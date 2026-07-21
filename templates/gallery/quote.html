@@ -208,6 +208,9 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{/totals.tax_total}}
 			<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
 			<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
+			{{#totals.total_saved_incl}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0; color: #15803d;"><span>{{i18n.total_saved}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_saved_incl_display}}</span></div>
+			{{/totals.total_saved_incl}}
 		</div>
 	</div>
 

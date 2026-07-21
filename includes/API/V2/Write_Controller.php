@@ -25,6 +25,7 @@ use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+use const WCPOS\WooCommercePOS\VERSION;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
@@ -374,6 +375,8 @@ class Write_Controller extends WP_REST_Controller {
 			}
 			// A retry that crashed after the original create but before the audit stamp would
 			// otherwise finalize an order still missing its audit meta — re-stamp (idempotent) here.
+			// Do not add a version marker: this may instead be an old order whose mutation row
+			// was pruned, so the accepting plugin version is no longer knowable.
 			if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 				$this->stamp_order_audit( $existing, $m['payload'] );
 			}
@@ -441,7 +444,7 @@ class Write_Controller extends WP_REST_Controller {
 			// Orders carry POS audit fields Pro analytics joins on (gap §3.3). They are PROTECTED
 			// meta, so — exactly like the uuid above — wc/v3 dropped them from the forwarded create;
 			// persist them directly, server-authoritative for the channel/cashier a client can't forge.
-			$this->stamp_order_audit( $new_id, $m['payload'] );
+			$this->stamp_order_audit( $new_id, $m['payload'], true );
 			if ( ! $this->store->finalize_poison( $m['mutationId'], $new_id ) ) {
 				return $this->finalize_error();
 			}
@@ -497,8 +500,8 @@ class Write_Controller extends WP_REST_Controller {
 	/**
 	 * The POS audit meta map to persist on an order create (gap §3.3 — Pro analytics joins on
 	 * these). The controller owns the POLICY (which values); the store owns the HPOS-safe write.
-	 *   - `_pos_user` = the authenticated user (the cashier) — SERVER-authoritative, so any
-	 *     client-supplied `_pos_user` is ignored (a client can't forge who rang the sale).
+	 *   - `_pos_user` = the authenticated user (the cashier) and `_woocommerce_pos_version` =
+	 *     the accepting server version — SERVER-authoritative, so client-supplied values are ignored.
 	 *   - `_pos_store` + cash-tender meta (`_pos_cash_amount_tendered` / `_pos_cash_change` /
 	 *     `_pos_card_cashback`) = PRESERVED from the client payload — those originate at the till.
 	 * (created_via is passed to the store separately — it's an order property, not meta.)
@@ -509,11 +512,11 @@ class Write_Controller extends WP_REST_Controller {
 	private const POS_CASH_META_KEYS = array( '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
 
 	/** Persist the POS audit meta + created_via for an order (both the create and born-twice paths). */
-	private function stamp_order_audit( int $id, $payload ): void {
-		$this->store->persist_order_audit_meta( $id, $this->order_audit_meta( is_array( $payload ) ? $payload : array() ), 'woocommerce-pos' );
+	private function stamp_order_audit( int $id, $payload, bool $stamp_version = false ): void {
+		$this->store->persist_order_audit_meta( $id, $this->order_audit_meta( is_array( $payload ) ? $payload : array(), $stamp_version ), 'woocommerce-pos' );
 	}
 
-	private function order_audit_meta( array $payload ): array {
+	private function order_audit_meta( array $payload, bool $stamp_version ): array {
 		$client = array();
 		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
 			$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
@@ -524,6 +527,9 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 		$meta = array( '_pos_user' => (string) ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 ) );
+		if ( $stamp_version ) {
+			$meta['_woocommerce_pos_version'] = VERSION;
+		}
 		foreach ( self::POS_TILL_META_KEYS as $key ) {
 			// Till values persist directly, bypassing wc/v3's own validation, so guard them: never
 			// store an empty/non-scalar value, and require the CASH AMOUNTS to be numeric (a malformed
@@ -552,7 +558,7 @@ class Write_Controller extends WP_REST_Controller {
 	 * (the till-sourced values are re-applied by persist_order_audit_meta, not the forward).
 	 */
 	private function without_pos_audit_meta( array $payload ): array {
-		$strip = array_merge( self::POS_TILL_META_KEYS, array( '_pos_user' ) );
+		$strip = array_merge( self::POS_TILL_META_KEYS, array( '_pos_user', '_woocommerce_pos_version' ) );
 		$meta  = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		return array_values(
 			array_filter(
@@ -831,6 +837,8 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			// The poison row does not record which plugin version accepted the POST, so a
+			// later deployment must not invent provenance while recovering its audit data.
 			$this->stamp_order_audit( $remote_id, $m['payload'] );
 		}
 		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {

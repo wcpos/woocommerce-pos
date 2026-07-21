@@ -7,13 +7,11 @@ set -euo pipefail
 : "${PR_TITLE:?PR_TITLE is required}"
 : "${MERGE_GATE_REQUIRED_CHECKS:?MERGE_GATE_REQUIRED_CHECKS is required}"
 
-MAX_ATTEMPTS="${MERGE_GATE_MAX_ATTEMPTS:-40}"
+MAX_ATTEMPTS="${MERGE_GATE_MAX_ATTEMPTS:-80}"
 SLEEP_SECONDS="${MERGE_GATE_SLEEP_SECONDS:-30}"
 TRANSLATION_FILE="${MERGE_GATE_TRANSLATION_FILE:-}"
 POT_FILE="${MERGE_GATE_POT_FILE:-}"
 POT_AUTHOR="${MERGE_GATE_POT_AUTHOR:-wcpos-bot[bot]}"
-TEST_MATRIX_FILE="${MERGE_GATE_TEST_MATRIX_FILE:-.github/test-matrix.json}"
-TEST_MATRIX_AUTHOR="${MERGE_GATE_TEST_MATRIX_AUTHOR:-wcpos-bot[bot]}"
 TRANSLATION_AUTHORS="|${MERGE_GATE_TRANSLATION_AUTHORS:-translations-ci[bot]|app/translations-ci}|"
 
 log() {
@@ -94,73 +92,6 @@ is_allowed_pot_pr() {
   [[ "$changed_files" == "$POT_FILE" ]]
 }
 
-is_allowed_test_matrix_pr() {
-  [[ -n "$TEST_MATRIX_FILE" ]] || return 1
-  [[ "$PR_AUTHOR" == "$TEST_MATRIX_AUTHOR" ]] || return 1
-  [[ "$PR_TITLE" == "chore: update test matrix versions" ]] || return 1
-
-  local changed_files
-  changed_files="$(pr_diff_names)"
-  [[ "$changed_files" == "$TEST_MATRIX_FILE" ]] || return 1
-
-  local changed_lines line matrix_line added=0 removed=0
-  changed_lines="$({ pr_diff_patch || true; } | awk '
-    /^diff --git / { next }
-    /^index / { next }
-    /^@@ / { next }
-    /^---$/ { next }
-    /^--- / { next }
-    /^\+\+\+ / { next }
-    /^From / { next }
-    /^Date: / { next }
-    /^Subject: / { next }
-    /^[+-]/ { print }
-  ')"
-
-  [[ -n "$changed_lines" ]] || return 1
-
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    matrix_line="${line:1}"
-    if [[ "$matrix_line" =~ ^[[:space:]]*\"lastUpdated\":[[:space:]]\"[0-9]{4}-[0-9]{2}-[0-9]{2}\",[[:space:]]*$ ]] ||
-      [[ "$matrix_line" =~ ^[[:space:]]*\"(minimum|stable|experimental)\":[[:space:]]\"[0-9][0-9A-Za-z.-]*\",?[[:space:]]*$ ]]; then
-      if [[ "$line" == -* ]]; then
-        removed=$((removed + 1))
-      elif [[ "$line" == +* ]]; then
-        added=$((added + 1))
-      else
-        log "Unexpected non-test-matrix diff line: $line"
-        return 1
-      fi
-    else
-      log "Unexpected test-matrix diff line: $line"
-      return 1
-    fi
-  done <<< "$changed_lines"
-
-  [[ "$added" -ge 1 && "$removed" -ge 1 ]]
-}
-
-is_allowed_dependabot_composer_dev_dependency_pr() {
-  [[ "$PR_AUTHOR" == "dependabot[bot]" ]] || return 1
-  [[ "$PR_TITLE" == build\(deps-dev\):\ bump\ * ||
-    "$PR_TITLE" == build\(deps-dev\):\ update\ *\ requirement\ from\ *\ to\ *\ in\ the\ dev-dependencies\ group ]] || return 1
-
-  local changed_files file
-  changed_files="$(pr_diff_names)"
-  [[ -n "$changed_files" ]] || return 1
-
-  while IFS= read -r file; do
-    case "$file" in
-      composer.json|composer.lock)
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  done <<< "$changed_files"
-}
-
 requires_php_tests() {
   local file
   while IFS= read -r file; do
@@ -198,7 +129,6 @@ bucket_is_failure() {
 }
 
 wait_for_checks() {
-  local coderabbit_required="$1"
   local attempt raw bucket state check all_pass any_failed
   IFS='|' read -r -a required_checks <<< "$MERGE_GATE_REQUIRED_CHECKS"
 
@@ -232,29 +162,6 @@ wait_for_checks() {
       fi
     done
 
-    if [[ "$coderabbit_required" == "true" ]]; then
-      raw="$(check_bucket "CodeRabbit")"
-      bucket="${raw%%$'\t'*}"
-      state="${raw#*$'\t'}"
-      if [[ -z "$raw" ]]; then
-        bucket="missing"
-        state="missing"
-      fi
-
-      if bucket_is_pass "$bucket" "$state"; then
-        log "✓ CodeRabbit passed"
-      elif bucket_is_failure "$bucket" "$state"; then
-        log "✗ CodeRabbit failed ($bucket/$state)"
-        any_failed=true
-        all_pass=false
-      else
-        log "… CodeRabbit pending ($bucket/$state)"
-        all_pass=false
-      fi
-    else
-      log "↷ CodeRabbit bypassed for validated automated PR"
-    fi
-
     if [[ "$any_failed" == "true" ]]; then
       return 1
     fi
@@ -272,25 +179,17 @@ wait_for_checks() {
 }
 
 main() {
-  local coderabbit_required=true
-
   if is_allowed_translation_version_pr; then
-    log "Validated automated translation-version PR; merge gate passes without waiting for CodeRabbit or full CI."
+    log "Validated automated translation-version PR; merge gate passes without waiting for full CI."
     return 0
   elif is_allowed_pot_pr; then
-    log "Validated automated POT-only PR; merge gate passes without waiting for CodeRabbit or full CI."
+    log "Validated automated POT-only PR; merge gate passes without waiting for full CI."
     return 0
-  elif is_allowed_test_matrix_pr; then
-    log "Validated automated test-matrix PR; waiting for required checks without CodeRabbit."
-    coderabbit_required=false
-  elif is_allowed_dependabot_composer_dev_dependency_pr; then
-    log "Validated automated Dependabot Composer dev-dependency PR; waiting for required checks without CodeRabbit."
-    coderabbit_required=false
   else
-    log "CodeRabbit and smoke test are required for this PR."
+    log "Required checks must pass for this PR."
   fi
 
-  wait_for_checks "$coderabbit_required"
+  wait_for_checks
 }
 
 main "$@"

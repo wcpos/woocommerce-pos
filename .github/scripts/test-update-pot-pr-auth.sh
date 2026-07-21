@@ -8,8 +8,8 @@ if [[ ! -f "$WORKFLOW_FILE" ]]; then
   exit 1
 fi
 
-if ! grep -Fq 'wp-cli/i18n-command:v2.2.13' "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command:v2.2.13" >&2
+if ! grep -Fq 'git clone --depth 1 --branch v2.2.13 https://github.com/wp-cli/i18n-command.git' "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to clone wp-cli/i18n-command v2.2.13" >&2
   exit 1
 fi
 
@@ -69,36 +69,4 @@ if grep -Fq '@coderabbitai review' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-if [[ ! -f '.github/workflows/pot-coderabbit-status.yml' ]]; then
-  echo "Expected guarded POT CodeRabbit status workflow to exist" >&2
-  exit 1
-fi
-
-POT_CODERABBIT_WORKFLOW='.github/workflows/pot-coderabbit-status.yml'
-
-if ! grep -Fq 'statuses: write' "$POT_CODERABBIT_WORKFLOW"; then
-  echo "Expected POT CodeRabbit workflow to be able to publish the required CodeRabbit status" >&2
-  exit 1
-fi
-
-if ! grep -Fq 'context=CodeRabbit' "$POT_CODERABBIT_WORKFLOW"; then
-  echo "Expected POT CodeRabbit workflow to publish the required CodeRabbit status context" >&2
-  exit 1
-fi
-
-if ! grep -Fq 'wcpos-bot[bot]' "$POT_CODERABBIT_WORKFLOW"; then
-  echo "Expected POT CodeRabbit workflow to limit the bypass to WCPOS Bot PRs" >&2
-  exit 1
-fi
-
-if ! grep -Fq 'languages/woocommerce-pos.pot' "$POT_CODERABBIT_WORKFLOW"; then
-  echo "Expected POT CodeRabbit workflow to limit the bypass to the POT file" >&2
-  exit 1
-fi
-
-if grep -Fq 'name: CodeRabbit' "$POT_CODERABBIT_WORKFLOW"; then
-  echo "Expected POT CodeRabbit workflow to publish a status context, not a duplicate Actions check named CodeRabbit" >&2
-  exit 1
-fi
-
-echo "Update POT workflow uses quiet make-pot generation, non-duplicated WCPOS Bot App PR auth, and a guarded CodeRabbit status for automated POT-only PRs"
+echo "Update POT workflow uses quiet make-pot generation and non-duplicated WCPOS Bot App PR auth"

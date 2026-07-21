@@ -140,6 +140,7 @@ class Receipt_I18n_Labels {
 			'regular_price'          => /* translators: Receipt label for the original or regular product price. */ __( 'Regular price', 'woocommerce-pos' ),
 			'selling_price'          => /* translators: Receipt label for the product selling price before coupons. */ __( 'Selling price', 'woocommerce-pos' ),
 			'savings'                => /* translators: Receipt label for money saved from the regular price. */ __( 'Savings', 'woocommerce-pos' ),
+			'total_saved'            => /* translators: Receipt total-row label for coupon discounts plus savings from regular prices. */ __( 'Total saved', 'woocommerce-pos' ),
 			'unit_excl'              => /* translators: Receipt table column heading for unit price excluding tax/VAT/GST. */ __( 'Unit (excl.)', 'woocommerce-pos' ),
 			'total_excl'             => /* translators: Receipt table column heading for line total excluding tax/VAT/GST. */ __( 'Total (excl.)', 'woocommerce-pos' ),
 			'discount'               => /* translators: Receipt label for discount amount or discount line. */ __( 'Discount', 'woocommerce-pos' ),

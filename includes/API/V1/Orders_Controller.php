@@ -29,6 +29,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\VERSION;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -425,6 +426,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$response = parent::create_item( $request );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+			$this->is_creating = false;
 		}
 
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
@@ -961,7 +963,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				'pay_for_order' => true,
 				'key'           => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
 			),
-			get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() )
+			wcpos_checkout_url( 'order-pay/' . $order->get_id() )
 		);
 
 		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
@@ -971,7 +973,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			array(
 				'key' => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
 			),
-			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() )
+			wcpos_checkout_url( 'wcpos-receipt/' . $order->get_id() )
 		);
 		$response->add_link( 'receipt', $pos_receipt_url );
 
@@ -1078,6 +1080,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
 		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
+			// Record provenance only; receipt calculations continue to infer historical
+			// pricing from the persisted line-item data of offline-synced orders.
+			$order->update_meta_data( '_woocommerce_pos_version', VERSION );
 		}
 
 		/**

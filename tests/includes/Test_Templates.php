@@ -97,6 +97,7 @@ class Test_Templates extends WP_UnitTestCase {
 	 * @param bool   $savings_in_discounts Whether legacy discounts contain savings.
 	 * @param bool   $has_exclusive_savings Whether tax-exclusive savings are provable.
 	 * @param bool   $include_order_coupon Whether to include an independent order coupon.
+	 * @param array  $totals_overrides     Overrides merged into the totals block.
 	 *
 	 * @return string
 	 */
@@ -105,7 +106,8 @@ class Test_Templates extends WP_UnitTestCase {
 		float $line_savings,
 		bool $savings_in_discounts,
 		bool $has_exclusive_savings = true,
-		bool $include_order_coupon = true
+		bool $include_order_coupon = true,
+		array $totals_overrides = array()
 	): string {
 		$template = file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $filename );
 		if ( false === $template ) {
@@ -180,6 +182,13 @@ class Test_Templates extends WP_UnitTestCase {
 				'discount_total_display'      => 'DISCOUNT-TOTAL',
 				'discount_total_incl_display' => 'DISCOUNT-TOTAL',
 				'discount_total_excl_display' => 'DISCOUNT-TOTAL',
+				'total_saved'                => 8,
+				'total_saved_incl'           => 8,
+				'total_saved_excl'           => 8,
+				'total_saved_complete'       => true,
+				'total_saved_display'        => 'TOTAL-SAVED',
+				'total_saved_incl_display'   => 'TOTAL-SAVED-INCL',
+				'total_saved_excl_display'   => 'TOTAL-SAVED-EXCL',
 			),
 			'tax'       => array(
 				'display_excl'       => true,
@@ -192,6 +201,8 @@ class Test_Templates extends WP_UnitTestCase {
 			'refunds'   => array(),
 			'i18n'      => Receipt_I18n_Labels::get_labels(),
 		);
+
+		$data['totals'] = array_merge( $data['totals'], $totals_overrides );
 
 		return ( new \Mustache\Engine() )->render( $template, $data );
 	}
@@ -225,6 +236,98 @@ class Test_Templates extends WP_UnitTestCase {
 			$this->assertStringNotContainsString( 'tax_summary.0', $content, $label );
 			$this->assertStringNotContainsString( 'i18n.order_date', $content, $label );
 			$this->assertDoesNotMatchRegularExpression( '/store\\.tax_id(?!s)/', $content, $label );
+		}
+	}
+
+	/**
+	 * Gallery HTML templates keep to a curated print-safe palette.
+	 *
+	 * PDF and on-screen output keep their colour, so accents are allowed — but
+	 * only from a curated set that stays legible when printed: accent ink must be
+	 * dark (Tailwind 700/800, reads as a solid gray when the browser print route
+	 * grayscales it), and coloured fills must be near-white 50-tints that use
+	 * negligible toner. Any other chromatic value fails this test and needs a
+	 * deliberate palette decision, not an ad-hoc colour.
+	 */
+	public function test_gallery_html_templates_use_print_safe_palette(): void {
+		$neutral_ink = array(
+			'#000',
+			'#000000',
+			'#111',
+			'#111827',
+			'#1f2937',
+			'#374151',
+			'#4b4b4b',
+			'#4b5563',
+			'#6b6b6b',
+			'#6b7280',
+			'#9ca3af',
+			'#d1d5db',
+			'#e5e5e5',
+			'#e5e7eb',
+			'#f3f4f6',
+			'#f9fafb',
+			'#fff',
+			'#ffffff',
+		);
+
+		$print_safe_accents = array(
+			'#15803d', // Green-700 — savings / discount ink.
+			'#b91c1c', // Red-700 — refunded ink.
+			'#92400e', // Amber-800 — customer note ink.
+			'#fffbeb', // Amber-50 — customer note fill.
+			'#fde68a', // Amber-200 — customer note border.
+			'#fff1f2', // Rose-50 — refunds fill.
+			'#fecdd3', // Rose-200 — refunds border.
+		);
+
+		$palette = array_merge( $neutral_ink, $print_safe_accents );
+
+		// CSS named colours with unequal red, green, and blue channels.
+		$chromatic_named_colors = explode(
+			' ',
+			'aliceblue antiquewhite aqua aquamarine azure beige bisque blanchedalmond blue blueviolet brown burlywood ' .
+			'cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod ' .
+			'darkgreen darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen ' .
+			'darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dodgerblue firebrick ' .
+			'floralwhite forestgreen fuchsia ghostwhite gold goldenrod green greenyellow honeydew hotpink indianred indigo ' .
+			'ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow ' .
+			'lightgreen lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue ' .
+			'lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple ' .
+			'mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream ' .
+			'mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen ' .
+			'paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown ' .
+			'royalblue saddlebrown salmon sandybrown seagreen seashell sienna skyblue slateblue slategray slategrey snow ' .
+			'springgreen steelblue tan teal thistle tomato turquoise violet wheat yellow yellowgreen'
+		);
+
+		$templates = glob( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/*.html' );
+		$this->assertNotFalse( $templates );
+		$this->assertNotEmpty( $templates );
+
+		foreach ( $templates as $template ) {
+			$content = file_get_contents( $template );
+			$label   = basename( $template );
+
+			$this->assertNotFalse( $content, 'Unable to read gallery template: ' . $template );
+
+			// Functional and named colour notation would bypass the hex allowlist below.
+			$this->assertDoesNotMatchRegularExpression( '/\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color(?:-mix|-contrast)?|device-cmyk|light-dark|contrast-color)\s*\(/i', $content, $label . ' must declare colours as hex values from the curated palette only' );
+
+			preg_match_all( '/\bstyle=(["\'])(.*?)\1/is', $content, $style_attributes );
+			foreach ( $style_attributes[2] as $style ) {
+				$this->assertDoesNotMatchRegularExpression( '/\b(?:' . implode( '|', $chromatic_named_colors ) . ')\b/i', $style, $label . ' uses a named colour outside the curated print-safe palette' );
+			}
+
+			// Lookbehind skips Mustache sections ({{#fees}}) and numeric entities (&#8212;).
+			preg_match_all( '/(?<![{&])#[0-9a-fA-F]{3,8}\b/', $content, $matches );
+			foreach ( $matches[0] as $color ) {
+				$this->assertContains(
+					strtolower( $color ),
+					$palette,
+					$label . ' uses a colour outside the curated print-safe palette: ' . $color
+				);
+			}
 		}
 	}
 
@@ -272,6 +375,107 @@ class Test_Templates extends WP_UnitTestCase {
 			if ( null !== $line_discount_marker ) {
 				$this->assertStringContainsString( $line_discount_marker, $legacy, $filename );
 			}
+		}
+	}
+
+	/**
+	 * Price-bearing templates show the complete combined savings total.
+	 */
+	public function test_price_bearing_gallery_templates_render_total_saved(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false );
+			$this->assertStringContainsString( 'TOTAL-SAVED-INCL', $rendered, $filename );
+		}
+	}
+
+	/**
+	 * Price-bearing templates omit the combined savings row when it is incomplete or zero.
+	 */
+	public function test_price_bearing_gallery_templates_omit_incomplete_or_zero_total_saved(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		// Display markers stay present so the assertions prove the template
+		// guards hide the row, not merely the absence of formatted values.
+		$incomplete = array(
+			'total_saved'          => null,
+			'total_saved_incl'     => null,
+			'total_saved_excl'     => null,
+			'total_saved_complete' => false,
+		);
+
+		$zero = array(
+			'total_saved'          => 0,
+			'total_saved_incl'     => 0,
+			'total_saved_excl'     => 0,
+			'total_saved_complete' => true,
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, true, true, $incomplete );
+			$this->assertStringNotContainsString( 'TOTAL-SAVED', $rendered, $filename . ' must omit the row when the aggregate is incomplete' );
+
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, true, true, $zero );
+			$this->assertStringNotContainsString( 'TOTAL-SAVED', $rendered, $filename . ' must omit the row when the aggregate is zero' );
+		}
+	}
+
+	/**
+	 * Templates render an available inclusive aggregate even when the store's display basis is incomplete.
+	 */
+	public function test_price_bearing_gallery_templates_render_available_inclusive_total_saved(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		$exclusive_incomplete = array(
+			'total_saved'          => null,
+			'total_saved_incl'     => 8,
+			'total_saved_excl'     => null,
+			'total_saved_complete' => false,
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, true, true, $exclusive_incomplete );
+			$this->assertStringContainsString( 'TOTAL-SAVED-INCL', $rendered, $filename . ' must render the available inclusive aggregate' );
 		}
 	}
 
@@ -466,12 +670,17 @@ class Test_Templates extends WP_UnitTestCase {
 		add_filter(
 			'woocommerce_pos_wp_overnight_pdf_document',
 			static function ( $document, string $document_type, $order ) {
-				$GLOBALS['wcpos_wcpdf_get_document_calls'][] = array(
+				$GLOBALS['woocommerce_pos_wcpdf_get_document_calls'][] = array(
 					'document_type' => $document_type,
 					'order'         => $order,
 				);
 
 				return new class() {
+					/**
+					 * Stub for the WP Overnight document get_html() method.
+					 *
+					 * @return string
+					 */
 					public function get_html() {
 						return '<main>WP Overnight invoice HTML</main>';
 					}
@@ -481,7 +690,7 @@ class Test_Templates extends WP_UnitTestCase {
 			3
 		);
 
-		$GLOBALS['wcpos_wcpdf_get_document_calls'] = array();
+		$GLOBALS['woocommerce_pos_wcpdf_get_document_calls'] = array();
 		$template                                  = Templates::get_virtual_template( 'wp-overnight-invoice', 'receipt' );
 		$order                                     = wc_create_order();
 		$renderer                                  = new Legacy_Php_Renderer();
@@ -491,9 +700,9 @@ class Test_Templates extends WP_UnitTestCase {
 		$html = ob_get_clean();
 
 		$this->assertStringContainsString( 'WP Overnight invoice HTML', $html );
-		$this->assertCount( 1, $GLOBALS['wcpos_wcpdf_get_document_calls'] );
-		$this->assertEquals( 'invoice', $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['document_type'] );
-		$this->assertSame( $order, $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['order'] );
+		$this->assertCount( 1, $GLOBALS['woocommerce_pos_wcpdf_get_document_calls'] );
+		$this->assertEquals( 'invoice', $GLOBALS['woocommerce_pos_wcpdf_get_document_calls'][0]['document_type'] );
+		$this->assertSame( $order, $GLOBALS['woocommerce_pos_wcpdf_get_document_calls'][0]['order'] );
 	}
 
 	/**

@@ -79,6 +79,7 @@
 	"settings.products_section_title": "Products",
 	"settings.customers_section_title": "Customers",
 	"settings.privacy_section_title": "Privacy",
+	"settings.advanced_section_title": "Advanced",
 	"settings.restore_stock_on_delete": "Restore stock on order delete",
 	"settings.restore_stock_on_delete_tip": "Automatically restore product stock when POS orders are trashed or deleted",
 	"settings.need_help": "Need help?",

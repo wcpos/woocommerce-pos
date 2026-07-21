@@ -647,8 +647,15 @@ class Preview_Receipt_Builder {
 		$discount_excl  = round( $lines_total_excl * $discount_rate / 100, $dp );
 		$discount_tax   = round( $discount_excl * $tax_rate / 100, $dp );
 		$discount_incl  = $discount_excl + $discount_tax;
-		/* translators: %s: discount percentage */
-		$discount_label = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
+		$discount_label = strtr(
+			/* translators: %s: discount percentage */
+			__( 'Summer Sale (%s%%)', 'woocommerce-pos' ),
+			array(
+				'%1$s' => (string) (int) $discount_rate,
+				'%s'   => (string) (int) $discount_rate,
+				'%%'   => '%',
+			)
+		);
 
 		// Distribute discount proportionally across line items with remainder correction.
 		$sum_discount_excl = 0.0;
@@ -764,23 +771,35 @@ class Preview_Receipt_Builder {
 			),
 		);
 
+		$sale_savings_total_incl = (float) array_sum( array_column( $lines, 'line_savings_incl' ) );
+		$sale_savings_total_excl = (float) array_sum( array_column( $lines, 'line_savings_excl' ) );
+		$total_saved_incl        = $discount_incl + $sale_savings_total_incl;
+		$total_saved_excl        = $discount_excl + $sale_savings_total_excl;
+
 		$totals = array(
-			'subtotal'            => $display_incl ? $subtotal_incl : $subtotal_excl,
-			'subtotal_incl'       => $subtotal_incl,
-			'subtotal_excl'       => $subtotal_excl,
-			'discount_total'      => $display_incl ? $discount_incl : $discount_excl,
-			'discount_total_incl' => $discount_incl,
-			'discount_total_excl' => $discount_excl,
-			'tax_total'           => $total_tax,
-			'total'         => $display_incl ? $total_incl : $total_excl,
-			'total_incl'    => $total_incl,
-			'total_excl'    => $total_excl,
-			'paid_total'          => $total_incl,
-			'change_total'        => $change_total,
-			'refund_total'        => 0.0,
-			'net_total'           => 0.0,
-			'total_qty'           => $total_qty,
-			'line_count'          => $line_count,
+			'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
+			'subtotal_incl'           => $subtotal_incl,
+			'subtotal_excl'           => $subtotal_excl,
+			'discount_total'          => $display_incl ? $discount_incl : $discount_excl,
+			'discount_total_incl'     => $discount_incl,
+			'discount_total_excl'     => $discount_excl,
+			'sale_savings_total'      => $display_incl ? $sale_savings_total_incl : $sale_savings_total_excl,
+			'sale_savings_total_incl' => $sale_savings_total_incl,
+			'sale_savings_total_excl' => $sale_savings_total_excl,
+			'total_saved'             => $display_incl ? $total_saved_incl : $total_saved_excl,
+			'total_saved_incl'        => $total_saved_incl,
+			'total_saved_excl'        => $total_saved_excl,
+			'total_saved_complete'    => true,
+			'tax_total'               => $total_tax,
+			'total'                   => $display_incl ? $total_incl : $total_excl,
+			'total_incl'              => $total_incl,
+			'total_excl'              => $total_excl,
+			'paid_total'              => $total_incl,
+			'change_total'            => $change_total,
+			'refund_total'            => 0.0,
+			'net_total'               => 0.0,
+			'total_qty'               => $total_qty,
+			'line_count'              => $line_count,
 		);
 
 		$taxable_amount_incl = $taxable_excl + $total_tax;

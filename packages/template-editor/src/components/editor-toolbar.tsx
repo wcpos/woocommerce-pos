@@ -44,7 +44,7 @@ function ToolButton({ label, onClick, pressed, children }: ToolButtonProps) {
 					'wcpos:transition-colors wcpos:duration-150',
 					pressed
 						? 'wcpos:bg-blue-100 wcpos:text-wp-admin-theme-color'
-						: 'wcpos:bg-transparent wcpos:text-gray-600 hover:wcpos:bg-gray-200 hover:wcpos:text-gray-900',
+						: 'wcpos:bg-transparent wcpos:text-gray-600 wcpos:hover:bg-gray-200 wcpos:hover:text-gray-900',
 				].join(' ')}
 			>
 				{children}

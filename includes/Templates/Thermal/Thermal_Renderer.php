@@ -66,15 +66,16 @@ class Thermal_Renderer {
 	 * template against canonical receipt data, strip XML-illegal control characters,
 	 * then parse the markup into an AST.
 	 *
-	 * @param array             $template Template metadata/content.
-	 * @param WC_Abstract_Order $order    The order to render.
+	 * @param array             $template     Template metadata/content.
+	 * @param WC_Abstract_Order $order        The order to render.
+	 * @param array|null        $receipt_data Optional canonical receipt payload.
 	 *
 	 * @return array The thermal AST root (a receipt node).
 	 */
-	public function build_ast( array $template, WC_Abstract_Order $order ): array {
+	public function build_ast( array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): array {
 		$content = (string) ( $template['content'] ?? '' );
 
-		$data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$data = null === $receipt_data ? ( new Receipt_Data_Builder() )->build( $order, 'live' ) : $receipt_data;
 
 		// Pre-format money/display fields so {{*_display}} placeholders resolve,
 		// mirroring Logicless_Renderer.

@@ -65,7 +65,7 @@ export function Notice({
 					type="button"
 					aria-label={dismissLabel}
 					onClick={onRemove}
-					className="wcpos:shrink-0 wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-0.5 wcpos:rounded hover:wcpos:bg-black/5"
+					className="wcpos:shrink-0 wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-0.5 wcpos:rounded wcpos:hover:bg-black/5"
 				>
 					<CloseIcon />
 				</button>

@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.6
+Stable tag: 1.9.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -129,6 +129,23 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.9 - 2026/07/18 =
+- **Security: hardened receipt/report template file resolution** -- the templates REST endpoint now strictly validates the requested template type and confirms that resolved template files stay inside the plugin's trusted template directories, closing a path-traversal issue. All stores should update.
+- **Fixed payment links blocked by trailing-slash rewrite rules** -- POS checkout, receipt and login URLs now follow your site's permalink trailing-slash style, so rewrite rules that force a trailing slash no longer redirect these links to an http target and get blocked as mixed content.
+- **Updated translations.**
+
+= 1.9.8 - 2026/07/17 =
+- **Fixed blocked payment and receipt links on https stores** -- checkout payment, receipt and login links now respect the Force SSL setting, so the order-pay popup is no longer blocked as mixed content on stores served over https while the WordPress home URL is still http (eg: behind Cloudflare Flexible SSL or other SSL-terminating proxies).
+- **Force SSL toggle restored** -- the Force SSL setting is back in the WCPOS settings under a new Advanced section, so stores that intentionally run over http can turn it off.
+
+= 1.9.7 - 2026/07/15 =
+- **Receipts can now show savings** -- receipt templates can display regular prices, per-line savings and a Total Saved line, with correct right-to-left (RTL) previews and localized labels.
+- **Better black & white printing** -- gallery receipt templates now print safely on B&W receipt printers, while PDF receipts keep their colours.
+- **Resizable template editor panel** -- drag to resize the fields panel in the receipt template editor.
+- **Improved welcome-screen analytics** -- consented admin landing payloads now include hostname-only site and admin domains so WCPOS can understand where opted-in stores come from without sending full URLs or paths.
+- **Fixes** -- order version stamping now only happens when the POS creates an order; safer file-permission fallback when WCPOS writes files.
+- **Updated translations.**
 
 = 1.9.6 - 2026/06/17 =
 - **Cash drawer support** -- open a connected cash drawer automatically after payment or on demand with a new Open Drawer button. Choose a drawer connector per printer, with support for thermal/ESC-POS printers, Epson, PrintNode, and cloud/remote print jobs.

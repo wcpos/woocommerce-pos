@@ -46,6 +46,7 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 		$this->assertSame( 'Regular price', $labels['regular_price'] ?? null );
 		$this->assertSame( 'Selling price', $labels['selling_price'] ?? null );
 		$this->assertSame( 'Savings', $labels['savings'] ?? null );
+		$this->assertSame( 'Total saved', $labels['total_saved'] ?? null );
 	}
 
 	/**

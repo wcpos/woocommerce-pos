@@ -14,6 +14,8 @@ use Exception;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
 
 /**
  * Receipt class.
@@ -113,9 +115,7 @@ class Receipt {
 			ob_start();
 
 			if ( $custom_template ) {
-				$template_engine = $this->get_template_engine( $custom_template );
-				$renderer        = ( new Receipt_Renderer_Factory() )->create( $template_engine );
-				$renderer->render( $custom_template, $order, $receipt_data );
+				$this->render_custom_template( $custom_template, $order, $receipt_data );
 			} else {
 				/**
 				 * Put WC_Order into the global scope so that the template can access it.
@@ -148,6 +148,46 @@ class Receipt {
 			}
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Render a custom template for the browser print surface.
+	 *
+	 * This route serves the HTML the POS prints via window.print(); PDFs render
+	 * through Template_Pdf_Service and never pass here. Logicless output is
+	 * wrapped with a print-only grayscale filter so physical printouts stay
+	 * black-and-white while on-screen and PDF output keep their colour. Browsers
+	 * that ignore the filter still print acceptably because template colours are
+	 * print-safe (dark accent ink, near-white fills). Legacy PHP templates emit a
+	 * full HTML document and own their print styling, so they render untouched.
+	 *
+	 * @param array              $custom_template Template metadata/content.
+	 * @param \WC_Abstract_Order $order           Order object.
+	 * @param array              $receipt_data    Canonical receipt payload.
+	 */
+	private function render_custom_template( array $custom_template, \WC_Abstract_Order $order, array $receipt_data ): void {
+		$template_engine = $this->get_template_engine( $custom_template );
+		if ( 'thermal' === $template_engine ) {
+			$ast          = ( new Thermal_Renderer() )->build_ast( $custom_template, $order, $receipt_data );
+			$thermal_html = ( new Html_Thermal_Emitter() )->emit( $ast );
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- The emitter escapes every dynamic value.
+			echo $thermal_html;
+
+			return;
+		}
+
+		$renderer = ( new Receipt_Renderer_Factory() )->create( $template_engine );
+
+		if ( 'logicless' !== $template_engine ) {
+			$renderer->render( $custom_template, $order, $receipt_data );
+
+			return;
+		}
+
+		echo '<style>@media print { .wcpos-receipt-print-root { -webkit-filter: grayscale(1); filter: grayscale(1); } }</style>';
+		echo '<div class="wcpos-receipt-print-root">';
+		$renderer->render( $custom_template, $order, $receipt_data );
+		echo '</div>';
 	}
 
 	/**

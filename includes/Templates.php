@@ -478,42 +478,69 @@ class Templates {
 	 * @return null|string File path or null if not found.
 	 */
 	public static function get_virtual_template_path( string $template_id, string $type = 'receipt' ): ?string {
+		if ( ! in_array( $type, self::SUPPORTED_TYPES, true ) ) {
+			return null;
+		}
+
 		$file_name = $type . '.php';
+		$directory = null;
+		$path      = null;
 
 		switch ( $template_id ) {
 			case self::TEMPLATE_THEME:
-				$path = get_stylesheet_directory() . '/woocommerce-pos/' . $file_name;
-				return file_exists( $path ) ? $path : null;
+				$directory = get_stylesheet_directory() . '/woocommerce-pos/';
+				$path      = $directory . $file_name;
+				break;
 
 			case self::TEMPLATE_PLUGIN_PRO:
 				// Pro template requires both the plugin AND an active license.
 				if ( \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) && self::is_pro_license_active() ) {
-					$path = \WCPOS\WooCommercePOSPro\PLUGIN_PATH . 'templates/' . $file_name;
-					return file_exists( $path ) ? $path : null;
+					$directory = \WCPOS\WooCommercePOSPro\PLUGIN_PATH . 'templates/';
+					$path      = $directory . $file_name;
+					break;
 				}
 				return null;
 
 			case self::TEMPLATE_PLUGIN_CORE:
-				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/' . $file_name;
-				return file_exists( $path ) ? $path : null;
+				$directory = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/';
+				$path      = $directory . $file_name;
+				break;
 
 			case self::TEMPLATE_WP_OVERNIGHT_INVOICE:
 				if ( 'receipt' !== $type || ! self::is_wp_overnight_pdf_templates_available() ) {
 					return null;
 				}
-				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/wp-overnight-invoice.php';
-				return file_exists( $path ) ? $path : null;
+				$directory = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/';
+				$path      = $directory . 'wp-overnight-invoice.php';
+				break;
 
 			case self::TEMPLATE_WP_OVERNIGHT_PACKING_SLIP:
 				if ( 'receipt' !== $type || ! self::is_wp_overnight_pdf_templates_available() ) {
 					return null;
 				}
-				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/wp-overnight-packing-slip.php';
-				return file_exists( $path ) ? $path : null;
+				$directory = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/';
+				$path      = $directory . 'wp-overnight-packing-slip.php';
+				break;
 
 			default:
 				return null;
 		}
+
+		if ( null === $directory || null === $path ) {
+			return null;
+		}
+
+		$real_directory = realpath( $directory );
+		$real_path      = realpath( $path );
+
+		if ( false === $real_directory || false === $real_path || ! is_file( $real_path ) ) {
+			return null;
+		}
+
+		$trusted_prefix = trailingslashit( wp_normalize_path( $real_directory ) );
+		$real_path      = wp_normalize_path( $real_path );
+
+		return 0 === strpos( $real_path, $trusted_prefix ) ? $real_path : null;
 	}
 
 	/**

@@ -183,7 +183,14 @@
       "total_qty": 3,
       "line_count": 2,
       "refund_total": 0,
-      "net_total": 0
+      "net_total": 0,
+      "sale_savings_total": 10,
+      "sale_savings_total_incl": 10,
+      "sale_savings_total_excl": 10,
+      "total_saved": 10,
+      "total_saved_incl": 10,
+      "total_saved_excl": 10,
+      "total_saved_complete": true
     },
     "tax_summary": [],
     "has_tax_summary": false,
@@ -207,6 +214,7 @@
       "refunded": "مسترد",
       "returned_items": "العناصر المرتجعة",
       "net_total": "الصافي",
+      "total_saved": "إجمالي التوفير",
       "thank_you_purchase": "شكراً لشرائكم"
     },
     "refunds": []

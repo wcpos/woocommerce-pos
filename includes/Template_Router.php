@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
+use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
  * Template_Router class.
@@ -22,6 +23,14 @@ class Template_Router {
 	 * Auth path slug for POS authorization endpoint.
 	 */
 	public const AUTH_PATH = 'wcpos-auth';
+
+	/**
+	 * Checkout path slug for POS checkout endpoints.
+	 *
+	 * @note 'wcpos-checkout' slug is used instead of 'checkout' to avoid conflicts
+	 * with WC checkout, eg: x-frame-options: SAMEORIGIN
+	 */
+	public const CHECKOUT_PATH = 'wcpos-checkout';
 
 	/**
 	 * POS frontend slug.
@@ -45,12 +54,9 @@ class Template_Router {
 	private $pos_auth_regex;
 
 	/**
-	 * POS checkout slug.
+	 * POS checkout slug regex, see CHECKOUT_PATH.
 	 *
 	 * @var string
-	 *
-	 * @note 'wcpos-checkout' slug is used instead 'checkout' to avoid conflicts with WC checkout
-	 * eg: x-frame-options: SAMEORIGIN
 	 */
 	private $pos_checkout_regex;
 
@@ -62,7 +68,7 @@ class Template_Router {
 		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
 		$this->pos_login_regex    = '^wcpos-login/?';
 		$this->pos_auth_regex     = '^' . self::AUTH_PATH . '/?';
-		$this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
+		$this->pos_checkout_regex = '^' . self::CHECKOUT_PATH . '/([a-z-]+)/([0-9]+)[/]?$';
 
 		$this->add_rewrite_rules();
 
@@ -77,10 +83,15 @@ class Template_Router {
 	/**
 	 * Get the full URL for the POS authorization endpoint.
 	 *
+	 * Respects the force_ssl setting, like wcpos_url(), so the login URL works
+	 * when the site home URL is http but the POS is served over https. The
+	 * trailing slash follows the site's permalink structure, via
+	 * user_trailingslashit().
+	 *
 	 * @return string
 	 */
 	public static function get_auth_url(): string {
-		return home_url( self::AUTH_PATH . '/' );
+		return home_url( user_trailingslashit( self::AUTH_PATH ), Settings::instance()->url_scheme() );
 	}
 
 	/**
@@ -171,7 +182,7 @@ class Template_Router {
 			array(
 				'key' => $order->get_order_key(),
 			),
-			get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() )
+			wcpos_checkout_url( 'order-received/' . $order->get_id() )
 		);
 
 		return $redirect;
