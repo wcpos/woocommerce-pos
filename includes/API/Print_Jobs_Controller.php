@@ -433,9 +433,21 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		if ( 'DELETE' === $request->get_method() ) {
-			$code   = (string) $request->get_param( 'code' );
-			$status = '' === $code || '000' === $code ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
+			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
+			$status = in_array( $code, array( '', '000', '200 OK' ), true ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
 			$this->jobs->set_status( (int) $job['id'], $status );
+
+			if ( Print_Job_Service::STATUS_FAILED === $status ) {
+				Logger::error(
+					sprintf(
+						'%s: printer "%s" reported failure code "%s" for print job %d.',
+						$request->get_route(),
+						$printer_id,
+						$code,
+						(int) $job['id']
+					)
+				);
+			}
 
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
@@ -444,7 +456,19 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'jobReady' => false ) );
 		}
 
-		return $this->serve_raw( $this->jobs->render_payload( $job ), $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
+		$payload = $this->jobs->render_payload( $job );
+		if ( '' === $payload ) {
+			Logger::error(
+				sprintf(
+					'%s: print job %d rendered an empty payload for printer "%s".',
+					$request->get_route(),
+					(int) $job['id'],
+					$printer_id
+				)
+			);
+		}
+
+		return $this->serve_raw( $payload, $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
 	}
 
 	/**
@@ -459,6 +483,14 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$token      = (string) $request->get_param( 'pt' );
 
 		if ( ! $this->registry->verify_token( $printer_id, $token ) ) {
+			Logger::warning(
+				sprintf(
+					'%s: authentication failed for printer "%s".',
+					$request->get_route(),
+					$printer_id
+				)
+			);
+
 			return new WP_Error(
 				'wcpos_print_job_invalid_token',
 				__( 'Invalid printer token.', 'woocommerce-pos' ),
@@ -478,8 +510,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	private function get_cloud_job_for_request( WP_REST_Request $request, string $printer_id ) {
-		$job = $this->jobs->get( (int) $request->get_param( 'token' ) );
+		$job_id = (int) $request->get_param( 'token' );
+		$job    = $this->jobs->get( $job_id );
 		if ( null === $job || $printer_id !== $job['printer_id'] ) {
+			Logger::warning(
+				sprintf(
+					'%s: print job "%d" was not found for printer "%s".',
+					$request->get_route(),
+					$job_id,
+					$printer_id
+				)
+			);
+
 			return new WP_Error(
 				'wcpos_print_job_not_found',
 				__( 'Print job not found.', 'woocommerce-pos' ),
@@ -524,6 +566,23 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			if ( null !== $claim ) {
 				$ok = false !== strpos( $raw_body, 'success="true"' );
 				$this->jobs->set_status( (int) $claim['id'], $ok ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED );
+
+				if ( ! $ok ) {
+					$code = 'unknown';
+					if ( 1 === preg_match( '/\bcode="([^"]*)"/', $raw_body, $matches ) ) {
+						$code = sanitize_text_field( $matches[1] );
+					}
+
+					Logger::error(
+						sprintf(
+							'%s: printer "%s" reported failure code "%s" for print job %d.',
+							$request->get_route(),
+							$printer_id,
+							$code,
+							(int) $claim['id']
+						)
+					);
+				}
 			}
 
 			return $this->serve_raw( $ack, $soap );

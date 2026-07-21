@@ -111,7 +111,7 @@ function getRestRoot(): string {
 function buildPollUrl(provider: CloudProvider, printerId: string, token: string): string {
 	const endpoint = PROVIDERS[provider].pollEndpoint;
 	const root = getRestRoot();
-	return `${root}wcpos/v1/print-jobs/${endpoint}?printer_id=${encodeURIComponent(
+	return `${root}wcpos/v1/print-jobs/${endpoint}?wcpos=1&printer_id=${encodeURIComponent(
 		printerId
 	)}&pt=${encodeURIComponent(token)}`;
 }

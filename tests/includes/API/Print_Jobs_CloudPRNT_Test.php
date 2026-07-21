@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
@@ -22,12 +23,31 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	private $jobs;
 
 	/**
+	 * Captured log messages.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $logged_messages = array();
+
+	/**
 	 * Set up a registered Star CloudPRNT printer.
 	 */
 	public function setUp(): void {
 		parent::setUp();
-		$this->jobs = new Print_Job_Service();
+		$this->jobs            = new Print_Job_Service();
+		$this->logged_messages = array();
 		$this->jobs->register_post_type();
+		Logger::reset_dedup_state();
+		add_filter(
+			'woocommerce_pos_logging',
+			function ( $should_log, $message ) {
+				$this->logged_messages[] = $message;
+
+				return false;
+			},
+			10,
+			2
+		);
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
 			array(
@@ -40,6 +60,15 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Tear down test fixtures.
+	 */
+	public function tearDown(): void {
+		remove_all_filters( 'woocommerce_pos_logging' );
+		Logger::reset_dedup_state();
+		parent::tearDown();
 	}
 
 	/**
@@ -101,8 +130,18 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $this->poll( 'GET', array( 'token' => $id ) )->get_status() );
 		$this->assertEquals( 'claimed', $this->jobs->get( $id )['status'] );
 
-		$this->assertEquals( 200, $this->poll( 'DELETE', array( 'token' => $id ) )->get_status() );
+		$this->assertEquals(
+			200,
+			$this->poll(
+				'DELETE',
+				array(
+					'token' => $id,
+					'code'  => '200 OK',
+				)
+			)->get_status()
+		);
 		$this->assertEquals( 'printed', $this->jobs->get( $id )['status'] );
+		$this->assertCount( 0, $this->logged_messages );
 	}
 
 	/**
@@ -150,7 +189,14 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	 * It rejects invalid printer tokens.
 	 */
 	public function test_poll_rejects_bad_token_with_401(): void {
-		$this->assertEquals( 401, $this->poll( 'POST', array( 'pt' => 'wrong' ) )->get_status() );
+		$response = $this->poll( 'POST', array( 'pt' => 'wrong' ) );
+
+		$this->assertEquals( 401, $response->get_status() );
+		$this->assertEquals(
+			array( '/wcpos/v1/print-jobs/cloudprnt: authentication failed for printer "p1".' ),
+			$this->logged_messages
+		);
+		$this->assertStringNotContainsString( 'wrong', implode( ' ', $this->logged_messages ) );
 	}
 
 	/**
@@ -163,5 +209,69 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->poll( 'POST', array() );
 
 		$this->assertGreaterThan( 0, $registry->get_seen( 'p1' ) );
+		$this->assertCount( 0, $this->logged_messages );
+	}
+
+	/**
+	 * It logs a job token that cannot be resolved for the polling printer.
+	 */
+	public function test_missing_job_token_logs_warning(): void {
+		$response = $this->poll( 'GET', array( 'token' => 999999 ) );
+
+		$this->assertEquals( 404, $response->get_status() );
+		$this->assertEquals(
+			array( '/wcpos/v1/print-jobs/cloudprnt: print job "999999" was not found for printer "p1".' ),
+			$this->logged_messages
+		);
+	}
+
+	/**
+	 * It logs a non-zero completion code reported by the printer.
+	 */
+	public function test_failed_completion_logs_printer_error_code(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+		$this->poll( 'GET', array( 'token' => $id ) );
+
+		$response = $this->poll(
+			'DELETE',
+			array(
+				'token' => $id,
+				'code'  => '500',
+			)
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'failed', $this->jobs->get( $id )['status'] );
+		$this->assertEquals(
+			array( sprintf( '/wcpos/v1/print-jobs/cloudprnt: printer "p1" reported failure code "500" for print job %d.', $id ) ),
+			$this->logged_messages
+		);
+	}
+
+	/**
+	 * It logs when a claimed job renders no printable bytes.
+	 */
+	public function test_empty_rendered_payload_logs_error(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => 'not-valid-base64',
+			)
+		);
+
+		$response = $this->poll( 'GET', array( 'token' => $id ) );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals(
+			array( sprintf( '/wcpos/v1/print-jobs/cloudprnt: print job %d rendered an empty payload for printer "p1".', $id ) ),
+			$this->logged_messages
+		);
 	}
 }

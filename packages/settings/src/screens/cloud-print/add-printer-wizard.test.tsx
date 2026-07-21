@@ -90,7 +90,7 @@ describe('AddPrinterWizard', () => {
 
 		// Step 2: poll URL + token + "shown only once" copy.
 		const expectedUrl =
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp?printer_id=kitchen&pt=9f3a8c21d7b64e0fa1c2e5d8b09a7f6c';
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp?wcpos=1&printer_id=kitchen&pt=9f3a8c21d7b64e0fa1c2e5d8b09a7f6c';
 		await waitFor(() => expect(screen.getByTestId('wizard-poll-url')).toBeInTheDocument());
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(expectedUrl);
 		expect(screen.getByTestId('wizard-poll-token')).toHaveTextContent(
@@ -315,7 +315,7 @@ describe('AddPrinterWizard', () => {
 		// Step 2 directly.
 		const url = screen.getByTestId('wizard-poll-url');
 		expect(url).toHaveTextContent(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?printer_id=kitchen'
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?wcpos=1&printer_id=kitchen'
 		);
 		expect(url).toHaveTextContent('pt=');
 		// Token masked (no real token, dots present).
