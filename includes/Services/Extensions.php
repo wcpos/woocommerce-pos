@@ -145,8 +145,7 @@ class Extensions {
 
 		$current = get_option( self::REFRESH_LOCK_KEY, array() );
 		if ( ! is_array( $current ) || (int) ( $current['expires_at'] ?? 0 ) < time() ) {
-			delete_option( self::REFRESH_LOCK_KEY );
-			if ( add_option( self::REFRESH_LOCK_KEY, $value, '', false ) ) {
+			if ( $this->delete_refresh_lock_if_value( $current ) && add_option( self::REFRESH_LOCK_KEY, $value, '', false ) ) {
 				return $token;
 			}
 		}
@@ -167,8 +166,35 @@ class Extensions {
 		$current = get_option( self::REFRESH_LOCK_KEY, array() );
 
 		if ( is_array( $current ) && ( $current['token'] ?? '' ) === $token ) {
-			delete_option( self::REFRESH_LOCK_KEY );
+			$this->delete_refresh_lock_if_value( $current );
 		}
+	}
+
+	/**
+	 * Atomically delete the refresh lock only if its stored value is unchanged.
+	 *
+	 * @param mixed $expected_value Exact option value observed by this request.
+	 */
+	private function delete_refresh_lock_if_value( $expected_value ): bool {
+		global $wpdb;
+
+		$deleted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic compare-and-delete; caches are invalidated below.
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name = %s AND BINARY option_value = %s",
+				self::REFRESH_LOCK_KEY,
+				maybe_serialize( $expected_value )
+			)
+		);
+
+		if ( 1 !== $deleted ) {
+			return false;
+		}
+
+		wp_cache_delete( self::REFRESH_LOCK_KEY, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+
+		return true;
 	}
 
 	/**
@@ -244,7 +270,7 @@ class Extensions {
 				return false;
 			}
 
-			if ( ! isset( $entry['tags'] ) || ! is_array( $entry['tags'] ) ) {
+			if ( ! isset( $entry['tags'] ) || ! is_array( $entry['tags'] ) || array_values( $entry['tags'] ) !== $entry['tags'] ) {
 				return false;
 			}
 			foreach ( $entry['tags'] as $tag ) {

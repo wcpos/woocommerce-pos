@@ -44,6 +44,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	private $catalog_http_requests = 0;
 
 	/**
+	 * Replacement lock installed while a compare-and-swap delete is pending.
+	 *
+	 * @var array
+	 */
+	private $replacement_refresh_lock = array();
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -58,6 +65,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	public function tearDown(): void {
 		$this->concurrent_refresh_result = null;
 		$this->catalog_http_requests     = 0;
+		$this->replacement_refresh_lock  = array();
 		delete_option( Extensions::REFRESH_LOCK_KEY );
 		delete_transient( 'wcpos_extensions_catalog' );
 		delete_site_option( 'auto_update_plugins' );
@@ -93,6 +101,9 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Test a failed refresh leaves the cached catalog unchanged.
+	 */
 	public function test_refresh_catalog_failure_preserves_cached_catalog(): void {
 		$cached = array( $this->valid_catalog_entry() );
 		set_transient( Extensions::TRANSIENT_KEY, $cached, HOUR_IN_SECONDS );
@@ -106,6 +117,9 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ) );
 	}
 
+	/**
+	 * Test wrong field types are rejected without replacing the cached catalog.
+	 */
 	public function test_refresh_catalog_wrong_typed_consumed_fields_preserve_cached_catalog(): void {
 		$cached = array( $this->valid_catalog_entry() );
 		$invalid_overrides = array(
@@ -135,6 +149,74 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * Test tags must be a JSON-list-compatible array.
+	 */
+	public function test_refresh_catalog_associative_tags_preserve_cached_catalog(): void {
+		$cached = array( $this->valid_catalog_entry() );
+		set_transient( Extensions::TRANSIENT_KEY, $cached, HOUR_IN_SECONDS );
+		$this->mock_catalog_data = array(
+			$this->valid_catalog_entry(
+				array( 'tags' => array( 'type' => 'payments' ) )
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$result = $this->service->refresh_catalog();
+
+		$this->assertWPError( $result );
+		$this->assertEquals( 'woocommerce_pos_extensions_refresh_failed', $result->get_error_code() );
+		$this->assertEquals( $cached, get_transient( Extensions::TRANSIENT_KEY ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test stale lock reclamation cannot delete a replacement owner.
+	 */
+	public function test_refresh_catalog_stale_takeover_preserves_new_owner_without_fetching(): void {
+		$stale = array(
+			'token'      => 'stale-owner',
+			'expires_at' => time() - 1,
+		);
+		$this->replacement_refresh_lock = array(
+			'token'      => 'replacement-owner',
+			'expires_at' => time() + Extensions::REFRESH_LOCK_TTL,
+		);
+		add_option( Extensions::REFRESH_LOCK_KEY, $stale, '', false );
+		add_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		add_filter( 'pre_http_request', array( $this, 'mock_counting_catalog_response' ), 10, 3 );
+
+		$result = $this->service->refresh_catalog();
+
+		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_counting_catalog_response' ) );
+		$this->assertWPError( $result );
+		$this->assertEquals( 'woocommerce_pos_extensions_refresh_in_progress', $result->get_error_code() );
+		$this->assertEquals( 0, $this->catalog_http_requests );
+		$this->assertEquals( $this->replacement_refresh_lock, get_option( Extensions::REFRESH_LOCK_KEY ) );
+	}
+
+	/**
+	 * Test lock release cannot delete a replacement owner.
+	 */
+	public function test_refresh_catalog_release_preserves_replacement_owner(): void {
+		$this->replacement_refresh_lock = array(
+			'token'      => 'replacement-owner',
+			'expires_at' => time() + Extensions::REFRESH_LOCK_TTL,
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_response_with_release_takeover' ), 10, 3 );
+
+		$result = $this->service->refresh_catalog();
+
+		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response_with_release_takeover' ) );
+		$this->assertIsArray( $result );
+		$this->assertEquals( $this->replacement_refresh_lock, get_option( Extensions::REFRESH_LOCK_KEY ) );
+	}
+
+	/**
+	 * Test a live lock rejects a concurrent refresh without another fetch.
+	 */
 	public function test_refresh_catalog_concurrent_request_is_rejected_without_fetching(): void {
 		$this->concurrent_refresh_result = null;
 		$this->catalog_http_requests     = 0;
@@ -154,6 +236,10 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 	/**
 	 * Attempt a nested refresh while the owner is inside its only HTTP request.
+	 *
+	 * @param false|array $response    Response.
+	 * @param array       $parsed_args Args.
+	 * @param string      $url         URL.
 	 */
 	public function mock_refresh_with_concurrent_attempt( $response, $parsed_args, $url ) {
 		if ( false === strpos( $url, 'catalog.json' ) ) {
@@ -162,6 +248,65 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 		++$this->catalog_http_requests;
 		$this->concurrent_refresh_result = $this->service->refresh_catalog();
+
+		return array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode( array( $this->valid_catalog_entry() ) ),
+		);
+	}
+
+	/**
+	 * Replace the observed lock immediately before its pending database delete executes.
+	 *
+	 * @param string $query Database query.
+	 */
+	public function mock_replace_refresh_lock_before_delete( $query ) {
+		global $wpdb;
+
+		if ( false === strpos( $query, 'DELETE FROM' ) || false === strpos( $query, $wpdb->options ) || false === strpos( $query, Extensions::REFRESH_LOCK_KEY ) ) {
+			return $query;
+		}
+
+		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		delete_option( Extensions::REFRESH_LOCK_KEY );
+		add_option( Extensions::REFRESH_LOCK_KEY, $this->replacement_refresh_lock, '', false );
+
+		return $query;
+	}
+
+	/**
+	 * Count any unexpected HTTP fetch and return a valid response.
+	 *
+	 * @param false|array $response    Response.
+	 * @param array       $parsed_args Args.
+	 * @param string      $url         URL.
+	 */
+	public function mock_counting_catalog_response( $response, $parsed_args, $url ) {
+		if ( false === strpos( $url, 'catalog.json' ) ) {
+			return $response;
+		}
+
+		++$this->catalog_http_requests;
+
+		return array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode( array( $this->valid_catalog_entry() ) ),
+		);
+	}
+
+	/**
+	 * Arrange for another owner to replace the lock while the first owner releases it.
+	 *
+	 * @param false|array $response    Response.
+	 * @param array       $parsed_args Args.
+	 * @param string      $url         URL.
+	 */
+	public function mock_catalog_response_with_release_takeover( $response, $parsed_args, $url ) {
+		if ( false === strpos( $url, 'catalog.json' ) ) {
+			return $response;
+		}
+
+		add_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
 
 		return array(
 			'response' => array( 'code' => 200 ),
