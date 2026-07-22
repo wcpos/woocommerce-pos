@@ -375,3 +375,35 @@ describe('PrinterCard blocked status', () => {
 		expect(screen.queryByTestId('printer-card-blocked-kitchen-1')).toBeNull();
 	});
 });
+
+describe('PrinterCard live blocked refresh', () => {
+	it('shows the blocked note when a background refresh reports blocked', async () => {
+		vi.useFakeTimers();
+		apiFetchMock.mockResolvedValue({
+			printers: [
+				{
+					id: 'kitchen-1',
+					name: 'Kitchen',
+					provider: 'star-cloudprnt',
+					store_id: 0,
+					status: 'blocked',
+					status_detail: 'cloudflare-challenge',
+				},
+			],
+			assignments: [],
+		});
+		renderCard({ printer: makePrinter({ status: 'connected' }) });
+
+		expect(screen.queryByTestId('printer-card-blocked-kitchen-1')).toBeNull();
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30000);
+		});
+
+		expect(screen.getByTestId('printer-card-blocked-kitchen-1')).toBeInTheDocument();
+		expect(screen.getByTestId('printer-card-blocked-kitchen-1').textContent).toContain(
+			'security service'
+		);
+		vi.useRealTimers();
+	});
+});

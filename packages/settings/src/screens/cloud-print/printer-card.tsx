@@ -12,7 +12,7 @@ import {
 	useSnackbar,
 } from '@wcpos/ui';
 
-import { PrinterStatusChip } from './printer-status-chip';
+import { PrinterStatusChip, usePrinterStatus } from './printer-status-chip';
 import { PROVIDERS } from './providers';
 import { KebabMenuTrigger } from '../../components/kebab-menu-trigger';
 import { i18n, t } from '../../translations';
@@ -123,6 +123,9 @@ export function PrinterCard({
 }: PrinterCardProps) {
 	const { addSnackbar } = useSnackbar();
 	const provider = PROVIDERS[printer.provider];
+	// Live status so the blocked explanation appears/disappears with the
+	// background refresh, not only on full settings reloads.
+	const { status: liveStatus, statusDetail } = usePrinterStatus(printer);
 	const isPrintNode = printer.provider === 'printnode';
 	const isStarOnline = printer.provider === 'star-online';
 	// Render the absent field as the server default ('pdf').
@@ -246,12 +249,12 @@ export function PrinterCard({
 					</div>
 				</div>
 
-				{printer.status === 'blocked' && (
+				{liveStatus === 'blocked' && (
 					<p
 						data-testid={`printer-card-blocked-${printer.id}`}
 						className="wcpos:mt-2 wcpos:rounded wcpos:bg-red-50 wcpos:px-2 wcpos:py-1 wcpos:text-xs wcpos:text-red-700"
 					>
-						{blockedExplanation(printer.status_detail)}
+						{blockedExplanation(statusDetail)}
 					</p>
 				)}
 
