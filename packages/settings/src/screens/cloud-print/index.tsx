@@ -291,11 +291,7 @@ function CloudPrint() {
 						'cloud_print.relay_explainer',
 						'Some receipt printers can\'t connect directly to modern web hosting and get stuck on "Waiting for printer". WCPOS Cloud Print gives your printers a compatible address at cloudprint.wcpos.com and passes their print jobs through to this store — receipts are never stored, and your printer tokens keep working unchanged.'
 					)}{' '}
-					<a
-						href="https://wcpos.com/cloudprint"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
+					<a href="https://wcpos.com/cloudprint" target="_blank" rel="noopener noreferrer">
 						{t('cloud_print.learn_more', 'Learn more')}
 					</a>
 				</p>

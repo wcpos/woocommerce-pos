@@ -704,9 +704,7 @@ export function AddPrinterWizard({
 										return null;
 									}
 									const relayBase =
-										relay?.enabled && relay.printer_base_url
-											? relay.printer_base_url
-											: undefined;
+										relay?.enabled && relay.printer_base_url ? relay.printer_base_url : undefined;
 									if (mode === 'setup') {
 										// No real token to display — append a literal mask after the
 										// (empty, so un-encoded) token placeholder.
@@ -730,7 +728,6 @@ export function AddPrinterWizard({
 													/>
 												)}
 											</>
-
 										);
 									}
 									const token = created?.token ?? '';

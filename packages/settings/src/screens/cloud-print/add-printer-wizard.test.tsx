@@ -397,9 +397,9 @@ describe('buildPollUrl relay routing', () => {
 	});
 
 	it('builds on the relay printer base URL when provided', () => {
-		expect(
-			buildPollUrl('epson-sdp', 'front', 'tok', 'https://cloudprint.wcpos.com/p/abc123')
-		).toBe('https://cloudprint.wcpos.com/p/abc123/epson-sdp?wcpos=1&printer_id=front&pt=tok');
+		expect(buildPollUrl('epson-sdp', 'front', 'tok', 'https://cloudprint.wcpos.com/p/abc123')).toBe(
+			'https://cloudprint.wcpos.com/p/abc123/epson-sdp?wcpos=1&printer_id=front&pt=tok'
+		);
 	});
 
 	it('tolerates a trailing slash on the relay base URL', () => {

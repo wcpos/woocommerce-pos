@@ -43,7 +43,7 @@ function blockedExplanation(detail?: string | null): string {
 	}
 	return t(
 		'cloud_print.blocked_security',
-		'A security service (like Cloudflare or a firewall plugin) is blocking WCPOS Cloud Print, so receipts can\'t reach this printer. Allowlist the relay to restore printing — see wcpos.com/cloudprint.'
+		"A security service (like Cloudflare or a firewall plugin) is blocking WCPOS Cloud Print, so receipts can't reach this printer. Allowlist the relay to restore printing — see wcpos.com/cloudprint."
 	);
 }
 
