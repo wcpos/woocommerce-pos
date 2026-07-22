@@ -1,10 +1,12 @@
 import * as React from 'react';
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildPreviewModalSrcDoc, PreviewModal } from '../components/preview-modal';
 import { usePreview } from '../hooks/use-preview';
+
 import type { PreviewResponse } from '../types';
 
 vi.mock('../hooks/use-preview', () => ({
@@ -27,9 +29,11 @@ describe('PreviewModal logicless previews', () => {
 	it('renders template_content with receipt_data instead of sanitized preview_html', () => {
 		const preview: PreviewResponse = {
 			engine: 'logicless',
-			template_content: '<div style="display:flex;justify-content:space-between"><span>{{label}}</span><span>{{amount}}</span></div>',
+			template_content:
+				'<div style="display:flex;justify-content:space-between"><span>{{label}}</span><span>{{amount}}</span></div>',
 			receipt_data: { label: 'Subtotal (sin impuestos)', amount: '15,00 $' },
-			preview_html: '<div style="justify-content:space-between"><span>Subtotal (sin impuestos)</span><span>15,00 $</span></div>',
+			preview_html:
+				'<div style="justify-content:space-between"><span>Subtotal (sin impuestos)</span><span>15,00 $</span></div>',
 			order_id: 0,
 			template_id: 'invoice',
 		};
@@ -107,12 +111,7 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal
-					templateId="legacy"
-					templateName="Legacy"
-					isGallery
-					onClose={() => {}}
-				/>,
+				<PreviewModal templateId="legacy" templateName="Legacy" isGallery onClose={() => {}} />
 			);
 		});
 
@@ -120,7 +119,9 @@ describe('PreviewModal logicless previews', () => {
 		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
 
-		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]') as HTMLElement | null;
+		const canvas = container.querySelector(
+			'[data-testid="preview-viewport-canvas"]'
+		) as HTMLElement | null;
 		expect(canvas).toBeTruthy();
 		expect(canvas?.style.width).toBe('794px');
 		expect(canvas?.style.height).toBe('1123px');
@@ -148,12 +149,7 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal
-					templateId="empty"
-					templateName="Empty"
-					isGallery
-					onClose={() => {}}
-				/>,
+				<PreviewModal templateId="empty" templateName="Empty" isGallery onClose={() => {}} />
 			);
 		});
 
@@ -181,12 +177,7 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal
-					templateId="legacy"
-					templateName="Legacy"
-					isGallery
-					onClose={() => {}}
-				/>,
+				<PreviewModal templateId="legacy" templateName="Legacy" isGallery onClose={() => {}} />
 			);
 		});
 

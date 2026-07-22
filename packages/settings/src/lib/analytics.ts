@@ -1,8 +1,4 @@
-export type LicenseActivationFailureReason =
-	| 'invalid_key'
-	| 'expired'
-	| 'network'
-	| 'server_error';
+export type LicenseActivationFailureReason = 'invalid_key' | 'expired' | 'network' | 'server_error';
 
 type CaptureProperties = Record<string, unknown>;
 
@@ -35,9 +31,7 @@ export function captureLicenseActivationSucceeded(licenseTier?: string) {
 	captureEvent('license_activate_succeeded', properties);
 }
 
-export function normalizeLicenseActivationFailure(
-	input: unknown
-): LicenseActivationFailureReason {
+export function normalizeLicenseActivationFailure(input: unknown): LicenseActivationFailureReason {
 	if (input instanceof TypeError) {
 		return 'network';
 	}
@@ -48,9 +42,9 @@ export function normalizeLicenseActivationFailure(
 			: input instanceof Error
 				? input.message
 				: typeof input === 'object' && input
-					? (input as Record<string, unknown>).error ??
+					? ((input as Record<string, unknown>).error ??
 						(input as Record<string, unknown>).message ??
-						''
+						'')
 					: '';
 
 	const normalized = (typeof rawMessage === 'string' ? rawMessage : '').toLowerCase();

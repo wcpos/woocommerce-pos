@@ -25,20 +25,12 @@ describe('CountrySelect', () => {
 	});
 
 	it('renders the selected country label', () => {
-		render(
-			<CountrySelect
-				countries={COUNTRIES}
-				value="DE"
-				onChange={() => {}}
-			/>
-		);
+		render(<CountrySelect countries={COUNTRIES} value="DE" onChange={() => {}} />);
 		expect(screen.getByRole('combobox')).toHaveTextContent('Germany');
 	});
 
 	it('opens the listbox on click and lists countries sorted by label', () => {
-		render(
-			<CountrySelect countries={COUNTRIES} value="" onChange={() => {}} />
-		);
+		render(<CountrySelect countries={COUNTRIES} value="" onChange={() => {}} />);
 		fireEvent.click(screen.getByRole('combobox'));
 		const listbox = screen.getByRole('listbox');
 		const labels = within(listbox)
@@ -65,9 +57,7 @@ describe('CountrySelect', () => {
 	});
 
 	it('also matches by country code', () => {
-		render(
-			<CountrySelect countries={COUNTRIES} value="" onChange={() => {}} />
-		);
+		render(<CountrySelect countries={COUNTRIES} value="" onChange={() => {}} />);
 		fireEvent.click(screen.getByRole('combobox'));
 		fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'au' } });
 		const listbox = screen.getByRole('listbox');
@@ -92,9 +82,7 @@ describe('CountrySelect', () => {
 
 	it('commits the selection on click', () => {
 		const onChange = vi.fn();
-		render(
-			<CountrySelect countries={COUNTRIES} value="" onChange={onChange} />
-		);
+		render(<CountrySelect countries={COUNTRIES} value="" onChange={onChange} />);
 		fireEvent.click(screen.getByRole('combobox'));
 		fireEvent.click(screen.getByText('Germany'));
 		expect(onChange).toHaveBeenCalledWith('DE');
@@ -102,9 +90,7 @@ describe('CountrySelect', () => {
 
 	it('navigates with arrow keys and selects with Enter', () => {
 		const onChange = vi.fn();
-		render(
-			<CountrySelect countries={COUNTRIES} value="" onChange={onChange} />
-		);
+		render(<CountrySelect countries={COUNTRIES} value="" onChange={onChange} />);
 		fireEvent.click(screen.getByRole('combobox'));
 		const search = screen.getByRole('searchbox');
 		// Sorted: Australia (0), Germany (1), United Kingdom (2), United States (3).
@@ -116,9 +102,7 @@ describe('CountrySelect', () => {
 
 	it('closes on Escape without committing', () => {
 		const onChange = vi.fn();
-		render(
-			<CountrySelect countries={COUNTRIES} value="" onChange={onChange} />
-		);
+		render(<CountrySelect countries={COUNTRIES} value="" onChange={onChange} />);
 		fireEvent.click(screen.getByRole('combobox'));
 		fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' });
 		expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
@@ -163,14 +147,7 @@ describe('CountrySelect', () => {
 	});
 
 	it('does not open when disabled', () => {
-		render(
-			<CountrySelect
-				countries={COUNTRIES}
-				value=""
-				onChange={() => {}}
-				disabled
-			/>
-		);
+		render(<CountrySelect countries={COUNTRIES} value="" onChange={() => {}} disabled />);
 		fireEvent.click(screen.getByRole('combobox'));
 		expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 	});

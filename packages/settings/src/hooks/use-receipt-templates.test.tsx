@@ -4,10 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useReceiptTemplateOptions } from './use-receipt-templates';
+
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
-
-import { useReceiptTemplateOptions } from './use-receipt-templates';
 
 function wrapper({ children }: { children: React.ReactNode }) {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -26,8 +26,20 @@ describe('useReceiptTemplateOptions', () => {
 	it('returns published/active receipt templates as { value, label, engine } options and excludes inactive drafts', async () => {
 		// Arrange
 		apiFetchMock.mockResolvedValue([
-			{ id: 12, title: 'Standard Receipt', status: 'publish', is_active: false, engine: 'logicless' },
-			{ id: 'plugin-core', title: 'Core Receipt', status: 'publish', is_active: true, engine: 'legacy-php' },
+			{
+				id: 12,
+				title: 'Standard Receipt',
+				status: 'publish',
+				is_active: false,
+				engine: 'logicless',
+			},
+			{
+				id: 'plugin-core',
+				title: 'Core Receipt',
+				status: 'publish',
+				is_active: true,
+				engine: 'legacy-php',
+			},
 			{ id: 99, title: 'Draft Receipt', status: 'draft', is_active: false, engine: 'thermal' },
 		]);
 

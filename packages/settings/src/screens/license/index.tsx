@@ -7,6 +7,7 @@ import Label from '../../components/label';
 import Notice from '../../components/notice';
 import { Button } from '../../components/ui';
 import useNotices from '../../hooks/use-notices';
+import useSettingsApi from '../../hooks/use-settings-api';
 import {
 	captureLicenseActivationAttempted,
 	captureLicenseActivationFailed,
@@ -14,7 +15,6 @@ import {
 	captureUpgradeCtaClicked,
 	captureUpgradeCtaViewed,
 } from '../../lib/analytics';
-import useSettingsApi from '../../hooks/use-settings-api';
 import { t, Trans } from '../../translations';
 
 export interface LicenseSettingsProps {

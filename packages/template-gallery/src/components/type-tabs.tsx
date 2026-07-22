@@ -25,7 +25,7 @@ export function TypeTabs({ activeType }: TypeTabsProps) {
 						tab.id === activeType
 							? 'wcpos:border-wp-admin-theme-color wcpos:text-wp-admin-theme-color'
 							: 'wcpos:border-transparent wcpos:text-gray-500',
-						!tab.enabled && 'wcpos:opacity-50 wcpos:cursor-not-allowed',
+						!tab.enabled && 'wcpos:opacity-50 wcpos:cursor-not-allowed'
 					)}
 				>
 					{t(tab.labelKey)}

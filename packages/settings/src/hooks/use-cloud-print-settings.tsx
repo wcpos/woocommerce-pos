@@ -68,7 +68,11 @@ export function useCloudPrintSettings() {
 
 	const mutation = useMutation({
 		mutationFn: (next: CloudPrintSettings) =>
-			apiFetch({ path: ENDPOINT, method: 'POST', data: next }) as Promise<CloudPrintSettingsResponse>,
+			apiFetch({
+				path: ENDPOINT,
+				method: 'POST',
+				data: next,
+			}) as Promise<CloudPrintSettingsResponse>,
 		onSuccess: (saved) =>
 			queryClient.setQueryData(['cloud-print'], {
 				printers: saved.printers,

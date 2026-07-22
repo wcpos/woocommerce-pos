@@ -6,10 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SnackbarProvider } from '@wcpos/ui';
 
+import CloudPrint from './index';
+
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
-
-import CloudPrint from './index';
 
 function deferred<T>() {
 	let resolve!: (value: T) => void;
@@ -127,7 +127,7 @@ describe('CloudPrint editing', () => {
 
 		// A POST happened whose new printer carries an empty (server-derived) id.
 		await waitFor(() => expect(postCalls().length).toBe(1));
-		const posted = lastPostData() as { printers: Array<{ id: string }> };
+		const posted = lastPostData() as { printers: { id: string }[] };
 		expect(posted.printers[posted.printers.length - 1].id).toBe('');
 
 		// The wizard step 2 surfaces the one-time token.
@@ -146,13 +146,13 @@ describe('CloudPrint editing', () => {
 					return firstSave.promise;
 				}
 				return Promise.resolve({
-					printers: [
-						{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
-					],
+					printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
 					assignments: [{ printer_id: 'kitchen', scope: 'every', template_id: '1' }],
 				});
 			},
-			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+			templates: [
+				{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' },
+			],
 		});
 
 		renderScreen();
@@ -187,13 +187,13 @@ describe('CloudPrint editing', () => {
 	it('rolls back an optimistic rule edit and shows an error snackbar when the save fails', async () => {
 		routeApiFetch({
 			getSettings: () => ({
-				printers: [
-					{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
-				],
+				printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
 				assignments: [],
 			}),
 			postSettings: () => Promise.reject({ message: 'Could not save rule.' }),
-			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+			templates: [
+				{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' },
+			],
 		});
 
 		renderScreen();
@@ -211,9 +211,7 @@ describe('CloudPrint editing', () => {
 
 		// An error snackbar (in the live region) surfaces the failure message.
 		const liveRegion = document.querySelector('[role="status"]') as HTMLElement;
-		await waitFor(() =>
-			expect(within(liveRegion).getByText('Could not save rule.')).toBeTruthy()
-		);
+		await waitFor(() => expect(within(liveRegion).getByText('Could not save rule.')).toBeTruthy());
 	});
 
 	it('rolls back to the last confirmed server snapshot after queued saves fail', async () => {
@@ -222,16 +220,16 @@ describe('CloudPrint editing', () => {
 		let postIndex = 0;
 		routeApiFetch({
 			getSettings: () => ({
-				printers: [
-					{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
-				],
+				printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
 				assignments: [],
 			}),
 			postSettings: () => {
 				postIndex += 1;
 				return postIndex === 1 ? firstSave.promise : secondSave.promise;
 			},
-			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+			templates: [
+				{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' },
+			],
 		});
 
 		renderScreen();

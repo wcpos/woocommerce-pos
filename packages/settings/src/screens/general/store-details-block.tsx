@@ -47,9 +47,7 @@ export function StoreDetailsBlock({ data, mutate, storeDefaults }: StoreDetailsB
 				title={t('settings.store_details_upgrade_callout_title')}
 				className="wcpos:mt-4"
 			>
-				<p className="wcpos:m-0">
-					{t('settings.store_details_upgrade_to_pro')}
-				</p>
+				<p className="wcpos:m-0">{t('settings.store_details_upgrade_to_pro')}</p>
 				<p className="wcpos:mt-2 wcpos:mb-0">
 					<a
 						href={UPGRADE_URL}
@@ -89,9 +87,7 @@ export function StoreDetailsBlock({ data, mutate, storeDefaults }: StoreDetailsB
 			>
 				<TextArea
 					rows={4}
-					value={
-						isString(data?.policies_and_conditions) ? data.policies_and_conditions : ''
-					}
+					value={isString(data?.policies_and_conditions) ? data.policies_and_conditions : ''}
 					placeholder={storeDefaults.policies_and_conditions}
 					onChange={(event) => mutate({ policies_and_conditions: event.target.value })}
 				/>

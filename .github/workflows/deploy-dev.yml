@@ -65,6 +65,7 @@ jobs:
             --exclude='turbo.json' \
             --exclude='tsconfig.json' \
             --exclude='.eslintrc*' \
+            --exclude='eslint.config.*' \
             --exclude='.prettierrc*' \
             --exclude='*.md' \
             --exclude='packages/*/src' \

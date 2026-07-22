@@ -12,9 +12,7 @@ const FRUIT = [
 
 function renderCombobox(props: Partial<React.ComponentProps<typeof Combobox>> = {}) {
 	const onChange = vi.fn();
-	const utils = render(
-		<Combobox value="" options={FRUIT} onChange={onChange} {...props} />
-	);
+	const utils = render(<Combobox value="" options={FRUIT} onChange={onChange} {...props} />);
 	return { onChange, ...utils };
 }
 

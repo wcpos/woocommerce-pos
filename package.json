@@ -43,6 +43,9 @@
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@wordpress/env": "^11.5.0",
+    "eslint": "^9.39.5",
+    "eslint-config-universe": "^16.0.0",
+    "prettier": "^3.9.5",
     "jsdoc": "^4.0.5",
     "newman": "^6.2.2",
     "taffydb": "^2.7.3",

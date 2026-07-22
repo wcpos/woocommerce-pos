@@ -91,9 +91,7 @@ export function RootLayout() {
 					)}
 
 					<ErrorBoundary FallbackComponent={ErrorFallback}>
-						<React.Suspense
-							fallback={pageSkeletons[location.pathname] || <FormSkeleton />}
-						>
+						<React.Suspense fallback={pageSkeletons[location.pathname] || <FormSkeleton />}>
 							<Outlet />
 						</React.Suspense>
 					</ErrorBoundary>

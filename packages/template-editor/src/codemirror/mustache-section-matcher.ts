@@ -1,4 +1,5 @@
 import { Decoration, EditorView, ViewPlugin, type DecorationSet } from '@codemirror/view';
+
 import type { EditorState } from '@codemirror/state';
 
 /**
@@ -41,7 +42,10 @@ function readAllTags(state: EditorState): SectionTag[] {
 	return readTagsFromText(state.doc.toString());
 }
 
-export function findEnclosingPair(tags: SectionTag[], cursor: number): [SectionTag, SectionTag] | null {
+export function findEnclosingPair(
+	tags: SectionTag[],
+	cursor: number
+): [SectionTag, SectionTag] | null {
 	const cursorTag = tags.find((tag) => cursor >= tag.from && cursor < tag.to);
 	if (!cursorTag) return null;
 
@@ -117,7 +121,7 @@ export const mustacheSectionMatcher = ViewPlugin.define(
 			}
 		},
 	}),
-	{ decorations: (v) => v.decorations as DecorationSet },
+	{ decorations: (v) => v.decorations as DecorationSet }
 );
 
 // Re-export EditorView so this file is a complete unit even when tree-shaken.

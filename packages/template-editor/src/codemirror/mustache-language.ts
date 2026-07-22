@@ -12,5 +12,5 @@ export const mustacheOverlay = ViewPlugin.define(
 			this.decorations = mustacheDecorator.updateDeco(u, this.decorations);
 		},
 	}),
-	{ decorations: (v) => v.decorations as DecorationSet },
+	{ decorations: (v) => v.decorations as DecorationSet }
 );

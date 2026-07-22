@@ -82,7 +82,7 @@ export function useResizableWidth({
 	const grabOffsetRef = useRef(0);
 	const [isResizing, setIsResizing] = useState(false);
 	const [width, setWidth] = useState(() =>
-		readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth),
+		readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth)
 	);
 	const widthRef = useRef(width);
 	// The width the user explicitly chose (restored from storage, updated on
@@ -94,14 +94,13 @@ export function useResizableWidth({
 	const clampWidth = useCallback(
 		(value: number) => {
 			let max = maxWidth;
-			const parentWidth =
-				panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+			const parentWidth = panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
 			if (parentWidth > 0) {
 				max = Math.max(minWidth, Math.min(maxWidth, parentWidth - reservedSpace));
 			}
 			return Math.min(max, Math.max(minWidth, value));
 		},
-		[minWidth, maxWidth, reservedSpace],
+		[minWidth, maxWidth, reservedSpace]
 	);
 
 	const applyWidth = useCallback(
@@ -111,7 +110,7 @@ export function useResizableWidth({
 			setWidth(clamped);
 			return clamped;
 		},
-		[clampWidth],
+		[clampWidth]
 	);
 
 	// A preferred width saved on a wide screen may not fit the current
@@ -178,7 +177,7 @@ export function useResizableWidth({
 			isResizingRef.current = true;
 			setIsResizing(true);
 		},
-		[widthAtPointer],
+		[widthAtPointer]
 	);
 
 	const handlePointerMove = useCallback(
@@ -194,7 +193,7 @@ export function useResizableWidth({
 			if (pointerWidth === null) return;
 			applyWidth(pointerWidth - grabOffsetRef.current);
 		},
-		[applyWidth, endResize, widthAtPointer],
+		[applyWidth, endResize, widthAtPointer]
 	);
 
 	const handleKeyDown = useCallback(
@@ -224,7 +223,7 @@ export function useResizableWidth({
 			preferredWidthRef.current = committed;
 			storeWidth(storageKey, committed);
 		},
-		[applyWidth, keyboardStep, minWidth, maxWidth, storageKey],
+		[applyWidth, keyboardStep, minWidth, maxWidth, storageKey]
 	);
 
 	return {
