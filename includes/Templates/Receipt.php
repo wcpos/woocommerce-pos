@@ -208,7 +208,11 @@ class Receipt {
 		// Content-Length header matches the bytes actually sent.
 		while ( ob_get_level() ) {
 			if ( ! ob_end_clean() ) {
-				break;
+				wp_die(
+					esc_html__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+					'',
+					array( 'response' => 500 )
+				);
 			}
 		}
 
