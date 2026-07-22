@@ -187,6 +187,9 @@ class Frontend {
 
 		$site_uuid        = wcpos_get_site_uuid();
 		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' );
+		if ( false === $opfs_worker_hash ) {
+			$opfs_worker_hash = VERSION;
+		}
 
 		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
 		if ( ! $user_uuid ) {
