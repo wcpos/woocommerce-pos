@@ -26,7 +26,7 @@ class Cloud_Print_Relay_Service {
 	 * Register relay event handlers.
 	 */
 	public function __construct() {
-		add_action( 'wcpos_print_job_created', array( self::class, 'send_hint' ), 10, 2 );
+		add_action( 'woocommerce_pos_print_job_created', array( self::class, 'send_hint' ), 10, 2 );
 		add_action( self::REREGISTER_HOOK, array( self::class, 'reregister' ) );
 	}
 

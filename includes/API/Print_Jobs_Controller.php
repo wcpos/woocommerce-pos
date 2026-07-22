@@ -140,7 +140,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( Cloud_Print_Relay_Service::class, 'register_response' ),
-				'permission_callback' => array( $this, 'manage_permissions_check' ),
+				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
 			)
 		);
 
@@ -150,7 +150,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( Cloud_Print_Relay_Service::class, 'disable_response' ),
-				'permission_callback' => array( $this, 'manage_permissions_check' ),
+				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
 			)
 		);
 
@@ -1021,7 +1021,17 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Permission check for app/admin management routes.
+	 * Permission check for relay registration routes.
+	 *
+	 * Registering rotates the site's relay credentials, so it needs the
+	 * settings-management capability, not the cashier-level print capability.
+	 */
+	public function relay_manage_permissions_check(): bool {
+		return current_user_can( 'manage_woocommerce_pos' );
+	}
+
+	/**
+	 * Check permissions for cashier-level print job actions.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 *

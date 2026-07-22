@@ -17,7 +17,11 @@ class Cloud_Print_Registry {
 	const SEEN_TTL       = 150; // Seconds; connected if seen within this window.
 	const PN_STATUS_TTL  = 60;  // Seconds; PrintNode live-status cache window.
 
-	/** @var array<string, string> Relay status details keyed by printer id. */
+	/**
+	 * Relay block signals captured while resolving statuses, keyed by printer id.
+	 *
+	 * @var array<string, string>
+	 */
 	private $relay_status_details = array();
 
 	/**

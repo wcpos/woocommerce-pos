@@ -30,8 +30,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		( new Print_Job_Service() )->register_post_type();
-		remove_all_actions( 'wcpos_print_job_created' );
-		add_action( 'wcpos_print_job_created', array( Cloud_Print_Relay_Service::class, 'send_hint' ), 10, 2 );
+		remove_all_actions( 'woocommerce_pos_print_job_created' );
+		add_action( 'woocommerce_pos_print_job_created', array( Cloud_Print_Relay_Service::class, 'send_hint' ), 10, 2 );
 	}
 
 	/**
