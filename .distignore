@@ -9,6 +9,7 @@ report.html
 README.md
 composer.json
 composer.lock
+eslint.config.mjs
 hookdoc-conf.json
 package.json
 yarn.lock
