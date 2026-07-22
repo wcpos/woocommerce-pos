@@ -143,7 +143,7 @@ class Storefront_Receipts {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
 
-			return $order && hash_equals( $order->get_order_key(), $key ) ? $order : null;
+			return $order && '' !== $key && hash_equals( $order->get_order_key(), $key ) ? $order : null;
 		}
 
 		if ( is_user_logged_in() && is_account_page() && is_wc_endpoint_url( 'view-order' ) ) {
