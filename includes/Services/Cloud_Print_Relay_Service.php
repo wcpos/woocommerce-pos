@@ -8,211 +8,66 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WP_Error;
-use WP_REST_Response;
 
 /**
- * Cloud_Print_Relay_Service class.
+ * Talks to the WCPOS Cloud Print relay: registration/consent, job-pending
+ * hints, and printer status queries. All relay knowledge lives here; the
+ * REST controller only wraps these methods in responses.
  */
 class Cloud_Print_Relay_Service {
-	const RELAY_URL              = 'https://cloudprint.wcpos.com';
-	const VERIFY_TRANSIENT       = 'wcpos_relay_verify_token';
-	const STATUS_CACHE_TTL       = 30;
-	const REREGISTER_GUARD       = 3600;
+	const RELAY_URL = 'https://cloudprint.wcpos.com';
+
+	/**
+	 * Server-owned relay state {enabled, site_key, hint_secret, registered_at}.
+	 * Deliberately a separate option from the client-writable cloud-print
+	 * settings so no settings write path can clobber or leak it.
+	 */
+	const OPTION = 'woocommerce_pos_cloud_print_relay';
+
+	const VERIFY_TRANSIENT        = 'wcpos_relay_verify_token';
+	const STATUS_CACHE_TTL        = 30;
 	const STATUS_TRANSIENT_PREFIX = 'wcpos_relay_status_';
-	const REREGISTER_TRANSIENT   = 'wcpos_relay_reregister_guard';
-	const REREGISTER_HOOK        = 'wcpos_relay_reregister';
+
+	/**
+	 * Site-wide "relay unreachable" marker: one failed status call stops
+	 * further calls for the cache window, so a hanging relay costs one
+	 * timeout per window instead of one per printer per admin tab.
+	 */
+	const DOWN_TRANSIENT = 'wcpos_relay_down';
+
+	const REREGISTER_GUARD     = 3600;
+	const REREGISTER_TRANSIENT = 'wcpos_relay_reregister_guard';
+	const REREGISTER_HOOK      = 'wcpos_relay_reregister';
 
 	/**
 	 * Register relay event handlers.
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_pos_print_job_created', array( self::class, 'send_hint' ), 10, 2 );
-		add_action( self::REREGISTER_HOOK, array( self::class, 'reregister' ) );
+		add_action( 'woocommerce_pos_print_job_created', array( $this, 'send_hint' ), 10, 2 );
+		add_action( self::REREGISTER_HOOK, array( $this, 'reregister' ) );
 	}
 
 	/**
-	 * Return a pending verification token to the relay.
+	 * Return the pending verification token, if a registration is in flight.
 	 *
-	 * @return WP_REST_Response|WP_Error
+	 * @return string|null
 	 */
-	public static function verification_response() {
+	public static function pending_verification_token(): ?string {
 		$token = get_transient( self::VERIFY_TRANSIENT );
-		if ( false === $token ) {
-			return new WP_Error(
-				'wcpos_relay_no_pending_verification',
-				__( 'No relay verification is pending.', 'woocommerce-pos' ),
-				array( 'status' => 404 )
-			);
-		}
 
-		return new WP_REST_Response( array( 'token' => (string) $token ), 200 );
+		return false === $token ? null : (string) $token;
 	}
 
 	/**
-	 * Register this site with the relay.
+	 * Register this site with the relay and persist its credentials.
 	 *
-	 * The relay calls verification_response() while this blocking request is open.
-	 *
-	 * @return WP_REST_Response|WP_Error
-	 */
-	public static function register_response() {
-		$result = self::register_site();
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		return new WP_REST_Response( $result, 200 );
-	}
-
-	/**
-	 * Disable relay use while retaining deterministic site credentials.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public static function disable_response(): WP_REST_Response {
-		$settings = get_option( Cloud_Print_Registry::OPTION, array() );
-		$settings = \is_array( $settings ) ? $settings : array();
-		$relay    = isset( $settings['relay'] ) && \is_array( $settings['relay'] ) ? $settings['relay'] : array();
-		$relay['enabled']  = false;
-		$settings['relay'] = $relay;
-		update_option( Cloud_Print_Registry::OPTION, $settings );
-
-		return new WP_REST_Response( array( 'enabled' => false ), 200 );
-	}
-
-	/**
-	 * Send a best-effort hint when a polling printer gets a job.
-	 *
-	 * @param int    $job_id     Print job ID.
-	 * @param string $printer_id Printer ID.
-	 */
-	public static function send_hint( $job_id, $printer_id ): void {
-		$relay = self::relay_settings();
-		if ( empty( $relay['enabled'] ) || ! self::valid_credentials( $relay ) ) {
-			return;
-		}
-
-		$printer = ( new Cloud_Print_Registry() )->get_printer( sanitize_text_field( (string) $printer_id ) );
-		if ( null === $printer || ! Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ) ) {
-			return;
-		}
-
-		$site_key  = (string) $relay['site_key'];
-		$secret    = (string) $relay['hint_secret'];
-		$path      = '/api/hint/' . $site_key;
-		$timestamp = (string) time();
-		$body      = wp_json_encode( array( 'printer_id' => (string) $printer_id ) );
-
-		// Best-effort by design: a lost hint costs at most one heartbeat
-		// interval of print latency, so failures are deliberately silent.
-		wp_remote_post(
-			self::relay_url() . $path,
-			array(
-				'blocking' => false,
-				'timeout'  => 2,
-				'headers'  => self::signed_headers( 'POST', $path, $timestamp, $body, $secret ),
-				'body'     => $body,
-			)
-		);
-	}
-
-	/**
-	 * Query the cached relay status for a printer.
-	 *
-	 * @param string $printer_id Printer ID.
-	 *
-	 * @return array|null Relay status or null on failure/when disabled.
-	 */
-	public static function status( string $printer_id ): ?array {
-		$relay = self::relay_settings();
-		if ( empty( $relay['enabled'] ) || ! self::valid_credentials( $relay ) ) {
-			return null;
-		}
-
-		$key    = self::STATUS_TRANSIENT_PREFIX . $printer_id;
-		$cached = get_transient( $key );
-		if ( false !== $cached ) {
-			return ! empty( $cached['failed'] ) ? null : $cached;
-		}
-
-		$site_key = (string) $relay['site_key'];
-		$path     = '/api/status/' . $site_key;
-		$timestamp = (string) time();
-		$response  = wp_remote_get(
-			self::relay_url() . $path . '?printer_id=' . rawurlencode( $printer_id ),
-			array(
-				'timeout' => 3,
-				'headers' => self::signed_headers( 'GET', $path, $timestamp, $printer_id, (string) $relay['hint_secret'] ),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			set_transient( $key, array( 'failed' => true ), self::STATUS_CACHE_TTL );
-
-			return null;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		$body = wp_remote_retrieve_body( $response );
-		if ( 404 === $code && false !== stripos( $body, 'unknown site' ) ) {
-			self::schedule_reregistration();
-		}
-		$data = json_decode( $body, true );
-		if ( 200 !== $code || ! \is_array( $data ) ) {
-			set_transient( $key, array( 'failed' => true ), self::STATUS_CACHE_TTL );
-
-			return null;
-		}
-
-		$status = array(
-			'origin_status'         => sanitize_text_field( (string) ( $data['origin_status'] ?? '' ) ),
-			'origin_block_signal'   => sanitize_text_field( (string) ( $data['origin_block_signal'] ?? '' ) ),
-			'last_seen_seconds_ago' => isset( $data['last_seen_seconds_ago'] ) ? max( 0, (int) $data['last_seen_seconds_ago'] ) : null,
-		);
-		set_transient( $key, $status, self::STATUS_CACHE_TTL );
-
-		return $status;
-	}
-
-	/**
-	 * Build a relay-compatible HMAC signature.
-	 *
-	 * @param string $method    HTTP method.
-	 * @param string $path      Request path without query string.
-	 * @param string $timestamp Unix timestamp.
-	 * @param string $payload   Signed payload.
-	 * @param string $secret    Hex-encoded signing secret.
-	 *
-	 * @return string Lowercase hexadecimal signature.
-	 */
-	public static function sign( string $method, string $path, string $timestamp, string $payload, string $secret ): string {
-		$key = hex2bin( $secret );
-
-		return false === $key ? '' : hash_hmac( 'sha256', $method . "\n" . $path . "\n" . $timestamp . "\n" . $payload, $key );
-	}
-
-	/**
-	 * Build the public printer URL for a registered site.
-	 *
-	 * @param string $site_key Relay site key.
-	 */
-	public static function printer_base_url( string $site_key ): string {
-		return self::relay_url() . '/p/' . rawurlencode( $site_key );
-	}
-
-	/**
-	 * Re-register after the relay reports an unknown site.
-	 */
-	public static function reregister(): void {
-		self::register_site();
-	}
-
-	/**
-	 * Perform relay registration and persist its authoritative response.
+	 * The relay fetches the verification token from this site while the
+	 * outbound request below is still open, proving consent and that WCPOS
+	 * is actually installed at the claimed URL.
 	 *
 	 * @return array|WP_Error Public relay fields or an error.
 	 */
-	private static function register_site() {
+	public static function register_site() {
 		try {
 			$token = bin2hex( random_bytes( 24 ) );
 		} catch ( \Exception $exception ) {
@@ -248,25 +103,213 @@ class Cloud_Print_Relay_Service {
 		$data        = \is_array( $data ) ? $data : array();
 		$site_key    = sanitize_text_field( (string) ( $data['site_key'] ?? '' ) );
 		$hint_secret = sanitize_text_field( (string) ( $data['hint_secret'] ?? '' ) );
-		$base_url    = esc_url_raw( (string) ( $data['printer_base_url'] ?? '' ) );
-		if ( 1 !== preg_match( '/^[a-f0-9]{32}$/i', $site_key ) || 1 !== preg_match( '/^[a-f0-9]{64}$/i', $hint_secret ) || '' === $base_url ) {
+		if ( 1 !== preg_match( '/^[a-f0-9]{32}$/i', $site_key ) || 1 !== preg_match( '/^[a-f0-9]{64}$/i', $hint_secret ) ) {
 			return self::registration_error( __( 'Relay registration returned invalid credentials.', 'woocommerce-pos' ) );
 		}
 
-		$settings          = get_option( Cloud_Print_Registry::OPTION, array() );
-		$settings          = \is_array( $settings ) ? $settings : array();
-		$settings['relay'] = array(
-			'enabled'       => true,
-			'site_key'      => $site_key,
-			'hint_secret'   => strtolower( $hint_secret ),
-			'registered_at' => time(),
+		update_option(
+			self::OPTION,
+			array(
+				'enabled'       => true,
+				'site_key'      => strtolower( $site_key ),
+				'hint_secret'   => strtolower( $hint_secret ),
+				'registered_at' => time(),
+			)
 		);
-		update_option( Cloud_Print_Registry::OPTION, $settings );
+		delete_transient( self::DOWN_TRANSIENT );
 
+		// The printer URL is always rebuilt from the validated site_key —
+		// never from the relay response — so a compromised relay cannot
+		// point printers (and their tokens) at another host.
 		return array(
 			'enabled'          => true,
-			'printer_base_url' => $base_url,
+			'printer_base_url' => self::printer_base_url( strtolower( $site_key ) ),
 		);
+	}
+
+	/**
+	 * Disable relay use while retaining the deterministic site credentials.
+	 *
+	 * @return array Public relay state.
+	 */
+	public static function disable(): array {
+		$stored            = self::settings();
+		$stored['enabled'] = false;
+		update_option( self::OPTION, $stored );
+
+		return array( 'enabled' => false );
+	}
+
+	/**
+	 * Public relay state for REST responses: never includes the secret.
+	 *
+	 * @return array
+	 */
+	public static function public_state(): array {
+		$relay = self::settings();
+		$state = array( 'enabled' => ! empty( $relay['enabled'] ) );
+		if ( 1 === preg_match( '/^[a-f0-9]{32}$/', (string) ( $relay['site_key'] ?? '' ) ) ) {
+			$state['printer_base_url'] = self::printer_base_url( (string) $relay['site_key'] );
+		}
+
+		return $state;
+	}
+
+	/**
+	 * Send a best-effort hint when a polling printer gets a job.
+	 *
+	 * @param int    $job_id     Print job ID.
+	 * @param string $printer_id Printer ID.
+	 */
+	public function send_hint( $job_id, $printer_id ): void {
+		$relay = self::settings();
+		if ( empty( $relay['enabled'] ) || ! self::valid_credentials( $relay ) ) {
+			return;
+		}
+
+		$printer = ( new Cloud_Print_Registry() )->get_printer( sanitize_text_field( (string) $printer_id ) );
+		if ( null === $printer || ! Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ) ) {
+			return;
+		}
+
+		$site_key  = (string) $relay['site_key'];
+		$path      = '/api/hint/' . $site_key;
+		$timestamp = (string) time();
+		$body      = wp_json_encode( array( 'printer_id' => (string) $printer_id ) );
+
+		// Best-effort by design: a lost hint costs at most one heartbeat
+		// interval of print latency, so failures are deliberately silent.
+		wp_remote_post(
+			self::relay_url() . $path,
+			array(
+				'blocking' => false,
+				'timeout'  => 2,
+				'headers'  => self::signed_headers( 'POST', $path, $timestamp, $body, (string) $relay['hint_secret'] ),
+				'body'     => $body,
+			)
+		);
+	}
+
+	/**
+	 * Query the cached relay status for a printer.
+	 *
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return array|null Relay status or null on failure/when disabled.
+	 */
+	public static function status( string $printer_id ): ?array {
+		$relay = self::settings();
+		if ( empty( $relay['enabled'] ) || ! self::valid_credentials( $relay ) ) {
+			return null;
+		}
+
+		$key    = self::STATUS_TRANSIENT_PREFIX . $printer_id;
+		$cached = get_transient( $key );
+		if ( false !== $cached ) {
+			return ! empty( $cached['failed'] ) ? null : $cached;
+		}
+		if ( false !== get_transient( self::DOWN_TRANSIENT ) ) {
+			return null;
+		}
+
+		$site_key  = (string) $relay['site_key'];
+		$path      = '/api/status/' . $site_key;
+		$timestamp = (string) time();
+		$response  = wp_remote_get(
+			self::relay_url() . $path . '?printer_id=' . rawurlencode( $printer_id ),
+			array(
+				'timeout' => 3,
+				'headers' => self::signed_headers( 'GET', $path, $timestamp, $printer_id, (string) $relay['hint_secret'] ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			self::note_status_failure( $key );
+
+			return null;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		// Exact match on the relay's machine-readable error field; the
+		// registry was rebuilt, so a guarded re-registration restores the
+		// same deterministic site key.
+		if ( 404 === $code && \is_array( $data ) && 'unknown site' === ( $data['error'] ?? '' ) ) {
+			self::schedule_reregistration();
+		}
+		if ( 200 !== $code || ! \is_array( $data ) ) {
+			self::note_status_failure( $key );
+
+			return null;
+		}
+
+		$status = array(
+			'origin_status'         => sanitize_text_field( (string) ( $data['origin_status'] ?? '' ) ),
+			'origin_block_signal'   => sanitize_text_field( (string) ( $data['origin_block_signal'] ?? '' ) ),
+			'last_seen_seconds_ago' => isset( $data['last_seen_seconds_ago'] ) ? max( 0, (int) $data['last_seen_seconds_ago'] ) : null,
+		);
+		set_transient( $key, $status, self::STATUS_CACHE_TTL );
+
+		return $status;
+	}
+
+	/**
+	 * The relay's block signal for a printer, when it reports one.
+	 *
+	 * Reads the same transient cache as status(), so calling both costs one
+	 * relay round-trip at most.
+	 *
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return string|null
+	 */
+	public static function status_detail( string $printer_id ): ?string {
+		$status = self::status( $printer_id );
+		if ( null !== $status && 'blocked' === $status['origin_status'] && '' !== $status['origin_block_signal'] ) {
+			return $status['origin_block_signal'];
+		}
+
+		return null;
+	}
+
+	/**
+	 * Build a relay-compatible HMAC signature.
+	 *
+	 * @param string $method    HTTP method.
+	 * @param string $path      Request path without query string.
+	 * @param string $timestamp Unix timestamp.
+	 * @param string $payload   Signed payload.
+	 * @param string $secret    Hex-encoded signing secret.
+	 *
+	 * @return string Lowercase hexadecimal signature.
+	 */
+	public static function sign( string $method, string $path, string $timestamp, string $payload, string $secret ): string {
+		$key = hex2bin( $secret );
+
+		return false === $key ? '' : hash_hmac( 'sha256', $method . "\n" . $path . "\n" . $timestamp . "\n" . $payload, $key );
+	}
+
+	/**
+	 * Build the public printer URL for a registered site.
+	 *
+	 * @param string $site_key Relay site key.
+	 */
+	public static function printer_base_url( string $site_key ): string {
+		return self::relay_url() . '/p/' . rawurlencode( $site_key );
+	}
+
+	/**
+	 * Re-register after the relay reports an unknown site.
+	 *
+	 * Bails when the admin has disabled the relay in the meantime — a
+	 * pending cron event must never re-enable it behind their back.
+	 */
+	public function reregister(): void {
+		$relay = self::settings();
+		if ( empty( $relay['enabled'] ) ) {
+			return;
+		}
+		self::register_site();
 	}
 
 	/**
@@ -274,10 +317,10 @@ class Cloud_Print_Relay_Service {
 	 *
 	 * @return array
 	 */
-	private static function relay_settings(): array {
-		$settings = get_option( Cloud_Print_Registry::OPTION, array() );
+	private static function settings(): array {
+		$stored = get_option( self::OPTION, array() );
 
-		return \is_array( $settings ) && isset( $settings['relay'] ) && \is_array( $settings['relay'] ) ? $settings['relay'] : array();
+		return \is_array( $stored ) ? $stored : array();
 	}
 
 	/**
@@ -307,6 +350,17 @@ class Cloud_Print_Relay_Service {
 			'X-Relay-Signature' => self::sign( $method, $path, $timestamp, $payload, $secret ),
 			'Content-Type'      => 'application/json',
 		);
+	}
+
+	/**
+	 * Record a failed status call: per-printer negative cache plus the
+	 * site-wide down marker so other printers skip their calls entirely.
+	 *
+	 * @param string $transient_key Per-printer status transient key.
+	 */
+	private static function note_status_failure( string $transient_key ): void {
+		set_transient( $transient_key, array( 'failed' => true ), self::STATUS_CACHE_TTL );
+		set_transient( self::DOWN_TRANSIENT, true, self::STATUS_CACHE_TTL );
 	}
 
 	/**

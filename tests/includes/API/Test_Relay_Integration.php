@@ -31,7 +31,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		parent::setUp();
 		( new Print_Job_Service() )->register_post_type();
 		remove_all_actions( 'woocommerce_pos_print_job_created' );
-		add_action( 'woocommerce_pos_print_job_created', array( Cloud_Print_Relay_Service::class, 'send_hint' ), 10, 2 );
+		remove_all_actions( Cloud_Print_Relay_Service::REREGISTER_HOOK );
+		new Cloud_Print_Relay_Service();
 	}
 
 	/**
@@ -43,8 +44,10 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		}
 		delete_option( Cloud_Print_Registry::OPTION );
 		delete_option( Cloud_Print_Registry::RUNTIME_OPTION );
+		delete_option( Cloud_Print_Relay_Service::OPTION );
 		delete_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT );
 		delete_transient( Cloud_Print_Relay_Service::REREGISTER_TRANSIENT );
+		delete_transient( Cloud_Print_Relay_Service::DOWN_TRANSIENT );
 		wp_clear_scheduled_hook( Cloud_Print_Relay_Service::REREGISTER_HOOK );
 		parent::tearDown();
 	}
@@ -98,12 +101,15 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 					),
 				),
 				'assignments' => array(),
-				'relay'       => array(
-					'enabled'       => $enabled,
-					'site_key'      => '0123456789abcdef0123456789abcdef',
-					'hint_secret'   => '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
-					'registered_at' => time(),
-				),
+			)
+		);
+		update_option(
+			Cloud_Print_Relay_Service::OPTION,
+			array(
+				'enabled'       => $enabled,
+				'site_key'      => '0123456789abcdef0123456789abcdef',
+				'hint_secret'   => '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+				'registered_at' => time(),
 			)
 		);
 	}
@@ -148,8 +154,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 				return $this->http_response(
 					201,
 					array(
-						'site_key'        => 'abcdef0123456789abcdef0123456789',
-						'hint_secret'     => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+						'site_key'         => 'abcdef0123456789abcdef0123456789',
+						'hint_secret'      => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
 						'printer_base_url' => 'https://cloudprint.wcpos.com/p/abcdef0123456789abcdef0123456789',
 					)
 				);
@@ -158,17 +164,45 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
-		$saved    = get_option( Cloud_Print_Registry::OPTION );
+		$saved    = get_option( Cloud_Print_Relay_Service::OPTION );
 
 		// Assert.
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( true, $saved['relay']['enabled'] );
-		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['relay']['site_key'] );
-		$this->assertEquals( '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff', $saved['relay']['hint_secret'] );
-		$this->assertGreaterThan( 0, $saved['relay']['registered_at'] );
+		$this->assertEquals( true, $saved['enabled'] );
+		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
+		$this->assertEquals( '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff', $saved['hint_secret'] );
+		$this->assertGreaterThan( 0, $saved['registered_at'] );
 		$this->assertFalse( get_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT ) );
 		$this->assertStringNotContainsString( 'hint_secret', wp_json_encode( $response->get_data() ) );
 		$this->assertEquals( true, $response->get_data()['enabled'] );
+	}
+
+	/**
+	 * It never trusts a relay-supplied printer base URL.
+	 */
+	public function test_register_ignores_relay_supplied_printer_base_url(): void {
+		// Arrange: a compromised relay pointing printers at another host.
+		$this->mock_http(
+			function () {
+				return $this->http_response(
+					201,
+					array(
+						'site_key'         => 'abcdef0123456789abcdef0123456789',
+						'hint_secret'      => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+						'printer_base_url' => 'https://evil.example/p/abcdef0123456789abcdef0123456789',
+					)
+				);
+			}
+		);
+
+		// Act.
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
+
+		// Assert: the URL is rebuilt from the validated site key.
+		$this->assertEquals(
+			'https://cloudprint.wcpos.com/p/abcdef0123456789abcdef0123456789',
+			$response->get_data()['printer_base_url']
+		);
 	}
 
 	/**
@@ -191,12 +225,12 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It preserves the server-owned relay section during general settings updates.
+	 * It keeps relay credentials out of reach of general settings updates.
 	 */
 	public function test_client_settings_update_cannot_write_relay_section(): void {
 		// Arrange.
 		$this->store_relay();
-		$expected = get_option( Cloud_Print_Registry::OPTION )['relay'];
+		$expected = get_option( Cloud_Print_Relay_Service::OPTION );
 		$request  = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
 		$request->set_body_params(
 			array(
@@ -213,8 +247,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		rest_do_request( $request );
 
-		// Assert.
-		$this->assertEquals( $expected, get_option( Cloud_Print_Registry::OPTION )['relay'] );
+		// Assert: the relay option is untouched by the settings write path.
+		$this->assertEquals( $expected, get_option( Cloud_Print_Relay_Service::OPTION ) );
 	}
 
 	/**
@@ -223,7 +257,11 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	public function test_settings_response_never_contains_hint_secret_and_exposes_printer_base_url(): void {
 		// Arrange.
 		$this->store_relay( 'printnode' );
-		$this->mock_http( function () { return new WP_Error( 'offline', 'offline' ); } );
+		$this->mock_http(
+			function () {
+				return new WP_Error( 'offline', 'offline' );
+			}
+		);
 
 		// Act.
 		$response = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) );
@@ -257,11 +295,26 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$jobs = new Print_Job_Service();
 
 		// Act.
-		$jobs->create( array( 'printer_id' => 'front', 'payload' => base64_encode( 'one' ) ) );
+		$jobs->create(
+			array(
+				'printer_id' => 'front',
+				'payload'    => base64_encode( 'one' ),
+			)
+		);
 		$this->store_relay( 'star-cloudprnt', false );
-		$jobs->create( array( 'printer_id' => 'front', 'payload' => base64_encode( 'two' ) ) );
+		$jobs->create(
+			array(
+				'printer_id' => 'front',
+				'payload'    => base64_encode( 'two' ),
+			)
+		);
 		$this->store_relay( 'printnode' );
-		$jobs->create( array( 'printer_id' => 'front', 'payload' => base64_encode( 'three' ) ) );
+		$jobs->create(
+			array(
+				'printer_id' => 'front',
+				'payload'    => base64_encode( 'three' ),
+			)
+		);
 
 		// Assert.
 		$this->assertCount( 1, $requests );
@@ -303,7 +356,11 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 				'last_seen_seconds_ago' => null,
 			)
 		);
-		$this->mock_http( function () use ( &$result ) { return $result; } );
+		$this->mock_http(
+			function () use ( &$result ) {
+				return $result;
+			}
+		);
 
 		// Act.
 		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
@@ -325,6 +382,38 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It stops calling the relay for other printers once one status call fails.
+	 */
+	public function test_relay_outage_marks_relay_down_site_wide(): void {
+		// Arrange: two polling printers, a relay that never answers.
+		$this->store_relay();
+		$settings               = get_option( Cloud_Print_Registry::OPTION );
+		$settings['printers'][] = array(
+			'id'       => 'back',
+			'name'     => 'Back',
+			'provider' => 'star-cloudprnt',
+		);
+		update_option( Cloud_Print_Registry::OPTION, $settings );
+		$calls = 0;
+		$this->mock_http(
+			function () use ( &$calls ) {
+				++$calls;
+
+				return new WP_Error( 'relay_unreachable', 'Relay unreachable' );
+			}
+		);
+		$registry = new Cloud_Print_Registry();
+
+		// Act.
+		$registry->status_for( 'front' );
+		$registry->status_for( 'back' );
+
+		// Assert: the second printer never triggers a second timeout.
+		$this->assertEquals( 1, $calls );
+		$this->assertNotFalse( get_transient( Cloud_Print_Relay_Service::DOWN_TRANSIENT ) );
+	}
+
+	/**
 	 * It schedules only one guarded re-registration for an unknown relay site.
 	 */
 	public function test_unknown_site_status_schedules_reregistration_once(): void {
@@ -332,7 +421,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$this->store_relay();
 		$this->mock_http(
 			function () {
-				return $this->http_response( 404, array( 'message' => 'unknown site' ) );
+				return $this->http_response( 404, array( 'error' => 'unknown site' ) );
 			}
 		);
 		$registry = new Cloud_Print_Registry();
@@ -346,11 +435,35 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		wp_clear_scheduled_hook( Cloud_Print_Relay_Service::REREGISTER_HOOK );
 		delete_transient( Cloud_Print_Relay_Service::STATUS_TRANSIENT_PREFIX . 'front' );
+		delete_transient( Cloud_Print_Relay_Service::DOWN_TRANSIENT );
 
 		// Act.
 		$registry->status_for( 'front' );
 
 		// Assert.
 		$this->assertFalse( wp_next_scheduled( Cloud_Print_Relay_Service::REREGISTER_HOOK ) );
+	}
+
+	/**
+	 * It never re-enables a relay the admin disabled while re-registration was pending.
+	 */
+	public function test_reregister_cron_respects_disabled_relay(): void {
+		// Arrange: registered, then explicitly disabled.
+		$this->store_relay( 'star-cloudprnt', false );
+		$calls = 0;
+		$this->mock_http(
+			function () use ( &$calls ) {
+				++$calls;
+
+				return $this->http_response( 201, array() );
+			}
+		);
+
+		// Act.
+		( new Cloud_Print_Relay_Service() )->reregister();
+
+		// Assert: no outbound registration, still disabled.
+		$this->assertEquals( 0, $calls );
+		$this->assertFalse( (bool) get_option( Cloud_Print_Relay_Service::OPTION )['enabled'] );
 	}
 }

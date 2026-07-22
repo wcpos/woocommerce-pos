@@ -129,7 +129,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			'/' . $this->rest_base . '/relay-verification',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( Cloud_Print_Relay_Service::class, 'verification_response' ),
+				'callback'            => array( $this, 'relay_verification' ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -139,7 +139,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			'/' . $this->rest_base . '/relay/register',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( Cloud_Print_Relay_Service::class, 'register_response' ),
+				'callback'            => array( $this, 'relay_register' ),
 				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
 			)
 		);
@@ -149,7 +149,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			'/' . $this->rest_base . '/relay/disable',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( Cloud_Print_Relay_Service::class, 'disable_response' ),
+				'callback'            => array( $this, 'relay_disable' ),
 				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
 			)
 		);
@@ -1018,6 +1018,44 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Serve the pending relay verification token (public; consent callback).
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function relay_verification() {
+		$token = Cloud_Print_Relay_Service::pending_verification_token();
+		if ( null === $token ) {
+			return new WP_Error(
+				'wcpos_relay_no_pending_verification',
+				__( 'No relay verification is pending.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return rest_ensure_response( array( 'token' => $token ) );
+	}
+
+	/**
+	 * Register this site with the WCPOS Cloud Print relay.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function relay_register() {
+		$result = Cloud_Print_Relay_Service::register_site();
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * Disable relay use for this site.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function relay_disable() {
+		return rest_ensure_response( Cloud_Print_Relay_Service::disable() );
 	}
 
 	/**

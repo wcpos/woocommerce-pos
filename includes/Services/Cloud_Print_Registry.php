@@ -18,13 +18,6 @@ class Cloud_Print_Registry {
 	const PN_STATUS_TTL  = 60;  // Seconds; PrintNode live-status cache window.
 
 	/**
-	 * Relay block signals captured while resolving statuses, keyed by printer id.
-	 *
-	 * @var array<string, string>
-	 */
-	private $relay_status_details = array();
-
-	/**
 	 * Get a registered cloud printer by id.
 	 *
 	 * @param string $printer_id Printer id.
@@ -168,8 +161,6 @@ class Cloud_Print_Registry {
 		if ( null !== $printer && Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ) ) {
 			$relay_status = Cloud_Print_Relay_Service::status( $printer_id );
 			if ( null !== $relay_status && 'blocked' === $relay_status['origin_status'] ) {
-				$this->relay_status_details[ $printer_id ] = (string) $relay_status['origin_block_signal'];
-
 				return 'blocked';
 			}
 			if ( null !== $relay_status && null !== $relay_status['last_seen_seconds_ago'] && $relay_status['last_seen_seconds_ago'] <= self::SEEN_TTL ) {
@@ -186,14 +177,17 @@ class Cloud_Print_Registry {
 	}
 
 	/**
-	 * Return relay detail captured while resolving a printer's status.
+	 * The relay's block signal for a printer, when it reports one.
+	 *
+	 * Delegates to the relay service's transient-cached status, so this is
+	 * safe to call in any order relative to status_for().
 	 *
 	 * @param string $printer_id Printer ID.
 	 *
 	 * @return string|null
 	 */
 	public function status_detail_for( string $printer_id ): ?string {
-		return $this->relay_status_details[ $printer_id ] ?? null;
+		return Cloud_Print_Relay_Service::status_detail( $printer_id );
 	}
 
 	/**

@@ -7,6 +7,7 @@ import { AutoPrintRules } from './auto-print-rules';
 import { fetchPrintNodePrinters } from './fetch-printnode-printers';
 import { fetchStarDevices } from './fetch-star-devices';
 import { PrinterCard } from './printer-card';
+import { PROVIDERS } from './providers';
 import { CardGrid } from '../../components/card-grid';
 import {
 	type CloudPrintSettings,
@@ -214,9 +215,7 @@ function CloudPrint() {
 	);
 
 	const relay = settings.relay;
-	const hasPollingPrinters = draft.printers.some(
-		(p) => p.provider === 'star-cloudprnt' || p.provider === 'epson-sdp'
-	);
+	const hasPollingPrinters = draft.printers.some((p) => PROVIDERS[p.provider]?.isPolling);
 
 	const handleRelayToggle = React.useCallback(
 		async (checked: boolean) => {
@@ -309,7 +308,6 @@ function CloudPrint() {
 							'cloud_print.relay_toggle',
 							'Route printers through WCPOS Cloud Print (recommended)'
 						)}
-						data-testid="cloud-print-relay-toggle"
 					/>
 					{relay?.enabled && (
 						<Chip variant="success" shape="pill" size="sm">

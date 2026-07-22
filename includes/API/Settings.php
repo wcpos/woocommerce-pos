@@ -644,17 +644,13 @@ class Settings extends WP_REST_Controller {
 				} else {
 					unset( $printer['status_detail'] );
 				}
-				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'], $printer['hint_secret'] );
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
 
 				return $printer;
 			},
 			$settings['printers']
 		);
-		$stored_relay      = isset( $settings['relay'] ) && \is_array( $settings['relay'] ) ? $settings['relay'] : array();
-		$settings['relay'] = array( 'enabled' => ! empty( $stored_relay['enabled'] ) );
-		if ( ! empty( $stored_relay['site_key'] ) ) {
-			$settings['relay']['printer_base_url'] = Cloud_Print_Relay_Service::printer_base_url( sanitize_text_field( (string) $stored_relay['site_key'] ) );
-		}
+		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
 
 		return new WP_REST_Response( $settings, 200 );
 	}
@@ -764,9 +760,6 @@ class Settings extends WP_REST_Controller {
 			'printers'    => $clean_printers,
 			'assignments' => array_map( array( $this, 'sanitize_cloud_assignment' ), $assigns ),
 		);
-		if ( \is_array( $existing ) && isset( $existing['relay'] ) && \is_array( $existing['relay'] ) ) {
-			$clean['relay'] = $existing['relay'];
-		}
 		update_option( 'woocommerce_pos_settings_cloud_print', $clean );
 
 		// Drop runtime last-seen entries for printers that were removed.
@@ -775,7 +768,7 @@ class Settings extends WP_REST_Controller {
 		$response_printers = array_map(
 			function ( $printer ) {
 				$printer = $this->with_cloud_printer_encoding_fields( $printer );
-				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'], $printer['hint_secret'] );
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
 
 				return $printer;
 			},
