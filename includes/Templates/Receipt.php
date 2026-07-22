@@ -215,7 +215,14 @@ class Receipt {
 		$order_number = sanitize_file_name( (string) $order->get_order_number() );
 		header( 'Content-Type: application/pdf' );
 		header( 'Content-Disposition: attachment; filename="receipt-' . $order_number . '.pdf"' );
-		header( 'Content-Length: ' . \strlen( $pdf ) );
+
+		// A remaining (non-removable) output buffer may transform the body on
+		// flush, e.g. ob_gzhandler, making the raw PDF byte count wrong. Only
+		// declare Content-Length when the output stream is unbuffered; browsers
+		// fall back to reading until the response ends.
+		if ( 0 === ob_get_level() ) {
+			header( 'Content-Length: ' . \strlen( $pdf ) );
+		}
 		header( 'Cache-Control: no-store' );
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		echo $pdf;
