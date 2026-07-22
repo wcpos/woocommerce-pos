@@ -50,6 +50,8 @@ function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): Sta
 				variant: 'warning',
 				label: t('cloud_print.status_waiting', 'Waiting for printer'),
 			};
+		case 'blocked':
+			return { variant: 'error', label: t('cloud_print.status_blocked', 'Blocked') };
 		case 'offline':
 		default:
 			return { variant: 'error', label: t('cloud_print.status_offline', 'Offline') };

@@ -29,6 +29,24 @@ export interface PrinterCardProps {
 	onUpdate: (id: string, changes: Partial<CloudPrinter>) => void;
 }
 
+/**
+ * Explain a 'blocked' status in the merchant's terms. A 5xx from the site is
+ * the site failing, not a security layer blocking — the fix is different, so
+ * the copy must be too.
+ */
+function blockedExplanation(detail?: string | null): string {
+	if (detail && /^http-5/.test(detail)) {
+		return t(
+			'cloud_print.blocked_site_error',
+			'WCPOS Cloud Print reached your site, but the site responded with a server error. Check your site health and error logs.'
+		);
+	}
+	return t(
+		'cloud_print.blocked_security',
+		'A security service (like Cloudflare or a firewall plugin) is blocking WCPOS Cloud Print, so receipts can\'t reach this printer. Allowlist the relay to restore printing — see wcpos.com/cloudprint.'
+	);
+}
+
 /** PDF/RAW options for the PrintNode format control. */
 function formatOptions(): { value: PrintnodeFormat; label: string }[] {
 	return [
@@ -227,6 +245,15 @@ export function PrinterCard({
 						</DropdownMenu>
 					</div>
 				</div>
+
+				{printer.status === 'blocked' && (
+					<p
+						data-testid={`printer-card-blocked-${printer.id}`}
+						className="wcpos:mt-2 wcpos:rounded wcpos:bg-red-50 wcpos:px-2 wcpos:py-1 wcpos:text-xs wcpos:text-red-700"
+					>
+						{blockedExplanation(printer.status_detail)}
+					</p>
+				)}
 
 				<dl className="wcpos:mt-3 wcpos:grid wcpos:grid-cols-[auto_1fr] wcpos:gap-x-3 wcpos:gap-y-1 wcpos:text-xs">
 					<dt className="wcpos:text-gray-500">{t('cloud_print.last_check_in', 'Last check-in')}</dt>

@@ -347,3 +347,31 @@ describe('PrinterCard', () => {
 		expect(onRemove).toHaveBeenCalledWith(printer);
 	});
 });
+
+describe('PrinterCard blocked status', () => {
+	it('explains a security-layer block with allowlisting guidance', () => {
+		renderCard({
+			printer: makePrinter({ status: 'blocked', status_detail: 'cloudflare-challenge' }),
+		});
+
+		const note = screen.getByTestId('printer-card-blocked-kitchen-1');
+		expect(note.textContent).toContain('security service');
+		expect(note.textContent).toContain('wcpos.com/cloudprint');
+	});
+
+	it('explains a 5xx signal as a site error, not a block', () => {
+		renderCard({
+			printer: makePrinter({ status: 'blocked', status_detail: 'http-502' }),
+		});
+
+		const note = screen.getByTestId('printer-card-blocked-kitchen-1');
+		expect(note.textContent).toContain('server error');
+		expect(note.textContent).not.toContain('security service');
+	});
+
+	it('renders no block note for healthy printers', () => {
+		renderCard({ printer: makePrinter({ status: 'connected' }) });
+
+		expect(screen.queryByTestId('printer-card-blocked-kitchen-1')).toBeNull();
+	});
+});

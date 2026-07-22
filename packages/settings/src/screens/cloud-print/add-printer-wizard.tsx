@@ -6,7 +6,11 @@ import { PROVIDERS } from './providers';
 import { t } from '../../translations';
 
 import type { StarDeviceOption } from './fetch-star-devices';
-import type { CloudPrinter, CloudProvider } from '../../hooks/use-cloud-print-settings';
+import type {
+	CloudPrinter,
+	CloudPrintRelay,
+	CloudProvider,
+} from '../../hooks/use-cloud-print-settings';
 
 /**
  * The fields collected by the wizard to register a new printer. There is no
@@ -45,6 +49,12 @@ export interface AddPrinterWizardProps {
 	 */
 	fetchPrintNodePrinters?: (apiKey: string) => Promise<PrintNodePrinterOption[]>;
 	fetchStarDevices?: (cloudprntUrl: string, apiKey: string) => Promise<StarDeviceOption[]>;
+	/**
+	 * WCPOS Cloud Print relay registration. When enabled, poll URLs are built
+	 * on the relay's printer base URL and the direct-to-site URL is demoted to
+	 * an "Advanced" disclosure.
+	 */
+	relay?: CloudPrintRelay;
 }
 
 /** The ordered provider choices shown on step 0. */
@@ -118,11 +128,21 @@ function getRestRoot(): string {
 /**
  * Build the poll URL a printer uses to fetch jobs. `root` already ends in `/`,
  * so the path is appended without a leading slash to avoid a double slash.
+ * When `relayBaseUrl` is given (e.g. https://cloudprint.wcpos.com/p/<site_key>)
+ * the URL is built on the relay instead of this site; the query string —
+ * including the `pt` token — is identical either way, because the relay
+ * passes it through untouched.
  */
-function buildPollUrl(provider: CloudProvider, printerId: string, token: string): string {
+export function buildPollUrl(
+	provider: CloudProvider,
+	printerId: string,
+	token: string,
+	relayBaseUrl?: string
+): string {
 	const endpoint = PROVIDERS[provider].pollEndpoint;
-	const root = getRestRoot();
-	const baseUrl = `${root}wcpos/v1/print-jobs/${endpoint}`;
+	const baseUrl = relayBaseUrl
+		? `${relayBaseUrl.replace(/\/$/, '')}/${endpoint}`
+		: `${getRestRoot()}wcpos/v1/print-jobs/${endpoint}`;
 	const separator = baseUrl.includes('?') ? '&' : '?';
 	return `${baseUrl}${separator}wcpos=1&printer_id=${encodeURIComponent(
 		printerId
@@ -189,6 +209,36 @@ function CopyRow({
 type CreatedState = { printer: CloudPrinter; token?: string };
 
 /**
+ * Collapsed fallback for the direct-to-site URL, shown only when the relay is
+ * active. Direct connections fail on some hosts (modern TLS the printer can't
+ * negotiate), which is the problem the relay exists to fix — hence "Advanced".
+ */
+function DirectUrlDisclosure({ url, copyable }: { url: string; copyable: boolean }) {
+	return (
+		<details className="wcpos:mt-1" data-testid="wizard-direct-disclosure">
+			<summary className="wcpos:cursor-pointer wcpos:text-xs wcpos:text-gray-500">
+				{t('cloud_print.advanced_direct', 'Advanced: connect directly to this site (no relay)')}
+			</summary>
+			<div className="wcpos:mt-2 wcpos:flex wcpos:flex-col wcpos:gap-2">
+				<p className="wcpos:text-xs wcpos:text-gray-500">
+					{t(
+						'cloud_print.advanced_direct_help',
+						'Only use the direct address if you can\'t use WCPOS Cloud Print — some printers can\'t connect to modern hosting and stay stuck on "Waiting for printer".'
+					)}
+				</p>
+				<CopyRow
+					label={t('cloud_print.direct_url', 'Direct URL')}
+					value={url}
+					copyValue={copyable ? url : undefined}
+					valueTestId="wizard-direct-url"
+					copyTestId="wizard-copy-direct-url"
+				/>
+			</div>
+		</details>
+	);
+}
+
+/**
  * A modal wizard for connecting a cloud printer.
  *
  * In `add` mode it walks: choose provider → name (+ PrintNode credentials) →
@@ -205,6 +255,7 @@ export function AddPrinterWizard({
 	onCreate,
 	fetchPrintNodePrinters,
 	fetchStarDevices,
+	relay,
 }: AddPrinterWizardProps): JSX.Element | null {
 	const [step, setStep] = React.useState(0);
 	const [provider, setProvider] = React.useState<CloudProvider | null>(null);
@@ -652,21 +703,34 @@ export function AddPrinterWizard({
 									if (!printerForUrl) {
 										return null;
 									}
+									const relayBase =
+										relay?.enabled && relay.printer_base_url
+											? relay.printer_base_url
+											: undefined;
 									if (mode === 'setup') {
 										// No real token to display — append a literal mask after the
 										// (empty, so un-encoded) token placeholder.
-										const baseUrl = `${buildPollUrl(finalProvider, printerForUrl.id, '')}••••`;
+										const baseUrl = `${buildPollUrl(finalProvider, printerForUrl.id, '', relayBase)}••••`;
 										return (
-											<CopyRow
-												label={t('cloud_print.poll_url', 'Poll URL')}
-												help={t(
-													'cloud_print.poll_url_help',
-													'paste into the printer\'s "server URL"'
+											<>
+												<CopyRow
+													label={t('cloud_print.poll_url', 'Poll URL')}
+													help={t(
+														'cloud_print.poll_url_help',
+														'paste into the printer\'s "server URL"'
+													)}
+													value={baseUrl}
+													valueTestId="wizard-poll-url"
+													copyTestId="wizard-copy-url"
+												/>
+												{relayBase && (
+													<DirectUrlDisclosure
+														url={`${buildPollUrl(finalProvider, printerForUrl.id, '')}••••`}
+														copyable={false}
+													/>
 												)}
-												value={baseUrl}
-												valueTestId="wizard-poll-url"
-												copyTestId="wizard-copy-url"
-											/>
+											</>
+
 										);
 									}
 									const token = created?.token ?? '';
@@ -683,7 +747,7 @@ export function AddPrinterWizard({
 											</Notice>
 										);
 									}
-									const url = buildPollUrl(finalProvider, printerForUrl.id, token);
+									const url = buildPollUrl(finalProvider, printerForUrl.id, token, relayBase);
 									return (
 										<>
 											<CopyRow
@@ -705,6 +769,12 @@ export function AddPrinterWizard({
 												valueTestId="wizard-poll-token"
 												copyTestId="wizard-copy-token"
 											/>
+											{relayBase && (
+												<DirectUrlDisclosure
+													url={buildPollUrl(finalProvider, printerForUrl.id, token)}
+													copyable
+												/>
+											)}
 										</>
 									);
 								})()}
