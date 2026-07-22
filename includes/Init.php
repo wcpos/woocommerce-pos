@@ -300,6 +300,7 @@ class Init {
 		if ( ! is_admin() ) {
 			new Template_Router();
 			new Form_Handler();
+			new Storefront_Receipts();
 		}
 	}
 

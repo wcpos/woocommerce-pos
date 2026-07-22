@@ -11,8 +11,11 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
+use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
 /**
@@ -87,6 +90,12 @@ class Receipt {
 				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ) );
 			}
 
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
+			if ( 'pdf' === $format ) {
+				$this->render_pdf( $order );
+			}
+
 			/*
 			 * Fires before rendering the receipt template.
 			 *
@@ -146,6 +155,100 @@ class Receipt {
 			}
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Render and serve a custom receipt template as a PDF download.
+	 *
+	 * @param \WC_Abstract_Order $order Order object.
+	 *
+	 * @return void
+	 */
+	private function render_pdf( \WC_Abstract_Order $order ): void {
+		$template_id = $this->get_pdf_template_id();
+		if ( null === $template_id ) {
+			wp_die(
+				esc_html__( 'No receipt template is configured.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 404 )
+			);
+		}
+
+		/*
+		 * Filters the receipt template used for storefront PDF downloads.
+		 *
+		 * @param int|string        $template_id Resolved receipt template ID.
+		 * @param WC_Abstract_Order $order       Order object.
+		 *
+		 * @returns int|string Receipt template ID.
+		 *
+		 * @since 1.9.11
+		 *
+		 * @hook woocommerce_pos_storefront_receipt_template
+		 */
+		$template_id = apply_filters( 'woocommerce_pos_storefront_receipt_template', $template_id, $order );
+		$template    = Print_Job_Service::load_template( (string) $template_id );
+		if ( null === $template ) {
+			wp_die(
+				esc_html__( 'No receipt template is configured.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 404 )
+			);
+		}
+
+		try {
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+		} catch ( \Throwable $e ) {
+			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
+			wp_die(
+				esc_html__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 500 )
+			);
+		}
+		if ( '' === $pdf ) {
+			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: renderer returned no data.', $order->get_id() ) );
+			wp_die(
+				esc_html__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 500 )
+			);
+		}
+
+		$order_number = sanitize_file_name( (string) $order->get_order_number() );
+		header( 'Content-Type: application/pdf' );
+		header( 'Content-Disposition: attachment; filename="receipt-' . $order_number . '.pdf"' );
+		header( 'Content-Length: ' . \strlen( $pdf ) );
+		header( 'Cache-Control: no-store' );
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo $pdf;
+		exit;
+	}
+
+	/**
+	 * Resolve the requested or active receipt template ID for PDF output.
+	 *
+	 * @return int|string|null Template ID or null when none resolves.
+	 */
+	private function get_pdf_template_id() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$template_id = isset( $_GET['template'] ) ? sanitize_text_field( wp_unslash( $_GET['template'] ) ) : '';
+		if ( '' !== $template_id ) {
+			if ( is_numeric( $template_id ) ) {
+				$post_id  = (int) $template_id;
+				$template = 'publish' === get_post_status( $post_id ) ? TemplatesManager::get_template( $post_id ) : null;
+			} else {
+				$template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
+			}
+
+			if ( $template && 'receipt' === ( $template['type'] ?? '' ) ) {
+				return $template['id'];
+			}
+		}
+
+		$template = TemplatesManager::get_active_template( 'receipt' );
+
+		return $template['id'] ?? null;
 	}
 
 	/**
