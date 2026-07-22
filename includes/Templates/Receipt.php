@@ -11,8 +11,10 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
+use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
 /**
@@ -76,15 +78,17 @@ class Receipt {
 		try {
 			$order = wc_get_order( $this->order_id );
 
-			// Order or receipt url is invalid.
-			if ( ! $order ) {
-				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
+			// Validate order key for security. Missing orders share the permission
+			// message so unauthenticated requests cannot enumerate order IDs.
+			$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+			if ( ! $order || empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) {
+				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ) );
 			}
 
-			// Validate order key for security.
-			$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
-			if ( empty( $order_key ) || $order_key !== $order->get_order_key() ) {
-				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ) );
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
+			if ( 'pdf' === $format ) {
+				$this->render_pdf( $order );
 			}
 
 			/*
@@ -146,6 +150,87 @@ class Receipt {
 			}
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Render and serve a custom receipt template as a PDF download.
+	 *
+	 * @param \WC_Abstract_Order $order Order object.
+	 *
+	 * @return void
+	 */
+	private function render_pdf( \WC_Abstract_Order $order ): void {
+		/*
+		 * Filters the receipt template used for storefront PDF downloads.
+		 *
+		 * Receives the same template array resolved for the HTML receipt surface
+		 * (including the woocommerce_pos_active_receipt_template filter and the
+		 * ?template= query param), so both surfaces stay in sync by default.
+		 *
+		 * @param null|array        $template Resolved template data or null.
+		 * @param WC_Abstract_Order $order    Order object.
+		 *
+		 * @returns null|array Template data or null.
+		 *
+		 * @since 1.9.11
+		 *
+		 * @hook woocommerce_pos_storefront_receipt_template
+		 */
+		$template = apply_filters( 'woocommerce_pos_storefront_receipt_template', $this->get_custom_template(), $order );
+		if ( ! \is_array( $template ) || empty( $template ) ) {
+			wp_die(
+				esc_html__( 'No receipt template is configured.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 404 )
+			);
+		}
+
+		try {
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+		} catch ( \Throwable $e ) {
+			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
+			wp_die(
+				esc_html__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 500 )
+			);
+		}
+		if ( '' === $pdf ) {
+			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: renderer returned no data.', $order->get_id() ) );
+			wp_die(
+				esc_html__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+				'',
+				array( 'response' => 500 )
+			);
+		}
+
+		// Discard any open output buffers (e.g. zlib compression) so the
+		// Content-Length header matches the bytes actually sent.
+		while ( ob_get_level() ) {
+			if ( ! ob_end_clean() ) {
+				wp_die(
+					esc_html__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+					'',
+					array( 'response' => 500 )
+				);
+			}
+		}
+
+		$order_number = sanitize_file_name( (string) $order->get_order_number() );
+		header( 'Content-Type: application/pdf' );
+		header( 'Content-Disposition: attachment; filename="receipt-' . $order_number . '.pdf"' );
+
+		// A remaining (non-removable) output buffer may transform the body on
+		// flush, e.g. ob_gzhandler, making the raw PDF byte count wrong. Only
+		// declare Content-Length when the output stream is unbuffered; browsers
+		// fall back to reading until the response ends.
+		if ( 0 === ob_get_level() ) {
+			header( 'Content-Length: ' . \strlen( $pdf ) );
+		}
+		header( 'Cache-Control: no-store' );
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo $pdf;
+		exit;
 	}
 
 	/**
