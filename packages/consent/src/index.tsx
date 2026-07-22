@@ -1,12 +1,8 @@
 import * as React from 'react';
+
 import { createRoot } from 'react-dom/client';
 
-import {
-	dismissCallout,
-	saveConsent,
-	type ConsentChoice,
-	type ConsentConfig,
-} from './api';
+import { dismissCallout, saveConsent, type ConsentChoice, type ConsentConfig } from './api';
 import { ConsentCallout } from './consent-callout';
 import { ConsentModal } from './consent-modal';
 
@@ -61,7 +57,7 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 				await saveConsent(choice, config);
 			} catch (err) {
 				// Surface the failure in the UI so the modal isn't stuck silently.
-				// eslint-disable-next-line no-console
+
 				console.error('[wcpos-consent] failed to save choice', err);
 				setHasError(true);
 				return;
@@ -81,7 +77,6 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 		// and even if it fails the user should see the callout close.
 		setCalloutVisible(false);
 		void dismissCallout(config).catch((err) => {
-			// eslint-disable-next-line no-console
 			console.error('[wcpos-consent] failed to persist dismiss', err);
 		});
 	}, [config]);

@@ -1,8 +1,9 @@
 import * as React from 'react';
 
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { Button, Chip, FilterTabs, TextArea, type ChipVariant } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
+
+import { Button, Chip, FilterTabs, TextArea, type ChipVariant } from '@wcpos/ui';
 
 import { formatCopyPayload, formatLocalTimestamp } from './format-copy-payload';
 import { groupByDay } from './group-by-day';
@@ -286,7 +287,8 @@ function Logs() {
 		<div>
 			{data?.has_fatal_errors && (
 				<Notice status="warning" isDismissible={false} className="wcpos:mb-4">
-					{t('logs.fatal_errors_detected', 'Fatal errors detected')}{' — '}
+					{t('logs.fatal_errors_detected', 'Fatal errors detected')}
+					{' — '}
 					<a href={data.fatal_errors_url} target="_blank" rel="noopener noreferrer">
 						{t('logs.view_in_wc', 'view in WooCommerce logs')}
 					</a>
@@ -305,10 +307,7 @@ function Logs() {
 				/>
 				{availableSources.length > 1 && (
 					<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
-						<label
-							htmlFor="wcpos-log-source-select"
-							className="wcpos:text-sm wcpos:text-gray-600"
-						>
+						<label htmlFor="wcpos-log-source-select" className="wcpos:text-sm wcpos:text-gray-600">
 							{t('logs.source', 'Source')}
 						</label>
 						<Select
@@ -360,9 +359,7 @@ function Logs() {
 											key={key}
 											entry={entry}
 											isExpanded={expandedKey === key}
-											onToggle={() =>
-												setExpandedKey(expandedKey === key ? null : key)
-											}
+											onToggle={() => setExpandedKey(expandedKey === key ? null : key)}
 											sourceName={sourceName}
 										/>
 									);

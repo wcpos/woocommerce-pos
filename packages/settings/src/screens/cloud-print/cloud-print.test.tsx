@@ -6,10 +6,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { SnackbarProvider } from '@wcpos/ui';
 
+import CloudPrint from './index';
+
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
-
-import CloudPrint from './index';
 
 interface ApiOpts {
 	path: string;
@@ -64,12 +64,12 @@ describe('CloudPrint screen', () => {
 	it('renders the intro callout, printer section with a card, and the rules section', async () => {
 		routeApiFetch({
 			getSettings: () => ({
-				printers: [
-					{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
-				],
+				printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
 				assignments: [],
 			}),
-			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+			templates: [
+				{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' },
+			],
 		});
 
 		renderScreen();
@@ -114,7 +114,9 @@ describe('CloudPrint screen', () => {
 					},
 				],
 			}),
-			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+			templates: [
+				{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' },
+			],
 		});
 
 		renderScreen();

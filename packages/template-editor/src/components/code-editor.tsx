@@ -1,8 +1,10 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
-import { useCodemirror, type CursorInfo } from '../hooks/use-codemirror';
-import type { EditorConfig } from '../types';
-import { EditorToolbar } from './editor-toolbar';
+
 import { EditorStatusLine } from './editor-status-line';
+import { EditorToolbar } from './editor-toolbar';
+import { useCodemirror, type CursorInfo } from '../hooks/use-codemirror';
+
+import type { EditorConfig } from '../types';
 
 interface CodeEditorProps {
 	initialDoc: string;
@@ -14,9 +16,12 @@ interface CodeEditorProps {
 export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEditorProps) {
 	const [wrap, setWrap] = useState(true);
 	const [cursor, setCursor] = useState<CursorInfo>({ line: 1, col: 1, lineCount: 1 });
-	const handleChange = useCallback((content: string) => {
-		onChange(content);
-	}, [onChange]);
+	const handleChange = useCallback(
+		(content: string) => {
+			onChange(content);
+		},
+		[onChange]
+	);
 
 	const { containerRef, viewRef, insertAtCursor } = useCodemirror({
 		initialDoc,

@@ -4,14 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import Extensions, { type Extension } from './index';
+
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
 vi.mock('../../lib/analytics', () => ({
 	captureUpgradeCtaClicked: vi.fn(),
 	captureUpgradeCtaViewed: vi.fn(),
 }));
-
-import Extensions, { type Extension } from './index';
 
 const oldExtension = {
 	slug: 'old-extension',

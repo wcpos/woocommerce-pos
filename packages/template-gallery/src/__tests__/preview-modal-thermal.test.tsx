@@ -1,10 +1,12 @@
 import * as React from 'react';
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildPreviewModalSrcDoc, PreviewModal } from '../components/preview-modal';
 import { usePreview } from '../hooks/use-preview';
+
 import type { PreviewResponse } from '../types';
 
 vi.mock('../hooks/use-preview', () => ({
@@ -27,7 +29,8 @@ describe('PreviewModal thermal previews', () => {
 	it('renders thermal template_content with receipt_data inside the shared 58mm frame', () => {
 		const preview: PreviewResponse = {
 			engine: 'thermal',
-			template_content: '<receipt paper-width="32"><text>Thermal XML {{order.number}}</text></receipt>',
+			template_content:
+				'<receipt paper-width="32"><text>Thermal XML {{order.number}}</text></receipt>',
 			receipt_data: { order: { number: '1234' } },
 			paper_width: '58mm',
 			order_id: 0,
@@ -46,7 +49,8 @@ describe('PreviewModal thermal previews', () => {
 		usePreviewMock.mockReturnValue({
 			data: {
 				engine: 'thermal',
-				template_content: '<receipt paper-width="32"><text>Thermal XML {{order.number}}</text></receipt>',
+				template_content:
+					'<receipt paper-width="32"><text>Thermal XML {{order.number}}</text></receipt>',
 				receipt_data: { order: { number: '1234' } },
 				paper_width: '58mm',
 				order_id: 0,
@@ -69,11 +73,13 @@ describe('PreviewModal thermal previews', () => {
 					templateName="Thermal"
 					isGallery
 					onClose={() => {}}
-				/>,
+				/>
 			);
 		});
 
-		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]') as HTMLElement | null;
+		const canvas = container.querySelector(
+			'[data-testid="preview-viewport-canvas"]'
+		) as HTMLElement | null;
 		expect(canvas).toBeTruthy();
 		expect(canvas?.style.width).toBe('219px');
 		expect(canvas?.style.height).toBe('520px');

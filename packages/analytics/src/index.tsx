@@ -6,7 +6,7 @@ import { t, i18nPromise } from './translations';
 
 const globalHooks = window.wp && window.wp.hooks;
 
-const WrappedReport = ({ Component, ...props }) => {
+function WrappedReport({ Component, ...props }) {
 	const [isReady, setIsReady] = React.useState(false);
 
 	React.useEffect(() => {
@@ -41,7 +41,7 @@ const WrappedReport = ({ Component, ...props }) => {
 			<Component {...props} />
 		</>
 	);
-};
+}
 
 if (globalHooks) {
 	globalHooks.addFilter('woocommerce_admin_reports_list', 'woocommerce-pos', (pages) => {

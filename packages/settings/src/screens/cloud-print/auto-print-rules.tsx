@@ -78,13 +78,8 @@ function parseApplies(value: string): { store_id: number; scope: ScopeValue } {
 // to its list screen rather than a route inside this React app.
 const TEMPLATES_URL = 'edit.php?post_type=wcpos_template';
 
-function selectedLabelLength(
-	options: SentenceSelectOption[],
-	value: string | number
-): number {
-	return (
-		options.find((option) => String(option.value) === String(value))?.label.length ?? 0
-	);
+function selectedLabelLength(options: SentenceSelectOption[], value: string | number): number {
+	return options.find((option) => String(option.value) === String(value))?.label.length ?? 0;
 }
 
 function sentenceSelectWidth(
@@ -138,7 +133,8 @@ export function AutoPrintRules({
 	return (
 		<div className="wcpos:mt-4 wcpos:flex wcpos:flex-col wcpos:gap-3">
 			<Callout status="info">
-				💡 {t(
+				💡{' '}
+				{t(
 					'cloud_print.rules_tip',
 					'This is optional — leave it empty to print receipts only manually from the POS.'
 				)}
@@ -152,10 +148,7 @@ export function AutoPrintRules({
 				<a href={TEMPLATES_URL} target="_blank" rel="noreferrer">
 					{t('cloud_print.templates_link', 'POS › Templates')}
 				</a>
-				{t(
-					'cloud_print.rules_subline_post',
-					'. More than one rule can run for the same order.'
-				)}
+				{t('cloud_print.rules_subline_post', '. More than one rule can run for the same order.')}
 			</p>
 
 			{assignments.length === 0 ? (
@@ -183,9 +176,7 @@ export function AutoPrintRules({
 									style={sentenceSelectWidth(options, value)}
 									value={value}
 									options={options}
-									onChange={({ value: nextValue }) =>
-										update(i, parseApplies(String(nextValue)))
-									}
+									onChange={({ value: nextValue }) => update(i, parseApplies(String(nextValue)))}
 								/>
 								<span>{t('cloud_print.rule_to', 'to')}</span>
 								<Select
@@ -196,9 +187,7 @@ export function AutoPrintRules({
 									style={sentenceSelectWidth(printerOptions, a.printer_id)}
 									value={a.printer_id}
 									options={printerOptions}
-									onChange={({ value }) =>
-										update(i, { printer_id: String(value) })
-									}
+									onChange={({ value }) => update(i, { printer_id: String(value) })}
 								/>
 								<span>{t('cloud_print.rule_using', 'using the')}</span>
 								<Select
@@ -209,9 +198,7 @@ export function AutoPrintRules({
 									style={sentenceSelectWidth(optionsForPrinter(a.printer_id), a.template_id)}
 									value={a.template_id}
 									options={optionsForPrinter(a.printer_id)}
-									onChange={({ value }) =>
-										update(i, { template_id: String(value) })
-									}
+									onChange={({ value }) => update(i, { template_id: String(value) })}
 								/>
 								<span>{t('cloud_print.rule_template_suffix', 'template.')}</span>
 								<Button
@@ -232,7 +219,7 @@ export function AutoPrintRules({
 				<Button
 					variant="outline"
 					data-testid="rules-add"
-					disabled={0 === printers.length}
+					disabled={printers.length === 0}
 					onClick={add}
 				>
 					{t('cloud_print.add_rule', '+ Add rule')}

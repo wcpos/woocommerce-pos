@@ -24,13 +24,7 @@ interface UserListItemProps {
 	onSelect: () => void;
 }
 
-function UserListItem({
-	user,
-	isSelected,
-	isYou,
-	isActiveNow,
-	onSelect,
-}: UserListItemProps) {
+function UserListItem({ user, isSelected, isYou, isActiveNow, onSelect }: UserListItemProps) {
 	return (
 		<button
 			type="button"

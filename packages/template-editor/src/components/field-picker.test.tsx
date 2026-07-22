@@ -1,8 +1,10 @@
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FieldPicker } from './field-picker';
+
 import type { FieldSchema } from '../types';
 
 vi.mock('../translations', () => ({
@@ -24,7 +26,7 @@ vi.mock('../translations', () => ({
 		if (!params) return template;
 		return Object.entries(params).reduce(
 			(acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
-			template,
+			template
 		);
 	},
 }));
@@ -166,8 +168,8 @@ describe('FieldPicker', () => {
 			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
 		});
 
-		const loopButton = getButtons(container).find((b) =>
-			b.getAttribute('aria-label') === 'Insert loop block'
+		const loopButton = getButtons(container).find(
+			(b) => b.getAttribute('aria-label') === 'Insert loop block'
 		);
 
 		expect(loopButton).toBeDefined();
@@ -195,7 +197,7 @@ describe('FieldPicker', () => {
 		const search = container.querySelector('input[type=text]') as HTMLInputElement;
 		const nativeSetter = Object.getOwnPropertyDescriptor(
 			window.HTMLInputElement.prototype,
-			'value',
+			'value'
 		)!.set!;
 		await act(async () => {
 			nativeSetter.call(search, 'zzzznomatch');
@@ -213,7 +215,6 @@ describe('FieldPicker', () => {
 		expect(container.textContent).toContain('Order');
 		expect(container.textContent).not.toContain('No fields match');
 	});
-
 
 	it('does not cap its own height so it can match the editor column', async () => {
 		const schema: FieldSchema = {
@@ -256,7 +257,9 @@ describe('FieldPicker', () => {
 			const { container, root, onInsertField } = renderPicker(schema);
 
 			await act(async () => {
-				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+				root.render(
+					<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />
+				);
 			});
 
 			expect(getPanel(container).style.width).toBe('280px');
@@ -275,7 +278,9 @@ describe('FieldPicker', () => {
 			const { container, root, onInsertField } = renderPicker(schema);
 
 			await act(async () => {
-				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+				root.render(
+					<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />
+				);
 			});
 
 			expect(getPanel(container).style.width).toBe('520px');
@@ -288,7 +293,9 @@ describe('FieldPicker', () => {
 			const { container, root, onInsertField } = renderPicker(schema);
 
 			await act(async () => {
-				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+				root.render(
+					<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />
+				);
 			});
 
 			const handle = getHandle(container);
@@ -310,7 +317,9 @@ describe('FieldPicker', () => {
 			const { container, root, onInsertField } = renderPicker(schema);
 
 			await act(async () => {
-				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+				root.render(
+					<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />
+				);
 			});
 
 			const panel = getPanel(container);
@@ -329,12 +338,12 @@ describe('FieldPicker', () => {
 			const handle = getHandle(container);
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, buttons: 1 }),
+					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, buttons: 1 })
 				);
 			});
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 340, buttons: 1 }),
+					new MouseEvent('pointermove', { bubbles: true, clientX: 340, buttons: 1 })
 				);
 			});
 			await act(async () => {
@@ -348,7 +357,7 @@ describe('FieldPicker', () => {
 			// After the drag ends, further moves must not resize the panel.
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 1 }),
+					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 1 })
 				);
 			});
 			expect(panel.style.width).toBe('340px');
@@ -358,7 +367,9 @@ describe('FieldPicker', () => {
 			const { container, root, onInsertField } = renderPicker(schema);
 
 			await act(async () => {
-				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+				root.render(
+					<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />
+				);
 			});
 
 			const panel = getPanel(container);
@@ -378,14 +389,14 @@ describe('FieldPicker', () => {
 			// Grab 6px beyond the panel edge (inside the straddling hit zone).
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointerdown', { bubbles: true, clientX: 286, buttons: 1 }),
+					new MouseEvent('pointerdown', { bubbles: true, clientX: 286, buttons: 1 })
 				);
 			});
 			// A 20px move must grow the panel by exactly 20px, not snap the
 			// edge to the pointer first (280 + 20, not 306).
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 306, buttons: 1 }),
+					new MouseEvent('pointermove', { bubbles: true, clientX: 306, buttons: 1 })
 				);
 			});
 
@@ -396,18 +407,20 @@ describe('FieldPicker', () => {
 			const { container, root, onInsertField } = renderPicker(schema);
 
 			await act(async () => {
-				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+				root.render(
+					<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />
+				);
 			});
 
 			const handle = getHandle(container);
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, button: 2, buttons: 2 }),
+					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, button: 2, buttons: 2 })
 				);
 			});
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 2 }),
+					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 2 })
 				);
 			});
 

@@ -11,12 +11,13 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/reorder-with-edge';
 import classnames from 'classnames';
+
 import { Toggle } from '@wcpos/ui';
 
-import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-
 import { t } from '../translations';
+
 import type { AnyTemplate, Template, VirtualTemplate } from '../types';
+import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 
 function isThermal(template: AnyTemplate): boolean {
 	return (
@@ -28,9 +29,7 @@ function isThermal(template: AnyTemplate): boolean {
 
 function isOffline(template: AnyTemplate): boolean {
 	return (
-		template.engine === 'logicless' ||
-		template.engine === 'thermal' ||
-		template.offline_capable
+		template.engine === 'logicless' || template.engine === 'thermal' || template.offline_capable
 	);
 }
 
@@ -87,7 +86,8 @@ function DraggableRow({
 	const [isDragging, setIsDragging] = React.useState(false);
 	const [closestEdge, setClosestEdge] = React.useState<Edge | null>(null);
 
-	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
+	const adminUrl =
+		(window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
 	const isVirtual = template.is_virtual;
 	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
 	const canDelete = !isVirtual;
@@ -111,7 +111,7 @@ function DraggableRow({
 			getData: ({ input, element }) => {
 				return attachClosestEdge(
 					{ id: template.id, index },
-					{ element, input, allowedEdges: ['top', 'bottom'] },
+					{ element, input, allowedEdges: ['top', 'bottom'] }
 				);
 			},
 			onDragEnter: ({ self }) => setClosestEdge(extractClosestEdge(self.data)),
@@ -132,7 +132,7 @@ function DraggableRow({
 			className={classnames(
 				'wcpos:relative wcpos:border-b wcpos:border-gray-100',
 				isDragging && 'wcpos:opacity-50',
-				!enabled && 'wcpos:opacity-60',
+				!enabled && 'wcpos:opacity-60'
 			)}
 		>
 			<td
@@ -143,7 +143,7 @@ function DraggableRow({
 					<div
 						className={classnames(
 							'wcpos:pointer-events-none wcpos:absolute wcpos:left-0 wcpos:h-0.5 wcpos:bg-wp-admin-theme-color wcpos:z-10',
-							closestEdge === 'top' ? 'wcpos:-top-px' : 'wcpos:-bottom-px',
+							closestEdge === 'top' ? 'wcpos:-top-px' : 'wcpos:-bottom-px'
 						)}
 						style={{ width: 'calc(var(--table-width, 100%) + 1px)' }}
 					/>
@@ -151,9 +151,7 @@ function DraggableRow({
 				&#8801;
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
-				<div className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
-					{template.title}
-				</div>
+				<div className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">{template.title}</div>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatCategory(template.category)}
@@ -218,7 +216,7 @@ interface TemplatesTableProps {
 	onPreview: (id: number | string) => void;
 	onToggle: (id: number | string) => void;
 	onDelete: (id: number) => void;
-	onReorder: (orderedIds: Array<number | string>) => void;
+	onReorder: (orderedIds: (number | string)[]) => void;
 	togglingId: number | string | null;
 	deletingId: number | null;
 }
@@ -281,9 +279,7 @@ export function TemplatesTable({
 	if (templates.length === 0) {
 		return (
 			<div className="wcpos:bg-white wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-8 wcpos:text-center">
-				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:m-0">
-					{t('table.no_templates')}
-				</p>
+				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:m-0">{t('table.no_templates')}</p>
 			</div>
 		);
 	}

@@ -6,6 +6,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { SnackbarProvider } from '@wcpos/ui';
 
+import License from './index';
+
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
 
@@ -18,8 +20,6 @@ vi.mock('../../lib/analytics', () => ({
 	captureUpgradeCtaClicked: vi.fn(),
 	captureUpgradeCtaViewed: vi.fn(),
 }));
-
-import License from './index';
 
 interface ApiOpts {
 	path: string;

@@ -1,8 +1,10 @@
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GalleryGrid } from '../screens/gallery-grid';
+
 import type { GalleryTemplate } from '../types';
 
 const ltrTemplate: GalleryTemplate = {
@@ -71,10 +73,15 @@ vi.mock('../translations', () => ({
 const mountedRoots: Root[] = [];
 
 beforeEach(() => {
-	(window as Window & { wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } } }).wcpos = {
+	(
+		window as Window & {
+			wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } };
+		}
+	).wcpos = {
 		templateGallery: {
 			adminUrl: 'https://example.test/wp-admin',
-			previewBaseUrl: 'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
+			previewBaseUrl:
+				'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
 		},
 	};
 });
@@ -101,7 +108,7 @@ function mountGrid(): HTMLElement {
 
 function clickDirection(container: HTMLElement, value: 'all' | 'ltr' | 'rtl'): void {
 	const radio = container.querySelector(
-		`input[name="filter-direction"][value="${value}"]`,
+		`input[name="filter-direction"][value="${value}"]`
 	) as HTMLInputElement | null;
 	expect(radio).not.toBeNull();
 	act(() => {

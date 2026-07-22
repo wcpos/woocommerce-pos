@@ -12,16 +12,13 @@ import {
 	useSnackbar,
 } from '@wcpos/ui';
 
-import { PROVIDERS } from './providers';
 import { PrinterStatusChip } from './printer-status-chip';
-import ConfirmDialog from '../sessions/confirm-dialog';
+import { PROVIDERS } from './providers';
 import { KebabMenuTrigger } from '../../components/kebab-menu-trigger';
 import { i18n, t } from '../../translations';
+import ConfirmDialog from '../sessions/confirm-dialog';
 
-import type {
-	CloudPrinter,
-	PrintnodeFormat,
-} from '../../hooks/use-cloud-print-settings';
+import type { CloudPrinter, PrintnodeFormat } from '../../hooks/use-cloud-print-settings';
 
 export interface PrinterCardProps {
 	printer: CloudPrinter;
@@ -43,7 +40,7 @@ function formatOptions(): { value: PrintnodeFormat; label: string }[] {
 	];
 }
 
-const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 	['year', 60 * 60 * 24 * 365],
 	['month', 60 * 60 * 24 * 30],
 	['day', 60 * 60 * 24],
@@ -77,7 +74,6 @@ export function formatRelative(unixSeconds: number, locale?: string): string {
 	}
 	return rtf.format(0, 'second');
 }
-
 
 function starGroupFromUrl(url?: string): string {
 	if (!url) {
@@ -233,13 +229,8 @@ export function PrinterCard({
 				</div>
 
 				<dl className="wcpos:mt-3 wcpos:grid wcpos:grid-cols-[auto_1fr] wcpos:gap-x-3 wcpos:gap-y-1 wcpos:text-xs">
-					<dt className="wcpos:text-gray-500">
-						{t('cloud_print.last_check_in', 'Last check-in')}
-					</dt>
-					<dd
-						className="wcpos:text-gray-900"
-						data-testid={`printer-card-last-seen-${printer.id}`}
-					>
+					<dt className="wcpos:text-gray-500">{t('cloud_print.last_check_in', 'Last check-in')}</dt>
+					<dd className="wcpos:text-gray-900" data-testid={`printer-card-last-seen-${printer.id}`}>
 						{lastSeen}
 					</dd>
 
@@ -264,29 +255,39 @@ export function PrinterCard({
 						</Tooltip>
 					</dd>
 
-
 					{isStarOnline && (
 						<>
 							<dt className="wcpos:text-gray-500">{t('cloud_print.star_device', 'Device')}</dt>
-							<dd className="wcpos:text-gray-900" data-testid={`printer-card-star-device-${printer.id}`}>
+							<dd
+								className="wcpos:text-gray-900"
+								data-testid={`printer-card-star-device-${printer.id}`}
+							>
 								{printer.star_client_type || PROVIDERS['star-online'].label}
 							</dd>
 							<dt className="wcpos:text-gray-500">{t('cloud_print.star_group', 'Group')}</dt>
-							<dd className="wcpos:text-gray-900" data-testid={`printer-card-star-group-${printer.id}`}>
+							<dd
+								className="wcpos:text-gray-900"
+								data-testid={`printer-card-star-group-${printer.id}`}
+							>
 								{starGroupFromUrl(printer.star_cloudprnt_url) || '—'}
 							</dd>
-							<dt className="wcpos:text-gray-500">{t('cloud_print.star_device_id', 'AccessIdentifier')}</dt>
-							<dd className="wcpos:text-gray-900" data-testid={`printer-card-star-device-id-${printer.id}`}>
-								<code className="wcpos:rounded wcpos:bg-gray-100 wcpos:px-1 wcpos:py-0.5">{printer.star_device_id}</code>
+							<dt className="wcpos:text-gray-500">
+								{t('cloud_print.star_device_id', 'AccessIdentifier')}
+							</dt>
+							<dd
+								className="wcpos:text-gray-900"
+								data-testid={`printer-card-star-device-id-${printer.id}`}
+							>
+								<code className="wcpos:rounded wcpos:bg-gray-100 wcpos:px-1 wcpos:py-0.5">
+									{printer.star_device_id}
+								</code>
 							</dd>
 						</>
 					)}
 
 					{isPrintNode && (
 						<>
-							<dt className="wcpos:text-gray-500">
-								{t('cloud_print.format', 'Print format')}
-							</dt>
+							<dt className="wcpos:text-gray-500">{t('cloud_print.format', 'Print format')}</dt>
 							<dd className="wcpos:text-gray-900">
 								<Select
 									data-testid={`printer-card-format-${printer.id}`}

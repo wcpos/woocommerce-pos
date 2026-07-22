@@ -1,13 +1,21 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import fs from 'fs';
 import path from 'path';
+
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { LivePreview, buildLivePreviewSrcDoc, getPreviewBodyClassName, getPreviewIframeStyle } from './live-preview';
+import {
+	LivePreview,
+	buildLivePreviewSrcDoc,
+	getPreviewBodyClassName,
+	getPreviewIframeStyle,
+} from './live-preview';
 
 describe('LivePreview helpers', () => {
 	it('wraps rendered logicless HTML in the shared A4 preview frame', () => {
-		const srcDoc = buildLivePreviewSrcDoc('<div style="display:flex"><span>A</span><span>B</span></div>');
+		const srcDoc = buildLivePreviewSrcDoc(
+			'<div style="display:flex"><span>A</span><span>B</span></div>'
+		);
 
 		expect(srcDoc).toContain('wcpos-preview-paper');
 		expect(srcDoc).toContain('width:210mm');
@@ -30,24 +38,14 @@ describe('LivePreview helpers', () => {
 	});
 
 	it('does not render an open-in-tab preview link', () => {
-		const markup = renderToStaticMarkup(
-			<LivePreview
-				content="<p>Receipt</p>"
-				sampleData={{}}
-			/>,
-		);
+		const markup = renderToStaticMarkup(<LivePreview content="<p>Receipt</p>" sampleData={{}} />);
 
 		expect(markup).not.toContain('https://example.test/preview');
 		expect(markup).not.toContain('Open in tab');
 	});
 
 	it('renders A4 previews inside the preview viewport canvas', () => {
-		const markup = renderToStaticMarkup(
-			<LivePreview
-				content="<p>Receipt</p>"
-				sampleData={{}}
-			/>,
-		);
+		const markup = renderToStaticMarkup(<LivePreview content="<p>Receipt</p>" sampleData={{}} />);
 
 		expect(markup).toContain('data-testid="preview-viewport-canvas"');
 		// width/height of the canvas matches the A4 paper dimensions

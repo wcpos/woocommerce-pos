@@ -69,8 +69,7 @@ function Sessions() {
 			if (selectedUserId !== null) setSelectedUserId(null);
 			return;
 		}
-		const stillExists =
-			selectedUserId !== null && users.some((u) => u.user_id === selectedUserId);
+		const stillExists = selectedUserId !== null && users.some((u) => u.user_id === selectedUserId);
 		if (!stillExists) {
 			const defaultId =
 				currentUserId !== null && users.some((u) => u.user_id === currentUserId)
@@ -104,13 +103,7 @@ function Sessions() {
 	});
 
 	const deleteAllSessionsMutation = useMutation({
-		mutationFn: async ({
-			userId,
-			exceptCurrent,
-		}: {
-			userId: number;
-			exceptCurrent: boolean;
-		}) => {
+		mutationFn: async ({ userId, exceptCurrent }: { userId: number; exceptCurrent: boolean }) => {
 			const params = new URLSearchParams({
 				user_id: userId.toString(),
 				wcpos: '1',
@@ -133,8 +126,7 @@ function Sessions() {
 		},
 	});
 
-	const isDeleting =
-		deleteSessionMutation.isPending || deleteAllSessionsMutation.isPending;
+	const isDeleting = deleteSessionMutation.isPending || deleteAllSessionsMutation.isPending;
 
 	const handleConfirm = () => {
 		if (!pendingConfirm) return;
@@ -156,8 +148,7 @@ function Sessions() {
 
 	const nowSeconds = Math.floor(Date.now() / 1000);
 	const selectedIsActiveNow =
-		selectedUser !== null &&
-		nowSeconds - selectedUser.last_active <= ACTIVE_NOW_THRESHOLD_SECONDS;
+		selectedUser !== null && nowSeconds - selectedUser.last_active <= ACTIVE_NOW_THRESHOLD_SECONDS;
 
 	const confirmCopy = React.useMemo(() => {
 		if (!pendingConfirm) return null;

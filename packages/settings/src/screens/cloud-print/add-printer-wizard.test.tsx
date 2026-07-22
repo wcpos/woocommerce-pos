@@ -40,17 +40,32 @@ describe('AddPrinterWizard', () => {
 		render(<AddPrinterWizard open mode="add" onClose={vi.fn()} onCreate={vi.fn()} />);
 
 		// No provider should be pre-selected on open.
-		expect(screen.getByTestId('provider-choice-printnode')).toHaveAttribute('aria-pressed', 'false');
-		expect(screen.getByTestId('provider-choice-star-online')).toHaveAttribute('aria-pressed', 'false');
-		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute('aria-pressed', 'false');
-		expect(screen.getByTestId('provider-choice-epson-sdp')).toHaveAttribute('aria-pressed', 'false');
+		expect(screen.getByTestId('provider-choice-printnode')).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
+		expect(screen.getByTestId('provider-choice-star-online')).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
+		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
+		expect(screen.getByTestId('provider-choice-epson-sdp')).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
 
 		// Continue is disabled until a provider is selected.
 		expect(screen.getByTestId('wizard-continue')).toBeDisabled();
 
 		fireEvent.click(screen.getByTestId('provider-choice-star-cloudprnt'));
 
-		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute('aria-pressed', 'true');
+		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
 		expect(screen.getByTestId('wizard-continue')).toBeEnabled();
 	});
 
@@ -181,7 +196,9 @@ describe('AddPrinterWizard', () => {
 		});
 		fireEvent.click(screen.getByTestId('wizard-continue'));
 
-		await waitFor(() => expect(screen.getByText(/no setup token was returned/i)).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText(/no setup token was returned/i)).toBeInTheDocument()
+		);
 		// No broken poll URL or empty token row.
 		expect(screen.queryByTestId('wizard-poll-url')).not.toBeInTheDocument();
 		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
@@ -249,7 +266,9 @@ describe('AddPrinterWizard', () => {
 		await waitFor(() =>
 			expect(screen.getByTestId('wizard-printnode-fetch-error')).toBeInTheDocument()
 		);
-		expect(screen.getByTestId('wizard-printnode-fetch-error')).toHaveTextContent(/No printers found/i);
+		expect(screen.getByTestId('wizard-printnode-fetch-error')).toHaveTextContent(
+			/No printers found/i
+		);
 		expect(screen.queryByTestId('wizard-printnode-printer-select')).not.toBeInTheDocument();
 	});
 
@@ -279,9 +298,9 @@ describe('AddPrinterWizard', () => {
 	});
 
 	it('clears provider-scoped state when switching providers', async () => {
-		const fetchStarDevices = vi.fn().mockResolvedValue([
-			{ id: 'star-1', name: 'Star One', state: 'online' },
-		]);
+		const fetchStarDevices = vi
+			.fn()
+			.mockResolvedValue([{ id: 'star-1', name: 'Star One', state: 'online' }]);
 
 		render(
 			<AddPrinterWizard

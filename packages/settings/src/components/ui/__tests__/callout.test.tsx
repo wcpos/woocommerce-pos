@@ -41,9 +41,7 @@ describe('Callout', () => {
 	});
 
 	it('honours an explicit icon override', () => {
-		render(
-			<Callout icon={<svg data-testid="custom-icon" />}>Body</Callout>
-		);
+		render(<Callout icon={<svg data-testid="custom-icon" />}>Body</Callout>);
 		expect(screen.getByTestId('custom-icon')).toBeInTheDocument();
 		// Default 'i' icon should not render when overridden
 		expect(screen.queryByText('i')).toBeNull();

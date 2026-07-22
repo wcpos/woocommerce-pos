@@ -129,7 +129,9 @@ function General() {
 				</FormRow>
 				<FormRow label={t('settings.barcode_field')}>
 					<Label tip={t('settings.barcode_field_tip')}>
-						<React.Suspense fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}>
+						<React.Suspense
+							fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}
+						>
 							<BarcodeSelect
 								selected={isString(data?.barcode_field) ? data?.barcode_field || '' : ''}
 								onSelect={(value) => {
@@ -152,7 +154,9 @@ function General() {
 				</FormRow>
 				<FormRow label={t('settings.default_customer')}>
 					<Label tip={t('settings.default_customer_tip')}>
-						<React.Suspense fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}>
+						<React.Suspense
+							fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}
+						>
 							<UserSelect
 								disabled={!!data?.default_customer_is_cashier}
 								selected={isNumber(data?.default_customer) ? data?.default_customer || 0 : 0}

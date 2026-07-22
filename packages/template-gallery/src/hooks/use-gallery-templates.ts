@@ -2,6 +2,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 
 import { useSnackbar } from '@wcpos/ui';
+
 import { t } from '../translations';
 
 import type { GalleryTemplate, Template } from '../types';

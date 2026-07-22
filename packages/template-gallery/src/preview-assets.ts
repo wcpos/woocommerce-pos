@@ -17,18 +17,20 @@ const previewKeys = new Set([
 ]);
 
 function getPreviewBaseUrl(): string | undefined {
-	return (window as Window & {
-		wcpos?: { templateGallery?: { previewBaseUrl?: string } };
-	}).wcpos?.templateGallery?.previewBaseUrl;
+	return (
+		window as Window & {
+			wcpos?: { templateGallery?: { previewBaseUrl?: string } };
+		}
+	).wcpos?.templateGallery?.previewBaseUrl;
 }
 
 export function getGalleryPreviewSrc(templateKey: string): string | undefined {
-	if (! previewKeys.has(templateKey)) {
+	if (!previewKeys.has(templateKey)) {
 		return undefined;
 	}
 
 	const previewBaseUrl = getPreviewBaseUrl();
-	if (! previewBaseUrl) {
+	if (!previewBaseUrl) {
 		return undefined;
 	}
 

@@ -79,7 +79,12 @@ function VersionLine({ extension }: { extension: Extension }) {
 		return (
 			<span className="wcpos:text-xs wcpos:text-gray-400">
 				{currentUrl ? (
-					<a href={currentUrl} target="_blank" rel="noopener noreferrer" className="hover:wcpos:text-gray-600 wcpos:transition-colors">
+					<a
+						href={currentUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="hover:wcpos:text-gray-600 wcpos:transition-colors"
+					>
 						v{installed_version}
 					</a>
 				) : (
@@ -87,7 +92,12 @@ function VersionLine({ extension }: { extension: Extension }) {
 				)}
 				{' \u2192 '}
 				{updateUrl ? (
-					<a href={updateUrl} target="_blank" rel="noopener noreferrer" className="wcpos:text-yellow-700 hover:wcpos:text-yellow-800 wcpos:transition-colors">
+					<a
+						href={updateUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="wcpos:text-yellow-700 hover:wcpos:text-yellow-800 wcpos:transition-colors"
+					>
 						v{latest_version}
 					</a>
 				) : (
@@ -103,7 +113,12 @@ function VersionLine({ extension }: { extension: Extension }) {
 	return (
 		<span className="wcpos:text-xs wcpos:text-gray-400">
 			{url ? (
-				<a href={url} target="_blank" rel="noopener noreferrer" className="hover:wcpos:text-gray-600 wcpos:transition-colors">
+				<a
+					href={url}
+					target="_blank"
+					rel="noopener noreferrer"
+					className="hover:wcpos:text-gray-600 wcpos:transition-colors"
+				>
 					v{version}
 				</a>
 			) : (
@@ -211,10 +226,8 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 
 	const footerContent = buildFooterContent(extension);
 
-	const showSettingsItem =
-		!!extension.settings_url && extension.status !== 'not_installed';
-	const showGitHubItem =
-		!!extension.homepage && isGitHubUrl(extension.homepage);
+	const showSettingsItem = !!extension.settings_url && extension.status !== 'not_installed';
+	const showGitHubItem = !!extension.homepage && isGitHubUrl(extension.homepage);
 	const showKebab = showSettingsItem || showGitHubItem;
 
 	return (
@@ -224,11 +237,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 					<DropdownMenu
 						label={extension.name}
 						className="wcpos:absolute wcpos:top-2 wcpos:right-2"
-						trigger={
-							<KebabMenuTrigger
-								label={t('extensions.more_actions', 'More actions')}
-							/>
-						}
+						trigger={<KebabMenuTrigger label={t('extensions.more_actions', 'More actions')} />}
 					>
 						{showSettingsItem && (
 							<DropdownMenuItem href={extension.settings_url}>
@@ -236,11 +245,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 							</DropdownMenuItem>
 						)}
 						{showGitHubItem && (
-							<DropdownMenuItem
-								href={extension.homepage}
-								target="_blank"
-								rel="noopener noreferrer"
-							>
+							<DropdownMenuItem href={extension.homepage} target="_blank" rel="noopener noreferrer">
 								{t('extensions.view_on_github', 'View on GitHub')}
 							</DropdownMenuItem>
 						)}
@@ -280,9 +285,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 						)}
 					</div>
 
-					<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-500">
-						{extension.description}
-					</p>
+					<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-500">{extension.description}</p>
 				</div>
 			</Card.Body>
 

@@ -1,6 +1,7 @@
 import { Chip } from '@wcpos/ui';
 
 import { t } from '../translations';
+
 import type { AnyTemplate, GalleryTemplate } from '../types';
 
 interface TemplateTagsProps {
@@ -17,9 +18,7 @@ function isThermal(template: AnyTemplate | GalleryTemplate): boolean {
 
 function isOffline(template: AnyTemplate | GalleryTemplate): boolean {
 	return (
-		template.engine === 'logicless' ||
-		template.engine === 'thermal' ||
-		template.offline_capable
+		template.engine === 'logicless' || template.engine === 'thermal' || template.offline_capable
 	);
 }
 

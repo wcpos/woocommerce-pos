@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import type { FieldSchema } from '../types';
-import { t } from '../translations';
-import { useResizableWidth } from '../hooks/use-resizable-width';
+
 import { FieldTreeNode } from './field-tree-node';
 import { SearchField } from './search-field';
 import { ThermalElements, thermalMatchesSearch } from './thermal-elements';
+import { useResizableWidth } from '../hooks/use-resizable-width';
+import { t } from '../translations';
+
+import type { FieldSchema } from '../types';
 
 interface FieldPickerProps {
 	schema: FieldSchema;
@@ -56,9 +58,9 @@ function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
 	if (entry.sectionKey.toLowerCase().includes(lower)) return true;
 	if (entry.section.label.toLowerCase().includes(lower)) return true;
 
-	const fieldMatches = Object.entries(entry.section.fields).some(([key, field]) => (
-		key.toLowerCase().includes(lower) || field.label.toLowerCase().includes(lower)
-	));
+	const fieldMatches = Object.entries(entry.section.fields).some(
+		([key, field]) => key.toLowerCase().includes(lower) || field.label.toLowerCase().includes(lower)
+	);
 	if (fieldMatches) return true;
 
 	return entry.children.some((child) => entryMatchesSearch(child, search));

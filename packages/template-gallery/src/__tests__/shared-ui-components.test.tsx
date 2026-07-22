@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TemplatesTable } from '../components/active-templates-table';
+
 import type { Template } from '../types';
 
 vi.mock('../translations', () => ({
@@ -36,7 +38,7 @@ describe('template gallery shared UI integration', () => {
 				onReorder={() => {}}
 				togglingId={null}
 				deletingId={null}
-			/>,
+			/>
 		);
 
 		expect(markup).toContain('role="switch"');
@@ -57,7 +59,7 @@ describe('template gallery shared UI integration', () => {
 				onReorder={() => {}}
 				togglingId={null}
 				deletingId={null}
-			/>,
+			/>
 		);
 
 		const switchMatch = markup.match(/<button[^>]*role="switch"[^>]*>[\s\S]*?<\/button>/);

@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 
-import { cleanup, screen } from '@testing-library/react';
 import { act } from 'react';
+
+import { cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 declare global {

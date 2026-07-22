@@ -1,10 +1,11 @@
+import type { CSSProperties, ReactNode } from 'react';
+
 import { buildPreviewFrameHtml } from '@wcpos/thermal-utils';
 import { PreviewViewport } from '@wcpos/ui';
 
 import { useMustachePreview } from '../hooks/use-mustache-preview';
 import { t } from '../translations';
 import { PreviewSkeleton } from './preview-skeleton';
-import type { CSSProperties, ReactNode } from 'react';
 
 interface LivePreviewProps {
 	content: string;
@@ -41,9 +42,7 @@ export function LivePreview({ content, sampleData, loading, sourcePicker }: Live
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
 					{t('editor.preview')}
 				</span>
-				<div className="wcpos:flex wcpos:items-center wcpos:gap-3">
-					{sourcePicker}
-				</div>
+				<div className="wcpos:flex wcpos:items-center wcpos:gap-3">{sourcePicker}</div>
 			</div>
 			<div className={getPreviewBodyClassName()}>
 				{loading ? (

@@ -110,9 +110,7 @@ export function PrinterStatusChip({ printer }: { printer: CloudPrinter }) {
 		setStatus(printer.status);
 
 		return subscribeToPrinterStatusUpdates((settings) => {
-			setStatus(
-				settings.printers.find((nextPrinter) => nextPrinter.id === printer.id)?.status
-			);
+			setStatus(settings.printers.find((nextPrinter) => nextPrinter.id === printer.id)?.status);
 		});
 	}, [printer.id, printer.status]);
 

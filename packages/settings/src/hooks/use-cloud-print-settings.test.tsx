@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useCloudPrintSettings } from './use-cloud-print-settings';
+
 const setQueryDataMock = vi.fn();
 const mutateAsyncMock = vi.fn();
 const useSuspenseQueryMock = vi.fn();
@@ -12,8 +14,6 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 
 vi.mock('@wordpress/api-fetch', () => ({ default: vi.fn() }));
-
-import { useCloudPrintSettings } from './use-cloud-print-settings';
 
 describe('useCloudPrintSettings', () => {
 	beforeEach(() => {

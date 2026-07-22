@@ -85,11 +85,7 @@ function resolveSource(
 	return 'default';
 }
 
-function effectiveKey(
-	override: string | undefined,
-	composed: string,
-	defaultKey: string
-): string {
+function effectiveKey(override: string | undefined, composed: string, defaultKey: string): string {
 	if (override && override !== '') return override;
 	return composed || defaultKey;
 }
@@ -169,10 +165,7 @@ function DetectionBanner({ plugins, overrideCount }: DetectionBannerProps) {
 							<div className="wcpos:text-xs wcpos:text-gray-600 wcpos:mt-1">
 								{t('tax_ids.banner_detected_explainer')}
 								{overrideCount > 0 && (
-									<>
-										{' '}
-										{t('tax_ids.banner_overrides_active', { count: overrideCount })}
-									</>
+									<> {t('tax_ids.banner_overrides_active', { count: overrideCount })}</>
 								)}
 							</div>
 						</>
@@ -211,15 +204,11 @@ function OverrideRow({
 	const source = resolveSource(type, override, composed, defaultKey);
 
 	return (
-		<TableRow
-			className={classNames(source === 'override' && 'wcpos:bg-amber-50/40')}
-		>
+		<TableRow className={classNames(source === 'override' && 'wcpos:bg-amber-50/40')}>
 			<TableCell className="wcpos:font-medium wcpos:text-gray-900">
 				{TAX_ID_TYPE_LABELS[type] ?? type}
 			</TableCell>
-			<TableCell className="wcpos:font-mono wcpos:text-xs wcpos:text-gray-600">
-				{inUse}
-			</TableCell>
+			<TableCell className="wcpos:font-mono wcpos:text-xs wcpos:text-gray-600">{inUse}</TableCell>
 			<TableCell>
 				<SourceBadge source={source} />
 			</TableCell>
