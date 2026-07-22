@@ -17,6 +17,9 @@ class Cloud_Print_Registry {
 	const SEEN_TTL       = 150; // Seconds; connected if seen within this window.
 	const PN_STATUS_TTL  = 60;  // Seconds; PrintNode live-status cache window.
 
+	/** @var array<string, string> Relay status details keyed by printer id. */
+	private $relay_status_details = array();
+
 	/**
 	 * Get a registered cloud printer by id.
 	 *
@@ -158,12 +161,35 @@ class Cloud_Print_Registry {
 			return $this->star_online_status( $printer );
 		}
 
+		if ( null !== $printer && Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ) ) {
+			$relay_status = Cloud_Print_Relay_Service::status( $printer_id );
+			if ( null !== $relay_status && 'blocked' === $relay_status['origin_status'] ) {
+				$this->relay_status_details[ $printer_id ] = (string) $relay_status['origin_block_signal'];
+
+				return 'blocked';
+			}
+			if ( null !== $relay_status && null !== $relay_status['last_seen_seconds_ago'] && $relay_status['last_seen_seconds_ago'] <= self::SEEN_TTL ) {
+				return 'connected';
+			}
+		}
+
 		$seen = $this->get_seen( $printer_id );
 		if ( 0 === $seen ) {
 			return 'waiting';
 		}
 
 		return ( time() - $seen ) <= self::SEEN_TTL ? 'connected' : 'offline';
+	}
+
+	/**
+	 * Return relay detail captured while resolving a printer's status.
+	 *
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return string|null
+	 */
+	public function status_detail_for( string $printer_id ): ?string {
+		return $this->relay_status_details[ $printer_id ] ?? null;
 	}
 
 	/**

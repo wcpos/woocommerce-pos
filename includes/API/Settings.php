@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
@@ -638,12 +639,22 @@ class Settings extends WP_REST_Controller {
 				$printer              = $this->with_cloud_printer_encoding_fields( $printer );
 				$printer['status']    = $registry->status_for( $id );
 				$printer['last_seen'] = $seen > 0 ? $seen : null;
-				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
+				if ( 'blocked' === $printer['status'] ) {
+					$printer['status_detail'] = $registry->status_detail_for( $id );
+				} else {
+					unset( $printer['status_detail'] );
+				}
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'], $printer['hint_secret'] );
 
 				return $printer;
 			},
 			$settings['printers']
 		);
+		$stored_relay      = isset( $settings['relay'] ) && \is_array( $settings['relay'] ) ? $settings['relay'] : array();
+		$settings['relay'] = array( 'enabled' => ! empty( $stored_relay['enabled'] ) );
+		if ( ! empty( $stored_relay['site_key'] ) ) {
+			$settings['relay']['printer_base_url'] = Cloud_Print_Relay_Service::printer_base_url( sanitize_text_field( (string) $stored_relay['site_key'] ) );
+		}
 
 		return new WP_REST_Response( $settings, 200 );
 	}
@@ -753,6 +764,9 @@ class Settings extends WP_REST_Controller {
 			'printers'    => $clean_printers,
 			'assignments' => array_map( array( $this, 'sanitize_cloud_assignment' ), $assigns ),
 		);
+		if ( \is_array( $existing ) && isset( $existing['relay'] ) && \is_array( $existing['relay'] ) ) {
+			$clean['relay'] = $existing['relay'];
+		}
 		update_option( 'woocommerce_pos_settings_cloud_print', $clean );
 
 		// Drop runtime last-seen entries for printers that were removed.
@@ -761,7 +775,7 @@ class Settings extends WP_REST_Controller {
 		$response_printers = array_map(
 			function ( $printer ) {
 				$printer = $this->with_cloud_printer_encoding_fields( $printer );
-				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'], $printer['hint_secret'] );
 
 				return $printer;
 			},

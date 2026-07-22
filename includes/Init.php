@@ -291,6 +291,7 @@ class Init {
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();
+		new Services\Cloud_Print_Relay_Service();
 	}
 
 	/**

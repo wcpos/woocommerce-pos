@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
@@ -119,6 +120,36 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'test_print' ),
+				'permission_callback' => array( $this, 'manage_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay-verification',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( Cloud_Print_Relay_Service::class, 'verification_response' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay/register',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( Cloud_Print_Relay_Service::class, 'register_response' ),
+				'permission_callback' => array( $this, 'manage_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay/disable',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( Cloud_Print_Relay_Service::class, 'disable_response' ),
 				'permission_callback' => array( $this, 'manage_permissions_check' ),
 			)
 		);
