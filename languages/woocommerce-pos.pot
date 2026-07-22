@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.9.9\n"
+"Project-Id-Version: WCPOS 1.9.10\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-21T21:17:27+00:00\n"
+"POT-Creation-Date: 2026-07-22T23:52:54+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -778,6 +778,9 @@ msgstr ""
 
 #: includes/API/Receipts_Controller.php:189
 #: includes/API/Receipts_Controller.php:197
+#: includes/Templates/Receipt.php:193
+#: includes/Templates/Receipt.php:201
+#: includes/Templates/Receipt.php:212
 msgid "Could not generate the receipt PDF."
 msgstr ""
 
@@ -2788,6 +2791,7 @@ msgstr ""
 #. translators: Document title printed at the top of a completed sale receipt.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:186
+#: includes/Storefront_Receipts.php:127
 #: includes/Templates.php:1256
 #: templates/receipt.php:184
 msgid "Receipt"
@@ -3094,6 +3098,16 @@ msgstr ""
 #: includes/Services/Template_Pdf_Service.php:138
 #, php-format
 msgid "WP Overnight %s PDF could not be generated."
+msgstr ""
+
+#: includes/Storefront_Receipts.php:38
+msgid "Download receipt (PDF)"
+msgstr ""
+
+#. translators: %s: order number.
+#: includes/Storefront_Receipts.php:129
+#, php-format
+msgid "Download receipt for order #%s"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
@@ -3701,66 +3715,69 @@ msgstr ""
 msgid "You do not have permission to modify checkout settings."
 msgstr ""
 
-#: includes/Templates/Receipt.php:81
-#: includes/Templates/Received.php:76
-msgid "Sorry, this order is invalid."
-msgstr ""
-
-#: includes/Templates/Receipt.php:87
+#: includes/Templates/Receipt.php:85
 msgid "You do not have permission to view this receipt."
 msgstr ""
 
+#: includes/Templates/Receipt.php:182
+msgid "No receipt template is configured."
+msgstr ""
+
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:238
+#: includes/Templates/Receipt.php:323
 msgid "Receipt Error"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:299
+#: includes/Templates/Receipt.php:384
 msgid "Receipt Template Error"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:300
+#: includes/Templates/Receipt.php:385
 msgid "There was a problem rendering the receipt template. This is usually caused by a syntax error or undefined variable in the template code."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:306
+#: includes/Templates/Receipt.php:391
 msgid "File:"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:307
+#: includes/Templates/Receipt.php:392
 msgid "Line:"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:311
+#: includes/Templates/Receipt.php:396
 msgid "Suggestions:"
 msgstr ""
 
 #. translators: Help text shown on the receipt template fatal error page.
-#: includes/Templates/Receipt.php:313
+#: includes/Templates/Receipt.php:398
 msgid "Check the template file for syntax errors (missing semicolons, brackets, etc.)"
 msgstr ""
 
 #. translators: Help text shown on the receipt template fatal error page.
-#: includes/Templates/Receipt.php:314
+#: includes/Templates/Receipt.php:399
 msgid "Ensure all variables used in the template are defined"
 msgstr ""
 
 #. translators: Help text shown on the receipt template fatal error page.
-#: includes/Templates/Receipt.php:315
+#: includes/Templates/Receipt.php:400
 msgid "Verify that any custom functions or classes exist"
 msgstr ""
 
-#: includes/Templates/Receipt.php:316
+#: includes/Templates/Receipt.php:401
 msgid "Try resetting to the default receipt template"
 msgstr ""
 
-#: includes/Templates/Receipt.php:320
+#: includes/Templates/Receipt.php:405
 msgid "Please contact the site administrator for assistance."
+msgstr ""
+
+#: includes/Templates/Received.php:76
+msgid "Sorry, this order is invalid."
 msgstr ""
 
 #: includes/Templates/Received.php:84
