@@ -54,8 +54,14 @@ class Cloud_Print_Relay_Service {
 	 */
 	public static function pending_verification_token(): ?string {
 		$token = get_transient( self::VERIFY_TRANSIENT );
+		if ( false === $token ) {
+			return null;
+		}
+		// Single-use: consumed on first read, so a second reader (or a racing
+		// registration attempt for this site) cannot replay the proof.
+		delete_transient( self::VERIFY_TRANSIENT );
 
-		return false === $token ? null : (string) $token;
+		return (string) $token;
 	}
 
 	/**
@@ -65,9 +71,13 @@ class Cloud_Print_Relay_Service {
 	 * outbound request below is still open, proving consent and that WCPOS
 	 * is actually installed at the claimed URL.
 	 *
+	 * @param bool $admin_initiated True for an explicit admin action; false for
+	 *                              background re-registration, which must never
+	 *                              flip a relay the admin has since disabled.
+	 *
 	 * @return array|WP_Error Public relay fields or an error.
 	 */
-	public static function register_site() {
+	public static function register_site( bool $admin_initiated = true ) {
 		try {
 			$token = bin2hex( random_bytes( 24 ) );
 		} catch ( \Exception $exception ) {
@@ -107,10 +117,13 @@ class Cloud_Print_Relay_Service {
 			return self::registration_error( __( 'Relay registration returned invalid credentials.', 'woocommerce-pos' ) );
 		}
 
+		// Re-read at completion time: a background re-registration must adopt
+		// the admin's latest enabled/disabled intent, not the state at launch.
+		$current = self::settings();
 		update_option(
 			self::OPTION,
 			array(
-				'enabled'       => true,
+				'enabled'       => $admin_initiated ? true : ! empty( $current['enabled'] ),
 				'site_key'      => strtolower( $site_key ),
 				'hint_secret'   => strtolower( $hint_secret ),
 				'registered_at' => time(),
@@ -309,7 +322,7 @@ class Cloud_Print_Relay_Service {
 		if ( empty( $relay['enabled'] ) ) {
 			return;
 		}
-		self::register_site();
+		self::register_site( false );
 	}
 
 	/**

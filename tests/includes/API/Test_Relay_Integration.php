@@ -130,7 +130,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It exposes the pending verification token without WCPOS authentication headers.
+	 * It exposes the pending verification token once, consuming it on first read.
 	 */
 	public function test_relay_verification_returns_token_during_registration_window(): void {
 		// Arrange.
@@ -138,8 +138,36 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		$response = rest_do_request( new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' ) );
+		$replay   = rest_do_request( new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' ) );
+
+		// Assert: first read succeeds, the proof is single-use.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array( 'token' => 'pending-token' ), $response->get_data() );
+		$this->assertEquals( 404, $replay->get_status() );
+	}
+
+	/**
+	 * It serves the verification route even when the WCPOS request marker is absent.
+	 */
+	public function test_relay_verification_route_registered_without_wcpos_marker(): void {
+		// Arrange: a REST surface where the full WCPOS API was never loaded,
+		// mirroring the relay's unmarked callback request in production.
+		$server = new \WP_REST_Server();
+		$init   = ( new \ReflectionClass( \WCPOS\WooCommercePOS\Init::class ) )->newInstanceWithoutConstructor();
+		$method = new \ReflectionMethod( $init, 'register_public_relay_routes' );
+		$method->setAccessible( true );
+
+		global $wp_rest_server;
+		$previous       = $wp_rest_server;
+		$wp_rest_server = $server;
+		$method->invoke( $init );
+		set_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT, 'pending-token', 300 );
+
+		// Act.
+		$response = $server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' ) );
 
 		// Assert.
+		$wp_rest_server = $previous;
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( array( 'token' => 'pending-token' ), $response->get_data() );
 	}
@@ -442,6 +470,40 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertFalse( wp_next_scheduled( Cloud_Print_Relay_Service::REREGISTER_HOOK ) );
+	}
+
+	/**
+	 * It keeps the relay disabled when the admin disables it mid re-registration.
+	 */
+	public function test_reregister_preserves_disable_that_lands_mid_flight(): void {
+		// Arrange: enabled at launch; the admin disables while the outbound
+		// registration request is in flight.
+		$this->store_relay();
+		$this->mock_http(
+			function ( $pre, $args, $url ) {
+				if ( false !== strpos( $url, '/api/register' ) ) {
+					Cloud_Print_Relay_Service::disable();
+
+					return $this->http_response(
+						201,
+						array(
+							'site_key'    => 'abcdef0123456789abcdef0123456789',
+							'hint_secret' => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+						)
+					);
+				}
+
+				return new WP_Error( 'unexpected', 'unexpected request' );
+			}
+		);
+
+		// Act.
+		( new Cloud_Print_Relay_Service() )->reregister();
+		$saved = get_option( Cloud_Print_Relay_Service::OPTION );
+
+		// Assert: credentials refreshed, but the admin's disable wins.
+		$this->assertFalse( (bool) $saved['enabled'] );
+		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
 	}
 
 	/**
