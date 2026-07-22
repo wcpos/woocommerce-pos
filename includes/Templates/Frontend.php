@@ -185,7 +185,8 @@ class Frontend {
 			wcpos_get_stores()
 		);
 
-		$site_uuid = wcpos_get_site_uuid();
+		$site_uuid        = wcpos_get_site_uuid();
+		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' );
 
 		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
 		if ( ! $user_uuid ) {
@@ -195,7 +196,7 @@ class Frontend {
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $cdn_base_url . '/metadata.json?v=' . VERSION,
+			'manifest'       => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
 			'homepage'       => woocommerce_pos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
@@ -240,7 +241,7 @@ class Frontend {
 		$idb_worker  = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
 		$opfs_worker = add_query_arg(
 			'ver',
-			hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' ),
+			$opfs_worker_hash,
 			PLUGIN_URL . 'assets/js/opfs.worker.js'
 		);
 
