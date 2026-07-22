@@ -207,7 +207,9 @@ class Receipt {
 		// Discard any open output buffers (e.g. zlib compression) so the
 		// Content-Length header matches the bytes actually sent.
 		while ( ob_get_level() ) {
-			ob_end_clean();
+			if ( ! ob_end_clean() ) {
+				break;
+			}
 		}
 
 		$order_number = sanitize_file_name( (string) $order->get_order_number() );

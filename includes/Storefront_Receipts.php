@@ -48,7 +48,7 @@ class Storefront_Receipts {
 		$explicit_order_id = '' !== trim( (string) $attributes['order_id'] );
 		if ( $explicit_order_id ) {
 			$order_id = absint( $attributes['order_id'] );
-			if ( ! $order_id || ! is_user_logged_in() || ! current_user_can( 'view_order', $order_id ) ) {
+			if ( ! $this->can_view_order( $order_id ) ) {
 				return '';
 			}
 
@@ -133,6 +133,16 @@ class Storefront_Receipts {
 	}
 
 	/**
+	 * Check whether the current user may view an order.
+	 *
+	 * @param int $order_id Order ID.
+	 * @return bool
+	 */
+	private function can_view_order( int $order_id ): bool {
+		return 0 < $order_id && is_user_logged_in() && current_user_can( 'view_order', $order_id );
+	}
+
+	/**
 	 * Resolve an order from a supported WooCommerce page context.
 	 *
 	 * @return WC_Abstract_Order|null Context order or null.
@@ -146,9 +156,9 @@ class Storefront_Receipts {
 			return $order && '' !== $key && hash_equals( $order->get_order_key(), $key ) ? $order : null;
 		}
 
-		if ( is_user_logged_in() && is_account_page() && is_wc_endpoint_url( 'view-order' ) ) {
+		if ( is_account_page() && is_wc_endpoint_url( 'view-order' ) ) {
 			$order_id = absint( get_query_var( 'view-order' ) );
-			if ( $order_id && current_user_can( 'view_order', $order_id ) ) {
+			if ( $this->can_view_order( $order_id ) ) {
 				$order = wc_get_order( $order_id );
 
 				return $order ? $order : null;
