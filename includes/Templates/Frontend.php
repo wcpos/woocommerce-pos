@@ -14,6 +14,7 @@ use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Template_Router;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -237,7 +238,11 @@ class Frontend {
 		 * Add path to worker scripts.
 		 */
 		$idb_worker  = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
-		$opfs_worker = PLUGIN_URL . 'assets/js/opfs.worker.js';
+		$opfs_worker = add_query_arg(
+			'ver',
+			hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' ),
+			PLUGIN_URL . 'assets/js/opfs.worker.js'
+		);
 
 		// getScript helper and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
