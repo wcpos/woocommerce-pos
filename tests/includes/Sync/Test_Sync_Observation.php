@@ -292,7 +292,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$this->assertSame( array( 'update', 'update' ), $update_changes );
 
 		// Act.
-		do_action( 'woocommerce_created_customer', $user_id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+		do_action( 'woocommerce_created_customer', $user_id, array(), false ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test, fired with its full core signature (WC Admin's merge_guest_customer_on_delayed_account_creation listener requires two arguments).
 		do_action( 'woocommerce_new_customer', $user_id, new \WC_Customer( $user_id ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
 
 		// Assert.
