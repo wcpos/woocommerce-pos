@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
@@ -638,12 +639,18 @@ class Settings extends WP_REST_Controller {
 				$printer              = $this->with_cloud_printer_encoding_fields( $printer );
 				$printer['status']    = $registry->status_for( $id );
 				$printer['last_seen'] = $seen > 0 ? $seen : null;
+				if ( 'blocked' === $printer['status'] ) {
+					$printer['status_detail'] = $registry->status_detail_for( $id );
+				} else {
+					unset( $printer['status_detail'] );
+				}
 				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
 
 				return $printer;
 			},
 			$settings['printers']
 		);
+		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
 
 		return new WP_REST_Response( $settings, 200 );
 	}

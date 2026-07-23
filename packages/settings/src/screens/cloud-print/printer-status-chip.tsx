@@ -50,6 +50,8 @@ function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): Sta
 				variant: 'warning',
 				label: t('cloud_print.status_waiting', 'Waiting for printer'),
 			};
+		case 'blocked':
+			return { variant: 'error', label: t('cloud_print.status_blocked', 'Blocked') };
 		case 'offline':
 		default:
 			return { variant: 'error', label: t('cloud_print.status_offline', 'Offline') };
@@ -102,17 +104,36 @@ function subscribeToPrinterStatusUpdates(subscriber: StatusSubscriber) {
 	};
 }
 
-export function PrinterStatusChip({ printer }: { printer: CloudPrinter }) {
-	const provider = PROVIDERS[printer.provider];
-	const [status, setStatus] = React.useState<CloudStatus | undefined>(printer.status);
+/**
+ * Live status + block detail for a printer: seeded from the printer prop,
+ * then kept fresh by the shared background settings refresh. Exported so the
+ * card can react to a printer becoming blocked after the page loaded, not
+ * just the chip.
+ */
+export function usePrinterStatus(printer: CloudPrinter): {
+	status: CloudStatus | undefined;
+	statusDetail: string | null | undefined;
+} {
+	const [state, setState] = React.useState({
+		status: printer.status,
+		statusDetail: printer.status_detail,
+	});
 
 	React.useEffect(() => {
-		setStatus(printer.status);
+		setState({ status: printer.status, statusDetail: printer.status_detail });
 
 		return subscribeToPrinterStatusUpdates((settings) => {
-			setStatus(settings.printers.find((nextPrinter) => nextPrinter.id === printer.id)?.status);
+			const next = settings.printers.find((nextPrinter) => nextPrinter.id === printer.id);
+			setState({ status: next?.status, statusDetail: next?.status_detail });
 		});
-	}, [printer.id, printer.status]);
+	}, [printer.id, printer.status, printer.status_detail]);
+
+	return state;
+}
+
+export function PrinterStatusChip({ printer }: { printer: CloudPrinter }) {
+	const provider = PROVIDERS[printer.provider];
+	const { status } = usePrinterStatus(printer);
 
 	const meta = getStatusMeta(status, provider.isPolling);
 

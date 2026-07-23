@@ -106,6 +106,7 @@ class Print_Job_Service {
 		if ( ! empty( $args['drawer_connector'] ) ) {
 			update_post_meta( $id, self::META_DRAWER_CONNECTOR, self::normalize_drawer_connector( (string) $args['drawer_connector'] ) );
 		}
+		do_action( 'woocommerce_pos_print_job_created', (int) $id, (string) $args['printer_id'] );
 
 		return (int) $id;
 	}

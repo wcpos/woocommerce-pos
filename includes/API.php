@@ -410,8 +410,9 @@ class API {
 		$has_route_specific_permission_error = is_user_logged_in() && 0 === strpos( $route, '/wcpos/v1/receipts/' );
 		$is_public_auth_route                = \in_array( $route, array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ), true );
 		$is_printer_token_route             = \in_array( $route, array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ), true );
+		$is_relay_verification_route        = '/wcpos/v1/print-jobs/relay-verification' === $route;
 
-		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route ) {
+		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route && ! $is_relay_verification_route ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
 				if ( ! is_user_logged_in() ) {
 					return new \WP_Error(

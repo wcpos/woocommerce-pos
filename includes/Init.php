@@ -126,9 +126,35 @@ class Init {
 		if ( $is_wcpos_request ) {
 			new API();
 		} else {
+			// Queue the registration at a later priority of the SAME
+			// rest_api_init pass this method runs on (priority 20), so
+			// register_rest_route() executes during the action as WP requires.
+			// When this method is called outside the action (tests), the
+			// add_action is simply inert.
+			add_action( 'rest_api_init', array( $this, 'register_public_relay_routes' ), 30 );
 			$this->log_unmarked_wcpos_rest_request();
 			new WC_API();
 		}
+	}
+
+	/**
+	 * Register the relay's public consent-callback route for unmarked requests.
+	 *
+	 * The WCPOS Cloud Print relay proves site consent by fetching
+	 * print-jobs/relay-verification WITHOUT the WCPOS request marker, so this
+	 * single public route must exist even when the full WCPOS API is not
+	 * loaded. Everything else stays behind the marker.
+	 */
+	public function register_public_relay_routes(): void {
+		register_rest_route(
+			SHORT_NAME . '/v1',
+			'/print-jobs/relay-verification',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( new API\Print_Jobs_Controller(), 'relay_verification' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 	}
 
 	/**
@@ -146,6 +172,12 @@ class Init {
 			: '';
 
 		if ( 1 !== preg_match( '#^/wcpos/v([12])(?:/|$)#', $route, $matches ) ) {
+			return;
+		}
+
+		// The relay's consent callback is expected unmarked traffic (see
+		// register_public_relay_routes()), not a misconfigured client.
+		if ( '/wcpos/v1/print-jobs/relay-verification' === $route ) {
 			return;
 		}
 
@@ -291,6 +323,7 @@ class Init {
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();
+		new Services\Cloud_Print_Relay_Service();
 	}
 
 	/**

@@ -45,7 +45,19 @@ if [[ "$args" == pr\ diff* && "$args" == *--patch* ]]; then
   exit 0
 fi
 
+if [[ "$args" == pr\ view* ]]; then
+  if [[ "${MOCK_MERGE_STATE_FAIL:-false}" == "true" ]]; then
+    echo "mock: merge-state lookup unavailable" >&2
+    exit 1
+  fi
+  printf '%s\n' "${MOCK_MERGE_STATE:-CLEAN}"
+  exit 0
+fi
+
 if [[ "$args" == pr\ checks* ]]; then
+  if [[ -n "${MOCK_CHECKS_SENTINEL:-}" ]]; then
+    : > "$MOCK_CHECKS_SENTINEL"
+  fi
   if [[ "${MOCK_NO_CHECKS_EXPECTED:-false}" == "true" ]]; then
     echo "merge gate should not query PR checks for this case" >&2
     exit 65
@@ -74,10 +86,19 @@ chmod +x "$tmpdir/gh"
 run_case() {
   local name="$1" expected="$2"
   shift 2
+  local checks_sentinel="$tmpdir/checks-invoked"
+  local no_checks_expected=false assignment
+  for assignment in "$@"; do
+    if [[ "$assignment" == "MOCK_NO_CHECKS_EXPECTED=true" ]]; then
+      no_checks_expected=true
+    fi
+  done
+  rm -f "$checks_sentinel"
   echo "Running $name"
   set +e
   env \
     PATH="$tmpdir:$PATH" \
+    MOCK_CHECKS_SENTINEL="$checks_sentinel" \
     GITHUB_REPOSITORY="wcpos/test" \
     PR_NUMBER="123" \
     MERGE_GATE_REQUIRED_CHECKS="$TEST_REQUIRED_CHECKS" \
@@ -96,6 +117,10 @@ run_case() {
   fi
   if [[ "$expected" == "fail" && "$status" -eq 0 ]]; then
     echo "Expected $name to fail, got exit 0" >&2
+    return 1
+  fi
+  if [[ "$no_checks_expected" == "true" && -e "$checks_sentinel" ]]; then
+    echo "Expected $name not to query PR checks" >&2
     return 1
   fi
 }
@@ -156,7 +181,43 @@ run_case "translation version plus extra code does not bypass required checks" f
   MOCK_PATCH="$translation_extra_code_patch" \
   MOCK_FAIL_CHECK="Smoke Test (Latest Stable)"
 
-# Normal path: required checks are the only gate.
+# Normal path: conflicts fail fast, otherwise required checks are the gate.
+
+run_case "conflicted PR fails before polling checks" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: conflicted change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE="DIRTY" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+if ! grep -Fq "Resolve the merge conflicts and update the PR branch before CI can run." "$tmpdir/out"; then
+  echo "Expected conflicted PR to fail with an actionable merge-conflict message" >&2
+  exit 1
+fi
+
+run_case "conflicted translation-version PR fails despite allowlist" fail \
+  PR_AUTHOR="translations-ci[bot]" \
+  PR_TITLE="chore: update translation version to 2026.5.6" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE="DIRTY" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "conflicted POT-only PR fails despite allowlist" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
+  MOCK_CHANGED_FILES="$TEST_POT_FILE" \
+  MOCK_PATCH="$pot_patch" \
+  MOCK_MERGE_STATE="DIRTY" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "merge-state lookup failure fails closed" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE_FAIL="true" \
+  MOCK_NO_CHECKS_EXPECTED="true"
 
 run_case "human PR passes when required checks pass" pass \
   PR_AUTHOR="kilbot" \

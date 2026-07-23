@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
@@ -120,6 +121,36 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'test_print' ),
 				'permission_callback' => array( $this, 'manage_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay-verification',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'relay_verification' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay/register',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'relay_register' ),
+				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay/disable',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'relay_disable' ),
+				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
 			)
 		);
 
@@ -990,7 +1021,55 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Permission check for app/admin management routes.
+	 * Serve the pending relay verification token (public; consent callback).
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function relay_verification() {
+		$token = Cloud_Print_Relay_Service::pending_verification_token();
+		if ( null === $token ) {
+			return new WP_Error(
+				'wcpos_relay_no_pending_verification',
+				__( 'No relay verification is pending.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return rest_ensure_response( array( 'token' => $token ) );
+	}
+
+	/**
+	 * Register this site with the WCPOS Cloud Print relay.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function relay_register() {
+		$result = Cloud_Print_Relay_Service::register_site();
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * Disable relay use for this site.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function relay_disable() {
+		return rest_ensure_response( Cloud_Print_Relay_Service::disable() );
+	}
+
+	/**
+	 * Permission check for relay registration routes.
+	 *
+	 * Registering rotates the site's relay credentials, so it needs the
+	 * settings-management capability, not the cashier-level print capability.
+	 */
+	public function relay_manage_permissions_check(): bool {
+		return current_user_can( 'manage_woocommerce_pos' );
+	}
+
+	/**
+	 * Check permissions for cashier-level print job actions.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 *
