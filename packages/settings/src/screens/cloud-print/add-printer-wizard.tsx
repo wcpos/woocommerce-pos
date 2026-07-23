@@ -126,27 +126,49 @@ function getRestRoot(): string {
 }
 
 /**
- * Build the poll URL a printer uses to fetch jobs. `root` already ends in `/`,
- * so the path is appended without a leading slash to avoid a double slash.
- * When `relayBaseUrl` is given (e.g. https://cloudprint.wcpos.com/p/<site_key>)
- * the URL is built on the relay instead of this site; the query string —
- * including the `pt` token — is identical either way, because the relay
- * passes it through untouched.
+ * Build a poll URL with the token segment already encoded (or masked for
+ * display). Credentials ride in the URL *path*, never the query string: Star
+ * printers URL-encode the configured query on the wire (& becomes %26), so
+ * query credentials never arrive as parameters — verified on a TSP100IV.
+ * Only the first configured `key=value` pair survives, which is why the
+ * direct form can still carry the lone `wcpos=1` marker. `root` already ends
+ * in `/`, so the path is appended without a leading slash.
  */
+function buildPollUrlWithTokenSegment(
+	provider: CloudProvider,
+	printerId: string,
+	tokenSegment: string,
+	relayBaseUrl?: string
+): string {
+	const endpoint = PROVIDERS[provider].pollEndpoint;
+	const creds = `${encodeURIComponent(printerId)}/${tokenSegment}`;
+	if (relayBaseUrl) {
+		// e.g. https://cloudprint.wcpos.com/p/<site_key>/<printer>/<token>/<endpoint>;
+		// the relay rebuilds the query server-side, so none is needed here.
+		return `${relayBaseUrl.replace(/\/$/, '')}/${creds}/${endpoint}`;
+	}
+	const baseUrl = `${getRestRoot()}wcpos/v1/print-jobs/${endpoint}/${creds}`;
+	const separator = baseUrl.includes('?') ? '&' : '?';
+	return `${baseUrl}${separator}wcpos=1`;
+}
+
+/** Build the poll URL a printer uses to fetch jobs. */
 export function buildPollUrl(
 	provider: CloudProvider,
 	printerId: string,
 	token: string,
 	relayBaseUrl?: string
 ): string {
-	const endpoint = PROVIDERS[provider].pollEndpoint;
-	const baseUrl = relayBaseUrl
-		? `${relayBaseUrl.replace(/\/$/, '')}/${endpoint}`
-		: `${getRestRoot()}wcpos/v1/print-jobs/${endpoint}`;
-	const separator = baseUrl.includes('?') ? '&' : '?';
-	return `${baseUrl}${separator}wcpos=1&printer_id=${encodeURIComponent(
-		printerId
-	)}&pt=${encodeURIComponent(token)}`;
+	return buildPollUrlWithTokenSegment(provider, printerId, encodeURIComponent(token), relayBaseUrl);
+}
+
+/** Display-only poll URL with the secret token segment masked. */
+export function maskedPollUrl(
+	provider: CloudProvider,
+	printerId: string,
+	relayBaseUrl?: string
+): string {
+	return buildPollUrlWithTokenSegment(provider, printerId, '••••', relayBaseUrl);
 }
 
 /** A label + read-only value with a copy-to-clipboard button. */
@@ -706,9 +728,6 @@ export function AddPrinterWizard({
 									const relayBase =
 										relay?.enabled && relay.printer_base_url ? relay.printer_base_url : undefined;
 									if (mode === 'setup') {
-										// No real token to display — append a literal mask after the
-										// (empty, so un-encoded) token placeholder.
-										const baseUrl = `${buildPollUrl(finalProvider, printerForUrl.id, '', relayBase)}••••`;
 										return (
 											<>
 												<CopyRow
@@ -717,13 +736,13 @@ export function AddPrinterWizard({
 														'cloud_print.poll_url_help',
 														'paste into the printer\'s "server URL"'
 													)}
-													value={baseUrl}
+													value={maskedPollUrl(finalProvider, printerForUrl.id, relayBase)}
 													valueTestId="wizard-poll-url"
 													copyTestId="wizard-copy-url"
 												/>
 												{relayBase && (
 													<DirectUrlDisclosure
-														url={`${buildPollUrl(finalProvider, printerForUrl.id, '')}••••`}
+														url={maskedPollUrl(finalProvider, printerForUrl.id)}
 														copyable={false}
 													/>
 												)}
@@ -734,7 +753,7 @@ export function AddPrinterWizard({
 									if (!token) {
 										// Polling providers always return a one-time token (Phase 1
 										// contract). Guard the theoretical empty case so we never show
-										// a broken `…&pt=` URL or an empty, copyable token row.
+										// a URL with an empty token segment or an empty, copyable token row.
 										return (
 											<Notice status="warning" isDismissible={false}>
 												{t(

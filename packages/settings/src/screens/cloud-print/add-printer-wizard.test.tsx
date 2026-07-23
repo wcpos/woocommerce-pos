@@ -105,7 +105,7 @@ describe('AddPrinterWizard', () => {
 
 		// Step 2: poll URL + token + "shown only once" copy.
 		const expectedUrl =
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp?wcpos=1&printer_id=kitchen&pt=9f3a8c21d7b64e0fa1c2e5d8b09a7f6c';
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp/kitchen/9f3a8c21d7b64e0fa1c2e5d8b09a7f6c?wcpos=1';
 		await waitFor(() => expect(screen.getByTestId('wizard-poll-url')).toBeInTheDocument());
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(expectedUrl);
 		expect(screen.getByTestId('wizard-poll-token')).toHaveTextContent(
@@ -137,7 +137,7 @@ describe('AddPrinterWizard', () => {
 		);
 
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(
-			'https://mystore.com/?rest_route=/wcpos/v1/print-jobs/cloudprnt&wcpos=1&printer_id=kitchen'
+			'https://mystore.com/?rest_route=/wcpos/v1/print-jobs/cloudprnt/kitchen'
 		);
 	});
 
@@ -353,11 +353,11 @@ describe('AddPrinterWizard', () => {
 		// Step 2 directly.
 		const url = screen.getByTestId('wizard-poll-url');
 		expect(url).toHaveTextContent(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?wcpos=1&printer_id=kitchen'
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen'
 		);
-		expect(url).toHaveTextContent('pt=');
-		// Token masked (no real token, dots present).
-		expect(url.textContent).toContain('•');
+		// Token masked (no real token, dots in the token path segment).
+		expect(url.textContent).toContain('/••••');
+		expect(url).toHaveTextContent('wcpos=1');
 		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
 		expect(screen.getByText(/can't be displayed again/i)).toBeInTheDocument();
 
@@ -392,20 +392,20 @@ describe('AddPrinterWizard', () => {
 describe('buildPollUrl relay routing', () => {
 	it('builds a direct URL on the site REST root by default', () => {
 		expect(buildPollUrl('star-cloudprnt', 'kitchen', 'tok')).toBe(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?wcpos=1&printer_id=kitchen&pt=tok'
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen/tok?wcpos=1'
 		);
 	});
 
 	it('builds on the relay printer base URL when provided', () => {
 		expect(buildPollUrl('epson-sdp', 'front', 'tok', 'https://cloudprint.wcpos.com/p/abc123')).toBe(
-			'https://cloudprint.wcpos.com/p/abc123/epson-sdp?wcpos=1&printer_id=front&pt=tok'
+			'https://cloudprint.wcpos.com/p/abc123/front/tok/epson-sdp'
 		);
 	});
 
 	it('tolerates a trailing slash on the relay base URL', () => {
 		expect(
 			buildPollUrl('star-cloudprnt', 'kitchen', 'tok', 'https://cloudprint.wcpos.com/p/abc123/')
-		).toBe('https://cloudprint.wcpos.com/p/abc123/cloudprnt?wcpos=1&printer_id=kitchen&pt=tok');
+		).toBe('https://cloudprint.wcpos.com/p/abc123/kitchen/tok/cloudprnt');
 	});
 });
 
@@ -423,11 +423,11 @@ describe('AddPrinterWizard relay display', () => {
 		);
 
 		expect(screen.getByTestId('wizard-poll-url').textContent).toContain(
-			'https://cloudprint.wcpos.com/p/abc123/cloudprnt'
+			'https://cloudprint.wcpos.com/p/abc123/kitchen/••••/cloudprnt'
 		);
 		expect(screen.getByTestId('wizard-direct-disclosure')).toBeInTheDocument();
 		expect(screen.getByTestId('wizard-direct-url').textContent).toContain(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt'
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen/••••'
 		);
 	});
 

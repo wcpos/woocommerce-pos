@@ -166,9 +166,36 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			)
 		);
 
+		// Path-credential form: Star printers URL-encode the configured query
+		// string on the wire (& becomes %26), so printer_id/pt can never
+		// arrive as query parameters — but the path is transmitted verbatim.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/cloudprnt/(?P<printer_id>[^/]+)/(?P<pt>[^/]+)',
+			array(
+				array(
+					'methods'             => array( 'POST', 'GET', 'DELETE' ),
+					'callback'            => array( $this, 'cloudprnt' ),
+					'permission_callback' => array( $this, 'printer_token_permissions_check' ),
+				),
+			)
+		);
+
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/epson-sdp',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'epson_sdp' ),
+					'permission_callback' => array( $this, 'printer_token_permissions_check' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/epson-sdp/(?P<printer_id>[^/]+)/(?P<pt>[^/]+)',
 			array(
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
