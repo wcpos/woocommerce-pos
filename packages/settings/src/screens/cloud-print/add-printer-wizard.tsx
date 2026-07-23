@@ -235,6 +235,28 @@ type CreatedState = { printer: CloudPrinter; token?: string };
  * active. Direct connections fail on some hosts (modern TLS the printer can't
  * negotiate), which is the problem the relay exists to fix — hence "Advanced".
  */
+/**
+ * One tiny line linking to the docs page that explains why printer URLs go
+ * through cloudprint.wcpos.com. Deliberately the only relay-related copy in
+ * the UI — the full explanation lives in the docs, not the settings screen.
+ */
+function RelayDocsNote() {
+	return (
+		<p className="wcpos:text-xs wcpos:text-gray-500" data-testid="wizard-relay-docs-note">
+			<a
+				href="https://docs.wcpos.com/receipts/cloud-printing"
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				{t(
+					'cloud_print.relay_docs_note',
+					"For more information on why we're using a relay server."
+				)}
+			</a>
+		</p>
+	);
+}
+
 function DirectUrlDisclosure({ url, copyable }: { url: string; copyable: boolean }) {
 	return (
 		<details className="wcpos:mt-1" data-testid="wizard-direct-disclosure">
