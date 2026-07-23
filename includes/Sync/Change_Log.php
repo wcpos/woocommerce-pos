@@ -109,7 +109,7 @@ final class Change_Log {
 		// The two WC post-persist create hooks: woocommerce_created_customer (the
 		// wc_create_new_customer / registration path) and woocommerce_new_customer (the
 		// WC_Customer::save() data-store path, the FINAL post-persist create event).
-		// Both bypass the dedup so a definitive post-save row always lands whichever
+		// Both bypass the pre-persist dedup so a definitive post-save row always lands whichever
 		// create flow ran. Together with user_register this matches WooCommerce's own
 		// customer.created webhook hooks.
 		add_action( 'woocommerce_created_customer', array( $this, 'record_customer_created_persisted' ), 10, 1 );
@@ -287,7 +287,7 @@ final class Change_Log {
 		}
 	}
 
-	/** woocommerce_created_customer — the definitive post-persist create; bypasses dedup. */
+	/** WooCommerce create hooks — definitive post-persist create with persisted dedup. */
 	public function record_customer_created_persisted( int $customer_id ): void {
 		if ( $this->is_customer( $customer_id ) ) {
 			$this->record( 'customer', $customer_id, 'create', 'hook', false );
@@ -390,18 +390,32 @@ final class Change_Log {
 		// Dedup CUSTOMER rows only: one customer role change fans out across
 		// overlapping WP-core hooks (set_role fires remove/add_user_role AND
 		// set_user_role). Products/variations/tax keep their per-hook-fire semantics.
-		// The WooCommerce post-persist hooks pass $dedup=false so they ALWAYS write a
-		// row: in a WC save, profile_update fires BEFORE the customer meta is written
-		// while woocommerce_update_customer fires AFTER — the definitive post-save row
-		// must survive as the repair for anything that read the earlier (stale) one.
-		if ( $dedup && 'customer' === $object_type ) {
-			$dedup_key = $object_id . ':' . $change_type;
-			if ( isset( $this->recorded_this_request[ $dedup_key ] ) ) {
-				return; // this exact customer change was already recorded this request
-			}
-			$this->recorded_this_request[ $dedup_key ] = true;
-		}
+		//
+		// Post-persist customer hooks pass $dedup=false and use a namespaced key
+		// with LAST-WRITE-WINS replacement: a later post-persist row in the same
+		// request carries NEWER state than the earlier one (checkout populates
+		// billing between woocommerce_created_customer and woocommerce_new_customer;
+		// a second save() sits between two woocommerce_update_customer fires), so
+		// suppressing it could strand a client that pulled between the two on the
+		// incomplete state forever. Instead the earlier same-request row is DELETED
+		// and the new state lands at a fresh head sequence — one row per request,
+		// and the definitive post-save state is always (re-)announced past any
+		// cursor that consumed the earlier row.
 		global $wpdb;
+		$dedup_key = null;
+		if ( 'customer' === $object_type ) {
+			$dedup_key = ( $dedup ? '' : 'persisted:' ) . $object_id . ':' . $change_type;
+			if ( isset( $this->recorded_this_request[ $dedup_key ] ) ) {
+				if ( $dedup ) {
+					return; // a pre-persist duplicate carries no new state
+				}
+				$wpdb->delete(
+					$this->table_name(),
+					array( 'sequence' => (int) $this->recorded_this_request[ $dedup_key ] ),
+					array( '%d' )
+				);
+			}
+		}
 		$started = microtime( true );
 		$now = gmdate( 'Y-m-d H:i:s' );
 		$wpdb->insert(
@@ -416,6 +430,11 @@ final class Change_Log {
 			),
 			array( '%s', '%d', '%s', '%s', '%s', '%s' )
 		);
+		if ( null !== $dedup_key ) {
+			// Pre-persist keys only need existence; persisted keys remember their
+			// row's sequence so a later same-request duplicate can replace it.
+			$this->recorded_this_request[ $dedup_key ] = $dedup ? true : (int) $wpdb->insert_id;
+		}
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 	}
 

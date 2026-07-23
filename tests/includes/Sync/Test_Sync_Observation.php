@@ -257,6 +257,111 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * The WC persisted customer hooks share one row without collapsing the
+	 * earlier WordPress row needed before persistence completes.
+	 */
+	public function test_change_log_customer_create_persisted_hooks_write_single_row(): void {
+		global $wpdb;
+
+		// Arrange.
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$table   = $this->change_log->table_name();
+
+		$create_changes = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT change_type FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'create' ORDER BY sequence ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$user_id
+			)
+		);
+		$this->assertSame( array( 'create' ), $create_changes );
+
+		// Arrange.
+		$customer = new \WC_Customer( $user_id );
+		$customer->set_first_name( 'Updated customer' );
+
+		// Act.
+		$customer->save();
+
+		// Assert.
+		$update_changes = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT change_type FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'update' ORDER BY sequence ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$user_id
+			)
+		);
+		$this->assertSame( array( 'update', 'update' ), $update_changes );
+
+		// Arrange: remember the sequence of the persisted update row so the
+		// last-write-wins replacement below is observable.
+		$persisted_update_sequence = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT MAX(sequence) FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'update'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$user_id
+			)
+		);
+
+		// Act: a SECOND save in the same request (checkout populates fields
+		// between persisted hooks; multi-save requests exist). The persisted
+		// update row must be REPLACED at a fresh head sequence — not suppressed
+		// (a client that consumed the first row would stay stale forever) and
+		// not double-logged.
+		$customer = new \WC_Customer( $user_id );
+		$customer->set_last_name( 'Second save' );
+		$customer->save();
+
+		// Assert: still exactly one pre-persist + one persisted update row, and
+		// the persisted row moved PAST the sequence a client may have consumed.
+		$update_changes = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT change_type FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'update' ORDER BY sequence ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$user_id
+			)
+		);
+		$this->assertSame( array( 'update', 'update' ), $update_changes );
+		$this->assertGreaterThan(
+			$persisted_update_sequence,
+			(int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT MAX(sequence) FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'update'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+					$user_id
+				)
+			)
+		);
+
+		// Act: the duplicate persisted CREATE pair (registration fires both
+		// woocommerce_created_customer and woocommerce_new_customer).
+		do_action( 'woocommerce_created_customer', $user_id, array(), false ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test, fired with its full core signature (WC Admin's merge_guest_customer_on_delayed_account_creation listener requires two arguments).
+		$first_persisted_create_sequence = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT MAX(sequence) FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'create'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$user_id
+			)
+		);
+		do_action( 'woocommerce_new_customer', $user_id, new \WC_Customer( $user_id ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+
+		// Assert: the pair collapses to ONE persisted create row (plus the
+		// original user_register row), and the SURVIVOR is the later event —
+		// the checkout flow saves billing fields between the two hooks, so the
+		// final state must be the row clients see.
+		$create_changes = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT change_type FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'create' ORDER BY sequence ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$user_id
+			)
+		);
+		$this->assertSame( array( 'create', 'create' ), $create_changes );
+		$this->assertGreaterThan(
+			$first_persisted_create_sequence,
+			(int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT MAX(sequence) FROM {$table} WHERE object_type = 'customer' AND object_id = %d AND change_type = 'create'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+					$user_id
+				)
+			)
+		);
+	}
+
+	/**
 	 * Restoring a CPT order recreates the digest removed by its trash hook.
 	 */
 	public function test_cpt_order_untrash_recreates_the_order_digest(): void {
