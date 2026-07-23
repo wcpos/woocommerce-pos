@@ -356,4 +356,16 @@ run_case "fix-bot 300-file commit fails closed (files API truncation)" fail \
   MOCK_COMMIT_FILES_c1="$big_files" \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK (79 tests) — wp-env'
 
+run_case "fix-bot workflow-only commit without trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.github/workflows/tests.yml' \
+  MOCK_COMMIT_MSG_c1="fix: tweak CI"
+
+run_case "fix-bot config commit with trailer passes without a new test" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tcomposer.json' \
+  MOCK_COMMIT_MSG_c1=$'fix: bump dep\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
 echo "All merge-gate tests passed."

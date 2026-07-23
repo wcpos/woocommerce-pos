@@ -234,6 +234,17 @@ trailer_block_has_tested() {
   '
 }
 
+# Config that steers CI or dependency resolution: a same-commit pinning test
+# usually has no meaningful form here (what test pins a version bump?), but
+# the change still needs proof the suite ran — mirror requires_php_tests:
+# config-class bot commits require the Tested: trailer, not a new test.
+is_config_path() {
+  case "$1" in
+    .github/workflows/*|.github/*.json|composer.json|composer.lock|package.json|pnpm-workspace.yaml|pnpm-lock.yaml|package-lock.json) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Fix-bot commits must carry their own proof: a bot-authored commit that
 # changes source must (a) touch a test in the SAME commit and (b) record a
 # local suite run as a `Tested:` trailer in the commit message. This is the
@@ -263,6 +274,7 @@ enforce_bot_fix_discipline() {
     fi
     has_source=false
     has_test=false
+    has_config=false
     while IFS=$'\t' read -r fstatus file; do
       [[ -n "$file" ]] || continue
       if is_test_path "$file"; then
@@ -270,10 +282,12 @@ enforce_bot_fix_discipline() {
         [[ "$fstatus" != "removed" ]] && has_test=true
       elif is_source_path "$file"; then
         has_source=true
+      elif is_config_path "$file"; then
+        has_config=true
       fi
     done <<< "$files"
-    [[ "$has_source" == "true" ]] || continue
-    if [[ "$has_test" != "true" ]]; then
+    [[ "$has_source" == "true" || "$has_config" == "true" ]] || continue
+    if [[ "$has_source" == "true" && "$has_test" != "true" ]]; then
       log "✗ Fix-bot commit ${sha:0:8} ($author) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
       failed=1
     fi
