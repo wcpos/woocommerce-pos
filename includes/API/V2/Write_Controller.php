@@ -699,7 +699,14 @@ class Write_Controller extends WP_REST_Controller {
 			$order = wc_get_order( $id );
 			if ( $order ) {
 				$order->set_billing_email( '' );
-				$order->save();
+				// Datastore update, NOT $order->save(): save() runs
+				// maybe_set_user_billing_email(), which backfills an empty email
+				// from the order's registered customer — silently undoing the
+				// cashier's explicit clear. The datastore path persists the ''
+				// through the active store (CPT or HPOS) with normal cache
+				// invalidation. date_modified already advanced via the wc/v3
+				// forward above, so pull cursors still see this update.
+				$order->get_data_store()->update( $order );
 			}
 		}
 		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] ); // keep the uuid stable across updates
