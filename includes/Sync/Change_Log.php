@@ -109,7 +109,7 @@ final class Change_Log {
 		// The two WC post-persist create hooks: woocommerce_created_customer (the
 		// wc_create_new_customer / registration path) and woocommerce_new_customer (the
 		// WC_Customer::save() data-store path, the FINAL post-persist create event).
-		// Both bypass the dedup so a definitive post-save row always lands whichever
+		// Both bypass the pre-persist dedup so a definitive post-save row always lands whichever
 		// create flow ran. Together with user_register this matches WooCommerce's own
 		// customer.created webhook hooks.
 		add_action( 'woocommerce_created_customer', array( $this, 'record_customer_created_persisted' ), 10, 1 );
@@ -287,7 +287,7 @@ final class Change_Log {
 		}
 	}
 
-	/** woocommerce_created_customer — the definitive post-persist create; bypasses dedup. */
+	/** WooCommerce create hooks — definitive post-persist create with persisted dedup. */
 	public function record_customer_created_persisted( int $customer_id ): void {
 		if ( $this->is_customer( $customer_id ) ) {
 			$this->record( 'customer', $customer_id, 'create', 'hook', false );
@@ -390,12 +390,11 @@ final class Change_Log {
 		// Dedup CUSTOMER rows only: one customer role change fans out across
 		// overlapping WP-core hooks (set_role fires remove/add_user_role AND
 		// set_user_role). Products/variations/tax keep their per-hook-fire semantics.
-		// The WooCommerce post-persist hooks pass $dedup=false so they ALWAYS write a
-		// row: in a WC save, profile_update fires BEFORE the customer meta is written
-		// while woocommerce_update_customer fires AFTER — the definitive post-save row
-		// must survive as the repair for anything that read the earlier (stale) one.
-		if ( $dedup && 'customer' === $object_type ) {
-			$dedup_key = $object_id . ':' . $change_type;
+		// Post-persist customer hooks pass $dedup=false to use a namespaced key:
+		// their definitive row survives the earlier pre-persist row while identical
+		// persisted hooks collapse.
+		if ( 'customer' === $object_type ) {
+			$dedup_key = ( $dedup ? '' : 'persisted:' ) . $object_id . ':' . $change_type;
 			if ( isset( $this->recorded_this_request[ $dedup_key ] ) ) {
 				return; // this exact customer change was already recorded this request
 			}
