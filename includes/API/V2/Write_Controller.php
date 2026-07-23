@@ -10,6 +10,9 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Product;
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
@@ -350,10 +353,23 @@ class Write_Controller extends WP_REST_Controller {
 
 	private function apply_create( string $collection, array $meta, array $m ) {
 		$variation_parent_id = 0;
+		$client_created_gmt  = null;
 		if ( 'variations' === $collection ) {
 			$variation_parent_id = $this->required_variation_parent_id( $m['payload'] );
 			if ( $variation_parent_id instanceof WP_REST_Response ) {
 				return $variation_parent_id;
+			}
+		} elseif ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$client_created_gmt = $this->validate_client_created_gmt( $m['payload'] );
+			if ( is_wp_error( $client_created_gmt ) ) {
+				return $client_created_gmt;
+			}
+			// tax_ids is stripped from the wc/v3 forward below, so wc/v3 never validates it.
+			// Run the v1 schema check here — otherwise malformed/unsupported entries slip past
+			// validation and Tax_Id_Writer silently drops them, acking an order missing tax IDs.
+			$tax_ids_error = $this->validate_order_tax_ids( $m['payload'] );
+			if ( is_wp_error( $tax_ids_error ) ) {
+				return $tax_ids_error;
 			}
 		}
 
@@ -394,6 +410,7 @@ class Write_Controller extends WP_REST_Controller {
 		$forward_payload = $m['payload'];
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $forward_payload ) ) {
 			$forward_payload['created_via'] = 'woocommerce-pos';
+			unset( $forward_payload['tax_ids'] );
 			// Only strip when meta_data is a well-formed array — a malformed (non-array) meta_data must
 			// pass through so wc/v3's own schema validation rejects it, not be silently replaced with [].
 			if ( isset( $forward_payload['meta_data'] ) && is_array( $forward_payload['meta_data'] ) ) {
@@ -404,7 +421,18 @@ class Write_Controller extends WP_REST_Controller {
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
 			: $meta['route'];
-		$response = $this->forward( 'POST', $route, $forward_payload );
+		$date_filter = static function ( $order, $request, $creating ) use ( $client_created_gmt ) {
+			if ( $creating && null !== $client_created_gmt && ! is_wp_error( $order ) ) {
+				$order->set_date_created( $client_created_gmt );
+			}
+			return $order;
+		};
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $date_filter, 10, 3 );
+		try {
+			$response = $this->forward( 'POST', $route, $forward_payload );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $date_filter, 10 );
+		}
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
@@ -420,6 +448,9 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_create_no_id', 'Create returned no server id.', array( 'status' => 502 ) );
 		}
 		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response->get_status() );
+		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$this->persist_order_tax_ids( $new_id, $m['payload'], true );
+		}
 		// The controller OWNS identity: wc/v3 dropped our uuid as protected meta, so
 		// force the client's recordId onto the new record (direct meta write) — it is
 		// the persisted, resolvable key (reuse-the-client's-uuid, never re-key).
@@ -621,6 +652,16 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_record_not_found', 'No record for recordId.', array( 'status' => 404 ) );
 		}
 
+		// Envelope-level payload validation runs BEFORE any wc/v3 read or write —
+		// mirroring create, and keeping "rejected before the forward" true on every
+		// WC version (the concurrency check below performs a document_for GET).
+		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
+			$tax_ids_error = $this->validate_order_tax_ids( $m['payload'] );
+			if ( is_wp_error( $tax_ids_error ) ) {
+				return $tax_ids_error;
+			}
+		}
+
 		$variation_parent_id = 0;
 		if ( 'variations' === $collection ) {
 			$variation = $this->variation( $id );
@@ -676,6 +717,7 @@ class Write_Controller extends WP_REST_Controller {
 		$clear_billing_email = false;
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			unset( $update_payload['created_via'] );
+			unset( $update_payload['tax_ids'] );
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
 				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload );
 			}
@@ -694,6 +736,9 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		if ( $response->get_status() >= 400 ) {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
+		}
+		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$this->persist_order_tax_ids( $id, $m['payload'], false );
 		}
 		if ( $clear_billing_email ) {
 			$order = wc_get_order( $id );
@@ -861,6 +906,11 @@ class Write_Controller extends WP_REST_Controller {
 			// The poison row does not record which plugin version accepted the POST, so a
 			// later deployment must not invent provenance while recovering its audit data.
 			$this->stamp_order_audit( $remote_id, $m['payload'] );
+			// A create can die after mark_poison() but before the separate tax-ID save. This
+			// recovery path finalizes the acknowledged order, so replay the create-time tax_ids
+			// persistence (idempotent) here — otherwise explicit or customer-snapshotted tax IDs
+			// are lost forever. is_create = true so an omitted payload still snapshots the customer.
+			$this->persist_order_tax_ids( $remote_id, $m['payload'], true );
 		}
 		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {
 			return $this->finalize_error();
@@ -902,7 +952,87 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		return $payload;
 	}
-
+	private function validate_client_created_gmt( array $payload ) {
+		if ( ! isset( $payload['date_created_gmt'] ) ) {
+			return null;
+		}
+		if ( ! is_scalar( $payload['date_created_gmt'] ) ) {
+			return new WP_Error( 'woocommerce_pos_rest_invalid_date_created_gmt', __( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		$value = wc_clean( wp_unslash( (string) $payload['date_created_gmt'] ) );
+		if ( '' === $value ) {
+			return null;
+		}
+		$timestamp = 1 === preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/i', $value )
+			? rest_parse_date( 'Z' === strtoupper( substr( $value, -1 ) ) ? $value : $value . 'Z', true )
+			: false;
+		if ( false === $timestamp ) {
+			return new WP_Error( 'woocommerce_pos_rest_invalid_date_created_gmt', __( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		if ( $timestamp > time() + DAY_IN_SECONDS ) {
+			return new WP_Error( 'woocommerce_pos_rest_future_date_created_gmt', __( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		return $timestamp;
+	}
+	/**
+	 * Validate a client-submitted `tax_ids` payload against the v1 order schema.
+	 *
+	 * tax_ids is unknown to the stock wc/v3 controller and is stripped before the forward,
+	 * so wc/v3 never validates it. V1\Orders_Controller::wcpos_get_item_schema() added a
+	 * TaxId[] schema (typed enum, string value, nullable country/label) that WordPress
+	 * enforced on every create/update; reproduce that check here so malformed or unsupported
+	 * entries are rejected with a 400 instead of being silently dropped by Tax_Id_Writer.
+	 *
+	 * @param array $payload Mutation payload.
+	 *
+	 * @return null|WP_Error null when tax_ids is absent or valid; WP_Error (400) otherwise.
+	 */
+	private function validate_order_tax_ids( array $payload ) {
+		if ( ! array_key_exists( 'tax_ids', $payload ) ) {
+			return null;
+		}
+		$schema = array(
+			'type'  => 'array',
+			'items' => array(
+				'type'       => 'object',
+				// value/type are required: Tax_Id_Writer silently drops an entry with no value and
+				// rewrites a missing type to `other`, so an accepted-but-mutated ack would diverge
+				// from the submitted IDs. Require them so the API returns a 400 instead.
+				'required'   => array( 'value', 'type' ),
+				'properties' => array(
+					'type'    => array(
+						'type' => 'string',
+						'enum' => Tax_Id_Types::all_types(),
+					),
+					'value'   => array(
+						'type' => 'string',
+					),
+					'country' => array(
+						'type' => array( 'string', 'null' ),
+					),
+					'label'   => array(
+						'type' => array( 'string', 'null' ),
+					),
+				),
+			),
+		);
+		$valid = rest_validate_value_from_schema( $payload['tax_ids'], $schema, 'tax_ids' );
+		if ( is_wp_error( $valid ) ) {
+			return new WP_Error( 'woocommerce_pos_rest_invalid_tax_ids', $valid->get_error_message(), array( 'status' => 400 ) );
+		}
+		return null;
+	}
+	private function persist_order_tax_ids( int $id, array $payload, bool $is_create ): void {
+		$order = wc_get_order( $id );
+		if ( ! $order ) {
+			return;
+		}
+		if ( is_array( $payload['tax_ids'] ?? null ) ) {
+			( new Tax_Id_Writer() )->write_for_order( $order, $payload['tax_ids'] );
+		} elseif ( $is_create && $order->get_customer_id() > 0 ) {
+			( new Tax_Id_Writer() )->snapshot_from_user_to_order( $order, $order->get_customer_id() );
+		}
+	}
 	private function forward( string $method, string $route, $payload ) {
 		$request = new WP_REST_Request( $method, $route );
 		if ( is_array( $payload ) ) {
@@ -1025,6 +1155,10 @@ class Write_Controller extends WP_REST_Controller {
 	 */
 	private function respond( array $bare, string $record_id, int $status, array $meta = array(), int $id = 0 ) {
 		$current_revision = $this->revision_for( $meta, $id, $bare );
+		$order            = 'order' === ( $meta['id_type'] ?? '' ) ? wc_get_order( $id ) : false;
+		if ( $order ) {
+			$bare['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+		}
 		if ( 'product' === ( $meta['post_type'] ?? '' ) ) {
 			$product = wc_get_product( $id );
 			if ( $product ) {

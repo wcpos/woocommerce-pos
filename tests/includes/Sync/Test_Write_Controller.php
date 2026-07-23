@@ -11,6 +11,9 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -561,7 +564,9 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'Variable parent', $forwarded['line_items'][0]['parent_name'] );
 		$this->assertSame( '', wc_get_order( $order_id )->get_billing_email() );
 		$this->assertSame( '', $result->get_data()['document']['billing']['email'] );
-		$this->assertSame( Order_Serializer::canonical_revision( $result->get_data()['document'] ), $result->get_data()['currentRevision'] );
+		$revision_document = $result->get_data()['document'];
+		unset( $revision_document['tax_ids'] ); // ack-only decoration; wc/v3 revision source omits it.
+		$this->assertSame( Order_Serializer::canonical_revision( $revision_document ), $result->get_data()['currentRevision'] );
 	}
 
 	/**
@@ -631,6 +636,360 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $removed->get_status() );
 		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
+	}
+
+	public function test_order_create_preserves_valid_client_date_created_gmt_through_real_wc(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$client_date = gmdate( 'Y-m-d\TH:i:s\Z', time() - HOUR_IN_SECONDS );
+
+		$created = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'date_created_gmt' => $client_date ),
+			)
+		);
+
+		$this->assertSame( 201, $created->get_status() );
+		$order = wc_get_order( (int) $created->get_data()['document']['id'] );
+		$this->assertSame( $client_date, gmdate( 'Y-m-d\TH:i:s\Z', $order->get_date_created()->getTimestamp() ) );
+	}
+
+	public function test_order_create_rejects_invalid_client_date_created_gmt(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'date_created_gmt' => 'not-a-date' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_date_created_gmt', $result->get_error_code() );
+	}
+
+	public function test_order_create_rejects_client_date_created_gmt_more_than_24_hours_future(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'date_created_gmt' => gmdate( 'Y-m-d\TH:i:s\Z', time() + DAY_IN_SECONDS + HOUR_IN_SECONDS ) ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_future_date_created_gmt', $result->get_error_code() );
+	}
+
+	public function test_order_create_without_date_created_gmt_uses_server_time_through_real_wc(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$created = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'status' => 'processing' ),
+			)
+		);
+
+		$this->assertSame( 201, $created->get_status() );
+		$this->assertNotFalse( wc_get_order( (int) $created->get_data()['document']['id'] ) );
+	}
+
+	public function test_order_create_persists_explicit_tax_ids_and_returns_them_in_ack(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tax_ids = array(
+			array(
+				'type'    => Tax_Id_Types::TYPE_BR_CPF,
+				'value'   => '12345678909',
+				'country' => 'BR',
+			),
+		);
+
+		$created = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => $tax_ids,
+				),
+			)
+		);
+
+		$this->assertSame( 201, $created->get_status() );
+		$order_tax_ids = ( new Tax_Id_Reader() )->read_for_order( wc_get_order( (int) $created->get_data()['document']['id'] ) );
+		$this->assertCount( 1, $order_tax_ids );
+		$this->assertSame( '12345678909', $order_tax_ids[0]['value'] );
+		$this->assertSame( $order_tax_ids, $created->get_data()['document']['tax_ids'] );
+	}
+
+	public function test_order_create_snapshots_customer_tax_ids_when_payload_omits_them(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$customer_id = self::factory()->user->create( array( 'role' => 'customer' ) );
+		( new Tax_Id_Writer() )->write_for_user(
+			$customer_id,
+			array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_EU_VAT,
+					'value'   => 'DE123456789',
+					'country' => 'DE',
+				),
+			)
+		);
+
+		$created = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'customer_id' => $customer_id,
+					'billing'     => array( 'country' => 'DE' ),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $created->get_status() );
+		$order_tax_ids = ( new Tax_Id_Reader() )->read_for_order( wc_get_order( (int) $created->get_data()['document']['id'] ) );
+		$this->assertCount( 1, $order_tax_ids );
+		$this->assertSame( 'DE123456789', $order_tax_ids[0]['value'] );
+	}
+
+	public function test_order_update_overwrites_explicit_tax_ids_and_omission_does_not_clobber_them(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$store = new Fake_Mutation_Store();
+		$created = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array(
+						array(
+							'type'  => Tax_Id_Types::TYPE_BR_CPF,
+							'value' => '12345678909',
+						),
+					),
+				),
+			)
+		);
+		$order_id = (int) $created->get_data()['document']['id'];
+
+		$updated = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'mutationId'   => '00000000-0000-4000-8000-00000000f001',
+				'baseRevision' => $created->get_data()['currentRevision'],
+				'payload'      => array(
+					'tax_ids' => array(
+						array(
+							'type'  => Tax_Id_Types::TYPE_BR_CNPJ,
+							'value' => '12345678000195',
+						),
+					),
+				),
+			)
+		);
+		$updated_tax_ids = ( new Tax_Id_Reader() )->read_for_order( wc_get_order( $order_id ) );
+		$this->assertCount( 1, $updated_tax_ids );
+		$this->assertSame( '12345678000195', $updated_tax_ids[0]['value'] );
+
+		$without_tax_ids = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'mutationId'   => '00000000-0000-4000-8000-00000000f002',
+				'baseRevision' => $updated->get_data()['currentRevision'],
+				'payload'      => array( 'status' => 'completed' ),
+			)
+		);
+
+		$this->assertSame( 200, $without_tax_ids->get_status() );
+		$preserved_tax_ids = ( new Tax_Id_Reader() )->read_for_order( wc_get_order( $order_id ) );
+		$this->assertCount( 1, $preserved_tax_ids );
+		$this->assertSame( '12345678000195', $preserved_tax_ids[0]['value'] );
+	}
+
+	public function test_order_create_rejects_malformed_tax_ids_before_forwarding(): void {
+		// An unsupported type would be silently remapped to `other` by Tax_Id_Writer once tax_ids is
+		// stripped from the wc/v3 forward; the v1 schema enum rejects it with a 400 instead. Reject
+		// BEFORE forwarding so no order is created for a mutation whose ack would drop the client's IDs.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array(
+						array(
+							'type'  => 'not_a_supported_type',
+							'value' => '12345678909',
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	/**
+	 * @dataProvider provide_incomplete_tax_id_entries
+	 */
+	public function test_order_create_rejects_tax_id_entry_missing_required_field_before_forwarding( array $entry ): void {
+		// value/type are required by the schema: without them Tax_Id_Writer would drop the entry or
+		// remap it to `other`, so the ack would silently differ from what the client submitted. Reject
+		// with a 400 BEFORE forwarding so no order is created for a mutation whose ack would mutate it.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array( $entry ),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	public function provide_incomplete_tax_id_entries(): array {
+		return array(
+			'missing value' => array( array( 'type' => 'eu_vat' ) ),
+			'missing type'  => array( array( 'value' => '12345678909' ) ),
+			'empty object'  => array( array() ),
+		);
+	}
+
+	public function test_order_create_rejects_non_object_tax_id_entry_before_forwarding(): void {
+		// Each entry must be an object per the v1 schema — a bare scalar would be dropped by the
+		// writer's is_array() guard; validate here so the client learns their submission was rejected.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array( 'not-an-object' ),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	public function test_order_update_rejects_malformed_tax_ids_before_forwarding(): void {
+		// Updates strip tax_ids from the wc/v3 forward too, so the same v1 schema check applies.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$store   = new Fake_Mutation_Store();
+		$created = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'billing' => array( 'country' => 'BR' ) ),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$forwards_after_create = \count( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'mutationId'   => '00000000-0000-4000-8000-00000000f003',
+				'baseRevision' => $created->get_data()['currentRevision'],
+				'payload'      => array(
+					'tax_ids' => array(
+						array(
+							'type'  => 'not_a_supported_type',
+							'value' => '12345678909',
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		// The malformed update must be rejected before the PUT forward (no new wc/v3 write).
+		$this->assertSame( $forwards_after_create, \count( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() ) );
+	}
+
+	public function test_order_poison_recovery_replays_tax_ids_without_reforwarding(): void {
+		// A create can die after mark_poison() but before the separate tax-ID save. Prove the poison
+		// recovery path replays the create-time tax_ids persistence: reach poison via a failed uuid
+		// stamp (which DID persist tax IDs on the first attempt), strip them to model the crash, then
+		// retry and assert recovery restores them — without a second wc/v3 forward.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$store = new Fake_Mutation_Store();
+		$store->persistUuidOk = false;
+		$env = array(
+			'collection' => 'orders',
+			'payload'    => array(
+				'billing' => array( 'country' => 'BR' ),
+				'tax_ids' => array(
+					array(
+						'type'    => Tax_Id_Types::TYPE_BR_CPF,
+						'value'   => '12345678909',
+						'country' => 'BR',
+					),
+				),
+			),
+		);
+
+		$first = $this->push( $store, $env );
+		$this->assertSame( 'woo_rxdb_sync_identity_persistence_failed', $first->get_error_code() );
+		$order_id = $store->poisoned[ self::MID ];
+		$this->assertGreaterThan( 0, $order_id );
+
+		// Model the crash-before-tax-save: wipe the tax IDs the first attempt happened to write.
+		( new Tax_Id_Writer() )->write_for_order( wc_get_order( $order_id ), array() );
+		$this->assertCount( 0, ( new Tax_Id_Reader() )->read_for_order( wc_get_order( $order_id ) ) );
+		$posts_before_retry = $this->count_forward_posts();
+
+		$store->persistUuidOk = true;
+		$retry = $this->push( $store, $env );
+
+		$this->assertSame( 201, $retry->get_status() );
+		// Recovery re-reads via a wc/v3 GET but must NOT re-create the order.
+		$this->assertSame( $posts_before_retry, $this->count_forward_posts() );
+		$recovered = ( new Tax_Id_Reader() )->read_for_order( wc_get_order( $order_id ) );
+		$this->assertCount( 1, $recovered );
+		$this->assertSame( '12345678909', $recovered[0]['value'] );
+		$this->assertSame( $recovered, $retry->get_data()['document']['tax_ids'] );
+	}
+
+	private function count_forward_posts(): int {
+		return \count(
+			array_filter(
+				$GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array(),
+				static function ( WP_REST_Request $r ) {
+					return 'POST' === $r->get_method();
+				}
+			)
+		);
 	}
 
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {
