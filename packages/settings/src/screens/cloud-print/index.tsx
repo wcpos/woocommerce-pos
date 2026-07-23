@@ -305,8 +305,6 @@ function CloudPrint() {
 				</div>
 			</FormSection>
 
-			<PrintQueue />
-
 			<FormSection title={t('cloud_print.auto_print', 'Auto-print rules')}>
 				<AutoPrintRules
 					printers={draft.printers}
@@ -316,6 +314,8 @@ function CloudPrint() {
 					onChange={handleRulesChange}
 				/>
 			</FormSection>
+
+			<PrintQueue />
 
 			<AddPrinterWizard
 				open={wizard.open}

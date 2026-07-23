@@ -42,6 +42,11 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 						'name'     => 'Front counter',
 						'provider' => 'epson-sdp',
 					),
+					array(
+						'id'       => 'office',
+						'name'     => 'Office',
+						'provider' => 'printnode',
+					),
 				),
 			)
 		);
@@ -176,6 +181,55 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 0, $printers['kitchen']['last_seen'] );
 		$this->assertGreaterThan( 0, $printers['front']['last_seen'] );
 		$this->assertEquals( 0, $printers['front']['pending'] );
+		$this->assertTrue( $printers['kitchen']['polling'] );
+		$this->assertFalse( $printers['office']['polling'] );
+	}
+
+	/**
+	 * It treats a printer with no provider field as polling, like the print path.
+	 */
+	public function test_queue_summary_defaults_missing_provider_to_polling(): void {
+		// Arrange: a legacy printer row saved without a provider.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'   => 'legacy',
+						'name' => 'Legacy',
+					),
+				),
+			)
+		);
+		$this->make_job( 'legacy' );
+
+		// Act.
+		$printers = array_column( $this->queue()->get_data()['summary']['printers'], null, 'printer_id' );
+
+		// Assert: the stale banner must not be suppressed for it.
+		$this->assertTrue( $printers['legacy']['polling'] );
+	}
+
+	/**
+	 * It maps status=active to the non-terminal statuses.
+	 */
+	public function test_queue_active_status_shows_waiting_and_failed_only(): void {
+		// Arrange: one of each state.
+		$pending = $this->make_job( 'kitchen' );
+		$claimed = $this->make_job( 'kitchen', Print_Job_Service::STATUS_CLAIMED );
+		$failed  = $this->make_job( 'kitchen', Print_Job_Service::STATUS_FAILED );
+		$this->make_job( 'kitchen', Print_Job_Service::STATUS_PRINTED );
+		$this->make_job( 'kitchen', Print_Job_Service::STATUS_CANCELLED );
+
+		// Act.
+		$data = $this->queue( array( 'status' => 'active' ) )->get_data();
+
+		// Assert: printed and cancelled history is excluded.
+		$this->assertEquals( 3, $data['total'] );
+		$this->assertEquals(
+			array( $pending, $claimed, $failed ),
+			array_column( $data['jobs'], 'id' )
+		);
 	}
 
 	/**

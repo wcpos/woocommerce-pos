@@ -47,6 +47,8 @@ export interface QueueJob {
 export interface QueueSummaryPrinter {
 	printer_id: string;
 	name: string;
+	/** False for push providers (PrintNode, Star Online) — they never poll. */
+	polling?: boolean;
 	pending: number;
 	oldest_pending_gmt: string;
 	/** Unix seconds of the printer's last fetch; 0 = never. */
@@ -107,7 +109,8 @@ function timeAgo(gmt: string): string {
 }
 
 function isStale(printer: QueueSummaryPrinter): boolean {
-	if (printer.pending === 0) {
+	// Push providers never poll — a last-seen banner would always cry wolf.
+	if (printer.polling === false || printer.pending === 0) {
 		return false;
 	}
 	if (printer.last_seen === 0) {
@@ -124,7 +127,9 @@ function isStale(printer: QueueSummaryPrinter): boolean {
 export function PrintQueue() {
 	const queryClient = useQueryClient();
 	const [printerFilter, setPrinterFilter] = React.useState('');
-	const [statusFilter, setStatusFilter] = React.useState('');
+	// Default view: jobs that still need something — waiting, printing, failed.
+	// Printed/cancelled history is opt-in via the status filter.
+	const [statusFilter, setStatusFilter] = React.useState('active');
 	const [page, setPage] = React.useState(1);
 	const [selected, setSelected] = React.useState<Set<number>>(new Set());
 
@@ -194,8 +199,9 @@ export function PrintQueue() {
 	const printerNames = new Map(summary.printers.map((p) => [p.printer_id, p.name]));
 	const stalePrinters = summary.printers.filter(isStale);
 	const counts = summary.counts;
-	const hasAnyJobs =
-		Object.values(counts).some((n) => n > 0) || total > 0 || printerFilter !== '' || statusFilter !== '';
+	// Nothing has ever been queued (no jobs in any status) — filters can't
+	// change that, so the whole section collapses to one quiet line.
+	const hasAnyJobs = Object.values(counts).some((n) => n > 0) || total > 0;
 
 	const pageIds = jobs.map((j) => j.id);
 	const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
@@ -219,7 +225,14 @@ export function PrintQueue() {
 
 	const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
+	const activeCount = (counts.pending ?? 0) + (counts.claimed ?? 0) + (counts.failed ?? 0);
 	const statusOptions = [
+		{
+			label: t('cloud_print.queue_status_active', 'Needs attention ({count})', {
+				count: String(activeCount),
+			}),
+			value: 'active',
+		},
 		{ label: t('cloud_print.queue_all_statuses', 'All statuses'), value: '' },
 		...(
 			['pending', 'claimed', 'failed', 'printed', 'cancelled'] as QueueJob['status'][]
@@ -262,7 +275,7 @@ export function PrintQueue() {
 									)}
 						</span>
 						<Button
-							variant="outline"
+							variant="ghost-destructive"
 							data-testid={`queue-cancel-all-${printer.printer_id}`}
 							onClick={() => cancelJobs.mutate({ printer_id: printer.printer_id })}
 							disabled={cancelJobs.isPending}
@@ -284,6 +297,8 @@ export function PrintQueue() {
 					<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:flex-wrap">
 						<Select
 							id="wcpos-queue-printer-filter"
+							inline
+							className="wcpos:w-44 wcpos:max-w-full"
 							aria-label={t('cloud_print.queue_filter_printer', 'Filter by printer')}
 							options={printerOptions}
 							value={printerFilter}
@@ -295,6 +310,8 @@ export function PrintQueue() {
 						/>
 						<Select
 							id="wcpos-queue-status-filter"
+							inline
+							className="wcpos:w-52 wcpos:max-w-full"
 							aria-label={t('cloud_print.queue_filter_status', 'Filter by status')}
 							options={statusOptions}
 							value={statusFilter}
@@ -307,7 +324,7 @@ export function PrintQueue() {
 						<div className="wcpos:flex-1" />
 						{cancellableSelected.length > 0 && (
 							<Button
-								variant="outline"
+								variant="ghost-destructive"
 								data-testid="queue-cancel-selected"
 								onClick={() => cancelJobs.mutate({ ids: cancellableSelected })}
 								disabled={cancelJobs.isPending}
@@ -325,7 +342,7 @@ export function PrintQueue() {
 						</p>
 					) : (
 						<div className="wcpos:overflow-x-auto">
-							<Table data-testid="queue-table">
+							<Table data-testid="queue-table" className="wcpos:min-w-[36rem]">
 								<TableHeader>
 									<TableHeaderRow>
 										<TableHead className="wcpos:w-8">
@@ -337,11 +354,17 @@ export function PrintQueue() {
 												data-testid="queue-select-all"
 											/>
 										</TableHead>
-										<TableHead>{t('cloud_print.queue_col_order', 'Order')}</TableHead>
+										<TableHead className="wcpos:w-28">
+											{t('cloud_print.queue_col_order', 'Order')}
+										</TableHead>
 										<TableHead>{t('cloud_print.queue_col_printer', 'Printer')}</TableHead>
-										<TableHead>{t('cloud_print.queue_col_status', 'Status')}</TableHead>
-										<TableHead>{t('cloud_print.queue_col_waiting', 'Waiting')}</TableHead>
-										<TableHead />
+										<TableHead className="wcpos:w-28">
+											{t('cloud_print.queue_col_status', 'Status')}
+										</TableHead>
+										<TableHead className="wcpos:w-32">
+											{t('cloud_print.queue_col_waiting', 'Waiting')}
+										</TableHead>
+										<TableHead className="wcpos:w-24" />
 									</TableHeaderRow>
 								</TableHeader>
 								<TableBody>
@@ -383,26 +406,26 @@ export function PrintQueue() {
 												<TableCell className="wcpos:tabular-nums wcpos:text-gray-600">
 													{waiting}
 												</TableCell>
-												<TableCell>
+												<TableCell className="wcpos:text-right">
 													{(job.status === 'pending' || job.status === 'claimed') && (
-														<button
-															className="wcpos:text-sm wcpos:text-blue-700 hover:wcpos:underline"
+														<Button
+															variant="ghost-destructive"
 															onClick={() => cancelJobs.mutate({ ids: [job.id] })}
 															disabled={cancelJobs.isPending}
 															data-testid={`queue-cancel-${job.id}`}
 														>
 															{t('cloud_print.queue_cancel', 'Cancel')}
-														</button>
+														</Button>
 													)}
 													{job.status === 'failed' && (
-														<button
-															className="wcpos:text-sm wcpos:text-blue-700 hover:wcpos:underline"
+														<Button
+															variant="text"
 															onClick={() => retryJob.mutate(job.id)}
 															disabled={retryJob.isPending}
 															data-testid={`queue-retry-${job.id}`}
 														>
 															{t('cloud_print.queue_retry', 'Retry')}
-														</button>
+														</Button>
 													)}
 												</TableCell>
 											</TableRow>

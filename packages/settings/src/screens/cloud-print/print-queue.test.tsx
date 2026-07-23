@@ -67,6 +67,7 @@ function makeQueue(overrides: Partial<QueueResponse> = {}): QueueResponse {
 				{
 					printer_id: 'kitchen',
 					name: 'Kitchen',
+					polling: true,
 					pending: 2,
 					oldest_pending_gmt: created,
 					last_seen: 0,
@@ -74,6 +75,7 @@ function makeQueue(overrides: Partial<QueueResponse> = {}): QueueResponse {
 				{
 					printer_id: 'front',
 					name: 'Front counter',
+					polling: true,
 					pending: 0,
 					oldest_pending_gmt: '',
 					last_seen: nowSeconds(),
@@ -242,6 +244,36 @@ describe('PrintQueue', () => {
 			const afterCancel = calls.slice(calls.findIndex((path) => path.includes('queue/cancel')));
 			expect(afterCancel.some((path) => path.includes('page=1'))).toBe(true);
 		});
+	});
+
+	it('requests the active view by default — printed history is opt-in', async () => {
+		routeQueue(makeQueue);
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		const firstQueueCall = apiFetchMock.mock.calls
+			.map((c) => (c[0] as ApiOpts).path)
+			.find((path) => path.includes('print-jobs/queue') && !path.includes('cancel'));
+		expect(firstQueueCall).toContain('status=active');
+	});
+
+	it('never shows a stale banner for a push provider with a backlog', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.summary.printers.push({
+				printer_id: 'office',
+				name: 'Star Online',
+				polling: false,
+				pending: 4,
+				oldest_pending_gmt: base.jobs[0].created_gmt,
+				last_seen: 0,
+			});
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-stale-kitchen')).toBeInTheDocument());
+		expect(screen.queryByTestId('queue-stale-office')).toBeNull();
 	});
 
 	it('collapses to a single quiet line when nothing has ever been queued', async () => {
