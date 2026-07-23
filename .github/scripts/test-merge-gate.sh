@@ -78,6 +78,23 @@ if [[ "$args" == pr\ checks* ]]; then
   exit 0
 fi
 
+if [[ "$args" == api\ repos/*/pulls/*/commits* ]]; then
+  printf '%s\n' "${MOCK_PR_COMMITS:-}"
+  exit 0
+fi
+
+if [[ "$args" == api\ repos/*/commits/* ]]; then
+  sha="$(printf '%s' "$args" | sed -n 's|.*repos/[^ ]*/commits/\([^ ]*\).*|\1|p' | cut -d' ' -f1)"
+  files_var="MOCK_COMMIT_FILES_${sha}"
+  msg_var="MOCK_COMMIT_MSG_${sha}"
+  if [[ "$args" == *files* ]]; then
+    printf '%s\n' "${!files_var:-}"
+  else
+    printf '%s\n' "${!msg_var:-}"
+  fi
+  exit 0
+fi
+
 echo "Unexpected gh invocation: $args" >&2
 exit 64
 MOCK_GH
@@ -254,3 +271,101 @@ run_case "human PR rejects skipped smoke test for composer lock changes" fail \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
 echo "merge-gate tests passed"
+
+# --- Fix-bot pinning-test discipline ---
+
+bot_commits=$'c1\twcpos-agents[bot]'
+mixed_commits=$'h1\tkilbot\nc1\twcpos-agents[bot]'
+
+run_case "fix-bot source commit without test fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1="fix: change behavior" \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot commit with test but no Tested trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nmodified\ttests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1="fix: change behavior" \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot commit with pinning test and Tested trailer passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$mixed_commits" \
+  MOCK_COMMIT_FILES_h1=$'modified\tincludes/API/V1/Orders_Controller.php' \
+  MOCK_COMMIT_MSG_h1="fix: human commit, exempt" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nmodified\ttests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot docs-only commit is exempt" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="docs: something" \
+  MOCK_CHANGED_FILES="README.md" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tREADME.md' \
+  MOCK_COMMIT_MSG_c1="docs: readme tweak"
+
+run_case "fix-bot Tested line outside the trailer block fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nadded\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nMentions a\nTested: requirement in prose.\n\nSigned-off-by: bot' \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot deleting a test does not satisfy the pin" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nremoved\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK' \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot meaningless Tested trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/X.php\nadded\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: N/A'
+
+run_case "fix-bot gate-script edit needs its harness touched" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 9/9 cases'
+
+run_case "fix-bot gate-script edit with harness passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh\nmodified\t.github/scripts/test-merge-gate.sh' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 12/12 cases pass — local harness'
+
+big_files="$(for i in $(seq 1 300); do printf 'modified\tsrc/f%d.ts\n' "$i"; done)"
+run_case "fix-bot 300-file commit fails closed (files API truncation)" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1="$big_files" \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK (79 tests) — wp-env'
+
+run_case "fix-bot workflow-only commit without trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.github/workflows/tests.yml' \
+  MOCK_COMMIT_MSG_c1="fix: tweak CI"
+
+run_case "fix-bot config commit with trailer passes without a new test" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tcomposer.json' \
+  MOCK_COMMIT_MSG_c1=$'fix: bump dep\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+echo "All merge-gate tests passed."
