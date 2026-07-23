@@ -818,6 +818,39 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
 	}
 
+	/**
+	 * @dataProvider provide_incomplete_tax_id_entries
+	 */
+	public function test_order_create_rejects_tax_id_entry_missing_required_field_before_forwarding( array $entry ): void {
+		// value/type are required by the schema: without them Tax_Id_Writer would drop the entry or
+		// remap it to `other`, so the ack would silently differ from what the client submitted. Reject
+		// with a 400 BEFORE forwarding so no order is created for a mutation whose ack would mutate it.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array( $entry ),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	public function provide_incomplete_tax_id_entries(): array {
+		return array(
+			'missing value' => array( array( 'type' => 'eu_vat' ) ),
+			'missing type'  => array( array( 'value' => '12345678909' ) ),
+			'empty object'  => array( array() ),
+		);
+	}
+
 	public function test_order_create_rejects_non_object_tax_id_entry_before_forwarding(): void {
 		// Each entry must be an object per the v1 schema — a bare scalar would be dropped by the
 		// writer's is_array() guard; validate here so the client learns their submission was rejected.

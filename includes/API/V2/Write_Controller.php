@@ -995,6 +995,10 @@ class Write_Controller extends WP_REST_Controller {
 			'type'  => 'array',
 			'items' => array(
 				'type'       => 'object',
+				// value/type are required: Tax_Id_Writer silently drops an entry with no value and
+				// rewrites a missing type to `other`, so an accepted-but-mutated ack would diverge
+				// from the submitted IDs. Require them so the API returns a 400 instead.
+				'required'   => array( 'value', 'type' ),
 				'properties' => array(
 					'type'    => array(
 						'type' => 'string',
