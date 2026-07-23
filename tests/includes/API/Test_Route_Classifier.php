@@ -136,8 +136,10 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'/wcpos/v1/auth/test',
 				'/wcpos/v1/auth/refresh',
+				'/wcpos/v1/print-jobs/relay-verification',
 				'/wcpos/v2/auth/test',
 				'/wcpos/v2/auth/refresh',
+				'/wcpos/v2/print-jobs/relay-verification',
 			),
 			$built_classifications['public']
 		);
