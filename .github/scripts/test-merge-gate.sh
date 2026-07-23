@@ -331,4 +331,22 @@ run_case "fix-bot deleting a test does not satisfy the pin" fail \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK' \
   MOCK_NO_CHECKS_EXPECTED=true
 
+run_case "fix-bot meaningless Tested trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/X.php\nadded\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: N/A'
+
+run_case "fix-bot gate-script edit needs its harness touched" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 9/9 cases'
+
+run_case "fix-bot gate-script edit with harness passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh\nmodified\t.github/scripts/test-merge-gate.sh' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 12/12 cases pass — local harness'
+
 echo "All merge-gate tests passed."

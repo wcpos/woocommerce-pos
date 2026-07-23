@@ -201,7 +201,7 @@ commit_message() {
 
 is_test_path() {
   case "$1" in
-    tests/*|*/tests/*|*.test.*|*.spec.*) return 0 ;;
+    tests/*|*/tests/*|*.test.*|*.spec.*|*/test-*.sh|test-*.sh) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -210,6 +210,7 @@ is_source_path() {
   is_test_path "$1" && return 1
   case "$1" in
     *.php|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.mts|*.cts) return 0 ;;
+    .github/scripts/*.sh|scripts/*.sh) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -217,11 +218,19 @@ is_source_path() {
 # The Tested: line must sit in the message's FINAL paragraph (the git trailer
 # block) — prose that merely mentions "Tested:" mid-body does not count.
 trailer_block_has_tested() {
+  # The trailer value must be result-shaped: a real suite result quotes counts,
+  # so require at least one digit and a minimally substantive value — bare
+  # "Tested:", "Tested: N/A", or a command with no result do not count.
   printf '%s\n' "$1" | awk '
     BEGIN { block = "" }
     /^[[:space:]]*$/ { block = ""; next }
     { block = block $0 "\n" }
-    END { exit (block ~ /(^|\n)Tested:/) ? 0 : 1 }
+    END {
+      if (match(block, /(^|\n)Tested:[^\n]*/) == 0) exit 1
+      value = substr(block, RSTART, RLENGTH)
+      sub(/(^|\n)Tested:[[:space:]]*/, "", value)
+      exit (length(value) >= 8 && value ~ /[0-9]/) ? 0 : 1
+    }
   '
 }
 
