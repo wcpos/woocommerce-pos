@@ -21,17 +21,23 @@ WordPress plugin providing the server-side foundation for WCPOS. This repository
 
 ## Wiki
 
-This repo includes the WCPOS wiki as a submodule at `.wiki/`. Pull latest before relying on it:
+The WCPOS wiki lives in [wcpos/wiki](https://github.com/wcpos/wiki) and changes daily. It is intentionally NOT vendored into this repo (a pinned submodule went stale and misled agents) — always fetch pages fresh, on demand.
 
-```bash
-git submodule update --init --remote .wiki
-```
+- **Local agents** (on Paul's machine): read from the sibling clone at `/Users/kilbot/Projects/wiki`, but pull first — the clone can be stale:
+
+  ```bash
+  git -C /Users/kilbot/Projects/wiki pull --ff-only
+  ```
+
+- **Cloud/CI agents** (no sibling clone): fetch specific pages fresh via `gh api repos/wcpos/wiki/contents/<path>` or `https://raw.githubusercontent.com/wcpos/wiki/main/<path>`.
+
+Start with `INDEX.md` at the wiki root — one line per page — then fetch only the pages you need. Paths below are relative to the wiki repo root.
 
 Relevant pages:
-- `.wiki/product/overview.md` — product and business context
-- `.wiki/architecture/plugin-free.md` — free plugin architecture
-- `.wiki/product/features.md` — feature inventory
-- `.wiki/support/index.md` — support knowledge
+- `product/overview.md` — product and business context
+- `architecture/plugin-free.md` — free plugin architecture
+- `product/features.md` — feature inventory
+- `support/index.md` — support knowledge
 
 ## Development Rules
 
