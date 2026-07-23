@@ -26,6 +26,10 @@ pr_diff_patch() {
   gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --patch
 }
 
+pr_merge_state() {
+  gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json mergeStateStatus --jq '.mergeStateStatus'
+}
+
 is_translation_author() {
   [[ "$TRANSLATION_AUTHORS" == *"|${PR_AUTHOR}|"* ]]
 }
@@ -187,6 +191,11 @@ main() {
     return 0
   else
     log "Required checks must pass for this PR."
+  fi
+
+  if [[ "$(pr_merge_state)" == "DIRTY" ]]; then
+    log "Resolve the merge conflicts and update the PR branch before CI can run."
+    return 1
   fi
 
   wait_for_checks
