@@ -425,6 +425,46 @@ class Print_Job_Service {
 	}
 
 	/**
+	 * One grouped pass over every job: per printer and status, the job count
+	 * and the oldest creation time (GMT, MySQL format).
+	 *
+	 * Replaces a per-printer count/oldest query fan-out — the queue view
+	 * refreshes every 30 seconds, so its summary must cost one query no
+	 * matter how many printers are registered.
+	 *
+	 * @return array<string, array<string, array{count: int, oldest_gmt: string}>> printer_id => status => stats.
+	 */
+	public function status_summary(): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one aggregate pass; WP_Query would need 2 queries per printer.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT printer.meta_value AS printer_id, status.meta_value AS job_status,
+						COUNT(DISTINCT p.ID) AS jobs, MIN(p.post_date_gmt) AS oldest_gmt
+				 FROM {$wpdb->posts} p
+				 INNER JOIN {$wpdb->postmeta} printer ON printer.post_id = p.ID AND printer.meta_key = %s
+				 INNER JOIN {$wpdb->postmeta} status ON status.post_id = p.ID AND status.meta_key = %s
+				 WHERE p.post_type = %s AND p.post_status = 'publish'
+				 GROUP BY printer.meta_value, status.meta_value",
+				self::META_PRINTER,
+				self::META_STATUS,
+				self::POST_TYPE
+			)
+		);
+
+		$summary = array();
+		foreach ( (array) $rows as $row ) {
+			$summary[ (string) $row->printer_id ][ (string) $row->job_status ] = array(
+				'count'      => (int) $row->jobs,
+				'oldest_gmt' => (string) $row->oldest_gmt,
+			);
+		}
+
+		return $summary;
+	}
+
+	/**
 	 * The creation time (GMT, MySQL format) of a printer's oldest waiting job.
 	 *
 	 * Waiting means pending or claimed: a printer that fetched a job and then
