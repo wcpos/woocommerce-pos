@@ -69,6 +69,9 @@ class Test_Print_Job_Retention extends WP_UnitTestCase {
 					'edit_date'     => true,
 				)
 			);
+			if ( Print_Job_Service::STATUS_PENDING !== $status ) {
+				update_post_meta( $id, Print_Job_Service::META_TERMINAL_AT, time() - $days_old * DAY_IN_SECONDS );
+			}
 		}
 
 		return $id;
@@ -143,6 +146,67 @@ class Test_Print_Job_Retention extends WP_UnitTestCase {
 		// Assert: only the filtered window is disabled.
 		$this->assertNotNull( $this->jobs->get( $old_printed ) );
 		$this->assertNull( $this->jobs->get( $old_failed ) );
+	}
+
+	/**
+	 * It keys retention on when the job ENDED, not when it was created.
+	 */
+	public function test_purge_retention_clock_starts_at_terminal_status(): void {
+		// Arrange: created 40 days ago, but only just printed/failed.
+		$late_print = $this->make_job();
+		$late_fail  = $this->make_job();
+		$stamp      = gmdate( 'Y-m-d H:i:s', time() - 40 * DAY_IN_SECONDS );
+		foreach ( array( $late_print, $late_fail ) as $id ) {
+			wp_update_post(
+				array(
+					'ID'            => $id,
+					'post_date'     => $stamp,
+					'post_date_gmt' => $stamp,
+					'edit_date'     => true,
+				)
+			);
+		}
+		$this->jobs->set_status( $late_print, Print_Job_Service::STATUS_PRINTED );
+		$this->jobs->set_status( $late_fail, Print_Job_Service::STATUS_FAILED );
+
+		// Act.
+		$this->jobs->purge_expired();
+
+		// Assert: both get their full retention window from today.
+		$this->assertNotNull( $this->jobs->get( $late_print ) );
+		$this->assertNotNull( $this->jobs->get( $late_fail ) );
+	}
+
+	/**
+	 * It purges legacy terminal rows that predate the terminal-at meta.
+	 */
+	public function test_purge_falls_back_to_creation_date_for_legacy_rows(): void {
+		// Arrange: an old printed row with no terminal-at meta.
+		$legacy = $this->make_job( Print_Job_Service::STATUS_PRINTED, 8 );
+		delete_post_meta( $legacy, Print_Job_Service::META_TERMINAL_AT );
+
+		// Act.
+		$this->jobs->purge_expired();
+
+		// Assert.
+		$this->assertNull( $this->jobs->get( $legacy ) );
+	}
+
+	/**
+	 * It registers the purge cron callback exactly once across service instances.
+	 */
+	public function test_purge_callback_registers_once(): void {
+		// Arrange: three constructions, as Init + trigger + submit do per request.
+		new Print_Job_Service();
+		new Print_Job_Service();
+		new Print_Job_Service();
+
+		// Act.
+		$hook      = $GLOBALS['wp_filter'][ Print_Job_Service::PURGE_HOOK ] ?? null;
+		$callbacks = null !== $hook ? \count( $hook->callbacks[10] ?? array() ) : 0;
+
+		// Assert: identical static callbacks dedupe to a single registration.
+		$this->assertEquals( 1, $callbacks );
 	}
 
 	/**

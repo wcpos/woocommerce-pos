@@ -261,6 +261,21 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It refuses to retry a stripped raw job that has no template to re-render.
+	 */
+	public function test_retry_refuses_expired_raw_source(): void {
+		// Arrange: a raw-payload job whose payload was stripped at print time.
+		$id = $this->make_job( 'kitchen', Print_Job_Service::STATUS_PRINTED );
+
+		// Act.
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		// Assert: explicit error, never a blank receipt.
+		$this->assertEquals( 410, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_source_expired', $response->as_error()->get_error_code() );
+	}
+
+	/**
 	 * It rejects anonymous requests.
 	 */
 	public function test_queue_requires_authentication(): void {

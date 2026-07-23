@@ -566,6 +566,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 404 )
 			);
 		}
+		if ( '' === $source['payload'] && '' === $source['template_id'] ) {
+			// A stripped raw job has nothing left to print — refuse loudly
+			// rather than queue a blank receipt.
+			return new WP_Error(
+				'wcpos_print_job_source_expired',
+				__( 'This job\'s stored receipt has been cleaned up and it has no template to re-render from.', 'woocommerce-pos' ),
+				array( 'status' => 410 )
+			);
+		}
 		$new_id = $this->jobs->create(
 			array(
 				'printer_id'       => $source['printer_id'],
