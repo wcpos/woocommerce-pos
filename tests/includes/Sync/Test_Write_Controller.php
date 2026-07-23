@@ -791,6 +791,148 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( '12345678000195', $preserved_tax_ids[0]['value'] );
 	}
 
+	public function test_order_create_rejects_malformed_tax_ids_before_forwarding(): void {
+		// An unsupported type would be silently remapped to `other` by Tax_Id_Writer once tax_ids is
+		// stripped from the wc/v3 forward; the v1 schema enum rejects it with a 400 instead. Reject
+		// BEFORE forwarding so no order is created for a mutation whose ack would drop the client's IDs.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array(
+						array(
+							'type'  => 'not_a_supported_type',
+							'value' => '12345678909',
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	public function test_order_create_rejects_non_object_tax_id_entry_before_forwarding(): void {
+		// Each entry must be an object per the v1 schema — a bare scalar would be dropped by the
+		// writer's is_array() guard; validate here so the client learns their submission was rejected.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing' => array( 'country' => 'BR' ),
+					'tax_ids' => array( 'not-an-object' ),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	public function test_order_update_rejects_malformed_tax_ids_before_forwarding(): void {
+		// Updates strip tax_ids from the wc/v3 forward too, so the same v1 schema check applies.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$store   = new Fake_Mutation_Store();
+		$created = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'billing' => array( 'country' => 'BR' ) ),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$forwards_after_create = \count( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'mutationId'   => '00000000-0000-4000-8000-00000000f003',
+				'baseRevision' => $created->get_data()['currentRevision'],
+				'payload'      => array(
+					'tax_ids' => array(
+						array(
+							'type'  => 'not_a_supported_type',
+							'value' => '12345678909',
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_tax_ids', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		// The malformed update must be rejected before the PUT forward (no new wc/v3 write).
+		$this->assertSame( $forwards_after_create, \count( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() ) );
+	}
+
+	public function test_order_poison_recovery_replays_tax_ids_without_reforwarding(): void {
+		// A create can die after mark_poison() but before the separate tax-ID save. Prove the poison
+		// recovery path replays the create-time tax_ids persistence: reach poison via a failed uuid
+		// stamp (which DID persist tax IDs on the first attempt), strip them to model the crash, then
+		// retry and assert recovery restores them — without a second wc/v3 forward.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$store = new Fake_Mutation_Store();
+		$store->persistUuidOk = false;
+		$env = array(
+			'collection' => 'orders',
+			'payload'    => array(
+				'billing' => array( 'country' => 'BR' ),
+				'tax_ids' => array(
+					array(
+						'type'    => Tax_Id_Types::TYPE_BR_CPF,
+						'value'   => '12345678909',
+						'country' => 'BR',
+					),
+				),
+			),
+		);
+
+		$first = $this->push( $store, $env );
+		$this->assertSame( 'woo_rxdb_sync_identity_persistence_failed', $first->get_error_code() );
+		$order_id = $store->poisoned[ self::MID ];
+		$this->assertGreaterThan( 0, $order_id );
+
+		// Model the crash-before-tax-save: wipe the tax IDs the first attempt happened to write.
+		( new Tax_Id_Writer() )->write_for_order( wc_get_order( $order_id ), array() );
+		$this->assertCount( 0, ( new Tax_Id_Reader() )->read_for_order( wc_get_order( $order_id ) ) );
+		$posts_before_retry = $this->count_forward_posts();
+
+		$store->persistUuidOk = true;
+		$retry = $this->push( $store, $env );
+
+		$this->assertSame( 201, $retry->get_status() );
+		// Recovery re-reads via a wc/v3 GET but must NOT re-create the order.
+		$this->assertSame( $posts_before_retry, $this->count_forward_posts() );
+		$recovered = ( new Tax_Id_Reader() )->read_for_order( wc_get_order( $order_id ) );
+		$this->assertCount( 1, $recovered );
+		$this->assertSame( '12345678909', $recovered[0]['value'] );
+		$this->assertSame( $recovered, $retry->get_data()['document']['tax_ids'] );
+	}
+
+	private function count_forward_posts(): int {
+		return \count(
+			array_filter(
+				$GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array(),
+				static function ( WP_REST_Request $r ) {
+					return 'POST' === $r->get_method();
+				}
+			)
+		);
+	}
+
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {
 		// gap §3.3: the audit meta is persisted DIRECTLY after create (server-authoritative). Pro
 		// analytics joins on created_via/_pos_user (a client can't forge channel/cashier); the

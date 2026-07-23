@@ -11,6 +11,7 @@ use WC_Product;
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -363,6 +364,13 @@ class Write_Controller extends WP_REST_Controller {
 			if ( is_wp_error( $client_created_gmt ) ) {
 				return $client_created_gmt;
 			}
+			// tax_ids is stripped from the wc/v3 forward below, so wc/v3 never validates it.
+			// Run the v1 schema check here — otherwise malformed/unsupported entries slip past
+			// validation and Tax_Id_Writer silently drops them, acking an order missing tax IDs.
+			$tax_ids_error = $this->validate_order_tax_ids( $m['payload'] );
+			if ( is_wp_error( $tax_ids_error ) ) {
+				return $tax_ids_error;
+			}
 		}
 
 		// Born-twice guard: if a record already carries this uuid (the mutation row
@@ -698,6 +706,12 @@ class Write_Controller extends WP_REST_Controller {
 		$update_payload = $m['payload'];
 		$clear_billing_email = false;
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
+			// Mirror create: tax_ids is stripped from the wc/v3 forward, so validate it against
+			// the v1 schema here rather than letting Tax_Id_Writer silently drop bad entries.
+			$tax_ids_error = $this->validate_order_tax_ids( $update_payload );
+			if ( is_wp_error( $tax_ids_error ) ) {
+				return $tax_ids_error;
+			}
 			unset( $update_payload['created_via'] );
 			unset( $update_payload['tax_ids'] );
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
@@ -888,6 +902,11 @@ class Write_Controller extends WP_REST_Controller {
 			// The poison row does not record which plugin version accepted the POST, so a
 			// later deployment must not invent provenance while recovering its audit data.
 			$this->stamp_order_audit( $remote_id, $m['payload'] );
+			// A create can die after mark_poison() but before the separate tax-ID save. This
+			// recovery path finalizes the acknowledged order, so replay the create-time tax_ids
+			// persistence (idempotent) here — otherwise explicit or customer-snapshotted tax IDs
+			// are lost forever. is_create = true so an omitted payload still snapshots the customer.
+			$this->persist_order_tax_ids( $remote_id, $m['payload'], true );
 		}
 		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {
 			return $this->finalize_error();
@@ -950,6 +969,50 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woocommerce_pos_rest_future_date_created_gmt', __( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		return $timestamp;
+	}
+	/**
+	 * Validate a client-submitted `tax_ids` payload against the v1 order schema.
+	 *
+	 * tax_ids is unknown to the stock wc/v3 controller and is stripped before the forward,
+	 * so wc/v3 never validates it. V1\Orders_Controller::wcpos_get_item_schema() added a
+	 * TaxId[] schema (typed enum, string value, nullable country/label) that WordPress
+	 * enforced on every create/update; reproduce that check here so malformed or unsupported
+	 * entries are rejected with a 400 instead of being silently dropped by Tax_Id_Writer.
+	 *
+	 * @param array $payload Mutation payload.
+	 *
+	 * @return null|WP_Error null when tax_ids is absent or valid; WP_Error (400) otherwise.
+	 */
+	private function validate_order_tax_ids( array $payload ) {
+		if ( ! array_key_exists( 'tax_ids', $payload ) ) {
+			return null;
+		}
+		$schema = array(
+			'type'  => 'array',
+			'items' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'type'    => array(
+						'type' => 'string',
+						'enum' => Tax_Id_Types::all_types(),
+					),
+					'value'   => array(
+						'type' => 'string',
+					),
+					'country' => array(
+						'type' => array( 'string', 'null' ),
+					),
+					'label'   => array(
+						'type' => array( 'string', 'null' ),
+					),
+				),
+			),
+		);
+		$valid = rest_validate_value_from_schema( $payload['tax_ids'], $schema, 'tax_ids' );
+		if ( is_wp_error( $valid ) ) {
+			return new WP_Error( 'woocommerce_pos_rest_invalid_tax_ids', $valid->get_error_message(), array( 'status' => 400 ) );
+		}
+		return null;
 	}
 	private function persist_order_tax_ids( int $id, array $payload, bool $is_create ): void {
 		$order = wc_get_order( $id );
