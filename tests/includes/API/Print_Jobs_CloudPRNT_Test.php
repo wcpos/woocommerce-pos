@@ -326,4 +326,81 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 			$this->logged_messages
 		);
 	}
+
+	/**
+	 * Poll the path-credential CloudPRNT route (printer_id and pt in the path).
+	 *
+	 * Star printers URL-encode the configured query string on the wire, so
+	 * these requests carry no credential query params and no WCPOS header —
+	 * only the `wcpos=1` marker, which survives as the sole configured pair.
+	 *
+	 * @param string $method     HTTP method.
+	 * @param array  $params     Extra query params (the printer's own runtime params).
+	 * @param string $printer_id Printer ID path segment.
+	 * @param string $token      Poll token path segment.
+	 */
+	private function poll_path( string $method, array $params = array(), string $printer_id = 'p1', string $token = 'tok' ) {
+		$request = new \WP_REST_Request( $method, '/wcpos/v1/print-jobs/cloudprnt/' . $printer_id . '/' . $token );
+		$request->set_query_params( array_merge( array( 'wcpos' => '1' ), $params ) );
+
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * It authenticates and advertises a pending job from path credentials alone.
+	 */
+	public function test_cloudprnt_path_credentials_poll_advertises_pending_job(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+
+		$response = $this->poll_path( 'POST' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( true, $data['jobReady'] );
+		$this->assertEquals( (string) $id, $data['jobToken'] );
+	}
+
+	/**
+	 * It rejects an invalid token in the path with 401.
+	 */
+	public function test_cloudprnt_path_credentials_invalid_token_returns_401(): void {
+		$response = $this->poll_path( 'POST', array(), 'p1', 'wrong-token' );
+
+		$this->assertEquals( 401, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_invalid_token', $response->as_error()->get_error_code() );
+	}
+
+	/**
+	 * It claims on GET and marks printed on DELETE via path credentials.
+	 */
+	public function test_cloudprnt_path_credentials_get_then_delete_marks_printed(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+
+		$this->assertEquals( 200, $this->poll_path( 'GET', array( 'token' => $id ) )->get_status() );
+		$this->assertEquals( 'claimed', $this->jobs->get( $id )['status'] );
+
+		$this->assertEquals(
+			200,
+			$this->poll_path(
+				'DELETE',
+				array(
+					'token' => $id,
+					'code'  => '200 OK',
+				)
+			)->get_status()
+		);
+		$this->assertEquals( 'printed', $this->jobs->get( $id )['status'] );
+	}
 }
