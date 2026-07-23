@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V1;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
@@ -70,6 +71,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 */
 	public function wcpos_route_classifications(): array {
 		return array(
+			'public'        => array(
+				"/{$this->namespace}/{$this->rest_base}/relay-verification",
+			),
 			'printer_token' => array(
 				"/{$this->namespace}/{$this->rest_base}/cloudprnt",
 				"/{$this->namespace}/{$this->rest_base}/epson-sdp",
@@ -134,6 +138,36 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'test_print' ),
 				'permission_callback' => array( $this, 'manage_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay-verification',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'relay_verification' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay/register',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'relay_register' ),
+				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/relay/disable',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'relay_disable' ),
+				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
 			)
 		);
 
@@ -447,9 +481,13 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		if ( 'DELETE' === $request->get_method() ) {
-			$code   = (string) $request->get_param( 'code' );
-			$status = '' === $code || '000' === $code ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
+			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
+			$status = '' === $code || '000' === $code || 1 === preg_match( '/^2\d{2,3}(?:\s|$)/', $code ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
 			$this->jobs->set_status( (int) $job['id'], $status );
+
+			if ( Print_Job_Service::STATUS_FAILED === $status ) {
+				$this->log_printer_failure( $request, $printer_id, $code, (int) $job['id'] );
+			}
 
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
@@ -458,7 +496,19 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'jobReady' => false ) );
 		}
 
-		return $this->serve_raw( $this->jobs->render_payload( $job ), $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
+		$payload = $this->jobs->render_payload( $job );
+		if ( '' === $payload ) {
+			Logger::error(
+				sprintf(
+					'%s: print job %d rendered an empty payload for printer "%s".',
+					$request->get_route(),
+					(int) $job['id'],
+					$printer_id
+				)
+			);
+		}
+
+		return $this->serve_raw( $payload, $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
 	}
 
 	/**
@@ -473,6 +523,14 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$token      = (string) $request->get_param( 'pt' );
 
 		if ( ! $this->registry->verify_token( $printer_id, $token ) ) {
+			Logger::warning(
+				sprintf(
+					'%s: authentication failed for printer "%s".',
+					$request->get_route(),
+					$printer_id
+				)
+			);
+
 			return new WP_Error(
 				'wcpos_print_job_invalid_token',
 				__( 'Invalid printer token.', 'woocommerce-pos' ),
@@ -492,8 +550,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	private function get_cloud_job_for_request( WP_REST_Request $request, string $printer_id ) {
-		$job = $this->jobs->get( (int) $request->get_param( 'token' ) );
+		$job_id = (int) $request->get_param( 'token' );
+		$job    = $this->jobs->get( $job_id );
 		if ( null === $job || $printer_id !== $job['printer_id'] ) {
+			Logger::warning(
+				sprintf(
+					'%s: print job "%d" was not found for printer "%s".',
+					$request->get_route(),
+					$job_id,
+					$printer_id
+				)
+			);
+
 			return new WP_Error(
 				'wcpos_print_job_not_found',
 				__( 'Print job not found.', 'woocommerce-pos' ),
@@ -502,6 +570,26 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		return $job;
+	}
+
+	/**
+	 * Log a printer-reported failure without request credentials or payloads.
+	 *
+	 * @param WP_REST_Request $request    Request.
+	 * @param string          $printer_id Printer ID.
+	 * @param string          $code       Failure code.
+	 * @param int             $job_id     Print job ID.
+	 */
+	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id ): void {
+		Logger::error(
+			sprintf(
+				'%s: printer "%s" reported failure code "%s" for print job %d.',
+				$request->get_route(),
+				$printer_id,
+				$code,
+				$job_id
+			)
+		);
 	}
 
 	/**
@@ -538,6 +626,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			if ( null !== $claim ) {
 				$ok = false !== strpos( $raw_body, 'success="true"' );
 				$this->jobs->set_status( (int) $claim['id'], $ok ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED );
+
+				if ( ! $ok ) {
+					$code = 'unknown';
+					if ( 1 === preg_match( '/\bcode="([^"]*)"/', $raw_body, $matches ) ) {
+						$code = sanitize_text_field( $matches[1] );
+					}
+
+					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'] );
+				}
 			}
 
 			return $this->serve_raw( $ack, $soap );
@@ -941,7 +1038,55 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Permission check for app/admin management routes.
+	 * Serve the pending relay verification token (public; consent callback).
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function relay_verification() {
+		$token = Cloud_Print_Relay_Service::pending_verification_token();
+		if ( null === $token ) {
+			return new WP_Error(
+				'wcpos_relay_no_pending_verification',
+				__( 'No relay verification is pending.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return rest_ensure_response( array( 'token' => $token ) );
+	}
+
+	/**
+	 * Register this site with the WCPOS Cloud Print relay.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function relay_register() {
+		$result = Cloud_Print_Relay_Service::register_site();
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * Disable relay use for this site.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function relay_disable() {
+		return rest_ensure_response( Cloud_Print_Relay_Service::disable() );
+	}
+
+	/**
+	 * Permission check for relay registration routes.
+	 *
+	 * Registering rotates the site's relay credentials, so it needs the
+	 * settings-management capability, not the cashier-level print capability.
+	 */
+	public function relay_manage_permissions_check(): bool {
+		return current_user_can( 'manage_woocommerce_pos' );
+	}
+
+	/**
+	 * Check permissions for cashier-level print job actions.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 *

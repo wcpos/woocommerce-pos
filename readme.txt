@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.9
+Stable tag: 1.9.10
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -129,6 +129,14 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.10 - 2026/07/22 =
+- **Fixed stale prices on products converted from simple to variable** -- variable products now show the lowest price of their current visible variations in the POS, instead of a leftover price left behind by the conversion.
+- **Fixed a fatal error in the receipt template editor on translated stores** -- receipt previews no longer crash when a translated label contains a literal percent sign (reported on Czech stores).
+- **Fixed cloud printer polling** -- Star CloudPRNT and Epson Server Direct Print polling URLs now include the marker WCPOS requires, so the URL you copy from the settings screen works as-is. Star results in the 2xx family (eg: 211 Paper Low) now count as printed rather than failed, and polling problems are recorded in the WCPOS logs with enough detail to act on.
+- **Refresh button on the Extensions screen** -- re-check the extensions catalogue on demand instead of waiting for the hourly cache to expire.
+- **Fixed the missing POS favicon** -- POS browser tabs and home-screen shortcuts show the WCPOS icon again.
+- **Updated translations.**
 
 = 1.9.9 - 2026/07/18 =
 - **Security: hardened receipt/report template file resolution** -- the templates REST endpoint now strictly validates the requested template type and confirms that resolved template files stay inside the plugin's trusted template directories, closing a path-traversal issue. All stores should update.

@@ -155,11 +155,73 @@ class Init {
 	 * Loads the POS API and duck punches the WC REST API.
 	 */
 	public function init_rest_api(): void {
-		if ( woocommerce_pos_request() ) {
+		$is_wcpos_request = woocommerce_pos_request();
+
+		if ( $is_wcpos_request ) {
 			new API();
 		} else {
+			// Queue the registration at a later priority of the SAME
+			// rest_api_init pass this method runs on (priority 20), so
+			// register_rest_route() executes during the action as WP requires.
+			// When this method is called outside the action (tests), the
+			// add_action is simply inert.
+			add_action( 'rest_api_init', array( $this, 'register_public_relay_routes' ), 30 );
+			$this->log_unmarked_wcpos_rest_request();
 			new WC_API();
 		}
+	}
+
+	/**
+	 * Register the relay's public consent-callback route for unmarked requests.
+	 *
+	 * The WCPOS Cloud Print relay proves site consent by fetching
+	 * print-jobs/relay-verification WITHOUT the WCPOS request marker, so this
+	 * single public route must exist even when the full WCPOS API is not
+	 * loaded. Everything else stays behind the marker.
+	 */
+	public function register_public_relay_routes(): void {
+		register_rest_route(
+			SHORT_NAME . '/v1',
+			'/print-jobs/relay-verification',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( new API\Print_Jobs_Controller(), 'relay_verification' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	/**
+	 * Log requests for a WCPOS namespace that omitted the required request marker.
+	 *
+	 * This runs before WCPOS routes are registered, so it captures the otherwise
+	 * silent rest_no_route response. Warnings are limited by API version to avoid
+	 * allowing repeated unauthenticated requests to flood WooCommerce logs.
+	 */
+	private function log_unmarked_wcpos_rest_request(): void {
+		global $wp;
+
+		$route = isset( $wp->query_vars['rest_route'] )
+			? '/' . ltrim( sanitize_text_field( wp_unslash( (string) $wp->query_vars['rest_route'] ) ), '/' )
+			: '';
+
+		if ( 1 !== preg_match( '#^/wcpos/v([12])(?:/|$)#', $route, $matches ) ) {
+			return;
+		}
+
+		// The relay's consent callback is expected unmarked traffic (see
+		// register_public_relay_routes()), not a misconfigured client.
+		if ( '/wcpos/v1/print-jobs/relay-verification' === $route ) {
+			return;
+		}
+
+		$transient = 'wcpos_missing_request_marker_v' . $matches[1];
+		if ( false !== get_transient( $transient ) ) {
+			return;
+		}
+
+		set_transient( $transient, 1, 5 * MINUTE_IN_SECONDS );
+		Logger::warning( $route . ': missing WCPOS request marker.' );
 	}
 
 	/**
@@ -300,6 +362,7 @@ class Init {
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();
+		new Services\Cloud_Print_Relay_Service();
 	}
 
 	/**
@@ -309,6 +372,7 @@ class Init {
 		if ( ! is_admin() ) {
 			new Template_Router();
 			new Form_Handler();
+			new Storefront_Receipts();
 		}
 	}
 

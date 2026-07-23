@@ -3,7 +3,7 @@ import * as React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AddPrinterWizard, type NewPrinterInput } from './add-printer-wizard';
+import { AddPrinterWizard, buildPollUrl, type NewPrinterInput } from './add-printer-wizard';
 
 import type { CloudPrinter } from '../../hooks/use-cloud-print-settings';
 
@@ -105,7 +105,7 @@ describe('AddPrinterWizard', () => {
 
 		// Step 2: poll URL + token + "shown only once" copy.
 		const expectedUrl =
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp?printer_id=kitchen&pt=9f3a8c21d7b64e0fa1c2e5d8b09a7f6c';
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp?wcpos=1&printer_id=kitchen&pt=9f3a8c21d7b64e0fa1c2e5d8b09a7f6c';
 		await waitFor(() => expect(screen.getByTestId('wizard-poll-url')).toBeInTheDocument());
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(expectedUrl);
 		expect(screen.getByTestId('wizard-poll-token')).toHaveTextContent(
@@ -120,6 +120,25 @@ describe('AddPrinterWizard', () => {
 		// Done closes.
 		fireEvent.click(screen.getByTestId('wizard-done'));
 		expect(onClose).toHaveBeenCalled();
+	});
+
+	it('preserves query-style REST roots in polling URLs', () => {
+		(window as unknown as { wpApiSettings: { root: string } }).wpApiSettings.root =
+			'https://mystore.com/?rest_route=/';
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="setup"
+				setupPrinter={makePrinter()}
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+			/>
+		);
+
+		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(
+			'https://mystore.com/?rest_route=/wcpos/v1/print-jobs/cloudprnt&wcpos=1&printer_id=kitchen'
+		);
 	});
 
 	it('add mode: printnode flow collects api key + printer id and shows linked confirmation', async () => {
@@ -334,7 +353,7 @@ describe('AddPrinterWizard', () => {
 		// Step 2 directly.
 		const url = screen.getByTestId('wizard-poll-url');
 		expect(url).toHaveTextContent(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?printer_id=kitchen'
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?wcpos=1&printer_id=kitchen'
 		);
 		expect(url).toHaveTextContent('pt=');
 		// Token masked (no real token, dots present).
@@ -367,5 +386,62 @@ describe('AddPrinterWizard', () => {
 			<AddPrinterWizard open={false} mode="add" onClose={vi.fn()} onCreate={vi.fn()} />
 		);
 		expect(container).toBeEmptyDOMElement();
+	});
+});
+
+describe('buildPollUrl relay routing', () => {
+	it('builds a direct URL on the site REST root by default', () => {
+		expect(buildPollUrl('star-cloudprnt', 'kitchen', 'tok')).toBe(
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt?wcpos=1&printer_id=kitchen&pt=tok'
+		);
+	});
+
+	it('builds on the relay printer base URL when provided', () => {
+		expect(buildPollUrl('epson-sdp', 'front', 'tok', 'https://cloudprint.wcpos.com/p/abc123')).toBe(
+			'https://cloudprint.wcpos.com/p/abc123/epson-sdp?wcpos=1&printer_id=front&pt=tok'
+		);
+	});
+
+	it('tolerates a trailing slash on the relay base URL', () => {
+		expect(
+			buildPollUrl('star-cloudprnt', 'kitchen', 'tok', 'https://cloudprint.wcpos.com/p/abc123/')
+		).toBe('https://cloudprint.wcpos.com/p/abc123/cloudprnt?wcpos=1&printer_id=kitchen&pt=tok');
+	});
+});
+
+describe('AddPrinterWizard relay display', () => {
+	it('setup mode with relay: relay URL is primary, direct URL sits behind Advanced', () => {
+		render(
+			<AddPrinterWizard
+				open
+				mode="setup"
+				setupPrinter={makePrinter()}
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+				relay={{ enabled: true, printer_base_url: 'https://cloudprint.wcpos.com/p/abc123' }}
+			/>
+		);
+
+		expect(screen.getByTestId('wizard-poll-url').textContent).toContain(
+			'https://cloudprint.wcpos.com/p/abc123/cloudprnt'
+		);
+		expect(screen.getByTestId('wizard-direct-disclosure')).toBeInTheDocument();
+		expect(screen.getByTestId('wizard-direct-url').textContent).toContain(
+			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt'
+		);
+	});
+
+	it('setup mode without relay: no Advanced disclosure is rendered', () => {
+		render(
+			<AddPrinterWizard
+				open
+				mode="setup"
+				setupPrinter={makePrinter()}
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+			/>
+		);
+
+		expect(screen.queryByTestId('wizard-direct-disclosure')).toBeNull();
 	});
 });

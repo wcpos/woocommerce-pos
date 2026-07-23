@@ -347,3 +347,63 @@ describe('PrinterCard', () => {
 		expect(onRemove).toHaveBeenCalledWith(printer);
 	});
 });
+
+describe('PrinterCard blocked status', () => {
+	it('explains a security-layer block with allowlisting guidance', () => {
+		renderCard({
+			printer: makePrinter({ status: 'blocked', status_detail: 'cloudflare-challenge' }),
+		});
+
+		const note = screen.getByTestId('printer-card-blocked-kitchen-1');
+		expect(note.textContent).toContain('security service');
+		expect(note.textContent).toContain('wcpos.com/cloudprint');
+	});
+
+	it('explains a 5xx signal as a site error, not a block', () => {
+		renderCard({
+			printer: makePrinter({ status: 'blocked', status_detail: 'http-502' }),
+		});
+
+		const note = screen.getByTestId('printer-card-blocked-kitchen-1');
+		expect(note.textContent).toContain('server error');
+		expect(note.textContent).not.toContain('security service');
+	});
+
+	it('renders no block note for healthy printers', () => {
+		renderCard({ printer: makePrinter({ status: 'connected' }) });
+
+		expect(screen.queryByTestId('printer-card-blocked-kitchen-1')).toBeNull();
+	});
+});
+
+describe('PrinterCard live blocked refresh', () => {
+	it('shows the blocked note when a background refresh reports blocked', async () => {
+		vi.useFakeTimers();
+		apiFetchMock.mockResolvedValue({
+			printers: [
+				{
+					id: 'kitchen-1',
+					name: 'Kitchen',
+					provider: 'star-cloudprnt',
+					store_id: 0,
+					status: 'blocked',
+					status_detail: 'cloudflare-challenge',
+				},
+			],
+			assignments: [],
+		});
+		renderCard({ printer: makePrinter({ status: 'connected' }) });
+
+		expect(screen.queryByTestId('printer-card-blocked-kitchen-1')).toBeNull();
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30000);
+		});
+
+		expect(screen.getByTestId('printer-card-blocked-kitchen-1')).toBeInTheDocument();
+		expect(screen.getByTestId('printer-card-blocked-kitchen-1').textContent).toContain(
+			'security service'
+		);
+		vi.useRealTimers();
+	});
+});

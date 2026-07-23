@@ -2,9 +2,17 @@ import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 
 export type CloudProvider = 'star-cloudprnt' | 'epson-sdp' | 'printnode' | 'star-online';
-// Star/Epson polling providers report `waiting | connected | offline`; PrintNode
-// reports its real upstream state `online | offline | unknown`.
-export type CloudStatus = 'waiting' | 'connected' | 'offline' | 'online' | 'unknown';
+// Star/Epson polling providers report `waiting | connected | offline`, plus
+// `blocked` when the WCPOS Cloud Print relay reports the site is refusing its
+// requests; PrintNode reports its real upstream state `online | offline | unknown`.
+export type CloudStatus = 'waiting' | 'connected' | 'offline' | 'online' | 'unknown' | 'blocked';
+
+// Site-level WCPOS Cloud Print relay registration. `printer_base_url` is only
+// present once the site has registered (e.g. https://cloudprint.wcpos.com/p/<site_key>).
+export interface CloudPrintRelay {
+	enabled: boolean;
+	printer_base_url?: string;
+}
 
 // PrintNode print format. RAW (ESC/POS) is only meaningful for thermal templates.
 export type PrintnodeFormat = 'pdf' | 'raw';
@@ -16,6 +24,9 @@ export interface CloudPrinter {
 	store_id: number;
 	// read-only (GET only):
 	status?: CloudStatus;
+	// Relay block signal (e.g. "cloudflare-challenge", "http-403"); only set
+	// when status is 'blocked'.
+	status_detail?: string | null;
 	last_seen?: number | null;
 	// write-only (POST only; never returned):
 	// Poll token is server-generated, stored hashed, and returned once on save —
@@ -46,6 +57,8 @@ export interface CloudAssignment {
 export interface CloudPrintSettings {
 	printers: CloudPrinter[];
 	assignments: CloudAssignment[];
+	// Server-owned; written only via the relay register/disable endpoints.
+	relay?: CloudPrintRelay;
 }
 
 export interface CloudPrintSettingsResponse extends CloudPrintSettings {
@@ -74,13 +87,51 @@ export function useCloudPrintSettings() {
 				data: next,
 			}) as Promise<CloudPrintSettingsResponse>,
 		onSuccess: (saved) =>
-			queryClient.setQueryData(['cloud-print'], {
-				printers: saved.printers,
-				assignments: saved.assignments,
-			}),
+			queryClient.setQueryData(
+				['cloud-print'],
+				(prev: CloudPrintSettings | undefined): CloudPrintSettings => ({
+					printers: saved.printers,
+					assignments: saved.assignments,
+					// The save endpoint ignores client relay data; carry the last
+					// known registration forward if the response omits it.
+					relay: saved.relay ?? prev?.relay,
+				})
+			),
 	});
 
 	// `save` resolves with the server response, whose `generated` map carries any
 	// one-time poll tokens for newly registered printers.
 	return { settings: data, save: mutation.mutateAsync };
+}
+
+const RELAY_REGISTER_ENDPOINT = 'wcpos/v1/print-jobs/relay/register?wcpos=1';
+const RELAY_DISABLE_ENDPOINT = 'wcpos/v1/print-jobs/relay/disable?wcpos=1';
+
+/**
+ * Register with / disable the WCPOS Cloud Print relay. Both endpoints return
+ * the new relay state, which is folded into the cached cloud-print settings.
+ */
+export function useCloudPrintRelay() {
+	const queryClient = useQueryClient();
+
+	const applyRelay = (relay: CloudPrintRelay) =>
+		queryClient.setQueryData(
+			['cloud-print'],
+			(prev: CloudPrintSettings | undefined): CloudPrintSettings | undefined =>
+				prev ? { ...prev, relay } : prev
+		);
+
+	const register = useMutation({
+		mutationFn: () =>
+			apiFetch({ path: RELAY_REGISTER_ENDPOINT, method: 'POST' }) as Promise<CloudPrintRelay>,
+		onSuccess: applyRelay,
+	});
+
+	const disable = useMutation({
+		mutationFn: () =>
+			apiFetch({ path: RELAY_DISABLE_ENDPOINT, method: 'POST' }) as Promise<CloudPrintRelay>,
+		onSuccess: applyRelay,
+	});
+
+	return { register, disable };
 }

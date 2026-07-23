@@ -18,6 +18,7 @@ export default defineConfig([
 			'vendor/',
 			'vendor_prefixed/',
 			'.wiki/',
+			'packages/eslint/**',
 		],
 	},
 	// fixupConfigRules restores plugin APIs removed in ESLint 10 (eslint-plugin-import
@@ -32,6 +33,21 @@ export default defineConfig([
 			},
 		},
 		rules: {
+			// eslint-plugin-node rules, disabled upstream; the plugin is namespaced `n` in flat config.
+			'n/handle-callback-err': 'off',
+			'n/no-callback-literal': 'off',
+			// Keep newly enabled React Compiler diagnostics non-blocking until
+			// the affected code is deliberately refactored.
+			'react-hooks/static-components': 'warn',
+			'react-hooks/use-memo': 'warn',
+			'react-hooks/preserve-manual-memoization': 'warn',
+			'react-hooks/immutability': 'warn',
+			'react-hooks/globals': 'warn',
+			'react-hooks/refs': 'warn',
+			'react-hooks/set-state-in-effect': 'warn',
+			'react-hooks/error-boundaries': 'warn',
+			'react-hooks/purity': 'warn',
+			'react-hooks/set-state-in-render': 'warn',
 			// `void somePromise()` statements are our idiom for intentionally
 			// un-awaited promises.
 			'no-void': ['warn', { allowAsStatement: true }],
