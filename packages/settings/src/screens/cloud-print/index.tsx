@@ -6,6 +6,7 @@ import { AddPrinterWizard, type NewPrinterInput } from './add-printer-wizard';
 import { AutoPrintRules } from './auto-print-rules';
 import { fetchPrintNodePrinters } from './fetch-printnode-printers';
 import { fetchStarDevices } from './fetch-star-devices';
+import { PrintQueue } from './print-queue';
 import { PrinterCard } from './printer-card';
 import { PROVIDERS } from './providers';
 import { CardGrid } from '../../components/card-grid';
@@ -357,6 +358,8 @@ function CloudPrint() {
 					</Button>
 				</div>
 			</FormSection>
+
+			<PrintQueue />
 
 			<FormSection title={t('cloud_print.auto_print', 'Auto-print rules')}>
 				<AutoPrintRules

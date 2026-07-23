@@ -126,6 +126,7 @@ class Print_Job_Service {
 
 		return array(
 			'id'           => (int) $post->ID,
+			'created_gmt'  => (string) $post->post_date_gmt,
 			'printer_id'   => (string) get_post_meta( $id, self::META_PRINTER, true ),
 			'status'       => (string) get_post_meta( $id, self::META_STATUS, true ),
 			'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
@@ -317,6 +318,128 @@ class Print_Job_Service {
 	 * @return array<int, array>
 	 */
 	public function query( array $filters = array() ): array {
+		$meta_query = $this->filters_to_meta_query( $filters );
+
+		$posts = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
+				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				'orderby'        => 'date',
+				'order'          => 'ASC',
+				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+
+		return array_map(
+			function ( $post ) {
+				return $this->get( (int) $post->ID );
+			},
+			$posts
+		);
+	}
+
+	/**
+	 * Count jobs matching the same filters query() accepts.
+	 *
+	 * @param array $filters printer_id / status / order_id / template_id.
+	 *
+	 * @return int
+	 */
+	public function count( array $filters = array() ): int {
+		$query = new \WP_Query(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_query'     => $this->filters_to_meta_query( $filters ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * The creation time (GMT, MySQL format) of the oldest pending job for a printer.
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return string Empty when the printer has no pending jobs.
+	 */
+	public function oldest_pending_gmt( string $printer_id ): string {
+		$rows = $this->query(
+			array(
+				'printer_id' => $printer_id,
+				'status'     => self::STATUS_PENDING,
+				'limit'      => 1,
+			)
+		);
+
+		return empty( $rows ) ? '' : (string) $rows[0]['created_gmt'];
+	}
+
+	/**
+	 * Cancel every waiting (pending or claimed) job matching the filter.
+	 *
+	 * Printed, failed, and already-cancelled jobs are never touched — this
+	 * exists to clear a backlog, not to rewrite history.
+	 *
+	 * @param array $filters ids (array of job ids) and/or printer_id.
+	 *
+	 * @return int Number of jobs cancelled.
+	 */
+	public function cancel_waiting( array $filters ): int {
+		$cancellable = array( self::STATUS_PENDING, self::STATUS_CLAIMED );
+		$cancelled   = 0;
+
+		if ( ! empty( $filters['ids'] ) ) {
+			foreach ( array_map( 'intval', (array) $filters['ids'] ) as $id ) {
+				$job = $this->get( $id );
+				if ( null !== $job && \in_array( $job['status'], $cancellable, true ) ) {
+					$this->set_status( $id, self::STATUS_CANCELLED );
+					++$cancelled;
+				}
+			}
+
+			return $cancelled;
+		}
+
+		if ( empty( $filters['printer_id'] ) ) {
+			return 0;
+		}
+
+		foreach ( $cancellable as $status ) {
+			// Batched: query() pages from the front and cancelling removes
+			// jobs from the result set, so repeat until the queue is drained.
+			do {
+				$jobs  = $this->query(
+					array(
+						'printer_id' => (string) $filters['printer_id'],
+						'status'     => $status,
+						'limit'      => 100,
+					)
+				);
+				$batch = \count( $jobs );
+				foreach ( $jobs as $job ) {
+					$this->set_status( (int) $job['id'], self::STATUS_CANCELLED );
+					++$cancelled;
+				}
+			} while ( 100 === $batch );
+		}
+
+		return $cancelled;
+	}
+
+	/**
+	 * Translate public filters into a meta_query array.
+	 *
+	 * @param array $filters printer_id / status / order_id / template_id.
+	 *
+	 * @return array
+	 */
+	private function filters_to_meta_query( array $filters ): array {
 		$meta_query = array();
 		if ( ! empty( $filters['printer_id'] ) ) {
 			$meta_query[] = array(
@@ -344,23 +467,7 @@ class Print_Job_Service {
 			);
 		}
 
-		$posts = get_posts(
-			array(
-				'post_type'      => self::POST_TYPE,
-				'post_status'    => 'publish',
-				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
-				'orderby'        => 'date',
-				'order'          => 'ASC',
-				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-			)
-		);
-
-		return array_map(
-			function ( $post ) {
-				return $this->get( (int) $post->ID );
-			},
-			$posts
-		);
+		return $meta_query;
 	}
 
 	/**

@@ -116,6 +116,30 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/queue',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_queue' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/queue/cancel',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'cancel_queue' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/test',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -412,6 +436,111 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$this->jobs->set_status( $id, Print_Job_Service::STATUS_CANCELLED );
 
 		return rest_ensure_response( $this->jobs->get( $id ) );
+	}
+
+	/**
+	 * The admin queue view: paginated jobs (payloads stripped), status counts,
+	 * and per-printer backlog with last-seen data for staleness banners.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function get_queue( $request ) {
+		$per_page = (int) $request->get_param( 'per_page' );
+		$per_page = min( 100, max( 1, 0 === $per_page ? 20 : $per_page ) );
+		$page     = max( 1, (int) $request->get_param( 'page' ) );
+		$filters  = array(
+			'printer_id' => $request->get_param( 'printer_id' ),
+			'status'     => $request->get_param( 'status' ),
+		);
+
+		$jobs = array_map(
+			function ( array $job ): array {
+				unset( $job['payload'] );
+				$order = $job['order_id'] ? wc_get_order( $job['order_id'] ) : false;
+				if ( $order ) {
+					$job['order_number']   = (string) $order->get_order_number();
+					$job['order_edit_url'] = $order->get_edit_order_url();
+				}
+
+				return $job;
+			},
+			$this->jobs->query(
+				array_merge(
+					$filters,
+					array(
+						'limit' => $per_page,
+						'page'  => $page,
+					)
+				)
+			)
+		);
+
+		$counts = array();
+		foreach ( array(
+			Print_Job_Service::STATUS_PENDING,
+			Print_Job_Service::STATUS_CLAIMED,
+			Print_Job_Service::STATUS_PRINTED,
+			Print_Job_Service::STATUS_FAILED,
+			Print_Job_Service::STATUS_CANCELLED,
+		) as $status ) {
+			$counts[ $status ] = $this->jobs->count( array( 'status' => $status ) );
+		}
+
+		$printers = array();
+		foreach ( $this->registry->get_printers() as $printer ) {
+			$printer_id = (string) ( $printer['id'] ?? '' );
+			if ( '' === $printer_id ) {
+				continue;
+			}
+			$printers[] = array(
+				'printer_id'         => $printer_id,
+				'name'               => (string) ( $printer['name'] ?? $printer_id ),
+				'pending'            => $this->jobs->count(
+					array(
+						'printer_id' => $printer_id,
+						'status'     => Print_Job_Service::STATUS_PENDING,
+					)
+				),
+				'oldest_pending_gmt' => $this->jobs->oldest_pending_gmt( $printer_id ),
+				'last_seen'          => $this->registry->get_seen( $printer_id ),
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'jobs'     => $jobs,
+				'total'    => $this->jobs->count( $filters ),
+				'page'     => $page,
+				'per_page' => $per_page,
+				'summary'  => array(
+					'counts'   => $counts,
+					'printers' => $printers,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Bulk-cancel waiting jobs by explicit ids or for a whole printer.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function cancel_queue( $request ) {
+		$ids        = $request->get_param( 'ids' );
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+
+		$cancelled = $this->jobs->cancel_waiting(
+			array(
+				'ids'        => \is_array( $ids ) ? $ids : array(),
+				'printer_id' => $printer_id,
+			)
+		);
+
+		return rest_ensure_response( array( 'cancelled' => $cancelled ) );
 	}
 
 	/**

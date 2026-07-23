@@ -18,6 +18,17 @@ class Cloud_Print_Registry {
 	const PN_STATUS_TTL  = 60;  // Seconds; PrintNode live-status cache window.
 
 	/**
+	 * All registered cloud printers.
+	 *
+	 * @return array<int, array>
+	 */
+	public function get_printers(): array {
+		$settings = get_option( self::OPTION, array() );
+
+		return isset( $settings['printers'] ) && \is_array( $settings['printers'] ) ? $settings['printers'] : array();
+	}
+
+	/**
 	 * Get a registered cloud printer by id.
 	 *
 	 * @param string $printer_id Printer id.
@@ -25,10 +36,7 @@ class Cloud_Print_Registry {
 	 * @return array|null
 	 */
 	public function get_printer( string $printer_id ): ?array {
-		$settings = get_option( self::OPTION, array() );
-		$printers = isset( $settings['printers'] ) && \is_array( $settings['printers'] ) ? $settings['printers'] : array();
-
-		foreach ( $printers as $printer ) {
+		foreach ( $this->get_printers() as $printer ) {
 			if ( isset( $printer['id'] ) && hash_equals( (string) $printer['id'], $printer_id ) ) {
 				return $printer;
 			}
