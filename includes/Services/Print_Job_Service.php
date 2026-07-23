@@ -326,8 +326,12 @@ class Print_Job_Service {
 				'post_status'    => 'publish',
 				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
 				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
-				'orderby'        => 'date',
-				'order'          => 'ASC',
+				// ID breaks date ties: jobs created in the same second must
+				// keep a stable order or offset pagination duplicates rows.
+				'orderby'        => array(
+					'date' => 'ASC',
+					'ID'   => 'ASC',
+				),
 				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 			)
 		);
@@ -337,6 +341,65 @@ class Print_Job_Service {
 				return $this->get( (int) $post->ID );
 			},
 			$posts
+		);
+	}
+
+	/**
+	 * Queue-view rows: like query(), but never hydrates post_content — a
+	 * raster receipt payload is megabytes the queue table doesn't need, and
+	 * a page of them would be loaded into memory on every refresh.
+	 *
+	 * @param array $filters printer_id / status / limit / page.
+	 *
+	 * @return array<int, array>
+	 */
+	public function query_rows( array $filters = array() ): array {
+		global $wpdb;
+
+		$query = new \WP_Query(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
+				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				'orderby'        => array(
+					'date' => 'ASC',
+					'ID'   => 'ASC',
+				),
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => $this->filters_to_meta_query( $filters ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		update_meta_cache( 'post', $ids );
+
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		// Direct, content-free date lookup: get_post() would pull the full
+		// row (payload included) into the object cache, defeating the point.
+		$dates = $wpdb->get_results(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a %d list.
+			$wpdb->prepare( "SELECT ID, post_date_gmt FROM {$wpdb->posts} WHERE ID IN ($placeholders)", $ids ),
+			OBJECT_K
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		return array_map(
+			function ( int $id ) use ( $dates ): array {
+				return array(
+					'id'           => $id,
+					'created_gmt'  => isset( $dates[ $id ] ) ? (string) $dates[ $id ]->post_date_gmt : '',
+					'printer_id'   => (string) get_post_meta( $id, self::META_PRINTER, true ),
+					'status'       => (string) get_post_meta( $id, self::META_STATUS, true ),
+					'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
+					'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
+					'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
+					'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
+				);
+			},
+			$ids
 		);
 	}
 
@@ -362,22 +425,34 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * The creation time (GMT, MySQL format) of the oldest pending job for a printer.
+	 * The creation time (GMT, MySQL format) of a printer's oldest waiting job.
+	 *
+	 * Waiting means pending or claimed: a printer that fetched a job and then
+	 * died leaves it claimed forever, and that backlog must still surface.
 	 *
 	 * @param string $printer_id Printer id.
 	 *
-	 * @return string Empty when the printer has no pending jobs.
+	 * @return string Empty when the printer has no waiting jobs.
 	 */
 	public function oldest_pending_gmt( string $printer_id ): string {
-		$rows = $this->query(
-			array(
-				'printer_id' => $printer_id,
-				'status'     => self::STATUS_PENDING,
-				'limit'      => 1,
-			)
-		);
+		$oldest = '';
+		foreach ( array( self::STATUS_PENDING, self::STATUS_CLAIMED ) as $status ) {
+			$rows = $this->query_rows(
+				array(
+					'printer_id' => $printer_id,
+					'status'     => $status,
+					'limit'      => 1,
+				)
+			);
+			if ( ! empty( $rows ) && '' !== (string) $rows[0]['created_gmt'] ) {
+				$created = (string) $rows[0]['created_gmt'];
+				if ( '' === $oldest || $created < $oldest ) {
+					$oldest = $created;
+				}
+			}
+		}
 
-		return empty( $rows ) ? '' : (string) $rows[0]['created_gmt'];
+		return $oldest;
 	}
 
 	/**

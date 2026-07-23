@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { SnackbarProvider } from '@wcpos/ui';
+
 import { PrintQueue, type QueueResponse } from './print-queue';
 
 const apiFetchMock = vi.fn();
@@ -101,7 +103,9 @@ function renderQueue() {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return render(
 		<QueryClientProvider client={client}>
-			<PrintQueue />
+			<SnackbarProvider>
+				<PrintQueue />
+			</SnackbarProvider>
 		</QueryClientProvider>
 	);
 }
@@ -180,6 +184,64 @@ describe('PrintQueue', () => {
 				)
 			).toBe(true)
 		);
+	});
+
+	it('surfaces an error snackbar when a cancel request fails', async () => {
+		apiFetchMock.mockImplementation((opts: ApiOpts) => {
+			if (opts.path.includes('print-jobs/queue/cancel')) {
+				return Promise.reject(new Error('boom'));
+			}
+			if (opts.path.includes('print-jobs/queue')) {
+				return Promise.resolve(makeQueue());
+			}
+			return Promise.resolve({});
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-cancel-11')).toBeInTheDocument());
+		fireEvent.click(screen.getByTestId('queue-cancel-11'));
+
+		await waitFor(() =>
+			expect(screen.getByText(/the queue is unchanged/i)).toBeInTheDocument()
+		);
+	});
+
+	it('clamps back into range when the current page empties', async () => {
+		// 21 jobs -> 2 pages. After "cancelling", the total drops to 20 and
+		// page 2 no longer exists; the component must fall back to page 1.
+		let total = 21;
+		apiFetchMock.mockImplementation((opts: ApiOpts) => {
+			if (opts.path.includes('print-jobs/queue/cancel')) {
+				total = 20;
+				return Promise.resolve({ cancelled: 1 });
+			}
+			if (opts.path.includes('print-jobs/queue')) {
+				const base = makeQueue();
+				const onPage2 = opts.path.includes('page=2') && total === 21;
+				return Promise.resolve({
+					...base,
+					jobs: onPage2 ? [base.jobs[0]] : base.jobs,
+					total,
+				});
+			}
+			return Promise.resolve({});
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-page-info')).toBeInTheDocument());
+		fireEvent.click(screen.getByLabelText('Next'));
+		// Wait for the page-2 render (21–21 of 21), not just the request.
+		await waitFor(() =>
+			expect(screen.getByTestId('queue-page-info')).toHaveTextContent('21–21 of 21')
+		);
+		fireEvent.click(screen.getByTestId('queue-cancel-11'));
+
+		// Total shrinks to one page; the component must re-request page 1.
+		await waitFor(() => {
+			const calls = apiFetchMock.mock.calls.map((c) => (c[0] as ApiOpts).path);
+			const afterCancel = calls.slice(calls.findIndex((path) => path.includes('queue/cancel')));
+			expect(afterCancel.some((path) => path.includes('page=1'))).toBe(true);
+		});
 	});
 
 	it('collapses to a single quiet line when nothing has ever been queued', async () => {

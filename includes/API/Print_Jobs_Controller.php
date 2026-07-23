@@ -447,7 +447,6 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		$jobs = array_map(
 			function ( array $job ): array {
-				unset( $job['payload'] );
 				$order = $job['order_id'] ? wc_get_order( $job['order_id'] ) : false;
 				if ( $order ) {
 					$job['order_number']   = (string) $order->get_order_number();
@@ -456,7 +455,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 				return $job;
 			},
-			$this->jobs->query(
+			$this->jobs->query_rows(
 				array_merge(
 					$filters,
 					array(
@@ -484,15 +483,24 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			if ( '' === $printer_id ) {
 				continue;
 			}
+			// Waiting = pending + claimed: a printer that fetched a job and
+			// then died leaves it claimed forever with zero pending — that
+			// backlog must still trip the stale banner.
+			$waiting    = $this->jobs->count(
+				array(
+					'printer_id' => $printer_id,
+					'status'     => Print_Job_Service::STATUS_PENDING,
+				)
+			) + $this->jobs->count(
+				array(
+					'printer_id' => $printer_id,
+					'status'     => Print_Job_Service::STATUS_CLAIMED,
+				)
+			);
 			$printers[] = array(
 				'printer_id'         => $printer_id,
 				'name'               => (string) ( $printer['name'] ?? $printer_id ),
-				'pending'            => $this->jobs->count(
-					array(
-						'printer_id' => $printer_id,
-						'status'     => Print_Job_Service::STATUS_PENDING,
-					)
-				),
+				'pending'            => $waiting,
 				'oldest_pending_gmt' => $this->jobs->oldest_pending_gmt( $printer_id ),
 				'last_seen'          => $this->registry->get_seen( $printer_id ),
 			);
@@ -551,11 +559,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 		$new_id = $this->jobs->create(
 			array(
-				'printer_id'   => $source['printer_id'],
-				'content_type' => $source['content_type'],
-				'payload'      => $source['payload'],
-				'order_id'     => $source['order_id'] ? $source['order_id'] : null,
-				'format'       => $source['format'] ? $source['format'] : null,
+				'printer_id'       => $source['printer_id'],
+				'content_type'     => $source['content_type'],
+				'payload'          => $source['payload'],
+				'order_id'         => $source['order_id'] ? $source['order_id'] : null,
+				'format'           => $source['format'] ? $source['format'] : null,
+				// Template-backed jobs (auto-print) carry no stored payload —
+				// the render metadata must survive the copy or the reprint
+				// renders nothing.
+				'template_id'      => '' !== $source['template_id'] ? $source['template_id'] : null,
+				'pn_kind'          => '' !== $source['pn_kind'] ? $source['pn_kind'] : null,
+				'auto_open_drawer' => $source['auto_open_drawer'],
+				'drawer_connector' => $source['drawer_connector'],
 			)
 		);
 		if ( $new_id <= 0 ) {

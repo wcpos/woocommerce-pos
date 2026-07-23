@@ -148,9 +148,11 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	 * It reports status counts and per-printer backlog with staleness data.
 	 */
 	public function test_queue_summary_reports_counts_and_backlog(): void {
-		// Arrange: kitchen has a backlog and has never polled; front is live.
+		// Arrange: kitchen has a backlog (including a job it fetched before
+		// dying — claimed forever) and has never polled; front is live.
 		$oldest = $this->make_job( 'kitchen' );
 		$this->make_job( 'kitchen' );
+		$this->make_job( 'kitchen', Print_Job_Service::STATUS_CLAIMED );
 		$this->make_job( 'front', Print_Job_Service::STATUS_PRINTED );
 		$this->make_job( 'front', Print_Job_Service::STATUS_FAILED );
 		( new Cloud_Print_Registry() )->record_seen( 'front' );
@@ -158,12 +160,14 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$summary = $this->queue()->get_data()['summary'];
 
-		// Assert.
+		// Assert: waiting = pending + claimed, so a stuck claimed job still
+		// trips the stale banner.
 		$this->assertEquals( 2, $summary['counts']['pending'] );
+		$this->assertEquals( 1, $summary['counts']['claimed'] );
 		$this->assertEquals( 1, $summary['counts']['printed'] );
 		$this->assertEquals( 1, $summary['counts']['failed'] );
 		$printers = array_column( $summary['printers'], null, 'printer_id' );
-		$this->assertEquals( 2, $printers['kitchen']['pending'] );
+		$this->assertEquals( 3, $printers['kitchen']['pending'] );
 		$this->assertEquals( 'Kitchen', $printers['kitchen']['name'] );
 		$this->assertEquals(
 			get_post( $oldest )->post_date_gmt,
@@ -199,6 +203,61 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'cancelled', $this->jobs->get( $b )['status'] );
 		$this->assertEquals( 'printed', $this->jobs->get( $printed )['status'] );
 		$this->assertEquals( 'pending', $this->jobs->get( $other )['status'] );
+	}
+
+	/**
+	 * It keeps a stable order across pages when jobs share a creation second.
+	 */
+	public function test_queue_pagination_is_stable_for_same_second_jobs(): void {
+		// Arrange: three jobs created within the same second.
+		$ids = array(
+			$this->make_job( 'kitchen' ),
+			$this->make_job( 'kitchen' ),
+			$this->make_job( 'kitchen' ),
+		);
+
+		// Act: walk the queue one row per page.
+		$seen = array();
+		for ( $page = 1; $page <= 3; $page++ ) {
+			$data = $this->queue(
+				array(
+					'per_page' => 1,
+					'page'     => $page,
+				)
+			)->get_data();
+			$seen[] = $data['jobs'][0]['id'];
+		}
+
+		// Assert: every job appears exactly once, in ID order.
+		$this->assertEquals( $ids, $seen );
+	}
+
+	/**
+	 * It preserves render metadata when retrying a template-backed job.
+	 */
+	public function test_retry_copies_template_metadata(): void {
+		// Arrange: an auto-print style job — render metadata, no payload.
+		$jobs = new Print_Job_Service();
+		$id   = $jobs->create(
+			array(
+				'printer_id'   => 'kitchen',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => '',
+				'template_id'  => 'receipt-80mm',
+				'pn_kind'      => 'order',
+			)
+		);
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+
+		// Act.
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		// Assert: the copy can still render.
+		$this->assertEquals( 201, $response->get_status() );
+		$copy = $jobs->get( (int) $response->get_data()['id'] );
+		$this->assertEquals( 'receipt-80mm', $copy['template_id'] );
+		$this->assertEquals( 'order', $copy['pn_kind'] );
+		$this->assertEquals( 'pending', $copy['status'] );
 	}
 
 	/**

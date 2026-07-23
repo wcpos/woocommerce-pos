@@ -16,6 +16,7 @@ import {
 	TableHeader,
 	TableHeaderRow,
 	TableRow,
+	useSnackbar,
 	type ChipVariant,
 } from '@wcpos/ui';
 
@@ -139,9 +140,17 @@ export function PrintQueue() {
 		refetchInterval: REFETCH_MS,
 	});
 
+	const { addSnackbar } = useSnackbar();
+
 	const invalidate = () => {
 		setSelected(new Set());
 		void queryClient.invalidateQueries({ queryKey: [QUEUE_QUERY_KEY] });
+	};
+	const onMutationError = () => {
+		addSnackbar({
+			message: t('cloud_print.queue_action_failed', "That didn't work — the queue is unchanged. Try again."),
+			status: 'error',
+		});
 	};
 
 	const cancelJobs = useMutation({
@@ -152,13 +161,28 @@ export function PrintQueue() {
 				data: body,
 			}) as Promise<{ cancelled: number }>,
 		onSuccess: invalidate,
+		onError: onMutationError,
 	});
 
 	const retryJob = useMutation({
 		mutationFn: (id: number) =>
 			apiFetch({ path: `wcpos/v1/print-jobs/${id}/reprint?wcpos=1`, method: 'POST' }),
 		onSuccess: invalidate,
+		onError: onMutationError,
 	});
+
+	// A cancel can empty the current page (e.g. the last row of page 2):
+	// clamp back into range instead of stranding the admin on a blank page.
+	const fetchedTotal = data?.total;
+	React.useEffect(() => {
+		if (typeof fetchedTotal !== 'number') {
+			return;
+		}
+		const pages = Math.max(1, Math.ceil(fetchedTotal / PER_PAGE));
+		if (page > pages) {
+			setPage(pages);
+		}
+	}, [fetchedTotal, page]);
 
 	// Also guards a malformed response — a queue view that can't render is
 	// invisible, never a crashed settings screen.
