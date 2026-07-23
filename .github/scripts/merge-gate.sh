@@ -183,6 +183,19 @@ wait_for_checks() {
 }
 
 main() {
+  # Conflicts block every PR — including allowlisted bot PRs — so this check
+  # runs before the bypass branches. A failed or empty lookup fails closed:
+  # an unknown merge state must never be treated as "not conflicted".
+  local merge_state
+  if ! merge_state="$(pr_merge_state)" || [[ -z "$merge_state" ]]; then
+    log "Could not determine the PR merge state; failing closed."
+    return 1
+  fi
+  if [[ "$merge_state" == "DIRTY" ]]; then
+    log "Resolve the merge conflicts and update the PR branch before CI can run."
+    return 1
+  fi
+
   if is_allowed_translation_version_pr; then
     log "Validated automated translation-version PR; merge gate passes without waiting for full CI."
     return 0
@@ -191,11 +204,6 @@ main() {
     return 0
   else
     log "Required checks must pass for this PR."
-  fi
-
-  if [[ "$(pr_merge_state)" == "DIRTY" ]]; then
-    log "Resolve the merge conflicts and update the PR branch before CI can run."
-    return 1
   fi
 
   wait_for_checks

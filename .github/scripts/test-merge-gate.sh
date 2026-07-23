@@ -46,6 +46,10 @@ if [[ "$args" == pr\ diff* && "$args" == *--patch* ]]; then
 fi
 
 if [[ "$args" == pr\ view* ]]; then
+  if [[ "${MOCK_MERGE_STATE_FAIL:-false}" == "true" ]]; then
+    echo "mock: merge-state lookup unavailable" >&2
+    exit 1
+  fi
   printf '%s\n' "${MOCK_MERGE_STATE:-CLEAN}"
   exit 0
 fi
@@ -190,6 +194,30 @@ if ! grep -Fq "Resolve the merge conflicts and update the PR branch before CI ca
   echo "Expected conflicted PR to fail with an actionable merge-conflict message" >&2
   exit 1
 fi
+
+run_case "conflicted translation-version PR fails despite allowlist" fail \
+  PR_AUTHOR="translations-ci[bot]" \
+  PR_TITLE="chore: update translation version to 2026.5.6" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE="DIRTY" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "conflicted POT-only PR fails despite allowlist" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
+  MOCK_CHANGED_FILES="$TEST_POT_FILE" \
+  MOCK_PATCH="$pot_patch" \
+  MOCK_MERGE_STATE="DIRTY" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "merge-state lookup failure fails closed" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE_FAIL="true" \
+  MOCK_NO_CHECKS_EXPECTED="true"
 
 run_case "human PR passes when required checks pass" pass \
   PR_AUTHOR="kilbot" \
