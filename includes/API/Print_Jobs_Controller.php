@@ -440,9 +440,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$per_page = (int) $request->get_param( 'per_page' );
 		$per_page = min( 100, max( 1, 0 === $per_page ? 20 : $per_page ) );
 		$page     = max( 1, (int) $request->get_param( 'page' ) );
-		$filters  = array(
+		$status   = $request->get_param( 'status' );
+		if ( 'active' === $status ) {
+			// The default queue view: everything not yet terminal-successful.
+			$status = array(
+				Print_Job_Service::STATUS_PENDING,
+				Print_Job_Service::STATUS_CLAIMED,
+				Print_Job_Service::STATUS_FAILED,
+			);
+		}
+		$filters = array(
 			'printer_id' => $request->get_param( 'printer_id' ),
-			'status'     => $request->get_param( 'status' ),
+			'status'     => $status,
 		);
 
 		$jobs = array_map(
@@ -509,6 +518,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			$printers[] = array(
 				'printer_id'         => $printer_id,
 				'name'               => (string) ( $printer['name'] ?? $printer_id ),
+				// Push providers (PrintNode, Star Online) never poll, so
+				// last-seen staleness is meaningless for them — the UI must
+				// not show a "never fetched" banner.
+				'polling'            => Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ),
 				'pending'            => $waiting,
 				'oldest_pending_gmt' => $oldest,
 				'last_seen'          => $this->registry->get_seen( $printer_id ),

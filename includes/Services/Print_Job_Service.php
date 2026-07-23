@@ -563,9 +563,15 @@ class Print_Job_Service {
 			);
 		}
 		if ( ! empty( $filters['status'] ) ) {
+			// A single status matches exactly; a list becomes an IN clause
+			// (the queue's default "active" view is pending + claimed + failed).
+			$status       = \is_array( $filters['status'] )
+				? array_map( 'sanitize_text_field', $filters['status'] )
+				: sanitize_text_field( $filters['status'] );
 			$meta_query[] = array(
-				'key'   => self::META_STATUS,
-				'value' => sanitize_text_field( $filters['status'] ),
+				'key'     => self::META_STATUS,
+				'value'   => $status,
+				'compare' => \is_array( $status ) ? 'IN' : '=',
 			);
 		}
 		if ( ! empty( $filters['order_id'] ) ) {
