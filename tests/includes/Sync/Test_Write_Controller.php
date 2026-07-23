@@ -197,7 +197,9 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				}
 			}
 			$GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] = apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'product' );
-			$GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] = apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'shop_order' );
+			foreach ( array( 'read', 'create', 'edit', 'delete' ) as $context ) {
+				$GLOBALS['wcpos_sync_test_wc_permissions']['shop_order'][ $context ] = apply_filters( 'woocommerce_rest_check_permissions', false, $context, 0, 'shop_order' );
+			}
 		}
 		if ( ! empty( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] ) ) {
 			return array_shift( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
@@ -330,7 +332,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Cashier write forwarding may relax only the catalog mutation checks.
+	 * Cashier write forwarding relaxes the catalog mutation checks, and re-maps
+	 * shop_order contexts through the caps the cashier actually holds (never wider).
 	 */
 	public function test_cashier_push_scoped_inner_permissions_allow_catalog_mutations(): void {
 		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
@@ -351,8 +354,138 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			}
 		}
 		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] );
-		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] );
+		// Orders re-map through the caps the cashier role actually holds (the HPOS
+		// placehold post type breaks WC's own mapping): cashier has publish/edit/
+		// read_private but NOT delete_shop_orders, so delete stays denied.
+		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] );
+		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['edit'] );
+		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['read'] );
+		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['delete'] );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
+	}
+
+	/**
+	 * The shop_order re-map grants nothing beyond the user's own role caps: a user
+	 * without any shop_orders capabilities keeps every order context denied.
+	 */
+	public function test_capless_push_scoped_inner_permissions_deny_order_mutations(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $user_id );
+		$this->setRestResponse( array( 'id' => 4242 ), 201 );
+
+		$this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'products',
+				'payload'    => array( 'name' => 'Capless product' ),
+			)
+		);
+
+		foreach ( array( 'read', 'create', 'edit', 'delete' ) as $context ) {
+			$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order'][ $context ], 'shop_order:' . $context );
+		}
+	}
+
+	/**
+	 * POS-legit values the stock wc/v3 order schema rejects are dropped from the
+	 * forwarded body (v1 relaxed the schema itself — see V1\Orders_Controller
+	 * wcpos_get_item_schema): billing.email '' (walk-in sale, fails the email
+	 * format check) and line_items[].parent_name null (WC recomputes it). A raw
+	 * forward would 400 the CREATE and strand the record client-side forever.
+	 */
+	public function test_order_forward_drops_wc_rejected_pos_values(): void {
+		$store = new Fake_Mutation_Store();
+		$store->resolveResults = array( 0, 901 );
+		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
+			new WP_REST_Response( array( 'id' => 901 ), 201 ),
+			new WP_REST_Response( array( 'id' => 901 ), 200 ),
+		);
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing'    => array(
+						'first_name' => 'Walk-in',
+						'email'      => '',
+					),
+					'line_items' => array(
+						array(
+							'product_id'  => 55,
+							'name'        => 'Simple product',
+							'quantity'    => 1,
+							'parent_name' => null,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $result->get_status() );
+		$forwarded = $GLOBALS['wcpos_sync_test_rest_do_request_calls'][0]->get_body_params();
+		$this->assertArrayNotHasKey( 'email', $forwarded['billing'] );
+		$this->assertSame( 'Walk-in', $forwarded['billing']['first_name'] ); // rest of billing intact
+		$this->assertArrayNotHasKey( 'parent_name', $forwarded['line_items'][0] );
+		$this->assertSame( 55, $forwarded['line_items'][0]['product_id'] ); // rest of the line intact
+	}
+
+	/**
+	 * The same tolerance applies to UPDATE forwards; non-empty values pass through untouched.
+	 */
+	public function test_order_update_forward_drops_empty_email_but_keeps_real_values(): void {
+		list( $order_id, $bare ) = $this->real_order_payload();
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $order_id;
+		$revision = Order_Serializer::canonical_revision( $bare );
+		$this->setRestResponse( $bare, 200 );
+
+		$this->push(
+			$store,
+			array(
+				'operation'    => 'update',
+				'collection'   => 'orders',
+				'baseRevision' => $revision,
+				'payload'      => array(
+					'billing'    => array(
+						'first_name' => 'Kept',
+						'email'      => '',
+					),
+					'line_items' => array(
+						array(
+							'product_id'  => 66,
+							'name'        => 'Line kept',
+							'quantity'    => 2,
+							'parent_name' => 'Variable parent', // non-null → preserved
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$puts = array_values(
+			array_filter(
+				$GLOBALS['wcpos_sync_test_rest_do_request_calls'],
+				static fn( WP_REST_Request $r ) => 'PUT' === $r->get_method()
+			)
+		);
+		$this->assertNotEmpty( $puts );
+		$forwarded = $puts[0]->get_body_params();
+		$this->assertArrayNotHasKey( 'email', $forwarded['billing'] );
+		$this->assertSame( 'Kept', $forwarded['billing']['first_name'] );
+		$this->assertSame( 'Variable parent', $forwarded['line_items'][0]['parent_name'] );
 	}
 
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {

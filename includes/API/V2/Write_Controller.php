@@ -399,6 +399,7 @@ class Write_Controller extends WP_REST_Controller {
 			if ( isset( $forward_payload['meta_data'] ) && is_array( $forward_payload['meta_data'] ) ) {
 				$forward_payload['meta_data'] = $this->without_pos_audit_meta( $forward_payload );
 			}
+			$forward_payload = $this->sanitize_order_wc_payload( $forward_payload );
 		}
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
@@ -677,6 +678,7 @@ class Write_Controller extends WP_REST_Controller {
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
 				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload );
 			}
+			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
 		}
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations/' . $id
@@ -848,6 +850,40 @@ class Write_Controller extends WP_REST_Controller {
 		return $this->envelope_document( $this->document_for( $meta, $remote_id ), $record_uuid, $meta, $remote_id, $status );
 	}
 
+	/**
+	 * WC-strict-schema tolerance for POS order payloads.
+	 *
+	 * The v1 surface relaxed the wc/v3 order schema for POS realities (walk-in
+	 * sales have no email; client line items carry a nullable parent_name that
+	 * WC recomputes anyway) by editing the POS controller's schema — see
+	 * V1\Orders_Controller::wcpos_get_item_schema(). The v2 write surface
+	 * forwards to the STOCK wc/v3 controller, whose strict schema turns those
+	 * POS-legit values into rest_invalid_param 400s (a rejected CREATE then
+	 * strands the record client-side: every later update 404s). Express the same
+	 * tolerance by dropping the values WC would reject:
+	 * - billing.email '' / null → dropped (absent means "no email"; '' fails the format check)
+	 * - line_items[n].parent_name null → dropped (schema wants string; the server recomputes it)
+	 *
+	 * @param array $payload Order payload about to be forwarded to wc/v3.
+	 *
+	 * @return array The payload with WC-rejected POS values dropped.
+	 */
+	private function sanitize_order_wc_payload( array $payload ): array {
+		if ( isset( $payload['billing'] ) && is_array( $payload['billing'] )
+			&& array_key_exists( 'email', $payload['billing'] )
+			&& ( '' === $payload['billing']['email'] || null === $payload['billing']['email'] ) ) {
+			unset( $payload['billing']['email'] );
+		}
+		if ( isset( $payload['line_items'] ) && is_array( $payload['line_items'] ) ) {
+			foreach ( $payload['line_items'] as $i => $line ) {
+				if ( is_array( $line ) && array_key_exists( 'parent_name', $line ) && null === $line['parent_name'] ) {
+					unset( $payload['line_items'][ $i ]['parent_name'] );
+				}
+			}
+		}
+		return $payload;
+	}
+
 	private function forward( string $method, string $route, $payload ) {
 		$request = new WP_REST_Request( $method, $route );
 		if ( is_array( $payload ) ) {
@@ -889,6 +925,24 @@ class Write_Controller extends WP_REST_Controller {
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
 		if ( ! $permission && current_user_can( 'access_woocommerce_pos' ) && \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true ) && \in_array( $context, array( 'create', 'edit', 'delete' ), true ) ) {
 			$permission = true;
+		}
+
+		// Orders: with HPOS enabled (sync off), get_post() yields shop_order_placehold
+		// (map_meta_cap = false, no capability_type), so WooCommerce's REST check maps
+		// to the generic edit_post/delete_post caps that cashier-tier roles lack —
+		// even though they hold the real shop_orders caps. Re-check the capability the
+		// mapping SHOULD have produced, mirroring V1\Orders_Controller's
+		// update_item_permissions_check fix. No grant beyond the user's own role caps.
+		if ( ! $permission && 'shop_order' === $post_type ) {
+			$order_caps = array(
+				'read'   => 'read_private_shop_orders',
+				'create' => 'publish_shop_orders',
+				'edit'   => 'edit_shop_orders',
+				'delete' => 'delete_shop_orders',
+			);
+			if ( isset( $order_caps[ $context ] ) && current_user_can( $order_caps[ $context ] ) ) {
+				$permission = true;
+			}
 		}
 
 		return $permission;
