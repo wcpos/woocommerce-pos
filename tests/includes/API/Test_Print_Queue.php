@@ -186,6 +186,31 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It treats a printer with no provider field as polling, like the print path.
+	 */
+	public function test_queue_summary_defaults_missing_provider_to_polling(): void {
+		// Arrange: a legacy printer row saved without a provider.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'   => 'legacy',
+						'name' => 'Legacy',
+					),
+				),
+			)
+		);
+		$this->make_job( 'legacy' );
+
+		// Act.
+		$printers = array_column( $this->queue()->get_data()['summary']['printers'], null, 'printer_id' );
+
+		// Assert: the stale banner must not be suppressed for it.
+		$this->assertTrue( $printers['legacy']['polling'] );
+	}
+
+	/**
 	 * It maps status=active to the non-terminal statuses.
 	 */
 	public function test_queue_active_status_shows_waiting_and_failed_only(): void {

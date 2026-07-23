@@ -520,8 +520,12 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'name'               => (string) ( $printer['name'] ?? $printer_id ),
 				// Push providers (PrintNode, Star Online) never poll, so
 				// last-seen staleness is meaningless for them — the UI must
-				// not show a "never fetched" banner.
-				'polling'            => Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ),
+				// not show a "never fetched" banner. A missing provider
+				// defaults to star-cloudprnt exactly like the print path, so
+				// legacy rows without the field keep their stale warnings.
+				'polling'            => Provider::is_polling(
+					'' !== (string) ( $printer['provider'] ?? '' ) ? (string) $printer['provider'] : 'star-cloudprnt'
+				),
 				'pending'            => $waiting,
 				'oldest_pending_gmt' => $oldest,
 				'last_seen'          => $this->registry->get_seen( $printer_id ),
