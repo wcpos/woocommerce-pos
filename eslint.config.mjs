@@ -17,7 +17,6 @@ export default defineConfig([
 			'**/build/',
 			'vendor/',
 			'vendor_prefixed/',
-			'.wiki/',
 			'packages/eslint/**',
 		],
 	},
