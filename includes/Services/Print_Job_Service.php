@@ -126,6 +126,7 @@ class Print_Job_Service {
 
 		return array(
 			'id'           => (int) $post->ID,
+			'created_gmt'  => (string) $post->post_date_gmt,
 			'printer_id'   => (string) get_post_meta( $id, self::META_PRINTER, true ),
 			'status'       => (string) get_post_meta( $id, self::META_STATUS, true ),
 			'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
@@ -317,6 +318,203 @@ class Print_Job_Service {
 	 * @return array<int, array>
 	 */
 	public function query( array $filters = array() ): array {
+		$meta_query = $this->filters_to_meta_query( $filters );
+
+		$posts = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
+				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				// ID breaks date ties: jobs created in the same second must
+				// keep a stable order or offset pagination duplicates rows.
+				'orderby'        => array(
+					'date' => 'ASC',
+					'ID'   => 'ASC',
+				),
+				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+
+		return array_map(
+			function ( $post ) {
+				return $this->get( (int) $post->ID );
+			},
+			$posts
+		);
+	}
+
+	/**
+	 * Queue-view rows: like query(), but never hydrates post_content — a
+	 * raster receipt payload is megabytes the queue table doesn't need, and
+	 * a page of them would be loaded into memory on every refresh.
+	 *
+	 * @param array $filters printer_id / status / limit / page.
+	 *
+	 * @return array<int, array>
+	 */
+	public function query_rows( array $filters = array() ): array {
+		global $wpdb;
+
+		$query = new \WP_Query(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
+				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				'orderby'        => array(
+					'date' => 'ASC',
+					'ID'   => 'ASC',
+				),
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => $this->filters_to_meta_query( $filters ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		update_meta_cache( 'post', $ids );
+
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		// Direct, content-free date lookup: get_post() would pull the full
+		// row (payload included) into the object cache, defeating the point.
+		$dates = $wpdb->get_results(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a %d list.
+			$wpdb->prepare( "SELECT ID, post_date_gmt FROM {$wpdb->posts} WHERE ID IN ($placeholders)", $ids ),
+			OBJECT_K
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		return array_map(
+			function ( int $id ) use ( $dates ): array {
+				return array(
+					'id'           => $id,
+					'created_gmt'  => isset( $dates[ $id ] ) ? (string) $dates[ $id ]->post_date_gmt : '',
+					'printer_id'   => (string) get_post_meta( $id, self::META_PRINTER, true ),
+					'status'       => (string) get_post_meta( $id, self::META_STATUS, true ),
+					'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
+					'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
+					'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
+					'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
+				);
+			},
+			$ids
+		);
+	}
+
+	/**
+	 * Count jobs matching the same filters query() accepts.
+	 *
+	 * @param array $filters printer_id / status / order_id / template_id.
+	 *
+	 * @return int
+	 */
+	public function count( array $filters = array() ): int {
+		$query = new \WP_Query(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_query'     => $this->filters_to_meta_query( $filters ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * The creation time (GMT, MySQL format) of a printer's oldest waiting job.
+	 *
+	 * Waiting means pending or claimed: a printer that fetched a job and then
+	 * died leaves it claimed forever, and that backlog must still surface.
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return string Empty when the printer has no waiting jobs.
+	 */
+	public function oldest_pending_gmt( string $printer_id ): string {
+		$oldest = '';
+		foreach ( array( self::STATUS_PENDING, self::STATUS_CLAIMED ) as $status ) {
+			$rows = $this->query_rows(
+				array(
+					'printer_id' => $printer_id,
+					'status'     => $status,
+					'limit'      => 1,
+				)
+			);
+			if ( ! empty( $rows ) && '' !== (string) $rows[0]['created_gmt'] ) {
+				$created = (string) $rows[0]['created_gmt'];
+				if ( '' === $oldest || $created < $oldest ) {
+					$oldest = $created;
+				}
+			}
+		}
+
+		return $oldest;
+	}
+
+	/**
+	 * Cancel every waiting (pending or claimed) job matching the filter.
+	 *
+	 * Printed, failed, and already-cancelled jobs are never touched — this
+	 * exists to clear a backlog, not to rewrite history.
+	 *
+	 * @param array $filters ids (array of job ids) and/or printer_id.
+	 *
+	 * @return int Number of jobs cancelled.
+	 */
+	public function cancel_waiting( array $filters ): int {
+		$cancellable = array( self::STATUS_PENDING, self::STATUS_CLAIMED );
+		$cancelled   = 0;
+
+		if ( ! empty( $filters['ids'] ) ) {
+			foreach ( array_map( 'intval', (array) $filters['ids'] ) as $id ) {
+				$job = $this->get( $id );
+				if ( null !== $job && \in_array( $job['status'], $cancellable, true ) ) {
+					$this->set_status( $id, self::STATUS_CANCELLED );
+					++$cancelled;
+				}
+			}
+
+			return $cancelled;
+		}
+
+		if ( empty( $filters['printer_id'] ) ) {
+			return 0;
+		}
+
+		foreach ( $cancellable as $status ) {
+			// Batched: query() pages from the front and cancelling removes
+			// jobs from the result set, so repeat until the queue is drained.
+			do {
+				$jobs  = $this->query(
+					array(
+						'printer_id' => (string) $filters['printer_id'],
+						'status'     => $status,
+						'limit'      => 100,
+					)
+				);
+				$batch = \count( $jobs );
+				foreach ( $jobs as $job ) {
+					$this->set_status( (int) $job['id'], self::STATUS_CANCELLED );
+					++$cancelled;
+				}
+			} while ( 100 === $batch );
+		}
+
+		return $cancelled;
+	}
+
+	/**
+	 * Translate public filters into a meta_query array.
+	 *
+	 * @param array $filters printer_id / status / order_id / template_id.
+	 *
+	 * @return array
+	 */
+	private function filters_to_meta_query( array $filters ): array {
 		$meta_query = array();
 		if ( ! empty( $filters['printer_id'] ) ) {
 			$meta_query[] = array(
@@ -344,23 +542,7 @@ class Print_Job_Service {
 			);
 		}
 
-		$posts = get_posts(
-			array(
-				'post_type'      => self::POST_TYPE,
-				'post_status'    => 'publish',
-				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
-				'orderby'        => 'date',
-				'order'          => 'ASC',
-				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-			)
-		);
-
-		return array_map(
-			function ( $post ) {
-				return $this->get( (int) $post->ID );
-			},
-			$posts
-		);
+		return $meta_query;
 	}
 
 	/**
