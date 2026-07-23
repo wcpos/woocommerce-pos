@@ -466,6 +466,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			)
 		);
 
+		// One grouped query covers all status counts and every printer's
+		// backlog — the view refreshes every 30 s, so summary cost must not
+		// scale with printer count.
+		$summary = $this->jobs->status_summary();
+
 		$counts = array();
 		foreach ( array(
 			Print_Job_Service::STATUS_PENDING,
@@ -474,7 +479,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			Print_Job_Service::STATUS_FAILED,
 			Print_Job_Service::STATUS_CANCELLED,
 		) as $status ) {
-			$counts[ $status ] = $this->jobs->count( array( 'status' => $status ) );
+			$counts[ $status ] = 0;
+			foreach ( $summary as $per_status ) {
+				$counts[ $status ] += isset( $per_status[ $status ] ) ? $per_status[ $status ]['count'] : 0;
+			}
 		}
 
 		$printers = array();
@@ -486,22 +494,23 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			// Waiting = pending + claimed: a printer that fetched a job and
 			// then died leaves it claimed forever with zero pending — that
 			// backlog must still trip the stale banner.
-			$waiting    = $this->jobs->count(
-				array(
-					'printer_id' => $printer_id,
-					'status'     => Print_Job_Service::STATUS_PENDING,
-				)
-			) + $this->jobs->count(
-				array(
-					'printer_id' => $printer_id,
-					'status'     => Print_Job_Service::STATUS_CLAIMED,
-				)
-			);
+			$waiting = 0;
+			$oldest  = '';
+			foreach ( array( Print_Job_Service::STATUS_PENDING, Print_Job_Service::STATUS_CLAIMED ) as $status ) {
+				if ( ! isset( $summary[ $printer_id ][ $status ] ) ) {
+					continue;
+				}
+				$waiting += $summary[ $printer_id ][ $status ]['count'];
+				$created  = $summary[ $printer_id ][ $status ]['oldest_gmt'];
+				if ( '' !== $created && ( '' === $oldest || $created < $oldest ) ) {
+					$oldest = $created;
+				}
+			}
 			$printers[] = array(
 				'printer_id'         => $printer_id,
 				'name'               => (string) ( $printer['name'] ?? $printer_id ),
 				'pending'            => $waiting,
-				'oldest_pending_gmt' => $this->jobs->oldest_pending_gmt( $printer_id ),
+				'oldest_pending_gmt' => $oldest,
 				'last_seen'          => $this->registry->get_seen( $printer_id ),
 			);
 		}
