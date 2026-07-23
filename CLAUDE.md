@@ -23,6 +23,8 @@ WordPress plugin providing the server-side foundation for WCPOS. This repository
 
 The WCPOS wiki lives in [wcpos/wiki](https://github.com/wcpos/wiki) and changes daily. It is intentionally NOT vendored into this repo (a pinned submodule went stale and misled agents) — always fetch pages fresh, on demand.
 
+Checkouts that predate the submodule removal may still have a leftover `.wiki/` directory (Git cannot delete an initialized submodule's working tree on checkout). Delete it — `rm -rf .wiki` — and never read from it.
+
 - **Local agents** (on Paul's machine): read from the sibling clone at `/Users/kilbot/Projects/wiki`, but pull first — the clone can be stale:
 
   ```bash
