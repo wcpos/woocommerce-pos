@@ -441,7 +441,7 @@ class Print_Job_Service {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT printer.meta_value AS printer_id, status.meta_value AS job_status,
-						COUNT(*) AS jobs, MIN(p.post_date_gmt) AS oldest_gmt
+						COUNT(DISTINCT p.ID) AS jobs, MIN(p.post_date_gmt) AS oldest_gmt
 				 FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} printer ON printer.post_id = p.ID AND printer.meta_key = %s
 				 INNER JOIN {$wpdb->postmeta} status ON status.post_id = p.ID AND status.meta_key = %s
