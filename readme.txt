@@ -113,14 +113,15 @@ Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) 
 Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 = What data does WCPOS send outside my site? =
-Your products, orders, and customer data stay between your WooCommerce site and your POS devices. The services below never receive product details, order contents, or customer personal data.
+Your products, orders, and customer data stay between your WooCommerce site and your POS devices, unless you turn on a feature below that relies on an outside service. Except where noted, the services below never receive product details, order contents, or customer personal data.
 
 WCPOS contacts these outside services to:
 
 * load the POS web bundle and other interface assets from jsDelivr;
 * load translations from jsDelivr;
-* send limited technical and aggregate usage information to wcpos.com **only if you opt in** (you can withdraw consent at any time in settings); and
-* validate Pro license and site identifiers with wcpos.com when activating Pro.
+* send limited technical and aggregate usage information to wcpos.com **only if you opt in** (you can withdraw consent at any time in settings);
+* validate Pro license and site identifiers with wcpos.com when activating Pro; and
+* relay cloud print jobs through the WCPOS Cloud Print relay at cloudprint.wcpos.com **only if you enable WCPOS Cloud Print** — enabling it registers your site with the relay, and each print job is then passed through the relay to your configured cloud printer, so the receipt contents (which include order details) leave your site. You can disable it at any time in settings.
 
 Full details are in our [privacy policy](https://wcpos.com/privacy).
 
