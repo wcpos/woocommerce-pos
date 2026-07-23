@@ -29,7 +29,7 @@ The WCPOS wiki lives in [wcpos/wiki](https://github.com/wcpos/wiki) and changes 
   git -C /Users/kilbot/Projects/wiki pull --ff-only
   ```
 
-- **Cloud/CI agents** (no sibling clone): fetch specific pages fresh via `gh api repos/wcpos/wiki/contents/<path>` or `https://raw.githubusercontent.com/wcpos/wiki/main/<path>`.
+- **Cloud/CI agents** (no sibling clone): fetch specific pages fresh via `gh api repos/wcpos/wiki/contents/<path> --header "Accept: application/vnd.github.raw"` or `https://raw.githubusercontent.com/wcpos/wiki/main/<path>`.
 
 Start with `INDEX.md` at the wiki root — one line per page — then fetch only the pages you need. Paths below are relative to the wiki repo root.
 
