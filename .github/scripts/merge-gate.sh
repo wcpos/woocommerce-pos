@@ -195,6 +195,14 @@ main() {
     log "Resolve the merge conflicts and update the PR branch before CI can run."
     return 1
   fi
+  # GitHub reports UNKNOWN until it finishes computing mergeability, and a
+  # conflicted PR passes through UNKNOWN on its way to DIRTY. Treating it as
+  # "not conflicted" would let a still-unmergeable PR reach the allowlist
+  # bypass below, so fail closed and let a re-run pick up the settled state.
+  if [[ "$merge_state" == "UNKNOWN" ]]; then
+    log "PR mergeability is still being computed (UNKNOWN); failing closed. Re-run the merge gate once GitHub reports a definitive state."
+    return 1
+  fi
 
   if is_allowed_translation_version_pr; then
     log "Validated automated translation-version PR; merge gate passes without waiting for full CI."
