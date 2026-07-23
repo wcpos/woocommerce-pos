@@ -425,6 +425,9 @@ describe('AddPrinterWizard relay display', () => {
 		expect(screen.getByTestId('wizard-poll-url').textContent).toContain(
 			'https://cloudprint.wcpos.com/p/abc123/kitchen/••••/cloudprnt'
 		);
+		expect(screen.getByTestId('wizard-relay-docs-note')).toHaveTextContent(
+			"For more information on why we're using a relay server."
+		);
 		expect(screen.getByTestId('wizard-direct-disclosure')).toBeInTheDocument();
 		expect(screen.getByTestId('wizard-direct-url').textContent).toContain(
 			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen/••••'

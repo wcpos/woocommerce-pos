@@ -78,6 +78,13 @@ class Cloud_Print_Relay_Service {
 	 * @return array|WP_Error Public relay fields or an error.
 	 */
 	public static function register_site( bool $admin_initiated = true ) {
+		if ( ! self::is_enabled() ) {
+			return new WP_Error(
+				'wcpos_relay_disabled',
+				__( 'WCPOS Cloud Print is disabled on this site.', 'woocommerce-pos' ),
+				array( 'status' => 403 )
+			);
+		}
 		try {
 			$token = bin2hex( random_bytes( 24 ) );
 		} catch ( \Exception $exception ) {
@@ -143,6 +150,9 @@ class Cloud_Print_Relay_Service {
 	/**
 	 * Disable relay use while retaining the deterministic site credentials.
 	 *
+	 * @deprecated The stored flag is no longer consulted; opt out with the
+	 *             `woocommerce_pos_cloud_print_relay_enabled` filter.
+	 *
 	 * @return array Public relay state.
 	 */
 	public static function disable(): array {
@@ -154,14 +164,42 @@ class Cloud_Print_Relay_Service {
 	}
 
 	/**
+	 * Whether the relay service may be used at all.
+	 *
+	 * The relay is on by default — there is no admin toggle. Sites that
+	 * really want to opt out do so in code:
+	 *
+	 *     add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+	 */
+	public static function is_enabled(): bool {
+		return (bool) apply_filters( 'woocommerce_pos_cloud_print_relay_enabled', true );
+	}
+
+	/**
 	 * Public relay state for REST responses: never includes the secret.
+	 *
+	 * `enabled` means registered and usable; `available` tells the settings
+	 * app whether it should self-register (false only when the opt-out
+	 * filter is in place). The stored `enabled` flag is deliberately not
+	 * consulted — the filter is the only off switch.
 	 *
 	 * @return array
 	 */
 	public static function public_state(): array {
+		if ( ! self::is_enabled() ) {
+			return array(
+				'enabled'   => false,
+				'available' => false,
+			);
+		}
+
 		$relay = self::settings();
-		$state = array( 'enabled' => ! empty( $relay['enabled'] ) );
+		$state = array(
+			'enabled'   => false,
+			'available' => true,
+		);
 		if ( 1 === preg_match( '/^[a-f0-9]{32}$/', (string) ( $relay['site_key'] ?? '' ) ) ) {
+			$state['enabled']          = true;
 			$state['printer_base_url'] = self::printer_base_url( (string) $relay['site_key'] );
 		}
 
@@ -176,7 +214,7 @@ class Cloud_Print_Relay_Service {
 	 */
 	public function send_hint( $job_id, $printer_id ): void {
 		$relay = self::settings();
-		if ( empty( $relay['enabled'] ) || ! self::valid_credentials( $relay ) ) {
+		if ( ! self::is_enabled() || ! self::valid_credentials( $relay ) ) {
 			return;
 		}
 
@@ -212,7 +250,7 @@ class Cloud_Print_Relay_Service {
 	 */
 	public static function status( string $printer_id ): ?array {
 		$relay = self::settings();
-		if ( empty( $relay['enabled'] ) || ! self::valid_credentials( $relay ) ) {
+		if ( ! self::is_enabled() || ! self::valid_credentials( $relay ) ) {
 			return null;
 		}
 
@@ -314,12 +352,11 @@ class Cloud_Print_Relay_Service {
 	/**
 	 * Re-register after the relay reports an unknown site.
 	 *
-	 * Bails when the admin has disabled the relay in the meantime — a
-	 * pending cron event must never re-enable it behind their back.
+	 * Bails only when the code-level opt-out filter is in place — a pending
+	 * cron event must never register a site that opted out.
 	 */
 	public function reregister(): void {
-		$relay = self::settings();
-		if ( empty( $relay['enabled'] ) ) {
+		if ( ! self::is_enabled() ) {
 			return;
 		}
 		self::register_site( false );
