@@ -182,6 +182,81 @@ wait_for_checks() {
   return 1
 }
 
+FIX_BOT_AUTHORS="|${MERGE_GATE_FIX_BOT_AUTHORS:-wcpos-agents[bot]}|"
+
+pr_commits() {
+  gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate \
+    --jq '.[] | [.sha, (.author.login // .commit.author.name // "unknown")] | @tsv'
+}
+
+commit_files() {
+  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --jq '.files[].filename'
+}
+
+commit_message() {
+  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --jq '.commit.message'
+}
+
+is_test_path() {
+  case "$1" in
+    tests/*|*/tests/*|*.test.*|*.spec.*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_source_path() {
+  is_test_path "$1" && return 1
+  case "$1" in
+    *.php|*.ts|*.tsx|*.js|*.jsx) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Fix-bot commits must carry their own proof: a bot-authored commit that
+# changes source must (a) touch a test in the SAME commit and (b) record a
+# local suite run as a `Tested:` trailer in the commit message. This is the
+# mechanical backstop for the fleet's Pinning-Test Discipline
+# (wcpos-openclaw sidecar AGENTS.md); humans are unaffected.
+enforce_bot_fix_discipline() {
+  local commits sha author files msg has_source has_test failed=0
+  if ! commits="$(pr_commits)"; then
+    log "Could not list PR commits for the fix-bot discipline check; failing closed."
+    return 1
+  fi
+  while IFS=$'\t' read -r sha author; do
+    [[ -n "$sha" ]] || continue
+    [[ "$FIX_BOT_AUTHORS" == *"|${author}|"* ]] || continue
+    if ! files="$(commit_files "$sha")"; then
+      log "Could not read files for fix-bot commit ${sha:0:8}; failing closed."
+      return 1
+    fi
+    has_source=false
+    has_test=false
+    while IFS= read -r file; do
+      [[ -n "$file" ]] || continue
+      if is_test_path "$file"; then
+        has_test=true
+      elif is_source_path "$file"; then
+        has_source=true
+      fi
+    done <<< "$files"
+    [[ "$has_source" == "true" ]] || continue
+    if [[ "$has_test" != "true" ]]; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
+      failed=1
+    fi
+    if ! msg="$(commit_message "$sha")"; then
+      log "Could not read the message for fix-bot commit ${sha:0:8}; failing closed."
+      return 1
+    fi
+    if ! grep -qE '^Tested:' <<< "$msg"; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) has no 'Tested:' trailer. Run the touched suite locally and record the literal result line (e.g. 'Tested: OK (79 tests) — wp-env WC 10.4.3')."
+      failed=1
+    fi
+  done <<< "$commits"
+  return "$failed"
+}
+
 main() {
   # Conflicts block every PR — including allowlisted bot PRs — so this check
   # runs before the bypass branches. A failed or empty lookup fails closed:
@@ -193,6 +268,12 @@ main() {
   fi
   if [[ "$merge_state" == "DIRTY" ]]; then
     log "Resolve the merge conflicts and update the PR branch before CI can run."
+    return 1
+  fi
+
+  # Runs before the allowlist bypasses: a fix-bot commit must carry its proof
+  # no matter which lane or PR shape it rides in on.
+  if ! enforce_bot_fix_discipline; then
     return 1
   fi
 

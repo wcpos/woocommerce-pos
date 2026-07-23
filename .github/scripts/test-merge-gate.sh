@@ -78,6 +78,23 @@ if [[ "$args" == pr\ checks* ]]; then
   exit 0
 fi
 
+if [[ "$args" == api\ repos/*/pulls/*/commits* ]]; then
+  printf '%s\n' "${MOCK_PR_COMMITS:-}"
+  exit 0
+fi
+
+if [[ "$args" == api\ repos/*/commits/* ]]; then
+  sha="$(printf '%s' "$args" | sed -n 's|.*repos/[^ ]*/commits/\([^ ]*\).*|\1|p' | cut -d' ' -f1)"
+  files_var="MOCK_COMMIT_FILES_${sha}"
+  msg_var="MOCK_COMMIT_MSG_${sha}"
+  if [[ "$args" == *files* ]]; then
+    printf '%s\n' "${!files_var:-}"
+  else
+    printf '%s\n' "${!msg_var:-}"
+  fi
+  exit 0
+fi
+
 echo "Unexpected gh invocation: $args" >&2
 exit 64
 MOCK_GH
@@ -254,3 +271,46 @@ run_case "human PR rejects skipped smoke test for composer lock changes" fail \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
 echo "merge-gate tests passed"
+
+# --- Fix-bot pinning-test discipline ---
+
+bot_commits=$'c1\twcpos-agents[bot]'
+mixed_commits=$'h1\tkilbot\nc1\twcpos-agents[bot]'
+
+run_case "fix-bot source commit without test fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1="includes/API/V2/Write_Controller.php" \
+  MOCK_COMMIT_MSG_c1="fix: change behavior" \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot commit with test but no Tested trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'includes/API/V2/Write_Controller.php\ntests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1="fix: change behavior" \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot commit with pinning test and Tested trailer passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$mixed_commits" \
+  MOCK_COMMIT_FILES_h1="includes/API/V1/Orders_Controller.php" \
+  MOCK_COMMIT_MSG_h1="fix: human commit, exempt" \
+  MOCK_COMMIT_FILES_c1=$'includes/API/V2/Write_Controller.php\ntests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot docs-only commit is exempt" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="docs: something" \
+  MOCK_CHANGED_FILES="README.md" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1="README.md" \
+  MOCK_COMMIT_MSG_c1="docs: readme tweak"
+
+echo "All merge-gate tests passed."
