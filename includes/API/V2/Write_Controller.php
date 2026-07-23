@@ -959,10 +959,16 @@ class Write_Controller extends WP_REST_Controller {
 				'delete' => 'delete_shop_orders',
 			);
 			$order_cap = $order_caps[ $context ] ?? null;
-			if ( 'edit' === $context ) {
+			// edit and delete are ownership-sensitive: the base *_shop_orders cap only
+			// authorizes acting on the user's OWN orders. Touching another user's order
+			// additionally requires the *_others_shop_orders cap, mirroring WooCommerce's
+			// own meta-cap map. Without this, a cashier with delete_shop_orders (but not
+			// delete_others_shop_orders) could delete/void orders they do not own.
+			if ( \in_array( $context, array( 'edit', 'delete' ), true ) ) {
 				$order_post = get_post( $object_id );
 				if ( $order_post ) {
-					$order_cap = get_current_user_id() === (int) $order_post->post_author ? 'edit_shop_orders' : 'edit_others_shop_orders';
+					$owns_order = get_current_user_id() === (int) $order_post->post_author;
+					$order_cap  = $owns_order ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
 				}
 			}
 			if ( $order_cap && current_user_can( $order_cap ) ) {
