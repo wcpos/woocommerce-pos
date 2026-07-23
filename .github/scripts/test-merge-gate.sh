@@ -349,4 +349,11 @@ run_case "fix-bot gate-script edit with harness passes" pass \
   MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh\nmodified\t.github/scripts/test-merge-gate.sh' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 12/12 cases pass — local harness'
 
+big_files="$(for i in $(seq 1 300); do printf 'modified\tsrc/f%d.ts\n' "$i"; done)"
+run_case "fix-bot 300-file commit fails closed (files API truncation)" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1="$big_files" \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK (79 tests) — wp-env'
+
 echo "All merge-gate tests passed."

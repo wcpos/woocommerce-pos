@@ -252,6 +252,15 @@ enforce_bot_fix_discipline() {
       log "Could not read files for fix-bot commit ${sha:0:8}; failing closed."
       return 1
     fi
+    # GitHub truncates the single-commit files array at 300 entries — beyond
+    # that the list can hide sources or tests in either direction. A fix-bot
+    # commit that large violates the small-directed-fix contract regardless,
+    # so fail closed rather than judge a partial list.
+    if [[ "$(wc -l <<< "$files" | tr -d ' ')" -ge 300 ]]; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) touches 300+ files — too large to verify (the files API truncates at 300) and far beyond a small, directed fix. Split it."
+      failed=1
+      continue
+    fi
     has_source=false
     has_test=false
     while IFS=$'\t' read -r fstatus file; do
