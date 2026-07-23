@@ -538,6 +538,75 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( Order_Serializer::canonical_revision( $result->get_data()['document'] ), $result->get_data()['currentRevision'] );
 	}
 
+	/**
+	 * Line-item REMOVAL uses wc/v3's null-as-delete convention: the client marks a
+	 * pushed line for deletion by nulling product_id (fees: name, shipping:
+	 * method_id, coupons: code — see WC_REST_Orders_V2_Controller::item_is_null).
+	 * This must survive the v2 forward's strict-schema validation END TO END, so
+	 * this test runs against the REAL wc/v3 dispatch (no stubbed responses) — it
+	 * guards the whole create → remove round trip, not just our sanitizer.
+	 */
+	public function test_order_update_removes_line_item_via_null_product_id_through_real_wc(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+		$store   = new Fake_Mutation_Store();
+		$created = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'status'     => 'processing',
+					'line_items' => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 1,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$order_id = (int) $created->get_data()['document']['id'];
+		$lines    = $created->get_data()['document']['line_items'];
+		$this->assertCount( 1, $lines );
+		$line_id  = (int) $lines[0]['id'];
+		$revision = $created->get_data()['currentRevision'];
+
+		$store->resolve = $order_id;
+		$removed = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'mutationId'   => '00000000-0000-4000-8000-00000000dead',
+				'baseRevision' => $revision,
+				'payload'      => array(
+					'line_items' => array(
+						array(
+							'id'         => $line_id,
+							'product_id' => null,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $removed->get_status() );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
+	}
+
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {
 		// gap §3.3: the audit meta is persisted DIRECTLY after create (server-authoritative). Pro
 		// analytics joins on created_via/_pos_user (a client can't forge channel/cashier); the
