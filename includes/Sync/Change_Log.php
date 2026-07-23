@@ -390,17 +390,32 @@ final class Change_Log {
 		// Dedup CUSTOMER rows only: one customer role change fans out across
 		// overlapping WP-core hooks (set_role fires remove/add_user_role AND
 		// set_user_role). Products/variations/tax keep their per-hook-fire semantics.
-		// Post-persist customer hooks pass $dedup=false to use a namespaced key:
-		// their definitive row survives the earlier pre-persist row while identical
-		// persisted hooks collapse.
+		//
+		// Post-persist customer hooks pass $dedup=false and use a namespaced key
+		// with LAST-WRITE-WINS replacement: a later post-persist row in the same
+		// request carries NEWER state than the earlier one (checkout populates
+		// billing between woocommerce_created_customer and woocommerce_new_customer;
+		// a second save() sits between two woocommerce_update_customer fires), so
+		// suppressing it could strand a client that pulled between the two on the
+		// incomplete state forever. Instead the earlier same-request row is DELETED
+		// and the new state lands at a fresh head sequence — one row per request,
+		// and the definitive post-save state is always (re-)announced past any
+		// cursor that consumed the earlier row.
+		global $wpdb;
+		$dedup_key = null;
 		if ( 'customer' === $object_type ) {
 			$dedup_key = ( $dedup ? '' : 'persisted:' ) . $object_id . ':' . $change_type;
 			if ( isset( $this->recorded_this_request[ $dedup_key ] ) ) {
-				return; // this exact customer change was already recorded this request
+				if ( $dedup ) {
+					return; // a pre-persist duplicate carries no new state
+				}
+				$wpdb->delete(
+					$this->table_name(),
+					array( 'sequence' => (int) $this->recorded_this_request[ $dedup_key ] ),
+					array( '%d' )
+				);
 			}
-			$this->recorded_this_request[ $dedup_key ] = true;
 		}
-		global $wpdb;
 		$started = microtime( true );
 		$now = gmdate( 'Y-m-d H:i:s' );
 		$wpdb->insert(
@@ -415,6 +430,11 @@ final class Change_Log {
 			),
 			array( '%s', '%d', '%s', '%s', '%s', '%s' )
 		);
+		if ( null !== $dedup_key ) {
+			// Pre-persist keys only need existence; persisted keys remember their
+			// row's sequence so a later same-request duplicate can replace it.
+			$this->recorded_this_request[ $dedup_key ] = $dedup ? true : (int) $wpdb->insert_id;
+		}
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 	}
 
