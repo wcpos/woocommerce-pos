@@ -358,10 +358,36 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		// placehold post type breaks WC's own mapping): cashier has publish/edit/
 		// read_private but NOT delete_shop_orders, so delete stays denied.
 		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] );
-		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['edit'] );
+		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['edit'] ); // edit requires an object id
 		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['read'] );
 		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['delete'] );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
+	}
+
+	public function test_order_edit_permission_respects_order_ownership(): void {
+		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$cashier    = get_user_by( 'id', $cashier_id );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+		$cashier->add_cap( 'edit_shop_orders' );
+		$cashier->remove_cap( 'edit_others_shop_orders' );
+		$own_order_id = self::factory()->post->create(
+			array(
+				'post_author' => $cashier_id,
+				'post_type'   => 'shop_order_placehold',
+			)
+		);
+		$other_order_id = self::factory()->post->create(
+			array(
+				'post_author' => $other_id,
+				'post_type'   => 'shop_order_placehold',
+			)
+		);
+		wp_set_current_user( $cashier_id );
+		$controller = new Write_Controller( new Fake_Mutation_Store() );
+
+		$this->assertTrue( $controller->wcpos_check_permissions( false, 'edit', $own_order_id, 'shop_order' ) );
+		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $other_order_id, 'shop_order' ) );
 	}
 
 	/**
@@ -389,11 +415,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	/**
 	 * POS-legit values the stock wc/v3 order schema rejects are dropped from the
 	 * forwarded body (v1 relaxed the schema itself — see V1\Orders_Controller
-	 * wcpos_get_item_schema): billing.email '' (walk-in sale, fails the email
+	 * wcpos_get_item_schema): a blank billing.email (walk-in sale, fails the email
 	 * format check) and line_items[].parent_name null (WC recomputes it). A raw
 	 * forward would 400 the CREATE and strand the record client-side forever.
+	 *
+	 * @dataProvider wcRejectedCreateBillingEmails
 	 */
-	public function test_order_forward_drops_wc_rejected_pos_values(): void {
+	public function test_order_forward_drops_wc_rejected_pos_values( $billing_email ): void {
 		$store = new Fake_Mutation_Store();
 		$store->resolveResults = array( 0, 901 );
 		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
@@ -408,7 +436,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'payload'    => array(
 					'billing'    => array(
 						'first_name' => 'Walk-in',
-						'email'      => '',
+						'last_name'  => 'Customer',
+						'email'      => $billing_email,
 					),
 					'line_items' => array(
 						array(
@@ -431,22 +460,40 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 201, $result->get_status() );
 		$forwarded = $GLOBALS['wcpos_sync_test_rest_do_request_calls'][0]->get_body_params();
 		$this->assertArrayNotHasKey( 'email', $forwarded['billing'] );
-		$this->assertSame( 'Walk-in', $forwarded['billing']['first_name'] ); // rest of billing intact
+		$this->assertSame( 'Walk-in', $forwarded['billing']['first_name'] );
+		$this->assertSame( 'Customer', $forwarded['billing']['last_name'] );
 		$this->assertArrayNotHasKey( 'parent_name', $forwarded['line_items'][0] );
 		$this->assertSame( 55, $forwarded['line_items'][0]['product_id'] ); // rest of the line intact
 	}
 
+	public static function wcRejectedCreateBillingEmails(): array {
+		return array(
+			'empty string' => array( '' ),
+			'null'         => array( null ),
+		);
+	}
+
 	/**
-	 * The same tolerance applies to UPDATE forwards; non-empty values pass through untouched.
+	 * UPDATE keeps the strict-schema workaround while applying an explicit email clear.
 	 */
 	public function test_order_update_forward_drops_empty_email_but_keeps_real_values(): void {
 		list( $order_id, $bare ) = $this->real_order_payload();
+		$order = wc_get_order( $order_id );
+		$order->set_billing_email( 'stale@example.test' );
+		$order->save();
+		$bare = ( new Order_Serializer() )->serialize_order( $order_id, new WP_REST_Request() );
+		$cleared = $bare;
+		$cleared['billing']['email'] = '';
 		$store = new Fake_Mutation_Store();
 		$store->resolve = $order_id;
 		$revision = Order_Serializer::canonical_revision( $bare );
-		$this->setRestResponse( $bare, 200 );
+		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
+			new WP_REST_Response( $bare, 200 ),
+			new WP_REST_Response( $bare, 200 ),
+			new WP_REST_Response( $cleared, 200 ),
+		);
 
-		$this->push(
+		$result = $this->push(
 			$store,
 			array(
 				'operation'    => 'update',
@@ -486,6 +533,9 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'email', $forwarded['billing'] );
 		$this->assertSame( 'Kept', $forwarded['billing']['first_name'] );
 		$this->assertSame( 'Variable parent', $forwarded['line_items'][0]['parent_name'] );
+		$this->assertSame( '', wc_get_order( $order_id )->get_billing_email() );
+		$this->assertSame( '', $result->get_data()['document']['billing']['email'] );
+		$this->assertSame( Order_Serializer::canonical_revision( $result->get_data()['document'] ), $result->get_data()['currentRevision'] );
 	}
 
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {

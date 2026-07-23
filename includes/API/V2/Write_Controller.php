@@ -673,11 +673,16 @@ class Write_Controller extends WP_REST_Controller {
 		// body, so a later client write can't clobber the server-owned audit trail. (Same is_array
 		// guard as create, so a malformed meta_data still reaches wc/v3's validation.)
 		$update_payload = $m['payload'];
+		$clear_billing_email = false;
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			unset( $update_payload['created_via'] );
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
 				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload );
 			}
+			$clear_billing_email = isset( $update_payload['billing'] )
+				&& is_array( $update_payload['billing'] )
+				&& array_key_exists( 'email', $update_payload['billing'] )
+				&& '' === $update_payload['billing']['email'];
 			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
 		}
 		$route = 'variations' === $collection
@@ -689,6 +694,13 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		if ( $response->get_status() >= 400 ) {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
+		}
+		if ( $clear_billing_email ) {
+			$order = wc_get_order( $id );
+			if ( $order ) {
+				$order->set_billing_email( '' );
+				$order->save();
+			}
 		}
 		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] ); // keep the uuid stable across updates
 		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
@@ -937,10 +949,16 @@ class Write_Controller extends WP_REST_Controller {
 			$order_caps = array(
 				'read'   => 'read_private_shop_orders',
 				'create' => 'publish_shop_orders',
-				'edit'   => 'edit_shop_orders',
 				'delete' => 'delete_shop_orders',
 			);
-			if ( isset( $order_caps[ $context ] ) && current_user_can( $order_caps[ $context ] ) ) {
+			$order_cap = $order_caps[ $context ] ?? null;
+			if ( 'edit' === $context ) {
+				$order_post = get_post( $object_id );
+				if ( $order_post ) {
+					$order_cap = get_current_user_id() === (int) $order_post->post_author ? 'edit_shop_orders' : 'edit_others_shop_orders';
+				}
+			}
+			if ( $order_cap && current_user_can( $order_cap ) ) {
 				$permission = true;
 			}
 		}
