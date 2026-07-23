@@ -46,8 +46,8 @@ class Extensions {
 	 * Constructor is private to prevent direct instantiation.
 	 */
 	private function __construct() {
-		add_action( 'activated_plugin', array( $this, 'clear_cache' ) );
-		add_action( 'deactivated_plugin', array( $this, 'clear_cache' ) );
+		add_action( 'activated_plugin', array( $this, 'clear_cache_on_plugin_change' ) );
+		add_action( 'deactivated_plugin', array( $this, 'clear_cache_on_plugin_change' ) );
 	}
 
 	/**
@@ -197,9 +197,22 @@ class Extensions {
 	/**
 	 * Clear the catalog transient cache.
 	 *
+	 * @return bool
+	 */
+	public function clear_cache(): bool {
+		if ( false === get_transient( self::TRANSIENT_KEY ) ) {
+			return true;
+		}
+
+		return delete_transient( self::TRANSIENT_KEY );
+	}
+
+	/**
+	 * Clear the catalog cache after a plugin change.
+	 *
 	 * @return void
 	 */
-	public function clear_cache(): void {
-		delete_transient( self::TRANSIENT_KEY );
+	public function clear_cache_on_plugin_change(): void {
+		$this->clear_cache();
 	}
 }

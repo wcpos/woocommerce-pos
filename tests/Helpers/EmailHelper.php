@@ -241,6 +241,21 @@ class EmailHelper {
 	}
 
 	/**
+	 * Restore the WooCommerce mailer instance after reset_mailer().
+	 *
+	 * reset_mailer() empties the WC_Emails singleton's emails array. Because the
+	 * singleton persists for the whole PHPUnit run, later test files crash inside
+	 * WC transactional email callbacks (e.g. customer_new_account) unless the
+	 * email instances are rebuilt. Call this from tearDown in any test that
+	 * called reset_mailer().
+	 */
+	public static function restore_mailer(): void {
+		if ( \function_exists( 'WC' ) && WC()->mailer() ) {
+			WC()->mailer()->init();
+		}
+	}
+
+	/**
 	 * Prevent actual email sending during tests.
 	 *
 	 * This hooks into pre_wp_mail to prevent actual sending while still

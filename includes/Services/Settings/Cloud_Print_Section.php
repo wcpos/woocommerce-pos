@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
 use WP_Error;
@@ -71,11 +72,17 @@ class Cloud_Print_Section extends Abstract_Section {
 				$printer              = $this->redact_printer( $printer );
 				$printer['status']    = $registry->status_for( $id );
 				$printer['last_seen'] = $seen > 0 ? $seen : null;
+				if ( 'blocked' === $printer['status'] ) {
+					$printer['status_detail'] = $registry->status_detail_for( $id );
+				} else {
+					unset( $printer['status_detail'] );
+				}
 
 				return $printer;
 			},
 			$settings['printers']
 		);
+		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
 
 		return $settings;
 	}

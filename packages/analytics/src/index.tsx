@@ -7,12 +7,12 @@ import { t, i18nPromise } from './translations';
 const globalHooks = window.wp && window.wp.hooks;
 
 function WrappedReport({ Component, ...props }) {
-	// The state value is intentionally unread — flipping it just re-renders the
-	// tree once translations have loaded so `t()` calls pick up real strings.
-	const [, setI18nReady] = React.useState(false);
+	// The state value is intentionally unread; changing it re-renders once
+	// translations have loaded so t() calls use the loaded strings.
+	const [, setIsReady] = React.useState(false);
 
 	React.useEffect(() => {
-		i18nPromise.then(() => setI18nReady(true));
+		i18nPromise.then(() => setIsReady(true));
 	}, []);
 
 	React.useEffect(() => {

@@ -26,6 +26,10 @@ pr_diff_patch() {
   gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --patch
 }
 
+pr_merge_state() {
+  gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json mergeStateStatus --jq '.mergeStateStatus'
+}
+
 is_translation_author() {
   [[ "$TRANSLATION_AUTHORS" == *"|${PR_AUTHOR}|"* ]]
 }
@@ -179,6 +183,27 @@ wait_for_checks() {
 }
 
 main() {
+  # Conflicts block every PR — including allowlisted bot PRs — so this check
+  # runs before the bypass branches. A failed or empty lookup fails closed:
+  # an unknown merge state must never be treated as "not conflicted".
+  local merge_state
+  if ! merge_state="$(pr_merge_state)" || [[ -z "$merge_state" ]]; then
+    log "Could not determine the PR merge state; failing closed."
+    return 1
+  fi
+  if [[ "$merge_state" == "DIRTY" ]]; then
+    log "Resolve the merge conflicts and update the PR branch before CI can run."
+    return 1
+  fi
+  # GitHub reports UNKNOWN until it finishes computing mergeability, and a
+  # conflicted PR passes through UNKNOWN on its way to DIRTY. Treating it as
+  # "not conflicted" would let a still-unmergeable PR reach the allowlist
+  # bypass below, so fail closed and let a re-run pick up the settled state.
+  if [[ "$merge_state" == "UNKNOWN" ]]; then
+    log "PR mergeability is still being computed (UNKNOWN); failing closed. Re-run the merge gate once GitHub reports a definitive state."
+    return 1
+  fi
+
   if is_allowed_translation_version_pr; then
     log "Validated automated translation-version PR; merge gate passes without waiting for full CI."
     return 0

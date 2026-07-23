@@ -61,6 +61,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 
 		EmailHelper::cleanup();
 		EmailHelper::allow_sending();
+		EmailHelper::restore_mailer();
 
 		parent::tearDown();
 	}
