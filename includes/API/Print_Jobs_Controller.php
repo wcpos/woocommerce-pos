@@ -146,16 +146,6 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/relay/disable',
-			array(
-				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( $this, 'relay_disable' ),
-				'permission_callback' => array( $this, 'relay_manage_permissions_check' ),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
 			'/' . $this->rest_base . '/cloudprnt',
 			array(
 				array(
@@ -1074,15 +1064,6 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$result = Cloud_Print_Relay_Service::register_site();
 
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
-	}
-
-	/**
-	 * Disable relay use for this site.
-	 *
-	 * @return \WP_REST_Response
-	 */
-	public function relay_disable() {
-		return rest_ensure_response( Cloud_Print_Relay_Service::disable() );
 	}
 
 	/**
