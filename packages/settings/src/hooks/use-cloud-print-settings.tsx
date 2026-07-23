@@ -9,8 +9,11 @@ export type CloudStatus = 'waiting' | 'connected' | 'offline' | 'online' | 'unkn
 
 // Site-level WCPOS Cloud Print relay registration. `printer_base_url` is only
 // present once the site has registered (e.g. https://cloudprint.wcpos.com/p/<site_key>).
+// `available: false` means the site opted out server-side (filter) and the
+// settings app must not attempt self-registration.
 export interface CloudPrintRelay {
 	enabled: boolean;
+	available?: boolean;
 	printer_base_url?: string;
 }
 
@@ -105,11 +108,13 @@ export function useCloudPrintSettings() {
 }
 
 const RELAY_REGISTER_ENDPOINT = 'wcpos/v1/print-jobs/relay/register?wcpos=1';
-const RELAY_DISABLE_ENDPOINT = 'wcpos/v1/print-jobs/relay/disable?wcpos=1';
 
 /**
- * Register with / disable the WCPOS Cloud Print relay. Both endpoints return
- * the new relay state, which is folded into the cached cloud-print settings.
+ * Self-register with the WCPOS Cloud Print relay. The endpoint returns the
+ * new relay state, which is folded into the cached cloud-print settings.
+ * There is no disable counterpart — the relay is on by default and sites
+ * opt out server-side via the `woocommerce_pos_cloud_print_relay_enabled`
+ * filter.
  */
 export function useCloudPrintRelay() {
 	const queryClient = useQueryClient();
@@ -127,11 +132,5 @@ export function useCloudPrintRelay() {
 		onSuccess: applyRelay,
 	});
 
-	const disable = useMutation({
-		mutationFn: () =>
-			apiFetch({ path: RELAY_DISABLE_ENDPOINT, method: 'POST' }) as Promise<CloudPrintRelay>,
-		onSuccess: applyRelay,
-	});
-
-	return { register, disable };
+	return { register };
 }

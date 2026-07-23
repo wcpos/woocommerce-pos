@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { SnackbarProvider } from '@wcpos/ui';
@@ -122,5 +122,63 @@ describe('CloudPrint screen', () => {
 		renderScreen();
 
 		expect(await screen.findByText('Auto-print rules')).toBeTruthy();
+	});
+});
+
+describe('CloudPrint relay self-registration', () => {
+	const relayRegisterCalls = () =>
+		apiFetchMock.mock.calls.filter(
+			(call) =>
+				(call[0] as ApiOpts).path.includes('relay/register') &&
+				(call[0] as ApiOpts).method === 'POST'
+		);
+
+	it('silently registers with the relay when unregistered and available', async () => {
+		routeApiFetch({
+			getSettings: () => ({
+				printers: [],
+				assignments: [],
+				relay: { enabled: false, available: true },
+			}),
+		});
+
+		renderScreen();
+
+		await screen.findByText('What is cloud printing?');
+		await waitFor(() => expect(relayRegisterCalls()).toHaveLength(1));
+	});
+
+	it('does not register again when the site is already registered', async () => {
+		routeApiFetch({
+			getSettings: () => ({
+				printers: [],
+				assignments: [],
+				relay: {
+					enabled: true,
+					available: true,
+					printer_base_url: 'https://cloudprint.wcpos.com/p/abc123',
+				},
+			}),
+		});
+
+		renderScreen();
+
+		await screen.findByText('What is cloud printing?');
+		expect(relayRegisterCalls()).toHaveLength(0);
+	});
+
+	it('does not register when the site opted out server-side', async () => {
+		routeApiFetch({
+			getSettings: () => ({
+				printers: [],
+				assignments: [],
+				relay: { enabled: false, available: false },
+			}),
+		});
+
+		renderScreen();
+
+		await screen.findByText('What is cloud printing?');
+		expect(relayRegisterCalls()).toHaveLength(0);
 	});
 });
