@@ -150,17 +150,14 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	 * It serves the verification route even when the WCPOS request marker is absent.
 	 */
 	public function test_relay_verification_route_registered_without_wcpos_marker(): void {
-		// Arrange: a REST surface where the full WCPOS API was never loaded,
-		// mirroring the relay's unmarked callback request in production.
-		$server = new \WP_REST_Server();
-		$init   = ( new \ReflectionClass( \WCPOS\WooCommercePOS\Init::class ) )->newInstanceWithoutConstructor();
-		$method = new \ReflectionMethod( $init, 'register_public_relay_routes' );
-		$method->setAccessible( true );
-
+		// Arrange: fire rest_api_init on a fresh server exactly as WordPress
+		// does for the relay's unmarked callback request — no ?wcpos=1, no
+		// X-WCPOS header — so Init takes its unmarked branch for real.
 		global $wp_rest_server;
 		$previous       = $wp_rest_server;
+		$server         = new \WP_REST_Server();
 		$wp_rest_server = $server;
-		$method->invoke( $init );
+		do_action( 'rest_api_init', $server );
 		set_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT, 'pending-token', 300 );
 
 		// Act.

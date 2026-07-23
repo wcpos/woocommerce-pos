@@ -126,7 +126,12 @@ class Init {
 		if ( $is_wcpos_request ) {
 			new API();
 		} else {
-			$this->register_public_relay_routes();
+			// Queue the registration at a later priority of the SAME
+			// rest_api_init pass this method runs on (priority 20), so
+			// register_rest_route() executes during the action as WP requires.
+			// When this method is called outside the action (tests), the
+			// add_action is simply inert.
+			add_action( 'rest_api_init', array( $this, 'register_public_relay_routes' ), 30 );
 			$this->log_unmarked_wcpos_rest_request();
 			new WC_API();
 		}
@@ -140,7 +145,7 @@ class Init {
 	 * single public route must exist even when the full WCPOS API is not
 	 * loaded. Everything else stays behind the marker.
 	 */
-	private function register_public_relay_routes(): void {
+	public function register_public_relay_routes(): void {
 		register_rest_route(
 			SHORT_NAME . '/v1',
 			'/print-jobs/relay-verification',
