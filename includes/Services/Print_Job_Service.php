@@ -30,6 +30,12 @@ class Print_Job_Service {
 	const META_DRAWER_ERROR     = '_wcpos_pj_drawer_error';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
+	/** Daily cron hook that prunes expired terminal jobs. */
+	const PURGE_HOOK = 'wcpos_print_job_purge';
+
+	/** Unix time a job reached a terminal status — the retention clock. */
+	const META_TERMINAL_AT = '_wcpos_pj_terminal_at';
+
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
 	const CLAIM_TTL = 120;
 
@@ -44,6 +50,17 @@ class Print_Job_Service {
 	 */
 	public function __construct() {
 		add_action( 'init', array( $this, 'register_post_type' ) );
+		// A static callback: several services construct Print_Job_Service on
+		// every request, and WordPress dedupes identical static callbacks, so
+		// the purge runs exactly once per cron event.
+		add_action( self::PURGE_HOOK, array( __CLASS__, 'run_purge' ) );
+	}
+
+	/**
+	 * Cron entry point for the retention purge.
+	 */
+	public static function run_purge(): void {
+		( new self() )->purge_expired();
 	}
 
 	/**
@@ -61,6 +78,10 @@ class Print_Job_Service {
 				'supports'            => array( 'title', 'editor' ),
 			)
 		);
+
+		if ( ! wp_next_scheduled( self::PURGE_HOOK ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', self::PURGE_HOOK );
+		}
 	}
 
 	/**
@@ -548,6 +569,21 @@ class Print_Job_Service {
 	}
 
 	/**
+	 * A meta_query clause matching a set of job statuses.
+	 *
+	 * @param array<string> $statuses Status values.
+	 *
+	 * @return array
+	 */
+	private function status_clause( array $statuses ): array {
+		return array(
+			'key'     => self::META_STATUS,
+			'value'   => $statuses,
+			'compare' => 'IN',
+		);
+	}
+
+	/**
 	 * Translate public filters into a meta_query array.
 	 *
 	 * @param array $filters printer_id / status / order_id / template_id.
@@ -599,6 +635,109 @@ class Print_Job_Service {
 	 */
 	public function set_status( int $id, string $status ): void {
 		update_post_meta( $id, self::META_STATUS, sanitize_text_field( $status ) );
+		if ( \in_array( $status, array( self::STATUS_PRINTED, self::STATUS_CANCELLED, self::STATUS_FAILED ), true ) ) {
+			// The retention clock starts when the job *ends*, not when it was
+			// created — a receipt that waited a week and then printed still
+			// deserves its full retention window.
+			update_post_meta( $id, self::META_TERMINAL_AT, time() );
+		}
+		if ( \in_array( $status, array( self::STATUS_PRINTED, self::STATUS_CANCELLED ), true ) ) {
+			// Terminal success (or abandonment): the payload has done its
+			// job, and a raster receipt is hundreds of KB. The row survives
+			// with metadata only — that's all the duplicate-trigger guard
+			// and the queue's history view need. Failed jobs keep their
+			// payload so Retry can copy it.
+			wp_update_post(
+				array(
+					'ID'           => $id,
+					'post_content' => '',
+				)
+			);
+		}
+	}
+
+	/**
+	 * Delete terminal jobs past their retention window.
+	 *
+	 * Runs daily via PURGE_HOOK. Printed/cancelled jobs are kept for
+	 * `woocommerce_pos_print_job_retention_days` (default 7 — long enough
+	 * for the duplicate-trigger guard and "did it print?" questions);
+	 * failed jobs for `woocommerce_pos_print_job_failed_retention_days`
+	 * (default 30 — they represent unresolved problems). A filter
+	 * returning 0 or less keeps that class of job forever. Waiting jobs
+	 * (pending/claimed) are never purged.
+	 */
+	public function purge_expired(): void {
+		$windows = array(
+			array(
+				'statuses' => array( self::STATUS_PRINTED, self::STATUS_CANCELLED ),
+				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_retention_days', 7 ),
+			),
+			array(
+				'statuses' => array( self::STATUS_FAILED ),
+				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_failed_retention_days', 30 ),
+			),
+		);
+
+		foreach ( $windows as $window ) {
+			if ( $window['days'] <= 0 ) {
+				continue;
+			}
+			$cutoff = time() - $window['days'] * DAY_IN_SECONDS;
+			// The retention clock is the moment the job went terminal. Rows
+			// from before this meta existed fall back to their creation date.
+			$expired_queries = array(
+				array(
+					'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						$this->status_clause( $window['statuses'] ),
+						array(
+							'key'     => self::META_TERMINAL_AT,
+							'value'   => $cutoff,
+							'compare' => '<',
+							'type'    => 'NUMERIC',
+						),
+					),
+				),
+				array(
+					'date_query' => array(
+						array(
+							'column' => 'post_date_gmt',
+							'before' => gmdate( 'Y-m-d H:i:s', $cutoff ),
+						),
+					),
+					'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						$this->status_clause( $window['statuses'] ),
+						array(
+							'key'     => self::META_TERMINAL_AT,
+							'compare' => 'NOT EXISTS',
+						),
+					),
+				),
+			);
+			$deleted         = 0;
+			foreach ( $expired_queries as $args ) {
+				do {
+					$query = new \WP_Query(
+						array_merge(
+							array(
+								'post_type'      => self::POST_TYPE,
+								'post_status'    => 'publish',
+								'posts_per_page' => 200,
+								'fields'         => 'ids',
+								'no_found_rows'  => true,
+							),
+							$args
+						)
+					);
+					$batch = \count( $query->posts );
+					foreach ( $query->posts as $post_id ) {
+						wp_delete_post( (int) $post_id, true );
+						++$deleted;
+					}
+					// Bounded per run — tomorrow's cron finishes any remainder.
+				} while ( 200 === $batch && $deleted < 2000 );
+			}
+		}
 	}
 
 	/**
