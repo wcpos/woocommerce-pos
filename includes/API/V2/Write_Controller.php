@@ -652,6 +652,16 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_record_not_found', 'No record for recordId.', array( 'status' => 404 ) );
 		}
 
+		// Envelope-level payload validation runs BEFORE any wc/v3 read or write —
+		// mirroring create, and keeping "rejected before the forward" true on every
+		// WC version (the concurrency check below performs a document_for GET).
+		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
+			$tax_ids_error = $this->validate_order_tax_ids( $m['payload'] );
+			if ( is_wp_error( $tax_ids_error ) ) {
+				return $tax_ids_error;
+			}
+		}
+
 		$variation_parent_id = 0;
 		if ( 'variations' === $collection ) {
 			$variation = $this->variation( $id );
@@ -706,12 +716,6 @@ class Write_Controller extends WP_REST_Controller {
 		$update_payload = $m['payload'];
 		$clear_billing_email = false;
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
-			// Mirror create: tax_ids is stripped from the wc/v3 forward, so validate it against
-			// the v1 schema here rather than letting Tax_Id_Writer silently drop bad entries.
-			$tax_ids_error = $this->validate_order_tax_ids( $update_payload );
-			if ( is_wp_error( $tax_ids_error ) ) {
-				return $tax_ids_error;
-			}
 			unset( $update_payload['created_via'] );
 			unset( $update_payload['tax_ids'] );
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
