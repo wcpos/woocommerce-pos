@@ -197,7 +197,9 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				}
 			}
 			$GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] = apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'product' );
-			$GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] = apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'shop_order' );
+			foreach ( array( 'read', 'create', 'edit', 'delete' ) as $context ) {
+				$GLOBALS['wcpos_sync_test_wc_permissions']['shop_order'][ $context ] = apply_filters( 'woocommerce_rest_check_permissions', false, $context, 0, 'shop_order' );
+			}
 		}
 		if ( ! empty( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] ) ) {
 			return array_shift( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
@@ -330,7 +332,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Cashier write forwarding may relax only the catalog mutation checks.
+	 * Cashier write forwarding relaxes the catalog mutation checks, and re-maps
+	 * shop_order contexts through the caps the cashier actually holds (never wider).
 	 */
 	public function test_cashier_push_scoped_inner_permissions_allow_catalog_mutations(): void {
 		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
@@ -351,8 +354,283 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			}
 		}
 		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] );
-		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] );
+		// Orders re-map through the caps the cashier role actually holds (the HPOS
+		// placehold post type breaks WC's own mapping): cashier has publish/edit/
+		// read_private but NOT delete_shop_orders, so delete stays denied.
+		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] );
+		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['edit'] ); // edit requires an object id
+		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['read'] );
+		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['delete'] );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
+	}
+
+	public function test_order_edit_permission_respects_order_ownership(): void {
+		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$cashier    = get_user_by( 'id', $cashier_id );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+		$cashier->add_cap( 'edit_shop_orders' );
+		$cashier->remove_cap( 'edit_others_shop_orders' );
+		$own_order_id = self::factory()->post->create(
+			array(
+				'post_author' => $cashier_id,
+				'post_type'   => 'shop_order_placehold',
+			)
+		);
+		$other_order_id = self::factory()->post->create(
+			array(
+				'post_author' => $other_id,
+				'post_type'   => 'shop_order_placehold',
+			)
+		);
+		wp_set_current_user( $cashier_id );
+		$controller = new Write_Controller( new Fake_Mutation_Store() );
+
+		$this->assertTrue( $controller->wcpos_check_permissions( false, 'edit', $own_order_id, 'shop_order' ) );
+		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $other_order_id, 'shop_order' ) );
+	}
+
+	public function test_order_delete_permission_respects_order_ownership(): void {
+		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$cashier    = get_user_by( 'id', $cashier_id );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+		$cashier->add_cap( 'delete_shop_orders' );
+		$cashier->remove_cap( 'delete_others_shop_orders' );
+		$own_order_id = self::factory()->post->create(
+			array(
+				'post_author' => $cashier_id,
+				'post_type'   => 'shop_order_placehold',
+			)
+		);
+		$other_order_id = self::factory()->post->create(
+			array(
+				'post_author' => $other_id,
+				'post_type'   => 'shop_order_placehold',
+			)
+		);
+		wp_set_current_user( $cashier_id );
+		$controller = new Write_Controller( new Fake_Mutation_Store() );
+
+		$this->assertTrue( $controller->wcpos_check_permissions( false, 'delete', $own_order_id, 'shop_order' ) );
+		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $other_order_id, 'shop_order' ) );
+	}
+
+	/**
+	 * The shop_order re-map grants nothing beyond the user's own role caps: a user
+	 * without any shop_orders capabilities keeps every order context denied.
+	 */
+	public function test_capless_push_scoped_inner_permissions_deny_order_mutations(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $user_id );
+		$this->setRestResponse( array( 'id' => 4242 ), 201 );
+
+		$this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'products',
+				'payload'    => array( 'name' => 'Capless product' ),
+			)
+		);
+
+		foreach ( array( 'read', 'create', 'edit', 'delete' ) as $context ) {
+			$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order'][ $context ], 'shop_order:' . $context );
+		}
+	}
+
+	/**
+	 * POS-legit values the stock wc/v3 order schema rejects are dropped from the
+	 * forwarded body (v1 relaxed the schema itself — see V1\Orders_Controller
+	 * wcpos_get_item_schema): a blank billing.email (walk-in sale, fails the email
+	 * format check) and line_items[].parent_name null (WC recomputes it). A raw
+	 * forward would 400 the CREATE and strand the record client-side forever.
+	 *
+	 * @dataProvider wcRejectedCreateBillingEmails
+	 */
+	public function test_order_forward_drops_wc_rejected_pos_values( $billing_email ): void {
+		$store = new Fake_Mutation_Store();
+		$store->resolveResults = array( 0, 901 );
+		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
+			new WP_REST_Response( array( 'id' => 901 ), 201 ),
+			new WP_REST_Response( array( 'id' => 901 ), 200 ),
+		);
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'billing'    => array(
+						'first_name' => 'Walk-in',
+						'last_name'  => 'Customer',
+						'email'      => $billing_email,
+					),
+					'line_items' => array(
+						array(
+							'product_id'  => 55,
+							'name'        => 'Simple product',
+							'quantity'    => 1,
+							'parent_name' => null,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $result->get_status() );
+		$forwarded = $GLOBALS['wcpos_sync_test_rest_do_request_calls'][0]->get_body_params();
+		$this->assertArrayNotHasKey( 'email', $forwarded['billing'] );
+		$this->assertSame( 'Walk-in', $forwarded['billing']['first_name'] );
+		$this->assertSame( 'Customer', $forwarded['billing']['last_name'] );
+		$this->assertArrayNotHasKey( 'parent_name', $forwarded['line_items'][0] );
+		$this->assertSame( 55, $forwarded['line_items'][0]['product_id'] ); // rest of the line intact
+	}
+
+	public static function wcRejectedCreateBillingEmails(): array {
+		return array(
+			'empty string' => array( '' ),
+			'null'         => array( null ),
+		);
+	}
+
+	/**
+	 * UPDATE keeps the strict-schema workaround while applying an explicit email clear.
+	 */
+	public function test_order_update_forward_drops_empty_email_but_keeps_real_values(): void {
+		list( $order_id, $bare ) = $this->real_order_payload();
+		$order = wc_get_order( $order_id );
+		$order->set_billing_email( 'stale@example.test' );
+		$order->save();
+		$bare = ( new Order_Serializer() )->serialize_order( $order_id, new WP_REST_Request() );
+		$cleared = $bare;
+		$cleared['billing']['email'] = '';
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $order_id;
+		$revision = Order_Serializer::canonical_revision( $bare );
+		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
+			new WP_REST_Response( $bare, 200 ),
+			new WP_REST_Response( $bare, 200 ),
+			new WP_REST_Response( $cleared, 200 ),
+		);
+
+		$result = $this->push(
+			$store,
+			array(
+				'operation'    => 'update',
+				'collection'   => 'orders',
+				'baseRevision' => $revision,
+				'payload'      => array(
+					'billing'    => array(
+						'first_name' => 'Kept',
+						'email'      => '',
+					),
+					'line_items' => array(
+						array(
+							'product_id'  => 66,
+							'name'        => 'Line kept',
+							'quantity'    => 2,
+							'parent_name' => 'Variable parent', // non-null → preserved
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$puts = array_values(
+			array_filter(
+				$GLOBALS['wcpos_sync_test_rest_do_request_calls'],
+				static fn( WP_REST_Request $r ) => 'PUT' === $r->get_method()
+			)
+		);
+		$this->assertNotEmpty( $puts );
+		$forwarded = $puts[0]->get_body_params();
+		$this->assertArrayNotHasKey( 'email', $forwarded['billing'] );
+		$this->assertSame( 'Kept', $forwarded['billing']['first_name'] );
+		$this->assertSame( 'Variable parent', $forwarded['line_items'][0]['parent_name'] );
+		$this->assertSame( '', wc_get_order( $order_id )->get_billing_email() );
+		$this->assertSame( '', $result->get_data()['document']['billing']['email'] );
+		$this->assertSame( Order_Serializer::canonical_revision( $result->get_data()['document'] ), $result->get_data()['currentRevision'] );
+	}
+
+	/**
+	 * Line-item REMOVAL uses wc/v3's null-as-delete convention: the client marks a
+	 * pushed line for deletion by nulling product_id (fees: name, shipping:
+	 * method_id, coupons: code — see WC_REST_Orders_V2_Controller::item_is_null).
+	 * This must survive the v2 forward's strict-schema validation END TO END, so
+	 * this test runs against the REAL wc/v3 dispatch (no stubbed responses) — it
+	 * guards the whole create → remove round trip, not just our sanitizer.
+	 */
+	public function test_order_update_removes_line_item_via_null_product_id_through_real_wc(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+		$store   = new Fake_Mutation_Store();
+		$created = $this->push(
+			$store,
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'status'     => 'processing',
+					'line_items' => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 1,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$order_id = (int) $created->get_data()['document']['id'];
+		$lines    = $created->get_data()['document']['line_items'];
+		$this->assertCount( 1, $lines );
+		$line_id  = (int) $lines[0]['id'];
+		$revision = $created->get_data()['currentRevision'];
+
+		$store->resolve = $order_id;
+		$removed = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'mutationId'   => '00000000-0000-4000-8000-00000000dead',
+				'baseRevision' => $revision,
+				'payload'      => array(
+					'line_items' => array(
+						array(
+							'id'         => $line_id,
+							'product_id' => null,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key' => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $removed->get_status() );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
 	}
 
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {
