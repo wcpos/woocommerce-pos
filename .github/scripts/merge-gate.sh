@@ -190,7 +190,9 @@ pr_commits() {
 }
 
 commit_files() {
-  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --jq '.files[].filename'
+  # status<TAB>filename — a REMOVED test must not satisfy the pinning-test
+  # requirement, so callers need the status.
+  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --jq '.files[] | [.status, .filename] | @tsv'
 }
 
 commit_message() {
@@ -207,9 +209,20 @@ is_test_path() {
 is_source_path() {
   is_test_path "$1" && return 1
   case "$1" in
-    *.php|*.ts|*.tsx|*.js|*.jsx) return 0 ;;
+    *.php|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.mts|*.cts) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# The Tested: line must sit in the message's FINAL paragraph (the git trailer
+# block) — prose that merely mentions "Tested:" mid-body does not count.
+trailer_block_has_tested() {
+  printf '%s\n' "$1" | awk '
+    BEGIN { block = "" }
+    /^[[:space:]]*$/ { block = ""; next }
+    { block = block $0 "\n" }
+    END { exit (block ~ /(^|\n)Tested:/) ? 0 : 1 }
+  '
 }
 
 # Fix-bot commits must carry their own proof: a bot-authored commit that
@@ -232,10 +245,11 @@ enforce_bot_fix_discipline() {
     fi
     has_source=false
     has_test=false
-    while IFS= read -r file; do
+    while IFS=$'\t' read -r fstatus file; do
       [[ -n "$file" ]] || continue
       if is_test_path "$file"; then
-        has_test=true
+        # Deleting a test is not pinning one.
+        [[ "$fstatus" != "removed" ]] && has_test=true
       elif is_source_path "$file"; then
         has_source=true
       fi
@@ -249,7 +263,7 @@ enforce_bot_fix_discipline() {
       log "Could not read the message for fix-bot commit ${sha:0:8}; failing closed."
       return 1
     fi
-    if ! grep -qE '^Tested:' <<< "$msg"; then
+    if ! trailer_block_has_tested "$msg"; then
       log "✗ Fix-bot commit ${sha:0:8} ($author) has no 'Tested:' trailer. Run the touched suite locally and record the literal result line (e.g. 'Tested: OK (79 tests) — wp-env WC 10.4.3')."
       failed=1
     fi

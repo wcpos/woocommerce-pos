@@ -282,7 +282,7 @@ run_case "fix-bot source commit without test fails" fail \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1="includes/API/V2/Write_Controller.php" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: change behavior" \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -291,7 +291,7 @@ run_case "fix-bot commit with test but no Tested trailer fails" fail \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'includes/API/V2/Write_Controller.php\ntests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nmodified\ttests/includes/Sync/Test_Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: change behavior" \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -300,9 +300,9 @@ run_case "fix-bot commit with pinning test and Tested trailer passes" pass \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$mixed_commits" \
-  MOCK_COMMIT_FILES_h1="includes/API/V1/Orders_Controller.php" \
+  MOCK_COMMIT_FILES_h1=$'modified\tincludes/API/V1/Orders_Controller.php' \
   MOCK_COMMIT_MSG_h1="fix: human commit, exempt" \
-  MOCK_COMMIT_FILES_c1=$'includes/API/V2/Write_Controller.php\ntests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nmodified\ttests/includes/Sync/Test_Write_Controller.php' \
   MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
 
 run_case "fix-bot docs-only commit is exempt" pass \
@@ -310,7 +310,25 @@ run_case "fix-bot docs-only commit is exempt" pass \
   MOCK_CHANGED_FILES="README.md" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1="README.md" \
+  MOCK_COMMIT_FILES_c1=$'modified\tREADME.md' \
   MOCK_COMMIT_MSG_c1="docs: readme tweak"
+
+run_case "fix-bot Tested line outside the trailer block fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nadded\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nMentions a\nTested: requirement in prose.\n\nSigned-off-by: bot' \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "fix-bot deleting a test does not satisfy the pin" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nremoved\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK' \
+  MOCK_NO_CHECKS_EXPECTED=true
 
 echo "All merge-gate tests passed."
