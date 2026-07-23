@@ -762,6 +762,7 @@ export function AddPrinterWizard({
 													valueTestId="wizard-poll-url"
 													copyTestId="wizard-copy-url"
 												/>
+												{relayBase && <RelayDocsNote />}
 												{relayBase && (
 													<DirectUrlDisclosure
 														url={maskedPollUrl(finalProvider, printerForUrl.id)}
@@ -807,6 +808,7 @@ export function AddPrinterWizard({
 												valueTestId="wizard-poll-token"
 												copyTestId="wizard-copy-token"
 											/>
+											{relayBase && <RelayDocsNote />}
 											{relayBase && (
 												<DirectUrlDisclosure
 													url={buildPollUrl(finalProvider, printerForUrl.id, token)}
