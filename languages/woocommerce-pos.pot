@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-22T23:52:54+00:00\n"
+"POT-Creation-Date: 2026-07-23T01:35:07+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -354,12 +354,12 @@ msgid "58mm (Narrow)"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API.php:419
+#: includes/API.php:420
 #: includes/API/Cashier.php:124
 msgid "Authentication required."
 msgstr ""
 
-#: includes/API.php:426
+#: includes/API.php:427
 #: includes/Templates/Auth.php:314
 msgid "You do not have permission to access the POS."
 msgstr ""
@@ -644,90 +644,94 @@ msgstr ""
 msgid "Provider-specific public metadata."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:194
+#: includes/API/Print_Jobs_Controller.php:225
 msgid "The PrintNode API key must be sent in the request body, not the query string."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:207
+#: includes/API/Print_Jobs_Controller.php:238
 msgid "A PrintNode API key is required."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:254
+#: includes/API/Print_Jobs_Controller.php:285
 msgid "The Star Online API key must be sent in the request body, not the query string."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:269
+#: includes/API/Print_Jobs_Controller.php:300
 msgid "A Star Online API key and a valid stario.online CloudPRNT URL are required."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:330
-#: includes/API/Print_Jobs_Controller.php:350
-#: includes/API/Print_Jobs_Controller.php:371
-#: includes/API/Print_Jobs_Controller.php:519
+#: includes/API/Print_Jobs_Controller.php:361
+#: includes/API/Print_Jobs_Controller.php:381
+#: includes/API/Print_Jobs_Controller.php:402
+#: includes/API/Print_Jobs_Controller.php:550
 msgid "Print job not found."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:387
-#: includes/API/Print_Jobs_Controller.php:688
-#: includes/API/Print_Jobs_Controller.php:802
-#: includes/API/Print_Jobs_Controller.php:840
+#: includes/API/Print_Jobs_Controller.php:418
+#: includes/API/Print_Jobs_Controller.php:719
+#: includes/API/Print_Jobs_Controller.php:833
+#: includes/API/Print_Jobs_Controller.php:871
 msgid "Print job could not be created."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:488
+#: includes/API/Print_Jobs_Controller.php:519
 msgid "Invalid printer token."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:629
+#: includes/API/Print_Jobs_Controller.php:660
 msgid "A printer_id is required."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:653
+#: includes/API/Print_Jobs_Controller.php:684
 msgid "PrintNode print jobs require an order and a template."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:668
-#: includes/API/Print_Jobs_Controller.php:767
+#: includes/API/Print_Jobs_Controller.php:699
+#: includes/API/Print_Jobs_Controller.php:798
 msgid "Unknown printer."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:717
+#: includes/API/Print_Jobs_Controller.php:748
 msgid "Unknown order."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:726
+#: includes/API/Print_Jobs_Controller.php:757
 msgid "Unknown template."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:743
+#: includes/API/Print_Jobs_Controller.php:774
 msgid "The selected template cannot be printed on this printer."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:787
+#: includes/API/Print_Jobs_Controller.php:818
 msgid "Test print is not available for this printer yet."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:878
+#: includes/API/Print_Jobs_Controller.php:909
 msgid "This PrintNode printer is missing its API key or printer id."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:892
+#: includes/API/Print_Jobs_Controller.php:923
 msgid "Could not generate the test print."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:966
+#: includes/API/Print_Jobs_Controller.php:997
 msgid "Epson Server Direct Print accepts order-based ePOS-Print jobs only, not raw payloads."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:973
+#: includes/API/Print_Jobs_Controller.php:1004
 msgid "Epson Server Direct Print requires the epos-xml format."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:984
+#: includes/API/Print_Jobs_Controller.php:1015
 msgid "Star CloudPRNT does not accept the epos-xml format."
 msgstr ""
 
-#: includes/API/Print_Jobs_Controller.php:1003
+#: includes/API/Print_Jobs_Controller.php:1033
+msgid "No relay verification is pending."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:1082
 msgid "Sorry, you cannot manage print jobs."
 msgstr ""
 
@@ -788,11 +792,11 @@ msgstr ""
 msgid "Sorry, you cannot view receipts."
 msgstr ""
 
-#: includes/API/Settings.php:718
+#: includes/API/Settings.php:725
 msgid "Star Online printers need an API key, a valid stario.online CloudPRNT URL, and a device."
 msgstr ""
 
-#: includes/API/Settings.php:729
+#: includes/API/Settings.php:736
 msgid "Duplicate printer id."
 msgstr ""
 
@@ -1138,6 +1142,18 @@ msgstr ""
 #: includes/Services/Auth.php:173
 #: includes/Services/Auth.php:246
 msgid "JWT is not configured properly, please contact the admin"
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:84
+msgid "Could not create a relay verification token."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:110
+msgid "Relay registration failed."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:117
+msgid "Relay registration returned invalid credentials."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
