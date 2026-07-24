@@ -296,6 +296,16 @@ class Settings extends WP_REST_Controller {
 					return \is_bool( $param );
 				},
 			),
+			'storefront_receipt_enabled' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
+			'storefront_receipt_template' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
 			'tracking_consent' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_string( $param ) && \in_array( $param, array( 'allowed', 'denied', 'undecided' ), true );

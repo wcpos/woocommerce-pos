@@ -44,6 +44,11 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 		unset( $wp->query_vars['order-received'], $wp->query_vars['view-order'], $_GET['key'] );
 		delete_option( 'wcpos_active_template_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+
+		// The My Account button is opt-in (off by default); enable it so the
+		// appearance-focused tests exercise the button. Tests that assert the
+		// default-off behaviour clear this explicitly.
+		update_option( 'woocommerce_pos_settings_general', array( 'storefront_receipt_enabled' => true ) );
 	}
 
 	/**
@@ -63,6 +68,7 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 		unset( $wp->query_vars['order-received'], $wp->query_vars['view-order'], $_GET['key'] );
 		delete_option( 'wcpos_active_template_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+		delete_option( 'woocommerce_pos_settings_general' );
 		wp_set_current_user( 0 );
 
 		parent::tearDown();
@@ -185,6 +191,74 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 
 		// Assert.
 		$this->assertArrayHasKey( 'wcpos-receipt', $actions );
+	}
+
+	/**
+	 * The account action is opt-in: without the setting it is not added.
+	 */
+	public function test_my_account_button_disabled_by_default_setting_omits_action(): void {
+		// Arrange.
+		delete_option( 'woocommerce_pos_settings_general' );
+		$order = OrderHelper::create_order( array( 'status' => 'completed' ) );
+
+		// Act.
+		$actions = $this->storefront_receipts->add_my_account_action( array(), $order );
+
+		// Assert.
+		$this->assertArrayNotHasKey( 'wcpos-receipt', $actions );
+	}
+
+	/**
+	 * The filter can force the button on even when the setting is disabled.
+	 */
+	public function test_my_account_button_filter_overrides_disabled_setting(): void {
+		// Arrange.
+		delete_option( 'woocommerce_pos_settings_general' );
+		$order = OrderHelper::create_order( array( 'status' => 'completed' ) );
+		add_filter( 'woocommerce_pos_storefront_receipt_my_account_button', '__return_true' );
+
+		// Act.
+		$actions = $this->storefront_receipts->add_my_account_action( array(), $order );
+
+		// Assert.
+		$this->assertArrayHasKey( 'wcpos-receipt', $actions );
+	}
+
+	/**
+	 * A configured template is threaded into the receipt URL.
+	 */
+	public function test_my_account_configured_template_is_added_to_url(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'storefront_receipt_enabled'  => true,
+				'storefront_receipt_template' => 'standard-receipt',
+			)
+		);
+		$order = OrderHelper::create_order( array( 'status' => 'completed' ) );
+
+		// Act.
+		$actions = $this->storefront_receipts->add_my_account_action( array(), $order );
+
+		// Assert.
+		$this->assertArrayHasKey( 'wcpos-receipt', $actions );
+		$this->assertStringContainsString( 'template=standard-receipt', $actions['wcpos-receipt']['url'] );
+	}
+
+	/**
+	 * With no configured template the receipt URL omits the template argument.
+	 */
+	public function test_my_account_without_configured_template_omits_template_arg(): void {
+		// Arrange.
+		$order = OrderHelper::create_order( array( 'status' => 'completed' ) );
+
+		// Act.
+		$actions = $this->storefront_receipts->add_my_account_action( array(), $order );
+
+		// Assert.
+		$this->assertArrayHasKey( 'wcpos-receipt', $actions );
+		$this->assertStringNotContainsString( 'template=', $actions['wcpos-receipt']['url'] );
 	}
 
 	/**
