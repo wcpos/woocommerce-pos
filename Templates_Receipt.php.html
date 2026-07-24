@@ -558,6 +558,9 @@ class Receipt {
 				$template = 'publish' === get_post_status( $post_id ) ? TemplatesManager::get_template( $post_id ) : null;
 			} else {
 				$template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
+				if ( ! $template ) {
+					$template = TemplatesManager::get_gallery_template_by_key( $template_id );
+				}
 			}
 
 			// Only allow published receipt templates.
