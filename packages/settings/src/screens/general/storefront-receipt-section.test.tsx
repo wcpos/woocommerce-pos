@@ -67,6 +67,38 @@ describe('StorefrontReceiptSection', () => {
 		);
 	});
 
+	it('shows a saved template as unavailable when it is no longer returned by the API', async () => {
+		// Arrange / Act
+		renderSection({ enabled: true, template: 'deleted-template', onChange: vi.fn() });
+
+		// Assert
+		const select = await screen.findByRole('combobox');
+		const option = await screen.findByRole('option', {
+			name: 'Unavailable template (deleted-template)',
+		});
+		expect(select).toHaveValue('deleted-template');
+		expect(option).toBeDisabled();
+	});
+
+	it('includes virtual templates that do not have a status field', async () => {
+		// Arrange
+		apiFetchMock.mockResolvedValue([
+			{
+				id: 'plugin-core',
+				title: 'Legacy PHP Template',
+				is_active: false,
+				is_virtual: true,
+				engine: 'legacy-php',
+			},
+		]);
+
+		// Act
+		renderSection({ enabled: true, template: '', onChange: vi.fn() });
+
+		// Assert
+		expect(await screen.findByRole('option', { name: 'Legacy PHP Template' })).toBeInTheDocument();
+	});
+
 	it('reports the pinned template when a specific one is selected', async () => {
 		// Arrange
 		const onChange = vi.fn();

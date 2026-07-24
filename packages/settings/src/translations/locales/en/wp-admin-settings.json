@@ -91,6 +91,7 @@
 	"settings.storefront_receipt_template": "Receipt template for customers",
 	"settings.storefront_receipt_template_tip": "Which receipt template customers get when downloading from My Account.",
 	"settings.storefront_receipt_template_active": "Use active receipt template",
+	"settings.storefront_receipt_template_unavailable": "Unavailable template ({value})",
 	"settings.need_help": "Need help?",
 	"settings.allow_anonymous_usage_data": "Allow anonymous usage data",
 	"settings.allow_anonymous_usage_data_tip": "Help us make WCPOS better by sharing some anonymous information about your setup and how you use the plugin.",

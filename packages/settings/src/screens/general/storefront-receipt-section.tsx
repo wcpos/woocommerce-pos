@@ -28,14 +28,24 @@ interface TemplateSelectProps {
  * suspense query, so callers must wrap this in a <Suspense> boundary.
  */
 function TemplateSelect({ value, onChange }: TemplateSelectProps) {
-	const templateOptions = useReceiptTemplateOptions();
+	const templateOptions = useReceiptTemplateOptions(true);
+	const isUnavailable = value !== '' && !templateOptions.some((option) => option.value === value);
 
 	const options = React.useMemo(
 		() => [
 			{ value: '', label: t('settings.storefront_receipt_template_active') },
+			...(isUnavailable
+				? [
+						{
+							value,
+							label: t('settings.storefront_receipt_template_unavailable', { value }),
+							disabled: true,
+						},
+					]
+				: []),
 			...templateOptions.map(({ value: v, label }) => ({ value: v, label })),
 		],
-		[templateOptions]
+		[isUnavailable, templateOptions, value]
 	);
 
 	return (
