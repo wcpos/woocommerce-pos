@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.11
+Stable tag: 1.9.12
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,13 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.12 - 2026/07/24 =
+- **Fixed cloud printing to Star TSP100 printers** -- StarPRNT-native Star printers (the TSP100/TSP100IV line) rejected Cloud Print jobs with a "510 Incompatible Media Type" error and never printed, because WCPOS sent them ESC/POS. WCPOS now serves these printers native StarPRNT, so Cloud Print works on the whole TSP100 family. Other cloud printers are unaffected.
+- **Customer receipt downloads are now opt-in** -- the Receipt button on My Account > Orders (added in 1.9.11) is now off by default and turned on under Settings > General > Customers, with an optional picker to choose which template customers get. Stores that want it must enable it; the [wcpos_receipt] shortcode is unaffected.
+- **Fixed the Cloud Print printer name being squeezed** -- a long or translated status label (eg: French "En attente de l'imprimante") no longer shrinks the editable printer-name field to a few characters; the status now sits on its own row.
+- **Fixed receipt template selection for downloaded receipts** -- gallery templates now resolve correctly for customer receipt links, and the storefront receipt uses the template you selected.
+- **Updated translations.**
 
 = 1.9.11 - 2026/07/24 =
 - **New: WCPOS Cloud Print relay** -- if your hosting or firewall blocks a cloud printer's direct connection (a permanent "Waiting for printer"), WCPOS now routes Star CloudPRNT and Epson Server Direct Print polling through the WCPOS Cloud Print relay automatically, and print jobs start on the printer's next poll instead of waiting for the next heartbeat. Printer cards tell you when a security layer is blocking cloud print. When the relay is used, print jobs (receipt contents) pass through cloudprint.wcpos.com -- see the privacy FAQ. Site owners can opt out in code.
