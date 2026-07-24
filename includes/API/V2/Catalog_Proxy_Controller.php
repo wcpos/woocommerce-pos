@@ -77,7 +77,11 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		$customer_search_filter = null;
 		if ( 'customers' === $resource && isset( $query_params['search'] ) ) {
 			$search = trim( (string) $query_params['search'] );
-			if ( 1 === preg_match( '/\s/u', $search ) ) {
+			// V1 parity: ANY non-empty search uses the per-term user-table filter (#1277).
+			// wc/v3's own customer search misses first_name/last_name/billing meta, so even
+			// single-word searches must go through it (and this keeps behavior consistent
+			// across WooCommerce versions).
+			if ( '' !== $search ) {
 				unset( $query_params['search'] );
 
 				// Reuse V1's search filter without importing its handling of other query parameters.

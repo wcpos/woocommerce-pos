@@ -72,7 +72,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Single-word searches retain WooCommerce passthrough behavior.
+	 * Single-word searches also use the per-term filter (V1 parity) and match name fields.
 	 */
 	public function test_single_word_search_matches_customer(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
