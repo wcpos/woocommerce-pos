@@ -107,7 +107,7 @@ afterEach(() => {
 });
 
 describe('CloudPrint editing', () => {
-	it('adds a printer via the wizard, POSTs the full settings with no real id, and surfaces the one-time token', async () => {
+	it('adds a printer via the wizard, POSTs the full settings with no real id, and surfaces the one-time poll URL', async () => {
 		routeApiFetch({
 			getSettings: () => ({ printers: [], assignments: [] }),
 			postSettings: () =>
@@ -130,8 +130,9 @@ describe('CloudPrint editing', () => {
 		const posted = lastPostData() as { printers: { id: string }[] };
 		expect(posted.printers[posted.printers.length - 1].id).toBe('');
 
-		// The wizard step 2 surfaces the one-time token.
-		expect(await screen.findByTestId('wizard-poll-token')).toHaveTextContent('poll-token-123');
+		// The wizard step 2 surfaces the poll URL with the one-time token embedded.
+		expect(await screen.findByTestId('wizard-poll-url')).toHaveTextContent('poll-token-123');
+		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
 
 		// The server-derived printer card appears once the save commits.
 		expect(await screen.findByTestId('printer-card-server-kitchen')).toBeTruthy();

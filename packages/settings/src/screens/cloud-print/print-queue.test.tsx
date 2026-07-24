@@ -203,9 +203,7 @@ describe('PrintQueue', () => {
 		await waitFor(() => expect(screen.getByTestId('queue-cancel-11')).toBeInTheDocument());
 		fireEvent.click(screen.getByTestId('queue-cancel-11'));
 
-		await waitFor(() =>
-			expect(screen.getByText(/the queue is unchanged/i)).toBeInTheDocument()
-		);
+		await waitFor(() => expect(screen.getByText(/the queue is unchanged/i)).toBeInTheDocument());
 	});
 
 	it('clamps back into range when the current page empties', async () => {
