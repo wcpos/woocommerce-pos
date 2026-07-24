@@ -33,6 +33,17 @@ class Cloud_Print_Diagnostic_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It strips control bytes from the printer name before emitting commands.
+	 */
+	public function test_build_strips_control_bytes_from_printer_name(): void {
+		$diag  = ( new Cloud_Print_Diagnostic() )->build( 'star-cloudprnt', "Kit\x1b\x64\x02chen" );
+		$bytes = base64_decode( $diag['payload'], true );
+
+		$this->assertStringContainsString( 'Kitd', $bytes ); // ESC + STX stripped, printable 'd' kept.
+		$this->assertStringNotContainsString( "\x1b\x64\x02", $bytes ); // No injected full cut.
+	}
+
+	/**
 	 * It builds an Epson diagnostic as ePOS-Print XML.
 	 */
 	public function test_build_epson_diagnostic_is_epos_xml(): void {

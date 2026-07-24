@@ -166,6 +166,43 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It rejects fixed-layout escpos/starprnt format jobs for Star CloudPRNT printers.
+	 *
+	 * The fixed-layout 'escpos' adapter emits a language StarPRNT-native
+	 * printers cannot decode, and the fixed-layout 'starprnt' adapter is a
+	 * non-functional placeholder — both must fail loudly at enqueue.
+	 */
+	public function test_enqueue_fixed_layout_format_to_star_printer_returns_400(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'star-1',
+						'provider' => 'star-cloudprnt',
+					),
+				),
+			)
+		);
+
+		foreach ( array( 'escpos', 'starprnt' ) as $format ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+			$request->set_body_params(
+				array(
+					'printer_id' => 'star-1',
+					'order_id'   => 12345,
+					'format'     => $format,
+				)
+			);
+
+			$response = rest_do_request( $request );
+
+			$this->assertEquals( 400, $response->get_status(), "format={$format}" );
+			$this->assertEquals( 'wcpos_print_job_incompatible', $response->as_error()->get_error_code(), "format={$format}" );
+		}
+	}
+
+	/**
 	 * It enqueues an order-based PrintNode job and schedules its submit event.
 	 */
 	public function test_enqueue_order_based_printnode_job_schedules_submit(): void {

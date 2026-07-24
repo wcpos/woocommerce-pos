@@ -26,6 +26,11 @@ class Cloud_Print_Diagnostic {
 			throw new \RuntimeException( esc_html( 'No server-side diagnostic for provider: ' . $provider ) );
 		}
 
+		// The name is concatenated into raw command streams; strip control
+		// bytes (ESC/GS/BEL…) so it cannot inject printer commands, matching
+		// the template pipeline's control-character stripping.
+		$printer_name = (string) preg_replace( '/[\x00-\x1F\x7F]/', '', $printer_name );
+
 		$date = gmdate( 'Y-m-d H:i' );
 		if ( 'epson-sdp' === $provider ) {
 			$payload = $this->epos( $printer_name, $date );

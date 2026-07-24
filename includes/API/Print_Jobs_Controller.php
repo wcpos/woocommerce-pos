@@ -683,14 +683,17 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// The fetch GET names the printer's chosen media type. Serving a
 		// different format than requested puts undecodable bytes on the wire,
 		// so answer 415 (per the CloudPRNT spec) and leave the job unclaimed.
+		// Media types are compared case-insensitively (RFC 2045) and the
+		// logged value is length-capped: printers poll every few seconds, so
+		// a wedged loop must not flood the log with unbounded input.
 		$requested_type = sanitize_text_field( (string) $request->get_param( 'type' ) );
-		if ( '' !== $requested_type && $requested_type !== $content_type ) {
+		if ( '' !== $requested_type && strtolower( $requested_type ) !== strtolower( $content_type ) ) {
 			Logger::warning(
 				sprintf(
 					'%s: printer "%s" requested media type "%s" for print job %d but the job is "%s".',
 					$request->get_route(),
 					$printer_id,
-					$requested_type,
+					substr( $requested_type, 0, 100 ),
 					(int) $job['id'],
 					$content_type
 				)
@@ -1241,6 +1244,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return new WP_Error(
 				'wcpos_print_job_incompatible',
 				__( 'Star CloudPRNT does not accept the epos-xml format.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// The fixed-layout 'escpos' adapter emits a language StarPRNT-native
+		// printers cannot decode, and the fixed-layout 'starprnt' adapter is a
+		// placeholder that emits marker text, not wire bytes. Fail these jobs
+		// loudly instead of queueing bytes the printer will reject.
+		if ( 'star-cloudprnt' === $provider && in_array( $format, array( 'escpos', 'starprnt' ), true ) ) {
+			return new WP_Error(
+				'wcpos_print_job_incompatible',
+				__( 'Star CloudPRNT printers require order-based template jobs or a raw payload.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);
 		}
