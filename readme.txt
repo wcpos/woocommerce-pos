@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.10
+Stable tag: 1.9.11
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,14 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.11 - 2026/07/24 =
+- **New: WCPOS Cloud Print relay** -- if your hosting or firewall blocks a cloud printer's direct connection (a permanent "Waiting for printer"), WCPOS now routes Star CloudPRNT and Epson Server Direct Print polling through the WCPOS Cloud Print relay automatically, and print jobs start on the printer's next poll instead of waiting for the next heartbeat. Printer cards tell you when a security layer is blocking cloud print. When the relay is used, print jobs (receipt contents) pass through cloudprint.wcpos.com -- see the privacy FAQ. Site owners can opt out in code.
+- **New: Cloud Print queue** -- the Cloud Print settings screen now shows a live queue of your print jobs and their status, so you can see what has printed, retry a failed job, and clear the backlog. Completed job payloads are stripped and old jobs are purged automatically.
+- **New: receipts on your online store** -- customers can download their order receipt as a PDF, rendered with your WCPOS receipt template, from a new Receipt button on My Account > Orders. A [wcpos_receipt] shortcode is also available for the order-received or custom pages.
+- **Fixed cloud printers that mangle the poll URL** -- printer credentials now travel in the URL path, so printer firmware that URL-encodes the query string (eg: Star TSP100IV) can authenticate. Existing configured printer URLs keep working.
+- **Fixed the WCPOS Pro license image** -- the Pro panel now loads its image correctly.
+- **Updated translations.**
 
 = 1.9.10 - 2026/07/22 =
 - **Fixed stale prices on products converted from simple to variable** -- variable products now show the lowest price of their current visible variations in the POS, instead of a leftover price left behind by the conversion.
