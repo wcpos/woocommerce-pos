@@ -87,6 +87,10 @@ class Storefront_Receipts {
 		/*
 		 * Filters whether the My Account receipt button is enabled.
 		 *
+		 * Defaults to the `storefront_receipt_enabled` general setting (opt-in,
+		 * off by default). The filter still allows programmatic overrides,
+		 * including per-order decisions via the $order argument.
+		 *
 		 * @param bool              $enabled Whether the button is enabled.
 		 * @param WC_Abstract_Order $order   Order object.
 		 *
@@ -96,7 +100,8 @@ class Storefront_Receipts {
 		 *
 		 * @hook woocommerce_pos_storefront_receipt_my_account_button
 		 */
-		$enabled = (bool) apply_filters( 'woocommerce_pos_storefront_receipt_my_account_button', true, $order );
+		$default_enabled = wp_validate_boolean( woocommerce_pos_get_settings( 'general', 'storefront_receipt_enabled' ) );
+		$enabled         = (bool) apply_filters( 'woocommerce_pos_storefront_receipt_my_account_button', $default_enabled, $order );
 		if ( ! $enabled || null === Templates::get_active_template_id( 'receipt' ) ) {
 			return $actions;
 		}
@@ -122,8 +127,14 @@ class Storefront_Receipts {
 			return $actions;
 		}
 
+		// An empty template means "use the active receipt template". A configured
+		// value is passed through the existing, already-validated ?template= path
+		// (published receipt templates only); an invalid value simply falls back
+		// to the active template when the receipt renders.
+		$template = sanitize_text_field( (string) woocommerce_pos_get_settings( 'general', 'storefront_receipt_template' ) );
+
 		$actions['wcpos-receipt'] = array(
-			'url'        => self::get_receipt_url( $order, 'pdf' ),
+			'url'        => self::get_receipt_url( $order, 'pdf', $template ),
 			'name'       => __( 'Receipt', 'woocommerce-pos' ),
 			/* translators: %s: order number. */
 			'aria-label' => sprintf( __( 'Download receipt for order #%s', 'woocommerce-pos' ), $order->get_order_number() ),
