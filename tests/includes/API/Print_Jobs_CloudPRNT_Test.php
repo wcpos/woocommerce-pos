@@ -116,6 +116,76 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It offers the job's content type as a mediaTypes list per the CloudPRNT spec.
+	 *
+	 * The printer compares the offered list against its decodable set and fetches
+	 * with its pick; a bare mediaType string is kept for older firmware.
+	 */
+	public function test_poll_offers_media_types_list(): void {
+		$this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+
+		$data = $this->poll( 'POST', array() )->get_data();
+
+		$this->assertEquals( array( 'application/vnd.star.starprnt' ), $data['mediaTypes'] );
+		$this->assertEquals( 'application/vnd.star.starprnt', $data['mediaType'] );
+	}
+
+	/**
+	 * It serves the job when the printer's requested type matches.
+	 */
+	public function test_get_with_matching_type_serves_job(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => 'application/vnd.star.starprnt',
+			)
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'claimed', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It returns 415 without claiming when the printer requests an unsupported type.
+	 */
+	public function test_get_with_mismatched_type_returns_415_and_leaves_job_pending(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => 'image/png',
+			)
+		);
+
+		$this->assertEquals( 415, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_incompatible_media_type', $response->as_error()->get_error_code() );
+		$this->assertEquals( 'pending', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
 	 * It claims on GET and marks printed on DELETE.
 	 */
 	public function test_get_then_delete_claims_then_marks_printed(): void {

@@ -159,6 +159,23 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It renders StarPRNT bytes with order data for the starprnt wire format.
+	 */
+	public function test_render_starprnt_returns_bytes_with_order_data(): void {
+		// Arrange.
+		$order    = OrderHelper::create_order();
+		$renderer = new Thermal_Renderer();
+
+		// Act.
+		$output = $renderer->render( $this->template(), $order, 'starprnt' );
+
+		// Assert.
+		$this->assertNotEmpty( $output );
+		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
+		$this->assertStringNotContainsString( "\x1b\x40", $output ); // Never ESC/POS init.
+	}
+
+	/**
 	 * It throws for an unknown wire format.
 	 */
 	public function test_render_throws_for_unknown_wire_format(): void {

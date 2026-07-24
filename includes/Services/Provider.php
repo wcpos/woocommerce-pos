@@ -20,12 +20,15 @@ class Provider {
 	 * @var array<string, array<string, mixed>>
 	 */
 	private const CAPABILITIES = array(
+		// StarPRNT-native printers (the whole TSP100 line) cannot decode
+		// ESC/POS; Star's docs advise against octet-stream for command data,
+		// so jobs are emitted as native StarPRNT under the vnd.star type.
 		'star-cloudprnt' => array(
 			'polling'                    => true,
-			'content_type'               => 'application/octet-stream',
+			'content_type'               => 'application/vnd.star.starprnt',
 			'poll_endpoint'              => 'cloudprnt',
 			'supports_server_diagnostic' => true,
-			'thermal_wire_format'        => 'escpos',
+			'thermal_wire_format'        => 'starprnt',
 		),
 		'epson-sdp'      => array(
 			'polling'                    => true,

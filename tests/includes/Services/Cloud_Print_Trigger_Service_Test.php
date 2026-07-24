@@ -210,7 +210,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		$counter_jobs = $this->jobs->query( array( 'printer_id' => 'counter' ) );
 		$this->assertEquals( 1, \count( $counter_jobs ) );
 		$counter_job = $this->jobs->get( $counter_jobs[0]['id'] );
-		$this->assertEquals( 'application/octet-stream', $counter_job['content_type'] );
+		$this->assertEquals( 'application/vnd.star.starprnt', $counter_job['content_type'] );
 	}
 
 	/**
@@ -492,7 +492,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		$jobs = $this->jobs->query( array( 'printer_id' => 'counter' ) );
 		$this->assertEquals( 1, \count( $jobs ) );
 		$job = $this->jobs->get( $jobs[0]['id'] );
-		$this->assertEquals( 'application/octet-stream', $job['content_type'] );
+		$this->assertEquals( 'application/vnd.star.starprnt', $job['content_type'] );
 		$this->assertFalse(
 			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $jobs[0]['id'] ) )
 		);

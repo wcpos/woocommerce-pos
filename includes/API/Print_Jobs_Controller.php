@@ -645,11 +645,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				return rest_ensure_response( array( 'jobReady' => false ) );
 			}
 
+			$content_type = $job['content_type'] ? $job['content_type'] : 'application/octet-stream';
+
+			// The CloudPRNT spec negotiates via the `mediaTypes` list: the
+			// printer compares it against its decodable set and fetches with
+			// its pick (or rejects pre-fetch with 510 when nothing matches).
+			// The singular `mediaType` is kept for older firmware.
 			return rest_ensure_response(
 				array(
-					'jobReady'  => true,
-					'jobToken'  => (string) $job['id'],
-					'mediaType' => $job['content_type'] ? $job['content_type'] : 'application/octet-stream',
+					'jobReady'   => true,
+					'jobToken'   => (string) $job['id'],
+					'mediaType'  => $content_type,
+					'mediaTypes' => array( $content_type ),
 				)
 			);
 		}
@@ -671,6 +678,31 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
 
+		$content_type = $job['content_type'] ? $job['content_type'] : 'application/octet-stream';
+
+		// The fetch GET names the printer's chosen media type. Serving a
+		// different format than requested puts undecodable bytes on the wire,
+		// so answer 415 (per the CloudPRNT spec) and leave the job unclaimed.
+		$requested_type = sanitize_text_field( (string) $request->get_param( 'type' ) );
+		if ( '' !== $requested_type && $requested_type !== $content_type ) {
+			Logger::warning(
+				sprintf(
+					'%s: printer "%s" requested media type "%s" for print job %d but the job is "%s".',
+					$request->get_route(),
+					$printer_id,
+					$requested_type,
+					(int) $job['id'],
+					$content_type
+				)
+			);
+
+			return new WP_Error(
+				'wcpos_print_job_incompatible_media_type',
+				__( 'The print job is not available in the requested media type.', 'woocommerce-pos' ),
+				array( 'status' => 415 )
+			);
+		}
+
 		if ( ! $this->jobs->try_claim( (int) $job['id'] ) ) {
 			return rest_ensure_response( array( 'jobReady' => false ) );
 		}
@@ -687,7 +719,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		return $this->serve_raw( $payload, $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
+		return $this->serve_raw( $payload, $content_type );
 	}
 
 	/**

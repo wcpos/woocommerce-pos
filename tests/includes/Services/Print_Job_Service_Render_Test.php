@@ -106,9 +106,9 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It renders ESC/POS bytes for a star-cloudprnt printer from a thermal template.
+	 * It renders StarPRNT bytes for a star-cloudprnt printer from a thermal template.
 	 */
-	public function test_render_payload_renders_thermal_escpos_for_star_printer(): void {
+	public function test_render_payload_renders_thermal_starprnt_for_star_printer(): void {
 		// Arrange.
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
@@ -136,8 +136,10 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 		// Act.
 		$out = $this->jobs->render_payload( $this->jobs->get( $id ) );
 
-		// Assert.
-		$this->assertSame( "\x1b\x40", substr( $out, 0, 2 ) );
+		// Assert. StarPRNT jobs start with the UTF-8 select sequence, never ESC @
+		// (a StarPRNT-native printer cannot decode ESC/POS — see issue with 510s).
+		$this->assertSame( "\x1b\x1d\x29\x55\x02\x00\x30\x01", substr( $out, 0, 8 ) );
+		$this->assertStringNotContainsString( "\x1b\x40", $out );
 		$this->assertStringContainsString( (string) $order->get_order_number(), $out );
 	}
 
