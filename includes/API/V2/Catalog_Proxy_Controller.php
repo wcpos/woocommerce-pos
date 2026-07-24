@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\API\V1\Customers_Controller as V1_Customers_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
@@ -23,8 +24,9 @@ use WP_REST_Server;
  * wrapped in our namespace so we can customize the request/response and
  * duck-punch for replication WITHOUT editing wc/v3 or the client).
  *
- * Each route forwards verbatim to its wc/v3 counterpart via `rest_do_request`,
- * preserving every query param plus the underlying status + pagination headers
+ * Routes forward to their wc/v3 counterparts via `rest_do_request`, preserving
+ * query params except where WCPOS adapts them (such as multi-term customer search),
+ * plus the underlying status + pagination headers
  * (so the client's existing array-shaped parsing and `length < per_page`
  * pagination keep working), then exposes a single `woocommerce_pos_sync_proxy_response`
  * filter seam — `($data, $resource, $request)` — so replication can shape the
@@ -65,14 +67,32 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Forward the request to $wc_route via rest_do_request (preserving query
-	 * params + the wc/v3 status/headers), then expose the batch through the
+	 * Forward the request to $wc_route via rest_do_request (adapting query
+	 * params where needed and preserving wc/v3 status/headers), then expose the batch through the
 	 * replication seam filter. wc/v3 errors are forwarded unchanged so the
 	 * client sees the same failure it would have seen hitting wc/v3 directly.
 	 */
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource ) {
+		$query_params           = $request->get_query_params();
+		$customer_search_filter = null;
+		if ( 'customers' === $resource && isset( $query_params['search'] ) ) {
+			$search = trim( (string) $query_params['search'] );
+			if ( 1 === preg_match( '/\s/u', $search ) ) {
+				unset( $query_params['search'] );
+
+				// Reuse V1's search filter without importing its handling of other query parameters.
+				$search_request = new WP_REST_Request();
+				$search_request->set_query_params( array( 'search' => $search ) );
+				$search_controller      = new V1_Customers_Controller();
+				$customer_search_filter = static function ( array $prepared_args ) use ( $search_controller, $search_request ): array {
+					return $search_controller->wcpos_customer_query( $prepared_args, $search_request );
+				};
+				add_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+			}
+		}
+
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
-		$inner->set_query_params( $request->get_query_params() );
+		$inner->set_query_params( $query_params );
 		// Leg-3 (ADR 0014 WP-M5): scope the POS servable filter around THIS forward only — added, then
 		// removed — so `online_only` products drop out of the served set for both greedy list pulls and
 		// targeted `include=` pulls, and no other product query on the request is affected. The client
@@ -87,6 +107,9 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 		}
 		$this->remove_pos_visibility_filter();
+		if ( null !== $customer_search_filter ) {
+			remove_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+		}
 		if ( $response->is_error() ) {
 			return $response;
 		}
