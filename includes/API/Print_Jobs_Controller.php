@@ -592,10 +592,17 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 410 )
 			);
 		}
+		$content_type = $source['content_type'];
+		if ( '' !== $source['template_id'] ) {
+			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
+			if ( null !== $printer ) {
+				$content_type = Provider::content_type( (string) ( $printer['provider'] ?? '' ) );
+			}
+		}
 		$new_id = $this->jobs->create(
 			array(
 				'printer_id'       => $source['printer_id'],
-				'content_type'     => $source['content_type'],
+				'content_type'     => $content_type,
 				'payload'          => $source['payload'],
 				'order_id'         => $source['order_id'] ? $source['order_id'] : null,
 				'format'           => $source['format'] ? $source['format'] : null,
@@ -899,8 +906,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$order_id        = (int) $request->get_param( 'order_id' );
 		$drawer_options = $this->drawer_options_from_request( $request );
 
-		$printer    = $this->registry->get_printer( $printer_id );
-		$validation = $this->validate_job_for_printer( $printer, $payload, $format );
+		$printer         = $this->registry->get_printer( $printer_id );
+		$is_template_job = 0 !== $order_id && '' !== $template_id;
+		$validation      = $this->validate_job_for_printer( $printer, $payload, $format, $is_template_job );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
 		}
@@ -1212,10 +1220,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @param array|null $printer Registered printer, or null when unknown.
 	 * @param string     $payload Base64 payload (raw jobs).
 	 * @param string     $format  Render format (order-based jobs).
+	 * @param bool       $is_template_job Whether this is an order/template job.
 	 *
 	 * @return true|WP_Error
 	 */
-	private function validate_job_for_printer( ?array $printer, string $payload, string $format ) {
+	private function validate_job_for_printer( ?array $printer, string $payload, string $format, bool $is_template_job ) {
 		if ( null === $printer ) {
 			return true;
 		}
@@ -1252,7 +1261,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// printers cannot decode, and the fixed-layout 'starprnt' adapter is a
 		// placeholder that emits marker text, not wire bytes. Fail these jobs
 		// loudly instead of queueing bytes the printer will reject.
-		if ( 'star-cloudprnt' === $provider && in_array( $format, array( 'escpos', 'starprnt' ), true ) ) {
+		if ( ! $is_template_job && 'star-cloudprnt' === $provider && in_array( $format, array( 'escpos', 'starprnt' ), true ) ) {
 			return new WP_Error(
 				'wcpos_print_job_incompatible',
 				__( 'Star CloudPRNT printers require order-based template jobs or a raw payload.', 'woocommerce-pos' ),
