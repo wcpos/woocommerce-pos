@@ -592,10 +592,17 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 410 )
 			);
 		}
+		$content_type = $source['content_type'];
+		if ( '' !== $source['template_id'] ) {
+			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
+			if ( null !== $printer ) {
+				$content_type = Provider::content_type( (string) ( $printer['provider'] ?? '' ) );
+			}
+		}
 		$new_id = $this->jobs->create(
 			array(
 				'printer_id'       => $source['printer_id'],
-				'content_type'     => $source['content_type'],
+				'content_type'     => $content_type,
 				'payload'          => $source['payload'],
 				'order_id'         => $source['order_id'] ? $source['order_id'] : null,
 				'format'           => $source['format'] ? $source['format'] : null,
@@ -645,11 +652,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				return rest_ensure_response( array( 'jobReady' => false ) );
 			}
 
+			$content_type = $job['content_type'] ? $job['content_type'] : 'application/octet-stream';
+
+			// The CloudPRNT spec negotiates via the `mediaTypes` list: the
+			// printer compares it against its decodable set and fetches with
+			// its pick (or rejects pre-fetch with 510 when nothing matches).
+			// The singular `mediaType` is kept for older firmware.
 			return rest_ensure_response(
 				array(
-					'jobReady'  => true,
-					'jobToken'  => (string) $job['id'],
-					'mediaType' => $job['content_type'] ? $job['content_type'] : 'application/octet-stream',
+					'jobReady'   => true,
+					'jobToken'   => (string) $job['id'],
+					'mediaType'  => $content_type,
+					'mediaTypes' => array( $content_type ),
 				)
 			);
 		}
@@ -671,6 +685,34 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
 
+		$content_type = $job['content_type'] ? $job['content_type'] : 'application/octet-stream';
+
+		// The fetch GET names the printer's chosen media type. Serving a
+		// different format than requested puts undecodable bytes on the wire,
+		// so answer 415 (per the CloudPRNT spec) and leave the job unclaimed.
+		// Media types are compared case-insensitively (RFC 2045) and the
+		// logged value is length-capped: printers poll every few seconds, so
+		// a wedged loop must not flood the log with unbounded input.
+		$requested_type = sanitize_text_field( (string) $request->get_param( 'type' ) );
+		if ( '' !== $requested_type && strtolower( $requested_type ) !== strtolower( $content_type ) ) {
+			Logger::warning(
+				sprintf(
+					'%s: printer "%s" requested media type "%s" for print job %d but the job is "%s".',
+					$request->get_route(),
+					$printer_id,
+					substr( $requested_type, 0, 100 ),
+					(int) $job['id'],
+					$content_type
+				)
+			);
+
+			return new WP_Error(
+				'wcpos_print_job_incompatible_media_type',
+				__( 'The print job is not available in the requested media type.', 'woocommerce-pos' ),
+				array( 'status' => 415 )
+			);
+		}
+
 		if ( ! $this->jobs->try_claim( (int) $job['id'] ) ) {
 			return rest_ensure_response( array( 'jobReady' => false ) );
 		}
@@ -687,7 +729,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		return $this->serve_raw( $payload, $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
+		return $this->serve_raw( $payload, $content_type );
 	}
 
 	/**
@@ -864,8 +906,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$order_id        = (int) $request->get_param( 'order_id' );
 		$drawer_options = $this->drawer_options_from_request( $request );
 
-		$printer    = $this->registry->get_printer( $printer_id );
-		$validation = $this->validate_job_for_printer( $printer, $payload, $format );
+		$printer         = $this->registry->get_printer( $printer_id );
+		$is_template_job = 0 !== $order_id && '' !== $template_id;
+		$validation      = $this->validate_job_for_printer( $printer, $payload, $format, $is_template_job );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
 		}
@@ -1177,10 +1220,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @param array|null $printer Registered printer, or null when unknown.
 	 * @param string     $payload Base64 payload (raw jobs).
 	 * @param string     $format  Render format (order-based jobs).
+	 * @param bool       $is_template_job Whether this is an order/template job.
 	 *
 	 * @return true|WP_Error
 	 */
-	private function validate_job_for_printer( ?array $printer, string $payload, string $format ) {
+	private function validate_job_for_printer( ?array $printer, string $payload, string $format, bool $is_template_job ) {
 		if ( null === $printer ) {
 			return true;
 		}
@@ -1209,6 +1253,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return new WP_Error(
 				'wcpos_print_job_incompatible',
 				__( 'Star CloudPRNT does not accept the epos-xml format.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// The fixed-layout 'escpos' adapter emits a language StarPRNT-native
+		// printers cannot decode, and the fixed-layout 'starprnt' adapter is a
+		// placeholder that emits marker text, not wire bytes. Fail these jobs
+		// loudly instead of queueing bytes the printer will reject.
+		if ( ! $is_template_job && 'star-cloudprnt' === $provider && in_array( $format, array( 'escpos', 'starprnt' ), true ) ) {
+			return new WP_Error(
+				'wcpos_print_job_incompatible',
+				__( 'Star CloudPRNT printers require order-based template jobs or a raw payload.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);
 		}

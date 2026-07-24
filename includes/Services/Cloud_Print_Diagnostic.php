@@ -26,10 +26,19 @@ class Cloud_Print_Diagnostic {
 			throw new \RuntimeException( esc_html( 'No server-side diagnostic for provider: ' . $provider ) );
 		}
 
-		$date    = gmdate( 'Y-m-d H:i' );
-		$payload = 'epson-sdp' === $provider
-			? $this->epos( $printer_name, $date )
-			: $this->escpos( $printer_name, $date );
+		// The name is concatenated into raw command streams; strip control
+		// bytes (ESC/GS/BEL…) so it cannot inject printer commands, matching
+		// the template pipeline's control-character stripping.
+		$printer_name = (string) preg_replace( '/[\x00-\x1F\x7F]/', '', $printer_name );
+
+		$date = gmdate( 'Y-m-d H:i' );
+		if ( 'epson-sdp' === $provider ) {
+			$payload = $this->epos( $printer_name, $date );
+		} elseif ( 'star-cloudprnt' === $provider ) {
+			$payload = $this->starprnt( $printer_name, $date );
+		} else {
+			$payload = $this->escpos( $printer_name, $date );
+		}
 
 		return array(
 			'content_type' => Provider::content_type( $provider ),
@@ -89,6 +98,34 @@ class Cloud_Print_Diagnostic {
 		$esc .= "\x1DV\x41\x00"; // full cut.
 
 		return $esc;
+	}
+
+	/**
+	 * Minimal native StarPRNT capability check.
+	 *
+	 * StarPRNT-native printers (the whole TSP100 line) cannot decode ESC/POS,
+	 * so the Star diagnostic must carry StarPRNT commands. No initialize
+	 * command: CloudPRNT jobs must not reset the printer; the job opens with
+	 * the UTF-8 encoding select sequence instead.
+	 *
+	 * @param string $name Printer display name.
+	 * @param string $date Render date.
+	 *
+	 * @return string
+	 */
+	private function starprnt( string $name, string $date ): string {
+		$star  = "\x1B\x1D\x29\x55\x02\x00\x30\x01"; // Select UTF-8 encoding.
+		$star .= "\x1B\x1D\x29\x55\x02\x00\x40\x00"; // UTF-8 font setting.
+		$star .= "\x1B\x1D\x61\x01";                 // Center align.
+		$star .= "WCPOS\n";
+		$star .= "Cloud Print Test\n";
+		$star .= "\x1B\x1D\x61\x00";                 // Left align.
+		$star .= 'Printer: ' . $name . "\n";
+		$star .= 'Date: ' . $date . "\n";
+		$star .= "If you can read this, printing works!\n\n\n";
+		$star .= "\x1B\x64\x03";                     // Feed and partial cut.
+
+		return $star;
 	}
 
 	/**

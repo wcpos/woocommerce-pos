@@ -50,11 +50,11 @@ class Provider_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It returns the octet-stream content type for star.
+	 * It returns the StarPRNT content type for star.
 	 */
-	public function test_content_type_star_returns_octet_stream(): void {
+	public function test_content_type_star_returns_starprnt(): void {
 		// Act / Assert.
-		$this->assertEquals( 'application/octet-stream', Provider::content_type( 'star-cloudprnt' ) );
+		$this->assertEquals( 'application/vnd.star.starprnt', Provider::content_type( 'star-cloudprnt' ) );
 	}
 
 	/**
@@ -106,11 +106,11 @@ class Provider_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It returns escpos for a thermal star printer.
+	 * It returns starprnt for a thermal star printer.
 	 */
-	public function test_wire_format_star_thermal_returns_escpos(): void {
+	public function test_wire_format_star_thermal_returns_starprnt(): void {
 		// Act / Assert.
-		$this->assertEquals( 'escpos', Provider::wire_format( 'star-cloudprnt', 'thermal' ) );
+		$this->assertEquals( 'starprnt', Provider::wire_format( 'star-cloudprnt', 'thermal' ) );
 	}
 
 	/**
