@@ -69,7 +69,7 @@ describe('AddPrinterWizard', () => {
 		expect(screen.getByTestId('wizard-continue')).toBeEnabled();
 	});
 
-	it('add mode: walks star/epson polling flow and shows poll URL + token', async () => {
+	it('add mode: walks star/epson polling flow and shows the poll URL with embedded token', async () => {
 		const onCreate = vi.fn().mockResolvedValue({
 			printer: makePrinter({ provider: 'epson-sdp' }),
 			token: '9f3a8c21d7b64e0fa1c2e5d8b09a7f6c',
@@ -103,15 +103,13 @@ describe('AddPrinterWizard', () => {
 		expect(arg.id).toBeUndefined();
 		expect('printnode_api_key' in arg).toBe(false);
 
-		// Step 2: poll URL + token + "shown only once" copy.
+		// Step 2: poll URL (token embedded, no separate token row) + one-time copy.
 		const expectedUrl =
 			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp/kitchen/9f3a8c21d7b64e0fa1c2e5d8b09a7f6c?wcpos=1';
 		await waitFor(() => expect(screen.getByTestId('wizard-poll-url')).toBeInTheDocument());
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(expectedUrl);
-		expect(screen.getByTestId('wizard-poll-token')).toHaveTextContent(
-			'9f3a8c21d7b64e0fa1c2e5d8b09a7f6c'
-		);
-		expect(screen.getByText(/shown only once/i)).toBeInTheDocument();
+		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
+		expect(screen.getByText(/shown in full only once/i)).toBeInTheDocument();
 
 		// Copy the URL.
 		fireEvent.click(screen.getByTestId('wizard-copy-url'));
@@ -429,6 +427,8 @@ describe('AddPrinterWizard relay display', () => {
 			"For more information on why we're using a relay server."
 		);
 		expect(screen.getByTestId('wizard-direct-disclosure')).toBeInTheDocument();
+		// Direct is framed as an opt-out from the relay, not a troubleshooting step.
+		expect(screen.getByText(/rather not route print jobs through a relay/i)).toBeInTheDocument();
 		expect(screen.getByTestId('wizard-direct-url').textContent).toContain(
 			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen/••••'
 		);

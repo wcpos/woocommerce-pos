@@ -9,6 +9,7 @@ import { fetchStarDevices } from './fetch-star-devices';
 import { PrintQueue } from './print-queue';
 import { PrinterCard } from './printer-card';
 import { PROVIDERS } from './providers';
+import Book from '../../../assets/book.svg';
 import { CardGrid } from '../../components/card-grid';
 import {
 	type CloudPrintSettings,
@@ -262,8 +263,13 @@ function CloudPrint() {
 						href="https://docs.wcpos.com/receipts/cloud-printing"
 						target="_blank"
 						rel="noopener noreferrer"
+						className="wcpos:inline-flex wcpos:items-center wcpos:gap-1"
 					>
+						<span className="wcpos:h-3.5 wcpos:w-3.5">
+							<Book fill="currentColor" />
+						</span>
 						{t('cloud_print.learn_more', 'Learn more')}
+						<span className="wcpos:sr-only"> (opens in new tab)</span>
 					</a>
 				</p>
 			</Callout>

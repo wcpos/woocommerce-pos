@@ -153,7 +153,10 @@ export function PrintQueue() {
 	};
 	const onMutationError = () => {
 		addSnackbar({
-			message: t('cloud_print.queue_action_failed', "That didn't work — the queue is unchanged. Try again."),
+			message: t(
+				'cloud_print.queue_action_failed',
+				"That didn't work — the queue is unchanged. Try again."
+			),
 			status: 'error',
 		});
 	};
@@ -234,12 +237,12 @@ export function PrintQueue() {
 			value: 'active',
 		},
 		{ label: t('cloud_print.queue_all_statuses', 'All statuses'), value: '' },
-		...(
-			['pending', 'claimed', 'failed', 'printed', 'cancelled'] as QueueJob['status'][]
-		).map((status) => ({
-			label: `${STATUS_META[status].label()} (${counts[status] ?? 0})`,
-			value: status,
-		})),
+		...(['pending', 'claimed', 'failed', 'printed', 'cancelled'] as QueueJob['status'][]).map(
+			(status) => ({
+				label: `${STATUS_META[status].label()} (${counts[status] ?? 0})`,
+				value: status,
+			})
+		),
 	];
 	const printerOptions = [
 		{ label: t('cloud_print.queue_all_printers', 'All printers'), value: '' },
@@ -249,7 +252,10 @@ export function PrintQueue() {
 	return (
 		<FormSection
 			title={t('cloud_print.queue_title', 'Print queue')}
-			description={t('cloud_print.queue_description', 'Jobs waiting to be fetched by your printers.')}
+			description={t(
+				'cloud_print.queue_description',
+				'Jobs waiting to be fetched by your printers.'
+			)}
 		>
 			{stalePrinters.map((printer) => (
 				<Notice key={printer.printer_id} status="warning" isDismissible={false}>
