@@ -255,6 +255,57 @@ class Starprnt_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It computes Unicode display width when mbstring is unavailable.
+	 */
+	public function test_emit_aligned_unicode_without_mbstring_succeeds(): void {
+		$script = <<<'PHP'
+<?php
+require getcwd() . '/includes/Templates/Thermal/Starprnt_Thermal_Emitter.php';
+$emitter = new \WCPOS\WooCommercePOS\Templates\Thermal\Starprnt_Thermal_Emitter();
+echo base64_encode(
+	$emitter->emit(
+		array(
+			'paper_width' => 4,
+			'children'    => array(
+				array(
+					'type'     => 'align',
+					'mode'     => 'center',
+					'children' => array(
+						array(
+							'type'     => 'text',
+							'children' => array( array( 'type' => 'raw-text', 'value' => '漢' ) ),
+						),
+					),
+				),
+			),
+		)
+	)
+		);
+PHP;
+		$process = proc_open(
+			array( PHP_BINARY, '-d', 'disable_functions=mb_ord,mb_convert_encoding' ),
+			array(
+				0 => array( 'pipe', 'r' ),
+				1 => array( 'pipe', 'w' ),
+				2 => array( 'pipe', 'w' ),
+			),
+			$pipes,
+			dirname( __DIR__, 4 )
+		);
+
+		$this->assertIsResource( $process );
+		fwrite( $pipes[0], $script );
+		fclose( $pipes[0] );
+		$output = stream_get_contents( $pipes[1] );
+		$errors = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+
+		$this->assertSame( 0, proc_close( $process ), $errors );
+		$this->assertStringContainsString( '漢', base64_decode( $output ) );
+	}
+
+	/**
 	 * It renders rule lines from the paper width.
 	 */
 	public function test_emit_line_repeats_rule_characters(): void {
