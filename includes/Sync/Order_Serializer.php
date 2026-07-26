@@ -22,12 +22,20 @@ final class Order_Serializer {
 		$response = $controller->prepare_object_for_response( $order, $request );
 		$response = rest_ensure_response( $response );
 		$data = rest_get_server()->response_to_data( $response, false );
+		$data = self::add_payment_link( $data, $order );
 
 		/**
 		 * Allows explicit lab inspection without bypassing WooCommerce/WP REST response preparation.
 		 * This filter is additive and must not remove WooCommerce REST fields.
 		 */
 		return apply_filters( 'woocommerce_pos_sync_serialized_order', $data, $order, $request );
+	}
+
+	public static function add_payment_link( array $payload, $order ): array {
+		$payload['links'] = array(
+			'payment' => array( array( 'href' => $order->get_checkout_payment_url() ) ),
+		);
+		return $payload;
 	}
 
 	public function sync_metadata( array $payload, int $order_id, string $source, bool $partial, int $sequence ): array {

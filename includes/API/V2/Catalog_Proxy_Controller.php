@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\API\V1\Customers_Controller as V1_Customers_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -118,6 +119,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			return $response;
 		}
 		$data = apply_filters( 'woocommerce_pos_sync_proxy_response', $response->get_data(), $resource, $request );
+		if ( 'orders' === $resource ) {
+			foreach ( (array) $data as $index => $payload ) {
+				$order          = wc_get_order( (int) ( $payload['id'] ?? 0 ) );
+				$data[ $index ] = $order ? Order_Serializer::add_payment_link( $payload, $order ) : $payload;
+			}
+		}
 		$response->set_data( $data );
 
 		return $response;

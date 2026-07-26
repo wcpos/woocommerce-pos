@@ -123,6 +123,28 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Pulled orders carry the customer-facing checkout payment URL.
+	 */
+	public function test_pull_document_carries_payment_link(): void {
+		$order = OrderHelper::create_order();
+		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+
+		$response = ( new Orders_Controller() )->pull_orders(
+			$this->request(
+				array(
+					'limit'          => 100,
+					'updated_at_gmt' => '1970-01-01T00:00:00.000Z',
+					'order_id'       => 0,
+					'sequence'       => 0,
+				)
+			)
+		);
+		$payload = $response->get_data()['documents'][0]['payload'];
+
+		$this->assertSame( $order->get_checkout_payment_url(), $payload['links']['payment'][0]['href'] );
+	}
+
+	/**
 	 * Structured order and line-item meta is typed before the pull revision is computed.
 	 */
 	public function test_pull_emits_typed_meta_and_revision_of_the_normalized_payload(): void {
@@ -397,5 +419,6 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		}
 		$this->assertNotNull( $served );
 		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $served['meta_data'] ?? array() ) );
+		$this->assertSame( $order->get_checkout_payment_url(), $served['links']['payment'][0]['href'] );
 	}
 }

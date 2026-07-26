@@ -76,7 +76,7 @@ class Revision {
 	}
 
 	public static function canonicalize( array $data ): array {
-		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links' ) );
+		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
 		foreach ( (array) $excluded as $field ) {
 			unset( $data[ $field ] );
 		}

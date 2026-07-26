@@ -49,4 +49,26 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		$this->assertNotSame( Order_Serializer::canonical_revision( $with ), Order_Serializer::canonical_revision( array_merge( $with, array( 'total' => '10.99' ) ) ) );
 		$this->assertCount( 2, $with['meta_data'] );
 	}
+
+	/**
+	 * Request-derived payment links do not affect a content revision.
+	 */
+	public function test_revision_is_invariant_to_payment_links(): void {
+		$without = array(
+			'id'    => 5,
+			'total' => '9.99',
+		);
+		$with    = array_merge(
+			$without,
+			array(
+				'links' => array(
+					'payment' => array(
+						array( 'href' => 'https://example.test/checkout/order-pay/5/?pay_for_order=true&key=wc_order_test' ),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ) );
+	}
 }
