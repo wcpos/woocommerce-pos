@@ -532,6 +532,28 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It refuses to cancel a failed job, preserving its retryable payload.
+	 *
+	 * set_status() clears post_content on cancel, so cancelling a failed job
+	 * destroys the payload Retry copies. cancel_waiting() already guards this
+	 * for bulk cancels; the single-job endpoint must agree.
+	 */
+	public function test_cancel_refuses_failed_job_and_keeps_payload(): void {
+		$jobs = new Print_Job_Service();
+		$id   = $this->jobs_seed( 'printer-A' );
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 409, $response->get_status() );
+		$job = $jobs->get( $id );
+		$this->assertEquals( 'failed', $job['status'] );
+		$this->assertEquals( base64_encode( 'x' ), $job['payload'] );
+	}
+
+	/**
 	 * It enqueues a pending diagnostic job for a Star printer.
 	 */
 	public function test_test_print_enqueues_pending_job_for_star_printer(): void {

@@ -415,14 +415,28 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function delete_item( $request ) {
-		$id = (int) $request->get_param( 'id' );
-		if ( null === $this->jobs->get( $id ) ) {
+		$id  = (int) $request->get_param( 'id' );
+		$job = $this->jobs->get( $id );
+		if ( null === $job ) {
 			return new WP_Error(
 				'wcpos_print_job_not_found',
 				__( 'Print job not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
 		}
+
+		// Only waiting jobs can be cancelled — the same rule cancel_waiting()
+		// applies to bulk cancels. Cancelling clears the payload, so allowing
+		// it on a failed job would destroy the bytes Retry needs, and on a
+		// printed job it would rewrite history.
+		if ( ! \in_array( $job['status'], array( Print_Job_Service::STATUS_PENDING, Print_Job_Service::STATUS_CLAIMED ), true ) ) {
+			return new WP_Error(
+				'wcpos_print_job_not_cancellable',
+				__( 'Only pending or claimed print jobs can be cancelled.', 'woocommerce-pos' ),
+				array( 'status' => 409 )
+			);
+		}
+
 		$this->jobs->set_status( $id, Print_Job_Service::STATUS_CANCELLED );
 
 		return rest_ensure_response( $this->jobs->get( $id ) );
