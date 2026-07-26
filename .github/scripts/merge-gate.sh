@@ -192,7 +192,12 @@ pr_commits() {
 commit_files() {
   # status<TAB>filename — a REMOVED test must not satisfy the pinning-test
   # requirement, so callers need the status.
-  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --jq '.files[] | [.status, .filename] | @tsv'
+  #
+  # --paginate: the Get-a-commit endpoint pages `files` at 30 by default, so a
+  # single request hides sources (and tests) in a large commit — and the
+  # 300-file guard below could never see 300 rows.
+  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --paginate \
+    --jq '.files[] | [.status, .filename] | @tsv'
 }
 
 commit_message() {
@@ -241,6 +246,9 @@ trailer_block_has_tested() {
 is_config_path() {
   case "$1" in
     .github/workflows/*|.github/*.json|composer.json|composer.lock|package.json|pnpm-workspace.yaml|pnpm-lock.yaml|package-lock.json) return 0 ;;
+    # The PHPUnit config selects which test files run at all — narrowing it
+    # silently disarms the suite, so it needs the same Tested: proof.
+    .phpunit.xml.dist|phpunit.xml.dist|phpunit.xml) return 0 ;;
     *) return 1 ;;
   esac
 }

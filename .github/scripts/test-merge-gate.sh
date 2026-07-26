@@ -368,4 +368,18 @@ run_case "fix-bot config commit with trailer passes without a new test" pass \
   MOCK_COMMIT_FILES_c1=$'modified\tcomposer.json' \
   MOCK_COMMIT_MSG_c1=$'fix: bump dep\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
 
+# The PHPUnit config decides which tests run at all — a bot narrowing the
+# suite must still prove it ran one.
+run_case "fix-bot phpunit-config commit without trailer fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.phpunit.xml.dist' \
+  MOCK_COMMIT_MSG_c1="test: narrow the suite"
+
+run_case "fix-bot phpunit-config commit with trailer passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t.phpunit.xml.dist' \
+  MOCK_COMMIT_MSG_c1=$'test: enroll suffix tests\n\nTested: OK (1919 tests, 9494 assertions) — wp-env'
+
 echo "All merge-gate tests passed."
