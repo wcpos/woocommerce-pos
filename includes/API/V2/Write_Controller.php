@@ -1141,7 +1141,9 @@ class Write_Controller extends WP_REST_Controller {
 		$response = rest_do_request( $request );
 		$data     = $response->get_data();
 		if ( is_array( $data ) ) {
-			$response->set_data( Meta_Normalizer::normalize( $data ) );
+			$data = Meta_Normalizer::normalize( $data );
+			$order = 'order' === ( $meta['id_type'] ?? '' ) ? wc_get_order( $id ) : false;
+			$response->set_data( $order ? Order_Serializer::add_payment_link( $data, $order ) : $data );
 		}
 		return $response;
 	}

@@ -1307,6 +1307,32 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array( self::MID => 7001 ), $store->finalized );
 	}
 
+	public function test_order_create_response_carries_payment_link(): void {
+		$order = OrderHelper::create_order();
+		$store = new Fake_Mutation_Store();
+		$store->resolveResults = array( 0, $order->get_id() );
+		$this->setRestResponse(
+			array(
+				'id'     => $order->get_id(),
+				'status' => $order->get_status(),
+			),
+			201
+		);
+
+		$result = $this->push( $store, array( 'collection' => 'orders' ) );
+
+		$this->assertSame(
+			add_query_arg(
+				array(
+					'pay_for_order' => true,
+					'key'           => $order->get_order_key(),
+				),
+				wcpos_checkout_url( 'order-pay/' . $order->get_id() )
+			),
+			$result->get_data()['document']['links']['payment'][0]['href']
+		);
+	}
+
 	public function test_order_create_fails_closed_when_uuid_stamp_cannot_be_verified(): void {
 		$store = new Fake_Mutation_Store();
 		$store->resolveResults = array( 0, 0 ); // no existing order, and still not resolvable after persist_uuid()
