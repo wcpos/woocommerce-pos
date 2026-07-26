@@ -185,4 +185,22 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 401, $response->get_status() );
 		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $response->get_data()['code'] );
 	}
+
+	/**
+	 * CORS preflights (OPTIONS) carry no credentials, so the anonymous gate must not
+	 * intercept them — a non-2xx preflight blocks every cross-origin standalone client.
+	 */
+	public function test_anonymous_options_preflight_bypasses_gate(): void {
+		wp_set_current_user( 0 );
+		$api = new API();
+
+		$request = new \WP_REST_Request( 'OPTIONS', '/wcpos/v2/cashier/2' );
+		$result  = $api->rest_pre_dispatch( null, $this->server, $request );
+
+		$this->assertNull( $result );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertLessThan( 300, $response->get_status() );
+		$this->assertGreaterThanOrEqual( 200, $response->get_status() );
+	}
 }

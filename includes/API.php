@@ -500,6 +500,14 @@ class API {
 			return $result;
 		}
 
+		// CORS preflights carry no credentials (browsers strip Authorization from OPTIONS),
+		// so the permission gate must never answer them with 401 — a non-2xx preflight blocks
+		// every cross-origin standalone client from the entire namespace. WP core serves
+		// OPTIONS with route metadata and Init::rest_pre_serve_request adds the CORS headers.
+		if ( 'OPTIONS' === $request->get_method() ) {
+			return $result;
+		}
+
 		// Baseline permission gate: POS endpoints require access_woocommerce_pos; the three
 		// sync admin operations instead use their route-level manage_woocommerce check.
 		// Exempt public auth, printer-token polling, and authenticated receipt denials that need
