@@ -144,7 +144,7 @@ final class Response_Telemetry {
 
 		// Error bodies (incl. the write contract's golden 4xx shapes) are never
 		// touched — contextual headers are the only telemetry they carry.
-		if ( $response->get_status() >= 400 ) {
+		if ( 304 === $response->get_status() || $response->get_status() >= 400 ) {
 			return $response;
 		}
 

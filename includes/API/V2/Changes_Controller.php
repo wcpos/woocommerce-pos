@@ -146,6 +146,38 @@ final class Changes_Controller extends WP_REST_Controller {
 		$since      = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
 
 		global $wpdb;
+		// Embed the FULL fingerprint set regardless of this stream's `collection`
+		// param: the products stream serves product AND variation rows, and a client
+		// replacing its standalone all-collections fingerprint poll with this
+		// embedded member must never see a narrowed snapshot (stale variations).
+		$config_fingerprint = $this->config_fingerprint_data( $request, $started, true );
+		$head_sequence      = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
+		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		$headers            = array(
+			'ETag'          => $etag,
+			'Cache-Control' => 'no-store',
+		);
+
+		// RFC 9110 If-None-Match semantics (parser adapted from wcpos-bot's review
+		// proposal): accept the wildcard, weak validators (W/"…"), and comma-separated
+		// validator lists — intermediaries may weaken or aggregate tags. Malformed
+		// headers never match (full 200 response).
+		$if_none_match              = trim( (string) $request->get_header( 'If-None-Match' ) );
+		$entity_tag_pattern         = '(?:W/)?"[\x21\x23-\x7E\x80-\xFF]*"';
+		$if_none_match_list_pattern = '~\A[ \t]*(?:,[ \t]*)*'
+			. $entity_tag_pattern
+			. '(?:[ \t]*,(?:[ \t]*' . $entity_tag_pattern . ')?)*[ \t]*\z~D';
+		$etag_matches               = '*' === $if_none_match;
+
+		if ( ! $etag_matches && 1 === preg_match( $if_none_match_list_pattern, $if_none_match ) ) {
+			preg_match_all( '~(?:W/)?"([\x21\x23-\x7E\x80-\xFF]*)"~', $if_none_match, $validators );
+			$etag_matches = in_array( substr( $etag, 1, -1 ), $validators[1], true );
+		}
+
+		if ( $since === $head_sequence && $etag_matches ) {
+			return new \WP_REST_Response( null, 304, $headers );
+		}
+
 		if ( 'tax_rates' === $collection ) {
 			$rows = $this->change_log->changes_since( 'tax_rate', $since, $limit )['rows'];
 		} elseif ( 'all' === $collection ) {
@@ -225,21 +257,32 @@ final class Changes_Controller extends WP_REST_Controller {
 		// pulls); only changes AFTER head need replaying. See finding F1 in
 		// docs/pos-replication-model.md. MAX over the whole table is a valid
 		// baseline bound for every scope (the sequence is one global monotonic space).
+		// Re-read AFTER building the page: the envelope's head must stay >= every
+		// served row (a row can land between the early ETag head-read and the page
+		// query). The early read above serves only the 304 short-circuit.
 		$head_sequence = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
 
-		return rest_ensure_response(
-			$this->envelope(
-				'sequence-log',
-				$collection,
-				array(
-					'since' => $checkpoint_since,
-					'head' => $head_sequence,
-				),
-				$changes,
-				\count( $rows ) < $limit,
-				$started
-			)
+		// Rebuild the served ETag from the refreshed head (CodeRabbit review): if a
+		// row landed between the reads, an ETag stamped with the stale head could
+		// never match the client's next at-head poll, costing one useless full 200.
+		// A newer-head ETag can't hide rows — the 304 branch still requires the NEXT
+		// request's since to equal that request's freshly-read head.
+		$headers['ETag'] = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+
+		$data                       = $this->envelope(
+			'sequence-log',
+			$collection,
+			array(
+				'since' => $checkpoint_since,
+				'head'  => $head_sequence,
+			),
+			$changes,
+			\count( $rows ) < $limit,
+			$started
 		);
+		$data['config_fingerprint'] = $config_fingerprint;
+
+		return new \WP_REST_Response( $data, 200, $headers );
 	}
 
 	/**
@@ -482,24 +525,51 @@ final class Changes_Controller extends WP_REST_Controller {
 	public function config_fingerprint( WP_REST_Request $request ) {
 		$started = microtime( true );
 
+		return rest_ensure_response( $this->config_fingerprint_data( $request, $started ) );
+	}
+
+	/**
+	 * The sequence-log validator: head sequence + a stable hash of the
+	 * representation-affecting fingerprint data.
+	 */
+	private function sequence_log_etag( int $head_sequence, array $config_fingerprint ): string {
+		return '"' . $head_sequence . ':' . md5(
+			(string) wp_json_encode(
+				array(
+					'fingerprints'   => $config_fingerprint['fingerprints'],
+					'barcode_fields' => $config_fingerprint['barcode_fields'],
+				)
+			)
+		) . '"';
+	}
+
+	/**
+	 * Build the config-fingerprint response data shared by both polling routes.
+	 *
+	 * @param bool $all_collections Ignore the request's `collection` narrowing and
+	 *                              report every collection (the sequence-log embed).
+	 */
+	private function config_fingerprint_data(
+		WP_REST_Request $request,
+		float $started,
+		bool $all_collections = false
+	): array {
 		$requested   = (string) ( $request->get_param( 'collection' ) ?? '' );
-		$collections = \in_array( $requested, Config_Fingerprint::collections(), true )
+		$collections = ! $all_collections && \in_array( $requested, Config_Fingerprint::collections(), true )
 			? array( $requested )
 			: Config_Fingerprint::collections();
 
 		$fp   = new Config_Fingerprint();
 		$snap = $fp->snapshot( $collections );
 
-		return rest_ensure_response(
-			array(
-				'candidate'      => 'config-fingerprint',
-				'fingerprints'   => $snap['fingerprints'],
-				'barcode_fields' => $snap['barcode_fields'],
-				'meta'           => array(
-					'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-					'supported'   => true,
-				),
-			)
+		return array(
+			'candidate'      => 'config-fingerprint',
+			'fingerprints'   => $snap['fingerprints'],
+			'barcode_fields' => $snap['barcode_fields'],
+			'meta'           => array(
+				'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
+				'supported'   => true,
+			),
 		);
 	}
 
