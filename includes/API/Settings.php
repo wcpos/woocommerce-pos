@@ -854,8 +854,17 @@ class Settings extends WP_REST_Controller {
 			return $printer;
 		}
 
-		$language = \in_array( $printer['language'] ?? '', array( 'esc-pos', 'star-prnt', 'star-line' ), true )
-			? $printer['language'] : 'esc-pos';
+		// No Star CloudPRNT printer decodes ESC/POS (the TSP100IV prints the
+		// command bytes as literal text), so 'esc-pos' is not an accepted
+		// value — including rows where earlier releases materialized it into
+		// the stored option as the old default. Only 'star-line' survives as
+		// an explicit choice, for Line Mode-only models (TSP650II et al.).
+		// There is no admin toggle; sites that need a different fallback set
+		// it in code via the woocommerce_pos_cloud_printer_default_language filter.
+		$language = $printer['language'] ?? '';
+		if ( ! \in_array( $language, array( 'star-prnt', 'star-line' ), true ) ) {
+			$language = (string) apply_filters( 'woocommerce_pos_cloud_printer_default_language', 'star-prnt', $printer );
+		}
 		$columns  = isset( $printer['columns'] ) ? (int) $printer['columns'] : 42;
 		if ( ! \in_array( $columns, array( 32, 42, 48 ), true ) ) {
 			$columns = 42;
