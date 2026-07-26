@@ -152,14 +152,7 @@ final class Changes_Controller extends WP_REST_Controller {
 		// embedded member must never see a narrowed snapshot (stale variations).
 		$config_fingerprint = $this->config_fingerprint_data( $request, $started, true );
 		$head_sequence      = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
-		$etag               = '"' . $head_sequence . ':' . md5(
-			(string) wp_json_encode(
-				array(
-					'fingerprints'   => $config_fingerprint['fingerprints'],
-					'barcode_fields' => $config_fingerprint['barcode_fields'],
-				)
-			)
-		) . '"';
+		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 		$headers            = array(
 			'ETag'          => $etag,
 			'Cache-Control' => 'no-store',
@@ -268,6 +261,13 @@ final class Changes_Controller extends WP_REST_Controller {
 		// served row (a row can land between the early ETag head-read and the page
 		// query). The early read above serves only the 304 short-circuit.
 		$head_sequence = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
+
+		// Rebuild the served ETag from the refreshed head (CodeRabbit review): if a
+		// row landed between the reads, an ETag stamped with the stale head could
+		// never match the client's next at-head poll, costing one useless full 200.
+		// A newer-head ETag can't hide rows — the 304 branch still requires the NEXT
+		// request's since to equal that request's freshly-read head.
+		$headers['ETag'] = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 
 		$data                       = $this->envelope(
 			'sequence-log',
@@ -526,6 +526,21 @@ final class Changes_Controller extends WP_REST_Controller {
 		$started = microtime( true );
 
 		return rest_ensure_response( $this->config_fingerprint_data( $request, $started ) );
+	}
+
+	/**
+	 * The sequence-log validator: head sequence + a stable hash of the
+	 * representation-affecting fingerprint data.
+	 */
+	private function sequence_log_etag( int $head_sequence, array $config_fingerprint ): string {
+		return '"' . $head_sequence . ':' . md5(
+			(string) wp_json_encode(
+				array(
+					'fingerprints'   => $config_fingerprint['fingerprints'],
+					'barcode_fields' => $config_fingerprint['barcode_fields'],
+				)
+			)
+		) . '"';
 	}
 
 	/**
