@@ -1322,7 +1322,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$result = $this->push( $store, array( 'collection' => 'orders' ) );
 
 		$this->assertSame(
-			$order->get_checkout_payment_url(),
+			add_query_arg(
+				array(
+					'pay_for_order' => true,
+					'key'           => $order->get_order_key(),
+				),
+				wcpos_checkout_url( 'order-pay/' . $order->get_id() )
+			),
 			$result->get_data()['document']['links']['payment'][0]['href']
 		);
 	}

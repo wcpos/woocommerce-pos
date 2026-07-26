@@ -141,7 +141,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		);
 		$payload = $response->get_data()['documents'][0]['payload'];
 
-		$this->assertSame( $order->get_checkout_payment_url(), $payload['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $payload['links']['payment'][0]['href'] );
 	}
 
 	/**
@@ -419,6 +419,19 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		}
 		$this->assertNotNull( $served );
 		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $served['meta_data'] ?? array() ) );
-		$this->assertSame( $order->get_checkout_payment_url(), $served['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $served['links']['payment'][0]['href'] );
+	}
+
+	/**
+	 * The POS checkout-route payment link (V1 parity), as add_payment_link() builds it.
+	 */
+	private function wcpos_expected_payment_link( \WC_Order $order ): string {
+		return add_query_arg(
+			array(
+				'pay_for_order' => true,
+				'key'           => $order->get_order_key(),
+			),
+			wcpos_checkout_url( 'order-pay/' . $order->get_id() )
+		);
 	}
 }

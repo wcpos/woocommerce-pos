@@ -31,10 +31,30 @@ final class Order_Serializer {
 		return apply_filters( 'woocommerce_pos_sync_serialized_order', $data, $order, $request );
 	}
 
+	/**
+	 * Augment a serialized order payload with the POS checkout payment link.
+	 *
+	 * Uses the WCPOS checkout route (V1 parity — Orders_Controller::add_pos_links),
+	 * NOT get_checkout_payment_url(): the custom route exists to avoid checkout-page
+	 * framing conflicts (X-Frame-Options), establish the POS checkout context, and
+	 * honor the force_ssl policy. Existing links entries (e.g. supplied by the proxy
+	 * response filter) are preserved; only `payment` is owned by this helper.
+	 *
+	 * @param array     $payload Serialized order payload.
+	 * @param \WC_Order $order   The order backing the payload.
+	 */
 	public static function add_payment_link( array $payload, $order ): array {
-		$payload['links'] = array(
-			'payment' => array( array( 'href' => $order->get_checkout_payment_url() ) ),
+		$pos_payment_url = add_query_arg(
+			array(
+				'pay_for_order' => true,
+				'key'           => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
+			),
+			wcpos_checkout_url( 'order-pay/' . $order->get_id() )
 		);
+
+		$links            = is_array( $payload['links'] ?? null ) ? $payload['links'] : array();
+		$links['payment'] = array( array( 'href' => $pos_payment_url ) );
+		$payload['links'] = $links;
 		return $payload;
 	}
 
@@ -66,6 +86,12 @@ final class Order_Serializer {
 	 * retirement (step 4) along with the grace option.
 	 */
 	public static function legacy_revision( array $payload ): string {
+		// Pre-cutover payloads never contained the read-time `links` augmentation.
+		// The write path's grace comparer reserializes the CURRENT order (links now
+		// injected) and compares against a hash the client computed BEFORE this
+		// deployment — hashing links here would reject every unchanged pre-upgrade
+		// order with a false 409.
+		unset( $payload['links'] );
 		$source = wp_json_encode( self::strip_identity_meta( $payload ) );
 		return 'sha256:' . hash( 'sha256', false === $source ? '' : $source );
 	}

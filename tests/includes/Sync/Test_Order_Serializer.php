@@ -71,4 +71,50 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 
 		$this->assertSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ) );
 	}
+
+	/**
+	 * The pre-cutover grace recipe must hash identically with and without the
+	 * read-time links augmentation — a pre-deployment baseRevision on an
+	 * unchanged order must still drain (no false 409 across the upgrade).
+	 */
+	public function test_legacy_revision_is_invariant_to_payment_links(): void {
+		$without = array(
+			'id'    => 5,
+			'total' => '9.99',
+		);
+		$with    = array_merge(
+			$without,
+			array(
+				'links' => array(
+					'payment' => array( array( 'href' => 'https://example.test/wcpos-checkout/order-pay/5/?pay_for_order=true&key=wc_order_test' ) ),
+				),
+			)
+		);
+
+		$this->assertSame( Order_Serializer::legacy_revision( $without ), Order_Serializer::legacy_revision( $with ) );
+	}
+
+	/**
+	 * Filter-supplied links entries survive the payment augmentation; only the
+	 * `payment` member is owned by add_payment_link().
+	 */
+	public function test_add_payment_link_preserves_existing_links(): void {
+		$order   = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$payload = array(
+			'id'    => $order->get_id(),
+			'links' => array(
+				'receipt' => array( array( 'href' => 'https://example.test/receipt' ) ),
+			),
+		);
+
+		$augmented = Order_Serializer::add_payment_link( $payload, $order );
+
+		$this->assertSame(
+			array( array( 'href' => 'https://example.test/receipt' ) ),
+			$augmented['links']['receipt']
+		);
+		$this->assertStringContainsString( 'order-pay/' . $order->get_id(), $augmented['links']['payment'][0]['href'] );
+		$this->assertStringContainsString( 'pay_for_order=', $augmented['links']['payment'][0]['href'] );
+		$this->assertStringNotContainsString( '/checkout/order-pay/', $augmented['links']['payment'][0]['href'] );
+	}
 }
