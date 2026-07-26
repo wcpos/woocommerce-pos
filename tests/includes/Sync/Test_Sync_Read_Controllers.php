@@ -21,6 +21,7 @@ use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
+use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
 
@@ -97,6 +98,78 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 'products', $data['changes'][0]['collection'] );
 		$this->assertSame( $product->get_id(), $data['changes'][0]['id'] );
+	}
+
+	/**
+	 * Sequence-log embeds the standalone config fingerprint response data.
+	 */
+	public function test_sequence_log_contains_standalone_config_fingerprint_data(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$controller = new Changes_Controller();
+
+		$sequence_data   = $controller->sequence_log( $this->request() )->get_data();
+		$standalone_data = $controller->config_fingerprint( $this->request() )->get_data();
+
+		// Request timing is intentionally volatile; the remaining response data must match.
+		unset( $sequence_data['config_fingerprint']['meta']['duration_ms'], $standalone_data['meta']['duration_ms'] );
+		$this->assertSame( $standalone_data, $sequence_data['config_fingerprint'] );
+	}
+
+	/**
+	 * A matching ETag at the current head returns no response body.
+	 */
+	public function test_sequence_log_matching_etag_at_head_returns_not_modified(): void {
+		$controller = new Changes_Controller();
+		$response   = $controller->sequence_log( $this->request( array( 'since' => 0 ) ) );
+		$etag       = $response->get_headers()['ETag'];
+		$request    = $this->request( array( 'since' => 0 ) );
+		$request->set_header( 'If-None-Match', $etag );
+		$request->set_route( '/wcpos/v2/changes/sequence-log' );
+		Response_Telemetry::start_request( null, null, $request );
+
+		$not_modified = Response_Telemetry::decorate_callback_response( $controller->sequence_log( $request ), null, $request );
+
+		$this->assertSame( 304, $not_modified->get_status() );
+		$this->assertNull( $not_modified->get_data() );
+		$this->assertSame( $etag, $not_modified->get_headers()['ETag'] );
+		$this->assertSame( 'no-store', $not_modified->get_headers()['Cache-Control'] );
+	}
+
+	/**
+	 * A matching ETag cannot hide rows after a behind cursor.
+	 */
+	public function test_sequence_log_matching_etag_with_since_behind_head_returns_page(): void {
+		$log = new Change_Log();
+		$log->record( 'product', 123, 'update', 'test', false );
+		$controller = new Changes_Controller( $log );
+		$latest     = $controller->sequence_log( $this->request( array( 'since' => 0 ) ) );
+		$head       = $latest->get_data()['checkpoint']['head'];
+		$current    = $controller->sequence_log( $this->request( array( 'since' => $head ) ) );
+		$request    = $this->request( array( 'since' => 0 ) );
+		$request->set_header( 'If-None-Match', $current->get_headers()['ETag'] );
+
+		$response = $controller->sequence_log( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 123, $response->get_data()['changes'][0]['id'] );
+	}
+
+	/**
+	 * A representation config change invalidates a sequence-log ETag.
+	 */
+	public function test_sequence_log_config_change_invalidates_etag(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$controller = new Changes_Controller();
+		$before     = $controller->sequence_log( $this->request( array( 'since' => 0 ) ) );
+		$request    = $this->request( array( 'since' => 0 ) );
+		$request->set_header( 'If-None-Match', $before->get_headers()['ETag'] );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+
+		$after = $controller->sequence_log( $request );
+
+		$this->assertSame( 200, $after->get_status() );
+		$this->assertNotSame( $before->get_headers()['ETag'], $after->get_headers()['ETag'] );
+		$this->assertSame( 'no-store', $after->get_headers()['Cache-Control'] );
 	}
 
 	/**
