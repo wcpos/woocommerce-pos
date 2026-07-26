@@ -34,6 +34,8 @@ class General_Section extends Abstract_Section {
 			'barcode_field'               => '_global_unique_id',
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
+			'storefront_receipt_enabled'  => false,
+			'storefront_receipt_template' => '',
 			'tracking_consent'            => 'undecided',
 			'store_name'                  => '',
 			'store_phone'                 => '',
@@ -102,6 +104,19 @@ class General_Section extends Abstract_Section {
 		if ( \array_key_exists( 'policies_and_conditions', $settings ) ) {
 			$settings['policies_and_conditions'] = \is_string( $settings['policies_and_conditions'] )
 				? sanitize_textarea_field( $settings['policies_and_conditions'] )
+				: '';
+		}
+
+		if ( \array_key_exists( 'storefront_receipt_enabled', $settings ) ) {
+			$settings['storefront_receipt_enabled'] = wp_validate_boolean( $settings['storefront_receipt_enabled'] );
+		}
+
+		// Template IDs are numeric (database) or slug strings (virtual/gallery); an empty
+		// string means "use the active receipt template". Store as a sanitized string and
+		// let Storefront_Receipts pass it through the already-validated ?template= path.
+		if ( \array_key_exists( 'storefront_receipt_template', $settings ) ) {
+			$settings['storefront_receipt_template'] = \is_scalar( $settings['storefront_receipt_template'] )
+				? sanitize_text_field( (string) $settings['storefront_receipt_template'] )
 				: '';
 		}
 

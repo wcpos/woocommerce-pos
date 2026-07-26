@@ -231,6 +231,26 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that a gallery template key selects the matching receipt template.
+	 */
+	public function test_template_query_param_selects_gallery_template(): void {
+		$order   = OrderHelper::create_order();
+		$receipt = new Receipt( $order->get_id() );
+
+		$_GET['template'] = 'standard-receipt';
+		try {
+			$template = $this->invoke_get_custom_template( $receipt );
+		} finally {
+			unset( $_GET['template'] );
+		}
+
+		$this->assertIsArray( $template );
+		$this->assertEquals( 'standard-receipt', $template['key'] );
+		$this->assertEquals( 'receipt', $template['type'] );
+		$this->assertTrue( $template['is_virtual'] );
+	}
+
+	/**
 	 * Test that an invalid template ID falls back to the active template.
 	 */
 	public function test_template_query_param_falls_back_on_invalid_id(): void {

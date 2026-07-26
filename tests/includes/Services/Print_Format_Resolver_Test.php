@@ -115,7 +115,7 @@ class Print_Format_Resolver_Test extends WP_UnitTestCase {
 	/**
 	 * It delegates star thermal to the provider wire format.
 	 */
-	public function test_star_thermal_delegates_to_provider_escpos(): void {
+	public function test_star_thermal_delegates_to_provider_starprnt(): void {
 		// Arrange.
 		$resolver = new Print_Format_Resolver();
 
@@ -128,8 +128,8 @@ class Print_Format_Resolver_Test extends WP_UnitTestCase {
 		// Assert.
 		$this->assertEquals(
 			array(
-				'kind' => 'escpos',
-				'content_type' => 'application/octet-stream',
+				'kind' => 'starprnt',
+				'content_type' => 'application/vnd.star.starprnt',
 			),
 			$actual
 		);

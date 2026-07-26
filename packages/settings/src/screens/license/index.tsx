@@ -131,7 +131,7 @@ function License() {
 					onClick={() => captureUpgradeCtaClicked('license_screen_card', 'https://wcpos.com/pro')}
 				>
 					<img
-						src="https://wcpos.com/wp-content/uploads/2025/07/wcpos-pro-icon.png"
+						src="https://wcpos.com/images/wcpos-pro.png"
 						alt="WCPOS Pro"
 						width={80}
 						height={80}

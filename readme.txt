@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.10
+Stable tag: 1.9.12
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -113,23 +113,28 @@ Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) 
 Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 = What data does WCPOS send outside my site? =
-Your products, orders, and customer data stay between your WooCommerce site and your POS devices, unless you turn on a feature below that relies on an outside service. Except where noted, the services below never receive product details, order contents, or customer personal data.
-
-WCPOS contacts these outside services to:
-
-* load the POS web bundle and other interface assets from jsDelivr;
-* load translations from jsDelivr;
-* send limited technical and aggregate usage information to wcpos.com **only if you opt in** (you can withdraw consent at any time in settings);
-* validate Pro license and site identifiers with wcpos.com when activating Pro; and
-* relay cloud print jobs through the WCPOS Cloud Print relay at cloudprint.wcpos.com **only if you enable WCPOS Cloud Print** — enabling it registers your site with the relay, and each print job is then passed through the relay to your configured cloud printer, so the receipt contents (which include order details) leave your site. You can disable it at any time in settings.
-
-Full details are in our [privacy policy](https://wcpos.com/privacy).
+WCPOS keeps your data in your own WooCommerce database, unless you turn on a feature that relies on an outside service. It contacts outside services to: load the POS web bundle, other interface assets, and translations from a CDN (jsDelivr); send anonymous usage analytics to wcpos.com **if you opt in** (withdraw any time in settings); validate your license key, site identifier (`site_uuid`), and anonymous identifier (`anon_id`) with wcpos.com when you activate Pro; and relay cloud print jobs through the WCPOS Cloud Print relay at cloudprint.wcpos.com **if you use cloud printing** — your site registers with the relay automatically when you open the Cloud Print settings, and each print job for a relay-addressed printer is then passed through the relay to your configured cloud printer, so the receipt contents (which include order details) leave your site (developers can opt out with the `woocommerce_pos_cloud_print_relay_enabled` filter). Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Screenshots ==
 
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.12 - 2026/07/24 =
+- **Fixed cloud printing to Star TSP100 printers** -- StarPRNT-native Star printers (the TSP100/TSP100IV line) rejected Cloud Print jobs with a "510 Incompatible Media Type" error and never printed, because WCPOS sent them ESC/POS. WCPOS now serves these printers native StarPRNT, so Cloud Print works on the whole TSP100 family. Other cloud printers are unaffected.
+- **Customer receipt downloads are now opt-in** -- the Receipt button on My Account > Orders (added in 1.9.11) is now off by default and turned on under Settings > General > Customers, with an optional picker to choose which template customers get. Stores that want it must enable it; the [wcpos_receipt] shortcode is unaffected.
+- **Fixed the Cloud Print printer name being squeezed** -- a long or translated status label (eg: French "En attente de l'imprimante") no longer shrinks the editable printer-name field to a few characters; the status now sits on its own row.
+- **Fixed receipt template selection for downloaded receipts** -- gallery templates now resolve correctly for customer receipt links, and the storefront receipt uses the template you selected.
+- **Updated translations.**
+
+= 1.9.11 - 2026/07/24 =
+- **New: WCPOS Cloud Print relay** -- if your hosting or firewall blocks a cloud printer's direct connection (a permanent "Waiting for printer"), WCPOS now routes Star CloudPRNT and Epson Server Direct Print polling through the WCPOS Cloud Print relay automatically, and print jobs start on the printer's next poll instead of waiting for the next heartbeat. Printer cards tell you when a security layer is blocking cloud print. When the relay is used, print jobs (receipt contents) pass through cloudprint.wcpos.com -- see the privacy FAQ. Site owners can opt out in code.
+- **New: Cloud Print queue** -- the Cloud Print settings screen now shows a live queue of your print jobs and their status, so you can see what has printed, retry a failed job, and clear the backlog. Completed job payloads are stripped and old jobs are purged automatically.
+- **New: receipts on your online store** -- customers can download their order receipt as a PDF, rendered with your WCPOS receipt template, from a new Receipt button on My Account > Orders. A [wcpos_receipt] shortcode is also available for the order-received or custom pages.
+- **Fixed cloud printers that mangle the poll URL** -- printer credentials now travel in the URL path, so printer firmware that URL-encodes the query string (eg: Star TSP100IV) can authenticate. Existing configured printer URLs keep working.
+- **Fixed the WCPOS Pro license image** -- the Pro panel now loads its image correctly.
+- **Updated translations.**
 
 = 1.9.10 - 2026/07/22 =
 - **Fixed stale prices on products converted from simple to variable** -- variable products now show the lowest price of their current visible variations in the POS, instead of a leftover price left behind by the conversion.

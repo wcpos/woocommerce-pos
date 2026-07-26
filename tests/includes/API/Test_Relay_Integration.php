@@ -49,6 +49,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		delete_transient( Cloud_Print_Relay_Service::REREGISTER_TRANSIENT );
 		delete_transient( Cloud_Print_Relay_Service::DOWN_TRANSIENT );
 		wp_clear_scheduled_hook( Cloud_Print_Relay_Service::REREGISTER_HOOK );
+		remove_all_filters( 'woocommerce_pos_cloud_print_relay_enabled' );
 		parent::tearDown();
 	}
 
@@ -296,6 +297,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals(
 			array(
 				'enabled'          => true,
+				'available'        => true,
 				'printer_base_url' => 'https://cloudprint.wcpos.com/p/0123456789abcdef0123456789abcdef',
 			),
 			$data['relay']
@@ -326,13 +328,14 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 				'payload'    => base64_encode( 'one' ),
 			)
 		);
-		$this->store_relay( 'star-cloudprnt', false );
+		add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
 		$jobs->create(
 			array(
 				'printer_id' => 'front',
 				'payload'    => base64_encode( 'two' ),
 			)
 		);
+		remove_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
 		$this->store_relay( 'printnode' );
 		$jobs->create(
 			array(
@@ -504,11 +507,12 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It never re-enables a relay the admin disabled while re-registration was pending.
+	 * It never registers a site that opted out via the filter.
 	 */
-	public function test_reregister_cron_respects_disabled_relay(): void {
-		// Arrange: registered, then explicitly disabled.
-		$this->store_relay( 'star-cloudprnt', false );
+	public function test_reregister_cron_respects_opt_out_filter(): void {
+		// Arrange: registered, then opted out in code.
+		$this->store_relay();
+		add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
 		$calls = 0;
 		$this->mock_http(
 			function () use ( &$calls ) {
@@ -521,8 +525,88 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		( new Cloud_Print_Relay_Service() )->reregister();
 
-		// Assert: no outbound registration, still disabled.
+		// Assert: no outbound registration.
 		$this->assertEquals( 0, $calls );
-		$this->assertFalse( (bool) get_option( Cloud_Print_Relay_Service::OPTION )['enabled'] );
+	}
+
+	/**
+	 * It reports the relay as available-but-unregistered without self-registering on a read.
+	 */
+	public function test_settings_relay_reports_available_when_unregistered(): void {
+		// Arrange: no relay credentials, and a tripwire on outbound HTTP.
+		$calls = 0;
+		$this->mock_http(
+			function () use ( &$calls ) {
+				++$calls;
+
+				return new WP_Error( 'unexpected', 'settings reads must not register' );
+			}
+		);
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert: the settings app is told to self-register; the read itself never does.
+		$this->assertEquals(
+			array(
+				'enabled'   => false,
+				'available' => true,
+			),
+			$data['relay']
+		);
+		$this->assertEquals( 0, $calls );
+	}
+
+	/**
+	 * It hides the relay everywhere when the opt-out filter is in place.
+	 */
+	public function test_relay_filter_opt_out_hides_relay_everywhere(): void {
+		// Arrange: valid credentials on record, but the site opted out in code.
+		$this->store_relay();
+		add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+		$calls = 0;
+		$this->mock_http(
+			function () use ( &$calls ) {
+				++$calls;
+
+				return $this->http_response( 202, array() );
+			}
+		);
+
+		// Act.
+		$settings = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+		$register = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
+		( new Print_Job_Service() )->create(
+			array(
+				'printer_id' => 'front',
+				'payload'    => base64_encode( 'X' ),
+			)
+		);
+
+		// Assert: state hidden, registration refused, no hint sent.
+		$this->assertEquals(
+			array(
+				'enabled'   => false,
+				'available' => false,
+			),
+			$settings['relay']
+		);
+		$this->assertEquals( 403, $register->get_status() );
+		$this->assertEquals( 'wcpos_relay_disabled', $register->as_error()->get_error_code() );
+		$this->assertEquals( 0, $calls );
+	}
+
+	/**
+	 * It ignores the legacy stored disabled flag when credentials are valid.
+	 */
+	public function test_relay_state_ignores_stored_disabled_flag(): void {
+		// Arrange: the brief toggle era could leave enabled=false in the option.
+		$this->store_relay( 'star-cloudprnt', false );
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert: the filter is the only off switch; credentials mean enabled.
+		$this->assertEquals( true, $data['relay']['enabled'] );
 	}
 }

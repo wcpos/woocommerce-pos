@@ -30,6 +30,12 @@ class Print_Job_Service {
 	const META_DRAWER_ERROR     = '_wcpos_pj_drawer_error';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
+	/** Daily cron hook that prunes expired terminal jobs. */
+	const PURGE_HOOK = 'wcpos_print_job_purge';
+
+	/** Unix time a job reached a terminal status — the retention clock. */
+	const META_TERMINAL_AT = '_wcpos_pj_terminal_at';
+
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
 	const CLAIM_TTL = 120;
 
@@ -44,6 +50,17 @@ class Print_Job_Service {
 	 */
 	public function __construct() {
 		add_action( 'init', array( $this, 'register_post_type' ) );
+		// A static callback: several services construct Print_Job_Service on
+		// every request, and WordPress dedupes identical static callbacks, so
+		// the purge runs exactly once per cron event.
+		add_action( self::PURGE_HOOK, array( __CLASS__, 'run_purge' ) );
+	}
+
+	/**
+	 * Cron entry point for the retention purge.
+	 */
+	public static function run_purge(): void {
+		( new self() )->purge_expired();
 	}
 
 	/**
@@ -61,6 +78,10 @@ class Print_Job_Service {
 				'supports'            => array( 'title', 'editor' ),
 			)
 		);
+
+		if ( ! wp_next_scheduled( self::PURGE_HOOK ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', self::PURGE_HOOK );
+		}
 	}
 
 	/**
@@ -126,6 +147,7 @@ class Print_Job_Service {
 
 		return array(
 			'id'           => (int) $post->ID,
+			'created_gmt'  => (string) $post->post_date_gmt,
 			'printer_id'   => (string) get_post_meta( $id, self::META_PRINTER, true ),
 			'status'       => (string) get_post_meta( $id, self::META_STATUS, true ),
 			'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
@@ -317,6 +339,258 @@ class Print_Job_Service {
 	 * @return array<int, array>
 	 */
 	public function query( array $filters = array() ): array {
+		$meta_query = $this->filters_to_meta_query( $filters );
+
+		$posts = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
+				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				// ID breaks date ties: jobs created in the same second must
+				// keep a stable order or offset pagination duplicates rows.
+				'orderby'        => array(
+					'date' => 'ASC',
+					'ID'   => 'ASC',
+				),
+				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+
+		return array_map(
+			function ( $post ) {
+				return $this->get( (int) $post->ID );
+			},
+			$posts
+		);
+	}
+
+	/**
+	 * Queue-view rows: like query(), but never hydrates post_content — a
+	 * raster receipt payload is megabytes the queue table doesn't need, and
+	 * a page of them would be loaded into memory on every refresh.
+	 *
+	 * @param array $filters printer_id / status / limit / page.
+	 *
+	 * @return array<int, array>
+	 */
+	public function query_rows( array $filters = array() ): array {
+		global $wpdb;
+
+		$query = new \WP_Query(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
+				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				'orderby'        => array(
+					'date' => 'ASC',
+					'ID'   => 'ASC',
+				),
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => $this->filters_to_meta_query( $filters ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		update_meta_cache( 'post', $ids );
+
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		// Direct, content-free date lookup: get_post() would pull the full
+		// row (payload included) into the object cache, defeating the point.
+		$dates = $wpdb->get_results(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a %d list.
+			$wpdb->prepare( "SELECT ID, post_date_gmt FROM {$wpdb->posts} WHERE ID IN ($placeholders)", $ids ),
+			OBJECT_K
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		return array_map(
+			function ( int $id ) use ( $dates ): array {
+				return array(
+					'id'           => $id,
+					'created_gmt'  => isset( $dates[ $id ] ) ? (string) $dates[ $id ]->post_date_gmt : '',
+					'printer_id'   => (string) get_post_meta( $id, self::META_PRINTER, true ),
+					'status'       => (string) get_post_meta( $id, self::META_STATUS, true ),
+					'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
+					'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
+					'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
+					'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
+				);
+			},
+			$ids
+		);
+	}
+
+	/**
+	 * Count jobs matching the same filters query() accepts.
+	 *
+	 * @param array $filters printer_id / status / order_id / template_id.
+	 *
+	 * @return int
+	 */
+	public function count( array $filters = array() ): int {
+		$query = new \WP_Query(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_query'     => $this->filters_to_meta_query( $filters ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * One grouped pass over every job: per printer and status, the job count
+	 * and the oldest creation time (GMT, MySQL format).
+	 *
+	 * Replaces a per-printer count/oldest query fan-out — the queue view
+	 * refreshes every 30 seconds, so its summary must cost one query no
+	 * matter how many printers are registered.
+	 *
+	 * @return array<string, array<string, array{count: int, oldest_gmt: string}>> printer_id => status => stats.
+	 */
+	public function status_summary(): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one aggregate pass; WP_Query would need 2 queries per printer.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT printer.meta_value AS printer_id, status.meta_value AS job_status,
+						COUNT(DISTINCT p.ID) AS jobs, MIN(p.post_date_gmt) AS oldest_gmt
+				 FROM {$wpdb->posts} p
+				 INNER JOIN {$wpdb->postmeta} printer ON printer.post_id = p.ID AND printer.meta_key = %s
+				 INNER JOIN {$wpdb->postmeta} status ON status.post_id = p.ID AND status.meta_key = %s
+				 WHERE p.post_type = %s AND p.post_status = 'publish'
+				 GROUP BY printer.meta_value, status.meta_value",
+				self::META_PRINTER,
+				self::META_STATUS,
+				self::POST_TYPE
+			)
+		);
+
+		$summary = array();
+		foreach ( (array) $rows as $row ) {
+			$summary[ (string) $row->printer_id ][ (string) $row->job_status ] = array(
+				'count'      => (int) $row->jobs,
+				'oldest_gmt' => (string) $row->oldest_gmt,
+			);
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * The creation time (GMT, MySQL format) of a printer's oldest waiting job.
+	 *
+	 * Waiting means pending or claimed: a printer that fetched a job and then
+	 * died leaves it claimed forever, and that backlog must still surface.
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return string Empty when the printer has no waiting jobs.
+	 */
+	public function oldest_pending_gmt( string $printer_id ): string {
+		$oldest = '';
+		foreach ( array( self::STATUS_PENDING, self::STATUS_CLAIMED ) as $status ) {
+			$rows = $this->query_rows(
+				array(
+					'printer_id' => $printer_id,
+					'status'     => $status,
+					'limit'      => 1,
+				)
+			);
+			if ( ! empty( $rows ) && '' !== (string) $rows[0]['created_gmt'] ) {
+				$created = (string) $rows[0]['created_gmt'];
+				if ( '' === $oldest || $created < $oldest ) {
+					$oldest = $created;
+				}
+			}
+		}
+
+		return $oldest;
+	}
+
+	/**
+	 * Cancel every waiting (pending or claimed) job matching the filter.
+	 *
+	 * Printed, failed, and already-cancelled jobs are never touched — this
+	 * exists to clear a backlog, not to rewrite history.
+	 *
+	 * @param array $filters ids (array of job ids) and/or printer_id.
+	 *
+	 * @return int Number of jobs cancelled.
+	 */
+	public function cancel_waiting( array $filters ): int {
+		$cancellable = array( self::STATUS_PENDING, self::STATUS_CLAIMED );
+		$cancelled   = 0;
+
+		if ( ! empty( $filters['ids'] ) ) {
+			foreach ( array_map( 'intval', (array) $filters['ids'] ) as $id ) {
+				$job = $this->get( $id );
+				if ( null !== $job && \in_array( $job['status'], $cancellable, true ) ) {
+					$this->set_status( $id, self::STATUS_CANCELLED );
+					++$cancelled;
+				}
+			}
+
+			return $cancelled;
+		}
+
+		if ( empty( $filters['printer_id'] ) ) {
+			return 0;
+		}
+
+		foreach ( $cancellable as $status ) {
+			// Batched: query() pages from the front and cancelling removes
+			// jobs from the result set, so repeat until the queue is drained.
+			do {
+				$jobs  = $this->query(
+					array(
+						'printer_id' => (string) $filters['printer_id'],
+						'status'     => $status,
+						'limit'      => 100,
+					)
+				);
+				$batch = \count( $jobs );
+				foreach ( $jobs as $job ) {
+					$this->set_status( (int) $job['id'], self::STATUS_CANCELLED );
+					++$cancelled;
+				}
+			} while ( 100 === $batch );
+		}
+
+		return $cancelled;
+	}
+
+	/**
+	 * A meta_query clause matching a set of job statuses.
+	 *
+	 * @param array<string> $statuses Status values.
+	 *
+	 * @return array
+	 */
+	private function status_clause( array $statuses ): array {
+		return array(
+			'key'     => self::META_STATUS,
+			'value'   => $statuses,
+			'compare' => 'IN',
+		);
+	}
+
+	/**
+	 * Translate public filters into a meta_query array.
+	 *
+	 * @param array $filters printer_id / status / order_id / template_id.
+	 *
+	 * @return array
+	 */
+	private function filters_to_meta_query( array $filters ): array {
 		$meta_query = array();
 		if ( ! empty( $filters['printer_id'] ) ) {
 			$meta_query[] = array(
@@ -325,9 +599,15 @@ class Print_Job_Service {
 			);
 		}
 		if ( ! empty( $filters['status'] ) ) {
+			// A single status matches exactly; a list becomes an IN clause
+			// (the queue's default "active" view is pending + claimed + failed).
+			$status       = \is_array( $filters['status'] )
+				? array_map( 'sanitize_text_field', $filters['status'] )
+				: sanitize_text_field( $filters['status'] );
 			$meta_query[] = array(
-				'key'   => self::META_STATUS,
-				'value' => sanitize_text_field( $filters['status'] ),
+				'key'     => self::META_STATUS,
+				'value'   => $status,
+				'compare' => \is_array( $status ) ? 'IN' : '=',
 			);
 		}
 		if ( ! empty( $filters['order_id'] ) ) {
@@ -344,23 +624,7 @@ class Print_Job_Service {
 			);
 		}
 
-		$posts = get_posts(
-			array(
-				'post_type'      => self::POST_TYPE,
-				'post_status'    => 'publish',
-				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
-				'orderby'        => 'date',
-				'order'          => 'ASC',
-				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-			)
-		);
-
-		return array_map(
-			function ( $post ) {
-				return $this->get( (int) $post->ID );
-			},
-			$posts
-		);
+		return $meta_query;
 	}
 
 	/**
@@ -371,6 +635,109 @@ class Print_Job_Service {
 	 */
 	public function set_status( int $id, string $status ): void {
 		update_post_meta( $id, self::META_STATUS, sanitize_text_field( $status ) );
+		if ( \in_array( $status, array( self::STATUS_PRINTED, self::STATUS_CANCELLED, self::STATUS_FAILED ), true ) ) {
+			// The retention clock starts when the job *ends*, not when it was
+			// created — a receipt that waited a week and then printed still
+			// deserves its full retention window.
+			update_post_meta( $id, self::META_TERMINAL_AT, time() );
+		}
+		if ( \in_array( $status, array( self::STATUS_PRINTED, self::STATUS_CANCELLED ), true ) ) {
+			// Terminal success (or abandonment): the payload has done its
+			// job, and a raster receipt is hundreds of KB. The row survives
+			// with metadata only — that's all the duplicate-trigger guard
+			// and the queue's history view need. Failed jobs keep their
+			// payload so Retry can copy it.
+			wp_update_post(
+				array(
+					'ID'           => $id,
+					'post_content' => '',
+				)
+			);
+		}
+	}
+
+	/**
+	 * Delete terminal jobs past their retention window.
+	 *
+	 * Runs daily via PURGE_HOOK. Printed/cancelled jobs are kept for
+	 * `woocommerce_pos_print_job_retention_days` (default 7 — long enough
+	 * for the duplicate-trigger guard and "did it print?" questions);
+	 * failed jobs for `woocommerce_pos_print_job_failed_retention_days`
+	 * (default 30 — they represent unresolved problems). A filter
+	 * returning 0 or less keeps that class of job forever. Waiting jobs
+	 * (pending/claimed) are never purged.
+	 */
+	public function purge_expired(): void {
+		$windows = array(
+			array(
+				'statuses' => array( self::STATUS_PRINTED, self::STATUS_CANCELLED ),
+				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_retention_days', 7 ),
+			),
+			array(
+				'statuses' => array( self::STATUS_FAILED ),
+				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_failed_retention_days', 30 ),
+			),
+		);
+
+		foreach ( $windows as $window ) {
+			if ( $window['days'] <= 0 ) {
+				continue;
+			}
+			$cutoff = time() - $window['days'] * DAY_IN_SECONDS;
+			// The retention clock is the moment the job went terminal. Rows
+			// from before this meta existed fall back to their creation date.
+			$expired_queries = array(
+				array(
+					'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						$this->status_clause( $window['statuses'] ),
+						array(
+							'key'     => self::META_TERMINAL_AT,
+							'value'   => $cutoff,
+							'compare' => '<',
+							'type'    => 'NUMERIC',
+						),
+					),
+				),
+				array(
+					'date_query' => array(
+						array(
+							'column' => 'post_date_gmt',
+							'before' => gmdate( 'Y-m-d H:i:s', $cutoff ),
+						),
+					),
+					'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						$this->status_clause( $window['statuses'] ),
+						array(
+							'key'     => self::META_TERMINAL_AT,
+							'compare' => 'NOT EXISTS',
+						),
+					),
+				),
+			);
+			$deleted         = 0;
+			foreach ( $expired_queries as $args ) {
+				do {
+					$query = new \WP_Query(
+						array_merge(
+							array(
+								'post_type'      => self::POST_TYPE,
+								'post_status'    => 'publish',
+								'posts_per_page' => 200,
+								'fields'         => 'ids',
+								'no_found_rows'  => true,
+							),
+							$args
+						)
+					);
+					$batch = \count( $query->posts );
+					foreach ( $query->posts as $post_id ) {
+						wp_delete_post( (int) $post_id, true );
+						++$deleted;
+					}
+					// Bounded per run — tomorrow's cron finishes any remainder.
+				} while ( 200 === $batch && $deleted < 2000 );
+			}
+		}
 	}
 
 	/**

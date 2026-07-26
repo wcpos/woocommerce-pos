@@ -49,7 +49,7 @@ class Test_Cloud_Print_Section extends WP_UnitTestCase {
 		$settings = $section->read();
 
 		$this->assertArrayNotHasKey( 'poll_token_hash', $settings['printers'][0] );
-		$this->assertEquals( 'esc-pos', $settings['printers'][0]['language'] );
+		$this->assertEquals( 'star-prnt', $settings['printers'][0]['language'] );
 		$this->assertEquals( 42, $settings['printers'][0]['columns'] );
 		$this->assertArrayHasKey( 'status', $settings['printers'][0] );
 	}
