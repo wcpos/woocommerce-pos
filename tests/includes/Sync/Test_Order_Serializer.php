@@ -115,6 +115,7 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		);
 		$this->assertStringContainsString( 'order-pay/' . $order->get_id(), $augmented['links']['payment'][0]['href'] );
 		$this->assertStringContainsString( 'pay_for_order=', $augmented['links']['payment'][0]['href'] );
+		$this->assertStringContainsString( 'key=' . $order->get_order_key(), $augmented['links']['payment'][0]['href'] );
 		$this->assertStringNotContainsString( '/checkout/order-pay/', $augmented['links']['payment'][0]['href'] );
 	}
 }
