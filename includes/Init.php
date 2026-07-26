@@ -256,7 +256,7 @@ class Init {
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
 		if ( 'OPTIONS' == $request->get_method() ) {
-			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
+			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing', 'ETag' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
 			$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
 
 			$allow_headers = array(
@@ -267,6 +267,7 @@ class Init {
 				'Content-Type',             // Specifies the media type of the resource.
 				'X-HTTP-Method-Override',   // Used to override the HTTP method.
 				'X-WCPOS',                  // Used to identify WCPOS requests.
+				'If-None-Match',            // Conditional sequence-log polling (304s).
 			);
 			$allow_headers = Sync\Header_Mirror::allow_cors_headers( $allow_headers );
 

@@ -146,7 +146,11 @@ final class Changes_Controller extends WP_REST_Controller {
 		$since      = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
 
 		global $wpdb;
-		$config_fingerprint = $this->config_fingerprint_data( $request, $started );
+		// Embed the FULL fingerprint set regardless of this stream's `collection`
+		// param: the products stream serves product AND variation rows, and a client
+		// replacing its standalone all-collections fingerprint poll with this
+		// embedded member must never see a narrowed snapshot (stale variations).
+		$config_fingerprint = $this->config_fingerprint_data( $request, $started, true );
 		$head_sequence      = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
 		$etag               = '"' . $head_sequence . ':' . md5(
 			(string) wp_json_encode(
@@ -161,7 +165,23 @@ final class Changes_Controller extends WP_REST_Controller {
 			'Cache-Control' => 'no-store',
 		);
 
-		if ( $since === $head_sequence && $etag === $request->get_header( 'If-None-Match' ) ) {
+		// RFC 9110 If-None-Match semantics (parser adapted from wcpos-bot's review
+		// proposal): accept the wildcard, weak validators (W/"…"), and comma-separated
+		// validator lists — intermediaries may weaken or aggregate tags. Malformed
+		// headers never match (full 200 response).
+		$if_none_match              = trim( (string) $request->get_header( 'If-None-Match' ) );
+		$entity_tag_pattern         = '(?:W/)?"[\x21\x23-\x7E\x80-\xFF]*"';
+		$if_none_match_list_pattern = '~\A[ \t]*(?:,[ \t]*)*'
+			. $entity_tag_pattern
+			. '(?:[ \t]*,(?:[ \t]*' . $entity_tag_pattern . ')?)*[ \t]*\z~D';
+		$etag_matches               = '*' === $if_none_match;
+
+		if ( ! $etag_matches && 1 === preg_match( $if_none_match_list_pattern, $if_none_match ) ) {
+			preg_match_all( '~(?:W/)?"([\x21\x23-\x7E\x80-\xFF]*)"~', $if_none_match, $validators );
+			$etag_matches = in_array( substr( $etag, 1, -1 ), $validators[1], true );
+		}
+
+		if ( $since === $head_sequence && $etag_matches ) {
 			return new \WP_REST_Response( null, 304, $headers );
 		}
 
@@ -510,10 +530,17 @@ final class Changes_Controller extends WP_REST_Controller {
 
 	/**
 	 * Build the config-fingerprint response data shared by both polling routes.
+	 *
+	 * @param bool $all_collections Ignore the request's `collection` narrowing and
+	 *                              report every collection (the sequence-log embed).
 	 */
-	private function config_fingerprint_data( WP_REST_Request $request, float $started ): array {
+	private function config_fingerprint_data(
+		WP_REST_Request $request,
+		float $started,
+		bool $all_collections = false
+	): array {
 		$requested   = (string) ( $request->get_param( 'collection' ) ?? '' );
-		$collections = \in_array( $requested, Config_Fingerprint::collections(), true )
+		$collections = ! $all_collections && \in_array( $requested, Config_Fingerprint::collections(), true )
 			? array( $requested )
 			: Config_Fingerprint::collections();
 

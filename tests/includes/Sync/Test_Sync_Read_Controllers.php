@@ -136,6 +136,64 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * RFC 9110 If-None-Match forms all match (parser from wcpos-bot's review).
+	 *
+	 * @dataProvider matching_if_none_match_header_provider
+	 */
+	public function test_sequence_log_matching_if_none_match_form_returns_not_modified( string $header_template ): void {
+		$controller = new Changes_Controller();
+		$response   = $controller->sequence_log( $this->request( array( 'since' => 0 ) ) );
+		$etag       = $response->get_headers()['ETag'];
+		$request    = $this->request( array( 'since' => 0 ) );
+		$header     = false === strpos( $header_template, '%s' ) ? $header_template : sprintf( $header_template, $etag );
+		$request->set_header( 'If-None-Match', $header );
+
+		$not_modified = $controller->sequence_log( $request );
+
+		$this->assertSame( 304, $not_modified->get_status() );
+	}
+
+	/**
+	 * Matching If-None-Match header forms.
+	 */
+	public function matching_if_none_match_header_provider(): array {
+		return array(
+			'weak validator' => array( 'W/%s' ),
+			'wildcard'       => array( '*' ),
+			'validator list' => array( '"other,tag", W/%s, "another"' ),
+		);
+	}
+
+	/**
+	 * Malformed conditional headers never match — full 200 response.
+	 */
+	public function test_sequence_log_malformed_if_none_match_returns_full_response(): void {
+		$controller = new Changes_Controller();
+		$controller->sequence_log( $this->request( array( 'since' => 0 ) ) );
+		$request = $this->request( array( 'since' => 0 ) );
+		$request->set_header( 'If-None-Match', 'not-a-quoted-tag' );
+
+		$response = $controller->sequence_log( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * The embedded fingerprint always reports every collection, even when the
+	 * stream itself is narrowed (products serves variation rows too).
+	 */
+	public function test_sequence_log_embedded_fingerprint_ignores_collection_narrowing(): void {
+		$controller = new Changes_Controller();
+
+		$sequence_data = $controller->sequence_log( $this->request( array( 'collection' => 'products' ) ) )->get_data();
+
+		$this->assertSame(
+			array_values( \WCPOS\WooCommercePOS\Sync\Config_Fingerprint::collections() ),
+			array_keys( $sequence_data['config_fingerprint']['fingerprints'] )
+		);
+	}
+
+	/**
 	 * A matching ETag cannot hide rows after a behind cursor.
 	 */
 	public function test_sequence_log_matching_etag_with_since_behind_head_returns_page(): void {
