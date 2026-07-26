@@ -861,9 +861,13 @@ class Settings extends WP_REST_Controller {
 		// an explicit choice, for Line Mode-only models (TSP650II et al.).
 		// There is no admin toggle; sites that need a different fallback set
 		// it in code via the woocommerce_pos_cloud_printer_default_language filter.
+		$accepted = array( 'star-prnt', 'star-line' );
 		$language = $printer['language'] ?? '';
-		if ( ! \in_array( $language, array( 'star-prnt', 'star-line' ), true ) ) {
+		if ( ! \in_array( $language, $accepted, true ) ) {
 			$language = (string) apply_filters( 'woocommerce_pos_cloud_printer_default_language', 'star-prnt', $printer );
+			if ( ! \in_array( $language, $accepted, true ) ) {
+				$language = 'star-prnt';
+			}
 		}
 		$columns  = isset( $printer['columns'] ) ? (int) $printer['columns'] : 42;
 		if ( ! \in_array( $columns, array( 32, 42, 48 ), true ) ) {

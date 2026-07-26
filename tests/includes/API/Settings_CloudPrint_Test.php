@@ -326,6 +326,71 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It honours a star-line fallback override for Line Mode-only fleets.
+	 *
+	 * The woocommerce_pos_cloud_printer_default_language filter must be able
+	 * to rescue a Line Mode-only printer whose stored language is a
+	 * materialized esc-pos default.
+	 */
+	public function test_get_settings_accepts_star_line_filter_override(): void {
+		add_filter(
+			'woocommerce_pos_cloud_printer_default_language',
+			static function (): string {
+				return 'star-line';
+			}
+		);
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'linemode',
+						'name'     => 'TSP650II',
+						'provider' => 'star-cloudprnt',
+						'store_id' => 0,
+						'language' => 'esc-pos',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		$this->assertEquals( 'star-line', $data['printers'][0]['language'] );
+	}
+
+	/**
+	 * It rejects an unsupported filtered fallback and serves star-prnt.
+	 */
+	public function test_get_settings_rejects_invalid_language_filter_override(): void {
+		add_filter(
+			'woocommerce_pos_cloud_printer_default_language',
+			static function (): string {
+				return 'esc-pos';
+			}
+		);
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'legacy',
+						'name'     => 'Legacy Star',
+						'provider' => 'star-cloudprnt',
+						'store_id' => 0,
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		$this->assertEquals( 'star-prnt', $data['printers'][0]['language'] );
+	}
+
+	/**
 	 * It includes server-owned encoding fields for Star CloudPRNT printers.
 	 */
 	public function test_star_cloudprnt_encoding_fields_round_trip_with_defaults(): void {
