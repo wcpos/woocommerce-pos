@@ -554,6 +554,50 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Retrying a push-provider job schedules its out-of-band submit.
+	 *
+	 * PrintNode and Star Online never poll the queue, so a replacement job
+	 * that is not handed to CRON_SUBMIT stays pending forever — Retry looks
+	 * like it worked and nothing ever prints.
+	 */
+	public function test_reprint_schedules_submit_for_push_provider(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                   => 'pn',
+						'name'                 => 'PrintNode',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'secret-key',
+						'printnode_printer_id' => 42,
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$jobs   = new Print_Job_Service();
+		$source = $jobs->create(
+			array(
+				'printer_id'   => 'pn',
+				'content_type' => 'application/pdf',
+				'payload'      => base64_encode( 'x' ),
+			)
+		);
+		$jobs->set_status( $source, Print_Job_Service::STATUS_FAILED );
+
+		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/print-jobs/' . $source . '/reprint' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 201, $response->get_status() );
+		$new_id = (int) $response->get_data()['id'];
+		$this->assertNotFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $new_id ) )
+		);
+	}
+
+	/**
 	 * It enqueues a pending diagnostic job for a Star printer.
 	 */
 	public function test_test_print_enqueues_pending_job_for_star_printer(): void {

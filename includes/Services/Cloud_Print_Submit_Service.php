@@ -72,6 +72,12 @@ class Cloud_Print_Submit_Service {
 		if ( '' !== $job['external_job_id'] ) {
 			return;
 		}
+		// A job cancelled between scheduling and this run must not be sent.
+		// The cancel path cannot unschedule reliably (retries reschedule with
+		// fresh timestamps), so the worker is the authority on status.
+		if ( ! $this->is_submittable( $job ) ) {
+			return;
+		}
 
 		// Atomic guard: only one worker may submit a given job at a time.
 		if ( ! $this->acquire_lock( $job_id ) ) {
@@ -79,9 +85,10 @@ class Cloud_Print_Submit_Service {
 		}
 
 		try {
-			// Double-check under the lock in case another worker just finished.
+			// Double-check under the lock in case another worker just finished
+			// or the job was cancelled while we waited for it.
 			$job = $this->jobs->get( $job_id );
-			if ( null === $job || '' !== $job['external_job_id'] ) {
+			if ( null === $job || '' !== $job['external_job_id'] || ! $this->is_submittable( $job ) ) {
 				return;
 			}
 
@@ -229,6 +236,25 @@ class Cloud_Print_Submit_Service {
 
 		$this->jobs->record_external_submission( $job_id, 'star-online', (string) $result['id'], 'submitted' );
 		$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
+	}
+
+	/**
+	 * Whether a job's status still permits submission.
+	 *
+	 * Pending is the normal case; claimed covers a retry that a worker had
+	 * already picked up. Cancelled, printed and failed jobs are terminal and
+	 * must never be pushed to a provider.
+	 *
+	 * @param array $job Job row.
+	 *
+	 * @return bool True when the job may be submitted.
+	 */
+	private function is_submittable( array $job ): bool {
+		return \in_array(
+			$job['status'] ?? '',
+			array( Print_Job_Service::STATUS_PENDING, Print_Job_Service::STATUS_CLAIMED ),
+			true
+		);
 	}
 
 	/**

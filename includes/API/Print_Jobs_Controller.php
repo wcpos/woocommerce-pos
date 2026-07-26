@@ -637,6 +637,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
+		// Push providers (PrintNode, Star Online) never poll the queue — their
+		// jobs only move when CRON_SUBMIT fires. Without this the replacement
+		// job stays pending forever and Retry silently does nothing.
+		$printer  = $this->registry->get_printer( (string) $source['printer_id'] );
+		$provider = null !== $printer ? (string) ( $printer['provider'] ?? '' ) : '';
+		if ( Provider::requires_submit( $provider ) ) {
+			wp_schedule_single_event( time(), Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $new_id ) );
+		}
+
 		$response = rest_ensure_response( $this->jobs->get( $new_id ) );
 		$response->set_status( 201 );
 
