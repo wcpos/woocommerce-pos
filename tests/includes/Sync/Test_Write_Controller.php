@@ -569,6 +569,56 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( Order_Serializer::canonical_revision( $revision_document ), $result->get_data()['currentRevision'] );
 	}
 
+	public function test_order_update_forward_strips_line_item_meta_display_fields(): void {
+		list( $order_id, $bare ) = $this->real_order_payload();
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $order_id;
+		$this->setRestResponse( $bare, 200 );
+
+		$this->push(
+			$store,
+			array(
+				'operation'    => 'update',
+				'collection'   => 'orders',
+				'baseRevision' => Order_Serializer::canonical_revision( $bare ),
+				'payload'      => array(
+					'line_items' => array(
+						array(
+							'id'        => 123,
+							'meta_data' => array(
+								array(
+									'key'           => 'options',
+									'value'         => array( 'size' => 'large' ),
+									'display_key'   => array( 'rendered' => 'Options' ),
+									'display_value' => array( 'size' => 'large' ),
+								),
+							),
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key'   => Pos_Uuid::META_KEY,
+							'value' => self::REC,
+						),
+					),
+				),
+			)
+		);
+
+		$puts = array_values(
+			array_filter(
+				$GLOBALS['wcpos_sync_test_rest_do_request_calls'],
+				static fn( WP_REST_Request $request ) => 'PUT' === $request->get_method()
+			)
+		);
+		$this->assertNotEmpty( $puts );
+		$meta = $puts[0]->get_body_params()['line_items'][0]['meta_data'][0];
+		$this->assertSame( 'options', $meta['key'] );
+		$this->assertSame( array( 'size' => 'large' ), $meta['value'] );
+		$this->assertArrayNotHasKey( 'display_key', $meta );
+		$this->assertArrayNotHasKey( 'display_value', $meta );
+	}
+
 	/**
 	 * Line-item REMOVAL uses wc/v3's null-as-delete convention: the client marks a
 	 * pushed line for deletion by nulling product_id (fees: name, shipping:

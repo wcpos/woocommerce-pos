@@ -84,7 +84,7 @@ final class Meta_Normalizer {
 	}
 
 	/**
-	 * Decode object and array JSON strings carried as meta values.
+	 * Normalize structured meta values and derived display fields.
 	 *
 	 * @param array $meta_data Serialized REST meta entries.
 	 *
@@ -94,7 +94,7 @@ final class Meta_Normalizer {
 		foreach ( $meta_data as $index => $entry ) {
 			// Top-level entity meta reaches the filters as live WC_Meta_Data objects
 			// (they only become arrays at JSON-encode time); convert a copy to the
-			// exact shape it would serialize to, and only swap it in when a decode
+			// exact shape it would serialize to, and only swap it in when normalization
 			// actually happens — untouched entries keep their original form so
 			// revision hashes of scalar-only records are unchanged.
 			$is_meta_object = $entry instanceof \WC_Meta_Data;
@@ -102,25 +102,33 @@ final class Meta_Normalizer {
 				$entry = json_decode( wp_json_encode( $entry ), true );
 			}
 
-			if ( ! is_array( $entry ) || ! isset( $entry['value'] ) || ! is_string( $entry['value'] ) ) {
+			if ( ! is_array( $entry ) ) {
 				continue;
 			}
 
-			$raw     = $entry['value'];
-			$trimmed = trim( $raw );
-			$opening = substr( $trimmed, 0, 1 );
-			if ( '{' !== $opening && '[' !== $opening ) {
-				continue;
+			$entry_changed = false;
+			if ( isset( $entry['value'] ) && is_string( $entry['value'] ) ) {
+				$raw     = $entry['value'];
+				$trimmed = trim( $raw );
+				$opening = substr( $trimmed, 0, 1 );
+				if ( '{' === $opening || '[' === $opening ) {
+					$decoded = json_decode( $raw );
+					if ( JSON_ERROR_NONE === json_last_error() && ( is_array( $decoded ) || $decoded instanceof \stdClass ) ) {
+						$entry['value'] = self::preserve_json_object_shape( $decoded );
+						$entry_changed  = true;
+					}
+				}
+			}
+			foreach ( array( 'display_key', 'display_value' ) as $display_field ) {
+				if ( array_key_exists( $display_field, $entry ) && ! is_string( $entry[ $display_field ] ) ) {
+					unset( $entry[ $display_field ] );
+					$entry_changed = true;
+				}
 			}
 
-			$decoded = json_decode( $raw );
-			if ( JSON_ERROR_NONE !== json_last_error() || ( ! is_array( $decoded ) && ! $decoded instanceof \stdClass ) ) {
-				continue;
+			if ( ! $is_meta_object || $entry_changed ) {
+				$meta_data[ $index ] = $entry;
 			}
-
-			$entry['value'] = self::preserve_json_object_shape( $decoded );
-
-			$meta_data[ $index ] = $entry;
 		}
 
 		return $meta_data;

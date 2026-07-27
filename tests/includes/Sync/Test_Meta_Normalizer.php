@@ -105,6 +105,78 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 		$this->assertSame( '{"note":"typed"}', wp_json_encode( $value ) );
 	}
 
+	public function test_object_display_fields_are_removed_from_typed_meta(): void {
+		$document = array(
+			'meta_data' => array(
+				array(
+					'key'           => 'settings',
+					'value'         => '{"enabled":true}',
+					'display_key'   => (object) array( 'rendered' => 'Settings' ),
+					'display_value' => (object) array( 'enabled' => true ),
+				),
+			),
+			'line_items' => array(
+				array(
+					'meta_data' => array(
+						array(
+							'key'           => 'options',
+							'value'         => '{"size":"large"}',
+							'display_key'   => (object) array( 'rendered' => 'Options' ),
+							'display_value' => (object) array( 'size' => 'large' ),
+						),
+					),
+				),
+			),
+		);
+
+		$normalized = Meta_Normalizer::normalize( $document );
+
+		$this->assertSame( array( 'enabled' => true ), $normalized['meta_data'][0]['value'] );
+		$this->assertArrayNotHasKey( 'display_key', $normalized['meta_data'][0] );
+		$this->assertArrayNotHasKey( 'display_value', $normalized['meta_data'][0] );
+		$this->assertSame( array( 'size' => 'large' ), $normalized['line_items'][0]['meta_data'][0]['value'] );
+		$this->assertArrayNotHasKey( 'display_key', $normalized['line_items'][0]['meta_data'][0] );
+		$this->assertArrayNotHasKey( 'display_value', $normalized['line_items'][0]['meta_data'][0] );
+	}
+
+	public function test_string_display_fields_are_preserved(): void {
+		$document = array(
+			'meta_data' => array(
+				array(
+					'key'           => 'settings',
+					'value'         => '{"enabled":true}',
+					'display_key'   => 'Settings',
+					'display_value' => 'Enabled',
+				),
+			),
+		);
+
+		$normalized = Meta_Normalizer::normalize( $document );
+
+		$this->assertSame( 'Settings', $normalized['meta_data'][0]['display_key'] );
+		$this->assertSame( 'Enabled', $normalized['meta_data'][0]['display_value'] );
+	}
+
+	public function test_object_display_fields_are_removed_when_value_is_already_typed(): void {
+		$typed = array( 'source' => 'native' );
+		$document = array(
+			'meta_data' => array(
+				array(
+					'key'           => 'already_typed',
+					'value'         => $typed,
+					'display_key'   => array( 'rendered' => 'Already typed' ),
+					'display_value' => array( 'source' => 'native' ),
+				),
+			),
+		);
+
+		$normalized = Meta_Normalizer::normalize( $document );
+
+		$this->assertSame( $typed, $normalized['meta_data'][0]['value'] );
+		$this->assertArrayNotHasKey( 'display_key', $normalized['meta_data'][0] );
+		$this->assertArrayNotHasKey( 'display_value', $normalized['meta_data'][0] );
+	}
+
 	public function test_hydrated_php_serialized_array_passes_through_unchanged(): void {
 		$typed = array( 'source' => 'php-serialized', 'ids' => array( 4, 8 ) );
 		$document = array(
@@ -146,8 +218,8 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 	public function test_normalization_is_idempotent(): void {
 		$document = array(
 			'meta_data' => array(
-				array( 'key' => 'object', 'value' => '{}' ),
-				array( 'key' => 'array', 'value' => '[1,2]' ),
+				array( 'key' => 'object', 'value' => '{}', 'display_value' => (object) array() ),
+				array( 'key' => 'array', 'value' => '[1,2]', 'display_key' => 'Array' ),
 			),
 		);
 

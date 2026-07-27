@@ -932,6 +932,7 @@ class Write_Controller extends WP_REST_Controller {
 	 * tolerance by dropping the values WC would reject:
 	 * - billing.email '' / null → dropped (absent means "no email"; '' fails the format check)
 	 * - line_items[n].parent_name null → dropped (schema wants string; the server recomputes it)
+	 * - meta_data display fields → dropped (WC derives them and ignores them on write)
 	 *
 	 * @param array $payload Order payload about to be forwarded to wc/v3.
 	 *
@@ -947,6 +948,28 @@ class Write_Controller extends WP_REST_Controller {
 			foreach ( $payload['line_items'] as $i => $line ) {
 				if ( is_array( $line ) && array_key_exists( 'parent_name', $line ) && null === $line['parent_name'] ) {
 					unset( $payload['line_items'][ $i ]['parent_name'] );
+				}
+			}
+		}
+		if ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) {
+			foreach ( $payload['meta_data'] as $i => $entry ) {
+				if ( is_array( $entry ) ) {
+					unset( $payload['meta_data'][ $i ]['display_key'], $payload['meta_data'][ $i ]['display_value'] );
+				}
+			}
+		}
+		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines' ) as $line_type ) {
+			if ( ! isset( $payload[ $line_type ] ) || ! is_array( $payload[ $line_type ] ) ) {
+				continue;
+			}
+			foreach ( $payload[ $line_type ] as $i => $line ) {
+				if ( ! is_array( $line ) || ! isset( $line['meta_data'] ) || ! is_array( $line['meta_data'] ) ) {
+					continue;
+				}
+				foreach ( $line['meta_data'] as $j => $entry ) {
+					if ( is_array( $entry ) ) {
+						unset( $payload[ $line_type ][ $i ]['meta_data'][ $j ]['display_key'], $payload[ $line_type ][ $i ]['meta_data'][ $j ]['display_value'] );
+					}
 				}
 			}
 		}
