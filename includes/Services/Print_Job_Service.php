@@ -904,12 +904,14 @@ class Print_Job_Service {
 		foreach ( $claimed as $job ) {
 			$claimed_at = (int) get_post_meta( $job['id'], self::META_CLAIMED_AT, true );
 			if ( 0 === $claimed_at || ( time() - $claimed_at ) > $ttl ) {
-				// Conditional on still-claimed: same race as try_claim() — a
-				// cancellation landing after the query above must not be
-				// overwritten back to pending.
-				if ( update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING, self::STATUS_CLAIMED ) ) {
-					delete_post_meta( $job['id'], self::META_CLAIMED_AT );
-				}
+				// Drop the timestamp while the job is still claimed — nothing
+				// can re-claim it until the status flips, so a fresh claim's
+				// timestamp can never be erased by this cleanup. Then the
+				// requeue is conditional on still-claimed: same race as
+				// try_claim() — a cancellation landing after the query above
+				// must not be overwritten back to pending.
+				delete_post_meta( $job['id'], self::META_CLAIMED_AT );
+				update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING, self::STATUS_CLAIMED );
 			}
 		}
 	}
