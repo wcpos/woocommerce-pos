@@ -111,24 +111,28 @@ jobs:
             FAILED=0
 
             for SITE in $SITES; do
+              # NOTE: this subshell is an `if` condition, so `set -e` is ignored
+              # inside it (bash errexit rule) — every critical command carries an
+              # explicit `|| exit 1` instead.
               if (
-                set -e
                 PLUGIN_DIR="/data/wordpress/${SITE}/html/wp-content/plugins/woocommerce-pos"
 
-                rm -rf "$PLUGIN_DIR"
-                mkdir -p "$PLUGIN_DIR"
-                tar -xzf "/tmp/${TARBALL}" -C "$PLUGIN_DIR"
+                rm -rf "$PLUGIN_DIR" || exit 1
+                mkdir -p "$PLUGIN_DIR" || exit 1
+                tar -xzf "/tmp/${TARBALL}" -C "$PLUGIN_DIR" || exit 1
 
-                chown -R 82:82 "$PLUGIN_DIR"
+                chown -R 82:82 "$PLUGIN_DIR" || exit 1
 
                 # A green extract is not proof the runtime picked it up: php-fpm
                 # reads the html tree through its own bind mount, which can hold
                 # a stale directory inode (observed 2026-07-28 on dev-next —
                 # files fresh on disk and via nginx, php still serving
                 # pre-deploy code). Restarting the site's php container
-                # re-resolves the mount and clears opcache.
-                if docker ps --format '{{.Names}}' | grep -qx "wp-${SITE}-php"; then
-                  docker restart "wp-${SITE}-php" > /dev/null
+                # re-resolves the mount and clears opcache. `container inspect`
+                # (not `docker ps`) so a stopped container is restarted, not
+                # skipped as missing.
+                if docker container inspect "wp-${SITE}-php" > /dev/null 2>&1; then
+                  docker restart "wp-${SITE}-php" > /dev/null || exit 1
                   echo "🔄 Restarted wp-${SITE}-php"
                 else
                   echo "⚠️ php container wp-${SITE}-php not found; skipped restart"
