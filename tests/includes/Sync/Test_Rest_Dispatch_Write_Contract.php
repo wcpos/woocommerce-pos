@@ -9,11 +9,13 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting, Generic.Files.OneObjectStructurePerFile, WordPress.NamingConventions -- Ported lab suite preserves its fake-store vocabulary and compact scenarios.
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
@@ -102,8 +104,12 @@ final class Dispatch_Write_Controller extends Write_Controller {
 class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	/** @var Dispatch_Fake_Mutation_Store */
 	private $store;
+	private $previous_manage_stock_option;
+	private $previous_general_settings;
 
 	public function setUp(): void {
+		$this->previous_manage_stock_option = get_option( 'woocommerce_manage_stock', 'no' );
+		$this->previous_general_settings    = get_option( 'woocommerce_pos_settings_general', null );
 		$this->store = new Dispatch_Fake_Mutation_Store();
 		Dispatch_Write_Controller::$store = $this->store;
 		update_option( Api::OPTION_ENABLED, true );
@@ -126,6 +132,13 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 	public function tearDown(): void {
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
+		remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock_option );
+		if ( null === $this->previous_general_settings ) {
+			delete_option( 'woocommerce_pos_settings_general' );
+		} else {
+			update_option( 'woocommerce_pos_settings_general', $this->previous_general_settings );
+		}
 		unset( $GLOBALS['wcpos_sync_contract_responses'], $GLOBALS['wcpos_sync_contract_calls'] );
 		parent::tearDown();
 		delete_option( Api::OPTION_ENABLED );
@@ -160,6 +173,95 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$request->set_body( (string) wp_json_encode( $envelope ) );
 
 		return $request;
+	}
+
+	private function stock_order_delete_request( bool $restore_stock = true ): array {
+		update_option( 'woocommerce_manage_stock', 'yes' );
+		update_option( 'woocommerce_pos_settings_general', array( 'restore_stock_on_delete' => $restore_stock ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 10,
+				'regular_price'  => 10,
+			)
+		);
+		$order = OrderHelper::create_order( array( 'product' => $product ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		wc_maybe_reduce_stock_levels( $order->get_id() );
+		$this->assertEquals( 6, wc_get_product( $product->get_id() )->get_stock_quantity() );
+
+		$current = rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() ) )->get_data();
+		$current = Meta_Normalizer::normalize( $current );
+		$current = Order_Serializer::add_payment_link( $current, $order );
+		$revision = Order_Serializer::canonical_revision( $current );
+		$envelope = array(
+			'mutationId'   => '10000000-0000-4000-8000-000000000071',
+			'operation'    => 'delete',
+			'collection'   => 'orders',
+			'recordId'     => '20000000-0000-4000-8000-000000000071',
+			'baseRevision' => $revision,
+		);
+		$headers = array(
+			'Idempotency-Key' => $envelope['mutationId'],
+			'If-Match'        => '"' . $revision . '"',
+		);
+		$this->store->resolve = $order->get_id();
+		$GLOBALS['wcpos_sync_contract_calls'] = array();
+
+		return array( $product->get_id(), $order->get_id(), $this->request( 'orders', $envelope, $headers ) );
+	}
+
+	public function test_order_force_delete_restores_stock_when_enabled(): void {
+		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request();
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( wc_get_order( $order_id ) );
+		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_order_force_delete_does_not_restore_stock_when_disabled(): void {
+		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request( false );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( wc_get_order( $order_id ) );
+		$this->assertEquals( 6, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_order_force_delete_filter_overrides_disabled_setting(): void {
+		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request( false );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( wc_get_order( $order_id ) );
+		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_failed_order_force_delete_rolls_back_stock_restore(): void {
+		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request();
+		$fail_delete = static function ( $result, $server, WP_REST_Request $forwarded ) {
+			if ( 'DELETE' === $forwarded->get_method() && 0 === strpos( $forwarded->get_route(), '/wc/v3/orders/' ) ) {
+				return new WP_REST_Response( array( 'code' => 'delete_failed' ), 500 );
+			}
+
+			return $result;
+		};
+		add_filter( 'rest_pre_dispatch', $fail_delete, 2, 3 );
+		try {
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $fail_delete, 2 );
+		}
+
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertInstanceOf( \WC_Order::class, wc_get_order( $order_id ) );
+		$this->assertEquals( 6, wc_get_product( $product_id )->get_stock_quantity() );
 	}
 
 	public function test_dispatch_fake_reservation_retains_envelope_and_rejects_reuse(): void {

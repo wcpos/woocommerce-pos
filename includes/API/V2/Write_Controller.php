@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Product;
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -826,8 +827,35 @@ class Write_Controller extends WP_REST_Controller {
 		$request = new WP_REST_Request( 'DELETE', $route );
 		$request->set_param( 'id', $id );
 		$request->set_param( 'force', true );
+		$restore_stock = false;
+		if ( 'orders' === $collection ) {
+			$setting = SettingsService::instance()->restore_stock_on_delete_enabled();
+
+			/**
+			 * Filter whether to restore stock when an order is deleted via the POS API.
+			 *
+			 * @since 1.9.0
+			 *
+			 * @param bool $restore_stock Whether to restore stock. Default from settings.
+			 * @param int  $order_id      The order ID being deleted.
+			 */
+			$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $id );
+
+			// WC core does not restore stock when orders are deleted (v1 carried
+			// this same override; see woocommerce/woocommerce#26716). The v2
+			// contract always force-deletes, so restore BEFORE the permanent
+			// delete and roll back below if the forward fails.
+			if ( $restore_stock ) {
+				wc_maybe_increase_stock_levels( $id );
+			}
+		}
 		$response = $this->dispatch_write( $request );
 		if ( $response->get_status() >= 400 ) {
+			// Rollback the pre-restore on a failed delete.
+			if ( $restore_stock ) {
+				wc_maybe_reduce_stock_levels( $id );
+			}
+
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
 		}
 		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
