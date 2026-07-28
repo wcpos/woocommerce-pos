@@ -71,6 +71,9 @@ final class Integrity_Digest {
 	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
 	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 	public const OBJECT_TYPES_SQL = "('product','variation')";
+	public const REBUILD_HOOK     = 'wcpos_integrity_digest_rebuild';
+	public const REBUILD_LOCK     = 'wcpos_integrity_digest_rebuild_lock';
+	public const REBUILD_LOCK_TTL = 300;
 
 	public function table_name(): string {
 		global $wpdb;
@@ -153,12 +156,25 @@ final class Integrity_Digest {
 	}
 
 	/**
+	 * Cron entry point for rebuilding an unexpectedly empty stored digest table.
+	 */
+	public static function run_scheduled_rebuild(): void {
+		try {
+			( new self() )->rebuild();
+		} catch ( \Throwable $exception ) {
+			Logger::error( 'WCPOS sync: scheduled integrity digest rebuild failed: ' . $exception->getMessage() );
+		} finally {
+			delete_transient( self::REBUILD_LOCK );
+		}
+	}
+
+	/**
 	 * Canonical per-row digest SELECT, shared verbatim by the hook upsert,
 	 * the scan's current-side aggregate, the drill-down and the rebuild —
 	 * the stored-vs-current comparison is only sound when every consumer
 	 * computes the digest with the byte-identical expression.
 	 *
-	 * 64-bit digest — CONV(SUBSTRING(MD5(CONCAT_WS('|', ...)),1,16),16,10) — over the wp_posts content columns plus
+	 * 64-bit digest — CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', ...)),1,16),16,10) AS UNSIGNED) — over the wp_posts content columns plus
 	 * the DIGESTED_META_KEYS rows (key=value pairs ordered by meta_key then
 	 * meta_id, so duplicate meta rows digest deterministically). Every
 	 * nullable operand is COALESCE'd because CONCAT_WS silently SKIPS NULL
@@ -365,7 +381,7 @@ final class Integrity_Digest {
 
 		return 'SELECT p.ID AS id,'
 			. " CASE WHEN p.post_type = 'product_variation' THEN 'variation' ELSE 'product' END AS object_type,"
-			. " CONV(SUBSTRING(MD5(CONCAT_WS('|',"
+			. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
 			. ' p.ID,'
 			. " COALESCE(p.post_title,''),"
 			. " COALESCE(p.post_excerpt,''),"
@@ -379,7 +395,7 @@ final class Integrity_Digest {
 			// BIT_XOR and fits the BIGINT UNSIGNED column, dropping the CRC32 collision floor from
 			// 2^-32 to 2^-64 (a stable per-bucket false "in sync" is unacceptable in a convergence
 			// backstop, and CRC32 is linear so structured bulk edits correlate collisions).
-			. ')),1,16),16,10) AS crc'
+			. ')),1,16),16,10) AS UNSIGNED) AS crc'
 			. " FROM {$wpdb->posts} p"
 			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
 			. ' WHERE p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
@@ -402,14 +418,14 @@ final class Integrity_Digest {
 
 		return 'SELECT u.ID AS id,'
 			. " 'customer' AS object_type,"
-			. " CONV(SUBSTRING(MD5(CONCAT_WS('|',"
+			. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
 			. ' u.ID,'
 			. " COALESCE(u.user_email,''),"
 			. " COALESCE(u.display_name,''),"
 			. " COALESCE(u.user_registered,''),"
 			. " COALESCE(GROUP_CONCAT(CONCAT(um.meta_key,'=',COALESCE(um.meta_value,'')) ORDER BY um.meta_key ASC, um.umeta_id ASC SEPARATOR '|'),'')"
 			// 64-bit digest (ADR 0014 M1): top 16 hex of MD5 → BIGINT UNSIGNED, folds under BIT_XOR.
-			. ')),1,16),16,10) AS crc'
+			. ')),1,16),16,10) AS UNSIGNED) AS crc'
 			. " FROM {$wpdb->users} u"
 			// Customer-role filter via INSTR (a substring match on the serialized capabilities meta),
 			// NOT LIKE '%"customer"%' — a literal `%` would be mangled by $wpdb->prepare (every consumer
@@ -450,13 +466,13 @@ final class Integrity_Digest {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return 'SELECT o.id AS id,'
 				. " 'order' AS object_type,"
-				. " CONV(SUBSTRING(MD5(CONCAT_WS('|',"
+				. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
 				. ' o.id,'
 				. " COALESCE(o.status,''),"
 				. " COALESCE(o.type,''),"
 				. " COALESCE(o.total_amount,''),"
 				. ' COALESCE(o.customer_id,0),'
-				. " COALESCE(o.date_updated_gmt,''))),1,16),16,10) AS crc"
+				. " COALESCE(o.date_updated_gmt,''))),1,16),16,10) AS UNSIGNED) AS crc"
 				. " FROM {$orders_table} o"
 				. " WHERE o.type = 'shop_order' AND o.status NOT IN ('trash','auto-draft')"
 				. $condition;
@@ -465,11 +481,11 @@ final class Integrity_Digest {
 		$meta_keys_sql = "('" . implode( "','", self::ORDER_DIGESTED_META_KEYS ) . "')";
 		return 'SELECT p.ID AS id,'
 			. " 'order' AS object_type,"
-			. " CONV(SUBSTRING(MD5(CONCAT_WS('|',"
+			. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
 			. ' p.ID,'
 			. " COALESCE(p.post_status,''),"
 			. " COALESCE(p.post_modified_gmt,''),"
-			. " COALESCE(GROUP_CONCAT(CONCAT(pm.meta_key,'=',COALESCE(pm.meta_value,'')) ORDER BY pm.meta_key ASC, pm.meta_id ASC SEPARATOR '|'),''))),1,16),16,10) AS crc"
+			. " COALESCE(GROUP_CONCAT(CONCAT(pm.meta_key,'=',COALESCE(pm.meta_value,'')) ORDER BY pm.meta_key ASC, pm.meta_id ASC SEPARATOR '|'),''))),1,16),16,10) AS UNSIGNED) AS crc"
 			. " FROM {$wpdb->posts} p"
 			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
 			. " WHERE p.post_type = 'shop_order' AND p.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL
