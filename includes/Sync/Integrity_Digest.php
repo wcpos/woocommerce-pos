@@ -159,11 +159,24 @@ final class Integrity_Digest {
 	 * Cron entry point for rebuilding an unexpectedly empty stored digest table.
 	 */
 	public static function run_scheduled_rebuild(): void {
+		$lease = get_transient( self::REBUILD_LOCK );
 		try {
 			( new self() )->rebuild();
 		} catch ( \Throwable $exception ) {
 			Logger::error( 'WCPOS sync: scheduled integrity digest rebuild failed: ' . $exception->getMessage() );
 		} finally {
+			self::release_rebuild_lock( $lease );
+		}
+	}
+
+	/**
+	 * Release the rebuild lease only if this run still owns it — a rebuild that
+	 * outlived the lock TTL must not delete a successor's fresh lease.
+	 *
+	 * @param mixed $lease The lease value captured when this run started.
+	 */
+	public static function release_rebuild_lock( $lease ): void {
+		if ( get_transient( self::REBUILD_LOCK ) === $lease ) {
 			delete_transient( self::REBUILD_LOCK );
 		}
 	}

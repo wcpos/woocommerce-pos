@@ -524,9 +524,21 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		if ( false === get_transient( Integrity_Digest::REBUILD_LOCK ) ) {
-			set_transient( Integrity_Digest::REBUILD_LOCK, true, Integrity_Digest::REBUILD_LOCK_TTL );
+			// Owner-token lease: a rebuild outliving the TTL must not delete a
+			// SUCCESSOR's lock in its finally (the callback captures the token
+			// at start and only releases a matching lease).
+			$token = uniqid( 'wcpos_rebuild_', true );
+			set_transient( Integrity_Digest::REBUILD_LOCK, $token, Integrity_Digest::REBUILD_LOCK_TTL );
+			if ( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) ) {
+				// An identical event is already queued (e.g. a concurrent scan
+				// won the race, or a prior lock expired before cron fired):
+				// keep the fresh lease and do not stack another event.
+				return true;
+			}
 			if ( false === wp_schedule_single_event( time(), Integrity_Digest::REBUILD_HOOK ) ) {
-				delete_transient( Integrity_Digest::REBUILD_LOCK );
+				if ( get_transient( Integrity_Digest::REBUILD_LOCK ) === $token ) {
+					delete_transient( Integrity_Digest::REBUILD_LOCK );
+				}
 				Logger::error( 'WCPOS sync: failed to schedule integrity digest rebuild.' );
 			}
 		}

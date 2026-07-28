@@ -209,6 +209,28 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A rebuild that outlived its lease must not delete a successor's lock,
+	 * and a lock set while an event is already queued must survive.
+	 */
+	public function test_rebuild_lease_is_owner_scoped(): void {
+		set_transient( Integrity_Digest::REBUILD_LOCK, 'successor-token', Integrity_Digest::REBUILD_LOCK_TTL );
+		Integrity_Digest::release_rebuild_lock( 'stale-token' );
+		$this->assertSame( 'successor-token', get_transient( Integrity_Digest::REBUILD_LOCK ) );
+
+		Integrity_Digest::release_rebuild_lock( 'successor-token' );
+		$this->assertFalse( get_transient( Integrity_Digest::REBUILD_LOCK ) );
+
+		// Lock absent but an event already queued (prior lease expired before
+		// cron fired): the scan re-arms the lease and does NOT stack an event.
+		$product_id = $this->create_product_with_empty_stored_digests();
+		wp_schedule_single_event( time() + 60, Integrity_Digest::REBUILD_HOOK );
+		$first = wp_next_scheduled( Integrity_Digest::REBUILD_HOOK );
+		$this->dispatch_aggregate_scan( $product_id );
+		$this->assertNotFalse( get_transient( Integrity_Digest::REBUILD_LOCK ) );
+		$this->assertSame( $first, wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+	}
+
+	/**
 	 * Current-side digests must not clamp at 2^63: MySQL coerces the CONV()
 	 * string column of a derived table as SIGNED inside BIT_XOR, clamping any
 	 * row digest >= 2^63 to PHP_INT_MAX while the stored BIGINT UNSIGNED side
@@ -225,11 +247,19 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 			$digest->upsert_digest( $product->get_id() );
 		}
 
-		$data = $this->dispatch_aggregate_scan( $ids[0] );
-
-		foreach ( $data['changes'] as $row ) {
-			$this->assertNotSame( '9223372036854775807', $row['current_digest'], 'current side clamped at 2^63' );
-			$this->assertTrue( $row['match'], wp_json_encode( $row ) );
+		// Cover EVERY generated product: ids can straddle a 1,000-id bucket
+		// boundary, so dispatch each distinct bucket and require the asserted
+		// record counts to account for all 24 rows.
+		$buckets = array_unique( array_map( static fn ( int $id ): int => (int) floor( $id / 1000 ), $ids ) );
+		$covered = 0;
+		foreach ( $buckets as $bucket ) {
+			$data = $this->dispatch_aggregate_scan( $bucket * 1000 );
+			foreach ( $data['changes'] as $row ) {
+				$this->assertNotSame( '9223372036854775807', $row['current_digest'], 'current side clamped at 2^63' );
+				$this->assertTrue( $row['match'], wp_json_encode( $row ) );
+				$covered += (int) $row['current_count'];
+			}
 		}
+		$this->assertGreaterThanOrEqual( \count( $ids ), $covered );
 	}
 }
