@@ -37,8 +37,9 @@ class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 	public function tearDown(): void {
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
-		remove_all_filters( 'wc_allow_changing_orders_storage_while_sync_is_pending' );
+		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
+		delete_option( Api::OPTION_ENABLED );
 	}
 }
