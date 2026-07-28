@@ -532,25 +532,84 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It refuses to cancel a failed job, preserving its retryable payload.
+	 * It refuses to cancel terminal jobs, preserving a failed job's retryable payload.
 	 *
 	 * set_status() clears post_content on cancel, so cancelling a failed job
 	 * destroys the payload Retry copies. cancel_waiting() already guards this
 	 * for bulk cancels; the single-job endpoint must agree.
 	 */
-	public function test_cancel_refuses_failed_job_and_keeps_payload(): void {
+	public function test_cancel_refuses_non_cancellable_statuses(): void {
+		$jobs = new Print_Job_Service();
+		foreach ( array( Print_Job_Service::STATUS_FAILED, Print_Job_Service::STATUS_PRINTED, Print_Job_Service::STATUS_CANCELLED ) as $status ) {
+			$id = $this->jobs_seed( 'printer-A' );
+			$jobs->set_status( $id, $status );
+
+			$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+			$request->set_header( 'X-WCPOS', '1' );
+			$response = rest_do_request( $request );
+
+			$this->assertEquals( 409, $response->get_status() );
+			$this->assertEquals( 'wcpos_print_job_not_cancellable', $response->as_error()->get_error_code() );
+			$job = $jobs->get( $id );
+			$this->assertEquals( $status, $job['status'] );
+			if ( Print_Job_Service::STATUS_FAILED === $status ) {
+				$this->assertEquals( base64_encode( 'x' ), $job['payload'] );
+			}
+		}
+	}
+
+	/**
+	 * It does not overwrite a printer failure that wins the cancellation race.
+	 */
+	public function test_cancel_does_not_overwrite_concurrent_printer_failure(): void {
 		$jobs = new Print_Job_Service();
 		$id   = $this->jobs_seed( 'printer-A' );
-		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+		$jobs->set_status( $id, Print_Job_Service::STATUS_CLAIMED );
+		$raced = false;
+		$race  = function ( $check, $object_id, $meta_key, $meta_value ) use ( $jobs, $id, &$raced ) {
+			if ( ! $raced && $id === (int) $object_id && Print_Job_Service::META_STATUS === $meta_key && Print_Job_Service::STATUS_CANCELLED === $meta_value ) {
+				$raced = true;
+				$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+			}
 
-		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
-		$request->set_header( 'X-WCPOS', '1' );
-		$response = rest_do_request( $request );
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $race, 10, 4 );
+
+		try {
+			$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+			$request->set_header( 'X-WCPOS', '1' );
+			$response = rest_do_request( $request );
+		} finally {
+			remove_filter( 'update_post_metadata', $race, 10 );
+		}
 
 		$this->assertEquals( 409, $response->get_status() );
-		$job = $jobs->get( $id );
-		$this->assertEquals( 'failed', $job['status'] );
-		$this->assertEquals( base64_encode( 'x' ), $job['payload'] );
+		$this->assertEquals( 'wcpos_print_job_not_cancellable', $response->as_error()->get_error_code() );
+		$this->assertEquals( Print_Job_Service::STATUS_FAILED, $jobs->get( $id )['status'] );
+		$this->assertEquals( base64_encode( 'x' ), $jobs->get( $id )['payload'] );
+	}
+
+	/**
+	 * It does not cancel a job while its provider submission holds the lifecycle lock.
+	 */
+	public function test_cancel_refuses_job_while_submission_lock_held(): void {
+		$jobs = new Print_Job_Service();
+		$id   = $this->jobs_seed( 'printer-A' );
+		add_option( Print_Job_Service::LIFECYCLE_LOCK_PREFIX . $id, (string) time(), '', false );
+
+		try {
+			$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+			$request->set_header( 'X-WCPOS', '1' );
+			$response = rest_do_request( $request );
+		} finally {
+			delete_option( Print_Job_Service::LIFECYCLE_LOCK_PREFIX . $id );
+		}
+
+		$this->assertEquals( 409, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_not_cancellable', $response->as_error()->get_error_code() );
+		$this->assertEquals( Print_Job_Service::STATUS_PENDING, $jobs->get( $id )['status'] );
+		$this->assertEquals( base64_encode( 'x' ), $jobs->get( $id )['payload'] );
 	}
 
 	/**

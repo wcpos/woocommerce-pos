@@ -168,12 +168,13 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 		// printable text (e.g. ESC p 0 55 121 prints as "p7y") — ugly on the
 		// receipt, but it cannot operate the printer, and the surrounding
 		// characters still render.
+		$expected_text = 'Ap7yBVACdDE';
 		foreach ( array( $escpos, $starprnt ) as $bytes ) {
 			$this->assertStringNotContainsString( "\x1b\x70", $bytes );
 			$this->assertStringNotContainsString( "\x1d\x56\x41", $bytes );
 			$this->assertStringNotContainsString( "\x1b\x64\x02", $bytes );
 			$this->assertStringNotContainsString( "\x1b\x07", $bytes );
-			$this->assertMatchesRegularExpression( '/A.*B.*C.*D.*E/', $bytes );
+			$this->assertStringContainsString( $expected_text, $bytes );
 		}
 	}
 
