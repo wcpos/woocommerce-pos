@@ -846,7 +846,13 @@ class Print_Job_Service {
 				return false;
 			}
 
-			update_post_meta( $id, self::META_STATUS, self::STATUS_CLAIMED );
+			// Conditional on still-pending: a cancellation that lands between
+			// the eligibility read above and this write must win — an
+			// unconditional write would flip a just-cancelled job back to
+			// claimed and hand it to the printer.
+			if ( ! update_post_meta( $id, self::META_STATUS, self::STATUS_CLAIMED, self::STATUS_PENDING ) ) {
+				return false;
+			}
 			update_post_meta( $id, self::META_CLAIMED_AT, time() );
 
 			return true;
@@ -898,8 +904,12 @@ class Print_Job_Service {
 		foreach ( $claimed as $job ) {
 			$claimed_at = (int) get_post_meta( $job['id'], self::META_CLAIMED_AT, true );
 			if ( 0 === $claimed_at || ( time() - $claimed_at ) > $ttl ) {
-				update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING );
-				delete_post_meta( $job['id'], self::META_CLAIMED_AT );
+				// Conditional on still-claimed: same race as try_claim() — a
+				// cancellation landing after the query above must not be
+				// overwritten back to pending.
+				if ( update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING, self::STATUS_CLAIMED ) ) {
+					delete_post_meta( $job['id'], self::META_CLAIMED_AT );
+				}
 			}
 		}
 	}

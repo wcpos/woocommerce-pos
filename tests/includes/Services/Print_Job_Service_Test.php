@@ -163,6 +163,42 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'pending', $service->get( $second_id )['status'] );
 	}
 	/**
+	 * It does not resurrect a job cancelled between the claim's read and write.
+	 */
+	public function test_try_claim_loses_to_concurrent_cancellation(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'a' ),
+			)
+		);
+
+		$raced = false;
+		$race  = function ( $check, $object_id, $meta_key, $meta_value ) use ( $service, $id, &$raced ) {
+			if ( ! $raced && $id === (int) $object_id && Print_Job_Service::META_STATUS === $meta_key && Print_Job_Service::STATUS_CLAIMED === $meta_value ) {
+				$raced = true;
+				$service->cancel_if_waiting( $id );
+			}
+
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $race, 10, 4 );
+
+		try {
+			$claimed = $service->try_claim( $id );
+		} finally {
+			remove_filter( 'update_post_metadata', $race, 10 );
+		}
+
+		$this->assertEquals( false, $claimed );
+		$this->assertEquals( 'cancelled', $service->get( $id )['status'] );
+		$this->assertEmpty( get_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, true ) );
+	}
+
+	/**
 	 * It records provider-neutral external submission metadata.
 	 */
 	public function test_record_external_submission_roundtrips(): void {
