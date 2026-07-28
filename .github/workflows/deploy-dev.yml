@@ -125,13 +125,12 @@ jobs:
 
                 # A green extract is not proof the runtime picked it up: php-fpm
                 # reads the html tree through its own bind mount, which can hold
-                # a stale directory inode (observed 2026-07-28 on dev-next —
-                # files fresh on disk and via nginx, php still serving
-                # pre-deploy code). Restarting the site's php container
-                # re-resolves the mount and clears opcache. `container inspect`
-                # (not `docker ps`) so a stopped container is restarted, not
-                # skipped as missing.
-                if docker container inspect "wp-${SITE}-php" > /dev/null 2>&1; then
+                # a stale directory inode, as observed on dev-next: files were
+                # fresh on disk and via nginx while php still served pre-deploy
+                # code. Restarting the site's php container re-resolves the mount
+                # and clears opcache.
+                PHP_CONTAINERS="$(docker ps -a --format '{{.Names}}')" || exit 1
+                if grep -Fqx "wp-${SITE}-php" <<< "$PHP_CONTAINERS"; then
                   docker restart "wp-${SITE}-php" > /dev/null || exit 1
                   echo "🔄 Restarted wp-${SITE}-php"
                 else
