@@ -49,6 +49,12 @@ final class Digests_Controller extends WP_REST_Controller {
 						'sanitize_callback' => 'sanitize_key',
 						'description'       => "Which id-space: 'products' (default) or 'customers'.",
 					),
+					'status' => array(
+						'sanitize_callback' => static function ( $status ) {
+							return 'publish' === $status ? 'publish' : '';
+						},
+						'description'       => "Set to 'publish' to scope product digests to the readable catalog.",
+					),
 				),
 			)
 		);
@@ -75,6 +81,9 @@ final class Digests_Controller extends WP_REST_Controller {
 				),
 				200
 			);
+		}
+		if ( 'products' === $collection && 'publish' === $request->get_param( 'status' ) ) {
+			$ids = $this->published_product_ids( $ids );
 		}
 		$reader = new Integrity_Digest();
 		if ( 'customers' === $collection ) {
@@ -121,5 +130,29 @@ final class Digests_Controller extends WP_REST_Controller {
 		}
 
 		return array_values( $ids );
+	}
+
+	/**
+	 * Keep published products and variations whose parent product is published.
+	 *
+	 * @param int[] $ids Requested product-space ids.
+	 *
+	 * @return int[]
+	 */
+	private function published_product_ids( array $ids ): array {
+		global $wpdb;
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		$published_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID FROM {$wpdb->posts} p"
+				. " LEFT JOIN {$wpdb->posts} parent ON parent.ID = p.post_parent AND p.post_type = 'product_variation'"
+				. ' WHERE p.ID IN (' . $placeholders . ')' // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Generated placeholders; ids are passed to prepare.
+				. " AND ((p.post_type = 'product' AND p.post_status = 'publish')"
+				. " OR (p.post_type = 'product_variation' AND parent.post_type = 'product' AND parent.post_status = 'publish'))",
+				...$ids
+			)
+		);
+
+		return array_values( array_intersect( $ids, array_map( 'intval', (array) $published_ids ) ) );
 	}
 }
