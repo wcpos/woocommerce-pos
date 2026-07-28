@@ -279,7 +279,24 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$bucket_raw  = $request->get_param( 'bucket' );
 
 		if ( null !== $bucket_raw && '' !== $bucket_raw ) {
-			return $this->drill_down( max( 0, (int) $bucket_raw ), $bucket_size, $started );
+			$bucket = max( 0, (int) $bucket_raw );
+			if ( $this->maybe_schedule_empty_digest_rebuild() ) {
+				return rest_ensure_response(
+					$this->envelope(
+						array(
+							'bucket_size' => $bucket_size,
+							'bucket' => $bucket,
+						),
+						array(),
+						true,
+						$started,
+						'drill-down: per-id stored-vs-current digest mismatches in one bucket.',
+						true
+					)
+				);
+			}
+
+			return $this->drill_down( $bucket, $bucket_size, $started );
 		}
 
 		$after_id      = max( 0, (int) ( $request->get_param( 'after_id' ) ?? 0 ) );
@@ -292,6 +309,22 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$first_bucket = $after_id > 0 ? ( (int) floor( $after_id / $bucket_size ) ) + 1 : 0;
 		$window_start = $first_bucket * $bucket_size;
 		$window_end   = ( $first_bucket + $limit_buckets ) * $bucket_size;
+
+		if ( $this->maybe_schedule_empty_digest_rebuild() ) {
+			return rest_ensure_response(
+				$this->envelope(
+					array(
+						'bucket_size' => $bucket_size,
+						'after_id' => $window_end - 1,
+					),
+					array(),
+					true,
+					$started,
+					'stored hook-time digests vs current raw-row digests, BIT_XOR(64-bit MD5-derived) per bucket; mismatch = content changed without hooks (or stored side not yet backfilled).',
+					true
+				)
+			);
+		}
 
 		global $wpdb;
 
@@ -475,15 +508,57 @@ final class Integrity_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Schedule one guarded rebuild when product-space digests are unexpectedly empty.
+	 */
+	private function maybe_schedule_empty_digest_rebuild(): bool {
+		global $wpdb;
+
+		$needs_rebuild = (bool) $wpdb->get_var(
+			'SELECT EXISTS (SELECT 1 FROM ' . $wpdb->posts
+			. " WHERE post_type IN ('product','product_variation') AND post_status NOT IN ('trash','auto-draft') LIMIT 1)"
+			. ' AND NOT EXISTS (SELECT 1 FROM ' . $this->digests->table_name()
+			. ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL . ' LIMIT 1)'
+		);
+		if ( ! $needs_rebuild ) {
+			return false;
+		}
+
+		if ( false === get_transient( Integrity_Digest::REBUILD_LOCK ) ) {
+			// Owner-token lease: a rebuild outliving the TTL must not delete a
+			// SUCCESSOR's lock in its finally (the callback captures the token
+			// at start and only releases a matching lease).
+			$token = uniqid( 'wcpos_rebuild_', true );
+			set_transient( Integrity_Digest::REBUILD_LOCK, $token, Integrity_Digest::REBUILD_LOCK_TTL );
+			if ( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) ) {
+				// An identical event is already queued (e.g. a concurrent scan
+				// won the race, or a prior lock expired before cron fired):
+				// keep the fresh lease and do not stack another event.
+				return true;
+			}
+			if ( false === wp_schedule_single_event( time(), Integrity_Digest::REBUILD_HOOK ) ) {
+				if ( get_transient( Integrity_Digest::REBUILD_LOCK ) === $token ) {
+					delete_transient( Integrity_Digest::REBUILD_LOCK );
+				}
+				Logger::error( 'WCPOS sync: failed to schedule integrity digest rebuild.' );
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Same envelope shape as class-changes-controller.php so the matrix client plumbing stays uniform.
 	 */
-	private function envelope( array $checkpoint, array $changes, bool $complete, float $started, ?string $note = null ): array {
+	private function envelope( array $checkpoint, array $changes, bool $complete, float $started, ?string $note = null, bool $rebuilding = false ): array {
 		$meta = array(
 			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
 			'supported'   => true,
 		);
 		if ( null !== $note ) {
 			$meta['note'] = $note;
+		}
+		if ( $rebuilding ) {
+			$meta['rebuilding'] = true;
 		}
 
 		return array(

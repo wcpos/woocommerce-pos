@@ -233,8 +233,14 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 				'bucket_size' => $bucket_size,
 			)
 		);
+		// Since the #1373 self-heal, an EMPTY stored table no longer reports
+		// per-id missing_stored rows — the scan stands clients down (empty
+		// changes + meta.rebuilding) while a rebuild is scheduled.
 		$before = ( new Integrity_Controller( $digest ) )->scan( $scan )->get_data();
-		$this->assertContains( $product->get_id(), array_column( $before['changes'], 'id' ) );
+		$this->assertSame( array(), $before['changes'] );
+		$this->assertTrue( $before['meta']['rebuilding'] );
+		delete_transient( Integrity_Digest::REBUILD_LOCK );
+		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
 
 		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/integrity/rebuild' ) );
 
