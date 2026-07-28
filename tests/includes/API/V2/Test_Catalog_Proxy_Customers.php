@@ -47,6 +47,44 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Targeted include= pulls must serve non-customer-role users without an
+	 * explicit role param — V1 enumerated ALL users as POS customers, and the
+	 * sync digests id-space is wp_users, so wc/v3's default role=customer made
+	 * any pull batch containing a cashier/admin id shortfall its tick and the
+	 * customers cursor never advanced (monorepo#850).
+	 */
+	public function test_include_pull_serves_non_customer_roles_by_default(): void {
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$request->set_query_params( array( 'include' => (string) $cashier_id ) );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame( array( $cashier_id ), array_column( $data, 'id' ) );
+	}
+
+	/**
+	 * An explicit role param still passes through untouched.
+	 */
+	public function test_explicit_role_param_is_preserved(): void {
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$request->set_query_params(
+			array(
+				'include' => (string) $cashier_id,
+				'role'    => 'customer',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data() );
+	}
+
+	/**
 	 * Multi-word searches match terms across customer fields.
 	 *
 	 * @dataProvider multi_word_search_provider

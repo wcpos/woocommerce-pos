@@ -76,6 +76,14 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource ) {
 		$query_params           = $request->get_query_params();
 		$customer_search_filter = null;
+		if ( 'customers' === $resource && ! isset( $query_params['role'] ) ) {
+			// V1 parity: 1.9 enumerated ALL users as POS customers (a cashier can
+			// buy, and the sync digests id-space is wp_users). wc/v3's default
+			// role=customer silently drops non-customer-role users from include=
+			// pulls, so a pull batch containing a cashier/admin id shortfalls its
+			// tick and the customers cursor never advances (monorepo#850).
+			$query_params['role'] = 'all';
+		}
 		if ( 'customers' === $resource && isset( $query_params['search'] ) ) {
 			$search = trim( (string) $query_params['search'] );
 			// V1 parity: ANY non-empty search uses the per-term user-table filter (#1277).
