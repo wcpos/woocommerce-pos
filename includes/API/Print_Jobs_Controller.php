@@ -415,15 +415,23 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function delete_item( $request ) {
-		$id = (int) $request->get_param( 'id' );
-		if ( null === $this->jobs->get( $id ) ) {
+		$id  = (int) $request->get_param( 'id' );
+		$job = $this->jobs->get( $id );
+		if ( null === $job ) {
 			return new WP_Error(
 				'wcpos_print_job_not_found',
 				__( 'Print job not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
 		}
-		$this->jobs->set_status( $id, Print_Job_Service::STATUS_CANCELLED );
+
+		if ( ! $this->jobs->cancel_if_waiting( $id ) ) {
+			return new WP_Error(
+				'wcpos_print_job_not_cancellable',
+				__( 'Only pending or claimed print jobs can be cancelled.', 'woocommerce-pos' ),
+				array( 'status' => 409 )
+			);
+		}
 
 		return rest_ensure_response( $this->jobs->get( $id ) );
 	}
@@ -621,6 +629,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				__( 'Print job could not be created.', 'woocommerce-pos' ),
 				array( 'status' => 500 )
 			);
+		}
+
+		// Push providers (PrintNode, Star Online) never poll the queue — their
+		// jobs only move when CRON_SUBMIT fires. Without this the replacement
+		// job stays pending forever and Retry silently does nothing.
+		$printer  = $this->registry->get_printer( (string) $source['printer_id'] );
+		$provider = null !== $printer ? (string) ( $printer['provider'] ?? '' ) : '';
+		if ( Provider::requires_submit( $provider ) ) {
+			wp_schedule_single_event( time(), Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $new_id ) );
 		}
 
 		$response = rest_ensure_response( $this->jobs->get( $new_id ) );

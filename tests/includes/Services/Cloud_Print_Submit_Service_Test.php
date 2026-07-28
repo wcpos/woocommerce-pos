@@ -177,7 +177,38 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It submits a PDF job to PrintNode and records the returned job id + PRINTED status.
+	 * It never sends a job that was cancelled before the cron worker ran.
+	 */
+	public function test_submit_skips_a_cancelled_job(): void {
+		// Arrange: a job cancelled after its submit event was scheduled but
+		// before the cron worker ran.
+		$this->seed_printnode_printer();
+		$this->mock_printnode( '987' );
+		$tid    = $this->create_thermal_template();
+		$order  = OrderHelper::create_order();
+		$job_id = $this->jobs->create(
+			array(
+				'printer_id'   => 'pn',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+				'content_type' => 'application/pdf',
+				'pn_kind'      => 'pdf',
+			)
+		);
+		$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_CANCELLED );
+
+		// Act.
+		( new Cloud_Print_Submit_Service() )->submit( $job_id );
+
+		// Assert: the receipt is never sent and the cancellation stands.
+		$this->assertFalse( $this->http_called );
+		$job = $this->jobs->get( $job_id );
+		$this->assertEquals( Print_Job_Service::STATUS_CANCELLED, $job['status'] );
+		$this->assertEquals( '', $job['external_job_id'] );
+	}
+
+	/**
+	 * It submits a PDF job to PrintNode and marks it printed.
 	 */
 	public function test_submit_pdf_job_calls_printnode_and_marks_printed(): void {
 		// Arrange.

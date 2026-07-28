@@ -163,6 +163,88 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'pending', $service->get( $second_id )['status'] );
 	}
 	/**
+	 * It does not resurrect a job cancelled between the claim's read and write.
+	 */
+	public function test_try_claim_loses_to_concurrent_cancellation(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'a' ),
+			)
+		);
+
+		$raced = false;
+		$race  = function ( $check, $object_id, $meta_key, $meta_value ) use ( $service, $id, &$raced ) {
+			if ( ! $raced && $id === (int) $object_id && Print_Job_Service::META_STATUS === $meta_key && Print_Job_Service::STATUS_CLAIMED === $meta_value ) {
+				$raced = true;
+				$service->cancel_if_waiting( $id );
+			}
+
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $race, 10, 4 );
+
+		try {
+			$claimed = $service->try_claim( $id );
+		} finally {
+			remove_filter( 'update_post_metadata', $race, 10 );
+		}
+
+		$this->assertEquals( false, $claimed );
+		$this->assertEquals( 'cancelled', $service->get( $id )['status'] );
+		$this->assertEmpty( get_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, true ) );
+	}
+
+	/**
+	 * Stale-claim cleanup never leaves a concurrently re-claimed job without
+	 * its claim timestamp (which the next cleanup would treat as stale).
+	 */
+	public function test_release_stale_claims_preserves_a_fresh_claim_timestamp(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'a' ),
+			)
+		);
+		$this->assertEquals( true, $service->try_claim( $id ) );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - ( 2 * Print_Job_Service::CLAIM_TTL ) );
+
+		$raced = false;
+		$race  = function ( $delete, $object_id, $meta_key ) use ( $service, $id, &$raced ) {
+			if ( ! $raced && $id === (int) $object_id && Print_Job_Service::META_CLAIMED_AT === $meta_key ) {
+				$raced = true;
+				// A printer poll claims mid-cleanup. Against the old
+				// requeue-then-delete order this lands after the pending
+				// flip, succeeds, and the cleanup then erases its fresh
+				// timestamp.
+				$service->try_claim( $id );
+			}
+
+			return $delete;
+		};
+		add_filter( 'delete_post_metadata', $race, 10, 3 );
+
+		try {
+			$service->release_stale_claims( 'printer-1' );
+		} finally {
+			remove_filter( 'delete_post_metadata', $race, 10 );
+		}
+
+		$job = $service->get( $id );
+		if ( Print_Job_Service::STATUS_CLAIMED === $job['status'] ) {
+			$this->assertNotEmpty( get_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, true ) );
+		} else {
+			$this->assertEquals( Print_Job_Service::STATUS_PENDING, $job['status'] );
+		}
+	}
+
+	/**
 	 * It records provider-neutral external submission metadata.
 	 */
 	public function test_record_external_submission_roundtrips(): void {
