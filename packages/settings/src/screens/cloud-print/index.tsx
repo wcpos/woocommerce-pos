@@ -1,13 +1,15 @@
 import * as React from 'react';
 
-import { Button, Callout, Chip, FormSection, Toggle, useSnackbar } from '@wcpos/ui';
+import { Button, Callout, FormSection, useSnackbar } from '@wcpos/ui';
 
 import { AddPrinterWizard, type NewPrinterInput } from './add-printer-wizard';
 import { AutoPrintRules } from './auto-print-rules';
 import { fetchPrintNodePrinters } from './fetch-printnode-printers';
 import { fetchStarDevices } from './fetch-star-devices';
+import { PrintQueue } from './print-queue';
 import { PrinterCard } from './printer-card';
 import { PROVIDERS } from './providers';
+import Book from '../../../assets/book.svg';
 import { CardGrid } from '../../components/card-grid';
 import {
 	type CloudPrintSettings,
@@ -44,8 +46,7 @@ type WizardState = {
 
 function CloudPrint() {
 	const { settings, save } = useCloudPrintSettings();
-	const { register: registerRelay, disable: disableRelay } = useCloudPrintRelay();
-	const [relayBusy, setRelayBusy] = React.useState(false);
+	const { register: registerRelay } = useCloudPrintRelay();
 	const templateOptions = useReceiptTemplateOptions();
 	const rawStoreOptions = window.wcpos?.settings?.cloudPrintStoreOptions;
 	const storeOptions = Array.isArray(rawStoreOptions) ? rawStoreOptions : [];
@@ -215,33 +216,22 @@ function CloudPrint() {
 	);
 
 	const relay = settings.relay;
-	const hasPollingPrinters = draft.printers.some((p) => PROVIDERS[p.provider]?.isPolling);
 
-	const handleRelayToggle = React.useCallback(
-		async (checked: boolean) => {
-			setRelayBusy(true);
-			try {
-				if (checked) {
-					await registerRelay.mutateAsync();
-					addSnackbar({
-						message: t('cloud_print.relay_enabled', 'Connected to WCPOS Cloud Print.'),
-						status: 'success',
-					});
-				} else {
-					await disableRelay.mutateAsync();
-					addSnackbar({
-						message: t('cloud_print.relay_disabled', 'WCPOS Cloud Print disabled.'),
-						status: 'success',
-					});
-				}
-			} catch (error) {
-				addSnackbar({ message: getSaveErrorMessage(error), status: 'error' });
-			} finally {
-				setRelayBusy(false);
-			}
-		},
-		[addSnackbar, disableRelay, registerRelay]
-	);
+	// The relay is on by default and has no admin toggle: silently register
+	// this site the first time the Cloud Print screen loads. Failure (site
+	// unreachable from the relay, opt-out filter, network) falls back to
+	// direct printer URLs without bothering the admin.
+	const relayRegistrationAttempted = React.useRef(false);
+	React.useEffect(() => {
+		if (!relay || relay.enabled || relay.available === false) {
+			return;
+		}
+		if (relayRegistrationAttempted.current) {
+			return;
+		}
+		relayRegistrationAttempted.current = true;
+		registerRelay.mutate(undefined, { onError: () => undefined });
+	}, [relay, registerRelay]);
 
 	return (
 		<div className="wcpos:flex wcpos:flex-col wcpos:gap-6 wcpos:px-4 wcpos:pb-5">
@@ -273,55 +263,16 @@ function CloudPrint() {
 						href="https://docs.wcpos.com/receipts/cloud-printing"
 						target="_blank"
 						rel="noopener noreferrer"
+						className="wcpos:inline-flex wcpos:items-center wcpos:gap-1"
 					>
+						<span className="wcpos:h-3.5 wcpos:w-3.5">
+							<Book fill="currentColor" />
+						</span>
 						{t('cloud_print.learn_more', 'Learn more')}
+						<span className="wcpos:sr-only"> (opens in new tab)</span>
 					</a>
 				</p>
 			</Callout>
-
-			<FormSection
-				title={t('cloud_print.relay_title', 'WCPOS Cloud Print')}
-				description={t(
-					'cloud_print.relay_description',
-					'A free relay that connects printers to this store.'
-				)}
-			>
-				<p className="wcpos:text-sm wcpos:text-gray-700">
-					{t(
-						'cloud_print.relay_explainer',
-						'Some receipt printers can\'t connect directly to modern web hosting and get stuck on "Waiting for printer". WCPOS Cloud Print gives your printers a compatible address at cloudprint.wcpos.com and passes their print jobs through to this store — receipts are never stored, and your printer tokens keep working unchanged.'
-					)}{' '}
-					<a href="https://wcpos.com/cloudprint" target="_blank" rel="noopener noreferrer">
-						{t('cloud_print.learn_more', 'Learn more')}
-					</a>
-				</p>
-				<div className="wcpos:mt-3 wcpos:flex wcpos:items-center wcpos:gap-3">
-					<Toggle
-						checked={Boolean(relay?.enabled)}
-						disabled={relayBusy}
-						onChange={(checked: boolean) => {
-							void handleRelayToggle(checked);
-						}}
-						label={t(
-							'cloud_print.relay_toggle',
-							'Route printers through WCPOS Cloud Print (recommended)'
-						)}
-					/>
-					{relay?.enabled && (
-						<Chip variant="success" shape="pill" size="sm">
-							{t('cloud_print.relay_connected', 'Connected')}
-						</Chip>
-					)}
-				</div>
-				{relay?.enabled && hasPollingPrinters && (
-					<p className="wcpos:mt-2 wcpos:text-xs wcpos:text-gray-500">
-						{t(
-							'cloud_print.relay_update_printers',
-							'New printer URLs use cloudprint.wcpos.com. For printers you set up earlier, open "Setup & token" on the printer card and update the Server URL on the device.'
-						)}
-					</p>
-				)}
-			</FormSection>
 
 			<FormSection
 				title={t('cloud_print.printers', 'Your cloud printers')}
@@ -369,6 +320,8 @@ function CloudPrint() {
 					onChange={handleRulesChange}
 				/>
 			</FormSection>
+
+			<PrintQueue />
 
 			<AddPrinterWizard
 				open={wizard.open}

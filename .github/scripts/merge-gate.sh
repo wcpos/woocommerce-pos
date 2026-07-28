@@ -182,6 +182,135 @@ wait_for_checks() {
   return 1
 }
 
+FIX_BOT_AUTHORS="|${MERGE_GATE_FIX_BOT_AUTHORS:-wcpos-agents[bot]}|"
+
+pr_commits() {
+  gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate \
+    --jq '.[] | [.sha, (.author.login // .commit.author.name // "unknown")] | @tsv'
+}
+
+commit_files() {
+  # status<TAB>filename — a REMOVED test must not satisfy the pinning-test
+  # requirement, so callers need the status.
+  #
+  # --paginate: the Get-a-commit endpoint pages `files` at 30 by default, so a
+  # single request hides sources (and tests) in a large commit — and the
+  # 300-file guard below could never see 300 rows.
+  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --paginate \
+    --jq '.files[] | [.status, .filename] | @tsv'
+}
+
+commit_message() {
+  gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --jq '.commit.message'
+}
+
+is_test_path() {
+  case "$1" in
+    tests/*|*/tests/*|*.test.*|*.spec.*|*/test-*.sh|test-*.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_source_path() {
+  is_test_path "$1" && return 1
+  case "$1" in
+    *.php|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.mts|*.cts) return 0 ;;
+    .github/scripts/*.sh|scripts/*.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The Tested: line must sit in the message's FINAL paragraph (the git trailer
+# block) — prose that merely mentions "Tested:" mid-body does not count.
+trailer_block_has_tested() {
+  # The trailer value must be result-shaped: a real suite result quotes counts,
+  # so require at least one digit and a minimally substantive value — bare
+  # "Tested:", "Tested: N/A", or a command with no result do not count.
+  printf '%s\n' "$1" | awk '
+    BEGIN { block = "" }
+    /^[[:space:]]*$/ { block = ""; next }
+    { block = block $0 "\n" }
+    END {
+      if (match(block, /(^|\n)Tested:[^\n]*/) == 0) exit 1
+      value = substr(block, RSTART, RLENGTH)
+      sub(/(^|\n)Tested:[[:space:]]*/, "", value)
+      exit (length(value) >= 8 && value ~ /[0-9]/) ? 0 : 1
+    }
+  '
+}
+
+# Config that steers CI or dependency resolution: a same-commit pinning test
+# usually has no meaningful form here (what test pins a version bump?), but
+# the change still needs proof the suite ran — mirror requires_php_tests:
+# config-class bot commits require the Tested: trailer, not a new test.
+is_config_path() {
+  case "$1" in
+    .github/workflows/*|.github/*.json|composer.json|composer.lock|package.json|pnpm-workspace.yaml|pnpm-lock.yaml|package-lock.json) return 0 ;;
+    # The PHPUnit config selects which test files run at all — narrowing it
+    # silently disarms the suite, so it needs the same Tested: proof.
+    .phpunit.xml.dist|phpunit.xml.dist|phpunit.xml) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Fix-bot commits must carry their own proof: a bot-authored commit that
+# changes source must (a) touch a test in the SAME commit and (b) record a
+# local suite run as a `Tested:` trailer in the commit message. This is the
+# mechanical backstop for the fleet's Pinning-Test Discipline
+# (wcpos-openclaw sidecar AGENTS.md); humans are unaffected.
+enforce_bot_fix_discipline() {
+  local commits sha author files msg has_source has_test failed=0
+  if ! commits="$(pr_commits)"; then
+    log "Could not list PR commits for the fix-bot discipline check; failing closed."
+    return 1
+  fi
+  while IFS=$'\t' read -r sha author; do
+    [[ -n "$sha" ]] || continue
+    [[ "$FIX_BOT_AUTHORS" == *"|${author}|"* ]] || continue
+    if ! files="$(commit_files "$sha")"; then
+      log "Could not read files for fix-bot commit ${sha:0:8}; failing closed."
+      return 1
+    fi
+    # GitHub truncates the single-commit files array at 300 entries — beyond
+    # that the list can hide sources or tests in either direction. A fix-bot
+    # commit that large violates the small-directed-fix contract regardless,
+    # so fail closed rather than judge a partial list.
+    if [[ "$(wc -l <<< "$files" | tr -d ' ')" -ge 300 ]]; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) touches 300+ files — too large to verify (the files API truncates at 300) and far beyond a small, directed fix. Split it."
+      failed=1
+      continue
+    fi
+    has_source=false
+    has_test=false
+    has_config=false
+    while IFS=$'\t' read -r fstatus file; do
+      [[ -n "$file" ]] || continue
+      if is_test_path "$file"; then
+        # Deleting a test is not pinning one.
+        [[ "$fstatus" != "removed" ]] && has_test=true
+      elif is_source_path "$file"; then
+        has_source=true
+      elif is_config_path "$file"; then
+        has_config=true
+      fi
+    done <<< "$files"
+    [[ "$has_source" == "true" || "$has_config" == "true" ]] || continue
+    if [[ "$has_source" == "true" && "$has_test" != "true" ]]; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
+      failed=1
+    fi
+    if ! msg="$(commit_message "$sha")"; then
+      log "Could not read the message for fix-bot commit ${sha:0:8}; failing closed."
+      return 1
+    fi
+    if ! trailer_block_has_tested "$msg"; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) has no 'Tested:' trailer. Run the touched suite locally and record the literal result line (e.g. 'Tested: OK (79 tests) — wp-env WC 10.4.3')."
+      failed=1
+    fi
+  done <<< "$commits"
+  return "$failed"
+}
+
 main() {
   # Conflicts block every PR — including allowlisted bot PRs — so this check
   # runs before the bypass branches. A failed or empty lookup fails closed:
@@ -201,6 +330,12 @@ main() {
   # bypass below, so fail closed and let a re-run pick up the settled state.
   if [[ "$merge_state" == "UNKNOWN" ]]; then
     log "PR mergeability is still being computed (UNKNOWN); failing closed. Re-run the merge gate once GitHub reports a definitive state."
+    return 1
+  fi
+
+  # Runs before the allowlist bypasses: a fix-bot commit must carry its proof
+  # no matter which lane or PR shape it rides in on.
+  if ! enforce_bot_fix_discipline; then
     return 1
   fi
 

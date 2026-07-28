@@ -35,7 +35,7 @@ class Thermal_Renderer {
 	 *
 	 * @param array             $template    Template metadata/content.
 	 * @param WC_Abstract_Order $order       The order to render.
-	 * @param string            $wire_format The target wire format ('escpos' or 'epos-xml').
+	 * @param string            $wire_format The target wire format ('escpos', 'starprnt' or 'epos-xml').
 	 * @param array             $options     Render options.
 	 *
 	 * @throws InvalidArgumentException When the wire format is not supported.
@@ -48,6 +48,8 @@ class Thermal_Renderer {
 		switch ( $wire_format ) {
 			case 'escpos':
 				return ( new Escpos_Thermal_Emitter( $options ) )->emit( $ast );
+			case 'starprnt':
+				return ( new Starprnt_Thermal_Emitter( $options ) )->emit( $ast );
 			case 'epos-xml':
 				return ( new Epos_Xml_Thermal_Emitter( $options ) )->emit( $ast );
 			case 'star-markup':

@@ -2,6 +2,13 @@
 /**
  * StarPRNT output adapter.
  *
+ * NON-FUNCTIONAL PLACEHOLDER: this fixed-layout adapter emits human-readable
+ * marker strings (e.g. `[STARPRNT:ALIGN:CENTER]`), not real StarPRNT wire
+ * bytes, and is not decodable by any printer. The production StarPRNT emitter
+ * is `WCPOS\WooCommercePOS\Templates\Thermal\Starprnt_Thermal_Emitter`
+ * (template/AST path). Print job validation rejects the 'starprnt' format for
+ * Star CloudPRNT printers so this adapter cannot reach real Star hardware.
+ *
  * @package WCPOS\WooCommercePOS\Templates\Adapters
  */
 

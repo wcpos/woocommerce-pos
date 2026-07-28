@@ -84,10 +84,26 @@ final class Route_Classifier {
 	/**
 	 * Check whether a route authenticates with a printer token.
 	 *
+	 * Matches the registered route exactly or as a slash-delimited prefix:
+	 * printer polls also arrive on path-credential URLs such as
+	 * cloudprnt/<printer_id>/<pt> (Star URL-encodes query strings), and those
+	 * concrete routes must stay exempt from the capability gate without
+	 * widening the match to sibling routes that merely share a name prefix.
+	 *
 	 * @param string $route REST route.
 	 */
 	public function is_printer_token( string $route ): bool {
-		return $this->is_exact_match( 'printer_token', $route );
+		if ( $this->is_exact_match( 'printer_token', $route ) ) {
+			return true;
+		}
+
+		foreach ( $this->classifications['printer_token'] as $base ) {
+			if ( 0 === strpos( $route, $base . '/' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

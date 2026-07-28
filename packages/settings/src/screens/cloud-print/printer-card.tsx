@@ -232,27 +232,35 @@ export function PrinterCard({
 						<div className="wcpos:px-1 wcpos:text-xs wcpos:text-gray-500">{provider.label}</div>
 					</div>
 
-					<div className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:pr-8">
-						<PrinterStatusChip printer={printer} />
-						<DropdownMenu
-							align="end"
-							label={t('cloud_print.printer_menu', 'Printer actions')}
-							className="wcpos:absolute wcpos:top-2 wcpos:right-2"
-							trigger={
-								<KebabMenuTrigger
-									label={t('cloud_print.printer_menu', 'Printer actions')}
-									testId={`printer-card-menu-${printer.id}`}
-								/>
-							}
-						>
-							<DropdownMenuItem onSelect={() => onOpenSetup(printer)}>
-								{t('cloud_print.menu_setup', 'Setup & token')}
-							</DropdownMenuItem>
-							<DropdownMenuItem destructive onSelect={() => setConfirmOpen(true)}>
-								{t('cloud_print.menu_remove', 'Remove printer')}
-							</DropdownMenuItem>
-						</DropdownMenu>
-					</div>
+					{/*
+					 * Kebab stays pinned top-right (absolute, so it costs no row
+					 * width). The status chip used to sit inline here too, but a long
+					 * or translated label (eg: French "En attente de l'imprimante")
+					 * collapsed the flex-1 name column — so it now lives on its own
+					 * row below the header, readable at any label length.
+					 */}
+					<DropdownMenu
+						align="end"
+						label={t('cloud_print.printer_menu', 'Printer actions')}
+						className="wcpos:absolute wcpos:top-2 wcpos:right-2"
+						trigger={
+							<KebabMenuTrigger
+								label={t('cloud_print.printer_menu', 'Printer actions')}
+								testId={`printer-card-menu-${printer.id}`}
+							/>
+						}
+					>
+						<DropdownMenuItem onSelect={() => onOpenSetup(printer)}>
+							{t('cloud_print.menu_setup', 'Setup & token')}
+						</DropdownMenuItem>
+						<DropdownMenuItem destructive onSelect={() => setConfirmOpen(true)}>
+							{t('cloud_print.menu_remove', 'Remove printer')}
+						</DropdownMenuItem>
+					</DropdownMenu>
+				</div>
+
+				<div className="wcpos:mt-2">
+					<PrinterStatusChip printer={printer} />
 				</div>
 
 				{liveStatus === 'blocked' && (

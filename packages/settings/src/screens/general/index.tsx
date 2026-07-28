@@ -7,6 +7,7 @@ import { type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
+import { StorefrontReceiptSection } from './storefront-receipt-section';
 import { TaxIdsSection } from './tax-ids-section';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
@@ -32,6 +33,8 @@ export interface GeneralSettingsProps {
 	default_customer_is_cashier: boolean;
 	barcode_field: string;
 	restore_stock_on_delete: boolean;
+	storefront_receipt_enabled: boolean;
+	storefront_receipt_template: string;
 	tracking_consent: 'undecided' | 'allowed' | 'denied';
 	store_name: string;
 	store_phone: string;
@@ -182,6 +185,15 @@ function General() {
 						/>
 					</div>
 				</FormRow>
+				<StorefrontReceiptSection
+					enabled={!!data?.storefront_receipt_enabled}
+					template={
+						isString(data?.storefront_receipt_template) ? data?.storefront_receipt_template : ''
+					}
+					onChange={(patch) => {
+						mutate(patch);
+					}}
+				/>
 				<React.Suspense
 					fallback={<Skeleton className="wcpos:h-32 wcpos:w-full wcpos:rounded-md wcpos:mt-4" />}
 				>

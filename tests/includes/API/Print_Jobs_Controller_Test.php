@@ -166,6 +166,107 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It rejects fixed-layout escpos/starprnt format jobs for Star CloudPRNT printers.
+	 *
+	 * The fixed-layout 'escpos' adapter emits a language StarPRNT-native
+	 * printers cannot decode, and the fixed-layout 'starprnt' adapter is a
+	 * non-functional placeholder — both must fail loudly at enqueue.
+	 */
+	public function test_enqueue_fixed_layout_format_to_star_printer_returns_400(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'star-1',
+						'provider' => 'star-cloudprnt',
+					),
+				),
+			)
+		);
+
+		foreach ( array( 'escpos', 'starprnt' ) as $format ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+			$request->set_body_params(
+				array(
+					'printer_id' => 'star-1',
+					'order_id'   => 12345,
+					'format'     => $format,
+				)
+			);
+
+			$response = rest_do_request( $request );
+
+			$this->assertEquals( 400, $response->get_status(), "format={$format}" );
+			$this->assertEquals( 'wcpos_print_job_incompatible', $response->as_error()->get_error_code(), "format={$format}" );
+		}
+	}
+
+	/**
+	 * It ignores a fixed-layout format when enqueueing a Star template job.
+	 */
+	public function test_enqueue_star_template_job_with_redundant_format_succeeds(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'star-1',
+						'provider' => 'star-cloudprnt',
+					),
+				),
+			)
+		);
+		$template_id = $this->create_thermal_template();
+		$order       = OrderHelper::create_order();
+		$request     = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'  => 'star-1',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $template_id,
+				'format'      => 'escpos',
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( 'application/vnd.star.starprnt', $response->get_data()['content_type'] );
+	}
+
+	/**
+	 * It refreshes the media type when retrying a template-backed Star job.
+	 */
+	public function test_reprint_star_template_job_refreshes_content_type(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'star-1',
+						'provider' => 'star-cloudprnt',
+					),
+				),
+			)
+		);
+		$jobs = new Print_Job_Service();
+		$id   = $jobs->create(
+			array(
+				'printer_id'   => 'star-1',
+				'content_type' => 'application/octet-stream',
+				'template_id'  => 'receipt-80mm',
+			)
+		);
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( 'application/vnd.star.starprnt', $response->get_data()['content_type'] );
+	}
+
+	/**
 	 * It enqueues an order-based PrintNode job and schedules its submit event.
 	 */
 	public function test_enqueue_order_based_printnode_job_schedules_submit(): void {
@@ -428,6 +529,131 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'cancelled', ( new Print_Job_Service() )->get( $id )['status'] );
+	}
+
+	/**
+	 * It refuses to cancel terminal jobs, preserving a failed job's retryable payload.
+	 *
+	 * set_status() clears post_content on cancel, so cancelling a failed job
+	 * destroys the payload Retry copies. cancel_waiting() already guards this
+	 * for bulk cancels; the single-job endpoint must agree.
+	 */
+	public function test_cancel_refuses_non_cancellable_statuses(): void {
+		$jobs = new Print_Job_Service();
+		foreach ( array( Print_Job_Service::STATUS_FAILED, Print_Job_Service::STATUS_PRINTED, Print_Job_Service::STATUS_CANCELLED ) as $status ) {
+			$id = $this->jobs_seed( 'printer-A' );
+			$jobs->set_status( $id, $status );
+
+			$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+			$request->set_header( 'X-WCPOS', '1' );
+			$response = rest_do_request( $request );
+
+			$this->assertEquals( 409, $response->get_status() );
+			$this->assertEquals( 'wcpos_print_job_not_cancellable', $response->as_error()->get_error_code() );
+			$job = $jobs->get( $id );
+			$this->assertEquals( $status, $job['status'] );
+			if ( Print_Job_Service::STATUS_FAILED === $status ) {
+				$this->assertEquals( base64_encode( 'x' ), $job['payload'] );
+			}
+		}
+	}
+
+	/**
+	 * It does not overwrite a printer failure that wins the cancellation race.
+	 */
+	public function test_cancel_does_not_overwrite_concurrent_printer_failure(): void {
+		$jobs = new Print_Job_Service();
+		$id   = $this->jobs_seed( 'printer-A' );
+		$jobs->set_status( $id, Print_Job_Service::STATUS_CLAIMED );
+		$raced = false;
+		$race  = function ( $check, $object_id, $meta_key, $meta_value ) use ( $jobs, $id, &$raced ) {
+			if ( ! $raced && $id === (int) $object_id && Print_Job_Service::META_STATUS === $meta_key && Print_Job_Service::STATUS_CANCELLED === $meta_value ) {
+				$raced = true;
+				$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+			}
+
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $race, 10, 4 );
+
+		try {
+			$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+			$request->set_header( 'X-WCPOS', '1' );
+			$response = rest_do_request( $request );
+		} finally {
+			remove_filter( 'update_post_metadata', $race, 10 );
+		}
+
+		$this->assertEquals( 409, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_not_cancellable', $response->as_error()->get_error_code() );
+		$this->assertEquals( Print_Job_Service::STATUS_FAILED, $jobs->get( $id )['status'] );
+		$this->assertEquals( base64_encode( 'x' ), $jobs->get( $id )['payload'] );
+	}
+
+	/**
+	 * It does not cancel a job while its provider submission holds the lifecycle lock.
+	 */
+	public function test_cancel_refuses_job_while_submission_lock_held(): void {
+		$jobs = new Print_Job_Service();
+		$id   = $this->jobs_seed( 'printer-A' );
+		add_option( Print_Job_Service::LIFECYCLE_LOCK_PREFIX . $id, (string) time(), '', false );
+
+		try {
+			$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+			$request->set_header( 'X-WCPOS', '1' );
+			$response = rest_do_request( $request );
+		} finally {
+			delete_option( Print_Job_Service::LIFECYCLE_LOCK_PREFIX . $id );
+		}
+
+		$this->assertEquals( 409, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_not_cancellable', $response->as_error()->get_error_code() );
+		$this->assertEquals( Print_Job_Service::STATUS_PENDING, $jobs->get( $id )['status'] );
+		$this->assertEquals( base64_encode( 'x' ), $jobs->get( $id )['payload'] );
+	}
+
+	/**
+	 * Retrying a push-provider job schedules its out-of-band submit.
+	 *
+	 * PrintNode and Star Online never poll the queue, so a replacement job
+	 * that is not handed to CRON_SUBMIT stays pending forever — Retry looks
+	 * like it worked and nothing ever prints.
+	 */
+	public function test_reprint_schedules_submit_for_push_provider(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                   => 'pn',
+						'name'                 => 'PrintNode',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'secret-key',
+						'printnode_printer_id' => 42,
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$jobs   = new Print_Job_Service();
+		$source = $jobs->create(
+			array(
+				'printer_id'   => 'pn',
+				'content_type' => 'application/pdf',
+				'payload'      => base64_encode( 'x' ),
+			)
+		);
+		$jobs->set_status( $source, Print_Job_Service::STATUS_FAILED );
+
+		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/print-jobs/' . $source . '/reprint' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 201, $response->get_status() );
+		$new_id = (int) $response->get_data()['id'];
+		$this->assertNotFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $new_id ) )
+		);
 	}
 
 	/**

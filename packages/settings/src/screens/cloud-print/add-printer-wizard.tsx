@@ -3,6 +3,7 @@ import * as React from 'react';
 import { Button, Chip, Modal, Notice, TextInput } from '@wcpos/ui';
 
 import { PROVIDERS } from './providers';
+import Book from '../../../assets/book.svg';
 import { t } from '../../translations';
 
 import type { StarDeviceOption } from './fetch-star-devices';
@@ -126,27 +127,49 @@ function getRestRoot(): string {
 }
 
 /**
- * Build the poll URL a printer uses to fetch jobs. `root` already ends in `/`,
- * so the path is appended without a leading slash to avoid a double slash.
- * When `relayBaseUrl` is given (e.g. https://cloudprint.wcpos.com/p/<site_key>)
- * the URL is built on the relay instead of this site; the query string —
- * including the `pt` token — is identical either way, because the relay
- * passes it through untouched.
+ * Build a poll URL with the token segment already encoded (or masked for
+ * display). Credentials ride in the URL *path*, never the query string: Star
+ * printers URL-encode the configured query on the wire (& becomes %26), so
+ * query credentials never arrive as parameters — verified on a TSP100IV.
+ * Only the first configured `key=value` pair survives, which is why the
+ * direct form can still carry the lone `wcpos=1` marker. `root` already ends
+ * in `/`, so the path is appended without a leading slash.
  */
+function buildPollUrlWithTokenSegment(
+	provider: CloudProvider,
+	printerId: string,
+	tokenSegment: string,
+	relayBaseUrl?: string
+): string {
+	const endpoint = PROVIDERS[provider].pollEndpoint;
+	const creds = `${encodeURIComponent(printerId)}/${tokenSegment}`;
+	if (relayBaseUrl) {
+		// e.g. https://cloudprint.wcpos.com/p/<site_key>/<printer>/<token>/<endpoint>;
+		// the relay rebuilds the query server-side, so none is needed here.
+		return `${relayBaseUrl.replace(/\/$/, '')}/${creds}/${endpoint}`;
+	}
+	const baseUrl = `${getRestRoot()}wcpos/v1/print-jobs/${endpoint}/${creds}`;
+	const separator = baseUrl.includes('?') ? '&' : '?';
+	return `${baseUrl}${separator}wcpos=1`;
+}
+
+/** Build the poll URL a printer uses to fetch jobs. */
 export function buildPollUrl(
 	provider: CloudProvider,
 	printerId: string,
 	token: string,
 	relayBaseUrl?: string
 ): string {
-	const endpoint = PROVIDERS[provider].pollEndpoint;
-	const baseUrl = relayBaseUrl
-		? `${relayBaseUrl.replace(/\/$/, '')}/${endpoint}`
-		: `${getRestRoot()}wcpos/v1/print-jobs/${endpoint}`;
-	const separator = baseUrl.includes('?') ? '&' : '?';
-	return `${baseUrl}${separator}wcpos=1&printer_id=${encodeURIComponent(
-		printerId
-	)}&pt=${encodeURIComponent(token)}`;
+	return buildPollUrlWithTokenSegment(provider, printerId, encodeURIComponent(token), relayBaseUrl);
+}
+
+/** Display-only poll URL with the secret token segment masked. */
+export function maskedPollUrl(
+	provider: CloudProvider,
+	printerId: string,
+	relayBaseUrl?: string
+): string {
+	return buildPollUrlWithTokenSegment(provider, printerId, '••••', relayBaseUrl);
 }
 
 /** A label + read-only value with a copy-to-clipboard button. */
@@ -209,9 +232,38 @@ function CopyRow({
 type CreatedState = { printer: CloudPrinter; token?: string };
 
 /**
+ * One tiny line linking to the docs page that explains why printer URLs go
+ * through cloudprint.wcpos.com. Deliberately the only relay-related copy in
+ * the UI — the full explanation lives in the docs, not the settings screen.
+ * The book icon matches the documentation links elsewhere in settings.
+ */
+function RelayDocsNote() {
+	return (
+		<p className="wcpos:text-xs" data-testid="wizard-relay-docs-note">
+			<a
+				href="https://docs.wcpos.com/receipts/cloud-printing"
+				target="_blank"
+				rel="noopener noreferrer"
+				className="wcpos:inline-flex wcpos:items-center wcpos:gap-1"
+			>
+				<span className="wcpos:h-3.5 wcpos:w-3.5">
+					<Book fill="currentColor" />
+				</span>
+				{t(
+					'cloud_print.relay_docs_note',
+					"For more information on why we're using a relay server."
+				)}
+				<span className="wcpos:sr-only"> (opens in new tab)</span>
+			</a>
+		</p>
+	);
+}
+
+/**
  * Collapsed fallback for the direct-to-site URL, shown only when the relay is
- * active. Direct connections fail on some hosts (modern TLS the printer can't
- * negotiate), which is the problem the relay exists to fix — hence "Advanced".
+ * active. The relay is deliberately built for maximum printer compatibility,
+ * so the direct URL is an opt-out for people who don't want a relay — not a
+ * troubleshooting step — and it may simply not work on some hosts.
  */
 function DirectUrlDisclosure({ url, copyable }: { url: string; copyable: boolean }) {
 	return (
@@ -222,8 +274,8 @@ function DirectUrlDisclosure({ url, copyable }: { url: string; copyable: boolean
 			<div className="wcpos:mt-2 wcpos:flex wcpos:flex-col wcpos:gap-2">
 				<p className="wcpos:text-xs wcpos:text-gray-500">
 					{t(
-						'cloud_print.advanced_direct_help',
-						'Only use the direct address if you can\'t use WCPOS Cloud Print — some printers can\'t connect to modern hosting and stay stuck on "Waiting for printer".'
+						'cloud_print.direct_url_help',
+						"The relay exists because many printers can't connect to modern hosting. Only connect directly if you'd rather not route print jobs through a relay — some printers can't reach this site and will stay stuck on \"Waiting for printer\"."
 					)}
 				</p>
 				<CopyRow
@@ -242,10 +294,10 @@ function DirectUrlDisclosure({ url, copyable }: { url: string; copyable: boolean
  * A modal wizard for connecting a cloud printer.
  *
  * In `add` mode it walks: choose provider → name (+ PrintNode credentials) →
- * create → show the one-time poll URL/token (polling providers) or a "linked"
- * confirmation (PrintNode). In `setup` mode it opens directly on the final
- * step for an existing printer, with the token masked because it is only ever
- * shown once at creation.
+ * create → show the one-time poll URL (polling providers; the URL embeds the
+ * secret token) or a "linked" confirmation (PrintNode). In `setup` mode it
+ * opens directly on the final step for an existing printer, with the token
+ * segment masked because it is only ever shown once at creation.
  */
 export function AddPrinterWizard({
 	open,
@@ -686,15 +738,15 @@ export function AddPrinterWizard({
 								{mode === 'setup' ? (
 									<Notice status="info" isDismissible={false}>
 										{t(
-											'cloud_print.token_lost',
-											"The token was shown only once when this printer was created and can't be displayed again. To get a new one, remove and re-add the printer."
+											'cloud_print.poll_url_lost',
+											"The full address (with its secret token) was shown only once when this printer was created and can't be displayed again. To get a new one, remove and re-add the printer."
 										)}
 									</Notice>
 								) : (
 									<p className="wcpos:text-sm wcpos:text-gray-700">
 										{t(
-											'cloud_print.token_once_intro',
-											"Copy these two values into your printer's setup screen. The token is shown only once."
+											'cloud_print.poll_url_once_intro',
+											"Copy this address into your printer's setup screen. It contains a secret token and is shown in full only once."
 										)}
 									</p>
 								)}
@@ -707,9 +759,6 @@ export function AddPrinterWizard({
 									const relayBase =
 										relay?.enabled && relay.printer_base_url ? relay.printer_base_url : undefined;
 									if (mode === 'setup') {
-										// No real token to display — append a literal mask after the
-										// (empty, so un-encoded) token placeholder.
-										const baseUrl = `${buildPollUrl(finalProvider, printerForUrl.id, '', relayBase)}••••`;
 										return (
 											<>
 												<CopyRow
@@ -718,13 +767,14 @@ export function AddPrinterWizard({
 														'cloud_print.poll_url_help',
 														'paste into the printer\'s "server URL"'
 													)}
-													value={baseUrl}
+													value={maskedPollUrl(finalProvider, printerForUrl.id, relayBase)}
 													valueTestId="wizard-poll-url"
 													copyTestId="wizard-copy-url"
 												/>
+												{relayBase && <RelayDocsNote />}
 												{relayBase && (
 													<DirectUrlDisclosure
-														url={`${buildPollUrl(finalProvider, printerForUrl.id, '')}••••`}
+														url={maskedPollUrl(finalProvider, printerForUrl.id)}
 														copyable={false}
 													/>
 												)}
@@ -735,7 +785,7 @@ export function AddPrinterWizard({
 									if (!token) {
 										// Polling providers always return a one-time token (Phase 1
 										// contract). Guard the theoretical empty case so we never show
-										// a broken `…&pt=` URL or an empty, copyable token row.
+										// a URL with an empty token segment or an empty, copyable token row.
 										return (
 											<Notice status="warning" isDismissible={false}>
 												{t(
@@ -759,14 +809,7 @@ export function AddPrinterWizard({
 												valueTestId="wizard-poll-url"
 												copyTestId="wizard-copy-url"
 											/>
-											<CopyRow
-												label={t('cloud_print.poll_token', 'Poll token')}
-												help={t('cloud_print.poll_token_help', 'store it like a password')}
-												value={token}
-												copyValue={token}
-												valueTestId="wizard-poll-token"
-												copyTestId="wizard-copy-token"
-											/>
+											{relayBase && <RelayDocsNote />}
 											{relayBase && (
 												<DirectUrlDisclosure
 													url={buildPollUrl(finalProvider, printerForUrl.id, token)}

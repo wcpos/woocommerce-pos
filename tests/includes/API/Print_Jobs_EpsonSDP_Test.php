@@ -149,4 +149,29 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 			$this->logged_messages
 		);
 	}
+
+	/**
+	 * It authenticates and claims a job from path credentials alone.
+	 *
+	 * Mirrors the CloudPRNT path-credential route: printer_id and pt ride in
+	 * the URL path, no credential query params and no WCPOS header — only the
+	 * `wcpos=1` marker query pair.
+	 */
+	public function test_epson_sdp_path_credentials_poll_claims_next_job(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/print-jobs/epson-sdp/p1/tok' );
+		$request->set_query_params( array( 'wcpos' => '1' ) );
+		$request->set_body( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'claimed', $this->jobs->get( $id )['status'] );
+	}
 }

@@ -55,6 +55,9 @@ class Deactivator {
 		// remove pos capabilities.
 		$this->remove_pos_capability();
 
+		// stop the print-job retention purge.
+		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Services\Print_Job_Service::PURGE_HOOK );
+
 		// remove pos rewrite rule.
 		flush_rewrite_rules( false ); // false will not overwrite .htaccess.
 	}

@@ -15,15 +15,32 @@ use WP_UnitTestCase;
  */
 class Cloud_Print_Diagnostic_Test extends WP_UnitTestCase {
 	/**
-	 * It builds a Star diagnostic as ESC/POS bytes.
+	 * It builds a Star diagnostic as native StarPRNT bytes.
+	 *
+	 * StarPRNT-native printers (the whole TSP100 line) cannot decode ESC/POS,
+	 * so the diagnostic must carry StarPRNT commands under the vnd.star type.
 	 */
-	public function test_build_star_diagnostic_is_escpos_bytes(): void {
+	public function test_build_star_diagnostic_is_starprnt_bytes(): void {
 		$diag = ( new Cloud_Print_Diagnostic() )->build( 'star-cloudprnt', 'Kitchen' );
-		$this->assertEquals( 'application/octet-stream', $diag['content_type'] );
+		$this->assertEquals( 'application/vnd.star.starprnt', $diag['content_type'] );
 		$bytes = base64_decode( $diag['payload'], true );
 		$this->assertStringContainsString( 'WCPOS', $bytes );
 		$this->assertStringContainsString( 'Kitchen', $bytes );
-		$this->assertStringContainsString( "\x1B@", $bytes ); // ESC @ init.
+		$this->assertStringNotContainsString( "\x1B@", $bytes ); // No ESC/POS init.
+		$this->assertStringNotContainsString( "\x1DV", $bytes ); // No ESC/POS cut.
+		$this->assertStringContainsString( "\x1B\x1D\x61\x01", $bytes ); // StarPRNT center align.
+		$this->assertStringContainsString( "\x1B\x64\x03", $bytes ); // StarPRNT partial cut.
+	}
+
+	/**
+	 * It strips control bytes from the printer name before emitting commands.
+	 */
+	public function test_build_strips_control_bytes_from_printer_name(): void {
+		$diag  = ( new Cloud_Print_Diagnostic() )->build( 'star-cloudprnt', "Kit\x1b\x64\x02chen" );
+		$bytes = base64_decode( $diag['payload'], true );
+
+		$this->assertStringContainsString( 'Kitd', $bytes ); // ESC + STX stripped, printable 'd' kept.
+		$this->assertStringNotContainsString( "\x1b\x64\x02", $bytes ); // No injected full cut.
 	}
 
 	/**
