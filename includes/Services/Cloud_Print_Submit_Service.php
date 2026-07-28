@@ -19,12 +19,6 @@ class Cloud_Print_Submit_Service {
 	/** Maximum number of submit attempts before a job is terminally failed. */
 	const MAX_ATTEMPTS = 3;
 
-	/** Per-job submit lock option prefix. */
-	const SUBMIT_LOCK_PREFIX = 'wcpos_pn_submit_lock_';
-
-	/** Seconds a submit lock is honoured before a crashed worker is self-healed. */
-	const SUBMIT_LOCK_TTL = 120;
-
 	/**
 	 * Job store.
 	 *
@@ -72,16 +66,23 @@ class Cloud_Print_Submit_Service {
 		if ( '' !== $job['external_job_id'] ) {
 			return;
 		}
+		// A job cancelled between scheduling and this run must not be sent.
+		// The cancel path cannot unschedule reliably (retries reschedule with
+		// fresh timestamps), so the worker is the authority on status.
+		if ( ! $this->is_submittable( $job ) ) {
+			return;
+		}
 
 		// Atomic guard: only one worker may submit a given job at a time.
-		if ( ! $this->acquire_lock( $job_id ) ) {
+		if ( ! $this->jobs->acquire_lifecycle_lock( $job_id ) ) {
 			return;
 		}
 
 		try {
-			// Double-check under the lock in case another worker just finished.
+			// Double-check under the lock in case another worker just finished
+			// or the job was cancelled while we waited for it.
 			$job = $this->jobs->get( $job_id );
-			if ( null === $job || '' !== $job['external_job_id'] ) {
+			if ( null === $job || '' !== $job['external_job_id'] || ! $this->is_submittable( $job ) ) {
 				return;
 			}
 
@@ -148,7 +149,7 @@ class Cloud_Print_Submit_Service {
 
 			$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
 		} finally {
-			$this->release_lock( $job_id );
+			$this->jobs->release_lifecycle_lock( $job_id );
 		}
 	}
 
@@ -232,41 +233,22 @@ class Cloud_Print_Submit_Service {
 	}
 
 	/**
-	 * Acquire the atomic per-job submit lock.
+	 * Whether a job's status still permits submission.
 	 *
-	 * Mirrors Print_Job_Service::acquire_claim_lock — add_option is atomic, so the
-	 * first caller wins. A lock older than the TTL is treated as a crashed worker
-	 * and self-healed.
+	 * Pending is the normal case; claimed covers a retry that a worker had
+	 * already picked up. Cancelled, printed and failed jobs are terminal and
+	 * must never be pushed to a provider.
 	 *
-	 * @param int $job_id Job ID.
+	 * @param array $job Job row.
 	 *
-	 * @return bool True when the lock was acquired.
+	 * @return bool True when the job may be submitted.
 	 */
-	private function acquire_lock( int $job_id ): bool {
-		$option = self::SUBMIT_LOCK_PREFIX . $job_id;
-		$now    = time();
-
-		if ( add_option( $option, (string) $now, '', false ) ) {
-			return true;
-		}
-
-		$locked_at = (int) get_option( $option, 0 );
-		if ( $locked_at > 0 && ( $now - $locked_at ) > self::SUBMIT_LOCK_TTL ) {
-			delete_option( $option );
-
-			return add_option( $option, (string) $now, '', false );
-		}
-
-		return false;
-	}
-
-	/**
-	 * Release the per-job submit lock.
-	 *
-	 * @param int $job_id Job ID.
-	 */
-	private function release_lock( int $job_id ): void {
-		delete_option( self::SUBMIT_LOCK_PREFIX . $job_id );
+	private function is_submittable( array $job ): bool {
+		return \in_array(
+			$job['status'] ?? '',
+			array( Print_Job_Service::STATUS_PENDING, Print_Job_Service::STATUS_CLAIMED ),
+			true
+		);
 	}
 
 	/**

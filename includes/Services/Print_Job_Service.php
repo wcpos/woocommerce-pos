@@ -28,7 +28,9 @@ class Print_Job_Service {
 	const META_AUTO_OPEN_DRAWER = '_wcpos_pj_auto_open_drawer';
 	const META_DRAWER_CONNECTOR = '_wcpos_pj_drawer_connector';
 	const META_DRAWER_ERROR     = '_wcpos_pj_drawer_error';
-	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
+	const CLAIM_LOCK_PREFIX     = 'wcpos_pj_claim_lock_';
+	const LIFECYCLE_LOCK_PREFIX = 'wcpos_pn_submit_lock_';
+	const LIFECYCLE_LOCK_TTL    = 120;
 
 	/** Daily cron hook that prunes expired terminal jobs. */
 	const PURGE_HOOK = 'wcpos_print_job_purge';
@@ -532,9 +534,7 @@ class Print_Job_Service {
 
 		if ( ! empty( $filters['ids'] ) ) {
 			foreach ( array_map( 'intval', (array) $filters['ids'] ) as $id ) {
-				$job = $this->get( $id );
-				if ( null !== $job && \in_array( $job['status'], $cancellable, true ) ) {
-					$this->set_status( $id, self::STATUS_CANCELLED );
+				if ( $this->cancel_if_waiting( $id ) ) {
 					++$cancelled;
 				}
 			}
@@ -557,15 +557,45 @@ class Print_Job_Service {
 						'limit'      => 100,
 					)
 				);
-				$batch = \count( $jobs );
+				$batch          = \count( $jobs );
+				$batch_cancelled = 0;
 				foreach ( $jobs as $job ) {
-					$this->set_status( (int) $job['id'], self::STATUS_CANCELLED );
-					++$cancelled;
+					if ( $this->cancel_if_waiting( (int) $job['id'] ) ) {
+						++$cancelled;
+						++$batch_cancelled;
+					}
 				}
-			} while ( 100 === $batch );
+			} while ( 100 === $batch && $batch_cancelled > 0 );
 		}
 
 		return $cancelled;
+	}
+
+	/**
+	 * Atomically cancel a waiting job while excluding provider submission.
+	 *
+	 * @param int $id Job ID.
+	 *
+	 * @return bool True when the job was cancelled.
+	 */
+	public function cancel_if_waiting( int $id ): bool {
+		if ( ! $this->acquire_lifecycle_lock( $id ) ) {
+			return false;
+		}
+
+		try {
+			foreach ( array( self::STATUS_PENDING, self::STATUS_CLAIMED ) as $status ) {
+				if ( update_post_meta( $id, self::META_STATUS, self::STATUS_CANCELLED, $status ) ) {
+					$this->finalize_status_change( $id, self::STATUS_CANCELLED );
+
+					return true;
+				}
+			}
+
+			return false;
+		} finally {
+			$this->release_lifecycle_lock( $id );
+		}
 	}
 
 	/**
@@ -635,6 +665,16 @@ class Print_Job_Service {
 	 */
 	public function set_status( int $id, string $status ): void {
 		update_post_meta( $id, self::META_STATUS, sanitize_text_field( $status ) );
+		$this->finalize_status_change( $id, $status );
+	}
+
+	/**
+	 * Apply side effects for a status change.
+	 *
+	 * @param int    $id     Job ID.
+	 * @param string $status New status.
+	 */
+	private function finalize_status_change( int $id, string $status ): void {
 		if ( \in_array( $status, array( self::STATUS_PRINTED, self::STATUS_CANCELLED, self::STATUS_FAILED ), true ) ) {
 			// The retention clock starts when the job *ends*, not when it was
 			// created — a receipt that waited a week and then printed still
@@ -654,6 +694,40 @@ class Print_Job_Service {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Acquire the atomic per-job lifecycle lock.
+	 *
+	 * @param int $id Job ID.
+	 *
+	 * @return bool True when the lock was acquired.
+	 */
+	public function acquire_lifecycle_lock( int $id ): bool {
+		$option = self::LIFECYCLE_LOCK_PREFIX . $id;
+		$now    = time();
+
+		if ( add_option( $option, (string) $now, '', false ) ) {
+			return true;
+		}
+
+		$locked_at = (int) get_option( $option, 0 );
+		if ( $locked_at > 0 && ( $now - $locked_at ) > self::LIFECYCLE_LOCK_TTL ) {
+			delete_option( $option );
+
+			return add_option( $option, (string) $now, '', false );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Release the per-job lifecycle lock.
+	 *
+	 * @param int $id Job ID.
+	 */
+	public function release_lifecycle_lock( int $id ): void {
+		delete_option( self::LIFECYCLE_LOCK_PREFIX . $id );
 	}
 
 	/**
@@ -772,7 +846,13 @@ class Print_Job_Service {
 				return false;
 			}
 
-			update_post_meta( $id, self::META_STATUS, self::STATUS_CLAIMED );
+			// Conditional on still-pending: a cancellation that lands between
+			// the eligibility read above and this write must win — an
+			// unconditional write would flip a just-cancelled job back to
+			// claimed and hand it to the printer.
+			if ( ! update_post_meta( $id, self::META_STATUS, self::STATUS_CLAIMED, self::STATUS_PENDING ) ) {
+				return false;
+			}
 			update_post_meta( $id, self::META_CLAIMED_AT, time() );
 
 			return true;
@@ -824,8 +904,14 @@ class Print_Job_Service {
 		foreach ( $claimed as $job ) {
 			$claimed_at = (int) get_post_meta( $job['id'], self::META_CLAIMED_AT, true );
 			if ( 0 === $claimed_at || ( time() - $claimed_at ) > $ttl ) {
-				update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING );
+				// Drop the timestamp while the job is still claimed — nothing
+				// can re-claim it until the status flips, so a fresh claim's
+				// timestamp can never be erased by this cleanup. Then the
+				// requeue is conditional on still-claimed: same race as
+				// try_claim() — a cancellation landing after the query above
+				// must not be overwritten back to pending.
 				delete_post_meta( $job['id'], self::META_CLAIMED_AT );
+				update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING, self::STATUS_CLAIMED );
 			}
 		}
 	}

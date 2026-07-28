@@ -139,6 +139,46 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Order text carrying printer command sequences cannot operate the printer.
+	 *
+	 * A customer note is attacker-controllable on a public checkout. If its
+	 * ESC bytes survived into the job, they would be executed as commands —
+	 * cutting paper or kicking the cash drawer mid-receipt. The control-byte
+	 * strip in render() is what prevents that, so assert on the emitted bytes
+	 * for both wire formats rather than on the strip itself.
+	 */
+	public function test_render_does_not_execute_printer_commands_from_order_text(): void {
+		// Arrange: ESC/POS drawer kick (ESC p) and full cut (GS V), plus the
+		// StarPRNT cut (ESC d) and drawer pulse (ESC BEL).
+		$order = OrderHelper::create_order();
+		$order->set_customer_note( "A\x1b\x70\x00\x37\x79B\x1d\x56\x41C\x1b\x64\x02D\x1b\x07E" );
+		$order->save();
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt paper-width="48"><text>{{order.customer_note}}</text></receipt>',
+		);
+		$renderer = new Thermal_Renderer();
+
+		// Act.
+		$escpos   = $renderer->render( $template, $order, 'escpos' );
+		$starprnt = $renderer->render( $template, $order, 'starprnt' );
+
+		// Assert: no command sequence from the note reaches either job. The
+		// escape byte is stripped, so what remains of each sequence is inert
+		// printable text (e.g. ESC p 0 55 121 prints as "p7y") — ugly on the
+		// receipt, but it cannot operate the printer, and the surrounding
+		// characters still render.
+		$expected_text = 'Ap7yBVACdDE';
+		foreach ( array( $escpos, $starprnt ) as $bytes ) {
+			$this->assertStringNotContainsString( "\x1b\x70", $bytes );
+			$this->assertStringNotContainsString( "\x1d\x56\x41", $bytes );
+			$this->assertStringNotContainsString( "\x1b\x64\x02", $bytes );
+			$this->assertStringNotContainsString( "\x1b\x07", $bytes );
+			$this->assertStringContainsString( $expected_text, $bytes );
+		}
+	}
+
+	/**
 	 * It builds an AST whose root is a receipt node with children.
 	 */
 	public function test_build_ast_returns_receipt_root_with_children(): void {

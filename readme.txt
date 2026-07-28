@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.12
+Stable tag: 1.9.13
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,9 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.13 - 2026/07/26 =
+- **Fixed garbled prints on Star CloudPRNT printers** -- after 1.9.12, receipts sent to Star CloudPRNT printers (the TSP100 line) could print the plain text lines followed by a metre of garbage characters, because cashier-initiated prints were still rendered as ESC/POS, which no Star CloudPRNT printer can decode. WCPOS now serves these printers native StarPRNT for cashier prints too, and automatically corrects the stored printer language on existing installs on the next settings sync -- no reconfiguration needed. Other cloud printers are unaffected.
 
 = 1.9.12 - 2026/07/24 =
 - **Fixed cloud printing to Star TSP100 printers** -- StarPRNT-native Star printers (the TSP100/TSP100IV line) rejected Cloud Print jobs with a "510 Incompatible Media Type" error and never printed, because WCPOS sent them ESC/POS. WCPOS now serves these printers native StarPRNT, so Cloud Print works on the whole TSP100 family. Other cloud printers are unaffected.
