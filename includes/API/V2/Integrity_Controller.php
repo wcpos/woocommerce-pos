@@ -108,6 +108,11 @@ final class Integrity_Controller extends WP_REST_Controller {
 						'default' => 'products',
 						'sanitize_callback' => 'sanitize_key',
 					),
+					'status' => array(
+						'sanitize_callback' => static function ( $status ) {
+							return 'publish' === $status ? 'publish' : '';
+						},
+					),
 				),
 			)
 		);
@@ -171,6 +176,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		// Each collection has its OWN digest source + id-space (ADR 0015): products/variations over
 		// wp_posts (p.ID), customers over wp_users (u.ID). Same 64-bit formula, so digests compare
 		// apples-to-apples with the manifest the client stored on pull.
+		$servable_join   = '';
 		$servable_filter = '';
 		$servable_args   = array();
 		if ( 'customers' === $collection ) {
@@ -180,6 +186,14 @@ final class Integrity_Controller extends WP_REST_Controller {
 			$inner_sql = $this->digests->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
 		} else {
 			$inner_sql = $this->digests->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
+			if ( 'publish' === $request->get_param( 'status' ) ) {
+				$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id"
+					. " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent"
+					. " AND catalog_post.post_type = 'product_variation'";
+				$servable_filter = " WHERE ((cur.object_type = 'product' AND catalog_post.post_status = 'publish')"
+					. " OR (cur.object_type = 'variation' AND parent_product.post_type = 'product'"
+					. " AND parent_product.post_status = 'publish'))";
+			}
 			// Leg-3 (ADR 0014 WP-M5): the authoritative served set must AGREE with the pull filter — drop
 			// the POS-hidden (`online_only`) products/variations here so this bucket-list omits them and the
 			// reconcile prunes any that were pulled BEFORE being toggled online_only. READ-SIDE ONLY: a
@@ -196,8 +210,9 @@ final class Integrity_Controller extends WP_REST_Controller {
 				)
 			);
 			if ( array() !== $hidden ) {
-				$servable_filter = ' WHERE cur.id NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
-				$servable_args   = array_map( 'intval', $hidden );
+				$servable_filter .= ( '' === $servable_filter ? ' WHERE ' : ' AND ' )
+					. 'cur.id NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
+				$servable_args    = array_map( 'intval', $hidden );
 			}
 		}
 
@@ -207,7 +222,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			$wpdb->prepare(
 				'SELECT cur.id AS id, cur.crc AS digest, cur.object_type AS object_type FROM ('
 				. $inner_sql
-				. ') cur' . $servable_filter . ' ORDER BY cur.id ASC',
+				. ') cur' . $servable_join . $servable_filter . ' ORDER BY cur.id ASC',
 				$range_start,
 				$range_end,
 				...$servable_args
