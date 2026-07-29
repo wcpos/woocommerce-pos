@@ -1,6 +1,6 @@
 <?php
 /**
- * Pins customer meta_data behavior on the V2 catalog proxy per role (#1309).
+ * Pins the v1-parity customer response contract on the V2 surfaces (#1309).
  *
  * @package WCPOS\WooCommercePOS\Tests\API\V2
  */
@@ -8,21 +8,21 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
+use WCPOS\WooCommercePOS\Services\Customer_Meta_Parity;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WP_REST_Request;
 
 /**
- * Pins what /wcpos/v2/customers serves per role TODAY (probed 2026-07-29,
- * evidence on #1309). Stock wc/v3 gates the entire meta_data key on
- * wc_current_user_has_role( 'administrator' ) and the proxy is a faithful
- * pass-through, so a cashier pull carries ONLY the uuid entry appended by
- * Proxy_Uuid_Stamper. V1's wcpos_customer_response() re-added non-protected
- * meta (and a top-level tax_ids field) for cashiers; V2 has no equivalent.
+ * Pins the #1309 ruling (2026-07-29): v2 customer serialization keeps v1.9
+ * parity for POS requests. Stock wc/v3 withholds the entire meta_data key
+ * from non-administrators and never serves tax_ids; Customer_Meta_Parity
+ * restores both on every POS-marked wc/v3 customer serialization, so the
+ * catalog proxy pulls AND the push write echo carry them for every role.
  *
- * These pins document CURRENT behavior, not a ruling: whether cashiers should
- * regain v1 meta/tax_ids parity is an open product question on #1309. If that
- * ruling lands, update these pins alongside the fix.
+ * Probe evidence for the pre-fix behavior (cashier = uuid-only meta,
+ * tax_ids absent for all roles) is on #1309.
  */
 class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case {
 	/**
@@ -33,12 +33,16 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 	private $customer;
 
 	/**
-	 * Enable sync routes, register uuid stampers, seed the customer fixture.
+	 * Enable sync routes, register uuid stampers + the parity service (Init.php
+	 * registrations do not run in the phpunit bootstrap), mark the request as
+	 * POS, and seed the customer fixture.
 	 */
 	public function setUp(): void {
 		update_option( Api::OPTION_ENABLED, true );
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		parent::setUp();
+		new Customer_Meta_Parity();
+		$_SERVER['HTTP_X_WCPOS'] = '1';
 
 		$this->customer = CustomerHelper::create_customer(
 			array(
@@ -57,6 +61,7 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 	 * Remove sync state written outside the test transaction.
 	 */
 	public function tearDown(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
 		delete_option( Api::OPTION_ENABLED );
@@ -91,38 +96,58 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 	}
 
 	/**
-	 * Admin pulls serve non-protected custom meta plus the stamped uuid;
-	 * protected (underscore-prefixed) keys stay withheld — wc/v3's own
-	 * is_protected_meta filter, unchanged by the proxy.
+	 * The v1-parity contract, asserted against one served payload: non-protected
+	 * custom meta present (id/key/value shape), protected keys withheld, and the
+	 * structured top-level tax_ids built from the legacy VAT meta.
+	 *
+	 * @param array $payload Served customer payload.
 	 */
-	public function test_admin_pull_serves_non_protected_meta_and_uuid(): void {
-		$payload = $this->pull_customer();
-		$keys    = $this->meta_keys( $payload );
-
+	private function assert_v1_parity_contract( array $payload ): void {
+		$keys = $this->meta_keys( $payload );
 		$this->assertContains( 'loyalty_points', $keys );
-		$this->assertContains( Api::UUID_META_KEY, $keys );
 		$this->assertNotContains( '_secret_internal', $keys );
 		$this->assertNotContains( '_vat_number', $keys );
+
+		$loyalty = array_values(
+			array_filter(
+				$payload['meta_data'],
+				static function ( $meta ) {
+					return 'loyalty_points' === $meta['key'];
+				}
+			)
+		);
+		$this->assertSame( '150', $loyalty[0]['value'] );
+		$this->assertIsInt( $loyalty[0]['id'] );
+
+		$this->assertArrayHasKey( 'tax_ids', $payload );
+		$this->assertCount( 1, $payload['tax_ids'] );
+		$this->assertSame( 'gb_vat', $payload['tax_ids'][0]['type'] );
+		$this->assertSame( 'GB123456789', $payload['tax_ids'][0]['value'] );
+		$this->assertSame( 'GB', $payload['tax_ids'][0]['country'] );
 	}
 
 	/**
-	 * Cashier pulls are guaranteed the uuid entry ONLY — stock wc/v3 withholds
-	 * the whole meta_data key from non-administrators and the proxy passes that
-	 * through; the uuid is appended afterward by Proxy_Uuid_Stamper. The exact
-	 * pin means non-uuid meta (loyalty_points here) is silently absent for
-	 * cashiers — the v1-parity delta flagged for a product ruling on #1309.
+	 * Admin proxy pulls serve the full v1-parity contract plus the stamped uuid.
 	 */
-	public function test_cashier_pull_is_guaranteed_uuid_only(): void {
+	public function test_admin_pull_serves_v1_parity_contract(): void {
+		$payload = $this->pull_customer();
+
+		$this->assert_v1_parity_contract( $payload );
+		$this->assertContains( Api::UUID_META_KEY, $this->meta_keys( $payload ) );
+	}
+
+	/**
+	 * Cashier proxy pulls serve the SAME contract — the #1309 regression:
+	 * stock wc/v3 gates meta_data on the administrator role, so without
+	 * Customer_Meta_Parity a cashier pull carried only the uuid entry.
+	 */
+	public function test_cashier_pull_serves_v1_parity_contract(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
 		$payload = $this->pull_customer();
 
-		$this->assertSame( array( Api::UUID_META_KEY ), $this->meta_keys( $payload ) );
-		$uuid = $payload['meta_data'][0]['value'];
-		$this->assertMatchesRegularExpression(
-			'/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/',
-			$uuid
-		);
+		$this->assert_v1_parity_contract( $payload );
+		$this->assertContains( Api::UUID_META_KEY, $this->meta_keys( $payload ) );
 	}
 
 	/**
@@ -141,15 +166,39 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 	}
 
 	/**
-	 * V2 serves NO top-level tax_ids field to either role — v1 built it in
-	 * wcpos_customer_response() via Tax_Id_Reader and nothing on the v2 proxy
-	 * runs it. Pinned as current behavior; the read-side tax_ids gap is part of
-	 * the same #1309 ruling.
+	 * The write echo carries the contract too: a cashier updating a customer
+	 * through wc/v3 (the dispatch /push/customers forwards to) must get
+	 * meta_data + tax_ids back, or the client's local document would wipe
+	 * those fields on every push round-trip.
 	 */
-	public function test_v2_pull_serves_no_tax_ids_field_for_any_role(): void {
-		$this->assertArrayNotHasKey( 'tax_ids', $this->pull_customer() );
-
+	public function test_cashier_write_echo_serves_v1_parity_contract(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
-		$this->assertArrayNotHasKey( 'tax_ids', $this->pull_customer() );
+
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/customers/' . $this->customer->get_id() );
+		$request->set_body_params( array( 'first_name' => 'Updated' ) );
+		$response = $this->server->dispatch( $request );
+		$payload  = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $payload ) );
+		$this->assertSame( 'Updated', $payload['first_name'] );
+		$this->assert_v1_parity_contract( $payload );
+	}
+
+	/**
+	 * Non-POS wc/v3 traffic stays exactly stock: without the X-WCPOS marker a
+	 * cashier gets no meta_data and nobody gets tax_ids — the parity fields
+	 * must not leak outside POS requests.
+	 */
+	public function test_non_pos_request_keeps_stock_wc_behavior(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$request  = new WP_REST_Request( 'GET', '/wc/v3/customers/' . $this->customer->get_id() );
+		$response = $this->server->dispatch( $request );
+		$payload  = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $payload ) );
+		$this->assertArrayNotHasKey( 'meta_data', $payload );
+		$this->assertArrayNotHasKey( 'tax_ids', $payload );
 	}
 }
