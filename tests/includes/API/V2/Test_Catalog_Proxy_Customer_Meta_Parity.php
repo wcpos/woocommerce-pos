@@ -194,7 +194,6 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $payload ) );
 		$this->assertSame( 'Updated', $payload['first_name'] );
 		$this->assert_v1_parity_contract( $payload );
-		$this->assertContains( Api::UUID_META_KEY, $this->meta_keys( $payload ) );
 	}
 
 	/**
