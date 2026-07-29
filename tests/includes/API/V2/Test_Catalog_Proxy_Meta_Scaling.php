@@ -178,6 +178,28 @@ class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Dispatch a warmed products list request and count its queries.
+	 *
+	 * @param array $include Product IDs to include.
+	 *
+	 * @return array{0: \WP_REST_Response, 1: int} Response and query count.
+	 */
+	private function measure_warmed_product_list( array $include ): array {
+		$warmup = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$warmup->set_param( 'include', $include );
+		$warmup->set_param( 'per_page', 10 );
+		$this->server->dispatch( $warmup );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_param( 'include', $include );
+		$request->set_param( 'per_page', 10 );
+		$queries_before = get_num_queries();
+		$response       = $this->server->dispatch( $request );
+
+		return array( $response, get_num_queries() - $queries_before );
+	}
+
+	/**
 	 * Listing ten meta-heavy products avoids query-per-meta scaling.
 	 */
 	public function test_product_list_query_count_avoids_meta_n_plus_one_scaling(): void {
@@ -188,20 +210,22 @@ class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
 			$this->add_bulk_post_meta( $product->get_id(), 100, '_wcpos_scale_list_' . $i );
 		}
 
-		$warmup = $this->wp_rest_get_request( '/wcpos/v2/products' );
-		$warmup->set_param( 'include', array( $product_ids[0] ) );
-		$this->server->dispatch( $warmup );
-
-		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
-		$request->set_param( 'include', $product_ids );
-		$request->set_param( 'per_page', 10 );
-		$queries_before = get_num_queries();
-		$response       = $this->server->dispatch( $request );
-		$query_count    = get_num_queries() - $queries_before;
+		list( , $single_count )        = $this->measure_warmed_product_list( array( $product_ids[0] ) );
+		list( $response, $list_count ) = $this->measure_warmed_product_list( $product_ids );
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 10, $response->get_data() );
-		// Measured baseline: 71 queries on 2026-07-29. The 225-query bound is just over 3x.
-		$this->assertLessThanOrEqual( 225, $query_count );
+		// Primary guard: the nine extra meta-heavy products may only add a
+		// bounded per-product increment — a query-per-meta (or steep
+		// per-product) regression blows past it. Measured 2026-07-29: warmed
+		// single-product and ten-product requests both cost 8 queries (the
+		// proxy batches meta), so 3 per product is pure headroom.
+		$this->assertLessThanOrEqual(
+			$single_count + ( 9 * 3 ),
+			$list_count,
+			"Ten-product list used {$list_count} queries vs {$single_count} for one product."
+		);
+		// Secondary absolute ceiling, ~3x the measured 71-query cold baseline.
+		$this->assertLessThanOrEqual( 225, $list_count );
 	}
 }
