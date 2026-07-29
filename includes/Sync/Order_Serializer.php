@@ -22,7 +22,7 @@ final class Order_Serializer {
 		$response = $controller->prepare_object_for_response( $order, $request );
 		$response = rest_ensure_response( $response );
 		$data = rest_get_server()->response_to_data( $response, false );
-		$data = self::add_payment_link( $data, $order );
+		$data = self::add_pos_links( $data, $order );
 
 		/**
 		 * Allows explicit lab inspection without bypassing WooCommerce/WP REST response preparation.
@@ -56,6 +56,37 @@ final class Order_Serializer {
 		$links['payment'] = array( array( 'href' => $pos_payment_url ) );
 		$payload['links'] = $links;
 		return $payload;
+	}
+
+	/**
+	 * Augment a serialized order payload with the POS receipt link.
+	 *
+	 * @param array     $payload Serialized order payload.
+	 * @param \WC_Order $order   The order backing the payload.
+	 */
+	public static function add_receipt_link( array $payload, $order ): array {
+		$pos_receipt_url = add_query_arg(
+			array(
+				'key' => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
+			),
+			wcpos_checkout_url( 'wcpos-receipt/' . $order->get_id() )
+		);
+
+		$links            = is_array( $payload['links'] ?? null ) ? $payload['links'] : array();
+		$links['receipt'] = array( array( 'href' => $pos_receipt_url ) );
+		$payload['links'] = $links;
+		return $payload;
+	}
+
+	/**
+	 * Augment a serialized order payload with POS payment and receipt links.
+	 *
+	 * @param array     $payload Serialized order payload.
+	 * @param \WC_Order $order   The order backing the payload.
+	 */
+	public static function add_pos_links( array $payload, $order ): array {
+		$payload = self::add_payment_link( $payload, $order );
+		return self::add_receipt_link( $payload, $order );
 	}
 
 	public function sync_metadata( array $payload, int $order_id, string $source, bool $partial, int $sequence ): array {

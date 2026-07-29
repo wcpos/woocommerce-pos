@@ -78,18 +78,12 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 	 * unchanged order must still drain (no false 409 across the upgrade).
 	 */
 	public function test_legacy_revision_is_invariant_to_payment_links(): void {
+		$order   = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
 		$without = array(
-			'id'    => 5,
+			'id'    => $order->get_id(),
 			'total' => '9.99',
 		);
-		$with    = array_merge(
-			$without,
-			array(
-				'links' => array(
-					'payment' => array( array( 'href' => 'https://example.test/wcpos-checkout/order-pay/5/?pay_for_order=true&key=wc_order_test' ) ),
-				),
-			)
-		);
+		$with    = Order_Serializer::add_pos_links( $without, $order );
 
 		$this->assertSame( Order_Serializer::legacy_revision( $without ), Order_Serializer::legacy_revision( $with ) );
 	}

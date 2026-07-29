@@ -142,6 +142,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$payload = $response->get_data()['documents'][0]['payload'];
 
 		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $payload['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $payload['links']['receipt'][0]['href'] );
 	}
 
 	/**
@@ -420,6 +421,33 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertNotNull( $served );
 		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $served['meta_data'] ?? array() ) );
 		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $served['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $served['links']['receipt'][0]['href'] );
+	}
+
+	/**
+	 * The POS links survive the cashier lane: the proxy serves both checkout-route
+	 * hrefs (payment + receipt) when the request runs as a cashier, not an admin.
+	 */
+	public function test_orders_proxy_serves_pos_links_as_cashier(): void {
+		$order   = OrderHelper::create_order();
+		$cashier = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $cashier );
+
+		$data = ( new Catalog_Proxy_Controller() )->proxy(
+			$this->request( array( 'include' => (string) $order->get_id() ) ),
+			'/wc/v3/orders',
+			'orders'
+		)->get_data();
+
+		$served = null;
+		foreach ( (array) $data as $row ) {
+			if ( isset( $row['id'] ) && $order->get_id() === $row['id'] ) {
+				$served = $row;
+			}
+		}
+		$this->assertNotNull( $served );
+		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $served['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $served['links']['receipt'][0]['href'] );
 	}
 
 	/**
@@ -432,6 +460,16 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 				'key'           => $order->get_order_key(),
 			),
 			wcpos_checkout_url( 'order-pay/' . $order->get_id() )
+		);
+	}
+
+	/**
+	 * The POS receipt link (V1 parity), as add_receipt_link() builds it.
+	 */
+	private function wcpos_expected_receipt_link( \WC_Order $order ): string {
+		return add_query_arg(
+			array( 'key' => $order->get_order_key() ),
+			wcpos_checkout_url( 'wcpos-receipt/' . $order->get_id() )
 		);
 	}
 }

@@ -1194,7 +1194,7 @@ class Write_Controller extends WP_REST_Controller {
 		if ( is_array( $data ) ) {
 			$data = Meta_Normalizer::normalize( $data );
 			$order = 'order' === ( $meta['id_type'] ?? '' ) ? wc_get_order( $id ) : false;
-			$response->set_data( $order ? Order_Serializer::add_payment_link( $data, $order ) : $data );
+			$response->set_data( $order ? Order_Serializer::add_pos_links( $data, $order ) : $data );
 		}
 		return $response;
 	}
