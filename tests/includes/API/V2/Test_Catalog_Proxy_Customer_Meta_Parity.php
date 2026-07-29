@@ -26,6 +26,13 @@ use WP_REST_Request;
  */
 class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * Sync API enabled value before this fixture overwrites it.
+	 *
+	 * @var bool|null
+	 */
+	private $original_sync_api_enabled;
+
+	/**
 	 * Customer carrying assorted meta: non-protected, protected, tax-ids-style.
 	 *
 	 * @var \WC_Customer
@@ -38,6 +45,7 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 	 * POS, and seed the customer fixture.
 	 */
 	public function setUp(): void {
+		$this->original_sync_api_enabled = get_option( Api::OPTION_ENABLED, null );
 		update_option( Api::OPTION_ENABLED, true );
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		parent::setUp();
@@ -64,7 +72,11 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
-		delete_option( Api::OPTION_ENABLED );
+		if ( null === $this->original_sync_api_enabled ) {
+			delete_option( Api::OPTION_ENABLED );
+		} else {
+			update_option( Api::OPTION_ENABLED, $this->original_sync_api_enabled );
+		}
 	}
 
 	/**
@@ -182,6 +194,7 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $payload ) );
 		$this->assertSame( 'Updated', $payload['first_name'] );
 		$this->assert_v1_parity_contract( $payload );
+		$this->assertContains( Api::UUID_META_KEY, $this->meta_keys( $payload ) );
 	}
 
 	/**
