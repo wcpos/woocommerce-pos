@@ -58,4 +58,218 @@ class Test_Receipt_Date_Formatter extends WP_UnitTestCase {
 			$this->assertSame( '', $value );
 		}
 	}
+
+	/**
+	 * Timestamp used across the time-format tests: 15:42 in Amsterdam (CEST, +02:00).
+	 */
+	private const SUMMER_TIMESTAMP = '2026-07-29 13:42:00 UTC';
+
+	/**
+	 * Fields that include a time component.
+	 */
+	private const TIME_FIELDS = array( 'datetime', 'time', 'datetime_short', 'datetime_long', 'datetime_full' );
+
+	/**
+	 * Assert no AM/PM day-period marker appears in any time-bearing field.
+	 *
+	 * @param array $date Formatted date fields.
+	 */
+	private function assert_no_day_period_marker( array $date ): void {
+		foreach ( self::TIME_FIELDS as $field ) {
+			$this->assertDoesNotMatchRegularExpression(
+				'/\d[\s\x{00A0}\x{202F}]*(am|pm|a\.\s?m\.|p\.\s?m\.)/iu',
+				$date[ $field ],
+				"Field {$field} should not contain an AM/PM marker: {$date[$field]}"
+			);
+		}
+	}
+
+	/**
+	 * Test 24-hour time_format is respected with an IANA timezone and non-English locale.
+	 */
+	public function test_time_fields_respect_24_hour_time_format_with_iana_timezone(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$date = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'nl_NL'
+		);
+
+		$this->assertSame( '15:42', $date['time'] );
+		$this->assertStringContainsString( '15:42', $date['datetime'] );
+		$this->assert_no_day_period_marker( $date );
+	}
+
+	/**
+	 * Test 24-hour time_format is respected with a fixed-offset timezone.
+	 */
+	public function test_time_fields_respect_24_hour_time_format_with_fixed_offset_timezone(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$fixed = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( '+02:00' ),
+			'nl_NL'
+		);
+		$iana  = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'nl_NL'
+		);
+
+		$this->assertSame( '15:42', $fixed['time'] );
+		$this->assert_no_day_period_marker( $fixed );
+		// Equivalent offsets must produce the same clock convention and text
+		// for fields that do not render a timezone name.
+		$this->assertSame( $iana['time'], $fixed['time'] );
+		$this->assertSame( $iana['datetime'], $fixed['datetime'] );
+	}
+
+	/**
+	 * Test 24-hour time_format wins over a 12-hour store locale.
+	 */
+	public function test_time_fields_respect_24_hour_time_format_with_en_us_locale(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$date = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'en_US'
+		);
+
+		$this->assertSame( '15:42', $date['time'] );
+		$this->assertStringContainsString( '15:42', $date['datetime'] );
+		$this->assert_no_day_period_marker( $date );
+	}
+
+	/**
+	 * Test a configured 12-hour time_format still produces AM/PM output.
+	 */
+	public function test_time_fields_respect_12_hour_time_format(): void {
+		update_option( 'time_format', 'g:i A' );
+
+		$date = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'en_US'
+		);
+
+		$this->assertStringContainsString( '3:42', $date['time'] );
+		$this->assertMatchesRegularExpression( '/pm/i', $date['time'] );
+		$this->assertStringNotContainsString( '15:42', $date['datetime'] );
+	}
+
+	/**
+	 * Test a 12-hour time_format converts a 24-hour locale to AM/PM.
+	 */
+	public function test_time_fields_respect_12_hour_time_format_with_24_hour_locale(): void {
+		update_option( 'time_format', 'g:i A' );
+
+		$date = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'nl_NL'
+		);
+
+		$this->assertStringContainsString( '3:42', $date['time'] );
+		$this->assertStringNotContainsString( '15:42', $date['time'] );
+	}
+
+	/**
+	 * Test a forced 12-hour convention keeps the locale's day-period placement.
+	 */
+	public function test_12_hour_time_format_keeps_locale_day_period_placement(): void {
+		update_option( 'time_format', 'g:i A' );
+
+		$date = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'zh_CN'
+		);
+
+		// Day-period placement must come from CLDR (zh_CN places the marker
+		// before the hour when full locale data is present), so the forced
+		// 12-hour output must match ICU's own native h12 rendering exactly
+		// — not a marker appended at the end of the pattern.
+		$native = new \IntlDateFormatter( 'zh_CN@hours=h12', \IntlDateFormatter::NONE, \IntlDateFormatter::SHORT, 'Europe/Amsterdam' );
+		$this->assertStringContainsString( '3:42', $date['time'] );
+		$this->assertSame( $native->format( strtotime( self::SUMMER_TIMESTAMP ) ), $date['time'] );
+	}
+
+	/**
+	 * Test the fallback path respects a 24-hour time_format when Intl is unavailable.
+	 */
+	public function test_fallback_respects_24_hour_time_format_when_intl_unavailable(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$date = Intl_Disabled_Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' )
+		);
+
+		$this->assertSame( '15:42', $date['time'] );
+		$this->assertSame( 'Jul 29, 2026 15:42', $date['datetime'] );
+		$this->assert_no_day_period_marker( $date );
+	}
+
+	/**
+	 * Test the fallback path respects a 12-hour time_format when Intl is unavailable.
+	 */
+	public function test_fallback_respects_12_hour_time_format_when_intl_unavailable(): void {
+		update_option( 'time_format', 'g:i a' );
+
+		$date = Intl_Disabled_Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' )
+		);
+
+		$this->assertSame( '3:42 pm', $date['time'] );
+		$this->assertSame( 'Jul 29, 2026 3:42 pm', $date['datetime'] );
+	}
+
+	/**
+	 * Test the fallback path respects time_format for a fixed-offset timezone.
+	 */
+	public function test_fallback_respects_24_hour_time_format_with_fixed_offset_timezone(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$date = Intl_Disabled_Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( '+02:00' )
+		);
+
+		$this->assertSame( '15:42', $date['time'] );
+		$this->assert_no_day_period_marker( $date );
+	}
+
+	/**
+	 * Test the fallback path keeps the historical 12-hour default when time_format is empty.
+	 */
+	public function test_fallback_keeps_default_format_when_time_format_empty(): void {
+		update_option( 'time_format', '' );
+
+		$date = Intl_Disabled_Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' )
+		);
+
+		$this->assertSame( '3:42 PM', $date['time'] );
+	}
+}
+
+/**
+ * Test double that simulates a PHP environment without the Intl extension.
+ *
+ * @internal
+ */
+class Intl_Disabled_Receipt_Date_Formatter extends Receipt_Date_Formatter {
+	/**
+	 * Report Intl as unavailable so the fallback path runs.
+	 *
+	 * @return bool
+	 */
+	protected static function intl_available(): bool {
+		return false;
+	}
 }
