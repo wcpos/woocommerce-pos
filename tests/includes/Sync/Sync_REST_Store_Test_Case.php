@@ -12,12 +12,12 @@ use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Sync_Index;
-use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_HPOS_Unit_Test_Case;
 
 /**
  * Installs sync tables once while providing the WCPOS REST test server.
  */
-abstract class Sync_REST_Store_Test_Case extends WCPOS_REST_Unit_Test_Case {
+abstract class Sync_REST_Store_Test_Case extends WCPOS_REST_HPOS_Unit_Test_Case {
 	/**
 	 * Install tables before any per-test transaction begins.
 	 */
