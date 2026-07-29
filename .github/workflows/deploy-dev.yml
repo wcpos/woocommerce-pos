@@ -104,7 +104,10 @@ jobs:
           # Upload tarball with per-run name to avoid races
           scp -o StrictHostKeyChecking=yes woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
 
-          ssh -o StrictHostKeyChecking=yes root@213.239.218.130 bash -s -- "${TARBALL}" "${SITES}" "${GITHUB_RUN_ID}" << 'EOF'
+          # printf %q each argument: OpenSSH flattens argv into ONE remote command
+          # string, so an unquoted multi-word $SITES word-splits on the server —
+          # the second site was silently never deployed.
+          ssh -o StrictHostKeyChecking=yes root@213.239.218.130 "bash -s -- $(printf '%q ' "${TARBALL}" "${SITES}" "${GITHUB_RUN_ID}")" << 'EOF'
             TARBALL="$1"
             SITES="$2"
             RUN_ID="$3"
@@ -162,8 +165,8 @@ jobs:
                 echo "✅ Deployed to ${SITE}.wcpos.com"
               else
                 echo "❌ Deploy failed for ${SITE}.wcpos.com" >&2
+                # No break: attempt remaining sites; FAILED preserves the exit code.
                 FAILED=1
-                break
               fi
             done
 
