@@ -290,21 +290,21 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A custom barcode field advertises no payload field (finding 9): the sync proxy
-	 * (raw wc/v3) never serves a top-level field for a custom/`_`-prefixed meta key,
-	 * so the honest advertised list is empty rather than a field that never arrives.
+	 * A custom barcode field advertises a `meta_data:<key>` selector (#1385): the
+	 * sync proxy never serves a top-level field for a custom meta key, but the
+	 * proxied `meta_data` carries the value, so the envelope names the entry the
+	 * client derives its local index from.
 	 */
-	public function test_config_fingerprint_custom_barcode_field_advertises_no_payload_field(): void {
+	public function test_config_fingerprint_custom_barcode_field_advertises_meta_data_selector(): void {
 		$fingerprint = new Config_Fingerprint();
 
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_alg_ean' ) );
-		$this->assertSame( array(), $fingerprint->barcode_fields( 'products' ) );
+		$this->assertSame( array( 'meta_data:_alg_ean' ), $fingerprint->barcode_fields( 'products' ) );
 
-		// `_barcode` is protected meta wc/v3 strips — also not served, so also empty.
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
-		$this->assertSame( array(), $fingerprint->barcode_fields( 'products' ) );
+		$this->assertSame( array( 'meta_data:_barcode' ), $fingerprint->barcode_fields( 'products' ) );
 
-		// The two natively-served fields remain advertised.
+		// The two natively-served fields keep their plain payload field names.
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$this->assertSame( array( 'sku' ), $fingerprint->barcode_fields( 'products' ) );
 	}
