@@ -253,6 +253,22 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Internal product meta is not serialized in wc/v3 meta_data.
+	 */
+	public function test_internal_meta_mapping_withholds_barcode_fields_envelope(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_price' ) );
+		$price_fields = $this->barcode_fields();
+
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_stock' ) );
+		$stock_fields = $this->barcode_fields();
+
+		$this->assertSame( array(), $price_fields['products'] );
+		$this->assertSame( array(), $price_fields['variations'] );
+		$this->assertSame( array(), $stock_fields['products'] );
+		$this->assertSame( array(), $stock_fields['variations'] );
+	}
+
+	/**
 	 * Product barcode meta survives a v2 push and is immediately readable.
 	 */
 	public function test_product_push_updates_custom_barcode_read_and_resolution(): void {

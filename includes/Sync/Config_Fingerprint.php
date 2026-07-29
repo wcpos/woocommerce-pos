@@ -92,9 +92,10 @@ final class Config_Fingerprint {
 	 * A custom meta key has no top-level field, but its value DOES reach the
 	 * client: proxied responses carry it in `meta_data` (pinned by
 	 * Test_Catalog_Proxy_Barcode read-parity tests). So a key absent from this
-	 * map is advertised as a `meta_data:<key>` SELECTOR by barcode_fields()
-	 * (#1385) rather than an empty list — the client derives its local index
-	 * from the named meta_data entry.
+	 * map is advertised as a `meta_data:<key>` SELECTOR by barcode_fields() if
+	 * WooCommerce does not classify it as internal. Internal product properties
+	 * are excluded from serialized `meta_data`, so their selector list remains
+	 * empty.
 	 */
 	private const BARCODE_META_TO_PAYLOAD = array(
 		'_sku'              => 'sku',
@@ -165,7 +166,10 @@ final class Config_Fingerprint {
 		$meta_key = $this->active_barcode_meta_key();
 
 		if ( ! \array_key_exists( $meta_key, self::BARCODE_META_TO_PAYLOAD ) ) {
-			return array( 'meta_data:' . $meta_key );
+			// @phpstan-ignore-next-line -- WC_Data_Store forwards this public method to its loaded store.
+			$internal_meta_keys = \WC_Data_Store::load( 'product' )->get_internal_meta_keys();
+
+			return \in_array( $meta_key, $internal_meta_keys, true ) ? array() : array( 'meta_data:' . $meta_key );
 		}
 		$payload_field = self::BARCODE_META_TO_PAYLOAD[ $meta_key ];
 
