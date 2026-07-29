@@ -66,18 +66,17 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Param-less LISTS keep wc/v3's role=customer default — the tracked
-	 * customer space (change-log + digests) is customer-role-scoped, so lists
-	 * must not serve records the existence surfaces disown.
+	 * Param-less lists include every WordPress user in the POS customer space
+	 * under the #1379 ruling (1.9 parity).
 	 */
-	public function test_plain_list_still_excludes_non_customer_roles(): void {
+	public function test_plain_list_includes_non_customer_roles(): void {
 		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v2/customers' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertNotContains( $cashier_id, array_column( $response->get_data(), 'id' ) );
+		$this->assertContains( $cashier_id, array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**

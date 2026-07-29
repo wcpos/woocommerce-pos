@@ -141,15 +141,19 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Product status does not scope the customer digest id-space.
+	 * Customer digests include non-customer roles and ignore product status.
 	 */
-	public function test_customer_digests_ignore_publish_status(): void {
-		$customer_id = $this->factory->user->create( array( 'role' => 'customer' ) );
-		( new Integrity_Digest() )->upsert_customer_digest( $customer_id );
+	public function test_customer_digests_include_non_customer_roles_and_ignore_publish_status(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		( new Integrity_Digest() )->upsert_customer_digest( $user_id );
 
 		$this->assertSame(
-			$this->digests( array( $customer_id ), 'customers' ),
-			$this->digests( array( $customer_id ), 'customers', 'publish' )
+			array( $user_id ),
+			array_column( $this->digests( array( $user_id ), 'customers' ), 'id' )
+		);
+		$this->assertSame(
+			array( $user_id ),
+			array_column( $this->digests( array( $user_id ), 'customers', 'publish' ), 'id' )
 		);
 	}
 }

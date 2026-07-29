@@ -139,9 +139,9 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Customer backfill only stamps users served by the customer collection.
+	 * Customer backfill stamps every WordPress user under the #1379 ruling.
 	 */
-	public function test_customer_uuid_backfill_only_stamps_customer_role_users(): void {
+	public function test_customer_uuid_backfill_stamps_all_users(): void {
 		$administrator_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
 		$subscriber_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$customer_id      = $this->factory->user->create( array( 'role' => 'customer' ) );
@@ -153,17 +153,17 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 
 		$result = $this->backfill( 'customers', min( $user_ids ) - 1 );
 
-		$this->assertSame( 1, $result['scanned'] );
-		$this->assertSame( 1, $result['stamped'] );
-		$this->assertSame( '', get_user_meta( $administrator_id, Api::UUID_META_KEY, true ) );
-		$this->assertSame( '', get_user_meta( $subscriber_id, Api::UUID_META_KEY, true ) );
-		$this->assertTrue( Pos_Uuid::is_uuid( get_user_meta( $customer_id, Api::UUID_META_KEY, true ) ) );
+		$this->assertSame( 3, $result['scanned'] );
+		$this->assertSame( 3, $result['stamped'] );
+		foreach ( $user_ids as $user_id ) {
+			$this->assertTrue( Pos_Uuid::is_uuid( get_user_meta( $user_id, Api::UUID_META_KEY, true ) ) );
+		}
 	}
 
 	/**
-	 * A UUID shared with an unserved user is not a customer-collection collision.
+	 * Customer collision repair includes duplicate UUIDs across all user roles.
 	 */
-	public function test_customer_uuid_collision_backfill_ignores_non_customer_duplicate(): void {
+	public function test_customer_uuid_collision_backfill_includes_all_user_roles(): void {
 		$administrator_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
 		$customer_id      = $this->factory->user->create( array( 'role' => 'customer' ) );
 		$duplicate        = wp_generate_uuid4();
@@ -172,10 +172,11 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 
 		$result = $this->backfill( 'customers', $administrator_id - 1, 'collisions' );
 
-		$this->assertSame( 0, $result['scanned'] );
-		$this->assertSame( 0, $result['stamped'] );
+		$this->assertSame( 1, $result['scanned'] );
+		$this->assertSame( 1, $result['stamped'] );
 		$this->assertSame( $duplicate, get_user_meta( $administrator_id, Api::UUID_META_KEY, true ) );
-		$this->assertSame( $duplicate, get_user_meta( $customer_id, Api::UUID_META_KEY, true ) );
+		$this->assertTrue( Pos_Uuid::is_uuid( get_user_meta( $customer_id, Api::UUID_META_KEY, true ) ) );
+		$this->assertNotSame( $duplicate, get_user_meta( $customer_id, Api::UUID_META_KEY, true ) );
 	}
 
 	/**
