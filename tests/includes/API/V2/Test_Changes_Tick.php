@@ -117,6 +117,24 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 		$this->assertNull( $not_modified->get_data() );
 		$this->assertSame( $etag, $not_modified->get_headers()['ETag'] );
 		$this->assertSame( 'no-store', $not_modified->get_headers()['Cache-Control'] );
+		// Telemetry must not decorate the empty 304 (Response_Telemetry skips
+		// 304/4xx): no timing header, no injected body metrics.
+		$this->assertArrayNotHasKey( 'Server-Timing', $not_modified->get_headers() );
+	}
+
+	/**
+	 * Tick emits the sequence-log validator: same server state, same ETag.
+	 * The whole delegation design rests on this property.
+	 */
+	public function test_tick_etag_matches_sequence_log_etag_for_same_state(): void {
+		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
+
+		$tick    = $this->server->dispatch( $this->tick_request( array( 'since' => 0 ) ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' );
+		$request->set_query_params( array( 'since' => 0 ) );
+		$sequence = $this->server->dispatch( $request );
+
+		$this->assertSame( $sequence->get_headers()['ETag'], $tick->get_headers()['ETag'] );
 	}
 
 	/**
