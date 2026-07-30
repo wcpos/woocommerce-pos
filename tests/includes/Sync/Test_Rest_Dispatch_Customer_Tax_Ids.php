@@ -157,6 +157,38 @@ class Test_Rest_Dispatch_Customer_Tax_Ids extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'GB123456789', $ack[0]['value'] ?? null );
 	}
 
+	public function test_customer_create_announces_tax_ids_after_persistence(): void {
+		$observed_tax_ids = array();
+		$observer         = static function ( int $customer_id ) use ( &$observed_tax_ids ): void {
+			$observed_tax_ids[] = ( new Tax_Id_Reader() )->read_for_user( $customer_id );
+		};
+		add_action( 'woocommerce_update_customer', $observer, 20, 1 );
+
+		try {
+			$response = $this->push_envelope(
+				$this->create_envelope(
+					array(
+						'tax_ids' => array(
+							array(
+								'type'    => 'au_abn',
+								'value'   => '51824753556',
+								'country' => 'AU',
+							),
+						),
+					),
+					'a1b2c3d4-4444-4222-8333-000000000006'
+				)
+			);
+		} finally {
+			remove_action( 'woocommerce_update_customer', $observer, 20 );
+		}
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertNotEmpty( $observed_tax_ids );
+		$latest = end( $observed_tax_ids );
+		$this->assertSame( '51824753556', $latest[0]['value'] ?? null );
+	}
+
 	public function test_customer_create_rejects_malformed_tax_ids_before_the_forward(): void {
 		$response = $this->push_envelope(
 			$this->create_envelope(

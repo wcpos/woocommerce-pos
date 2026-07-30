@@ -1120,6 +1120,11 @@ class Write_Controller extends WP_REST_Controller {
 	private function persist_customer_tax_ids( int $user_id, array $payload ): void {
 		if ( $user_id > 0 && is_array( $payload['tax_ids'] ?? null ) ) {
 			( new Tax_Id_Writer() )->write_for_user( $user_id, $payload['tax_ids'] );
+			do_action(
+				'woocommerce_update_customer', // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Re-announce the final WooCommerce customer state.
+				$user_id,
+				new \WC_Customer( $user_id )
+			);
 		}
 	}
 	private function forward( string $method, string $route, $payload ) {
