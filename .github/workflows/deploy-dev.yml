@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
 jobs:
   build:
     # Stable lane (main) deploys to the dev sites below. The `next` lane only
@@ -81,6 +85,7 @@ jobs:
           name: deployment-package
           path: woocommerce-pos.tar.gz
           if-no-files-found: error
+          overwrite: true
 
   deploy:
     needs: build
@@ -90,9 +95,6 @@ jobs:
     # automatic. Scoping HETZNER_SSH_KEY as an environment secret (instead of
     # a repo secret) limits its release to jobs that pass this branch policy.
     environment: development
-    concurrency:
-      group: deploy-dev
-      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     steps:
@@ -118,33 +120,43 @@ jobs:
           # Target sites by lane: main -> stable dev sites; next -> dev-next sites
           # (from repo variable DEV_NEXT_SITES, e.g. "dev-next-free dev-next-pro").
           if [ "$LANE" = "next" ]; then
-            SITES="$DEV_NEXT_SITES"
+            IFS=$' \t\n' read -r -d '' -a SITES < <(printf '%s\0' "$DEV_NEXT_SITES")
           else
-            SITES="dev-free dev-pro"
+            SITES=(dev-free dev-pro)
           fi
 
-          for SITE in $SITES; do
+          if [ "${#SITES[@]}" -eq 0 ]; then
+            echo "DEV_NEXT_SITES must contain at least one deployment site" >&2
+            exit 1
+          fi
+
+          for SITE in "${SITES[@]}"; do
             if ! [[ "$SITE" =~ ^[a-z0-9-]+$ ]]; then
               echo "Invalid deployment site: '$SITE'" >&2
               exit 1
             fi
           done
-          echo "Deploying lane '$LANE' to: $SITES"
+          echo "Deploying lane '$LANE' to: ${SITES[*]}"
 
           # Upload tarball with per-run name to avoid races
           /usr/bin/scp -o StrictHostKeyChecking=yes woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
 
-          # printf %q each argument: OpenSSH flattens argv into ONE remote command
-          # string, so an unquoted multi-word $SITES word-splits on the server —
-          # the second site was silently never deployed.
-          /usr/bin/ssh -o StrictHostKeyChecking=yes root@213.239.218.130 "bash -s -- $(printf '%q ' "${TARBALL}" "${SITES}" "${GITHUB_RUN_ID}")" << 'EOF'
+          # OpenSSH flattens argv into one remote command string, so shell-quote
+          # every argument and reconstruct the site array from positional args.
+          /usr/bin/ssh -o StrictHostKeyChecking=yes root@213.239.218.130 "bash -s -- $(printf '%q ' "${TARBALL}" "${GITHUB_RUN_ID}" "${SITES[@]}")" << 'EOF'
             TARBALL="$1"
-            SITES="$2"
-            RUN_ID="$3"
+            RUN_ID="$2"
+            shift 2
+            SITES=("$@")
             set -e
             FAILED=0
 
-            for SITE in $SITES; do
+            if [ "${#SITES[@]}" -eq 0 ]; then
+              echo "No deployment sites received" >&2
+              exit 1
+            fi
+
+            for SITE in "${SITES[@]}"; do
               if ! [[ "$SITE" =~ ^[a-z0-9-]+$ ]]; then
                 echo "Invalid deployment site: '$SITE'" >&2
                 exit 1

@@ -12,7 +12,9 @@ on:
       - "**.jsx"
       - "package.json"
       - "packages/*/src/translations/locales/en/*.json"
+      - ".github/scripts/test-deploy-dev-workflow.sh"
       - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
   pull_request:
@@ -26,7 +28,9 @@ on:
       - "**.jsx"
       - "package.json"
       - "packages/*/src/translations/locales/en/*.json"
+      - ".github/scripts/test-deploy-dev-workflow.sh"
       - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
   workflow_dispatch:
@@ -46,6 +50,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate dev deployment workflow
+        run: bash .github/scripts/test-deploy-dev-workflow.sh
 
       - name: Validate JS translation workflow
         run: bash .github/scripts/test-push-js-strings.sh
