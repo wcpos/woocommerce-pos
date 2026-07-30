@@ -192,8 +192,24 @@ class Test_Receipt_Date_Formatter extends WP_UnitTestCase {
 		// before the hour when full locale data is present), so the forced
 		// 12-hour output must match ICU's own native h12 rendering exactly
 		// — not a marker appended at the end of the pattern.
-		$native = new \IntlDateFormatter( 'zh_CN@hours=h12', \IntlDateFormatter::NONE, \IntlDateFormatter::SHORT, 'Europe/Amsterdam' );
+		$native = new \IntlDateFormatter( 'zh_CN-u-hc-h12', \IntlDateFormatter::NONE, \IntlDateFormatter::SHORT, 'Europe/Amsterdam' );
 		$this->assertStringContainsString( '3:42', $date['time'] );
+		$this->assertSame( $native->format( strtotime( self::SUMMER_TIMESTAMP ) ), $date['time'] );
+	}
+
+	/**
+	 * Test the hour-cycle keyword is added to an existing Unicode extension.
+	 */
+	public function test_12_hour_time_format_keeps_existing_unicode_extension(): void {
+		update_option( 'time_format', 'g:i A' );
+
+		$date = Receipt_Date_Formatter::from_timestamp(
+			strtotime( self::SUMMER_TIMESTAMP ),
+			new DateTimeZone( 'Europe/Amsterdam' ),
+			'zh_CN-u-ca-gregory'
+		);
+
+		$native = new \IntlDateFormatter( 'zh_CN-u-ca-gregory-hc-h12', \IntlDateFormatter::NONE, \IntlDateFormatter::SHORT, 'Europe/Amsterdam' );
 		$this->assertSame( $native->format( strtotime( self::SUMMER_TIMESTAMP ) ), $date['time'] );
 	}
 

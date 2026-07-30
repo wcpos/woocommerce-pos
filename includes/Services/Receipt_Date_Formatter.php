@@ -155,37 +155,51 @@ class Receipt_Date_Formatter {
 			$locale,
 			$fallback_pattern,
 			static function ( string $timezone_name ) use ( $locale, $date_style, $time_style, $hour_token ) {
-				if ( null === $hour_token || self::INTL_NONE === $time_style ) {
-					return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
-				}
-
-				$use_24_hour = 'H' === $hour_token[0];
-
-				// Request the hour cycle via the ICU locale keyword first so
-				// CLDR controls day-period placement (before vs after the
-				// hour, time-first patterns). Older ICU ignores the keyword,
-				// which the pattern probe detects.
-				$keyword_locale = $locale . ( false === strpos( $locale, '@' ) ? '@hours=' : ';hours=' ) . ( $use_24_hour ? 'h23' : 'h12' );
-				$formatter      = new IntlDateFormatter( $keyword_locale, $date_style, $time_style, $timezone_name );
-				$pattern        = (string) $formatter->getPattern();
-
-				if ( ! self::pattern_matches_clock( $pattern, $use_24_hour ) ) {
-					$formatter = new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
-					$pattern   = (string) $formatter->getPattern();
-				}
-
-				// Normalize the hour symbols to the configured padding and,
-				// on the no-keyword fallback, rewrite the clock convention.
-				// Never set an empty pattern (PCRE failure) — blank output
-				// is worse than the locale-default clock.
-				$adjusted = self::apply_clock_convention( $pattern, $hour_token );
-				if ( '' !== $adjusted && $adjusted !== $pattern ) {
-					$formatter->setPattern( $adjusted );
-				}
-
-				return $formatter;
+				return self::build_clock_aware_formatter( $locale, $date_style, $time_style, $timezone_name, $hour_token );
 			}
 		);
+	}
+
+	/**
+	 * Build an Intl formatter with the requested clock convention.
+	 *
+	 * @param string      $locale       Locale code.
+	 * @param int         $date_style    Intl date style.
+	 * @param int         $time_style    Intl time style.
+	 * @param string      $timezone_name Intl timezone name.
+	 * @param string|null $hour_token    ICU hour token, or null to keep the locale default.
+	 *
+	 * @return IntlDateFormatter
+	 */
+	private static function build_clock_aware_formatter( string $locale, int $date_style, int $time_style, string $timezone_name, ?string $hour_token ): IntlDateFormatter {
+		if ( null === $hour_token || self::INTL_NONE === $time_style ) {
+			return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
+		}
+
+		$use_24_hour = 'H' === $hour_token[0];
+
+		// Request the hour cycle via the Unicode locale extension first so
+		// CLDR controls day-period placement (before vs after the hour and
+		// time-first patterns). The pattern probe detects unsupported cycles.
+		$hour_cycle_locale = $locale . ( false === strpos( $locale, '-u-' ) ? '-u-hc-' : '-hc-' ) . ( $use_24_hour ? 'h23' : 'h12' );
+		$formatter         = new IntlDateFormatter( $hour_cycle_locale, $date_style, $time_style, $timezone_name );
+		$pattern           = (string) $formatter->getPattern();
+
+		if ( ! self::pattern_matches_clock( $pattern, $use_24_hour ) ) {
+			$formatter = new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
+			$pattern   = (string) $formatter->getPattern();
+		}
+
+		// Normalize the hour symbols to the configured padding and,
+		// on the no-extension fallback, rewrite the clock convention.
+		// Never set an empty pattern (PCRE failure) — blank output
+		// is worse than the locale-default clock.
+		$adjusted = self::apply_clock_convention( $pattern, $hour_token );
+		if ( '' !== $adjusted && $adjusted !== $pattern ) {
+			$formatter->setPattern( $adjusted );
+		}
+
+		return $formatter;
 	}
 
 	/**
