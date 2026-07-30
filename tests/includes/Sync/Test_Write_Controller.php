@@ -1357,7 +1357,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array( self::MID => 7001 ), $store->finalized );
 	}
 
-	public function test_order_create_response_carries_payment_link(): void {
+	public function test_order_create_response_carries_pos_links(): void {
 		$order = OrderHelper::create_order();
 		$store = new Fake_Mutation_Store();
 		$store->resolveResults = array( 0, $order->get_id() );
@@ -1380,6 +1380,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				wcpos_checkout_url( 'order-pay/' . $order->get_id() )
 			),
 			$result->get_data()['document']['links']['payment'][0]['href']
+		);
+		$this->assertSame(
+			add_query_arg(
+				array( 'key' => $order->get_order_key() ),
+				wcpos_checkout_url( 'wcpos-receipt/' . $order->get_id() )
+			),
+			$result->get_data()['document']['links']['receipt'][0]['href']
 		);
 	}
 

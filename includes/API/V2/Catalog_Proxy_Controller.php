@@ -136,7 +136,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( 'orders' === $resource ) {
 			foreach ( (array) $data as $index => $payload ) {
 				$order          = wc_get_order( (int) ( $payload['id'] ?? 0 ) );
-				$data[ $index ] = $order ? Order_Serializer::add_payment_link( $payload, $order ) : $payload;
+				$data[ $index ] = $order ? Order_Serializer::add_pos_links( $payload, $order ) : $payload;
 			}
 		}
 		$response->set_data( $data );
