@@ -266,6 +266,31 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A hookless capabilities write (direct update_user_meta / SQL / import) fires no
+	 * role or profile hook, so the stored digest goes stale — the CURRENT-side digest
+	 * must drift so the integrity scan can detect and repair the stale role (#1395).
+	 */
+	public function test_customer_digest_includes_site_capabilities_meta(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->integrity_digest->upsert_customer_digest( $user_id );
+		$stored_digest = $this->integrity_digest->read_customer_digests( array( $user_id ) )[ $user_id ];
+
+		update_user_meta( $user_id, $wpdb->prefix . 'capabilities', array( 'editor' => true ) );
+
+		$current_digest = (string) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT crc FROM (' . $this->integrity_digest->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
+				$user_id
+			)
+		);
+
+		$this->assertSame( $stored_digest, $this->integrity_digest->read_customer_digests( array( $user_id ) )[ $user_id ], 'a hookless write must NOT update the stored digest (that is the point)' );
+		$this->assertNotSame( $stored_digest, $current_digest, 'the current-side digest must drift when capabilities change' );
+	}
+
+	/**
 	 * Leaving the customer role is a plain customer update and keeps the digest.
 	 */
 	public function test_customer_role_departure_records_update_and_keeps_digest(): void {

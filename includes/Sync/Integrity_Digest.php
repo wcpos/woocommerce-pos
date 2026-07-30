@@ -57,7 +57,11 @@ final class Integrity_Digest {
 	 * Customer usermeta folded into the digest (ADR 0015, Leg-3 phase 7). Kept small + stable —
 	 * identity/existence fields the POS keys on, NOT every usermeta row (a churny meta bloats the digest
 	 * with irrelevant drift). The customer's core columns (email, display name, registered) come from
-	 * wp_users directly; these four are the identifying usermeta.
+	 * wp_users directly; these four are the identifying usermeta. The site-prefixed `capabilities`
+	 * meta joins them at runtime in {@see customer_digest_select_sql} (the prefix is per-site, so it
+	 * cannot live in a const): roles are part of the served record under #1379, and a hookless
+	 * capabilities write (direct update_user_meta/SQL/import) must drift the digest so the
+	 * integrity scan can repair the stale role — no role/profile hook fires for those writes.
 	 */
 	public const CUSTOMER_DIGESTED_META_KEYS = array( 'first_name', 'last_name', 'billing_email', 'billing_phone' );
 
@@ -424,7 +428,7 @@ final class Integrity_Digest {
 	 */
 	public function customer_digest_select_sql( string $where_sql = '' ): string {
 		global $wpdb;
-		$meta_keys_sql = "('" . implode( "','", self::CUSTOMER_DIGESTED_META_KEYS ) . "')";
+		$meta_keys_sql = "('" . implode( "','", array_merge( self::CUSTOMER_DIGESTED_META_KEYS, array( $wpdb->prefix . 'capabilities' ) ) ) . "')";
 
 		return 'SELECT u.ID AS id,'
 			. " 'customer' AS object_type,"
