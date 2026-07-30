@@ -62,6 +62,30 @@ final class Change_Log {
 		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
 	}
 
+	/**
+	 * Append a compensating 'update' row for EVERY live user — the sync-schema-3
+	 * migration for the #1379 customer-space widening. The persisted stream can hold
+	 * role-departure tombstones from the customer-role-only era; a client cursor
+	 * behind one would replay the 'delete' against a user /customers?role=all now
+	 * serves. A head-appended update per user supersedes every stale tombstone and
+	 * (re-)announces users the old role-filtered stream never carried.
+	 *
+	 * @return bool Whether the append succeeded (false leaves the schema unlatched for retry).
+	 */
+	public function append_customer_updates_for_all_users(): bool {
+		global $wpdb;
+		$now = gmdate( 'Y-m-d H:i:s' );
+
+		return false !== $wpdb->query(
+			$wpdb->prepare(
+				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, change_type, modified_gmt, origin, created_gmt)'
+				. " SELECT 'customer', ID, 'update', %s, 'schema-upgrade', %s FROM " . $wpdb->users,
+				$now,
+				$now
+			)
+		);
+	}
+
 	public function register_hooks(): void {
 		add_action( 'woocommerce_new_product', array( $this, 'record_product_created' ), 10, 1 );
 		add_action( 'woocommerce_update_product', array( $this, 'record_product_updated' ), 10, 1 );
