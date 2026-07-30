@@ -237,10 +237,35 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * The custom-meta envelope cannot yet identify the nested client field.
+	 * A custom meta mapping advertises a meta_data selector for both collections.
 	 */
 	public function test_custom_meta_mapping_emits_a_barcode_fields_envelope(): void {
-		$this->markTestSkipped( 'Issue #1385: custom meta mappings currently emit an empty barcode_fields envelope.' );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
+		$underscore_fields = $this->barcode_fields();
+
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => 'custom_ean' ) );
+		$plain_fields = $this->barcode_fields();
+
+		$this->assertSame( array( 'meta_data:_barcode' ), $underscore_fields['products'] );
+		$this->assertSame( array( 'meta_data:_barcode' ), $underscore_fields['variations'] );
+		$this->assertSame( array( 'meta_data:custom_ean' ), $plain_fields['products'] );
+		$this->assertSame( array( 'meta_data:custom_ean' ), $plain_fields['variations'] );
+	}
+
+	/**
+	 * Internal product meta is not serialized in wc/v3 meta_data.
+	 */
+	public function test_internal_meta_mapping_withholds_barcode_fields_envelope(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_price' ) );
+		$price_fields = $this->barcode_fields();
+
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_stock' ) );
+		$stock_fields = $this->barcode_fields();
+
+		$this->assertSame( array(), $price_fields['products'] );
+		$this->assertSame( array(), $price_fields['variations'] );
+		$this->assertSame( array(), $stock_fields['products'] );
+		$this->assertSame( array(), $stock_fields['variations'] );
 	}
 
 	/**
