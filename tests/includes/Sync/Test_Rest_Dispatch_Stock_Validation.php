@@ -258,7 +258,9 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 400, $updated->get_status(), wp_json_encode( $data ) );
 		$this->assertSame( 'wcpos_insufficient_stock', $data['code'] );
-		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status(), 'The rejected checkout must leave the draft untouched.' );
+		$order = wc_get_order( $order_id );
+		$this->assertNotFalse( $order );
+		$this->assertSame( 'pos-open', $order->get_status(), 'The rejected checkout must leave the draft untouched.' );
 	}
 
 	/**
