@@ -262,6 +262,33 @@ class Test_Decimal_Quantity_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A POS request does not relax the separate refund controller's quantity schema.
+	 */
+	public function test_refund_line_item_quantity_schema_stays_integer_with_setting_enabled(): void {
+		$this->setup_decimal_quantity_tests();
+		$route     = '/wc/v3/orders/(?P<order_id>[\d]+)/refunds';
+		$endpoints = array(
+			$route => array(
+				array(
+					'args' => array(
+						'line_items' => array(
+							'items' => array(
+								'properties' => array(
+									'quantity' => array( 'type' => 'integer' ),
+								),
+							),
+						),
+					),
+				),
+			),
+		);
+
+		$filtered = apply_filters( 'rest_endpoints', $endpoints );
+
+		$this->assertSame( 'integer', $filtered[ $route ][0]['args']['line_items']['items']['properties']['quantity']['type'] );
+	}
+
+	/**
 	 * A non-POS wc/v3 request keeps the strict integer schema even with decimal_qty on.
 	 */
 	public function test_direct_wc_request_keeps_strict_schema_with_setting_enabled(): void {

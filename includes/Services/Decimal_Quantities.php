@@ -53,7 +53,7 @@ class Decimal_Quantities {
 			if ( ! \is_array( $handlers ) ) {
 				continue;
 			}
-			$is_orders   = 0 === strpos( $route, '/wc/v3/orders' );
+			$is_orders   = 1 === preg_match( '#^/wc/v3/orders(?:/\(\?P<id>[^/]+\))?$#', $route );
 			$is_products = 0 === strpos( $route, '/wc/v3/products' );
 			if ( ! $is_orders && ! $is_products ) {
 				continue;
