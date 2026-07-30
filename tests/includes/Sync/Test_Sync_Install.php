@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Health;
 
 /**
@@ -81,6 +82,47 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$this->assertTrue( Health::is_healthy() );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+	}
+
+	/**
+	 * Upgrading from a pre-3 sync schema appends a compensating customer 'update' for
+	 * every live user (past the old stream head), superseding role-departure tombstones
+	 * from the customer-role-only era — and a fresh latch at 3 appends nothing more.
+	 */
+	public function test_customer_scope_upgrade_appends_updates_for_all_live_users(): void {
+		global $wpdb;
+
+		$this->install_sync_tables_directly();
+		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$change_log = new Change_Log();
+		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
+		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$live_ids = array_map( 'intval', get_users( array( 'fields' => 'ids' ) ) );
+		sort( $live_ids );
+		update_option( Api::SCHEMA_OPTION, '2', false );
+
+		( new Activator() )->install_sync_schema();
+
+		$appended = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT object_id, change_type FROM ' . $change_log->table_name() . ' WHERE sequence > %d ORDER BY object_id ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared sequence.
+				$old_head
+			),
+			ARRAY_A
+		);
+
+		$this->assertSame( $live_ids, array_map( 'intval', array_column( $appended, 'object_id' ) ) );
+		$this->assertSame( array_fill( 0, count( $live_ids ), 'update' ), array_column( $appended, 'change_type' ) );
+		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+
+		// Re-latching at the current schema is not an upgrade — no second compensation pass.
+		$new_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		( new Activator() )->install_sync_schema();
+		$this->assertSame(
+			$new_head,
+			(int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+			'a same-version re-latch must not append compensating rows'
+		);
 	}
 
 	/**

@@ -57,7 +57,11 @@ final class Integrity_Digest {
 	 * Customer usermeta folded into the digest (ADR 0015, Leg-3 phase 7). Kept small + stable —
 	 * identity/existence fields the POS keys on, NOT every usermeta row (a churny meta bloats the digest
 	 * with irrelevant drift). The customer's core columns (email, display name, registered) come from
-	 * wp_users directly; these four are the identifying usermeta.
+	 * wp_users directly; these four are the identifying usermeta. The site-prefixed `capabilities`
+	 * meta joins them at runtime in {@see customer_digest_select_sql} (the prefix is per-site, so it
+	 * cannot live in a const): roles are part of the served record under #1379, and a hookless
+	 * capabilities write (direct update_user_meta/SQL/import) must drift the digest so the
+	 * integrity scan can repair the stale role — no role/profile hook fires for those writes.
 	 */
 	public const CUSTOMER_DIGESTED_META_KEYS = array( 'first_name', 'last_name', 'billing_email', 'billing_phone' );
 
@@ -130,19 +134,17 @@ final class Integrity_Digest {
 		add_action( 'wp_trash_post', array( $this, 'record_post_deleted' ), 10, 1 );
 		add_action( 'before_delete_post', array( $this, 'record_post_deleted' ), 10, 1 );
 
-		// Leg-3 phase 7 (ADR 0015): customer digest maintenance. record_customer_saved is role-aware AND
-		// idempotent (INSERT…SELECT is a no-op for a non-customer; the upsert/delete carry no per-fire
-		// state), so hooking several overlapping create/update/role events is safe — no dedup needed,
-		// unlike the change-log. set_user_role covers a customer↔other role flip; delete_user the removal.
+		// Leg-3 phase 7 (ADR 0015): ALL WordPress users are POS customers under
+		// #1379 (1.9 parity). Saves and role changes idempotently upsert their
+		// digest; only delete_user removes it.
 		add_action( 'user_register', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'profile_update', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'woocommerce_created_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'woocommerce_new_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'woocommerce_update_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'set_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
-		// add_role()/remove_role() fire ONLY add_user_role/remove_user_role (no
-		// set_user_role, no profile_update) — the role-aware handler is idempotent,
-		// so registering it on both keeps multi-role transitions digested.
+		// add_role()/remove_role() fire ONLY add_user_role/remove_user_role, so
+		// register both to capture membership changes in the served record.
 		add_action( 'add_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'remove_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'delete_user', array( $this, 'record_customer_deleted' ), 10, 1 );
@@ -420,14 +422,13 @@ final class Integrity_Digest {
 	/**
 	 * Canonical per-CUSTOMER digest SELECT (ADR 0015, Leg-3 phase 7) — the wp_users analogue of
 	 * {@see row_digest_select_sql}. Same 64-bit MD5-derived formula (BIT_XOR-foldable), over a customer's
-	 * identity columns + the allowlisted usermeta. Filtered to CUSTOMER-ROLE users (the serialized
-	 * `{prefix}capabilities` meta contains `"customer"`, matching {@see Change_Log::is_customer}'s
-	 * `in_array('customer', roles)`), so admin/editor user edits never enter the customer digest.
-	 * `$where_sql` narrows to a single user for the hook upsert (`u.ID = %d`); empty = all customers.
+	 * identity columns + the allowlisted usermeta. ALL wp_users rows are POS customers under #1379
+	 * (1.9 parity). `$where_sql` narrows to a single user for the hook upsert (`u.ID = %d`);
+	 * empty selects every user.
 	 */
 	public function customer_digest_select_sql( string $where_sql = '' ): string {
 		global $wpdb;
-		$meta_keys_sql = "('" . implode( "','", self::CUSTOMER_DIGESTED_META_KEYS ) . "')";
+		$meta_keys_sql = "('" . implode( "','", array_merge( self::CUSTOMER_DIGESTED_META_KEYS, array( $wpdb->prefix . 'capabilities' ) ) ) . "')";
 
 		return 'SELECT u.ID AS id,'
 			. " 'customer' AS object_type,"
@@ -440,10 +441,6 @@ final class Integrity_Digest {
 			// 64-bit digest (ADR 0014 M1): top 16 hex of MD5 → BIGINT UNSIGNED, folds under BIT_XOR.
 			. ')),1,16),16,10) AS UNSIGNED) AS crc'
 			. " FROM {$wpdb->users} u"
-			// Customer-role filter via INSTR (a substring match on the serialized capabilities meta),
-			// NOT LIKE '%"customer"%' — a literal `%` would be mangled by $wpdb->prepare (every consumer
-			// of this SQL runs it through prepare for the id placeholder). INSTR is wildcard-free.
-			. Customer_Role::sql_join( 'u.ID', 'cap' )
 			. " LEFT JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key IN {$meta_keys_sql}"
 			. ( '' === $where_sql ? '' : ' WHERE ' . $where_sql )
 			. ' GROUP BY u.ID';
@@ -551,29 +548,21 @@ final class Integrity_Digest {
 			. ' AND lp.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . ')';
 	}
 
-	/** Customer analogue of {@see live_row_exists_sql}: the id still names a customer-role user (ADR 0015). */
+	/** Customer analogue of {@see live_row_exists_sql}: the id still names any WordPress user (ADR 0015). */
 	public function customer_live_row_exists_sql( string $id_expr ): string {
 		global $wpdb;
 
-		return "EXISTS (SELECT 1 FROM {$wpdb->users} lu"
-			. Customer_Role::sql_join( 'lu.ID', 'lc' )
-			. " WHERE lu.ID = {$id_expr})";
+		return "EXISTS (SELECT 1 FROM {$wpdb->users} lu WHERE lu.ID = {$id_expr})";
 	}
 
 	/**
-	 * Customer digest maintenance (ADR 0015, Leg-3 phase 7) — role-aware, mirroring
-	 * {@see Change_Log::is_customer}: a customer-role user is (re)digested; a user who is
-	 * NOT (or no longer) a customer has any stale digest removed. A role removal is a customer "delete"
-	 * for Leg 3, so the same handler covers save AND un-customer without a separate role hook.
+	 * Customer digest maintenance (ADR 0015, Leg-3 phase 7) — every WordPress
+	 * user is a POS customer, so saves and role changes always upsert.
 	 */
 	public function record_customer_saved( int $user_id ): void {
 		$this->observe(
 			function () use ( $user_id ): void {
-				if ( $this->is_customer( $user_id ) ) {
-					$this->upsert_customer_digest( $user_id );
-				} else {
-					$this->delete_customer_digest( $user_id );
-				}
+				$this->upsert_customer_digest( $user_id );
 			}
 		);
 	}
@@ -616,11 +605,6 @@ final class Integrity_Digest {
 		if ( false === $deleted ) {
 			throw new RuntimeException( 'delete stored customer digest failed: ' . $wpdb->last_error );
 		}
-	}
-
-	/** Role check identical to the change-log's — only customer-role users carry a digest. */
-	private function is_customer( int $user_id ): bool {
-		return Customer_Role::is_customer( $user_id );
 	}
 
 	/** Order analogue of {@see live_row_exists_sql} — HPOS/CPT-aware (ADR 0015, Leg-3 phase 7). */
@@ -774,9 +758,9 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Customer analogue of {@see upsert_digest} (ADR 0015, Leg-3 phase 7): compute + store one customer's
-	 * digest in a single INSERT…SELECT. No-op for a user outside the customer-role predicate (the delete
-	 * hook owns removals), so hooking it to every user save is free.
+	 * Customer analogue of {@see upsert_digest} (ADR 0015, Leg-3 phase 7):
+	 * compute and store one WordPress user's customer digest in a single
+	 * INSERT…SELECT. Only the delete hook removes it.
 	 */
 	public function upsert_customer_digest( int $user_id ): void {
 		global $wpdb;

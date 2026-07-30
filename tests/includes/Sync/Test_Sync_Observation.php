@@ -54,9 +54,18 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	 * Remove observer callbacks after each test.
 	 */
 	public function tearDown(): void {
+		$this->remove_observer_callbacks( array( $this->change_log, $this->integrity_digest, $this->sync_index ) );
+		parent::tearDown();
+	}
+
+	/**
+	 * Unhook every registered callback bound to the given observer instances.
+	 *
+	 * @param array $observers Observer objects whose hooks should be removed.
+	 */
+	private function remove_observer_callbacks( array $observers ): void {
 		global $wp_filter;
 
-		$observers = array( $this->change_log, $this->integrity_digest, $this->sync_index );
 		foreach ( $wp_filter as $hook_name => $hook ) {
 			foreach ( $hook->callbacks as $priority => $callbacks ) {
 				foreach ( $callbacks as $callback ) {
@@ -66,7 +75,6 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 				}
 			}
 		}
-		parent::tearDown();
 	}
 
 	/**
@@ -183,7 +191,6 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		global $wpdb;
 
 		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
-		$user    = get_user_by( 'id', $user_id );
 		$messages = array();
 		$break_digest_delete = static function ( $query ) use ( $wpdb ) {
 			$table = $wpdb->prefix . 'wcpos_sync_stored_digest';
@@ -200,7 +207,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		add_filter( 'query', $break_digest_delete );
 		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		try {
-			$user->remove_role( 'customer' );
+			wp_delete_user( $user_id );
 			$this->integrity_digest->record_order_deleted( 1 );
 		} finally {
 			remove_filter( 'query', $break_digest_delete );
@@ -212,10 +219,9 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * add_role()/remove_role() fire only add_user_role/remove_user_role — the
-	 * digest must follow those transitions too (the P2 from the review).
+	 * Role membership changes keep every user in the customer digest space.
 	 */
-	public function test_add_and_remove_customer_role_maintain_the_customer_digest(): void {
+	public function test_add_and_remove_customer_role_keep_the_customer_digest(): void {
 		global $wpdb;
 
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
@@ -226,10 +232,117 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		};
 
 		$user->add_role( 'customer' );
-		$this->assertContains( (string) $user_id, $customer_digests(), 'add_role(customer) must create the digest' );
+		$this->assertContains( (string) $user_id, $customer_digests(), 'add_role(customer) must keep the digest' );
 
 		$user->remove_role( 'customer' );
-		$this->assertNotContains( (string) $user_id, $customer_digests(), 'remove_role(customer) must remove the digest' );
+		$this->assertContains( (string) $user_id, $customer_digests(), 'remove_role(customer) must keep the digest' );
+	}
+
+	/**
+	 * An administrator profile edit is a customer update because all users are
+	 * POS customers under the #1379 ruling.
+	 */
+	public function test_admin_profile_update_records_customer_update_and_digest(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => 'Updated administrator',
+			)
+		);
+
+		$changes = $wpdb->get_col(
+			$wpdb->prepare(
+				'SELECT change_type FROM ' . $this->change_log->table_name() . " WHERE object_type = 'customer' AND object_id = %d ORDER BY sequence ASC", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared id.
+				$user_id
+			)
+		);
+
+		$this->assertContains( 'update', $changes );
+		$this->assertNotContains( 'delete', $changes );
+		$this->assertArrayHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+	}
+
+	/**
+	 * A hookless capabilities write (direct update_user_meta / SQL / import) fires no
+	 * role or profile hook, so the stored digest goes stale — the CURRENT-side digest
+	 * must drift so the integrity scan can detect and repair the stale role (#1395).
+	 */
+	public function test_customer_digest_includes_site_capabilities_meta(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->integrity_digest->upsert_customer_digest( $user_id );
+		$stored_digest = $this->integrity_digest->read_customer_digests( array( $user_id ) )[ $user_id ];
+
+		update_user_meta( $user_id, $wpdb->prefix . 'capabilities', array( 'editor' => true ) );
+
+		$current_digest = (string) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT crc FROM (' . $this->integrity_digest->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
+				$user_id
+			)
+		);
+
+		$this->assertSame( $stored_digest, $this->integrity_digest->read_customer_digests( array( $user_id ) )[ $user_id ], 'a hookless write must NOT update the stored digest (that is the point)' );
+		$this->assertNotSame( $stored_digest, $current_digest, 'the current-side digest must drift when capabilities change' );
+	}
+
+	/**
+	 * Leaving the customer role is a plain customer update and keeps the digest.
+	 */
+	public function test_customer_role_departure_records_update_and_keeps_digest(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$user    = get_user_by( 'id', $user_id );
+
+		// The role change arrives in a LATER request than the create, and the
+		// change-log dedup is per-request (per-instance): the creation's own role
+		// hooks already consumed this user's 'update' dedup key. Model the request
+		// boundary with a fresh Change_Log instance, as production would have.
+		$second_request = new Change_Log();
+		$second_request->register_hooks();
+		try {
+			$user->remove_role( 'customer' );
+		} finally {
+			$this->remove_observer_callbacks( array( $second_request ) );
+		}
+
+		$changes = $wpdb->get_col(
+			$wpdb->prepare(
+				'SELECT change_type FROM ' . $this->change_log->table_name() . " WHERE object_type = 'customer' AND object_id = %d ORDER BY sequence ASC", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared id.
+				$user_id
+			)
+		);
+
+		$this->assertSame( 'update', $changes[ count( $changes ) - 1 ] );
+		$this->assertNotContains( 'delete', $changes );
+		$this->assertArrayHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+	}
+
+	/**
+	 * Deleting any WordPress user tombstones the customer and removes its digest.
+	 */
+	public function test_delete_user_records_customer_delete_and_removes_digest(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->assertArrayHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+
+		wp_delete_user( $user_id );
+
+		$latest_change = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT change_type FROM ' . $this->change_log->table_name() . " WHERE object_type = 'customer' AND object_id = %d ORDER BY sequence DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared id.
+				$user_id
+			)
+		);
+
+		$this->assertSame( 'delete', $latest_change );
+		$this->assertArrayNotHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
 	}
 
 	/**

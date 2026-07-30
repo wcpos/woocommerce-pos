@@ -13,7 +13,6 @@ use WC_Coupon;
 use WC_Customer;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
-use WCPOS\WooCommercePOS\Sync\Customer_Role;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Term_Meta_Adapter;
@@ -349,19 +348,17 @@ final class Uuid_Backfill_Controller extends WP_REST_Controller {
 		return array_map( 'intval', (array) $wpdb->get_col( $sql ) );
 	}
 
-	/** Select users with missing or duplicated valid UUID meta. */
+	/** Select all WordPress users with missing or duplicated valid UUID meta. */
 	private function select_ids_user( string $mode, int $since_id, int $limit ): array {
 		global $wpdb;
 		$regexp = self::UUID_SQL_REGEXP;
 		if ( 'collisions' === $mode ) {
 			$sql = $wpdb->prepare(
 				"SELECT m.user_id FROM {$wpdb->usermeta} m
-				 JOIN {$wpdb->users} u ON u.ID = m.user_id"
-				 . Customer_Role::sql_join( 'u.ID', 'cap' ) . "
+				 JOIN {$wpdb->users} u ON u.ID = m.user_id
 				 JOIN (
 				     SELECT m2.meta_value, MIN(u2.ID) AS keep_id
-				     FROM {$wpdb->users} u2"
-				 . Customer_Role::sql_join( 'u2.ID', 'cap2' ) . "
+				     FROM {$wpdb->users} u2
 				     JOIN {$wpdb->usermeta} m2 ON m2.user_id = u2.ID
 				     WHERE m2.meta_key = %s AND m2.meta_value REGEXP '$regexp'
 				     GROUP BY m2.meta_value HAVING COUNT(*) > 1
@@ -375,8 +372,7 @@ final class Uuid_Backfill_Controller extends WP_REST_Controller {
 			);
 		} else {
 			$sql = $wpdb->prepare(
-				"SELECT u.ID FROM {$wpdb->users} u"
-				 . Customer_Role::sql_join( 'u.ID', 'cap' ) . "
+				"SELECT u.ID FROM {$wpdb->users} u
 				 LEFT JOIN {$wpdb->usermeta} m
 				   ON m.user_id = u.ID AND m.meta_key = %s AND m.meta_value REGEXP '$regexp'
 				 WHERE u.ID > %d AND m.umeta_id IS NULL ORDER BY u.ID ASC LIMIT %d",

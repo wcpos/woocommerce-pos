@@ -62,6 +62,30 @@ final class Change_Log {
 		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
 	}
 
+	/**
+	 * Append a compensating 'update' row for EVERY live user — the sync-schema-3
+	 * migration for the #1379 customer-space widening. The persisted stream can hold
+	 * role-departure tombstones from the customer-role-only era; a client cursor
+	 * behind one would replay the 'delete' against a user /customers?role=all now
+	 * serves. A head-appended update per user supersedes every stale tombstone and
+	 * (re-)announces users the old role-filtered stream never carried.
+	 *
+	 * @return bool Whether the append succeeded (false leaves the schema unlatched for retry).
+	 */
+	public function append_customer_updates_for_all_users(): bool {
+		global $wpdb;
+		$now = gmdate( 'Y-m-d H:i:s' );
+
+		return false !== $wpdb->query(
+			$wpdb->prepare(
+				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, change_type, modified_gmt, origin, created_gmt)'
+				. " SELECT 'customer', ID, 'update', %s, 'schema-upgrade', %s FROM " . $wpdb->users,
+				$now,
+				$now
+			)
+		);
+	}
+
 	public function register_hooks(): void {
 		add_action( 'woocommerce_new_product', array( $this, 'record_product_created' ), 10, 1 );
 		add_action( 'woocommerce_update_product', array( $this, 'record_product_updated' ), 10, 1 );
@@ -97,12 +121,10 @@ final class Change_Log {
 		add_action( 'added_term_meta', array( $this, 'record_term_meta_change' ), 10, 2 );
 		add_action( 'updated_term_meta', array( $this, 'record_term_meta_change' ), 10, 2 );
 		add_action( 'deleted_term_meta', array( $this, 'record_term_meta_deleted' ), 10, 2 );
-		// Customers are WP users. Mirror WooCommerce's own webhook topic hooks
-		// (WC_Webhook::get_default_topic_hooks): create = user_register +
+		// ALL WordPress users are POS customers under the #1379 ruling (1.9 parity).
+		// Mirror WooCommerce's own webhook topic hooks: create = user_register +
 		// woocommerce_created_customer; update = profile_update +
-		// woocommerce_update_customer; delete = delete_user. Each is filtered to
-		// customer-role users (record_customer_*), so admin/editor user edits — which
-		// fire the same WP-core hooks — never pollute the customer change-log.
+		// woocommerce_update_customer; delete = delete_user.
 		// Duplicate rows on the WC path (both create hooks fire) are harmless: the
 		// client re-pulls the customer id once regardless of how many rows it sees.
 		add_action( 'user_register', array( $this, 'record_customer_created' ), 10, 1 );
@@ -114,11 +136,11 @@ final class Change_Log {
 		// customer.created webhook hooks.
 		add_action( 'woocommerce_created_customer', array( $this, 'record_customer_created_persisted' ), 10, 1 );
 		add_action( 'woocommerce_new_customer', array( $this, 'record_customer_created_persisted' ), 10, 1 );
-		// Role transitions are detected two ways because WordPress splits them:
+		// Role changes are plain customer updates because role membership is part
+		// of every served user record. WordPress reports them through several hooks:
 		// profile_update (wp_update_user) carries the OLD user data (arg 2), while
 		// WP_User::set_role() / bulk role changes fire set_user_role (with the old
-		// roles) and do NOT fire profile_update. Both feed one transition helper;
-		// duplicate rows when a path fires both are harmless (one re-pull).
+		// roles) and do NOT fire profile_update.
 		add_action( 'profile_update', array( $this, 'record_customer_profile_update' ), 10, 2 );
 		add_action( 'set_user_role', array( $this, 'record_customer_role_change' ), 10, 3 );
 		// Multi-role paths: WP_User::add_role()/remove_role() (membership plugins)
@@ -282,108 +304,57 @@ final class Change_Log {
 	}
 
 	public function record_customer_created( int $customer_id ): void {
-		if ( $this->is_customer( $customer_id ) ) {
-			$this->record( 'customer', $customer_id, 'create' );
-		}
+		$this->record( 'customer', $customer_id, 'create' );
 	}
 
-	/** WooCommerce create hooks — definitive post-persist create with persisted dedup. */
+	/** WooCommerce create hooks for any user — definitive post-persist create with persisted dedup. */
 	public function record_customer_created_persisted( int $customer_id ): void {
-		if ( $this->is_customer( $customer_id ) ) {
-			$this->record( 'customer', $customer_id, 'create', 'hook', false );
-		}
+		$this->record( 'customer', $customer_id, 'create', 'hook', false );
 	}
 
 	/**
-	 * woocommerce_update_customer — the definitive post-persist update (fires AFTER
-	 * the customer meta is written). Bypasses dedup so it always lands as the repair
-	 * row for any read of the earlier, pre-persist profile_update row.
+	 * woocommerce_update_customer — the definitive post-persist update for any
+	 * user. Bypasses dedup so it repairs an earlier pre-persist update row.
 	 */
 	public function record_customer_updated( int $customer_id ): void {
-		if ( $this->is_customer( $customer_id ) ) {
-			$this->record( 'customer', $customer_id, 'update', 'hook', false );
-		}
+		$this->record( 'customer', $customer_id, 'update', 'hook', false );
 	}
 
 	/**
-	 * profile_update handler — role-transition aware. WordPress has already stored
-	 * the NEW role by the time this fires, so a plain current-role check would MISS
-	 * a customer who just lost the `customer` role: they vanish from wc/v3/customers
-	 * (which filters by role) yet the local doc would never be tombstoned. Compare
-	 * the old role (arg 2, the pre-update WP_User) with the new:
-	 *   - was + is customer      → update
-	 *   - was NOT, is customer   → create (joined the customer collection)
-	 *   - was customer, is NOT   → delete (left it — tombstone the stale local doc)
-	 *   - neither                → ignore
+	 * profile_update handler — every WordPress user is a POS customer (#1379,
+	 * 1.9 parity), so every profile change is an update. Keep the second argument
+	 * because the WordPress hook passes two arguments.
 	 */
 	public function record_customer_profile_update( int $user_id, $old_user_data = null ): void {
-		$was_customer = is_object( $old_user_data )
-			&& isset( $old_user_data->roles )
-			&& in_array( 'customer', (array) $old_user_data->roles, true );
-		$this->record_customer_role_transition( $user_id, $was_customer, $this->is_customer( $user_id ) );
+		$this->record( 'customer', $user_id, 'update' );
 	}
 
 	/**
-	 * set_user_role handler — fires from WP_User::set_role() (bulk role changes,
-	 * programmatic role sets) which do NOT fire profile_update. set_role REPLACES
-	 * all roles with the single new $role, so the new customer-membership is exactly
-	 * `$role === 'customer'`; $old_roles is the pre-change role array.
+	 * set_user_role handler — every role replacement changes the served user
+	 * record, but never removes the user from the POS customer space.
 	 */
 	public function record_customer_role_change( int $user_id, $role = '', $old_roles = array() ): void {
-		$was_customer = is_array( $old_roles ) && in_array( 'customer', $old_roles, true );
-		$this->record_customer_role_transition( $user_id, $was_customer, 'customer' === $role );
+		$this->record( 'customer', $user_id, 'update' );
 	}
 
 	/**
-	 * add_user_role handler — the customer role was ADDED to a (possibly multi-role)
-	 * user. add_role fires ONLY when the role is genuinely new, so this is a join.
+	 * add_user_role handler — any added role changes the served customer record.
 	 */
 	public function record_customer_role_added( int $user_id, $role = '' ): void {
-		if ( 'customer' === $role && $this->is_customer( $user_id ) ) {
-			$this->record( 'customer', $user_id, 'create' );
-		}
+		$this->record( 'customer', $user_id, 'update' );
 	}
 
 	/**
-	 * remove_user_role handler — the customer role was REMOVED. It's a genuine leave
-	 * only if the user no longer holds the customer role (they had a single 'customer'
-	 * role, or every customer grant is now gone) — so they've left wc/v3/customers.
+	 * remove_user_role handler — any removed role changes the served customer
+	 * record; role departure is never a customer tombstone.
 	 */
 	public function record_customer_role_removed( int $user_id, $role = '' ): void {
-		if ( 'customer' === $role && ! $this->is_customer( $user_id ) ) {
-			$this->record( 'customer', $user_id, 'delete' );
-		}
+		$this->record( 'customer', $user_id, 'update' );
 	}
 
-	/**
-	 * One transition rule for every role-change path: was + is → update; joined
-	 * (create); left → delete (tombstone the local doc — a former customer is gone
-	 * from the role-filtered wc/v3/customers collection); neither → ignore.
-	 */
-	private function record_customer_role_transition( int $user_id, bool $was_customer, bool $is_customer ): void {
-		if ( $is_customer ) {
-			$this->record( 'customer', $user_id, $was_customer ? 'update' : 'create' );
-		} elseif ( $was_customer ) {
-			$this->record( 'customer', $user_id, 'delete' );
-		}
-	}
-
+	/** delete_user handler — deletion removes any user from the POS customer space. */
 	public function record_customer_deleted( int $customer_id ): void {
-		// delete_user fires BEFORE the row is removed, so the role is still readable.
-		if ( $this->is_customer( $customer_id ) ) {
-			$this->record( 'customer', $customer_id, 'delete' );
-		}
-	}
-
-	/**
-	 * Only WP users with the `customer` role belong in the customer change-log —
-	 * the WP-core hooks (user_register / profile_update / delete_user) fire for
-	 * EVERY user (admins, editors), so without this filter an admin profile edit
-	 * would emit a phantom "customer" change the client would try to pull from
-	 * wc/v3/customers (a 404 / wrong record).
-	 */
-	private function is_customer( int $user_id ): bool {
-		return Customer_Role::is_customer( $user_id );
+		$this->record( 'customer', $customer_id, 'delete' );
 	}
 
 	public function record( string $object_type, int $object_id, string $change_type, string $origin = 'hook', bool $dedup = true ): void {

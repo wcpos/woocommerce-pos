@@ -76,18 +76,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource ) {
 		$query_params           = $request->get_query_params();
 		$customer_search_filter = null;
-		if ( 'customers' === $resource && isset( $query_params['include'] ) && ! isset( $query_params['role'] ) ) {
-			// TARGETED pulls only: the app must be able to fetch specific users
-			// that are not role=customer (the cashier's own record — wc/v3's
-			// default role filter returned 0/1 for it, failing the apply tick and
-			// freezing the customers cursor; monorepo#850). Lists keep wc/v3's
-			// role=customer default: the tracked customer space (change-log +
-			// digests) is deliberately customer-role-scoped, so widening lists
-			// would serve records the existence surfaces disown. A targeted-pulled
-			// non-customer doc may be pruned by a later existence reconcile and
-			// re-required on next boot — bounded, accepted until the customer-space
-			// design question (all users vs role=customer, v1 did the former) is
-			// settled.
+		if ( 'customers' === $resource && ! isset( $query_params['role'] ) ) {
+			// The POS customer space is ALL WordPress users under the #1379
+			// ruling (1.9 parity: v1 enumerated all users). wc/v3 defaults to
+			// role=customer, so override it for targeted and untargeted pulls;
+			// an explicit client role remains untouched. This subsumes the
+			// earlier #1378 targeted-include exception.
 			$query_params['role'] = 'all';
 		}
 		if ( 'customers' === $resource && isset( $query_params['search'] ) ) {
