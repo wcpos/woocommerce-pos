@@ -363,6 +363,7 @@ class Init {
 		new Emails();
 		new Templates();
 		new Services\Stock_Validator();
+		new Services\Decimal_Quantities();
 		new Services\Customer_Meta_Parity();
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
