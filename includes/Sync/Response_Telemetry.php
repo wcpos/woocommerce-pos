@@ -252,6 +252,7 @@ final class Response_Telemetry {
 				$base . 'revision-hash',
 				$base . 'range-checksum',
 				$base . 'config-fingerprint',
+				$base . 'tick',
 			),
 			true
 		);
@@ -277,6 +278,7 @@ final class Response_Telemetry {
 			$base . 'changes/revision-hash',
 			$base . 'changes/range-checksum',
 			$base . 'changes/config-fingerprint',
+			$base . 'changes/tick',
 			$base . 'digests',
 			$base . 'integrity/scan',
 			$base . 'integrity/rebuild',
