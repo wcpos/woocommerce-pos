@@ -53,11 +53,13 @@ class Init {
 				\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
 				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
 				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_serialized_variable_prices' ), 10, 3 );
+				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Product_Images::class, 'stamp_serialized_product_images' ), 10, 3 );
 				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
 				\WCPOS\WooCommercePOS\Sync\Revision::register_proxy_stamps();
 				\WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper::register_proxy_stampers();
 				\WCPOS\WooCommercePOS\Sync\Integrity_Digest::register_proxy_digest_stampers();
 				add_filter( 'woocommerce_pos_sync_proxy_response', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_proxy_variable_prices' ), 10, 3 );
+				add_filter( 'woocommerce_pos_sync_proxy_response', array( \WCPOS\WooCommercePOS\Sync\Product_Images::class, 'stamp_proxy_product_images' ), 10, 3 );
 			}
 
 			// Identity is core, not an observer benchmark variable: every product is
