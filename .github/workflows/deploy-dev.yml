@@ -85,8 +85,10 @@ jobs:
   deploy:
     needs: build
     if: ${{ github.ref_name != 'next' || vars.DEV_NEXT_SITES != '' }}
-    # Configure required reviewers on this environment so deployment secrets
-    # are not released until the build from the triggering branch is approved.
+    # The `development` environment has a deployment branch policy (main/next
+    # only) and deliberately NO required reviewers — dev deploys must stay
+    # automatic. Scoping HETZNER_SSH_KEY as an environment secret (instead of
+    # a repo secret) limits its release to jobs that pass this branch policy.
     environment: development
     concurrency:
       group: deploy-dev
