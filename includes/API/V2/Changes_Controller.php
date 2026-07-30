@@ -121,6 +121,25 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
+			'/' . Api::ROUTE_PREFIX . 'changes/tick',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'tick' ),
+				'permission_callback' => array( $this, 'permissions_check' ),
+				'args'                => array_merge(
+					$common_args,
+					array(
+						'since' => array(
+							'default' => 0,
+							'sanitize_callback' => 'absint',
+						),
+					)
+				),
+			)
+		);
+
+		register_rest_route(
+			Api::ROUTE_NAMESPACE,
 			'/' . Api::ROUTE_PREFIX . 'changes/config-fingerprint',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -526,6 +545,57 @@ final class Changes_Controller extends WP_REST_Controller {
 		$started = microtime( true );
 
 		return rest_ensure_response( $this->config_fingerprint_data( $request, $started ) );
+	}
+
+	/**
+	 * Combined change-signal tick (#1405): the config-fingerprint envelope and
+	 * the sequence-log payload in ONE response, so an idle register's poll
+	 * costs a single request — and a single empty 304 once nothing has moved.
+	 *
+	 * Delegates wholesale to sequence_log(): that handler already computes the
+	 * un-narrowed all-collections fingerprint for its embedded member and
+	 * derives its ETag from (sequence head, fingerprint) — exactly this
+	 * endpoint's validator — so both payload members, the conditional-request
+	 * semantics (RFC 9110 If-None-Match parsing, 304 only when the cursor is
+	 * at head so a matching validator can never hide rows behind a lagging
+	 * `since`), and the ETag reuse the existing serializers verbatim rather
+	 * than forking them. The fingerprint member is lifted to the top level as
+	 * the stable read location for tick clients; the copy embedded inside the
+	 * sequence_log member is kept verbatim ON PURPOSE — that member is the
+	 * source endpoint's response data unmodified, which is what makes payload
+	 * parity a structural property instead of a maintained one (the duplicated
+	 * bytes are a few hashes; idle polls are 304s and never carry them). Both
+	 * copies carry the same payload the standalone /changes/config-fingerprint
+	 * endpoint reports with no `collection` narrowing — the client replacing
+	 * its standalone fingerprint poll must never see a narrowed snapshot (see
+	 * the embed's rationale) — differing only in per-request telemetry meta.
+	 */
+	public function tick( WP_REST_Request $request ) {
+		$started  = microtime( true );
+		$response = $this->sequence_log( $request );
+
+		if ( 304 === $response->get_status() ) {
+			return $response;
+		}
+
+		$sequence_data = $response->get_data();
+
+		return new \WP_REST_Response(
+			array(
+				'candidate'          => 'tick',
+				'config_fingerprint' => $sequence_data['config_fingerprint'],
+				'sequence_log'       => $sequence_data,
+				// The sibling envelopes get meta from envelope(); tick owns its
+				// (composition-level) meta so the shape does not depend on the
+				// telemetry decorator being hooked.
+				'meta'               => array(
+					'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
+					'supported'   => true,
+				),
+			),
+			200,
+			$response->get_headers()
+		);
 	}
 
 	/**

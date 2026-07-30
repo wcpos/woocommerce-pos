@@ -165,6 +165,7 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 			'/wcpos/v2/changes/revision-hash',
 			'/wcpos/v2/changes/range-checksum',
 			'/wcpos/v2/changes/config-fingerprint',
+			'/wcpos/v2/changes/tick',
 			'/wcpos/v2/digests',
 			'/wcpos/v2/integrity/scan',
 			'/wcpos/v2/integrity/bucket',
