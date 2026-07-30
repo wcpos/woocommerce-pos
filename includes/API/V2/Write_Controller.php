@@ -365,10 +365,14 @@ class Write_Controller extends WP_REST_Controller {
 			if ( is_wp_error( $client_created_gmt ) ) {
 				return $client_created_gmt;
 			}
-			// tax_ids is stripped from the wc/v3 forward below, so wc/v3 never validates it.
-			// Run the v1 schema check here — otherwise malformed/unsupported entries slip past
-			// validation and Tax_Id_Writer silently drops them, acking an order missing tax IDs.
-			$tax_ids_error = $this->validate_order_tax_ids( $m['payload'] );
+		}
+
+		// tax_ids is stripped from the wc/v3 forward below, so wc/v3 never validates it.
+		// Run the v1 schema check here for both tax_ids-bearing collections — orders and
+		// customers (issue #1403 row 4) — otherwise malformed/unsupported entries slip past
+		// validation and Tax_Id_Writer silently drops them, acking a record missing tax IDs.
+		if ( \in_array( $meta['id_type'] ?? '', array( 'order', 'user' ), true ) ) {
+			$tax_ids_error = $this->validate_tax_ids_payload( $m['payload'] );
 			if ( is_wp_error( $tax_ids_error ) ) {
 				return $tax_ids_error;
 			}
@@ -419,6 +423,11 @@ class Write_Controller extends WP_REST_Controller {
 			}
 			$forward_payload = $this->sanitize_order_wc_payload( $forward_payload );
 		}
+		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $forward_payload ) ) {
+			// tax_ids is a POS-owned field: wc/v3 would silently ignore it, and the
+			// server persists it via Tax_Id_Writer after a successful forward.
+			unset( $forward_payload['tax_ids'] );
+		}
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
 			: $meta['route'];
@@ -451,6 +460,9 @@ class Write_Controller extends WP_REST_Controller {
 		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response->get_status() );
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			$this->persist_order_tax_ids( $new_id, $m['payload'], true );
+		}
+		if ( 'user' === ( $meta['id_type'] ?? '' ) ) {
+			$this->persist_customer_tax_ids( $new_id, $m['payload'] );
 		}
 		// The controller OWNS identity: wc/v3 dropped our uuid as protected meta, so
 		// force the client's recordId onto the new record (direct meta write) — it is
@@ -656,8 +668,8 @@ class Write_Controller extends WP_REST_Controller {
 		// Envelope-level payload validation runs BEFORE any wc/v3 read or write —
 		// mirroring create, and keeping "rejected before the forward" true on every
 		// WC version (the concurrency check below performs a document_for GET).
-		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
-			$tax_ids_error = $this->validate_order_tax_ids( $m['payload'] );
+		if ( \in_array( $meta['id_type'] ?? '', array( 'order', 'user' ), true ) && is_array( $m['payload'] ) ) {
+			$tax_ids_error = $this->validate_tax_ids_payload( $m['payload'] );
 			if ( is_wp_error( $tax_ids_error ) ) {
 				return $tax_ids_error;
 			}
@@ -716,6 +728,10 @@ class Write_Controller extends WP_REST_Controller {
 		// guard as create, so a malformed meta_data still reaches wc/v3's validation.)
 		$update_payload = $m['payload'];
 		$clear_billing_email = false;
+		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
+			// POS-owned field: persisted via Tax_Id_Writer after the forward, never sent to wc/v3.
+			unset( $update_payload['tax_ids'] );
+		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			unset( $update_payload['created_via'] );
 			unset( $update_payload['tax_ids'] );
@@ -740,6 +756,9 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			$this->persist_order_tax_ids( $id, $m['payload'], false );
+		}
+		if ( 'user' === ( $meta['id_type'] ?? '' ) ) {
+			$this->persist_customer_tax_ids( $id, $m['payload'] );
 		}
 		if ( $clear_billing_email ) {
 			$order = wc_get_order( $id );
@@ -940,6 +959,10 @@ class Write_Controller extends WP_REST_Controller {
 			// are lost forever. is_create = true so an omitted payload still snapshots the customer.
 			$this->persist_order_tax_ids( $remote_id, $m['payload'], true );
 		}
+		if ( 'user' === ( $meta['id_type'] ?? '' ) ) {
+			// Same poison-recovery replay for the customer-side tax_ids save (idempotent).
+			$this->persist_customer_tax_ids( $remote_id, $m['payload'] );
+		}
 		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {
 			return $this->finalize_error();
 		}
@@ -1026,19 +1049,20 @@ class Write_Controller extends WP_REST_Controller {
 		return $timestamp;
 	}
 	/**
-	 * Validate a client-submitted `tax_ids` payload against the v1 order schema.
+	 * Validate a client-submitted `tax_ids` payload against the v1 schema.
 	 *
-	 * tax_ids is unknown to the stock wc/v3 controller and is stripped before the forward,
-	 * so wc/v3 never validates it. V1\Orders_Controller::wcpos_get_item_schema() added a
-	 * TaxId[] schema (typed enum, string value, nullable country/label) that WordPress
-	 * enforced on every create/update; reproduce that check here so malformed or unsupported
-	 * entries are rejected with a 400 instead of being silently dropped by Tax_Id_Writer.
+	 * tax_ids is unknown to the stock wc/v3 controllers and is stripped before the forward,
+	 * so wc/v3 never validates it. The v1 controllers (Orders_Controller::wcpos_get_item_schema,
+	 * Customers_Controller) exposed a TaxId[] schema (typed enum, string value, nullable
+	 * country/label) that WordPress enforced on every create/update; reproduce that check here
+	 * for both orders and customers so malformed or unsupported entries are rejected with a
+	 * 400 instead of being silently dropped by Tax_Id_Writer.
 	 *
 	 * @param array $payload Mutation payload.
 	 *
 	 * @return null|WP_Error null when tax_ids is absent or valid; WP_Error (400) otherwise.
 	 */
-	private function validate_order_tax_ids( array $payload ) {
+	private function validate_tax_ids_payload( array $payload ) {
 		if ( ! array_key_exists( 'tax_ids', $payload ) ) {
 			return null;
 		}
@@ -1082,6 +1106,20 @@ class Write_Controller extends WP_REST_Controller {
 			( new Tax_Id_Writer() )->write_for_order( $order, $payload['tax_ids'] );
 		} elseif ( $is_create && $order->get_customer_id() > 0 ) {
 			( new Tax_Id_Writer() )->snapshot_from_user_to_order( $order, $order->get_customer_id() );
+		}
+	}
+
+	/**
+	 * Persist customer tax_ids after a successful wc/v3 forward — the v2 port of
+	 * V1\Customers_Controller::wcpos_persist_tax_ids_from_request (issue #1403 row 4).
+	 * An absent tax_ids key is a no-op; there is no customer-side snapshot concept.
+	 *
+	 * @param int   $user_id Resolved customer user id.
+	 * @param array $payload Mutation payload.
+	 */
+	private function persist_customer_tax_ids( int $user_id, array $payload ): void {
+		if ( $user_id > 0 && is_array( $payload['tax_ids'] ?? null ) ) {
+			( new Tax_Id_Writer() )->write_for_user( $user_id, $payload['tax_ids'] );
 		}
 	}
 	private function forward( string $method, string $route, $payload ) {
