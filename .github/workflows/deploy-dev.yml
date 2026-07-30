@@ -10,14 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  build:
     # Stable lane (main) deploys to the dev sites below. The `next` lane only
     # deploys once the dev-next target is configured: set repo variable
     # DEV_NEXT_SITES (e.g. "dev-next-free dev-next-pro"). Until then `next` is skipped.
     if: ${{ github.ref_name != 'next' || vars.DEV_NEXT_SITES != '' }}
-    concurrency:
-      group: deploy-dev
-      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     steps:
@@ -78,6 +75,30 @@ jobs:
           tar -czf ../woocommerce-pos.tar.gz .
           cd ..
 
+      - name: 📤 Upload deployment package
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: deployment-package
+          path: woocommerce-pos.tar.gz
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    if: ${{ github.ref_name != 'next' || vars.DEV_NEXT_SITES != '' }}
+    # Configure required reviewers on this environment so deployment secrets
+    # are not released until the build from the triggering branch is approved.
+    environment: development
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Download deployment package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: deployment-package
+
       - name: 🔑 Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -99,15 +120,22 @@ jobs:
           else
             SITES="dev-free dev-pro"
           fi
+
+          for SITE in $SITES; do
+            if ! [[ "$SITE" =~ ^[a-z0-9-]+$ ]]; then
+              echo "Invalid deployment site: '$SITE'" >&2
+              exit 1
+            fi
+          done
           echo "Deploying lane '$LANE' to: $SITES"
 
           # Upload tarball with per-run name to avoid races
-          scp -o StrictHostKeyChecking=yes woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
+          /usr/bin/scp -o StrictHostKeyChecking=yes woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
 
           # printf %q each argument: OpenSSH flattens argv into ONE remote command
           # string, so an unquoted multi-word $SITES word-splits on the server —
           # the second site was silently never deployed.
-          ssh -o StrictHostKeyChecking=yes root@213.239.218.130 "bash -s -- $(printf '%q ' "${TARBALL}" "${SITES}" "${GITHUB_RUN_ID}")" << 'EOF'
+          /usr/bin/ssh -o StrictHostKeyChecking=yes root@213.239.218.130 "bash -s -- $(printf '%q ' "${TARBALL}" "${SITES}" "${GITHUB_RUN_ID}")" << 'EOF'
             TARBALL="$1"
             SITES="$2"
             RUN_ID="$3"
@@ -115,6 +143,10 @@ jobs:
             FAILED=0
 
             for SITE in $SITES; do
+              if ! [[ "$SITE" =~ ^[a-z0-9-]+$ ]]; then
+                echo "Invalid deployment site: '$SITE'" >&2
+                exit 1
+              fi
               # NOTE: this subshell is an `if` condition, so `set -e` is ignored
               # inside it (bash errexit rule) — every critical command carries an
               # explicit `|| exit 1` instead.
