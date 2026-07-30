@@ -687,6 +687,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	 * Existing-order receipt dates should use the store locale, not the site locale.
 	 */
 	public function test_build_formats_order_dates_with_store_locale(): void {
+		// The WordPress time_format setting controls the clock convention
+		// (see #1396); configure 24-hour like a typical Spanish site so this
+		// test keeps guarding against English AM/PM leaking into es_ES text.
+		update_option( 'time_format', 'H:i' );
+
 		$order = wc_create_order();
 		$order->set_date_created( strtotime( '2026-01-15 10:30:00 UTC' ) );
 		$order->save();
@@ -713,6 +718,47 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$normalized_time = strtolower( $payload['order']['created']['time'] );
 		$this->assertStringNotContainsString( 'am', $normalized_time );
 		$this->assertStringNotContainsString( 'pm', $normalized_time );
+	}
+
+	/**
+	 * Order date fields should respect the WordPress time_format setting even
+	 * when the store locale would default to 12-hour AM/PM output.
+	 */
+	public function test_build_respects_wordpress_time_format_for_order_dates(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$order = wc_create_order();
+		$order->set_date_created( strtotime( '2026-07-29 13:42:00 UTC' ) );
+		$order->set_date_paid( strtotime( '2026-07-29 13:42:00 UTC' ) );
+		$order->set_date_completed( strtotime( '2026-07-29 13:42:00 UTC' ) );
+		$order->save();
+
+		$pos_store = new class() {
+			/**
+			 * Store locale.
+			 */
+			public function get_locale(): string {
+				return 'en_US';
+			}
+
+			/**
+			 * Store timezone.
+			 */
+			public function get_timezone(): string {
+				return 'Europe/Amsterdam';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+
+		foreach ( array( 'created', 'paid', 'completed' ) as $field ) {
+			$this->assertEquals( '15:42', $payload['order'][ $field ]['time'], "order.{$field}.time should be 24-hour" );
+			$this->assertStringContainsString( '15:42', $payload['order'][ $field ]['datetime'] );
+		}
+
+		$printed_time = strtolower( $payload['order']['printed']['time'] );
+		$this->assertStringNotContainsString( 'am', $printed_time );
+		$this->assertStringNotContainsString( 'pm', $printed_time );
 	}
 
 	/**
