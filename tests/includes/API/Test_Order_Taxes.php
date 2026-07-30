@@ -16,6 +16,10 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
 		$this->endpoint = new Orders_Controller();
+		// Production POS requests always carry the physical X-WCPOS header; the
+		// request-gated fee tax handler (Orders::fee_after_calculate_taxes) reads
+		// it from the server globals, not the WP_REST_Request object.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
 		update_option( 'woocommerce_calc_taxes', 'yes' );
 		update_option( 'woocommerce_tax_based_on', 'base' );
 
@@ -84,6 +88,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function tearDown(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 	}
 

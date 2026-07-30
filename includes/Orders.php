@@ -67,6 +67,7 @@ class Orders {
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
+		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( __CLASS__, 'fee_after_calculate_taxes' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid_for_product', array( $this, 'coupon_is_valid_for_product' ), 10, 4 );
 		add_action( 'woocommerce_order_after_calculate_totals', array( __CLASS__, 'cleanup_temp_caches' ), 999 );
@@ -609,6 +610,43 @@ class Orders {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Respect a negative fee line's own tax_status and tax_class on POS-marked requests.
+	 *
+	 * WooCommerce routes negative fees through its discount tax path, disregarding the
+	 * fee's tax_status and tax_class and allocating line-item tax rates proportionally
+	 * instead. The v1 controller corrected this per-dispatch (issue #1403 row 2); this
+	 * global, request-gated registration serves both the v1 routes and the v2 push's
+	 * inner wc/v3 forward (which carries the X-WCPOS header) with one implementation.
+	 * Static so V1\Orders_Controller can delegate without constructing the service.
+	 *
+	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
+	 * @param array              $calculate_tax_for The tax calculation location data.
+	 *
+	 * @return void
+	 */
+	public static function fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
+		if ( ! wcpos_request() || $fee_item->get_total() >= 0 ) {
+			return;
+		}
+
+		if ( 'taxable' === $fee_item->get_tax_status() ) {
+			// Use the fee's own tax_class if set, otherwise the default class.
+			$tax_class                      = $fee_item->get_tax_class();
+			$calculate_tax_for['tax_class'] = $tax_class ? $tax_class : '';
+
+			$tax_rates      = WC_Tax::find_rates( $calculate_tax_for );
+			$discount_taxes = WC_Tax::calc_tax( (float) $fee_item->get_total(), $tax_rates );
+
+			$fee_item->set_taxes( array( 'total' => $discount_taxes ) );
+		} else {
+			// Clear taxes entirely when the fee's tax_status is 'none'.
+			$fee_item->set_taxes( array() );
+		}
+
+		$fee_item->save();
 	}
 
 	/**

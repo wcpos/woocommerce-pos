@@ -232,7 +232,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 1 );
 		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
-		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( $this, 'wcpos_order_item_fee_after_calculate_taxes' ), 10, 2 );
+		// Negative-fee tax handling is registered globally by WCPOS\WooCommercePOS\Orders
+		// (request-gated) so the v2 push forward shares it — no per-dispatch registration.
 
 		/*
 		 * Check if the request is for all orders and if the 'posts_per_page' is set to -1.
@@ -716,33 +717,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
 	 * the wrong result.
 	 *
+	 * The implementation lives in WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes,
+	 * registered globally and request-gated so the v2 push forward shares it (issue #1403).
+	 * This public method is preserved for backward compatibility and delegates.
+	 *
 	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
 	 * @param array              $calculate_tax_for The tax calculation data.
 	 */
 	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
-		if ( $fee_item->get_total() < 0 ) {
-			// Respect the fee line's tax_class and tax_status.
-			$tax_class  = $fee_item->get_tax_class();
-			$tax_status = $fee_item->get_tax_status();
-
-			if ( 'taxable' === $tax_status ) {
-				// Use the tax_class if set, otherwise default.
-				$calculate_tax_for['tax_class'] = $tax_class ? $tax_class : '';
-
-				// Find rates and calculate taxes for the fee.
-				$tax_rates      = WC_Tax::find_rates( $calculate_tax_for );
-				$discount_taxes = WC_Tax::calc_tax( (float) $fee_item->get_total(), $tax_rates );
-
-				// Apply calculated taxes to the fee item.
-				$fee_item->set_taxes( array( 'total' => $discount_taxes ) );
-			} else {
-				// Set taxes to none if tax_status is 'none'.
-				$fee_item->set_taxes( array() );
-			}
-
-			// Save the updated fee item.
-			$fee_item->save();
-		}
+		\WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes( $fee_item, $calculate_tax_for );
 	}
 
 	/**
