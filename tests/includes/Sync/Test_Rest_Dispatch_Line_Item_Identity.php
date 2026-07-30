@@ -233,6 +233,80 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '5.00', $line->get_subtotal() );
 	}
 
+	public function test_misc_line_checks_the_sentinel_after_ninety_nine_suffixes(): void {
+		for ( $i = 0; $i < 100; $i++ ) {
+			$squatter = ProductHelper::create_simple_product();
+			$squatter->set_sku( 'wcpos-misc-item-no-sku-lookup' . ( 0 === $i ? '' : '-' . $i ) );
+			$squatter->save();
+		}
+
+		$response = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'processing',
+				'line_items' => array( $this->misc_line() ),
+				'meta_data'  => $this->order_meta(),
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 0, $this->single_line( (int) $response->get_data()['document']['id'] )->get_product_id() );
+	}
+
+	public function test_misc_line_sentinel_literal_sku_is_preserved_as_meta(): void {
+		$response = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'processing',
+				'line_items' => array(
+					$this->misc_line( array( 'sku' => 'wcpos-misc-item-no-sku-lookup' ) ),
+				),
+				'meta_data'  => $this->order_meta(),
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$line = $this->single_line( (int) $response->get_data()['document']['id'] );
+		$this->assertSame( 'wcpos-misc-item-no-sku-lookup', $line->get_meta( '_sku', true ) );
+	}
+
+	public function test_misc_line_non_string_sku_is_rejected_by_wc_v3(): void {
+		$response = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'processing',
+				'line_items' => array(
+					$this->misc_line( array( 'sku' => array( 'not-a-string' ) ) ),
+				),
+				'meta_data'  => $this->order_meta(),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	public function test_misc_line_non_array_meta_data_is_rejected_by_wc_v3(): void {
+		$response = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'processing',
+				'line_items' => array(
+					$this->misc_line(
+						array(
+							'sku'       => 'MISC-MALFORMED-META',
+							'meta_data' => 'not-an-array',
+						)
+					),
+				),
+				'meta_data'  => $this->order_meta(),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
 	public function test_partial_update_line_without_product_id_cannot_be_rebound_by_sku(): void {
 		$a = ProductHelper::create_simple_product(
 			array(
@@ -292,6 +366,39 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$line = $this->single_line( $order_id );
 		$this->assertSame( $a->get_id(), $line->get_product_id() );
 		$this->assertSame( 2, $line->get_quantity() );
+	}
+
+	public function test_misc_line_posted_sku_overrides_stale_sku_meta(): void {
+		$created = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'processing',
+				'line_items' => array( $this->misc_line( array( 'sku' => 'MISC-OLD-SKU' ) ) ),
+				'meta_data'  => $this->order_meta(),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$document = $created->get_data()['document'];
+		$line     = $document['line_items'][0];
+
+		$updated = $this->push_envelope(
+			'update',
+			array(
+				'line_items' => array(
+					array(
+						'id'         => $line['id'],
+						'product_id' => 0,
+						'sku'        => 'MISC-NEW-SKU',
+						'meta_data'  => $line['meta_data'],
+					),
+				),
+				'meta_data'  => $this->order_meta(),
+			),
+			$this->order_revision( (int) $document['id'] )
+		);
+
+		$this->assertSame( 200, $updated->get_status() );
+		$this->assertSame( 'MISC-NEW-SKU', $this->single_line( (int) $document['id'] )->get_meta( '_sku', true ) );
 	}
 
 	public function test_misc_line_sku_clear_updates_the_sku_meta(): void {

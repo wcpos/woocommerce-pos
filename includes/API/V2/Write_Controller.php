@@ -1050,15 +1050,27 @@ class Write_Controller extends WP_REST_Controller {
 			// wc/v3's remove-this-line marker and was excluded above). Mirror v1's
 			// maybe_set_item_meta_data: when the line carries a sku key, its typed
 			// value (including '' — an explicit clear) becomes the single `_sku`
-			// item meta, unless the client already sent one.
-			if ( array_key_exists( 'sku', $line ) && is_scalar( $line['sku'] ) ) {
-				$typed_sku = trim( (string) $line['sku'] );
-				if ( self::MISC_LINE_SKU_SENTINEL !== $typed_sku && ! $this->line_has_sku_meta( $line ) ) {
-					$meta   = isset( $line['meta_data'] ) && is_array( $line['meta_data'] ) ? $line['meta_data'] : array();
-					$meta[] = array(
-						'key'   => '_sku',
-						'value' => $typed_sku,
-					);
+			// item meta, replacing any stale `_sku` in a pulled order document.
+			if ( array_key_exists( 'sku', $line ) ) {
+				if ( ! is_string( $line['sku'] ) ) {
+					continue;
+				}
+				if ( ! array_key_exists( 'meta_data', $line ) || is_array( $line['meta_data'] ) ) {
+					$typed_sku    = trim( $line['sku'] );
+					$meta         = $line['meta_data'] ?? array();
+					$has_sku_meta = false;
+					foreach ( $meta as $j => $entry ) {
+						if ( is_array( $entry ) && '_sku' === ( $entry['key'] ?? null ) ) {
+							$meta[ $j ]['value'] = $typed_sku;
+							$has_sku_meta        = true;
+						}
+					}
+					if ( ! $has_sku_meta ) {
+						$meta[] = array(
+							'key'   => '_sku',
+							'value' => $typed_sku,
+						);
+					}
 					$line_items[ $i ]['meta_data'] = $meta;
 				}
 			}
@@ -1069,34 +1081,19 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Whether a posted line already carries an explicit `_sku` meta entry.
-	 *
-	 * @param array $line Posted line item.
-	 *
-	 * @return bool
-	 */
-	private function line_has_sku_meta( array $line ): bool {
-		foreach ( ( isset( $line['meta_data'] ) && is_array( $line['meta_data'] ) ? $line['meta_data'] : array() ) as $entry ) {
-			if ( is_array( $entry ) && '_sku' === ( $entry['key'] ?? null ) ) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	/**
 	 * The sentinel sku for the forwarded line, verified against the catalog:
 	 * WooCommerce would happily let a merchant assign the literal sentinel to a
 	 * product, and a colliding lookup would bind the misc line to it — so probe
-	 * the lookup and suffix until it misses (bounded; the lookup is indexed).
+	 * the lookup and suffix until it misses (the lookup is indexed).
 	 *
 	 * @return string
 	 */
 	private function misc_line_sentinel_sku(): string {
-		$sku = self::MISC_LINE_SKU_SENTINEL;
-		for ( $n = 1; $n < 100 && function_exists( 'wc_get_product_id_by_sku' ) && (int) wc_get_product_id_by_sku( $sku ) > 0; $n++ ) {
-			$sku = self::MISC_LINE_SKU_SENTINEL . '-' . $n;
+		$sku    = self::MISC_LINE_SKU_SENTINEL;
+		$suffix = 0;
+		while ( function_exists( 'wc_get_product_id_by_sku' ) && (int) wc_get_product_id_by_sku( $sku ) > 0 ) {
+			++$suffix;
+			$sku = self::MISC_LINE_SKU_SENTINEL . '-' . $suffix;
 		}
 
 		return $sku;
