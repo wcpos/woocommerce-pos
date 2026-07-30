@@ -77,23 +77,25 @@ final class Config_Fingerprint {
 	private const LEGACY_PROACTIVE_OPTION_PREFIX = 'woocommerce_pos_sync_config_fp_';
 
 	/**
-	 * Raw barcode META key -> synced-doc PAYLOAD field name. Keys are the values
+	 * Raw barcode META key -> synced-doc PAYLOAD field name, for the mappings the
+	 * catalog proxy serves as NATIVE top-level wc/v3 fields. Keys are the values
 	 * the production barcode setting can hold; values are the top-level payload
 	 * field names the client indexes against.
 	 *
-	 * HONESTY CONSTRAINT (review finding 9): this map may ONLY list a field the
-	 * sync read surface ACTUALLY serves. That surface is the catalog proxy →
-	 * raw wc/v3 (Catalog_Proxy_Controller forwards to /wc/v3/products), which
-	 * emits `sku` and `global_unique_id` as native top-level fields but NEVER a
-	 * top-level `barcode` — that stamping lives only on the wcpos/v1
-	 * Products_Controller (an override of a DIFFERENT namespace the proxy never
-	 * dispatches through), and a `_`-prefixed custom key like `_barcode` is
-	 * protected meta wc/v3 strips from meta_data too. So `_barcode` (and any
-	 * other custom key) has NO indexable payload field here and is deliberately
-	 * absent → barcode_fields() reports an empty list for it rather than telling
-	 * the client to index a field that never arrives. (Offline scan resolution
-	 * of a custom field still works via /resolve/barcode, which reads the DB
-	 * directly.)
+	 * HONESTY CONSTRAINT (review finding 9): this map may ONLY list a TOP-LEVEL
+	 * field the sync read surface ACTUALLY serves. That surface is the catalog
+	 * proxy → raw wc/v3 (Catalog_Proxy_Controller forwards to /wc/v3/products),
+	 * which emits `sku` and `global_unique_id` natively but NEVER a top-level
+	 * `barcode` — that stamping lives only on the wcpos/v1 Products_Controller
+	 * (an override of a DIFFERENT namespace the proxy never dispatches through).
+	 *
+	 * A custom meta key has no top-level field, but its value DOES reach the
+	 * client: proxied responses carry it in `meta_data` (pinned by
+	 * Test_Catalog_Proxy_Barcode read-parity tests). So a key absent from this
+	 * map is advertised as a `meta_data:<key>` SELECTOR by barcode_fields() if
+	 * WooCommerce does not classify it as internal. Internal product properties
+	 * are excluded from serialized `meta_data`, so their selector list remains
+	 * empty.
 	 */
 	private const BARCODE_META_TO_PAYLOAD = array(
 		'_sku'              => 'sku',
@@ -150,25 +152,34 @@ final class Config_Fingerprint {
 	}
 
 	/**
-	 * The resolved active barcode PAYLOAD field names for a collection (the
-	 * already-synced doc-shape field the client indexes). Empty for collections
-	 * with no barcode mapping. An unknown meta key resolves to an empty list
-	 * rather than guessing.
+	 * The resolved active barcode selectors for a collection: the payload field
+	 * name the client indexes (`sku`, `global_unique_id`) for native mappings,
+	 * or a `meta_data:<key>` selector for any other configured meta key (#1385
+	 * — the proxied `meta_data` carries the value, so the client derives its
+	 * local index from the named entry). Empty for collections with no barcode
+	 * mapping.
 	 */
 	public function barcode_fields( string $collection ): array {
 		if ( ! \in_array( $collection, self::barcode_collections(), true ) ) {
 			return array();
 		}
-		$meta_key      = $this->active_barcode_meta_key();
-		$payload_field = self::BARCODE_META_TO_PAYLOAD[ $meta_key ] ?? null;
+		$meta_key = $this->active_barcode_meta_key();
+
+		if ( ! \array_key_exists( $meta_key, self::BARCODE_META_TO_PAYLOAD ) ) {
+			// @phpstan-ignore-next-line -- WC_Data_Store forwards this public method to its loaded store.
+			$internal_meta_keys = \WC_Data_Store::load( 'product' )->get_internal_meta_keys();
+
+			return \in_array( $meta_key, $internal_meta_keys, true ) ? array() : array( 'meta_data:' . $meta_key );
+		}
+		$payload_field = self::BARCODE_META_TO_PAYLOAD[ $meta_key ];
 
 		// wc/v3 only serves global_unique_id from WC 9.2 — advertising it on older
 		// versions would tell the client to index a field that never arrives.
 		if ( 'global_unique_id' === $payload_field && \function_exists( 'WC' ) && version_compare( WC()->version, '9.2', '<' ) ) {
-			$payload_field = null;
+			return array();
 		}
 
-		return null === $payload_field ? array() : array( $payload_field );
+		return array( $payload_field );
 	}
 
 	/**
