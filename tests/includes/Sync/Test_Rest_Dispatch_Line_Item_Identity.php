@@ -253,6 +253,43 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 0, $this->single_line( (int) $response->get_data()['document']['id'] )->get_product_id() );
 	}
 
+	public function test_misc_lines_forward_distinct_uuid_sentinels(): void {
+		$forwarded_skus = array();
+		$capture_skus   = static function ( $result, $server, $request ) use ( &$forwarded_skus ) {
+			if ( '/wc/v3/orders' === $request->get_route() ) {
+				$forwarded_skus = array_column( $request->get_param( 'line_items' ), 'sku' );
+			}
+
+			return $result;
+		};
+		$second_line    = $this->misc_line();
+		$second_line['meta_data'][0]['value'] = '88888888-9999-4aaa-8bbb-ccccddddeeee';
+
+		add_filter( 'rest_pre_dispatch', $capture_skus, 20, 3 );
+		try {
+			$response = $this->push_envelope(
+				'create',
+				array(
+					'status'     => 'processing',
+					'line_items' => array( $this->misc_line(), $second_line ),
+					'meta_data'  => $this->order_meta(),
+				)
+			);
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $capture_skus, 20 );
+		}
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertCount( 2, $forwarded_skus );
+		$this->assertNotSame( $forwarded_skus[0], $forwarded_skus[1] );
+		foreach ( $forwarded_skus as $sku ) {
+			$this->assertMatchesRegularExpression(
+				'/^wcpos-misc-item-no-sku-lookup-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
+				$sku
+			);
+		}
+	}
+
 	public function test_misc_line_sentinel_literal_sku_is_preserved_as_meta(): void {
 		$response = $this->push_envelope(
 			'create',

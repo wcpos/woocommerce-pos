@@ -1005,7 +1005,7 @@ class Write_Controller extends WP_REST_Controller {
 		return $payload;
 	}
 	/**
-	 * A sku value guaranteed to miss every catalog lookup. Stock wc/v3 requires a
+	 * Prefix for a collision-resistant payload-only sku. Stock wc/v3 requires a
 	 * product_id OR a sku on line-item create, so a misc line (product_id 0) must
 	 * carry one — but a real sku would resolve to a catalog product. The posted
 	 * line sku is lookup-only in wc/v3 (never persisted), so the sentinel leaves
@@ -1081,22 +1081,14 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * The sentinel sku for the forwarded line, verified against the catalog:
-	 * WooCommerce would happily let a merchant assign the literal sentinel to a
-	 * product, and a colliding lookup would bind the misc line to it — so probe
-	 * the lookup and suffix until it misses (the lookup is indexed).
+	 * A fresh sentinel sku for the forwarded line. A catalog miss probe cannot
+	 * make the later wc/v3 lookup atomic, so use a UUID suffix that makes an
+	 * independently assigned catalog collision negligibly likely.
 	 *
 	 * @return string
 	 */
 	private function misc_line_sentinel_sku(): string {
-		$sku    = self::MISC_LINE_SKU_SENTINEL;
-		$suffix = 0;
-		while ( function_exists( 'wc_get_product_id_by_sku' ) && (int) wc_get_product_id_by_sku( $sku ) > 0 ) {
-			++$suffix;
-			$sku = self::MISC_LINE_SKU_SENTINEL . '-' . $suffix;
-		}
-
-		return $sku;
+		return self::MISC_LINE_SKU_SENTINEL . '-' . wp_generate_uuid4();
 	}
 
 	private function validate_client_created_gmt( array $payload ) {
