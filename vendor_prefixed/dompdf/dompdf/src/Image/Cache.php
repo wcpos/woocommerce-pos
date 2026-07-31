@@ -112,9 +112,13 @@ class Cache
             if (!\is_readable($resolved_url) || !\filesize($resolved_url)) {
                 throw new ImageException("Image not readable or empty", \E_WARNING);
             }
-            list($width, $height, $type) = Helpers::dompdf_getimagesize($resolved_url, $options->getHttpContext());
+            list($width, $height, $type, , , , , $imageBytes) = Helpers::dompdf_getimagesize($resolved_url, $options->getHttpContext());
             if (($width && $height && \in_array($type, ["gif", "png", "jpeg", "bmp", "svg", "webp"], \true)) === \false) {
                 throw new ImageException("Image type unknown", \E_WARNING);
+            }
+            $maxImageBytes = $options->getImageByteSizeLimit();
+            if ($width <= 0 || $height <= 0 || $maxImageBytes > 0 && ($imageBytes === null || $imageBytes > $maxImageBytes)) {
+                throw new ImageException("Image dimensions or size exceed the configured limit", \E_WARNING);
             }
             if ($type === "svg") {
                 $parser = \xml_parser_create("utf-8");
@@ -134,7 +138,7 @@ class Cache
                             }
                             $inner_full_url = Helpers::build_url($parsed_url["protocol"], $parsed_url["host"], $parsed_url["path"], $url, $options->getChroot());
                             if (empty($inner_full_url)) {
-                                continue;
+                                throw new ImageException("This SVG document references a resource that could not be resolved.", \E_WARNING);
                             }
                             self::detectCircularRef($full_url, $inner_full_url);
                             self::$svgRefs[$full_url][] = $inner_full_url;

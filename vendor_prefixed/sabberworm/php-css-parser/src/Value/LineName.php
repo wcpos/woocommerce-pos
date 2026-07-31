@@ -7,10 +7,16 @@ use WCPOS\Vendor\Sabberworm\CSS\OutputFormat;
 use WCPOS\Vendor\Sabberworm\CSS\Parsing\ParserState;
 use WCPOS\Vendor\Sabberworm\CSS\Parsing\UnexpectedEOFException;
 use WCPOS\Vendor\Sabberworm\CSS\Parsing\UnexpectedTokenException;
+/**
+ * A name for a named CSS grid line.
+ *
+ * @see https://www.w3.org/TR/css-grid-1/#line-name
+ * @see https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Grid_layout/Named_grid_lines
+ */
 class LineName extends ValueList
 {
     /**
-     * @param array<Value|string> $components
+     * @param array<string> $components
      * @param int<1, max>|null $lineNumber
      */
     public function __construct(array $components = [], ?int $lineNumber = null)
@@ -51,14 +57,5 @@ class LineName extends ValueList
     public function render(OutputFormat $outputFormat) : string
     {
         return '[' . parent::render(OutputFormat::createCompact()) . ']';
-    }
-    /**
-     * @return array<string, bool|int|float|string|array<mixed>|null>
-     *
-     * @internal
-     */
-    public function getArrayRepresentation() : array
-    {
-        throw new \BadMethodCallException('`getArrayRepresentation` is not yet implemented for `' . self::class . '`');
     }
 }

@@ -40,6 +40,50 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The scoped Dompdf build calls the global PHP 8.4 HTTP response header
+	 * functions, never prefixed ones.
+	 *
+	 * php-scoper 0.16's bundled symbol list predates PHP 8.4, so without the
+	 * exclude-functions entry in php-scoper/scoper.inc.php it rewrites Dompdf's
+	 * http_(get|clear)_last_response_headers() calls into WCPOS\Vendor\ — where
+	 * no such functions exist — fataling on PHP 8.4+ sites.
+	 */
+	public function test_scoped_dompdf_calls_global_http_response_header_functions(): void {
+		// Arrange.
+		$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/src/Helpers.php';
+		$this->assertFileExists( $path );
+		$helpers = file_get_contents( $path );
+
+		// Assert: calls survived scoping as global (a backslash not preceded
+		// by a namespace segment) and no prefixed variants remain.
+		$this->assertGreaterThan( 0, preg_match_all( '/(?<!\w)\\\\http_get_last_response_headers\(\)/', $helpers ) );
+		$this->assertGreaterThan( 0, preg_match_all( '/(?<!\w)\\\\http_clear_last_response_headers\(\)/', $helpers ) );
+		$this->assertStringNotContainsString( 'Vendor\http_get_last_response_headers', $helpers );
+		$this->assertStringNotContainsString( 'Vendor\http_clear_last_response_headers', $helpers );
+	}
+
+	/**
+	 * The scoped Dompdf build checks the global IMAGETYPE_SVG constant, never
+	 * a prefixed one.
+	 *
+	 * Same failure mode as the http_* functions above, for constants:
+	 * IMAGETYPE_SVG is new in PHP 8.5, so without the exclude-constants entry
+	 * the scoper rewrites Dompdf's defined('IMAGETYPE_SVG') check into
+	 * WCPOS\Vendor\ where it is always false, silently disabling Dompdf's
+	 * native SVG image-size handling.
+	 */
+	public function test_scoped_dompdf_checks_global_imagetype_svg_constant(): void {
+		// Arrange.
+		$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/src/Helpers.php';
+		$this->assertFileExists( $path );
+		$helpers = file_get_contents( $path );
+
+		// Assert.
+		$this->assertStringContainsString( "defined('IMAGETYPE_SVG')", $helpers );
+		$this->assertStringNotContainsString( 'Vendor\\\\IMAGETYPE_SVG', $helpers );
+	}
+
+	/**
 	 * Render_html returns a non-trivial PDF document.
 	 */
 	public function test_render_html_returns_pdf_bytes(): void {
