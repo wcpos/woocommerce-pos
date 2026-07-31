@@ -742,6 +742,7 @@ class Write_Controller extends WP_REST_Controller {
 				&& is_array( $update_payload['billing'] )
 				&& array_key_exists( 'email', $update_payload['billing'] )
 				&& '' === $update_payload['billing']['email'];
+			$update_payload = $this->reconcile_order_coupon_lines( $id, $update_payload );
 			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
 		}
 		$route = 'variations' === $collection
@@ -1127,6 +1128,69 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 	}
+	/**
+	 * Reconcile a full-document order update's coupon_lines with the stored order —
+	 * the v2 port of V1\Orders_Controller::calculate_coupons (issue #1403 row 3).
+	 *
+	 * Stock wc/v3 treats coupon_lines as remove-and-reapply and throws
+	 * `woocommerce_rest_coupon_item_id_readonly` (400) on any line carrying an `id` —
+	 * but the POS always pushes the complete order document, whose coupon_lines carry
+	 * the ids from the previous ack, so every update of a couponed order would fail.
+	 * Mirror the v1 semantics at the forward seam: when the requested coupon code-set
+	 * equals the order's current coupons, drop coupon_lines from the forward entirely
+	 * (skip the recalculation, preserving stable coupon line ids — v1 returned false);
+	 * when the sets differ, strip the ids and let wc/v3 do its remove-and-reapply.
+	 *
+	 * @param int   $order_id Resolved order id.
+	 * @param array $payload  Update payload about to be forwarded.
+	 *
+	 * @return array The payload with coupon_lines reconciled.
+	 */
+	private function reconcile_order_coupon_lines( int $order_id, array $payload ): array {
+		if ( ! isset( $payload['coupon_lines'] ) || ! is_array( $payload['coupon_lines'] ) ) {
+			return $payload;
+		}
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return $payload;
+		}
+
+		$requested_codes = array();
+		$all_lines_valid = true;
+		foreach ( $payload['coupon_lines'] as $line ) {
+			$code = is_array( $line ) ? ( $line['code'] ?? null ) : null;
+			if ( ! is_string( $code ) || '' === trim( $code ) ) {
+				// A malformed line must reach wc/v3 so its canonical "Coupon code is
+				// required" validation fires — skipping here would silently ack it.
+				$all_lines_valid = false;
+				break;
+			}
+			$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
+		}
+		$existing_codes = array_map(
+			static function ( $coupon ) {
+				return wc_strtolower( $coupon->get_code() );
+			},
+			array_values( $order->get_coupons() )
+		);
+		sort( $requested_codes );
+		sort( $existing_codes );
+
+		if ( $all_lines_valid && $requested_codes === $existing_codes ) {
+			unset( $payload['coupon_lines'] );
+			return $payload;
+		}
+
+		foreach ( $payload['coupon_lines'] as $i => $line ) {
+			if ( is_array( $line ) ) {
+				unset( $payload['coupon_lines'][ $i ]['id'] );
+			}
+		}
+		$payload['coupon_lines'] = array_values( $payload['coupon_lines'] );
+
+		return $payload;
+	}
+
 	private function forward( string $method, string $route, $payload ) {
 		$request = new WP_REST_Request( $method, $route );
 		if ( is_array( $payload ) ) {
