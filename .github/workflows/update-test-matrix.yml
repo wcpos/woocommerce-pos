@@ -29,6 +29,7 @@ jobs:
           echo "wp_min=$(jq -r '.wordpress.minimum' .github/test-matrix.json)" >> $GITHUB_OUTPUT
           echo "wc_min=$(jq -r '.woocommerce.minimum' .github/test-matrix.json)" >> $GITHUB_OUTPUT
           echo "php_experimental=$(jq -r '.php.experimental' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "php_current=$(jq -r '.php.current // .php.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
 
       - name: Get latest stable WordPress
         id: wp
@@ -177,6 +178,7 @@ jobs:
           LATEST_PHP_EXPERIMENTAL="${{ steps.php.outputs.experimental }}"
           CURRENT_WP="${{ steps.current.outputs.wp }}"
           CURRENT_WC="${{ steps.current.outputs.wc }}"
+          CURRENT_PHP_EXPERIMENTAL="${{ steps.current.outputs.php_experimental }}"
           CHANGES="${{ steps.updates.outputs.changes }}"
 
           version_lt() {
@@ -219,8 +221,11 @@ jobs:
           fi
 
           if echo "$CHANGES" | grep -q "php-experimental"; then
-            jq --arg experimental "$LATEST_PHP_EXPERIMENTAL" \
-              '.php.experimental = $experimental' \
+            # Rotate PHP: the outgoing experimental minor becomes "current"
+            # (most widely deployed GA), the new latest becomes experimental —
+            # same rotation idiom as the WP/WC major bumps above.
+            jq --arg experimental "$LATEST_PHP_EXPERIMENTAL" --arg current "$CURRENT_PHP_EXPERIMENTAL" \
+              '.php.experimental = $experimental | .php.current = $current' \
               .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
           fi
 
@@ -270,7 +275,10 @@ jobs:
             |---|---|---|
             | WordPress | ${{ steps.current.outputs.wp }} | ${{ steps.wp.outputs.stable }} |
             | WooCommerce | ${{ steps.current.outputs.wc }} | ${{ steps.wc.outputs.stable }} |
+            | PHP current | ${{ steps.current.outputs.php_current }} | see rotation note |
             | PHP experimental | ${{ steps.current.outputs.php_experimental }} | ${{ steps.php.outputs.experimental }} |
+
+            When the experimental PHP minor rotates, the outgoing experimental version becomes the new "current" (most widely deployed GA minor).
 
             ### Active Pre-releases (tested automatically as experimental)
             - WordPress RC: ${{ steps.rc.outputs.wp_rc }}
