@@ -163,6 +163,9 @@ class Activator {
 		( new Mutation_Store() )->install();
 
 		if ( ! Sync_Health::is_healthy() ) {
+			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
+				delete_option( Sync_Api::SCHEMA_OPTION );
+			}
 			return;
 		}
 

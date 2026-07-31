@@ -19,6 +19,11 @@ use WCPOS\WooCommercePOS\Sync\Health;
  */
 class Test_Sync_Install extends Sync_Store_Test_Case {
 	/**
+	 * User fixture committed by real DDL.
+	 */
+	private int $committed_user_id = 0;
+
+	/**
 	 * These tests exercise INSTALL mechanics: they need REAL DDL (see setUp),
 	 * and real DDL implicitly commits the wp-phpunit transaction — so cleanup
 	 * must run AFTER parent::tearDown()'s rollback, or the rollback resurrects
@@ -39,6 +44,9 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
+		if ( 0 !== $this->committed_user_id ) {
+			wp_delete_user( $this->committed_user_id );
+		}
 		// Post-rollback hygiene: restore a sane committed world for later classes.
 		( new \WCPOS\WooCommercePOS\Activator() )->install_sync_schema();
 		delete_option( Api::SCHEMA_OPTION );
@@ -59,9 +67,11 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * A missing table is not healthy and a later install repairs and re-latches it.
+	 * A failed repair clears the current latch so a later install retries.
 	 */
-	public function test_missing_table_does_not_latch_and_next_install_repairs_schema(): void {
+	public function test_failed_repair_clears_current_latch_and_next_install_repairs_schema(): void {
+		update_option( Api::SCHEMA_OPTION, Api::SCHEMA_VERSION, false );
+
 		$activator = new Activator();
 		$skip_mutation_table = static function ( array $queries ): array {
 			return array_filter(
@@ -93,6 +103,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$this->install_sync_tables_directly();
 		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->committed_user_id = $user_id;
 		$change_log = new Change_Log();
 		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
 		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
