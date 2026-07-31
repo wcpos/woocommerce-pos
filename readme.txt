@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.13
+Stable tag: 1.9.14
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,12 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.14 - 2026/07/31 =
+- **Receipt timestamps now respect your WordPress time format** -- receipts could force 12-hour AM/PM times even when your site is set to a 24-hour clock. The receipt date formatter now follows the time format configured under Settings > General, while the store locale continues to control the date language.
+- **Hardened cloud-print job handling** -- bulk-cancelling print jobs now verifies it is acting on actual print jobs (a POS-level user could previously trigger status changes on unrelated posts), and cancelling is refused for jobs that are not waiting (so a failed job keeps its payload and stays retryable). Also adds regression coverage proving receipt text cannot inject printer control bytes into thermal output -- a protection already shipped in earlier releases.
+- **PHP 8.4+ build hardening** -- the plugin's bundled PDF engine now calls PHP 8.4's new functions directly instead of relying on runtime compatibility shims. Installs that loaded the shims were already protected, but a bootstrap that missed them (eg: a partial plugin update) could still hit a fatal error when rendering PDF receipts -- that failure class is now gone entirely. The same issue broke PDF receipts on WCPOS Pro on PHP 8.4+, fixed separately in Pro 1.9.14.
+- **Updated translations.**
 
 = 1.9.13 - 2026/07/26 =
 - **Fixed garbled prints on Star CloudPRNT printers** -- after 1.9.12, receipts sent to Star CloudPRNT printers (the TSP100 line) could print the plain text lines followed by a metre of garbage characters, because cashier-initiated prints were still rendered as ESC/POS, which no Star CloudPRNT printer can decode. WCPOS now serves these printers native StarPRNT for cashier prints too, and automatically corrects the stored printer language on existing installs on the next settings sync -- no reconfiguration needed. Other cloud printers are unaffected.
