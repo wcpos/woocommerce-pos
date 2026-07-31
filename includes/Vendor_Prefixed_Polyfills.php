@@ -2,6 +2,12 @@
 /**
  * Polyfills for functions accidentally prefixed in vendored dependencies.
  *
+ * The authoritative fix lives in php-scoper/scoper.inc.php (exclude-functions),
+ * which stops the scoper from prefixing these calls in the first place. This
+ * shim only protects sites still running a vendor_prefixed build produced
+ * before that fix; do not add new symbols here — exclude them in the scoper
+ * config instead.
+ *
  * @package WCPOS\Vendor
  */
 

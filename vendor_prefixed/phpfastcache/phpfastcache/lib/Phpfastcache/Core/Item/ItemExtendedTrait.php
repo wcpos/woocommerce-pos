@@ -297,7 +297,7 @@ trait ItemExtendedTrait
      * Implements \JsonSerializable interface
      * @return mixed
      */
-    #[\ReturnTypeWillChange] // PHP 8.1 compatibility
+    #[\ReturnTypeWillChange]
     public function jsonSerialize()
     {
         return $this->get();
