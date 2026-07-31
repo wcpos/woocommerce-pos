@@ -138,6 +138,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		);
 
 		$this->assertSame( 1, $compensating_updates );
+		$this->assertTrue( Health::is_healthy() );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
 	}
 
@@ -151,6 +152,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$this->install_sync_tables_directly();
 		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->committed_user_id = $user_id;
 		$change_log = new Change_Log();
 		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
 		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
