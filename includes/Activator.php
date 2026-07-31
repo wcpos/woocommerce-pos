@@ -155,7 +155,6 @@ class Activator {
 	 */
 	public function install_sync_schema(): void {
 		$previous_schema = get_option( Sync_Api::SCHEMA_OPTION, null );
-		delete_option( Sync_Api::SCHEMA_OPTION );
 
 		$change_log = new Change_Log();
 		$change_log->install();
@@ -164,21 +163,23 @@ class Activator {
 		( new Mutation_Store() )->install();
 
 		if ( ! Sync_Health::is_healthy() ) {
+			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
+				delete_option( Sync_Api::SCHEMA_OPTION );
+			}
 			return;
 		}
 
 		// Schema 3 (#1379): the customer space widened from role=customer to ALL users.
 		// Upgrading installs carry role-departure tombstones in the persisted stream that
 		// would replay against now-live users; compensating updates supersede them (see
-		// Change_Log::append_customer_updates_for_all_users). A failed append restores the
-		// previous latch so the unlatched-schema path retries the migration instead of
-		// silently skipping it. Fresh installs (no previous latch) have no stream to repair.
+		// Change_Log::append_customer_updates_for_all_users). The old latch stays until
+		// migration succeeds, so retries may append duplicate but harmless superseding
+		// updates. Fresh installs (no previous latch) have no stream to repair.
 		if (
 			null !== $previous_schema
 			&& version_compare( (string) $previous_schema, '3', '<' )
 			&& ! $change_log->append_customer_updates_for_all_users()
 		) {
-			update_option( Sync_Api::SCHEMA_OPTION, $previous_schema, false );
 			return;
 		}
 

@@ -19,6 +19,11 @@ use WCPOS\WooCommercePOS\Sync\Health;
  */
 class Test_Sync_Install extends Sync_Store_Test_Case {
 	/**
+	 * User fixture committed by real DDL.
+	 */
+	private int $committed_user_id = 0;
+
+	/**
 	 * These tests exercise INSTALL mechanics: they need REAL DDL (see setUp),
 	 * and real DDL implicitly commits the wp-phpunit transaction — so cleanup
 	 * must run AFTER parent::tearDown()'s rollback, or the rollback resurrects
@@ -39,6 +44,9 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
+		if ( 0 !== $this->committed_user_id ) {
+			wp_delete_user( $this->committed_user_id );
+		}
 		// Post-rollback hygiene: restore a sane committed world for later classes.
 		( new \WCPOS\WooCommercePOS\Activator() )->install_sync_schema();
 		delete_option( Api::SCHEMA_OPTION );
@@ -59,9 +67,11 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * A missing table is not healthy and a later install repairs and re-latches it.
+	 * A failed repair clears the current latch so a later install retries.
 	 */
-	public function test_missing_table_does_not_latch_and_next_install_repairs_schema(): void {
+	public function test_failed_repair_clears_current_latch_and_next_install_repairs_schema(): void {
+		update_option( Api::SCHEMA_OPTION, Api::SCHEMA_VERSION, false );
+
 		$activator = new Activator();
 		$skip_mutation_table = static function ( array $queries ): array {
 			return array_filter(
@@ -85,6 +95,54 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A failed health check preserves the old latch so the retry still compensates
+	 * legacy customer tombstones before latching the new schema.
+	 */
+	public function test_unhealthy_schema_upgrade_preserves_compensation_for_retry(): void {
+		global $wpdb;
+
+		$this->install_sync_tables_directly();
+		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->committed_user_id = $user_id;
+		$change_log = new Change_Log();
+		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
+		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		update_option( Api::SCHEMA_OPTION, '2', false );
+
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . Health::MUTATIONS_TABLE ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$skip_mutation_table = static function ( array $queries ): array {
+			return array_filter(
+				$queries,
+				static function ( string $query ): bool {
+					return false === strpos( $query, Health::MUTATIONS_TABLE );
+				}
+			);
+		};
+		add_filter( 'dbdelta_create_queries', $skip_mutation_table );
+
+		$activator = new Activator();
+		$activator->install_sync_schema();
+		remove_filter( 'dbdelta_create_queries', $skip_mutation_table );
+
+		$this->assertFalse( Health::is_healthy() );
+		$this->assertSame( '2', get_option( Api::SCHEMA_OPTION, null ) );
+
+		$activator->install_sync_schema();
+
+		$compensating_updates = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM ' . $change_log->table_name() . " WHERE sequence > %d AND object_type = 'customer' AND object_id = %d AND change_type = 'update' AND origin = 'schema-upgrade'", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared values.
+				$old_head,
+				$user_id
+			)
+		);
+
+		$this->assertSame( 1, $compensating_updates );
+		$this->assertTrue( Health::is_healthy() );
+		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+	}
+
+	/**
 	 * Upgrading from a pre-3 sync schema appends a compensating customer 'update' for
 	 * every live user (past the old stream head), superseding role-departure tombstones
 	 * from the customer-role-only era — and a fresh latch at 3 appends nothing more.
@@ -94,6 +152,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$this->install_sync_tables_directly();
 		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$this->committed_user_id = $user_id;
 		$change_log = new Change_Log();
 		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
 		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
