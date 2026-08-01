@@ -135,6 +135,104 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An assignment requesting two copies creates two jobs.
+	 */
+	public function test_assignment_with_two_copies_creates_two_jobs(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 2,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * Firing the trigger twice does not exceed the requested copy count.
+	 */
+	public function test_trigger_fired_twice_with_two_copies_leaves_two_jobs(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 2,
+				),
+			)
+		);
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+
+		// Act.
+		$service->handle_order( $order->get_id() );
+		$service->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * Copy counts above the maximum are clamped to five jobs.
+	 */
+	public function test_assignment_with_excessive_copies_clamps_to_five_jobs(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 99,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 5, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
 	 * It skips online orders for POS-scoped assignments.
 	 */
 	public function test_online_order_with_pos_scope_creates_no_job(): void {

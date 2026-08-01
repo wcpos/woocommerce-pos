@@ -84,7 +84,16 @@ class Cloud_Print_Trigger_Service {
 			if ( ! $this->scope_matches( $scope, $is_pos ) ) {
 				continue;
 			}
-			if ( $this->already_queued( $order->get_id(), (string) $assignment['printer_id'], (string) $assignment['template_id'] ) ) {
+			$copies   = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+			$existing = $this->jobs->count(
+				array(
+					'printer_id'  => (string) $assignment['printer_id'],
+					'order_id'    => $order->get_id(),
+					'template_id' => (string) $assignment['template_id'],
+				)
+			);
+			$shortfall = max( 0, $copies - $existing );
+			if ( 0 === $shortfall ) {
 				continue;
 			}
 
@@ -100,23 +109,26 @@ class Cloud_Print_Trigger_Service {
 				continue;
 			}
 
-			$job_id = self::enqueue_order_job(
-				$this->jobs,
-				(string) $assignment['printer_id'],
-				$printer,
-				$order->get_id(),
-				$template_id,
-				$template
-			);
-			if ( 0 === $job_id ) {
-				Logger::log(
-					sprintf(
-						'Cloud print: skipping assignment for printer "%s" — template "%s" is not printable on provider "%s".',
-						(string) $assignment['printer_id'],
-						$template_id,
-						$provider
-					)
+			for ( $copy = 0; $copy < $shortfall; $copy++ ) {
+				$job_id = self::enqueue_order_job(
+					$this->jobs,
+					(string) $assignment['printer_id'],
+					$printer,
+					$order->get_id(),
+					$template_id,
+					$template
 				);
+				if ( 0 === $job_id ) {
+					Logger::log(
+						sprintf(
+							'Cloud print: skipping assignment for printer "%s" — template "%s" is not printable on provider "%s".',
+							(string) $assignment['printer_id'],
+							$template_id,
+							$provider
+						)
+					);
+					break;
+				}
 			}
 		}
 	}
@@ -236,25 +248,5 @@ class Cloud_Print_Trigger_Service {
 		}
 
 		return false;
-	}
-
-	/**
-	 * Guard against duplicate jobs for the same order+printer+template.
-	 *
-	 * @param int    $order_id    Order ID.
-	 * @param string $printer_id  Printer ID.
-	 * @param string $template_id Template ID.
-	 */
-	private function already_queued( int $order_id, string $printer_id, string $template_id ): bool {
-		$existing = $this->jobs->query(
-			array(
-				'printer_id'  => $printer_id,
-				'order_id'    => $order_id,
-				'template_id' => $template_id,
-				'limit'       => 1,
-			)
-		);
-
-		return ! empty( $existing );
 	}
 }

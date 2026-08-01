@@ -308,6 +308,10 @@
 	"cloud_print.rule_printer_label": "Printer",
 	"cloud_print.rule_using": "using the",
 	"cloud_print.rule_template_label": "Receipt template",
-	"cloud_print.rule_template_suffix": "template.",
+	"cloud_print.rule_template_suffix": "template,",
+	"cloud_print.rule_copies_one": "{count} copy",
+	"cloud_print.rule_copies_other": "{count} copies",
+	"cloud_print.rule_copies_label": "Number of copies",
+	"cloud_print.rule_copies_suffix": ".",
 	"cloud_print.add_rule": "+ Add rule"
 }

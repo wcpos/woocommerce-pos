@@ -99,6 +99,10 @@ export function AutoPrintRules({
 	onChange,
 }: AutoPrintRulesProps) {
 	const printerOptions = printers.map((p) => ({ value: p.id, label: p.name }));
+	const copiesOptions = Array.from({ length: 5 }, (_, index) => {
+		const count = index + 1;
+		return { value: count, label: t('cloud_print.rule_copies', { count }) };
+	});
 
 	// The provider for a printer id (falls back to PrintNode-style "all
 	// templates" when the printer can't be found, e.g. a stale assignment).
@@ -124,6 +128,7 @@ export function AutoPrintRules({
 				store_id: 0,
 				scope: 'every',
 				template_id: firstOptions[0]?.value ?? '',
+				copies: 1,
 			},
 		]);
 	};
@@ -200,7 +205,18 @@ export function AutoPrintRules({
 									options={optionsForPrinter(a.printer_id)}
 									onChange={({ value }) => update(i, { template_id: String(value) })}
 								/>
-								<span>{t('cloud_print.rule_template_suffix', 'template.')}</span>
+								<span>{t('cloud_print.rule_template_suffix', 'template,')}</span>
+								<Select
+									inline
+									data-testid={`rule-copies-${i}`}
+									aria-label={t('cloud_print.rule_copies_label', 'Number of copies')}
+									className="wcpos:max-w-full"
+									style={sentenceSelectWidth(copiesOptions, a.copies ?? 1)}
+									value={a.copies ?? 1}
+									options={copiesOptions}
+									onChange={({ value }) => update(i, { copies: Number(value) })}
+								/>
+								<span>{t('cloud_print.rule_copies_suffix', '.')}</span>
 								<Button
 									variant="ghost-destructive"
 									data-testid={`rule-remove-${i}`}

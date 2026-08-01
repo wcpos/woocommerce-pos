@@ -47,7 +47,7 @@ function renderRules(overrides: Partial<AutoPrintRulesTestProps> = {}) {
 }
 
 describe('AutoPrintRules', () => {
-	it('renders each assignment as a sentence with three selects', () => {
+	it('renders each assignment as a sentence with four selects', () => {
 		renderRules();
 
 		expect(screen.getByTestId('rule-0')).toBeInTheDocument();
@@ -57,13 +57,37 @@ describe('AutoPrintRules', () => {
 		expect(screen.getAllByText(/Automatically print/i).length).toBeGreaterThan(0);
 		expect(screen.getAllByText(/^to$/i).length).toBeGreaterThan(0);
 		expect(screen.getAllByText(/using the/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/template\./i).length).toBeGreaterThan(0);
+		expect(screen.getAllByText(/template,/i).length).toBeGreaterThan(0);
 
-		// Three selects per row.
+		// Four selects per row.
 		const row0 = screen.getByTestId('rule-0');
 		expect(within(row0).getByTestId('rule-scope-0')).toBeInTheDocument();
 		expect(within(row0).getByTestId('rule-printer-0')).toBeInTheDocument();
 		expect(within(row0).getByTestId('rule-template-0')).toBeInTheDocument();
+		expect(within(row0).getByTestId('rule-copies-0')).toBeInTheDocument();
+	});
+
+	it('renders the copies select with a default value of one', () => {
+		renderRules();
+
+		expect(screen.getByTestId('rule-copies-0')).toHaveValue('1');
+	});
+
+	it('changing copies calls onChange with copies updated on the right rule', () => {
+		const { onChange } = renderRules();
+
+		fireEvent.change(screen.getByTestId('rule-copies-1'), { target: { value: '2' } });
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		const next = onChange.mock.calls[0][0] as CloudAssignment[];
+		expect(next[0]).not.toHaveProperty('copies');
+		expect(next[1]).toEqual({
+			printer_id: 'front',
+			store_id: 0,
+			scope: 'online',
+			template_id: '22',
+			copies: 2,
+		});
 	});
 
 	it('sizes each rule select from its currently selected label', () => {
@@ -138,6 +162,7 @@ describe('AutoPrintRules', () => {
 			store_id: 0,
 			scope: 'every',
 			template_id: templateOptions[0].value,
+			copies: 1,
 		});
 	});
 
