@@ -205,7 +205,8 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	 */
 	public function test_overlapping_triggers_do_not_exceed_requested_copy_count(): void {
 		// Arrange.
-		$tid = $this->create_thermal_template();
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
 		$this->set_cloud_print(
 			array(
 				array(
@@ -223,7 +224,6 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			)
 		);
-		$order     = OrderHelper::create_order();
 		$service   = new Cloud_Print_Trigger_Service();
 		$reentered = false;
 		$callback  = function () use ( $service, $order, &$reentered ): void {
@@ -254,6 +254,86 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				)
 			)
 		);
+	}
+
+	/**
+	 * A callback exception does not leave the assignment locked.
+	 */
+	public function test_assignment_lock_is_released_when_job_created_callback_throws(): void {
+		// Arrange.
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+				),
+			)
+		);
+		$service  = new Cloud_Print_Trigger_Service();
+		$lock     = 'wcpos_cloud_print_assignment_lock_' . md5( $order->get_id() . "\0kitchen\0" . $tid );
+		$callback = static function (): void {
+			throw new \RuntimeException( 'Job-created callback failed.' );
+		};
+		$exception = null;
+		add_action( 'woocommerce_pos_print_job_created', $callback );
+
+		// Act.
+		try {
+			$service->handle_order( $order->get_id() );
+		} catch ( \RuntimeException $caught ) {
+			$exception = $caught;
+		} finally {
+			remove_action( 'woocommerce_pos_print_job_created', $callback );
+		}
+		$locked_at = get_option( $lock, false );
+		delete_option( $lock );
+
+		// Assert.
+		$this->assertInstanceOf( \RuntimeException::class, $exception );
+		$this->assertFalse( $locked_at );
+	}
+
+	/**
+	 * Reclaiming a stale lock does not delete a replacement lock.
+	 */
+	public function test_stale_lock_reclaim_preserves_replacement_lock(): void {
+		// Arrange.
+		$lock      = 'wcpos_cloud_print_assignment_lock_replacement_test';
+		$fresh     = (string) ( time() + 60 );
+		$stale     = (string) ( time() - Cloud_Print_Trigger_Service::ASSIGNMENT_LOCK_TTL - 1 );
+		$filter    = static function () use ( $stale ): string {
+			return $stale;
+		};
+		$method    = new \ReflectionMethod( Cloud_Print_Trigger_Service::class, 'acquire_assignment_lock' );
+		$service   = new Cloud_Print_Trigger_Service();
+		$acquired  = null;
+		delete_option( $lock );
+		$this->assertTrue( add_option( $lock, $fresh, '', false ) );
+		add_filter( 'pre_option_' . $lock, $filter );
+
+		// Act.
+		try {
+			$method->setAccessible( true );
+			$acquired = $method->invoke( $service, $lock );
+		} finally {
+			remove_filter( 'pre_option_' . $lock, $filter );
+		}
+		$stored = get_option( $lock );
+		delete_option( $lock );
+
+		// Assert.
+		$this->assertFalse( $acquired );
+		$this->assertSame( $fresh, $stored );
 	}
 
 	/**

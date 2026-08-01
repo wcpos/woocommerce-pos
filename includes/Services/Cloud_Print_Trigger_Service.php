@@ -96,55 +96,55 @@ class Cloud_Print_Trigger_Service {
 			if ( ! $this->acquire_assignment_lock( $lock ) ) {
 				continue;
 			}
-			$copies   = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
-			$existing = $this->jobs->count(
-				array(
-					'printer_id'  => $printer_id,
-					'order_id'    => $order_id,
-					'template_id' => $template_id,
-				)
-			);
-			$shortfall = max( 0, $copies - $existing );
-			if ( 0 === $shortfall ) {
-				delete_option( $lock );
-				continue;
-			}
-
-			$printer = $this->registry->get_printer( $printer_id );
-			if ( empty( $printer ) ) {
-				delete_option( $lock );
-				continue;
-			}
-			$provider = (string) ( $printer['provider'] ?? '' );
-
-			$template = Print_Job_Service::load_template( $template_id );
-			if ( null === $template ) {
-				delete_option( $lock );
-				continue;
-			}
-
-			for ( $copy = 0; $copy < $shortfall; $copy++ ) {
-				$job_id = self::enqueue_order_job(
-					$this->jobs,
-					$printer_id,
-					$printer,
-					$order_id,
-					$template_id,
-					$template
+			try {
+				$copies   = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+				$existing = $this->jobs->count(
+					array(
+						'printer_id'  => $printer_id,
+						'order_id'    => $order_id,
+						'template_id' => $template_id,
+					)
 				);
-				if ( 0 === $job_id ) {
-					Logger::log(
-						sprintf(
-							'Cloud print: skipping assignment for printer "%s" — template "%s" is not printable on provider "%s".',
-							$printer_id,
-							$template_id,
-							$provider
-						)
-					);
-					break;
+				$shortfall = max( 0, $copies - $existing );
+				if ( 0 === $shortfall ) {
+					continue;
 				}
+
+				$printer = $this->registry->get_printer( $printer_id );
+				if ( empty( $printer ) ) {
+					continue;
+				}
+				$provider = (string) ( $printer['provider'] ?? '' );
+
+				$template = Print_Job_Service::load_template( $template_id );
+				if ( null === $template ) {
+					continue;
+				}
+
+				for ( $copy = 0; $copy < $shortfall; $copy++ ) {
+					$job_id = self::enqueue_order_job(
+						$this->jobs,
+						$printer_id,
+						$printer,
+						$order_id,
+						$template_id,
+						$template
+					);
+					if ( 0 === $job_id ) {
+						Logger::log(
+							sprintf(
+								'Cloud print: skipping assignment for printer "%s" — template "%s" is not printable on provider "%s".',
+								$printer_id,
+								$template_id,
+								$provider
+							)
+						);
+						break;
+					}
+				}
+			} finally {
+				delete_option( $lock );
 			}
-			delete_option( $lock );
 		}
 	}
 
@@ -160,9 +160,22 @@ class Cloud_Print_Trigger_Service {
 			return true;
 		}
 
-		$locked_at = (int) get_option( $option, 0 );
-		if ( $locked_at > 0 && ( $now - $locked_at ) > self::ASSIGNMENT_LOCK_TTL ) {
-			delete_option( $option );
+		$locked_at = get_option( $option, 0 );
+		if ( (int) $locked_at > 0 && ( $now - (int) $locked_at ) > self::ASSIGNMENT_LOCK_TTL ) {
+			global $wpdb;
+			// The value predicate prevents deleting a lock replaced after get_option().
+			$deleted = $wpdb->delete(
+				$wpdb->options,
+				array(
+					'option_name'  => $option,
+					'option_value' => (string) $locked_at,
+				),
+				array( '%s', '%s' )
+			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic option delete; cache cleared below.
+			if ( 1 !== $deleted ) {
+				return false;
+			}
+			wp_cache_delete( $option, 'options' );
 
 			return add_option( $option, (string) $now, '', false );
 		}
