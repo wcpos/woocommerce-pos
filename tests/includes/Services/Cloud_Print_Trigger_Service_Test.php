@@ -201,6 +201,62 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Overlapping triggers do not exceed the requested copy count.
+	 */
+	public function test_overlapping_triggers_do_not_exceed_requested_copy_count(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 2,
+				),
+			)
+		);
+		$order     = OrderHelper::create_order();
+		$service   = new Cloud_Print_Trigger_Service();
+		$reentered = false;
+		$callback  = function () use ( $service, $order, &$reentered ): void {
+			if ( $reentered ) {
+				return;
+			}
+			$reentered = true;
+			$service->handle_order( $order->get_id() );
+		};
+		add_action( 'woocommerce_pos_print_job_created', $callback );
+
+		// Act.
+		try {
+			$service->handle_order( $order->get_id() );
+		} finally {
+			remove_action( 'woocommerce_pos_print_job_created', $callback );
+		}
+
+		// Assert.
+		$this->assertTrue( $reentered );
+		$this->assertEquals(
+			2,
+			$this->jobs->count(
+				array(
+					'printer_id'  => 'kitchen',
+					'order_id'    => $order->get_id(),
+					'template_id' => (string) $tid,
+				)
+			)
+		);
+	}
+
+	/**
 	 * Copy counts above the maximum are clamped to five jobs.
 	 */
 	public function test_assignment_with_excessive_copies_clamps_to_five_jobs(): void {

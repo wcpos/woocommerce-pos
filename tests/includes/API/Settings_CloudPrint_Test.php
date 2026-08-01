@@ -925,6 +925,26 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A malformed top-level assignments value reads as an empty list.
+	 */
+	public function test_non_array_assignments_read_as_empty_list(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(),
+				'assignments' => null,
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( array(), $data['assignments'] );
+	}
+
+	/**
 	 * Assignment copies above the maximum clamp to five.
 	 */
 	public function test_cloud_assignment_with_excessive_copies_clamps_to_five(): void {

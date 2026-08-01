@@ -21,6 +21,11 @@ class Cloud_Print_Trigger_Service {
 	const CRON_SUBMIT = 'wcpos_cloud_print_submit';
 
 	/**
+	 * Seconds before an abandoned assignment lock may be reclaimed.
+	 */
+	const ASSIGNMENT_LOCK_TTL = 120;
+
+	/**
 	 * Job store.
 	 *
 	 * @var Print_Job_Service
@@ -84,37 +89,46 @@ class Cloud_Print_Trigger_Service {
 			if ( ! $this->scope_matches( $scope, $is_pos ) ) {
 				continue;
 			}
+			$printer_id  = (string) $assignment['printer_id'];
+			$template_id = (string) $assignment['template_id'];
+			$order_id    = $order->get_id();
+			$lock        = 'wcpos_cloud_print_assignment_lock_' . md5( $order_id . "\0" . $printer_id . "\0" . $template_id );
+			if ( ! $this->acquire_assignment_lock( $lock ) ) {
+				continue;
+			}
 			$copies   = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
 			$existing = $this->jobs->count(
 				array(
-					'printer_id'  => (string) $assignment['printer_id'],
-					'order_id'    => $order->get_id(),
-					'template_id' => (string) $assignment['template_id'],
+					'printer_id'  => $printer_id,
+					'order_id'    => $order_id,
+					'template_id' => $template_id,
 				)
 			);
 			$shortfall = max( 0, $copies - $existing );
 			if ( 0 === $shortfall ) {
+				delete_option( $lock );
 				continue;
 			}
 
-			$printer = $this->registry->get_printer( (string) $assignment['printer_id'] );
+			$printer = $this->registry->get_printer( $printer_id );
 			if ( empty( $printer ) ) {
+				delete_option( $lock );
 				continue;
 			}
 			$provider = (string) ( $printer['provider'] ?? '' );
 
-			$template_id = (string) $assignment['template_id'];
-			$template    = Print_Job_Service::load_template( $template_id );
+			$template = Print_Job_Service::load_template( $template_id );
 			if ( null === $template ) {
+				delete_option( $lock );
 				continue;
 			}
 
 			for ( $copy = 0; $copy < $shortfall; $copy++ ) {
 				$job_id = self::enqueue_order_job(
 					$this->jobs,
-					(string) $assignment['printer_id'],
+					$printer_id,
 					$printer,
-					$order->get_id(),
+					$order_id,
 					$template_id,
 					$template
 				);
@@ -122,7 +136,7 @@ class Cloud_Print_Trigger_Service {
 					Logger::log(
 						sprintf(
 							'Cloud print: skipping assignment for printer "%s" — template "%s" is not printable on provider "%s".',
-							(string) $assignment['printer_id'],
+							$printer_id,
 							$template_id,
 							$provider
 						)
@@ -130,7 +144,30 @@ class Cloud_Print_Trigger_Service {
 					break;
 				}
 			}
+			delete_option( $lock );
 		}
+	}
+
+	/**
+	 * Acquire the lock covering copy counting and job creation.
+	 *
+	 * @param string $option Lock option name.
+	 */
+	private function acquire_assignment_lock( string $option ): bool {
+		$now = time();
+
+		if ( add_option( $option, (string) $now, '', false ) ) {
+			return true;
+		}
+
+		$locked_at = (int) get_option( $option, 0 );
+		if ( $locked_at > 0 && ( $now - $locked_at ) > self::ASSIGNMENT_LOCK_TTL ) {
+			delete_option( $option );
+
+			return add_option( $option, (string) $now, '', false );
+		}
+
+		return false;
 	}
 
 	/**

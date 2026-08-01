@@ -84,6 +84,7 @@ class Cloud_Print_Section extends Abstract_Section {
 		);
 		// Assignments saved before the copies field existed have no `copies`
 		// key stored; normalize on read so the REST view always carries it.
+		$assignments             = \is_array( $settings['assignments'] ) ? $settings['assignments'] : array();
 		$settings['assignments'] = array_map(
 			function ( $assignment ) {
 				if ( ! \is_array( $assignment ) ) {
@@ -93,7 +94,7 @@ class Cloud_Print_Section extends Abstract_Section {
 
 				return $assignment;
 			},
-			$settings['assignments']
+			$assignments
 		);
 		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
 
