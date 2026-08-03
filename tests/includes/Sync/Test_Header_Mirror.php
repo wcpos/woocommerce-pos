@@ -33,6 +33,15 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		return $request;
 	}
 
+	/**
+	 * @param array<string, string> $sent_headers
+	 *
+	 * @return array<int, string>
+	 */
+	private function exposed_headers( array $sent_headers ): array {
+		return array_map( 'trim', explode( ',', $sent_headers['Access-Control-Expose-Headers'] ) );
+	}
+
 	public function test_allow_cors_headers_appends_the_mirror_headers_without_duplicates(): void {
 		$this->assertSame(
 			array( 'Authorization', 'Idempotency-Key', 'If-Match' ),
@@ -72,6 +81,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertContains( 'Date', $this->exposed_headers( $server->sent_headers ) );
 	}
 
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
@@ -94,6 +104,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertContains( 'Date', $this->exposed_headers( $server->sent_headers ) );
 	}
 
 	public function test_init_does_not_expose_telemetry_headers_on_non_preflight_requests(): void {
