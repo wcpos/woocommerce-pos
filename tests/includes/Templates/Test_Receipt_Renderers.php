@@ -414,4 +414,86 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$this->assertStringContainsString( 'Closed on public holidays', $output );
 		$this->assertStringNotContainsString( '{{store.opening_hours_notes}}', $output );
 	}
+
+	/**
+	 * The thermal engine must never resolve to the PHP-executing legacy renderer.
+	 *
+	 * Thermal template content is stored raw (kses-exempt via
+	 * OFFLINE_CAPABLE_ENGINES), so routing it through Legacy_Php_Renderer would
+	 * execute attacker-supplied PHP. See the security regression below.
+	 */
+	public function test_factory_does_not_select_php_renderer_for_thermal(): void {
+		$renderer = ( new Receipt_Renderer_Factory() )->create( 'thermal' );
+
+		$this->assertNotInstanceOf( Legacy_Php_Renderer::class, $renderer );
+	}
+
+	/**
+	 * Regression: a thermal template carrying an embedded PHP tag must not execute.
+	 *
+	 * A Shop Manager can store raw (kses-exempt) content on a thermal template.
+	 * Rendering it must go through the thermal pipeline, which drops the PHP
+	 * processing instruction, never through include-based PHP execution.
+	 */
+	public function test_thermal_renderer_does_not_execute_embedded_php(): void {
+		// Arrange: a valid thermal receipt with an embedded PHP tag whose output
+		// ("RCEPROOF") is assembled at runtime, so the literal never appears in
+		// the source and can only surface if PHP actually executes.
+		$order    = OrderHelper::create_order();
+		$template = array(
+			'engine'      => 'thermal',
+			'paper_width' => '80mm',
+			'content'     => '<receipt paper-width="48"><text>Receipt</text><?php print( "RCE" . "PROOF" ); ?></receipt>',
+		);
+
+		// Act.
+		$renderer = ( new Receipt_Renderer_Factory() )->create( 'thermal' );
+		ob_start();
+		$renderer->render( $template, $order, array() );
+		$output = ob_get_clean();
+
+		// Assert: the PHP never ran.
+		$this->assertStringNotContainsString( 'RCEPROOF', $output );
+	}
+
+	/**
+	 * The thermal renderer renders real receipt content to HTML via the pipeline.
+	 */
+	public function test_thermal_renderer_renders_receipt_content(): void {
+		$order    = OrderHelper::create_order();
+		$number   = (string) $order->get_order_number();
+		$template = array(
+			'engine'      => 'thermal',
+			'paper_width' => '80mm',
+			'content'     => '<receipt paper-width="48"><text>Order #{{order.number}}</text></receipt>',
+		);
+
+		$renderer = ( new Receipt_Renderer_Factory() )->create( 'thermal' );
+		ob_start();
+		$renderer->render( $template, $order, array() );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( $number, $output );
+		$this->assertStringNotContainsString( '{{order.number}}', $output );
+	}
+
+	/**
+	 * Malformed thermal markup (e.g. a raw PHP payload with no <receipt> root)
+	 * fails closed with a harmless comment rather than surfacing raw content.
+	 */
+	public function test_thermal_renderer_fails_closed_on_malformed_markup(): void {
+		$order    = OrderHelper::create_order();
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<?php print( "RCE" . "PROOF" ); ?>',
+		);
+
+		$renderer = ( new Receipt_Renderer_Factory() )->create( 'thermal' );
+		ob_start();
+		$renderer->render( $template, $order, array() );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'RCEPROOF', $output );
+		$this->assertStringContainsString( 'Thermal receipt could not be rendered', $output );
+	}
 }
