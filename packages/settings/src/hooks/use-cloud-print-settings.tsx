@@ -55,6 +55,7 @@ export interface CloudAssignment {
 	store_id?: number;
 	scope: 'every' | 'pos' | 'online';
 	template_id: string;
+	copies?: number;
 }
 
 export interface CloudPrintSettings {

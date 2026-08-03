@@ -566,8 +566,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * Kept for backward compatibility — the Settings_CloudPrint_Test conformance
 	 * gate exercises this method directly via ReflectionMethod. Delegates to
-	 * Cloud_Print_Section::sanitize_assignment() so the schema has exactly one
-	 * owner.
+	 * Cloud_Print_Section::sanitize_assignment() when the section is registered.
 	 *
 	 * @param mixed $assignment Assignment.
 	 *
@@ -582,7 +581,10 @@ class Settings extends WP_REST_Controller {
 			return $section->sanitize_assignment( $assignment );
 		}
 
-		return \is_array( $assignment ) ? $assignment : array();
+		$assignment           = \is_array( $assignment ) ? $assignment : array();
+		$assignment['copies'] = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+
+		return $assignment;
 	}
 
 

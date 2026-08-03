@@ -135,6 +135,240 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An assignment requesting two copies creates two jobs.
+	 */
+	public function test_assignment_with_two_copies_creates_two_jobs(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 2,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * Firing the trigger twice does not exceed the requested copy count.
+	 */
+	public function test_trigger_fired_twice_with_two_copies_leaves_two_jobs(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 2,
+				),
+			)
+		);
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+
+		// Act.
+		$service->handle_order( $order->get_id() );
+		$service->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * Overlapping triggers do not exceed the requested copy count.
+	 */
+	public function test_overlapping_triggers_do_not_exceed_requested_copy_count(): void {
+		// Arrange.
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 2,
+				),
+			)
+		);
+		$service   = new Cloud_Print_Trigger_Service();
+		$reentered = false;
+		$callback  = function () use ( $service, $order, &$reentered ): void {
+			if ( $reentered ) {
+				return;
+			}
+			$reentered = true;
+			$service->handle_order( $order->get_id() );
+		};
+		add_action( 'woocommerce_pos_print_job_created', $callback );
+
+		// Act.
+		try {
+			$service->handle_order( $order->get_id() );
+		} finally {
+			remove_action( 'woocommerce_pos_print_job_created', $callback );
+		}
+
+		// Assert.
+		$this->assertTrue( $reentered );
+		$this->assertEquals(
+			2,
+			$this->jobs->count(
+				array(
+					'printer_id'  => 'kitchen',
+					'order_id'    => $order->get_id(),
+					'template_id' => (string) $tid,
+				)
+			)
+		);
+	}
+
+	/**
+	 * A callback exception does not leave the assignment locked.
+	 */
+	public function test_assignment_lock_is_released_when_job_created_callback_throws(): void {
+		// Arrange.
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+				),
+			)
+		);
+		$service  = new Cloud_Print_Trigger_Service();
+		$lock     = 'wcpos_cloud_print_assignment_lock_' . md5( $order->get_id() . "\0kitchen\0" . $tid );
+		$callback = static function (): void {
+			throw new \RuntimeException( 'Job-created callback failed.' );
+		};
+		$exception = null;
+		add_action( 'woocommerce_pos_print_job_created', $callback );
+
+		// Act.
+		try {
+			$service->handle_order( $order->get_id() );
+		} catch ( \RuntimeException $caught ) {
+			$exception = $caught;
+		} finally {
+			remove_action( 'woocommerce_pos_print_job_created', $callback );
+		}
+		$locked_at = get_option( $lock, false );
+		delete_option( $lock );
+
+		// Assert.
+		$this->assertInstanceOf( \RuntimeException::class, $exception );
+		$this->assertFalse( $locked_at );
+	}
+
+	/**
+	 * Reclaiming a stale lock does not delete a replacement lock.
+	 */
+	public function test_stale_lock_reclaim_preserves_replacement_lock(): void {
+		// Arrange.
+		$lock      = 'wcpos_cloud_print_assignment_lock_replacement_test';
+		$fresh     = (string) ( time() + 60 );
+		$stale     = (string) ( time() - Cloud_Print_Trigger_Service::ASSIGNMENT_LOCK_TTL - 1 );
+		$filter    = static function () use ( $stale ): string {
+			return $stale;
+		};
+		$method    = new \ReflectionMethod( Cloud_Print_Trigger_Service::class, 'acquire_assignment_lock' );
+		$service   = new Cloud_Print_Trigger_Service();
+		$acquired  = null;
+		delete_option( $lock );
+		$this->assertTrue( add_option( $lock, $fresh, '', false ) );
+		add_filter( 'pre_option_' . $lock, $filter );
+
+		// Act.
+		try {
+			$method->setAccessible( true );
+			$acquired = $method->invoke( $service, $lock );
+		} finally {
+			remove_filter( 'pre_option_' . $lock, $filter );
+		}
+		$stored = get_option( $lock );
+		delete_option( $lock );
+
+		// Assert.
+		$this->assertFalse( $acquired );
+		$this->assertSame( $fresh, $stored );
+	}
+
+	/**
+	 * Copy counts above the maximum are clamped to five jobs.
+	 */
+	public function test_assignment_with_excessive_copies_clamps_to_five_jobs(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 99,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 5, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
 	 * It skips online orders for POS-scoped assignments.
 	 */
 	public function test_online_order_with_pos_scope_creates_no_job(): void {

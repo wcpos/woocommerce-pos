@@ -82,6 +82,20 @@ class Cloud_Print_Section extends Abstract_Section {
 			},
 			$settings['printers']
 		);
+		// Assignments saved before the copies field existed have no `copies`
+		// key stored; normalize on read so the REST view always carries it.
+		$assignments             = \is_array( $settings['assignments'] ) ? $settings['assignments'] : array();
+		$settings['assignments'] = array_map(
+			function ( $assignment ) {
+				if ( ! \is_array( $assignment ) ) {
+					return $assignment;
+				}
+				$assignment['copies'] = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+
+				return $assignment;
+			},
+			$assignments
+		);
 		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
 
 		return $settings;
@@ -317,6 +331,7 @@ class Cloud_Print_Section extends Abstract_Section {
 			'store_id'    => isset( $assignment['store_id'] ) ? (int) $assignment['store_id'] : 0,
 			'scope'       => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
 			'template_id' => sanitize_text_field( (string) ( $assignment['template_id'] ?? '' ) ),
+			'copies'      => min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) ),
 		);
 	}
 }

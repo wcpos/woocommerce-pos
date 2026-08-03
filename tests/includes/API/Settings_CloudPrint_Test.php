@@ -809,4 +809,165 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertSame( 12, $with_store['store_id'] );
 	}
+
+	/**
+	 * Assignment copies round-trip through the Cloud Print settings endpoint.
+	 */
+	public function test_cloud_assignment_with_copies_round_trips_copies(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+						'copies'      => 2,
+					),
+				),
+			)
+		);
+
+		// Act.
+		rest_do_request( $request );
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( 2, $data['assignments'][0]['copies'] );
+	}
+
+	/**
+	 * Assignment copies default to one when omitted.
+	 */
+	public function test_cloud_assignment_without_copies_sanitizes_to_one(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $request )->get_data();
+
+		// Assert.
+		$this->assertEquals( 1, $data['assignments'][0]['copies'] );
+	}
+
+	/**
+	 * Assignment copies below the minimum clamp to one.
+	 */
+	public function test_cloud_assignment_with_zero_copies_clamps_to_one(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+						'copies'      => 0,
+					),
+				),
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $request )->get_data();
+
+		// Assert.
+		$this->assertEquals( 1, $data['assignments'][0]['copies'] );
+	}
+
+	/**
+	 * Assignments stored before the copies field existed default to one on read.
+	 */
+	public function test_legacy_assignment_without_copies_reads_as_one_copy(): void {
+		// Arrange: seed the raw option directly, as a pre-upgrade release wrote it.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'kitchen',
+						'name'     => 'Kitchen',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'store_id'    => 0,
+						'scope'       => 'every',
+						'template_id' => '11',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( 1, $data['assignments'][0]['copies'] );
+	}
+
+	/**
+	 * A malformed top-level assignments value reads as an empty list.
+	 */
+	public function test_non_array_assignments_read_as_empty_list(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(),
+				'assignments' => null,
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( array(), $data['assignments'] );
+	}
+
+	/**
+	 * Assignment copies above the maximum clamp to five.
+	 */
+	public function test_cloud_assignment_with_excessive_copies_clamps_to_five(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+						'copies'      => 99,
+					),
+				),
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $request )->get_data();
+
+		// Assert.
+		$this->assertEquals( 5, $data['assignments'][0]['copies'] );
+	}
 }
