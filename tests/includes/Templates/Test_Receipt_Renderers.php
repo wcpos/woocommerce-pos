@@ -475,6 +475,10 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 
 		$this->assertStringContainsString( $number, $output );
 		$this->assertStringNotContainsString( '{{order.number}}', $output );
+		// Output is constrained to the roll width so rows don't stretch on a wider
+		// browser page (80mm ≈ 302px at 96dpi).
+		$this->assertStringContainsString( 'max-width:100%', $output );
+		$this->assertStringContainsString( 'width:302', $output );
 	}
 
 	/**

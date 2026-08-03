@@ -17,6 +17,7 @@
 namespace WCPOS\WooCommercePOS\Templates\Renderers;
 
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Renderer_Interface;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
 use WC_Abstract_Order;
@@ -39,22 +40,50 @@ class Thermal_Html_Renderer implements Receipt_Renderer_Interface {
 			return;
 		}
 
+		$paper_width_px = $this->paper_width_px( $template );
+
 		try {
 			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
 			$html = ( new Html_Thermal_Emitter() )->emit(
 				$ast,
-				array( 'paper_width_px' => $this->paper_width_px( $template ) )
+				array( 'paper_width_px' => $paper_width_px )
 			);
 		} catch ( \Throwable $e ) {
 			// Malformed thermal markup (e.g. a raw PHP payload with no <receipt>
-			// root) throws during parsing. Fail closed with a harmless comment
-			// rather than surfacing the raw content.
+			// root) throws during parsing. Fail closed with a harmless comment,
+			// but log the cause so a genuinely broken template is diagnosable.
+			Logger::log(
+				sprintf(
+					'Thermal receipt render failed for template %s: %s',
+					isset( $template['id'] ) ? (string) $template['id'] : 'unknown',
+					$e->getMessage()
+				)
+			);
 			echo '<!-- Thermal receipt could not be rendered -->';
 			return;
 		}
 
-		// $html is built by the thermal emitter, which escapes receipt data.
-		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Emitter output is self-generated thermal markup with escaped values.
+		// The emitter leaves its output width-agnostic (the PDF path constrains it
+		// via the physical page size). On the browser-print surface the page can be
+		// wider than the roll, so constrain to the resolved paper width here or the
+		// row tables would stretch across the whole page.
+		$open = '<div style="width:' . esc_attr( $this->format_px( $paper_width_px ) )
+			. 'px;max-width:100%;margin:0 auto;">';
+
+		// $html is built by the thermal emitter, which escapes receipt data; $open
+		// is a fixed wrapper with an escaped numeric width.
+		echo $open . $html . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	}
+
+	/**
+	 * Format a pixel value for inline CSS without a trailing decimal point.
+	 *
+	 * @param float $px Pixel value.
+	 *
+	 * @return string
+	 */
+	private function format_px( float $px ): string {
+		return rtrim( rtrim( number_format( $px, 2, '.', '' ), '0' ), '.' );
 	}
 
 	/**
