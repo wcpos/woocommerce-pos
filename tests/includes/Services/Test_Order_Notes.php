@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Store_Defaults;
 use WP_UnitTestCase;
@@ -37,5 +38,40 @@ final class Test_Order_Notes extends WP_UnitTestCase {
 		$this->assertSame( 'Store #999999', Order_Notes::store_name( 999999 ) );
 		$this->assertSame( 'Named Store', Order_Notes::store_name( $store_id ) );
 		$this->assertSame( 'store-uuid', Order_Notes::store_name( 'store-uuid' ) );
+	}
+
+	/** Test cash amounts are formatted in the order currency, not the site default. */
+	public function test_cash_note_formats_amounts_in_the_order_currency(): void {
+		update_option( 'woocommerce_currency', 'USD' );
+
+		$order = OrderHelper::create_order();
+		$order->set_currency( 'EUR' );
+		$order->save();
+
+		Order_Notes::add_cash_note( $order, '50.00', '10.00' );
+
+		$note = $this->find_note( $order->get_id(), 'Cash payment received' );
+
+		$this->assertStringContainsString( get_woocommerce_currency_symbol( 'EUR' ), $note->content );
+		$this->assertStringNotContainsString( get_woocommerce_currency_symbol( 'USD' ), $note->content );
+	}
+
+	/**
+	 * Return the single order note whose content starts with the given prefix.
+	 *
+	 * @param int    $order_id Order ID.
+	 * @param string $prefix   Note content prefix.
+	 */
+	private function find_note( int $order_id, string $prefix ): object {
+		$notes = array_values(
+			array_filter(
+				wc_get_order_notes( array( 'order_id' => $order_id ) ),
+				static fn( $note ) => 0 === strpos( wp_strip_all_tags( $note->content ), $prefix )
+			)
+		);
+
+		$this->assertCount( 1, $notes, sprintf( 'Expected exactly one "%s" note.', $prefix ) );
+
+		return $notes[0];
 	}
 }

@@ -122,11 +122,14 @@ class Order_Notes {
 
 	/** Add the cash tender audit note. */
 	public static function add_cash_note( WC_Order $order, $tendered, $change ): void {
+		// Format against the order's own currency, not the site default — the two can differ under
+		// multi-currency, per-store currency, or simply after the shop currency setting was changed.
+		$price_args = array( 'currency' => $order->get_currency() );
 		$note = sprintf(
 			/* translators: 1: cash amount tendered, 2: change given. */
 			__( 'Cash payment received — amount tendered: %1$s, change given: %2$s.', 'woocommerce-pos' ),
-			wc_price( $tendered ),
-			wc_price( $change )
+			wc_price( $tendered, $price_args ),
+			wc_price( $change, $price_args )
 		);
 		$order->add_order_note( $note, 0, true );
 	}
