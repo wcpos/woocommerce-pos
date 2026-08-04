@@ -56,6 +56,25 @@ final class Test_Order_Notes extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( get_woocommerce_currency_symbol( 'USD' ), $note->content );
 	}
 
+	/** Test audit notes are internal and attributed to the acting user. */
+	public function test_notes_are_internal_and_attributed_to_the_acting_user(): void {
+		$actor_id = self::factory()->user->create(
+			array(
+				'display_name' => 'Note Actor',
+				'role'         => 'administrator',
+			)
+		);
+		wp_set_current_user( $actor_id );
+
+		$order = OrderHelper::create_order();
+		Order_Notes::add_creation_note( $order, $actor_id, 0 );
+
+		$note = $this->find_note( $order->get_id(), 'Order created via POS' );
+
+		$this->assertFalse( $note->customer_note );
+		$this->assertSame( 'Note Actor', $note->added_by );
+	}
+
 	/**
 	 * Return the single order note whose content starts with the given prefix.
 	 *
