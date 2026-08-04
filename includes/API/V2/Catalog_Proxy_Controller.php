@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\API\V1\Customers_Controller as V1_Customers_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -46,6 +47,8 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	 * The `post__not_in` closure while a `/products` forward is in flight (null otherwise).
 	 */
 	private $pos_visibility_filter = null;
+	private $pos_order_filter      = null;
+	private $pos_order_filter_hook = null;
 
 	public function register_routes(): void {
 		foreach ( self::resources() as $route => $meta ) {
@@ -105,6 +108,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		}
 
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
+		$this->add_pos_order_filter( $resource, $query_params );
 		$inner->set_query_params( $query_params );
 		// Leg-3 (ADR 0014 WP-M5): scope the POS servable filter around THIS forward only — added, then
 		// removed — so `online_only` products drop out of the served set for both greedy list pulls and
@@ -115,13 +119,17 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( $relax_wc_permissions ) {
 			add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		}
-		$response = rest_do_request( $inner );
-		if ( $relax_wc_permissions ) {
-			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
-		}
-		$this->remove_pos_visibility_filter();
-		if ( null !== $customer_search_filter ) {
-			remove_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+		try {
+			$response = rest_do_request( $inner );
+		} finally {
+			if ( $relax_wc_permissions ) {
+				remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+			}
+			$this->remove_pos_visibility_filter();
+			$this->remove_pos_order_filter();
+			if ( null !== $customer_search_filter ) {
+				remove_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+			}
 		}
 		if ( $response->is_error() ) {
 			return $response;
@@ -220,6 +228,86 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( null !== $this->pos_visibility_filter ) {
 			remove_filter( 'woocommerce_rest_product_object_query', $this->pos_visibility_filter );
 			$this->pos_visibility_filter = null;
+		}
+	}
+
+	private function add_pos_order_filter( string $resource, array &$query_params ): void {
+		if ( 'orders' !== $resource ) {
+			return;
+		}
+		$filters = array();
+		foreach ( array( 'pos_cashier', 'pos_store', 'created_via' ) as $key ) {
+			if ( array_key_exists( $key, $query_params ) ) {
+				$value = $query_params[ $key ];
+				if ( 'created_via' === $key && \is_array( $value ) ) {
+					$filters[ $key ] = \array_map( 'sanitize_key', \array_values( $value ) );
+				} else {
+					$value           = \is_scalar( $value ) ? $value : '';
+					$filters[ $key ] = 'created_via' === $key ? sanitize_key( (string) $value ) : absint( $value );
+				}
+				unset( $query_params[ $key ] );
+			}
+		}
+		if ( array() === $filters ) {
+			return;
+		}
+		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->pos_order_filter_hook = 'woocommerce_orders_table_query_clauses';
+			$this->pos_order_filter      = static function ( array $clauses, $query ) use ( $filters ): array {
+				global $wpdb;
+				$orders     = $query->get_table_name( 'orders' );
+				$meta       = $query->get_table_name( 'meta' );
+				$operations = $query->get_table_name( 'operational_data' );
+				$meta_keys  = array(
+					'pos_cashier' => '_pos_user',
+					'pos_store'   => '_pos_store',
+				);
+				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Table names come from WooCommerce; placeholder lists are generated below.
+				foreach ( $meta_keys as $key => $meta_key ) {
+					if ( isset( $filters[ $key ] ) ) {
+						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$meta} WHERE meta_key=%s AND meta_value=%s)", $meta_key, (string) $filters[ $key ] );
+					}
+				}
+				if ( isset( $filters['created_via'] ) ) {
+					$created_via = (array) $filters['created_via'];
+					if ( array() !== $created_via ) {
+						$placeholders      = implode( ', ', array_fill( 0, \count( $created_via ), '%s' ) );
+						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$operations} WHERE created_via IN ({$placeholders}))", ...$created_via );
+					}
+				}
+				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+
+				return $clauses;
+			};
+			add_filter( $this->pos_order_filter_hook, $this->pos_order_filter, 10, 2 );
+			return;
+		}
+		$this->pos_order_filter_hook = 'woocommerce_rest_shop_order_object_query';
+		$this->pos_order_filter      = static function ( array $args ) use ( $filters ): array {
+			$meta_keys = array(
+				'pos_cashier' => '_pos_user',
+				'pos_store'   => '_pos_store',
+				'created_via' => '_created_via',
+			);
+			foreach ( $meta_keys as $key => $meta_key ) {
+				if ( isset( $filters[ $key ] ) && array() !== $filters[ $key ] ) {
+					$args['meta_query'][] = array(
+						'key'   => $meta_key,
+						'value' => $filters[ $key ],
+					);
+				}
+			}
+
+			return $args;
+		};
+		add_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
+	}
+
+	private function remove_pos_order_filter(): void {
+		if ( null !== $this->pos_order_filter ) {
+			remove_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
+			$this->pos_order_filter      = null;
+			$this->pos_order_filter_hook = null;
 		}
 	}
 }

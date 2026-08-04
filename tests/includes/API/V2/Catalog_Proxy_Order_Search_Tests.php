@@ -73,6 +73,34 @@ trait Catalog_Proxy_Order_Search_Tests {
 	}
 
 	/**
+	 * Array-valued creation channels are preserved by the proxy filter.
+	 */
+	public function test_created_via_array_returns_matching_orders(): void {
+		$checkout_order = OrderHelper::create_order();
+		$checkout_order->set_created_via( 'checkout' );
+		$checkout_order->save();
+
+		$rest_order = OrderHelper::create_order();
+		$rest_order->set_created_via( 'rest-api' );
+		$rest_order->save();
+
+		$other_order = OrderHelper::create_order();
+		$other_order->set_created_via( 'other' );
+		$other_order->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params( array( 'created_via' => array( 'checkout', 'rest-api' ) ) );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing(
+			array( $checkout_order->get_id(), $rest_order->get_id() ),
+			wp_list_pluck( $response->get_data(), 'id' )
+		);
+	}
+
+	/**
 	 * Dispatch a real V2 request and assert that it finds the target order.
 	 *
 	 * @param string $search Search value.
