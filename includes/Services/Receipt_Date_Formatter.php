@@ -97,13 +97,19 @@ class Receipt_Date_Formatter {
 		$locale   = $locale ? $locale : self::get_default_locale();
 		$date     = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( $timezone );
 
+		// The WordPress time_format setting controls the clock convention
+		// (12 vs 24-hour); the locale keeps controlling localized date text.
+		$time_format   = self::get_time_format_option();
+		$hour_token    = self::get_icu_hour_token( $time_format );
+		$fallback_time = '' !== $time_format ? $time_format : 'g:i A';
+
 		return array(
-			'datetime'       => self::format_style( $date, $timezone, $locale, self::INTL_MEDIUM, self::INTL_SHORT, 'M j, Y g:i A' ),
+			'datetime'       => self::format_style( $date, $timezone, $locale, self::INTL_MEDIUM, self::INTL_SHORT, 'M j, Y ' . $fallback_time, $hour_token ),
 			'date'           => self::format_style( $date, $timezone, $locale, self::INTL_MEDIUM, self::INTL_NONE, 'M j, Y' ),
-			'time'           => self::format_style( $date, $timezone, $locale, self::INTL_NONE, self::INTL_SHORT, 'g:i A' ),
-			'datetime_short' => self::format_style( $date, $timezone, $locale, self::INTL_SHORT, self::INTL_SHORT, 'n/j/y g:i A' ),
-			'datetime_long'  => self::format_style( $date, $timezone, $locale, self::INTL_LONG, self::INTL_SHORT, 'F j, Y g:i A' ),
-			'datetime_full'  => self::format_style( $date, $timezone, $locale, self::INTL_FULL, self::INTL_SHORT, 'l, F j, Y g:i A' ),
+			'time'           => self::format_style( $date, $timezone, $locale, self::INTL_NONE, self::INTL_SHORT, $fallback_time, $hour_token ),
+			'datetime_short' => self::format_style( $date, $timezone, $locale, self::INTL_SHORT, self::INTL_SHORT, 'n/j/y ' . $fallback_time, $hour_token ),
+			'datetime_long'  => self::format_style( $date, $timezone, $locale, self::INTL_LONG, self::INTL_SHORT, 'F j, Y ' . $fallback_time, $hour_token ),
+			'datetime_full'  => self::format_style( $date, $timezone, $locale, self::INTL_FULL, self::INTL_SHORT, 'l, F j, Y ' . $fallback_time, $hour_token ),
 			'date_short'     => self::format_style( $date, $timezone, $locale, self::INTL_SHORT, self::INTL_NONE, 'n/j/y' ),
 			'date_long'      => self::format_style( $date, $timezone, $locale, self::INTL_LONG, self::INTL_NONE, 'F j, Y' ),
 			'date_full'      => self::format_style( $date, $timezone, $locale, self::INTL_FULL, self::INTL_NONE, 'l, F j, Y' ),
@@ -138,19 +144,62 @@ class Receipt_Date_Formatter {
 	 * @param int               $date_style       Intl date style.
 	 * @param int               $time_style       Intl time style.
 	 * @param string            $fallback_pattern wp_date()/DateTime fallback pattern.
+	 * @param string|null       $hour_token       ICU hour token enforcing the configured clock convention, or null to keep the locale default.
 	 *
 	 * @return string
 	 */
-	private static function format_style( DateTimeInterface $date, DateTimeZone $timezone, string $locale, int $date_style, int $time_style, string $fallback_pattern ): string {
+	private static function format_style( DateTimeInterface $date, DateTimeZone $timezone, string $locale, int $date_style, int $time_style, string $fallback_pattern, ?string $hour_token = null ): string {
 		return self::run_intl_with_fallback(
 			$date,
 			$timezone,
 			$locale,
 			$fallback_pattern,
-			static function ( string $timezone_name ) use ( $locale, $date_style, $time_style ) {
-				return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
+			static function ( string $timezone_name ) use ( $locale, $date_style, $time_style, $hour_token ) {
+				return self::build_clock_aware_formatter( $locale, $date_style, $time_style, $timezone_name, $hour_token );
 			}
 		);
+	}
+
+	/**
+	 * Build an Intl formatter with the requested clock convention.
+	 *
+	 * @param string      $locale       Locale code.
+	 * @param int         $date_style    Intl date style.
+	 * @param int         $time_style    Intl time style.
+	 * @param string      $timezone_name Intl timezone name.
+	 * @param string|null $hour_token    ICU hour token, or null to keep the locale default.
+	 *
+	 * @return IntlDateFormatter
+	 */
+	private static function build_clock_aware_formatter( string $locale, int $date_style, int $time_style, string $timezone_name, ?string $hour_token ): IntlDateFormatter {
+		if ( null === $hour_token || self::INTL_NONE === $time_style ) {
+			return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
+		}
+
+		$use_24_hour = 'H' === $hour_token[0];
+
+		// Request the hour cycle via the Unicode locale extension first so
+		// CLDR controls day-period placement (before vs after the hour and
+		// time-first patterns). The pattern probe detects unsupported cycles.
+		$hour_cycle_locale = $locale . ( false === strpos( $locale, '-u-' ) ? '-u-hc-' : '-hc-' ) . ( $use_24_hour ? 'h23' : 'h12' );
+		$formatter         = new IntlDateFormatter( $hour_cycle_locale, $date_style, $time_style, $timezone_name );
+		$pattern           = (string) $formatter->getPattern();
+
+		if ( ! self::pattern_matches_clock( $pattern, $use_24_hour ) ) {
+			$formatter = new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
+			$pattern   = (string) $formatter->getPattern();
+		}
+
+		// Normalize the hour symbols to the configured padding and,
+		// on the no-extension fallback, rewrite the clock convention.
+		// Never set an empty pattern (PCRE failure) — blank output
+		// is worse than the locale-default clock.
+		$adjusted = self::apply_clock_convention( $pattern, $hour_token );
+		if ( '' !== $adjusted && $adjusted !== $pattern ) {
+			$formatter->setPattern( $adjusted );
+		}
+
+		return $formatter;
 	}
 
 	/**
@@ -177,7 +226,7 @@ class Receipt_Date_Formatter {
 	}
 
 	/**
-	 * Run an IntlDateFormatter with fixed-offset timezone guard and fallback.
+	 * Run an IntlDateFormatter with fixed-offset timezone normalization and fallback.
 	 *
 	 * @param DateTimeInterface $date             Date to format.
 	 * @param DateTimeZone      $timezone         Date timezone.
@@ -190,10 +239,13 @@ class Receipt_Date_Formatter {
 	private static function run_intl_with_fallback( DateTimeInterface $date, DateTimeZone $timezone, string $locale, string $fallback_pattern, callable $make_formatter ): string {
 		$timezone_name = $timezone->getName();
 		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
-			return self::format_fallback( $date, $fallback_pattern, $locale );
+			// ICU rejects raw offset names like "+02:00" but accepts the
+			// equivalent "GMT+02:00" spelling, so fixed-offset sites can use
+			// the same Intl path as IANA timezones.
+			$timezone_name = 'GMT' . $timezone_name;
 		}
 
-		if ( class_exists( IntlDateFormatter::class ) ) {
+		if ( static::intl_available() ) {
 			try {
 				$formatter = $make_formatter( $timezone_name );
 				$formatted = $formatter->format( $date );
@@ -206,6 +258,198 @@ class Receipt_Date_Formatter {
 		}
 
 		return self::format_fallback( $date, $fallback_pattern, $locale );
+	}
+
+	/**
+	 * Whether the Intl extension can be used. Overridable for testing.
+	 *
+	 * @return bool
+	 */
+	protected static function intl_available(): bool {
+		return class_exists( IntlDateFormatter::class );
+	}
+
+	/**
+	 * Read the WordPress time_format option.
+	 *
+	 * @return string Configured format, or empty string when unavailable/blank.
+	 */
+	private static function get_time_format_option(): string {
+		if ( ! function_exists( 'get_option' ) ) {
+			return '';
+		}
+
+		$time_format = get_option( 'time_format', '' );
+		if ( ! is_string( $time_format ) || '' === trim( $time_format ) ) {
+			return '';
+		}
+
+		return $time_format;
+	}
+
+	/**
+	 * Map the configured WordPress time format to an ICU hour token.
+	 *
+	 * The token carries both the clock convention and the zero-padding intent:
+	 * G → H, H → HH (24-hour), g → h, h → hh (12-hour).
+	 *
+	 * @param string $time_format WordPress time format string.
+	 *
+	 * @return string|null ICU hour token, or null when no hour token is present.
+	 */
+	private static function get_icu_hour_token( string $time_format ): ?string {
+		// Ignore backslash-escaped literal characters.
+		$unescaped = (string) preg_replace( '/\\\\./', '', $time_format );
+
+		if ( false !== strpos( $unescaped, 'H' ) ) {
+			return 'HH';
+		}
+		if ( false !== strpos( $unescaped, 'G' ) ) {
+			return 'H';
+		}
+		if ( false !== strpos( $unescaped, 'h' ) ) {
+			return 'hh';
+		}
+		if ( false !== strpos( $unescaped, 'g' ) ) {
+			return 'h';
+		}
+
+		return null;
+	}
+
+	/**
+	 * Check whether a pattern's hour symbols already match a clock convention.
+	 *
+	 * Used to detect ICU builds that ignore the hours locale keyword.
+	 *
+	 * @param string $pattern     ICU date/time pattern.
+	 * @param bool   $use_24_hour Whether the 24-hour convention is requested.
+	 *
+	 * @return bool
+	 */
+	private static function pattern_matches_clock( string $pattern, bool $use_24_hour ): bool {
+		$in_quote = false;
+		$length   = strlen( $pattern );
+
+		for ( $i = 0; $i < $length; $i++ ) {
+			$char = $pattern[ $i ];
+
+			if ( "'" === $char ) {
+				if ( $i + 1 < $length && "'" === $pattern[ $i + 1 ] ) {
+					++$i;
+					continue;
+				}
+				$in_quote = ! $in_quote;
+				continue;
+			}
+
+			if ( $in_quote ) {
+				continue;
+			}
+
+			if ( $use_24_hour && ( 'H' === $char || 'k' === $char ) ) {
+				return true;
+			}
+			if ( ! $use_24_hour && ( 'h' === $char || 'K' === $char ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Rewrite an ICU pattern so its clock convention matches the hour token.
+	 *
+	 * Hour symbols (h, H, k, K) outside quoted literals are replaced with the
+	 * token. For 24-hour tokens, day-period markers (a, b, B) are removed; for
+	 * 12-hour tokens, a day-period marker is appended when missing. The
+	 * time_format option contributes only the clock convention and padding —
+	 * the locale owns separators, ordering, and day-period placement.
+	 *
+	 * Byte-wise iteration is safe on UTF-8 patterns: no ASCII byte can occur
+	 * inside a multibyte sequence.
+	 *
+	 * @param string $pattern    ICU date/time pattern.
+	 * @param string $hour_token ICU hour token: H, HH, h, or hh.
+	 *
+	 * @return string
+	 */
+	private static function apply_clock_convention( string $pattern, string $hour_token ): string {
+		$use_24_hour    = 'H' === $hour_token[0];
+		$result         = '';
+		$in_quote       = false;
+		$has_day_period = false;
+		$has_hour       = false;
+		$time_end       = 0;
+		$length         = strlen( $pattern );
+
+		for ( $i = 0; $i < $length; $i++ ) {
+			$char = $pattern[ $i ];
+
+			if ( "'" === $char ) {
+				$result .= $char;
+				// A doubled quote is an escaped literal quote, not a toggle.
+				if ( $i + 1 < $length && "'" === $pattern[ $i + 1 ] ) {
+					$result .= "'";
+					++$i;
+					continue;
+				}
+				$in_quote = ! $in_quote;
+				continue;
+			}
+
+			if ( $in_quote ) {
+				$result .= $char;
+				continue;
+			}
+
+			if ( 'h' === $char || 'H' === $char || 'k' === $char || 'K' === $char ) {
+				while ( $i + 1 < $length && $pattern[ $i + 1 ] === $char ) {
+					++$i;
+				}
+				$result  .= $hour_token;
+				$has_hour = true;
+				$time_end = strlen( $result );
+				continue;
+			}
+
+			if ( 'a' === $char || 'b' === $char || 'B' === $char ) {
+				if ( $use_24_hour ) {
+					$result .= "\x01";
+					continue;
+				}
+				$has_day_period = true;
+			}
+
+			$result .= $char;
+
+			// Track the end of the time cluster (minutes/seconds and their
+			// separator) so a missing day-period marker can be inserted after
+			// the time rather than after a trailing date in time-first patterns.
+			if ( $has_hour && ( 'm' === $char || 's' === $char || ':' === $char || '.' === $char ) ) {
+				$time_end = strlen( $result );
+			}
+		}
+
+		if ( $use_24_hour ) {
+			// Strip removed day-period markers with their surrounding spacing
+			// (including NBSP/NNBSP used by newer CLDR data).
+			$result = (string) preg_replace( '/[\s\x{00A0}\x{202F}]*\x01+[\s\x{00A0}\x{202F}]*/u', ' ', $result );
+			$result = (string) preg_replace( '/[\s\x{00A0}\x{202F}]{2,}/u', ' ', $result );
+
+			return trim( $result );
+		}
+
+		if ( $has_hour && ! $has_day_period ) {
+			if ( $time_end >= strlen( $result ) ) {
+				return rtrim( $result ) . ' a';
+			}
+
+			return substr( $result, 0, $time_end ) . ' a' . substr( $result, $time_end );
+		}
+
+		return $result;
 	}
 
 	/**

@@ -13,6 +13,7 @@ use WCPOS\Vendor\Sabberworm\CSS\Parsing\UnexpectedTokenException;
 use WCPOS\Vendor\Sabberworm\CSS\Position\Position;
 use WCPOS\Vendor\Sabberworm\CSS\Position\Positionable;
 use WCPOS\Vendor\Sabberworm\CSS\Property\Declaration;
+use WCPOS\Vendor\Sabberworm\CSS\ShortClassNameProvider;
 /**
  * This class is a container for individual `Declaration`s.
  *
@@ -29,6 +30,7 @@ class RuleSet implements CSSElement, CSSListItem, Positionable, DeclarationList
     use CommentContainer;
     use LegacyDeclarationListMethods;
     use Position;
+    use ShortClassNameProvider;
     /**
      * the declarations in this rule set, using the property name as the key,
      * with potentially multiple declarations per property name.
@@ -102,7 +104,6 @@ class RuleSet implements CSSElement, CSSListItem, Positionable, DeclarationList
         }
         $position = \count($this->declarations[$propertyName]);
         if ($sibling !== null) {
-            $siblingIsInSet = \false;
             $siblingPosition = \array_search($sibling, $this->declarations[$propertyName], \true);
             if ($siblingPosition !== \false) {
                 $siblingIsInSet = \true;
@@ -302,7 +303,13 @@ class RuleSet implements CSSElement, CSSListItem, Positionable, DeclarationList
      */
     public function getArrayRepresentation() : array
     {
-        throw new \BadMethodCallException('`getArrayRepresentation` is not yet implemented for `' . self::class . '`');
+        $declarationsArrayRepresentation = [];
+        foreach ($this->declarations as $propertyName => $declarationsForOneProperty) {
+            $declarationsArrayRepresentation[$propertyName] = \array_map(function (Declaration $declaration) : array {
+                return $declaration->getArrayRepresentation();
+            }, $declarationsForOneProperty);
+        }
+        return ['class' => $this->getShortClassName(), 'declarations' => $declarationsArrayRepresentation];
     }
     /**
      * @return int negative if `$first` is before `$second`; zero if they have the same position; positive otherwise

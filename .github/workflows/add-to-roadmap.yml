@@ -13,14 +13,14 @@ jobs:
     name: Add issue to Roadmap
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
         with:
           app-id: ${{ secrets.PROJECT_BOT_APP_ID }}
           private-key: ${{ secrets.PROJECT_BOT_PRIVATE_KEY }}
           owner: wcpos
 
-      - uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e # v1.0.2
+      - uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
         id: add
         with:
           project-url: https://github.com/orgs/wcpos/projects/4

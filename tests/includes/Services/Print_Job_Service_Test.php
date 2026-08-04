@@ -15,6 +15,24 @@ use WP_UnitTestCase;
  */
 class Print_Job_Service_Test extends WP_UnitTestCase {
 	/**
+	 * It refuses to cancel a non-print post supplied as a job ID.
+	 */
+	public function test_cancel_if_waiting_refuses_non_print_post(): void {
+		$service = new Print_Job_Service();
+		$post_id = self::factory()->post->create(
+			array(
+				'post_content' => 'Content that must be preserved.',
+			)
+		);
+
+		$cancelled = $service->cancel_if_waiting( $post_id );
+
+		$this->assertEquals( false, $cancelled );
+		$this->assertEquals( 'Content that must be preserved.', get_post_field( 'post_content', $post_id ) );
+		$this->assertEquals( '', get_post_meta( $post_id, Print_Job_Service::META_STATUS, true ) );
+	}
+
+	/**
 	 * It registers the internal print job post type.
 	 */
 	public function test_register_post_type_registers_wcpos_print_job(): void {

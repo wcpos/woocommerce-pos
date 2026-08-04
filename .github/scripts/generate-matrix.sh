@@ -123,6 +123,9 @@ CONFIG=$(cat "$MATRIX_FILE")
 
 PHP_MINIMUM=$(echo "$CONFIG" | jq -r '.php.minimum')
 PHP_STABLE=$(echo "$CONFIG" | jq -r '.php.stable')
+# "current" = most widely deployed GA minor (one behind experimental).
+# Fall back to stable for configs that predate the alias.
+PHP_CURRENT=$(echo "$CONFIG" | jq -r '.php.current // .php.stable')
 PHP_EXPERIMENTAL=$(echo "$CONFIG" | jq -r '.php.experimental')
 
 WP_MINIMUM=$(echo "$CONFIG" | jq -r '.wordpress.minimum')
@@ -131,7 +134,7 @@ WP_STABLE=$(echo "$CONFIG" | jq -r '.wordpress.stable')
 WC_MINIMUM=$(echo "$CONFIG" | jq -r '.woocommerce.minimum')
 WC_STABLE=$(echo "$CONFIG" | jq -r '.woocommerce.stable')
 
-log "PHP: minimum=$PHP_MINIMUM, stable=$PHP_STABLE, experimental=$PHP_EXPERIMENTAL"
+log "PHP: minimum=$PHP_MINIMUM, stable=$PHP_STABLE, current=$PHP_CURRENT, experimental=$PHP_EXPERIMENTAL"
 log "WP:  minimum=$WP_MINIMUM, stable=$WP_STABLE"
 log "WC:  minimum=$WC_MINIMUM, stable=$WC_STABLE"
 
@@ -166,6 +169,7 @@ resolve_php() {
   case "$alias" in
     minimum)     echo "$PHP_MINIMUM" ;;
     stable)      echo "$PHP_STABLE" ;;
+    current)     echo "$PHP_CURRENT" ;;
     experimental) echo "$PHP_EXPERIMENTAL" ;;
     *)           echo "$alias" ;;
   esac
