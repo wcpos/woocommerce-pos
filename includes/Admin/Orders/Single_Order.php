@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
 use WC_Abstract_Order;
+use WC_Order;
+use WCPOS\WooCommercePOS\Services\Order_Notes;
 
 /**
  * Single_Order class.
@@ -21,6 +23,7 @@ class Single_Order {
 		add_filter( 'wc_order_is_editable', array( $this, 'wc_order_is_editable' ), 10, 2 );
 		add_action( 'woocommerce_admin_order_data_after_order_details', array( $this, 'add_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_cashier_select' ) );
+		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'add_customer_change_note' ), 10 );
 
 		$this->add_available_gateways();
 	}
@@ -129,6 +132,32 @@ class Single_Order {
 				);
 				$order->add_order_note( $note );
 			}
+		}
+	}
+
+	/**
+	 * Add an audit note before WooCommerce applies its posted customer change.
+	 *
+	 * WooCommerce 10.4.3 registers WC_Meta_Box_Order_Data::save at priority 40;
+	 * this priority-10 callback therefore reads the old customer from the order.
+	 * Core verifies its order-data nonce before firing this hook.
+	 *
+	 * @param int $post_id The order ID.
+	 */
+	public function add_customer_change_note( $post_id ): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies its order-data nonce before firing this hook.
+		if ( ! array_key_exists( 'customer_user', $_POST ) ) {
+			return;
+		}
+		$order = wc_get_order( $post_id );
+		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+			return;
+		}
+		$old_customer_id = $order->get_customer_id();
+		$new_customer_id = absint( wp_unslash( $_POST['customer_user'] ?? 0 ) );
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		if ( $old_customer_id !== $new_customer_id ) {
+			Order_Notes::add_admin_customer_change_note( $order, $old_customer_id, $new_customer_id );
 		}
 	}
 }

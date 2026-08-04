@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Product;
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -490,6 +491,10 @@ class Write_Controller extends WP_REST_Controller {
 			// meta, so — exactly like the uuid above — wc/v3 dropped them from the forwarded create;
 			// persist them directly, server-authoritative for the channel/cashier a client can't forge.
 			$this->stamp_order_audit( $new_id, $m['payload'], true );
+			$order = wc_get_order( $new_id );
+			if ( $order ) {
+				Order_Notes::add_creation_note( $order, get_current_user_id(), $order->get_meta( '_pos_store' ) );
+			}
 			if ( ! $this->store->finalize_poison( $m['mutationId'], $new_id ) ) {
 				return $this->finalize_error();
 			}
@@ -722,6 +727,16 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 
+		$pos_reassignment = array();
+		if ( 'order' === ( $meta['id_type'] ?? '' ) && isset( $m['payload']['meta_data'] ) && is_array( $m['payload']['meta_data'] ) ) {
+			foreach ( $m['payload']['meta_data'] as $entry ) {
+				$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+				if ( is_scalar( $key ) && in_array( (string) $key, array( '_pos_user', '_pos_store' ), true ) ) {
+					$pos_reassignment[ (string) $key ] = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( $entry->value ?? '' );
+				}
+			}
+		}
+
 		// The POS audit trail is write-once, set at create — an UPDATE must not overwrite it. Strip
 		// the server-managed _pos_* keys AND created_via (the channel marker) from the forwarded update
 		// body, so a later client write can't clobber the server-owned audit trail. (Same is_array
@@ -757,6 +772,45 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			$this->persist_order_tax_ids( $id, $m['payload'], false );
+			$order = wc_get_order( $id );
+			$data = $response->get_data();
+			if ( $order && is_array( $data ) ) {
+				$current_user_id = get_current_user_id();
+				$old_user_id = $order->get_meta( '_pos_user' );
+				$old_store_id = $order->get_meta( '_pos_store' );
+				$cashier_changed = isset( $pos_reassignment['_pos_user'] )
+					&& is_numeric( $pos_reassignment['_pos_user'] )
+					&& (int) $pos_reassignment['_pos_user'] === $current_user_id
+					&& (string) $old_user_id !== (string) $current_user_id;
+				$store_changed = isset( $pos_reassignment['_pos_store'] )
+					&& is_scalar( $pos_reassignment['_pos_store'] )
+					&& '' !== (string) $pos_reassignment['_pos_store']
+					&& (string) $old_store_id !== (string) $pos_reassignment['_pos_store'];
+				if ( $cashier_changed ) {
+					$order->update_meta_data( '_pos_user', (string) $current_user_id );
+				}
+				if ( $store_changed ) {
+					$order->update_meta_data( '_pos_store', (string) $pos_reassignment['_pos_store'] );
+				}
+				if ( $cashier_changed || $store_changed ) {
+					$order->save();
+				}
+
+				$reopened = 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current_bare['status'] ?? '' );
+				if ( $reopened ) {
+					Order_Notes::add_reopen_note( $order, $current_user_id, $order->get_meta( '_pos_store' ) );
+				} else {
+					if ( $cashier_changed ) {
+						Order_Notes::add_cashier_change_note( $order, $old_user_id, $current_user_id );
+					}
+					if ( $store_changed ) {
+						Order_Notes::add_store_change_note( $order, $old_store_id, $pos_reassignment['_pos_store'] );
+					}
+				}
+				if ( array_key_exists( 'customer_id', $current_bare ) && array_key_exists( 'customer_id', $data ) && (int) $current_bare['customer_id'] !== (int) $data['customer_id'] ) {
+					Order_Notes::add_pos_customer_change_note( $order, $current_bare['customer_id'], $data['customer_id'] );
+				}
+			}
 		}
 		if ( 'user' === ( $meta['id_type'] ?? '' ) ) {
 			$this->persist_customer_tax_ids( $id, $m['payload'] );

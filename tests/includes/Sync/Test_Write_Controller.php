@@ -165,6 +165,14 @@ final class Fake_Mutation_Store {
 	}
 	public function persist_order_audit_meta( int $id, array $meta, string $created_via = '' ): void {
 		$this->auditMeta[] = compact( 'id', 'meta', 'created_via' );
+		$order = wc_get_order( $id );
+		if ( $order ) {
+			foreach ( $meta as $key => $value ) {
+				$order->update_meta_data( $key, $value );
+			}
+			$order->set_created_via( $created_via );
+			$order->save();
+		}
 	}
 }
 
@@ -272,6 +280,42 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * A meta value from a document, whether meta_data holds plain arrays (the
+	 * faked wc/v3 responses) or WC_Meta_Data objects (a real re-read document).
+	 */
+	private function metaValue( array $data, string $key ) {
+		foreach ( $data['meta_data'] ?? array() as $entry ) {
+			$entry_key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? $entry->key : null );
+			if ( $key === $entry_key ) {
+				return is_array( $entry ) ? $entry['value'] : $entry->value;
+			}
+		}
+		return null;
+	}
+
+	private function noteContents( int $order_id ): array {
+		return array_map(
+			static fn( $note ) => $note->content,
+			wc_get_order_notes( array( 'order_id' => $order_id ) )
+		);
+	}
+
+	private function updateOrder( $order, array $payload ) {
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$current = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+		return $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'baseRevision' => Order_Serializer::canonical_revision( $current ),
+				'payload'      => $payload,
+			)
+		);
 	}
 
 	public function test_unknown_collection_is_rejected_400_without_reserving(): void {
@@ -1111,6 +1155,200 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		// A fresh create reports the POST's 201, not the GET re-read's 200.
 		$this->assertSame( 201, $result->get_status() );
+	}
+
+	public function test_order_create_adds_creation_note_with_cashier_and_store(): void {
+		$cashier_id = self::factory()->user->create(
+			array(
+				'display_name' => 'Create Cashier',
+				'role'         => 'administrator',
+			)
+		);
+		$store_id = self::factory()->post->create(
+			array(
+				'post_type'  => 'wcpos_store',
+				'post_title' => 'Create Store',
+			)
+		);
+		wp_set_current_user( $cashier_id );
+
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array(
+					'meta_data' => array(
+						array(
+							'key'   => '_pos_store',
+							'value' => (string) $store_id,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $result->get_status() );
+		$this->assertContains(
+			'Order created via POS by Create Cashier at Create Store.',
+			$this->noteContents( (int) $result->get_data()['document']['id'] )
+		);
+	}
+
+	public function test_order_update_reassigns_cashier_to_authenticated_user_and_acknowledges_meta(): void {
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$new_id = self::factory()->user->create(
+			array(
+				'display_name' => 'New Cashier',
+				'role'         => 'administrator',
+			)
+		);
+		$order  = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		wp_set_current_user( $new_id );
+
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => (string) $new_id,
+					),
+				),
+			)
+		);
+
+		$this->assertSame( (string) $new_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertSame( (string) $new_id, (string) $this->metaValue( $result->get_data()['document'], '_pos_user' ) );
+		$this->assertContains( 'POS cashier changed from Old Cashier to New Cashier.', $this->noteContents( $order->get_id() ) );
+	}
+
+	public function test_order_update_silently_ignores_different_cashier_user(): void {
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Current Cashier' ) );
+		$other_id = self::factory()->user->create( array( 'display_name' => 'Other Cashier' ) );
+		$actor_id = self::factory()->user->create(
+			array(
+				'display_name' => 'Actor',
+				'role'         => 'administrator',
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		wp_set_current_user( $actor_id );
+
+		$this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => (string) $other_id,
+					),
+				),
+			)
+		);
+
+		$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertCount( 0, array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => 0 === strpos( $note, 'POS cashier changed' ) ) );
+	}
+
+	public function test_order_update_reassigns_store_and_adds_change_note(): void {
+		$old_store = self::factory()->post->create(
+			array(
+				'post_type'  => 'wcpos_store',
+				'post_title' => 'Old Store',
+			)
+		);
+		$new_store = self::factory()->post->create(
+			array(
+				'post_type'  => 'wcpos_store',
+				'post_title' => 'New Store',
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_store', (string) $old_store );
+		$order->save();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_store',
+						'value' => (string) $new_store,
+					),
+				),
+			)
+		);
+
+		$this->assertSame( (string) $new_store, wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
+		$this->assertContains( 'POS store changed from Old Store to New Store.', $this->noteContents( $order->get_id() ) );
+	}
+
+	public function test_order_reopen_suppresses_reassignment_notes(): void {
+		$old_user = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$new_user = self::factory()->user->create(
+			array(
+				'display_name' => 'Reopening Cashier',
+				'role'         => 'administrator',
+			)
+		);
+		$old_store = self::factory()->post->create(
+			array(
+				'post_type'  => 'wcpos_store',
+				'post_title' => 'Old Store',
+			)
+		);
+		$new_store = self::factory()->post->create(
+			array(
+				'post_type'  => 'wcpos_store',
+				'post_title' => 'Reopen Store',
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_status( 'processing' );
+		$order->update_meta_data( '_pos_user', (string) $old_user );
+		$order->update_meta_data( '_pos_store', (string) $old_store );
+		$order->save();
+		wp_set_current_user( $new_user );
+
+		$this->updateOrder(
+			$order,
+			array(
+				'status'    => 'pos-open',
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => (string) $new_user,
+					),
+					array(
+						'key'   => '_pos_store',
+						'value' => (string) $new_store,
+					),
+				),
+			)
+		);
+
+		$notes = $this->noteContents( $order->get_id() );
+		$this->assertCount( 1, array_filter( $notes, static fn( $note ) => 0 === strpos( $note, 'Order re-opened via POS' ) ) );
+		$this->assertCount( 0, array_filter( $notes, static fn( $note ) => 0 === strpos( $note, 'POS cashier changed' ) ) );
+		$this->assertCount( 0, array_filter( $notes, static fn( $note ) => 0 === strpos( $note, 'POS store changed' ) ) );
+	}
+
+	public function test_order_update_changing_customer_adds_pos_note(): void {
+		$old_customer = self::factory()->user->create( array( 'display_name' => 'Old Customer' ) );
+		$new_customer = self::factory()->user->create( array( 'display_name' => 'New Customer' ) );
+		$order = OrderHelper::create_order();
+		$order->set_customer_id( $old_customer );
+		$order->save();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->updateOrder( $order, array( 'customer_id' => $new_customer ) );
+
+		$this->assertContains( 'Customer changed from Old Customer to New Customer via WCPOS.', $this->noteContents( $order->get_id() ) );
 	}
 
 	public function test_non_order_create_persists_no_audit_meta(): void {

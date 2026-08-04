@@ -15,6 +15,7 @@ namespace WCPOS\WooCommercePOS\Gateways;
 use WC_Order;
 use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\Payments\Abstract_POS_Gateway;
+use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WP_REST_Request;
 
 /**
@@ -280,6 +281,7 @@ class Cash extends Abstract_POS_Gateway {
 		$order->update_meta_data( '_pos_cash_change', $change );
 
 		if ( $tendered >= $order->get_total() ) {
+			Order_Notes::add_cash_note( $order, $tendered, $change );
 			$order->payment_complete();
 			return true;
 		}
@@ -308,6 +310,7 @@ class Cash extends Abstract_POS_Gateway {
 
 		$order->add_item( $fee );
 		$order->set_total( wc_format_decimal( floatval( $order->get_total() ) - floatval( $tendered ) ) );
+		Order_Notes::add_cash_note( $order, $tendered, $change );
 		$order->update_status( 'wc-pos-partial' );
 
 		return true;

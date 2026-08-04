@@ -351,6 +351,32 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test a POS cash payment records its tender audit note.
+	 */
+	public function test_pos_cash_payment_adds_tendered_and_change_note(): void {
+		$order = OrderHelper::create_order();
+		$order->set_total( '40.00' );
+		$order->save();
+
+		$result = $this->gateway->process_pos_checkout_action(
+			array(),
+			'start',
+			array( 'amount_tendered' => '50.00' ),
+			$order
+		);
+		$notes = array_filter(
+			wc_get_order_notes( array( 'order_id' => $order->get_id() ) ),
+			static fn( $note ) => 0 === strpos( $note->content, 'Cash payment received' )
+		);
+		$note = wp_strip_all_tags( reset( $notes )->content );
+
+		$this->assertSame( 'completed', $result['status'] );
+		$this->assertStringContainsString( 'Cash payment received — amount tendered:', $note );
+		$this->assertStringContainsString( '50.00', $note );
+		$this->assertStringContainsString( '10.00', $note );
+	}
+
+	/**
 	 * Direct test: partial payment (tendered less than total).
 	 */
 	public function test_direct_partial_payment(): void {
