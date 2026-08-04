@@ -84,13 +84,20 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$rest_order->set_created_via( 'rest-api' );
 		$rest_order->save();
 
+		$other_order = OrderHelper::create_order();
+		$other_order->set_created_via( 'other' );
+		$other_order->save();
+
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
-		$request->set_query_params( array( 'created_via' => array( 'checkout' ) ) );
+		$request->set_query_params( array( 'created_via' => array( 'checkout', 'rest-api' ) ) );
 
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( array( $checkout_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		$this->assertEqualsCanonicalizing(
+			array( $checkout_order->get_id(), $rest_order->get_id() ),
+			wp_list_pluck( $response->get_data(), 'id' )
+		);
 	}
 
 	/**
