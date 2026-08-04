@@ -12,7 +12,9 @@ on:
       - "**.jsx"
       - "package.json"
       - "packages/*/src/translations/locales/en/*.json"
+      - ".github/scripts/test-deploy-dev-workflow.sh"
       - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
   pull_request:
@@ -26,7 +28,9 @@ on:
       - "**.jsx"
       - "package.json"
       - "packages/*/src/translations/locales/en/*.json"
+      - ".github/scripts/test-deploy-dev-workflow.sh"
       - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
   workflow_dispatch:
@@ -45,18 +49,21 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate dev deployment workflow
+        run: bash .github/scripts/test-deploy-dev-workflow.sh
 
       - name: Validate JS translation workflow
         run: bash .github/scripts/test-push-js-strings.sh
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v4
         with:
           version: '11.1.1'
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
 

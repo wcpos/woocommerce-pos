@@ -209,6 +209,11 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	 * @covers ::build
 	 */
 	public function test_preview_formats_order_dates_with_store_locale(): void {
+		// The WordPress time_format setting controls the clock convention
+		// (see #1396); configure 24-hour like a typical Spanish site so this
+		// test keeps guarding against English AM/PM leaking into es_ES text.
+		update_option( 'time_format', 'H:i' );
+
 		$store_filter = static function () {
 			return new class() {
 				public function get_currency(): string {

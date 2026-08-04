@@ -150,6 +150,7 @@ write_matrix_fixture() {
   "php": {
     "minimum": "7.4",
     "stable": "8.2",
+    "current": "8.4",
     "experimental": "8.5"
   },
   "wordpress": {
@@ -165,6 +166,7 @@ write_matrix_fixture() {
     { "php": "7.4", "wp": "stable",  "wc": "stable" },
     { "php": "8.2", "wp": "minimum", "wc": "minimum" },
     { "php": "8.2", "wp": "stable",  "wc": "stable" },
+    { "php": "current", "wp": "stable",  "wc": "stable" },
     { "php": "experimental", "wp": "stable", "wc": "stable", "experimental": true }
   ]
 }
@@ -198,18 +200,19 @@ run_case() {
 
 duplicate_output=$(run_case duplicate)
 
-jq -e '.include | length == 4' "$duplicate_output" >/dev/null
+jq -e '.include | length == 5' "$duplicate_output" >/dev/null
 jq -e '[.include[] | select(.wp == "6.7" and (.wc | startswith("10.")))] | length == 0' "$duplicate_output" >/dev/null
 jq -e '[.include[] | select(.source == "wc-rc-detected")] | length == 0' "$duplicate_output" >/dev/null
 jq -e '[.include[] | select(.source == "latest")] | length == 0' "$duplicate_output" >/dev/null
 jq -e '[.include[] | select(.experimental == true)] | length == 1' "$duplicate_output" >/dev/null
 jq -e '.include[] | select(.source == "wp-rc-detected") | .experimental == true' "$duplicate_output" >/dev/null
 jq -e '.include[] | select(.php == "8.5" and .wp == "6.9.4" and .wc == "10.7.0") | .experimental == false' "$duplicate_output" >/dev/null
+jq -e '.include[] | select(.php == "8.4" and .wp == "6.9.4" and .wc == "10.7.0") | .experimental == false' "$duplicate_output" >/dev/null
 echo 'duplicate case: all checks passed'
 
 stale_older_output=$(run_case stale-older)
 
-jq -e '.include | length == 3' "$stale_older_output" >/dev/null
+jq -e '.include | length == 4' "$stale_older_output" >/dev/null
 jq -e '[.include[] | select(.wp == "6.7" and (.wc | startswith("10.")))] | length == 0' "$stale_older_output" >/dev/null
 jq -e '[.include[] | select(.source == "wc-rc-detected")] | length == 0' "$stale_older_output" >/dev/null
 jq -e '[.include[] | select(.source == "latest")] | length == 0' "$stale_older_output" >/dev/null
@@ -218,7 +221,7 @@ echo 'stale-older case: all checks passed'
 
 distinct_output=$(run_case distinct)
 
-jq -e '.include | length == 5' "$distinct_output" >/dev/null
+jq -e '.include | length == 6' "$distinct_output" >/dev/null
 jq -e '[.include[] | select(.wp == "6.7" and (.wc | startswith("10.")))] | length == 0' "$distinct_output" >/dev/null
 jq -e '[.include[] | select(.source == "wc-rc-detected" and .wc == "10.9.0-rc.1" and .experimental == true)] | length == 1' "$distinct_output" >/dev/null
 jq -e '[.include[] | select(.source == "latest" and .experimental == false)] | length == 1' "$distinct_output" >/dev/null

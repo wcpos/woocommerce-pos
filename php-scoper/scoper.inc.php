@@ -98,4 +98,25 @@ return array(
 	),
 
 	'whitelist' => array(),
+
+	// PHP 8.4 added the native http_get_last_response_headers() /
+	// http_clear_last_response_headers() functions, but php-scoper 0.16's
+	// bundled symbol list predates PHP 8.4 so it doesn't recognise them as
+	// built-ins and prefixes Dompdf's calls into WCPOS\Vendor\ — where no such
+	// functions exist — fataling on PHP 8.4+. Declare them internal so calls
+	// resolve to the global functions; Dompdf only invokes them behind a
+	// version_compare( PHP_VERSION, '8.4.0', '>=' ) guard, so they are always
+	// defined where they run.
+	'exclude-functions' => array(
+		'http_get_last_response_headers',
+		'http_clear_last_response_headers',
+	),
+
+	// Same story for constants: IMAGETYPE_SVG is new in PHP 8.5, so the stale
+	// symbol list lets the scoper rewrite Dompdf's defined('IMAGETYPE_SVG')
+	// check into the WCPOS\Vendor namespace, where it is always false — which
+	// silently disables Dompdf's native SVG getimagesize() handling.
+	'exclude-constants' => array(
+		'IMAGETYPE_SVG',
+	),
 );

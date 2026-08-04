@@ -579,6 +579,10 @@ class Print_Job_Service {
 	 * @return bool True when the job was cancelled.
 	 */
 	public function cancel_if_waiting( int $id ): bool {
+		if ( self::POST_TYPE !== get_post_type( $id ) ) {
+			return false;
+		}
+
 		if ( ! $this->acquire_lifecycle_lock( $id ) ) {
 			return false;
 		}

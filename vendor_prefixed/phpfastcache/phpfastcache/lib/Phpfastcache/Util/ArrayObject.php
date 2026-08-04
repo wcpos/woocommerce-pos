@@ -43,7 +43,7 @@ class ArrayObject implements ArrayAccess, Iterator, Countable
     /**
      * @return mixed
      */
-    #[\ReturnTypeWillChange] // PHP 8.1 compatibility
+    #[\ReturnTypeWillChange]
     public function current()
     {
         return $this->array[$this->position];
@@ -95,7 +95,7 @@ class ArrayObject implements ArrayAccess, Iterator, Countable
      * @param mixed $offset
      * @return mixed
      */
-    #[\ReturnTypeWillChange] // PHP 8.1 compatibility
+    #[\ReturnTypeWillChange]
     public function offsetGet($offset)
     {
         return $this->array[$offset] ?? null;
