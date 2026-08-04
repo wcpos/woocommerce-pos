@@ -238,8 +238,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		$filters = array();
 		foreach ( array( 'pos_cashier', 'pos_store', 'created_via' ) as $key ) {
 			if ( array_key_exists( $key, $query_params ) ) {
-				$value           = \is_scalar( $query_params[ $key ] ) ? $query_params[ $key ] : '';
-				$filters[ $key ] = 'created_via' === $key ? sanitize_key( (string) $value ) : absint( $value );
+				$value = $query_params[ $key ];
+				if ( 'created_via' === $key && \is_array( $value ) ) {
+					$filters[ $key ] = \array_map( 'sanitize_key', \array_values( $value ) );
+				} else {
+					$value           = \is_scalar( $value ) ? $value : '';
+					$filters[ $key ] = 'created_via' === $key ? sanitize_key( (string) $value ) : absint( $value );
+				}
 				unset( $query_params[ $key ] );
 			}
 		}
@@ -253,19 +258,24 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				$orders     = $query->get_table_name( 'orders' );
 				$meta       = $query->get_table_name( 'meta' );
 				$operations = $query->get_table_name( 'operational_data' );
-				$meta_keys  = array( 'pos_cashier' => '_pos_user', 'pos_store' => '_pos_store' );
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from WooCommerce.
+				$meta_keys  = array(
+					'pos_cashier' => '_pos_user',
+					'pos_store'   => '_pos_store',
+				);
+				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Table names come from WooCommerce; placeholder lists are generated below.
 				foreach ( $meta_keys as $key => $meta_key ) {
 					if ( isset( $filters[ $key ] ) ) {
-						$sql               = " AND {$orders}.id IN (SELECT order_id FROM {$meta} WHERE meta_key=%s AND meta_value=%s)";
-						$clauses['where'] .= $wpdb->prepare( $sql, $meta_key, (string) $filters[ $key ] );
+						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$meta} WHERE meta_key=%s AND meta_value=%s)", $meta_key, (string) $filters[ $key ] );
 					}
 				}
 				if ( isset( $filters['created_via'] ) ) {
-					$sql               = " AND {$orders}.id IN (SELECT order_id FROM {$operations} WHERE created_via=%s)";
-					$clauses['where'] .= $wpdb->prepare( $sql, $filters['created_via'] );
+					$created_via = (array) $filters['created_via'];
+					if ( array() !== $created_via ) {
+						$placeholders      = implode( ', ', array_fill( 0, \count( $created_via ), '%s' ) );
+						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$operations} WHERE created_via IN ({$placeholders}))", ...$created_via );
+					}
 				}
-				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
 				return $clauses;
 			};
@@ -274,10 +284,17 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		}
 		$this->pos_order_filter_hook = 'woocommerce_rest_shop_order_object_query';
 		$this->pos_order_filter      = static function ( array $args ) use ( $filters ): array {
-			$meta_keys = array( 'pos_cashier' => '_pos_user', 'pos_store' => '_pos_store', 'created_via' => '_created_via' );
+			$meta_keys = array(
+				'pos_cashier' => '_pos_user',
+				'pos_store'   => '_pos_store',
+				'created_via' => '_created_via',
+			);
 			foreach ( $meta_keys as $key => $meta_key ) {
-				if ( isset( $filters[ $key ] ) ) {
-					$args['meta_query'][] = array( 'key' => $meta_key, 'value' => $filters[ $key ] );
+				if ( isset( $filters[ $key ] ) && array() !== $filters[ $key ] ) {
+					$args['meta_query'][] = array(
+						'key'   => $meta_key,
+						'value' => $filters[ $key ],
+					);
 				}
 			}
 
