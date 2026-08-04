@@ -377,6 +377,39 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test a partial cash payment records its tender audit note and flips the order status.
+	 */
+	public function test_partial_cash_payment_adds_note_and_sets_partial_status(): void {
+		$order = OrderHelper::create_order();
+		$order->set_total( '100.00' );
+		$order->save();
+
+		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
+		$_POST['pos-cash-tendered']            = '60.00';
+
+		try {
+			$result = $this->gateway->process_payment( $order->get_id() );
+		} finally {
+			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+		}
+
+		$notes = array_values(
+			array_filter(
+				wc_get_order_notes( array( 'order_id' => $order->get_id() ) ),
+				static fn( $note ) => 0 === strpos( $note->content, 'Cash payment received' )
+			)
+		);
+
+		$this->assertSame( 'success', $result['result'] );
+		$this->assertCount( 1, $notes, 'The partial-cash path should record exactly one tender audit note.' );
+
+		$note = wp_strip_all_tags( $notes[0]->content );
+		$this->assertStringContainsString( 'Cash payment received — amount tendered:', $note );
+		$this->assertStringContainsString( '60.00', $note );
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
 	 * Direct test: partial payment (tendered less than total).
 	 */
 	public function test_direct_partial_payment(): void {
