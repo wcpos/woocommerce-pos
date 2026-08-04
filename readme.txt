@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.15
+Stable tag: 1.9.16
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,9 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.16 - 2026/08/05 =
+- **Fixed stale price ranges on variable products** -- the POS product grid could show an outdated price or price range for a variable product even after variation prices changed, and clearing local data did not help, because the freshly recomputed range was discarded in favour of an old stored value when building the server response. Responses now always serve the current values, so the displayed range matches the live variation prices. The price charged at checkout was always correct -- this fixes what the grid displays. Server-side fix; no app update needed.
 
 = 1.9.15 - 2026/08/04 =
 - **Security: custom thermal receipt templates can no longer run PHP** -- a user with POS management access (eg: a shop manager) could embed PHP in a custom thermal receipt template and have it execute when a receipt was rendered, because the thermal engine fell through to the legacy PHP renderer. Thermal templates now render exclusively through the safe Mustache/XML pipeline, which discards embedded PHP; malformed markup fails closed. **If you use custom receipt templates, please update.**
