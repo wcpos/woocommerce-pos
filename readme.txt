@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.14
+Stable tag: 1.9.15
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,10 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.15 - 2026/08/04 =
+- **Security: custom thermal receipt templates can no longer run PHP** -- a user with POS management access (eg: a shop manager) could embed PHP in a custom thermal receipt template and have it execute when a receipt was rendered, because the thermal engine fell through to the legacy PHP renderer. Thermal templates now render exclusively through the safe Mustache/XML pipeline, which discards embedded PHP; malformed markup fails closed. **If you use custom receipt templates, please update.**
+- **More reliable thermal receipt rendering** -- thermal render failures are now logged so a broken template is diagnosable, and browser-printed HTML receipts are constrained to the configured paper width so wide rows no longer overflow the roll.
 
 = 1.9.14 - 2026/07/31 =
 - **Receipt timestamps now respect your WordPress time format** -- receipts could force 12-hour AM/PM times even when your site is set to a 24-hour clock. The receipt date formatter now follows the time format configured under Settings > General, while the store locale continues to control the date language.
