@@ -161,27 +161,29 @@ class Variations_Controller extends WP_REST_Controller {
 	 * @return true|WP_Error
 	 */
 	private function validate_search_request( WP_REST_Request $request ) {
-		$sku = (string) $request->get_param( 'sku' );
-		if ( self::MAX_SKU_LENGTH < \strlen( $sku ) ) {
-			return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not exceed 4096 bytes', array( 'status' => 400 ) );
-		}
-		$skus = array_filter(
-			array_map( 'trim', explode( ',', $sku ) ),
-			static function ( string $term ): bool {
-				return '' !== $term;
+		if ( $request->has_param( 'sku' ) ) {
+			$sku = (string) $request->get_param( 'sku' );
+			if ( self::MAX_SKU_LENGTH < \strlen( $sku ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not exceed 4096 bytes', array( 'status' => 400 ) );
 			}
-		);
-		if ( self::MAX_SKU_TERMS < \count( $skus ) ) {
-			return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not contain more than 100 comma-separated terms', array( 'status' => 400 ) );
-		}
-
-		$search = (string) $request->get_param( 'search' );
-		if ( self::MAX_SEARCH_LENGTH < \strlen( $search ) ) {
-			return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 bytes', array( 'status' => 400 ) );
-		}
-		$terms = (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
-		if ( self::MAX_SEARCH_TERMS < \count( $terms ) ) {
-			return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
+			$skus = array_filter(
+				array_map( 'trim', explode( ',', $sku ) ),
+				static function ( string $term ): bool {
+					return '' !== $term;
+				}
+			);
+			if ( self::MAX_SKU_TERMS < \count( $skus ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not contain more than 100 comma-separated terms', array( 'status' => 400 ) );
+			}
+		} else {
+			$search = (string) $request->get_param( 'search' );
+			if ( self::MAX_SEARCH_LENGTH < \strlen( $search ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 bytes', array( 'status' => 400 ) );
+			}
+			$terms = (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+			if ( self::MAX_SEARCH_TERMS < \count( $terms ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
+			}
 		}
 
 		if ( self::MAX_PAGE < (int) $request->get_param( 'page' ) ) {

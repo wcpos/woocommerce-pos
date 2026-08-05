@@ -191,6 +191,12 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 */
 	public function valid_search_limit_provider(): array {
 		return array(
+			'sku precedence'    => array(
+				array(
+					'sku'    => 'EXACT-SKU',
+					'search' => str_repeat( 'S', 257 ),
+				),
+			),
 			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4096 ) ) ),
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 100, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
