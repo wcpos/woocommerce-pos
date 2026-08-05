@@ -84,8 +84,8 @@ class Resolve_Controller extends WP_REST_Controller {
 		}
 		$matches = $this->apply_matches_filter( $matches, $code );
 		$visibility        = new Pos_Visibility();
-		$hidden_products   = $visibility->online_only_product_ids();
-		$hidden_variations = $visibility->online_only_variation_ids();
+		$hidden_products   = $visibility->hidden_ids( Pos_Visibility::PRODUCTS );
+		$hidden_variations = $visibility->hidden_ids( Pos_Visibility::VARIATIONS );
 		$matches = array_values(
 			array_filter(
 				$matches,

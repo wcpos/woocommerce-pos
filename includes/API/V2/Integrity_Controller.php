@@ -200,15 +200,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			// toggle changes no product row (no hook fires), so stored per-record digests are never touched;
 			// omitting the ids from this read is enough because the client folds THIS list. Products and
 			// variations share the wp_posts id-space, so their two hidden lists union safely on cur.id.
-			$visibility = new Pos_Visibility();
-			$hidden     = array_values(
-				array_unique(
-					array_merge(
-						$visibility->online_only_product_ids(),
-						$visibility->online_only_variation_ids()
-					)
-				)
-			);
+			$hidden = ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG );
 			if ( array() !== $hidden ) {
 				$servable_filter .= ( '' === $servable_filter ? ' WHERE ' : ' AND ' )
 					. 'cur.id NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';

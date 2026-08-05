@@ -198,13 +198,7 @@ final class Variable_Price_Range {
 	 * @return array<int, int>
 	 */
 	private static function visible_child_ids( WC_Product_Variable $product ): array {
-		$child_ids = (array) $product->get_visible_children();
-		$hidden    = ( new Pos_Visibility() )->online_only_variation_ids();
-		if ( array() !== $hidden ) {
-			$child_ids = array_values( array_diff( array_map( 'intval', $child_ids ), $hidden ) );
-		}
-
-		return array_map( 'intval', $child_ids );
+		return ( new Pos_Visibility() )->filter_visible_children( $product->get_visible_children() );
 	}
 
 	/**

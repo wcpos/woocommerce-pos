@@ -199,29 +199,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			return;
 		}
 		$visibility = new Pos_Visibility();
-		$exclude    = $visibility->online_only_product_ids();
-		$exclude    = array_merge( $exclude, $visibility->online_only_variation_ids() );
-		if ( array() === $exclude ) {
+		// Nothing hidden → don't attach a filter that would be a no-op. Sync\Pos_Visibility owns the
+		// rule itself: which ids are hidden, the feature gate, and the post__in-vs-post__not_in trap.
+		if ( array() === $visibility->hidden_ids( Pos_Visibility::CATALOG ) ) {
 			return;
 		}
-		$this->pos_visibility_filter = static function ( $args ) use ( $exclude ) {
-			// Review finding 8: WooCommerce maps `include=` to `post__in`, and WP_Query IGNORES
-			// `post__not_in` whenever `post__in` is present (they are mutually exclusive in core's
-			// WHERE builder). So for a targeted pull we must INTERSECT — subtract the hidden ids from
-			// the include list itself — or a targeted pull of an `online_only` id would leak. An empty
-			// intersection must yield an EMPTY response, not an unfiltered one, so we pin post__in to a
-			// non-existent id (0) rather than leaving it empty.
-			if ( isset( $args['post__in'] ) && array() !== (array) $args['post__in'] ) {
-				$intersected      = array_values( array_diff( array_map( 'intval', (array) $args['post__in'] ), $exclude ) );
-				$args['post__in'] = array() === $intersected ? array( 0 ) : $intersected;
-
-				return $args;
-			}
-
-			$existing             = isset( $args['post__not_in'] ) && \is_array( $args['post__not_in'] ) ? $args['post__not_in'] : array();
-			$args['post__not_in'] = array_values( array_unique( array_merge( $existing, $exclude ) ) );
-
-			return $args;
+		$this->pos_visibility_filter = static function ( $args ) use ( $visibility ) {
+			return $visibility->apply_to_wp_query_args( (array) $args, 'products' );
 		};
 		add_filter( 'woocommerce_rest_product_object_query', $this->pos_visibility_filter );
 	}
