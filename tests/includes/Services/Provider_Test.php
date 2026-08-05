@@ -218,23 +218,22 @@ class Provider_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It exposes every provider's client-facing capabilities.
+	 * It projects every provider's public capabilities.
 	 */
-	public function test_client_capabilities_covers_every_provider(): void {
-		$capabilities = Provider::client_capabilities();
+	public function test_public_capabilities_covers_every_provider(): void {
+		// Act.
+		$actual = Provider::public_capabilities();
 
-		$this->assertEquals( Provider::valid(), array_keys( $capabilities ) );
-		foreach ( Provider::valid() as $provider ) {
-			$this->assertEquals(
-				array(
-					'polling'          => Provider::is_polling( $provider ),
-					'poll_endpoint'    => Provider::poll_endpoint( $provider ),
-					'template_engines' => Provider::template_engines( $provider ),
-				),
-				$capabilities[ $provider ],
-				$provider
-			);
-		}
+		// Assert.
+		$this->assertEquals(
+			array(
+				'star-cloudprnt' => array( 'template_engines' => 'thermal' ),
+				'epson-sdp'      => array( 'template_engines' => 'thermal' ),
+				'printnode'      => array( 'template_engines' => 'all' ),
+				'star-online'    => array( 'template_engines' => 'thermal' ),
+			),
+			$actual
+		);
 	}
 
 	/**

@@ -823,14 +823,64 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertEquals( 200, $response->get_status() );
-		$providers = $response->get_data()['providers'];
-		$this->assertEquals( 'all', $providers['printnode']['template_engines'] );
-		$this->assertEquals( 'thermal', $providers['star-cloudprnt']['template_engines'] );
-		$this->assertEquals( 'thermal', $providers['epson-sdp']['template_engines'] );
-		$this->assertEquals( 'thermal', $providers['star-online']['template_engines'] );
-		$this->assertTrue( $providers['star-cloudprnt']['polling'] );
-		$this->assertEquals( 'cloudprnt', $providers['star-cloudprnt']['poll_endpoint'] );
-		$this->assertFalse( $providers['printnode']['polling'] );
-		$this->assertNull( $providers['printnode']['poll_endpoint'] );
+		$this->assertEquals(
+			array(
+				'star-cloudprnt' => array( 'template_engines' => 'thermal' ),
+				'epson-sdp'      => array( 'template_engines' => 'thermal' ),
+				'printnode'      => array( 'template_engines' => 'all' ),
+				'star-online'    => array( 'template_engines' => 'thermal' ),
+			),
+			$response->get_data()['providers']
+		);
+	}
+
+	/**
+	 * It repeats provider capabilities on the save response.
+	 *
+	 * The admin app rebuilds its cached settings from the save response, so a
+	 * field served only on GET would be dropped by the first save.
+	 */
+	public function test_update_cloud_print_returns_provider_capabilities(): void {
+		// Arrange.
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(),
+			)
+		);
+
+		// Act.
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'all', $response->get_data()['providers']['printnode']['template_engines'] );
+	}
+
+	/**
+	 * It never persists the served provider capabilities into the option.
+	 */
+	public function test_update_cloud_print_does_not_store_provider_capabilities(): void {
+		// Arrange.
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(),
+				'providers'   => array( 'printnode' => array( 'template_engines' => 'thermal' ) ),
+			)
+		);
+
+		// Act.
+		rest_do_request( $request );
+
+		// Assert.
+		$this->assertEquals(
+			array( 'printers', 'assignments' ),
+			array_keys( get_option( 'woocommerce_pos_settings_cloud_print' ) )
+		);
 	}
 }

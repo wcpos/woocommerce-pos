@@ -659,10 +659,10 @@ class Settings extends WP_REST_Controller {
 			$settings['printers']
 		);
 		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
-		// Read-only provider facts (which template engines a provider can
-		// render, how it is delivered). The admin app currently mirrors these
-		// in its own table; serving them keeps the server authoritative.
-		$settings['providers'] = Provider::client_capabilities();
+		// Read-only provider facts (currently: which template engines a
+		// provider can render). The admin app mirrors this in its own table;
+		// serving it makes the server the authority.
+		$settings['providers'] = Provider::public_capabilities();
 
 		return new WP_REST_Response( $settings, 200 );
 	}
@@ -792,6 +792,10 @@ class Settings extends WP_REST_Controller {
 				'printers'    => $response_printers,
 				'assignments' => $clean['assignments'],
 				'generated'   => $generated,
+				// Repeated from the GET shape: the admin app rebuilds its cache
+				// from this response, so a field served only on GET would be
+				// dropped by the first save.
+				'providers'   => Provider::public_capabilities(),
 			),
 			200
 		);

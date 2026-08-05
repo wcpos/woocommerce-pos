@@ -85,6 +85,11 @@ class Cloud_Print_Diagnostic {
 	 * not by this server, so it is returned as text rather than through
 	 * build(). Kept here so every provider's diagnostic lives in one class.
 	 *
+	 * Unlike build(), the name is not stripped of control bytes: this is markup
+	 * text, not a raw command stream, so the escaping that matters is of the
+	 * markup's own brackets. Stored printer names are sanitize_text_field()'d
+	 * on the way in, which already removes control characters.
+	 *
 	 * @param string $printer_name Display name.
 	 *
 	 * @return string Star Document Markup source.

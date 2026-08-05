@@ -182,20 +182,21 @@ class Provider {
 	}
 
 	/**
-	 * Per-provider facts the settings UI needs, keyed by provider.
+	 * Per-provider facts the settings screen cannot derive, keyed by provider.
 	 *
-	 * Projected into the cloud-print settings response so the admin app can
-	 * read provider capabilities from the server instead of re-declaring them
-	 * in its own table.
+	 * Projected onto the cloud-print settings response (cf.
+	 * Cloud_Print_Relay_Service::public_state()) so the admin app can read the
+	 * provider table from the server instead of re-declaring it. Deliberately
+	 * narrow: presentation (labels, badges) stays in the client, and facts the
+	 * client already renders from its own table are not duplicated here until
+	 * something reads them.
 	 *
-	 * @return array<string, array<string, mixed>>
+	 * @return array<string, array<string, string>>
 	 */
-	public static function client_capabilities(): array {
+	public static function public_capabilities(): array {
 		$capabilities = array();
 		foreach ( self::valid() as $provider ) {
 			$capabilities[ $provider ] = array(
-				'polling'          => self::is_polling( $provider ),
-				'poll_endpoint'    => self::poll_endpoint( $provider ),
 				'template_engines' => self::template_engines( $provider ),
 			);
 		}

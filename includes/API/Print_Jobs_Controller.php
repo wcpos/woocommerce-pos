@@ -1068,7 +1068,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		try {
-			$diag = ( new Cloud_Print_Diagnostic() )->build( (string) $printer['provider'], (string) $printer['name'] );
+			$diag = ( new Cloud_Print_Diagnostic() )->build( $provider, (string) $printer['name'] );
 		} catch ( \RuntimeException $e ) {
 			return new WP_Error(
 				'wcpos_print_job_no_diagnostic',

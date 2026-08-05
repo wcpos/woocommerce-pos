@@ -73,11 +73,14 @@ class Print_Format_Resolver {
 	 *
 	 * PrintNode therefore reports its PDF default here even for a printer in raw
 	 * mode, unlike resolve(), which sees the engine and can honour
-	 * `printnode_format`. That asymmetry is pre-existing and deliberate: it is
-	 * inert because PrintNode submissions choose their wire from the job's
-	 * `pn_kind` (see Cloud_Print_Submit_Service), never from this value.
-	 * Collapsing the two answers waits on the mediaTypes negotiation work
-	 * (issue #1351).
+	 * `printnode_format`. Only the reprint path can actually reach that case —
+	 * the diagnostic builder throws for PrintNode before it gets here. The
+	 * asymmetry is pre-existing and, as far as we can tell, harmless: PrintNode
+	 * submissions choose their wire from the job's `pn_kind` (see
+	 * Cloud_Print_Submit_Service), never from this value, so a reprinted
+	 * raw-mode job prints correctly even though its stored content type reads
+	 * `application/pdf` next to `pn_kind` of `escpos`. Collapsing the two
+	 * answers waits on the mediaTypes negotiation work (issue #1351).
 	 *
 	 * @param array $printer Printer configuration.
 	 *

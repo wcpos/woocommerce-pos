@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Print_Format_Resolver;
-use WCPOS\WooCommercePOS\Services\Provider;
 use WP_UnitTestCase;
 
 /**
@@ -202,7 +201,6 @@ class Print_Format_Resolver_Test extends WP_UnitTestCase {
 				$resolver->content_type_for_printer( array( 'provider' => $provider ) ),
 				$provider
 			);
-			$this->assertEquals( $content_type, Provider::content_type( $provider ), $provider );
 		}
 	}
 
