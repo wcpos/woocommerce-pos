@@ -209,4 +209,148 @@ class Test_Update_1_10_0 extends WP_UnitTestCase {
 
 		$this->assertSame( '', get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
 	}
+
+	/**
+	 * Insert a raw usermeta row directly (bypassing the meta API and cache).
+	 *
+	 * @param int    $user_id  The user ID (need not exist in wp_users).
+	 * @param string $meta_key The meta key.
+	 * @param string $value    The meta value.
+	 */
+	private function insert_raw_meta_row( int $user_id, string $meta_key, string $value ): void {
+		global $wpdb;
+
+		$wpdb->insert(
+			$wpdb->usermeta,
+			array(
+				'user_id'    => $user_id,
+				'meta_key'   => $meta_key,
+				'meta_value' => $value,
+			),
+			array( '%d', '%s', '%s' )
+		);
+		wp_cache_delete( $user_id, 'user_meta' );
+	}
+
+	/**
+	 * Test the collision fallback: when the lowest blog id's value is owned by
+	 * another user's plain key, the NEXT blog's free value is promoted instead
+	 * of minting fresh.
+	 */
+	public function test_migration_falls_back_to_next_blog_on_collision(): void {
+		$owner_id  = $this->factory()->user->create();
+		$clone_id  = $this->factory()->user->create();
+		$dupe_uuid = wp_generate_uuid4();
+		$free_uuid = wp_generate_uuid4();
+		update_user_meta( $owner_id, '_woocommerce_pos_uuid', $dupe_uuid );
+		update_user_meta( $clone_id, '_woocommerce_pos_uuid_2', $dupe_uuid );
+		update_user_meta( $clone_id, '_woocommerce_pos_uuid_3', $free_uuid );
+
+		$this->run_migration();
+
+		$this->assertSame( $free_uuid, get_user_meta( $clone_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertEquals( 0, $this->count_meta_rows( $clone_id, '_woocommerce_pos_uuid_2' ) );
+		$this->assertEquals( 0, $this->count_meta_rows( $clone_id, '_woocommerce_pos_uuid_3' ) );
+	}
+
+	/**
+	 * Test an invalid lowest-blog value falls through to a valid higher-blog
+	 * value rather than blocking promotion.
+	 */
+	public function test_migration_falls_back_to_next_blog_when_lowest_value_invalid(): void {
+		$user_id    = $this->factory()->user->create();
+		$valid_uuid = wp_generate_uuid4();
+		update_user_meta( $user_id, '_woocommerce_pos_uuid_2', 'junk-value' );
+		update_user_meta( $user_id, '_woocommerce_pos_uuid_10', $valid_uuid );
+
+		$this->run_migration();
+
+		$this->assertSame( $valid_uuid, get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
+	 * Test a valid uuid in ANY plain row wins even when an invalid duplicate
+	 * row sits in front of it (matching Pos_Uuid::read_valid_uuid_from_meta) —
+	 * the migration must not overwrite an identity a client may hold.
+	 */
+	public function test_migration_respects_valid_plain_uuid_behind_invalid_duplicate_row(): void {
+		$user_id    = $this->factory()->user->create();
+		$plain_uuid = wp_generate_uuid4();
+		$this->insert_raw_meta_row( $user_id, '_woocommerce_pos_uuid', 'junk-first-row' );
+		$this->insert_raw_meta_row( $user_id, '_woocommerce_pos_uuid', $plain_uuid );
+		update_user_meta( $user_id, '_woocommerce_pos_uuid_2', wp_generate_uuid4() );
+
+		$this->run_migration();
+
+		$plain_values = get_user_meta( $user_id, '_woocommerce_pos_uuid' );
+		$this->assertContains( $plain_uuid, $plain_values );
+		$this->assertContains( 'junk-first-row', $plain_values, 'Plain rows must not be rewritten when a valid uuid exists.' );
+		$this->assertEquals( 0, $this->count_meta_rows( $user_id, '_woocommerce_pos_uuid_2' ) );
+	}
+
+	/**
+	 * Test duplicate legacy rows for ONE key prefer the valid uuid over an
+	 * invalid row that happens to sort first.
+	 */
+	public function test_migration_prefers_valid_value_among_duplicate_legacy_rows(): void {
+		$user_id    = $this->factory()->user->create();
+		$valid_uuid = wp_generate_uuid4();
+		$this->insert_raw_meta_row( $user_id, '_woocommerce_pos_uuid_2', 'junk-value' );
+		$this->insert_raw_meta_row( $user_id, '_woocommerce_pos_uuid_2', $valid_uuid );
+
+		$this->run_migration();
+
+		$this->assertSame( $valid_uuid, get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertEquals( 0, $this->count_meta_rows( $user_id, '_woocommerce_pos_uuid_2' ) );
+	}
+
+	/**
+	 * Test a failed promotion write keeps the user's legacy rows — the ladder
+	 * is one-shot, so the rows must survive for #1450's lazy adoption.
+	 */
+	public function test_migration_keeps_legacy_rows_when_write_fails(): void {
+		$user_id = $this->factory()->user->create();
+		update_user_meta( $user_id, '_woocommerce_pos_uuid_2', wp_generate_uuid4() );
+		$veto = function ( $check, $object_id, $meta_key ) {
+			return '_woocommerce_pos_uuid' === $meta_key ? false : $check;
+		};
+		add_filter( 'add_user_metadata', $veto, 10, 3 );
+
+		$this->run_migration();
+
+		remove_filter( 'add_user_metadata', $veto, 10 );
+		$this->assertSame( '', get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertEquals( 1, $this->count_meta_rows( $user_id, '_woocommerce_pos_uuid_2' ), 'Legacy rows must survive a vetoed write.' );
+	}
+
+	/**
+	 * Test orphaned legacy rows of DELETED users are left untouched — nothing
+	 * reads them, and promoting them would recreate garbage.
+	 */
+	public function test_migration_ignores_orphaned_rows_of_deleted_users(): void {
+		$ghost_id = 999999901;
+		$this->insert_raw_meta_row( $ghost_id, '_woocommerce_pos_uuid_2', wp_generate_uuid4() );
+
+		$this->run_migration();
+
+		$this->assertEquals( 1, $this->count_meta_rows( $ghost_id, '_woocommerce_pos_uuid_2' ) );
+		$this->assertEquals( 0, $this->count_meta_rows( $ghost_id, '_woocommerce_pos_uuid' ) );
+	}
+
+	/**
+	 * Test a stale plain row belonging to a DELETED user does not block a live
+	 * user's promotion (the ownership check joins wp_users, mirroring
+	 * Pos_Uuid::uuid_owned_by_other_user).
+	 */
+	public function test_migration_ignores_stale_plain_owner_of_deleted_user(): void {
+		$ghost_id    = 999999902;
+		$user_id     = $this->factory()->user->create();
+		$legacy_uuid = wp_generate_uuid4();
+		$this->insert_raw_meta_row( $ghost_id, '_woocommerce_pos_uuid', $legacy_uuid );
+		update_user_meta( $user_id, '_woocommerce_pos_uuid_2', $legacy_uuid );
+
+		$this->run_migration();
+
+		$this->assertSame( $legacy_uuid, get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
+	}
 }
