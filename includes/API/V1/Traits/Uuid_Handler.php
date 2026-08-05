@@ -9,12 +9,10 @@ namespace WCPOS\WooCommercePOS\API\V1\Traits;
 
 use Ramsey\Uuid\Uuid;
 use WC_Abstract_Order;
-use WC_Customer;
 use WC_Data;
 use WC_Order_Item;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WCPOS\WooCommercePOS\Sync\Term_Meta_Adapter;
 use WP_User;
 use function wp_cache_add;
 use function wp_cache_delete;
@@ -117,28 +115,6 @@ trait Uuid_Handler {
 	}
 
 	/**
-	 * Generate a new UUID.
-	 *
-	 * @return string
-	 */
-	private function create_uuid(): string {
-		return Pos_Uuid::generate_uuid();
-	}
-
-	/**
-	 * Check if the given UUID is unique.
-	 *
-	 * @param string  $uuid   The UUID to check.
-	 * @param WC_Data $object The WooCommerce data object.
-	 * @return bool True if another record owns the UUID, false otherwise.
-	 */
-	private function uuid_postmeta_exists( string $uuid, WC_Data $object ): bool {
-		return $object instanceof WC_Abstract_Order
-			? Pos_Uuid::uuid_owned_by_other_order( $uuid, $object )
-			: Pos_Uuid::uuid_owned_by_other( $uuid, $object );
-	}
-
-	/**
 	 * Retrieve order IDs by UUID.
 	 *
 	 * @param string $uuid The UUID to search for.
@@ -146,29 +122,5 @@ trait Uuid_Handler {
 	 */
 	private function get_order_ids_by_uuid( string $uuid ) {
 		return Pos_Uuid::get_order_ids_by_uuid( $uuid );
-	}
-
-	/**
-	 * Check if the given UUID already exists for any user.
-	 *
-	 * @param string $uuid       The UUID to check.
-	 * @param int    $exclude_id The user ID to exclude.
-	 * @return bool True if another record owns the UUID, false otherwise.
-	 */
-	private function uuid_usermeta_exists( string $uuid, int $exclude_id ): bool {
-		$customer = new WC_Customer( $exclude_id );
-
-		return Pos_Uuid::uuid_owned_by_other_user( $uuid, $customer );
-	}
-
-	/**
-	 * Check if the given UUID already exists for any term.
-	 *
-	 * @param string $uuid            The UUID to check.
-	 * @param int    $exclude_term_id The term ID to exclude.
-	 * @return bool True if another record owns the UUID, false otherwise.
-	 */
-	private function uuid_termmeta_exists( string $uuid, int $exclude_term_id ): bool {
-		return Pos_Uuid::uuid_owned_by_other_term( $uuid, new Term_Meta_Adapter( $exclude_term_id ) );
 	}
 }

@@ -23,13 +23,6 @@ class Test_Uuid_Handler_Class {
 
 	/**
 	 * Expose private method for testing.
-	 */
-	public function test_create_uuid(): string {
-		return $this->create_uuid();
-	}
-
-	/**
-	 * Expose private method for testing.
 	 *
 	 * @param mixed $object
 	 */
@@ -51,22 +44,6 @@ class Test_Uuid_Handler_Class {
 	 */
 	public function test_get_term_uuid( $term ): string {
 		return $this->get_term_uuid( $term );
-	}
-
-	/**
-	 * Expose private method for testing.
-	 *
-	 * @param mixed $object
-	 */
-	public function test_uuid_postmeta_exists( string $uuid, $object ): bool {
-		return $this->uuid_postmeta_exists( $uuid, $object );
-	}
-
-	/**
-	 * Expose private method for testing.
-	 */
-	public function test_uuid_usermeta_exists( string $uuid, int $exclude_id ): bool {
-		return $this->uuid_usermeta_exists( $uuid, $exclude_id );
 	}
 
 	/**
@@ -154,33 +131,6 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 		$hacked = StaticMockerHack::get_hack_instance()->hack( $source, '' );
 
 		$this->assertSame( $source, $hacked );
-	}
-
-	/**
-	 * Test create_uuid generates valid UUID v4.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::create_uuid
-	 */
-	public function test_create_uuid_generates_valid_uuid(): void {
-		$uuid = $this->handler->test_create_uuid();
-
-		$this->assertNotEmpty( $uuid );
-		$this->assertTrue( Uuid::isValid( $uuid ), 'Generated UUID should be valid' );
-	}
-
-	/**
-	 * Test create_uuid generates unique UUIDs.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::create_uuid
-	 */
-	public function test_create_uuid_generates_unique_values(): void {
-		$uuid1 = $this->handler->test_create_uuid();
-		$uuid2 = $this->handler->test_create_uuid();
-		$uuid3 = $this->handler->test_create_uuid();
-
-		$this->assertNotEquals( $uuid1, $uuid2 );
-		$this->assertNotEquals( $uuid2, $uuid3 );
-		$this->assertNotEquals( $uuid1, $uuid3 );
 	}
 
 	/**
@@ -390,79 +340,6 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test uuid_postmeta_exists returns false for unique UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_postmeta_exists
-	 */
-	public function test_uuid_postmeta_exists_unique(): void {
-		$product     = ProductHelper::create_simple_product();
-		$unique_uuid = Uuid::uuid4()->toString();
-
-		$exists = $this->handler->test_uuid_postmeta_exists( $unique_uuid, $product );
-
-		$this->assertFalse( $exists, 'Unique UUID should not exist' );
-	}
-
-	/**
-	 * Test uuid_postmeta_exists returns true for duplicate UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_postmeta_exists
-	 */
-	public function test_uuid_postmeta_exists_duplicate(): void {
-		// Create two products with the same UUID
-		$product1 = ProductHelper::create_simple_product();
-		$product2 = ProductHelper::create_simple_product();
-
-		$duplicate_uuid = Uuid::uuid4()->toString();
-
-		$product1->update_meta_data( '_woocommerce_pos_uuid', $duplicate_uuid );
-		$product1->save();
-
-		// Check if duplicate exists from perspective of product2
-		$exists = $this->handler->test_uuid_postmeta_exists( $duplicate_uuid, $product2 );
-
-		$this->assertTrue( $exists, 'Duplicate UUID should be detected' );
-	}
-
-	/**
-	 * Test uuid_usermeta_exists returns false for unique UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_usermeta_exists
-	 */
-	public function test_uuid_usermeta_exists_unique(): void {
-		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$unique_uuid = Uuid::uuid4()->toString();
-
-		$exists = $this->handler->test_uuid_usermeta_exists( $unique_uuid, $user->ID );
-
-		$this->assertFalse( $exists, 'Unique UUID should not exist' );
-
-		wp_delete_user( $user->ID );
-	}
-
-	/**
-	 * Test uuid_usermeta_exists returns true for duplicate UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_usermeta_exists
-	 */
-	public function test_uuid_usermeta_exists_duplicate(): void {
-		$user1 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$user2 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-
-		$duplicate_uuid = Uuid::uuid4()->toString();
-
-		update_user_meta( $user1->ID, '_woocommerce_pos_uuid', $duplicate_uuid );
-
-		// Check if duplicate exists from perspective of user2
-		$exists = $this->handler->test_uuid_usermeta_exists( $duplicate_uuid, $user2->ID );
-
-		$this->assertTrue( $exists, 'Duplicate UUID should be detected' );
-
-		wp_delete_user( $user1->ID );
-		wp_delete_user( $user2->ID );
-	}
-
-	/**
 	 * Test get_order_ids_by_uuid returns correct order IDs.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_order_ids_by_uuid
@@ -524,19 +401,5 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 		$this->handler->test_maybe_add_order_item_uuid( $item );
 
 		$this->assertSame( 'legacy-order-item-identity', $item->get_meta( Api::UUID_META_KEY ) );
-	}
-
-	/**
-	 * Test UUID format matches expected pattern.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::create_uuid
-	 */
-	public function test_uuid_format(): void {
-		$uuid = $this->handler->test_create_uuid();
-
-		// UUID v4 pattern
-		$pattern = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
-
-		$this->assertMatchesRegularExpression( $pattern, $uuid, 'UUID should match v4 format' );
 	}
 }
