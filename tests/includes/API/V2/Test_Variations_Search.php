@@ -158,6 +158,63 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Search resource limits accept requests at each boundary.
+	 *
+	 * @dataProvider valid_search_limit_provider
+	 *
+	 * @param array $params Query parameters for the request.
+	 */
+	public function test_search_accepts_resource_limit_boundary( array $params ): void {
+		$response = $this->variations_request( $params );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * Search resource limits reject requests above each boundary.
+	 *
+	 * @dataProvider invalid_search_limit_provider
+	 *
+	 * @param array $params Query parameters for the request.
+	 */
+	public function test_search_rejects_request_over_resource_limit( array $params ): void {
+		$response = $this->variations_request( $params );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_variations_search_limit_exceeded', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Requests at the configured resource limits.
+	 *
+	 * @return array<string, array{array<string, int|string>}>
+	 */
+	public function valid_search_limit_provider(): array {
+		return array(
+			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4096 ) ) ),
+			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 100, 'SKU' ) ) ) ),
+			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
+			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 10, 'term' ) ) ) ),
+			'page'              => array( array( 'search' => 'boundary', 'page' => 1000, 'per_page' => 100 ) ),
+		);
+	}
+
+	/**
+	 * Requests above the configured resource limits.
+	 *
+	 * @return array<string, array{array<string, int|string>}>
+	 */
+	public function invalid_search_limit_provider(): array {
+		return array(
+			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4097 ) ) ),
+			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
+			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
+			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
+			'page'              => array( array( 'search' => 'boundary', 'page' => 1001, 'per_page' => 100 ) ),
+		);
+	}
+
+	/**
 	 * Online-only variations are excluded before pagination and counting.
 	 */
 	public function test_search_excludes_online_only_variation(): void {
