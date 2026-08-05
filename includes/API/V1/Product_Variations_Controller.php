@@ -31,7 +31,6 @@ use WP_REST_Server;
  */
 class Product_Variations_Controller extends WC_REST_Product_Variations_Controller {
 	use Traits\Product_Helpers;
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 

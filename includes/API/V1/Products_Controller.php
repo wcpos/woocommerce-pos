@@ -33,7 +33,6 @@ use WP_REST_Response;
  */
 class Products_Controller extends WC_REST_Products_Controller {
 	use Traits\Product_Helpers;
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
