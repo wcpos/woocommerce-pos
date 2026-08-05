@@ -8,12 +8,12 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product_Variation;
-use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\API\V1\Traits\Product_Helpers;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -99,34 +99,30 @@ class Variations_Controller extends WP_REST_Controller {
 			}
 		}
 
-		// Hydrate through the same filtered products-controller seam as
-		// resolve/changes (ADR 0003 — values come from the REST representation,
-		// never raw SQL). wc_get_product() returns a WC_Product_Variation for a
-		// variation id; the instanceof guard keeps a product id from being
-		// hydrated through this lane.
+		// Hydrate through THE product assembly line (Product_Serializer), the same
+		// seam resolve/changes use (ADR 0003 — values come from the REST
+		// representation, never raw SQL). wc_get_product() returns a
+		// WC_Product_Variation for a variation id; the instanceof guard keeps a
+		// product id from being hydrated through this lane.
 		// Leg-3 (ADR 0014): attach each variation's stored 64-bit digest as `_rxdb_digest` so the client
 		// seeds its existence-reconcile manifest from this pull too (products get theirs via the proxy
 		// filter). Bulk-read once for the whole include set. A string — the digest exceeds int range.
-		// Integrity_Digest is namespaced (WCPOS\WooCommercePOS\Sync); the bare
-		// string 'Integrity_Digest' would resolve to a GLOBAL class and be
-		// forever false from inside this namespace, so variation digests never
-		// emitted (review finding 3). Use the ::class constant so it resolves to
-		// the fully-qualified namespaced name.
+		// ::class, never the bare string: from inside this namespace
+		// class_exists( 'Integrity_Digest' ) probes the GLOBAL namespace and is
+		// forever false, so variation digests would never emit (review finding 3).
 		$digests = class_exists( Integrity_Digest::class )
 			? ( new Integrity_Digest() )->read_digests( $ids )
 			: array();
 
 		$serialization_request = new WP_REST_Request( 'GET', '/' );
-		$controller            = new WC_REST_Products_Controller();
+		$serializer            = new Product_Serializer();
 		$documents             = array();
 		foreach ( $ids as $id ) {
 			$variation = wc_get_product( $id );
 			if ( ! $variation instanceof WC_Product_Variation ) {
 				continue;
 			}
-			$response = rest_ensure_response( $controller->prepare_object_for_response( $variation, $serialization_request ) );
-			$payload  = rest_get_server()->response_to_data( $response, false );
-			$payload  = apply_filters( 'woocommerce_pos_sync_serialized_product', $payload, $variation, $serialization_request );
+			$payload  = $serializer->serialize( $variation, $serialization_request );
 			$document = array(
 				'id'        => $id,
 				'parent_id' => (int) $variation->get_parent_id(),

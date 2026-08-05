@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product;
 use WC_Product_Variation;
-use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
@@ -24,6 +23,7 @@ use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_Error;
 use WP_REST_Controller;
@@ -1415,14 +1415,10 @@ class Write_Controller extends WP_REST_Controller {
 			if ( is_wp_error( $variation ) ) {
 				return $variation;
 			}
-			// Exact twin of class-variations-controller.php's targeted read:
-			// products-controller serialization, then the shared product filter,
-			// wrapped with the numeric id + stored parent id.
+			// Same assembly line as the targeted variations read, wrapped with the
+			// numeric id + stored parent id.
 			$request = new WP_REST_Request( 'GET', '/' );
-			$controller = new WC_REST_Products_Controller();
-			$response = rest_ensure_response( $controller->prepare_object_for_response( $variation, $request ) );
-			$payload = rest_get_server()->response_to_data( $response, false );
-			$payload = apply_filters( 'woocommerce_pos_sync_serialized_product', $payload, $variation, $request );
+			$payload = ( new Product_Serializer() )->serialize( $variation, $request );
 			$document = array(
 				'id'        => $id,
 				'parent_id' => (int) $variation->get_parent_id(),
@@ -1465,7 +1461,7 @@ class Write_Controller extends WP_REST_Controller {
 			$product = wc_get_product( $id );
 			if ( $product ) {
 				$request = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
-				$bare    = apply_filters( 'woocommerce_pos_sync_serialized_product', $bare, $product, $request );
+				$bare    = Product_Serializer::augment( $bare, $product, $request );
 			}
 		}
 		if ( 'product_variation' === ( $meta['post_type'] ?? '' ) ) {

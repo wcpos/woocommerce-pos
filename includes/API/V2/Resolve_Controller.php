@@ -7,11 +7,11 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
-use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -104,14 +104,11 @@ class Resolve_Controller extends WP_REST_Controller {
 			$first   = $matches[0];
 			$product = wc_get_product( (int) ( $first['id'] ?? 0 ) );
 			if ( $product ) {
-				// Hydrate only the first match, and only through the filtered
-				// REST path — mirrors class-changes-controller.php
-				// revision_hash; raw projections are never trusted (ADR 0003).
+				// Hydrate only the first match, and only through THE product
+				// assembly line (Product_Serializer) — raw projections are never
+				// trusted (ADR 0003).
 				$serialization_request = new WP_REST_Request( 'GET', '/' );
-				$controller            = new WC_REST_Products_Controller();
-				$response              = rest_ensure_response( $controller->prepare_object_for_response( $product, $serialization_request ) );
-				$payload               = rest_get_server()->response_to_data( $response, false );
-				$payload               = apply_filters( 'woocommerce_pos_sync_serialized_product', $payload, $product, $serialization_request );
+				$payload               = ( new Product_Serializer() )->serialize( $product, $serialization_request );
 				$type                  = (string) ( $first['type'] ?? 'product' );
 				$match                 = array(
 					'id'        => (int) ( $first['id'] ?? 0 ),
