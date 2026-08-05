@@ -35,7 +35,7 @@ class Gateways {
 		global $plugin_page;
 
 		// Early exit for WooCommerce settings, ie: don't show POS gateways.
-		if ( is_admin() && 'wc-settings' == $plugin_page ) {
+		if ( self::should_suppress_pos_gateways( is_admin(), $plugin_page ) ) {
 			return $gateways;
 		}
 
@@ -47,6 +47,27 @@ class Gateways {
 				'WCPOS\WooCommercePOS\Gateways\Card',
 			)
 		);
+	}
+
+	/**
+	 * Decide whether the POS gateways should be withheld from registration.
+	 *
+	 * Pure policy function: all ambient state is passed in, so it makes no
+	 * WordPress calls and reads no globals.
+	 *
+	 * NOTE: the loose `==` comparison is carried over verbatim from the inline
+	 * implementation this was extracted from. `$plugin_page` is a WordPress
+	 * global that is commonly `null`, and on PHP 7.4 a loose comparison against
+	 * a non-empty string behaves differently from PHP 8 for some falsy values,
+	 * so the comparison operator is preserved rather than tightened.
+	 *
+	 * @param bool  $is_admin    Result of is_admin() for the current request.
+	 * @param mixed $plugin_page The WordPress `$plugin_page` global.
+	 *
+	 * @return bool True when the POS gateways must not be registered.
+	 */
+	public static function should_suppress_pos_gateways( bool $is_admin, $plugin_page ): bool {
+		return $is_admin && 'wc-settings' == $plugin_page;
 	}
 
 	/**
@@ -69,12 +90,43 @@ class Gateways {
 		// use POS settings.
 		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
 
-		// Get all payment gateways.
+		/*
+		 * Get all payment gateways.
+		 *
+		 * NOTE: this reads the public `payment_gateways` property directly rather
+		 * than calling the `payment_gateways()` accessor. Preserved verbatim - the
+		 * two are not interchangeable in every WooCommerce version.
+		 */
 		$all_gateways = WC()->payment_gateways->payment_gateways;
 
+		return self::order_gateways( $all_gateways, $settings );
+	}
+
+	/**
+	 * Apply the POS gateway availability and ordering policy.
+	 *
+	 * Pure policy function: array in, array out. It performs no WordPress calls
+	 * and reads no globals, so it can be exercised directly in unit tests.
+	 *
+	 * For each registered gateway that is enabled in the POS `payment_gateways`
+	 * settings it overrides the title, blanks the icon, forces the gateway
+	 * enabled and marks the configured `default_gateway` as chosen. The result is
+	 * then sorted by the per-gateway `order` setting.
+	 *
+	 * NOTE: `$settings` is intentionally untyped. Lots of plugins/themes call the
+	 * `woocommerce_available_payment_gateways` filter and the settings shape is
+	 * not guaranteed; the behaviour for unexpected shapes is preserved exactly as
+	 * it was inline.
+	 *
+	 * @param array $gateways All registered payment gateway objects.
+	 * @param array $settings The POS `payment_gateways` settings blob.
+	 *
+	 * @return array The enabled gateways, keyed by gateway id, in settings order.
+	 */
+	public static function order_gateways( array $gateways, $settings ): array {
 		$_available_gateways = array();
 
-		foreach ( $all_gateways as $gateway ) {
+		foreach ( $gateways as $gateway ) {
 			if ( isset( $settings['gateways'][ $gateway->id ] ) && $settings['gateways'][ $gateway->id ]['enabled'] ) {
 				if ( isset( $settings['gateways'][ $gateway->id ]['title'] ) ) {
 					$gateway->title = $settings['gateways'][ $gateway->id ]['title'];
@@ -96,7 +148,14 @@ class Gateways {
 			}
 		}
 
-		// Order the available gateways according to the settings.
+		/*
+		 * Order the available gateways according to the settings.
+		 *
+		 * KNOWN ISSUE (pre-existing, deliberately preserved): the `order` key is
+		 * read unguarded, so a gateway configured without one emits an undefined
+		 * index warning and sorts as if its order were null. This is characterised
+		 * by Test_Gateways::test_order_gateways_missing_order_key_warns_and_sorts_null_first().
+		 */
 		uksort(
 			$_available_gateways,
 			function ( $a, $b ) use ( $settings ) {
