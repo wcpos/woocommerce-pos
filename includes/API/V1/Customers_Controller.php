@@ -33,7 +33,6 @@ use WP_User_Query;
  * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Customers_Controller methods
  */
 class Customers_Controller extends WC_REST_Customers_Controller {
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
@@ -518,7 +517,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		// add modified_after date_modified_gmt.
 		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
 			$timestamp                   = strtotime( $query_params['modified_after'] );
-			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries(
+			$prepared_args['meta_query'] = $this->wcpos_merge_meta_queries(
 				array(
 					array(
 						'key'     => 'last_update',
@@ -596,6 +595,44 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		}
 
 		return $prepared_args;
+	}
+
+	/**
+	 * Combine two meta_query arrays.
+	 *
+	 * Moved here from the Query_Helpers trait, of which this controller was the only caller.
+	 *
+	 * @param array $meta_query1 First meta query array.
+	 * @param array $meta_query2 Second meta query array.
+	 *
+	 * @return array Combined meta query array.
+	 */
+	private function wcpos_merge_meta_queries( $meta_query1, $meta_query2 ) {
+		// If either meta_query is empty, return the other.
+		if ( empty( $meta_query1 ) ) {
+			return $meta_query2;
+		}
+		if ( empty( $meta_query2 ) ) {
+			return $meta_query1;
+		}
+
+		// Check if both meta_queries have 'AND' as their top-level relation.
+		if ( isset( $meta_query1['relation'] ) && 'AND' === $meta_query1['relation'] &&
+			isset( $meta_query2['relation'] ) && 'AND' === $meta_query2['relation'] ) {
+			// Remove the 'relation' element and combine the arrays.
+			unset( $meta_query1['relation'], $meta_query2['relation'] );
+			$combined = array_merge( $meta_query1, $meta_query2 );
+			array_unshift( $combined, array( 'relation' => 'AND' ) );
+
+			return $combined;
+		}
+
+		// If both meta_queries are not empty and do not both have 'AND', combine them with 'AND' relation.
+		return array(
+			'relation' => 'AND',
+			$meta_query1,
+			$meta_query2,
+		);
 	}
 
 	/**
