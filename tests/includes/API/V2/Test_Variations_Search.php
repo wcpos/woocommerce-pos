@@ -39,6 +39,9 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * Create a variation with an independently controlled SKU and status.
+	 *
+	 * @param string $sku    Variation SKU.
+	 * @param string $status Variation post status.
 	 */
 	private function create_variation( string $sku, string $status = 'publish' ): WC_Product_Variation {
 		$parent    = ProductHelper::create_variation_product();
@@ -54,6 +57,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * Dispatch a variations request with query parameters.
+	 *
+	 * @param array $params Query parameters for the request.
 	 */
 	private function variations_request( array $params = array() ) {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/variations' );

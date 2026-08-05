@@ -49,8 +49,14 @@ class Variations_Controller extends WP_REST_Controller {
 					'include'  => array( 'sanitize_callback' => 'wp_parse_id_list' ),
 					'search'   => array( 'sanitize_callback' => 'sanitize_text_field' ),
 					'sku'      => array( 'sanitize_callback' => 'sanitize_text_field' ),
-					'per_page' => array( 'default' => 10, 'sanitize_callback' => 'absint' ),
-					'page'     => array( 'default' => 1, 'sanitize_callback' => 'absint' ),
+					'per_page' => array(
+						'default' => 10,
+						'sanitize_callback' => 'absint',
+					),
+					'page'     => array(
+						'default' => 1,
+						'sanitize_callback' => 'absint',
+					),
 				),
 			)
 		);
@@ -150,7 +156,14 @@ class Variations_Controller extends WP_REST_Controller {
 		$args     = array( 'product_variation', 'publish' );
 
 		if ( $request->has_param( 'sku' ) ) {
-			$skus = array_values( array_filter( array_map( 'trim', explode( ',', (string) $request->get_param( 'sku' ) ) ), 'strlen' ) );
+			$skus = array_values(
+				array_filter(
+					array_map( 'trim', explode( ',', (string) $request->get_param( 'sku' ) ) ),
+					static function ( string $sku ): bool {
+						return '' !== $sku;
+					}
+				)
+			);
 			if ( array() === $skus ) {
 				$match_sql = '1 = 0';
 			} else {
