@@ -136,6 +136,8 @@ trait Uuid_Handler {
 			return;
 		}
 		try {
+			$this->adopt_legacy_multisite_user_uuid( $user->ID );
+
 			$uuids = get_user_meta( $user->ID, '_woocommerce_pos_uuid', false );
 
 			// If more than one UUID exists, keep the first and remove the rest.
@@ -156,6 +158,39 @@ trait Uuid_Handler {
 			}
 		} finally {
 			$this->release_lock( $lock_key );
+		}
+	}
+
+	/**
+	 * Promote a legacy per-blog cashier uuid to the network-wide key.
+	 *
+	 * Before identity consolidated here, Services\Cashier minted
+	 * `_woocommerce_pos_uuid_{blog_id}` on multisite while every other reader used
+	 * the plain network-wide key — forking one user into two RxDB identities. When
+	 * the plain key holds no valid uuid yet, adopt the current blog's legacy value
+	 * so existing multisite cashiers keep their identity regardless of which
+	 * endpoint reads them first. An existing valid plain uuid wins, because it is
+	 * what /customers has already served to clients. Legacy rows are left in place
+	 * (harmless, rollback-safe); the duplicate check in maybe_add_user_uuid() still
+	 * runs after adoption, so a copied legacy value owned by another user is
+	 * re-minted rather than served as a duplicate key.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	private function adopt_legacy_multisite_user_uuid( int $user_id ): void {
+		if ( ! ( \function_exists( 'is_multisite' ) && is_multisite() ) ) {
+			return;
+		}
+
+		$existing = get_user_meta( $user_id, '_woocommerce_pos_uuid', true );
+		if ( \is_string( $existing ) && Uuid::isValid( $existing ) ) {
+			return;
+		}
+
+		$legacy = get_user_meta( $user_id, '_woocommerce_pos_uuid_' . get_current_blog_id(), true );
+		if ( \is_string( $legacy ) && Uuid::isValid( $legacy ) ) {
+			update_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy );
 		}
 	}
 
