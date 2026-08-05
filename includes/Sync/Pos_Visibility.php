@@ -226,7 +226,7 @@ final class Pos_Visibility {
 	}
 
 	/**
-	 * wooProductIds hidden from the POS for the given scope.
+	 * Product ids hidden from the POS for the given scope.
 	 *
 	 * @deprecated Use hidden_ids( self::PRODUCTS, $scope ). Kept as a thin delegate so callers outside
 	 *             this repository keep working.
@@ -240,7 +240,7 @@ final class Pos_Visibility {
 	}
 
 	/**
-	 * wooVariationIds hidden from the POS for the given scope.
+	 * Variation ids hidden from the POS for the given scope.
 	 *
 	 * @deprecated Use hidden_ids( self::VARIATIONS, $scope ). Kept as a thin delegate so callers
 	 *             outside this repository keep working.
