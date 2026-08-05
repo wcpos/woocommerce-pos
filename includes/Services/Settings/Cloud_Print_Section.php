@@ -104,7 +104,7 @@ class Cloud_Print_Section extends Abstract_Section {
 	/**
 	 * Full replacement, not a merge: the incoming payload IS the write.
 	 *
-	 * write() replaces printers and assignments wholesale, and read() decorates
+	 * Writes replace printers and assignments wholesale, and read() decorates
 	 * the view with runtime-only fields (status, last_seen, relay) while
 	 * stripping secrets. Merging that view into the payload would both write
 	 * runtime fields into the option and resurrect printers the client just

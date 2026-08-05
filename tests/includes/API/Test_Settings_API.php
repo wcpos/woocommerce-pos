@@ -173,7 +173,14 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		$user    = get_user_by( 'id', $user_id );
 		$user->add_cap( 'access_woocommerce_pos' );
 		$user->add_cap( 'manage_woocommerce_pos' );
-		wp_set_current_user( $user_id );
+
+		// wp_set_current_user() short-circuits for the id it already holds, so
+		// the cached capability list has to be dropped after every cap change.
+		$refresh = static function () use ( $user_id ): void {
+			wp_set_current_user( 0 );
+			wp_set_current_user( $user_id );
+		};
+		$refresh();
 
 		foreach ( self::NAMESPACES as $namespace ) {
 			// Reads are allowed at the settings-management level.
@@ -185,15 +192,18 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 			$this->assertEquals( 403, $write->get_status(), 'POST ' . $namespace . '/settings/access' );
 
 			$user->add_cap( 'edit_users' );
+			$refresh();
 			$write = $this->server->dispatch( $this->wp_rest_post_request( $namespace . '/settings/access' ) );
 			$this->assertEquals( 403, $write->get_status(), 'edit_users alone must not be enough' );
 
 			$user->add_cap( 'promote_users' );
+			$refresh();
 			$write = $this->server->dispatch( $this->wp_rest_post_request( $namespace . '/settings/access' ) );
 			$this->assertEquals( 200, $write->get_status(), 'edit_users + promote_users must be accepted' );
 
 			$user->remove_cap( 'edit_users' );
 			$user->remove_cap( 'promote_users' );
+			$refresh();
 		}
 
 		wp_delete_user( $user_id );
