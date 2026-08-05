@@ -182,6 +182,7 @@ class Access_Section implements Settings_Section_Interface {
 
 				// Ignore capabilities outside the access settings view (issue #1159).
 				$flattened_caps = array_intersect_key( $flattened_caps, array_flip( $allowed_caps ) );
+				$flattened_caps = array_map( 'wp_validate_boolean', $flattened_caps );
 
 				// Apply each allowed capability grant/revoke.
 				foreach ( $flattened_caps as $cap => $grant ) {

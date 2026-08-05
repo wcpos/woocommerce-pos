@@ -27,6 +27,13 @@ use WP_Error;
  */
 class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * Route-registration warnings captured during setUp().
+	 *
+	 * @var string[]
+	 */
+	private $route_warnings = array();
+
+	/**
 	 * The legacy per-section routes and the HTTP verbs they shipped with.
 	 * These paths and verbs are frozen public interface.
 	 *
@@ -61,6 +68,10 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 
 		if ( 'test_section_with_an_unsafe_id_gets_no_route' === $this->getName() ) {
 			add_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
+		}
+		if ( 'test_sections_with_colliding_route_slugs_are_rejected' === $this->getName() ) {
+			add_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_colliding_sections' ) );
+			add_filter( 'woocommerce_pos_logging', array( $this, 'capture_route_warning' ), 10, 2 );
 		}
 
 		SettingsService::instance()->reset_sections_for_testing();
@@ -105,9 +116,46 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Register two sections whose ids normalize to the same route slug.
+	 *
+	 * @param Section_Registry $registry The Section Registry.
+	 */
+	public function register_colliding_sections( Section_Registry $registry ): void {
+		$registry->register(
+			new class() extends Fixture_Settings_Section {
+				public function id(): string {
+					return 'collision_id';
+				}
+			}
+		);
+		$registry->register(
+			new class() extends Fixture_Settings_Section {
+				public function id(): string {
+					return 'collision-id';
+				}
+			}
+		);
+	}
+
+	/**
+	 * Capture route-registration warnings without writing a test log.
+	 *
+	 * @param bool   $enabled Whether logging is enabled.
+	 * @param string $message Log message.
+	 */
+	public function capture_route_warning( bool $enabled, string $message ): bool {
+		$this->route_warnings[] = $message;
+
+		return false;
+	}
+
+	/**
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		remove_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
+		remove_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_colliding_sections' ) );
+		remove_filter( 'woocommerce_pos_logging', array( $this, 'capture_route_warning' ), 10 );
 		Fixture_Settings_Section::unregister();
 		Fixture_Settings_Section::reset();
 		SettingsService::instance()->reset_sections_for_testing();
@@ -116,6 +164,7 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		delete_option( 'woocommerce_pos_settings_checkout' );
 		delete_option( 'woocommerce_pos_settings_tax_ids' );
 		delete_option( 'woocommerce_pos_settings_payment_gateways' );
+		delete_option( 'woocommerce_pos_settings_visibility' );
 
 		parent::tearDown();
 	}
@@ -197,6 +246,14 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/general' ) );
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertArrayHasKey( 'barcode_field', $response->get_data() );
+	}
+
+	/**
+	 * Distinct section ids may not silently register the same normalized route.
+	 */
+	public function test_sections_with_colliding_route_slugs_are_rejected(): void {
+		$this->assertNotEmpty( $this->route_warnings );
+		$this->assertStringContainsString( 'collision-id', implode( '\n', $this->route_warnings ) );
 	}
 
 	// ──────────────────────────────────────────────
@@ -573,6 +630,46 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Visibility writes reject malformed trees before changing the option.
+	 */
+	public function test_visibility_update_rejects_malformed_tree(): void {
+		$before   = SettingsService::instance()->get_visibility_settings();
+		$response = $this->post_settings( '/wcpos/v1/settings/visibility', array( 'products' => 'bad' ) );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'rest_invalid_param', $response->get_data()['code'] );
+		$this->assertEquals( $before, SettingsService::instance()->get_visibility_settings() );
+	}
+
+	/**
+	 * Visibility id lists are replacements, including an explicitly empty list.
+	 */
+	public function test_visibility_update_replaces_id_lists(): void {
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( 5, 6 ) ),
+					),
+				),
+			)
+		);
+
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/visibility',
+			array( 'products' => array( 'default' => array( 'online_only' => array( 'ids' => array( 6 ) ) ) ) )
+		);
+		$this->assertSame( array( 6 ), $response->get_data()['products']['default']['online_only']['ids'] );
+
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/visibility',
+			array( 'products' => array( 'default' => array( 'online_only' => array( 'ids' => array() ) ) ) )
+		);
+		$this->assertSame( array(), $response->get_data()['products']['default']['online_only']['ids'] );
+	}
+
+	/**
 	 * Test updating access settings.
 	 */
 	public function test_update_access_settings(): void {
@@ -603,6 +700,27 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertTrue( $response->get_data()['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/**
+	 * Form-encoded boolean strings are normalized before capability mutation.
+	 */
+	public function test_update_access_settings_normalizes_form_boolean_strings(): void {
+		try {
+			$response = $this->post_settings(
+				'/wcpos/v1/settings/access',
+				array(
+					'administrator' => array(
+						'capabilities' => array(
+							'wcpos' => array( 'access_woocommerce_pos' => 'false' ),
+						),
+					),
+				)
+			);
+			$this->assertFalse( $response->get_data()['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
+		} finally {
+			get_role( 'administrator' )->add_cap( 'access_woocommerce_pos' );
+		}
 	}
 
 	/**

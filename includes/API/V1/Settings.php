@@ -109,6 +109,7 @@ class Settings extends WP_REST_Controller {
 	 * @return void
 	 */
 	public function register_routes(): void {
+		$route_slugs = array();
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,
@@ -136,6 +137,11 @@ class Settings extends WP_REST_Controller {
 				continue;
 			}
 
+			if ( isset( $route_slugs[ $this->route_slug( $id ) ] ) ) {
+				Logger::warning( sprintf( 'Settings section "%s" has no REST route: route slug already registered.', $id ) );
+				continue;
+			}
+			$route_slugs[ $this->route_slug( $id ) ] = true;
 			$this->register_section_routes( $id, $section );
 		}
 
