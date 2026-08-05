@@ -1106,13 +1106,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	private function test_print_star_online( string $printer_id, array $printer ) {
-		$date    = gmdate( 'Y-m-d H:i' );
-		$markup  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
-		$markup .= 'Cloud Print Test' . "\n" . '[align: left]';
-		$markup .= 'Printer: ' . $this->star_escape( (string) $printer['name'] ) . "\n";
-		$markup .= 'Date: ' . $date . "\n";
-		$markup .= 'If you can read this, printing works!' . "\n";
-		$markup .= '[feed][cut]';
+		$markup = ( new Cloud_Print_Diagnostic() )->star_markup( (string) $printer['name'] );
 
 		$id = $this->jobs->create(
 			array(
@@ -1136,17 +1130,6 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$response->set_status( 201 );
 
 		return $response;
-	}
-
-	/**
-	 * Escape brackets for Star Document Markup text.
-	 *
-	 * @param string $value Text.
-	 *
-	 * @return string
-	 */
-	private function star_escape( string $value ): string {
-		return str_replace( array( '[', ']' ), array( '[[', ']]' ), $value );
 	}
 
 	/**

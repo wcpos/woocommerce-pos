@@ -79,6 +79,40 @@ class Cloud_Print_Diagnostic {
 	}
 
 	/**
+	 * Build a Star Document Markup diagnostic receipt.
+	 *
+	 * Star Online is a push provider: the markup is rendered by stario.online,
+	 * not by this server, so it is returned as text rather than through
+	 * build(). Kept here so every provider's diagnostic lives in one class.
+	 *
+	 * @param string $printer_name Display name.
+	 *
+	 * @return string Star Document Markup source.
+	 */
+	public function star_markup( string $printer_name ): string {
+		$date    = gmdate( 'Y-m-d H:i' );
+		$markup  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
+		$markup .= 'Cloud Print Test' . "\n" . '[align: left]';
+		$markup .= 'Printer: ' . $this->star_escape( $printer_name ) . "\n";
+		$markup .= 'Date: ' . $date . "\n";
+		$markup .= 'If you can read this, printing works!' . "\n";
+		$markup .= '[feed][cut]';
+
+		return $markup;
+	}
+
+	/**
+	 * Escape brackets for Star Document Markup text.
+	 *
+	 * @param string $value Text.
+	 *
+	 * @return string
+	 */
+	private function star_escape( string $value ): string {
+		return str_replace( array( '[', ']' ), array( '[[', ']]' ), $value );
+	}
+
+	/**
 	 * Minimal ESC/POS capability check.
 	 *
 	 * @param string $name Printer display name.
