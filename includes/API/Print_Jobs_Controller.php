@@ -532,7 +532,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				// defaults to star-cloudprnt exactly like the print path, so
 				// legacy rows without the field keep their stale warnings.
 				'polling'            => Provider::is_polling(
-					'' !== (string) ( $printer['provider'] ?? '' ) ? (string) $printer['provider'] : 'star-cloudprnt'
+					Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null )
 				),
 				'pending'            => $waiting,
 				'oldest_pending_gmt' => $oldest,
@@ -1245,7 +1245,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( null === $printer ) {
 			return true;
 		}
-		$provider = $printer['provider'] ?? 'star-cloudprnt';
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 
 		if ( 'epos-xml' === Provider::wire_format( $provider, 'thermal' ) ) {
 			if ( '' !== $payload ) {

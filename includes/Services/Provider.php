@@ -15,6 +15,14 @@ namespace WCPOS\WooCommercePOS\Services;
  */
 class Provider {
 	/**
+	 * Provider assumed for printer rows that predate the provider field.
+	 *
+	 * Star CloudPRNT was the only provider before the field existed, so a row
+	 * without one is a Star CloudPRNT printer.
+	 */
+	public const DEFAULT_PROVIDER = 'star-cloudprnt';
+
+	/**
 	 * Per-provider capability map.
 	 *
 	 * @var array<string, array<string, mixed>>
@@ -60,6 +68,22 @@ class Provider {
 	 */
 	public static function valid(): array {
 		return array_keys( self::CAPABILITIES );
+	}
+
+	/**
+	 * Resolve a stored printer row's provider to a known provider key.
+	 *
+	 * Callers read `$printer['provider']` from an option that predates the
+	 * field, so the value can be missing, empty, or (for hand-edited options)
+	 * a key this build does not know. All three resolve to the default rather
+	 * than to a silent no-provider state.
+	 *
+	 * @param string|null $provider Raw provider value from a printer row.
+	 *
+	 * @return string A key from self::valid().
+	 */
+	public static function normalize( ?string $provider ): string {
+		return \in_array( $provider, self::valid(), true ) ? (string) $provider : self::DEFAULT_PROVIDER;
 	}
 
 	/**

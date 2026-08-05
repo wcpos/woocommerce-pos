@@ -802,8 +802,7 @@ class Settings extends WP_REST_Controller {
 	 */
 	private function sanitize_cloud_printer( $printer ): array {
 		$printer  = \is_array( $printer ) ? $printer : array();
-		$provider = \in_array( $printer['provider'] ?? '', Provider::valid(), true )
-			? $printer['provider'] : 'star-cloudprnt';
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 
 		$clean = array(
 			'id'               => sanitize_text_field( $printer['id'] ?? '' ),
