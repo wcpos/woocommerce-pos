@@ -12,7 +12,6 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
-use WCPOS\WooCommercePOS\Registry;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Post;
@@ -40,8 +39,6 @@ class Single_Product {
 	 * Constructor.
 	 */
 	public function __construct() {
-		Registry::get_instance()->set( static::class, $this );
-
 		$this->barcode_field = Settings::instance()->barcode_field();
 
 		// visibility options.
