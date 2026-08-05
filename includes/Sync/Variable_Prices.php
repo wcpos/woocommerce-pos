@@ -16,48 +16,28 @@ final class Variable_Prices {
 	public const META_KEY = '_woocommerce_pos_variable_prices';
 
 	/**
-	 * Hook for `woocommerce_pos_sync_proxy_response` (catalog-proxy `/products`): serve a FRESH
-	 * variable-product price range. WC caches a variable product's min/max in a
-	 * `wc_var_prices_*` transient that goes STALE when a child variation's price changes
-	 * (gap-analysis §4.3), so the POS would otherwise show a wrong range. For each
-	 * `type: 'variable'` product, recompute the price / regular_price / sale_price ranges by
-	 * reading each visible child variation DIRECTLY — NOT via `get_variation_prices()`, which
-	 * can hand back that same stale transient (codex review) — and inject
-	 * `_woocommerce_pos_variable_prices` into the served meta_data. Non-variable products and
-	 * non-array entries pass through untouched.
+	 * THE variable-price augmentation, registered ONCE with {@see Augmentation_Pipeline}
+	 * and projected onto both read lanes (the catalog-proxy `/products` batch and the
+	 * per-object serialize path behind `/resolve/barcode`, the targeted read and the
+	 * revision-hash drill-down).
 	 *
-	 * @param mixed      $data
-	 * @param mixed      $resource
-	 * @param null|mixed $request
-	 */
-	public static function stamp_proxy_variable_prices( $data, $resource = '', $request = null ) {
-		if ( 'products' !== $resource || ! \is_array( $data ) || ! \function_exists( 'wc_get_product' ) ) {
-			return $data;
-		}
-		foreach ( $data as $index => $product ) {
-			// Gate on the response `type` BEFORE loading the object — a search/targeted page can be
-			// entirely simple products, and loading each just to no-op would defeat the bulk fast path.
-			if ( \is_array( $product ) && isset( $product['id'] ) && 'variable' === ( $product['type'] ?? '' ) ) {
-				$data[ $index ] = self::inject_variable_price_range( $product, wc_get_product( (int) $product['id'] ), $request );
-			}
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Twin of stamp_proxy_variable_prices for the `woocommerce_pos_sync_serialized_product` filter —
-	 * the SINGLE-product serialize path used by `/resolve/barcode`, the per-id read, and the
-	 * revision-hash drill-down. Without this a cashier scanning a barcode on a variable parent
-	 * (or any per-id serialized read) would miss the fresh range the list proxy injects (codex).
-	 * The WC object is passed by the filter; fall back to loading it by id.
+	 * WC caches a variable product's min/max in a `wc_var_prices_*` transient that goes
+	 * STALE when a child variation's price changes (gap-analysis §4.3), so the POS would
+	 * otherwise show a wrong range. For each `type: 'variable'` product, recompute the
+	 * price / regular_price / sale_price ranges by reading each visible child variation
+	 * DIRECTLY — NOT via `get_variation_prices()`, which can hand back that same stale
+	 * transient (codex review) — and inject `_woocommerce_pos_variable_prices` into the
+	 * served meta_data. Non-variable products and non-array entries pass through untouched.
 	 *
-	 * @param mixed      $payload
-	 * @param null|mixed $object
-	 * @param null|mixed $request
+	 * The `type` gate comes FIRST so a page of simple products never triggers an object
+	 * load; the batch lane hands over a null `$object` and relies on that gate plus the
+	 * lazy load by id below.
+	 *
+	 * @param mixed      $payload Serialized product record.
+	 * @param null|mixed $object  Product object, when the lane has one loaded.
+	 * @param null|mixed $request Request context.
 	 */
-	public static function stamp_serialized_variable_prices( $payload, $object = null, $request = null ) {
-		// Gate on type first so a simple product never triggers an object load here.
+	public static function augment_record( $payload, $object = null, $request = null ) {
 		if ( ! \is_array( $payload ) || 'variable' !== ( $payload['type'] ?? '' ) ) {
 			return $payload;
 		}
@@ -66,6 +46,40 @@ final class Variable_Prices {
 		}
 
 		return self::inject_variable_price_range( $payload, $object, $request );
+	}
+
+	/**
+	 * Backward-compatible batch-lane entry point.
+	 *
+	 * Kept for third-party code hooked to `woocommerce_pos_sync_proxy_response`
+	 * with this callback; the pipeline no longer registers it.
+	 *
+	 * @param mixed      $data     Response data.
+	 * @param mixed      $resource Resource name.
+	 * @param null|mixed $request  Request context.
+	 */
+	public static function stamp_proxy_variable_prices( $data, $resource = '', $request = null ) {
+		if ( 'products' !== $resource || ! \is_array( $data ) ) {
+			return $data;
+		}
+		foreach ( $data as $index => $product ) {
+			if ( \is_array( $product ) ) {
+				$data[ $index ] = self::augment_record( $product, null, $request );
+			}
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Backward-compatible per-object-lane entry point.
+	 *
+	 * @param mixed      $payload Response payload.
+	 * @param null|mixed $object  Product object.
+	 * @param null|mixed $request Request context.
+	 */
+	public static function stamp_serialized_variable_prices( $payload, $object = null, $request = null ) {
+		return self::augment_record( $payload, $object, $request );
 	}
 
 	/**

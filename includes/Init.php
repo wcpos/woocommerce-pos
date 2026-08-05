@@ -49,17 +49,14 @@ class Init {
 		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
 			if ( $sync_schema_latched ) {
 				// Normalize structured meta at priority 5, before revision stamps at 9
-				// and UUID, digest, and variable-price stamps at priority 10.
+				// and UUID, digest, and variable-price stamps at priority 10. Kept out
+				// of the augmentation pipeline because it also serves the order lane.
 				\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
-				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_serialized_variable_prices' ), 10, 3 );
-				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Product_Images::class, 'stamp_serialized_product_images' ), 10, 3 );
 				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-				\WCPOS\WooCommercePOS\Sync\Revision::register_proxy_stamps();
-				\WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper::register_proxy_stampers();
-				\WCPOS\WooCommercePOS\Sync\Integrity_Digest::register_proxy_digest_stampers();
-				add_filter( 'woocommerce_pos_sync_proxy_response', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_proxy_variable_prices' ), 10, 3 );
-				add_filter( 'woocommerce_pos_sync_proxy_response', array( \WCPOS\WooCommercePOS\Sync\Product_Images::class, 'stamp_proxy_product_images' ), 10, 3 );
+				// ONE seam for both product read lanes: the batch catalog proxy and the
+				// per-object serializer. Every stamper is declared once inside; both
+				// public filter names stay live as projections of it.
+				\WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline::install();
 			}
 
 			// Identity is core, not an observer benchmark variable: every product is

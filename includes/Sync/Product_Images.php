@@ -12,8 +12,27 @@ namespace WCPOS\WooCommercePOS\Sync;
  */
 final class Product_Images {
 	/**
-	 * Hook for `woocommerce_pos_sync_proxy_response` (catalog-proxy `/products`):
-	 * replace full-size product image URLs with their WordPress medium size.
+	 * THE image augmentation, registered ONCE with {@see Augmentation_Pipeline}
+	 * and projected onto both read lanes: replace full-size product image URLs
+	 * with their WordPress medium size.
+	 *
+	 * @param mixed      $payload Serialized product record.
+	 * @param null|mixed $object  Product object, when the lane has one loaded.
+	 * @param null|mixed $request Request context.
+	 */
+	public static function augment_record( $payload, $object = null, $request = null ) {
+		if ( ! \is_array( $payload ) ) {
+			return $payload;
+		}
+
+		return self::downsize_images( $payload );
+	}
+
+	/**
+	 * Backward-compatible batch-lane entry point.
+	 *
+	 * Kept for third-party code hooked to `woocommerce_pos_sync_proxy_response`
+	 * with this callback; the pipeline no longer registers it.
 	 *
 	 * @param mixed      $data     Response data.
 	 * @param mixed      $resource Resource name.
@@ -25,7 +44,7 @@ final class Product_Images {
 		}
 		foreach ( $data as $index => $record ) {
 			if ( \is_array( $record ) ) {
-				$data[ $index ] = self::downsize_images( $record );
+				$data[ $index ] = self::augment_record( $record, null, $request );
 			}
 		}
 
@@ -33,19 +52,14 @@ final class Product_Images {
 	}
 
 	/**
-	 * Twin of stamp_proxy_product_images for the
-	 * `woocommerce_pos_sync_serialized_product` filter.
+	 * Backward-compatible per-object-lane entry point.
 	 *
 	 * @param mixed      $payload Response payload.
 	 * @param null|mixed $object  Product object.
 	 * @param null|mixed $request Request context.
 	 */
 	public static function stamp_serialized_product_images( $payload, $object = null, $request = null ) {
-		if ( ! \is_array( $payload ) ) {
-			return $payload;
-		}
-
-		return self::downsize_images( $payload );
+		return self::augment_record( $payload, $object, $request );
 	}
 
 	/**
