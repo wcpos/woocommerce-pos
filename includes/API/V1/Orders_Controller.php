@@ -300,14 +300,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
 
-		// Add barcode property to the schema.
-		$schema['properties']['barcode'] = array(
-			'description' => /* translators: REST API schema field label or error message. */ __( 'Barcode', 'woocommerce-pos' ),
-			'type'        => 'string',
-			'context'     => array( 'view', 'edit' ),
-			'readonly'    => false,
-		);
-
 		// Add structured tax_ids property (TaxId[]) snapshotted from the customer
 		// at create time. Editable via update for corrections.
 		$schema['properties']['tax_ids'] = array(
