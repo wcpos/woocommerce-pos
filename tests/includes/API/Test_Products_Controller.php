@@ -1677,6 +1677,76 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '', $variable_prices['sale_price']['max'], 'sale_price max should be empty string when no variations are on sale.' );
 	}
 
+	/**
+	 * CHARACTERIZATION: the persisted variable-price metadata is byte-identical.
+	 *
+	 * The V1 lane stores a JSON string in postmeta, so key ORDER and decimal
+	 * formatting are part of the contract, not just the values. This pins the
+	 * exact bytes so the shared range service cannot quietly reshape them.
+	 */
+	public function test_variable_product_price_metadata_json_shape_is_stable(): void {
+		// Arrange.
+		$product = new \WC_Product_Variable();
+		$product->set_props(
+			array(
+				'name' => 'Variable Shape Test',
+				'sku'  => uniqid( 'VARIABLE SHAPE' ),
+			)
+		);
+		$attribute_data = ProductHelper::create_attribute( 'shape', array( 'small', 'large' ) );
+		$attribute      = new \WC_Product_Attribute();
+		$attribute->set_id( $attribute_data['attribute_id'] );
+		$attribute->set_name( $attribute_data['attribute_taxonomy'] );
+		$attribute->set_options( $attribute_data['term_ids'] );
+		$attribute->set_position( 1 );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+		$product->set_attributes( array( $attribute ) );
+		$product->save();
+
+		$variation_1 = new \WC_Product_Variation();
+		$variation_1->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'SHAPE SMALL' ),
+				'regular_price' => '20',
+				'sale_price'    => '15',
+			)
+		);
+		$variation_1->set_attributes( array( 'pa_shape' => 'small' ) );
+		$variation_1->save();
+
+		$variation_2 = new \WC_Product_Variation();
+		$variation_2->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'SHAPE LARGE' ),
+				'regular_price' => '30',
+			)
+		);
+		$variation_2->set_attributes( array( 'pa_shape' => 'large' ) );
+		$variation_2->save();
+		wc_delete_product_transients( $product->get_id() );
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$encoded  = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$encoded = $meta['value'];
+				break;
+			}
+		}
+
+		// Assert.
+		$this->assertEquals(
+			'{"price":{"min":"15.00","max":"30.00"},"regular_price":{"min":"20.00","max":"30.00"},"sale_price":{"min":"15.00","max":"15.00"}}',
+			$encoded
+		);
+	}
+
 	public function test_uuid_is_unique(): void {
 		$uuid      = Uuid::uuid4()->toString();
 		$product1  = ProductHelper::create_simple_product();

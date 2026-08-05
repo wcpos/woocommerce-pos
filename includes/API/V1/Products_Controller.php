@@ -19,6 +19,7 @@ use WC_Product;
 use WC_Product_Variable;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
@@ -281,11 +282,10 @@ class Products_Controller extends WC_REST_Products_Controller {
 	/**
 	 * Build variable product price ranges from current variation data.
 	 *
-	 * WooCommerce caches variable product price ranges in a parent-product transient.
-	 * If a variation price changes without that parent cache being refreshed, the POS
-	 * listing response can keep serving stale parent prices. Read the visible child
-	 * variations directly for WCPOS response metadata so the listing reflects the
-	 * current variation prices used by variation selection and cart flows.
+	 * Thin adapter over {@see Variable_Price_Range}, THE canonical computation
+	 * shared with the V2 sync read lane. This lane persists the DECIMAL rendering
+	 * to `_woocommerce_pos_variable_prices` postmeta: every value formatted at the
+	 * store's price precision, all three sub-ranges always present.
 	 *
 	 * @param WC_Product_Variable $product       Variable product.
 	 * @param string|null         $minimum_price Unrounded filtered minimum price, passed by reference.
@@ -294,149 +294,10 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 *               sale_price: array{min: string, max: string}}
 	 */
 	private function wcpos_get_variable_product_price_ranges( WC_Product_Variable $product, ?string &$minimum_price = null ): array {
-		$prices = array(
-			'price'         => array(),
-			'regular_price' => array(),
-			'sale_price'    => array(),
-		);
+		$computed      = Variable_Price_Range::for( $product, Variable_Price_Range::FORMAT_DECIMAL );
+		$minimum_price = $computed['minimum_price'];
 
-		$price_decimals = wc_get_price_decimals();
-
-		$variation_ids = ( new Pos_Visibility() )->filter_visible_children( $product->get_visible_children() );
-
-		foreach ( $variation_ids as $variation_id ) {
-			$variation = wc_get_product( $variation_id );
-
-			if ( ! $variation ) {
-				continue;
-			}
-
-			$price = apply_filters(
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
-				'woocommerce_variation_prices_price',
-				$variation->get_price( 'edit' ),
-				$variation,
-				$product
-			);
-
-			if ( '' === $price ) {
-				continue;
-			}
-
-			$regular_price = apply_filters(
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
-				'woocommerce_variation_prices_regular_price',
-				$variation->get_regular_price( 'edit' ),
-				$variation,
-				$product
-			);
-			$sale_price = apply_filters(
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
-				'woocommerce_variation_prices_sale_price',
-				$variation->get_sale_price( 'edit' ),
-				$variation,
-				$product
-			);
-
-			$formatted_price         = wc_format_decimal( $price, $price_decimals );
-			$formatted_regular_price = wc_format_decimal( $regular_price, $price_decimals );
-			$formatted_sale_price    = wc_format_decimal( $sale_price, $price_decimals );
-
-			$prices['price'][ $variation_id ]         = (string) $price;
-			$prices['regular_price'][ $variation_id ] = $formatted_regular_price;
-
-			if ( '' !== $sale_price
-				&& $formatted_sale_price !== $formatted_regular_price
-				&& $formatted_sale_price === $formatted_price ) {
-				$prices['sale_price'][ $variation_id ] = $formatted_sale_price;
-			}
-		}
-
-		foreach ( $prices as $key => $values ) {
-			asort( $values, SORT_NUMERIC );
-			$prices[ $key ] = $values;
-		}
-
-		$price_range         = $this->wcpos_apply_variable_product_price_range_filter(
-			'woocommerce_get_variation_price',
-			$this->wcpos_get_min_max_price_range( $prices['price'] ),
-			$product
-		);
-		$minimum_price       = $price_range['min'];
-		$price_range         = array(
-			'min' => '' === $price_range['min'] ? '' : wc_format_decimal( $price_range['min'], $price_decimals ),
-			'max' => '' === $price_range['max'] ? '' : wc_format_decimal( $price_range['max'], $price_decimals ),
-		);
-		$regular_price_range = $this->wcpos_get_min_max_price_range( $prices['regular_price'] );
-		$sale_price_range    = $this->wcpos_get_min_max_price_range( $prices['sale_price'] );
-
-		return array(
-			'price'         => $price_range,
-			'regular_price' => $this->wcpos_apply_variable_product_price_range_filter(
-				'woocommerce_get_variation_regular_price',
-				$regular_price_range,
-				$product
-			),
-			'sale_price'    => $this->wcpos_apply_variable_product_price_range_filter(
-				'woocommerce_get_variation_sale_price',
-				$sale_price_range,
-				$product
-			),
-		);
-	}
-
-	/**
-	 * Apply WooCommerce variable product min/max price filters to a calculated range.
-	 *
-	 * @param string                          $hook_name WooCommerce price range filter name.
-	 * @param array{min: string, max: string} $price_range Price range.
-	 * @param WC_Product_Variable             $product Variable product.
-	 *
-	 * @return array{min: string, max: string}
-	 */
-	private function wcpos_apply_variable_product_price_range_filter( string $hook_name, array $price_range, WC_Product_Variable $product ): array {
-		if ( '' !== $price_range['min'] ) {
-			$price_range['min'] = (string) apply_filters(
-				$hook_name,
-				$price_range['min'],
-				$product,
-				'min',
-				false
-			);
-		}
-
-		if ( '' !== $price_range['max'] ) {
-			$price_range['max'] = (string) apply_filters(
-				$hook_name,
-				$price_range['max'],
-				$product,
-				'max',
-				false
-			);
-		}
-
-		return $price_range;
-	}
-
-	/**
-	 * Convert a variation price list to a min/max range.
-	 *
-	 * @param array<int,string> $prices Prices keyed by variation ID.
-	 *
-	 * @return array{min: string, max: string}
-	 */
-	private function wcpos_get_min_max_price_range( array $prices ): array {
-		if ( empty( $prices ) ) {
-			return array(
-				'min' => '',
-				'max' => '',
-			);
-		}
-
-		return array(
-			'min' => (string) reset( $prices ),
-			'max' => (string) end( $prices ),
-		);
+		return $computed['ranges'];
 	}
 
 	/**

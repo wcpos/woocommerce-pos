@@ -7,13 +7,13 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
-use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -339,7 +339,7 @@ final class Changes_Controller extends WP_REST_Controller {
 		$changes               = array();
 		$checkpoint_id         = $since_id;
 		$serialization_request = new WP_REST_Request( 'GET', '/' );
-		$controller            = new WC_REST_Products_Controller();
+		$serializer            = new Product_Serializer();
 		foreach ( $rows as $row ) {
 			$id            = (int) $row['ID'];
 			$checkpoint_id = $id;
@@ -347,14 +347,11 @@ final class Changes_Controller extends WP_REST_Controller {
 			if ( ! $product ) {
 				continue;
 			}
-			// Mirror class-order-serializer.php: filtered REST representation,
-			// never a raw projection (ADR 0003). Variations go through the same
-			// products controller — documented lab simplification.
+			// THE product assembly line (Product_Serializer): filtered REST
+			// representation, never a raw projection (ADR 0003).
 			// Per-record delay mirrors the orders controller's per-document
 			// serialize_document delays — this is where slow-php hurts most.
-			$response  = rest_ensure_response( $controller->prepare_object_for_response( $product, $serialization_request ) );
-			$payload   = rest_get_server()->response_to_data( $response, false );
-			$payload   = apply_filters( 'woocommerce_pos_sync_serialized_product', $payload, $product, $serialization_request );
+			$payload   = $serializer->serialize( $product, $serialization_request );
 			$changes[] = array(
 				'id'       => $id,
 				'revision' => md5( (string) wp_json_encode( $this->canonicalize_for_revision( $payload ) ) ),
