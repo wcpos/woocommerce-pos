@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WP_REST_Request;
 use WP_UnitTestCase;
@@ -168,6 +169,12 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 */
 	public function test_updating_pro_license_settings_clears_license_dependent_caches(): void {
 		// Arrange.
+		$this->assertNotFalse(
+			has_filter(
+				'pre_update_option_woocommerce_pos_pro_settings_license',
+				array( Init::class, 'remove_license_transient' )
+			)
+		);
 		set_transient( 'woocommerce_pos_pro_license_status', array( 'activated' => false ) );
 		set_site_transient(
 			'update_plugins',
