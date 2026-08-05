@@ -41,7 +41,7 @@ class Cloud_Print_Diagnostic {
 		}
 
 		return array(
-			'content_type' => Provider::content_type( $provider ),
+			'content_type' => ( new Print_Format_Resolver() )->content_type_for_printer( array( 'provider' => $provider ) ),
 			'payload'      => base64_encode( $payload ),
 		);
 	}

@@ -62,4 +62,28 @@ class Print_Format_Resolver {
 			'content_type' => Provider::content_type( $provider ),
 		);
 	}
+
+	/**
+	 * Resolve the HTTP content type for a printer when no template is in hand.
+	 *
+	 * Two callers have a printer but no loaded template: the diagnostic builder
+	 * (its payload is hand-built, not rendered from a template) and the reprint
+	 * path (it copies a job's template id without loading the template). Both
+	 * get the provider's declared type.
+	 *
+	 * PrintNode therefore reports its PDF default here even for a printer in raw
+	 * mode, unlike resolve(), which sees the engine and can honour
+	 * `printnode_format`. That asymmetry is pre-existing and deliberate: it is
+	 * inert because PrintNode submissions choose their wire from the job's
+	 * `pn_kind` (see Cloud_Print_Submit_Service), never from this value.
+	 * Collapsing the two answers waits on the mediaTypes negotiation work
+	 * (issue #1351).
+	 *
+	 * @param array $printer Printer configuration.
+	 *
+	 * @return string
+	 */
+	public function content_type_for_printer( array $printer ): string {
+		return Provider::content_type( (string) ( $printer['provider'] ?? '' ) );
+	}
 }

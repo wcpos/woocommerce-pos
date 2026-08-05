@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
+use WCPOS\WooCommercePOS\Services\Print_Format_Resolver;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
@@ -604,7 +605,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( '' !== $source['template_id'] ) {
 			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
 			if ( null !== $printer ) {
-				$content_type = Provider::content_type( (string) ( $printer['provider'] ?? '' ) );
+				$content_type = ( new Print_Format_Resolver() )->content_type_for_printer( $printer );
 			}
 		}
 		$new_id = $this->jobs->create(
