@@ -150,7 +150,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	/**
 	 * The authoritative current {id, digest, object_type} for every live servable record whose id falls
 	 * in bucket [bucket*size, (bucket+1)*size). Digests come from the SAME 64-bit formula the manifest
-	 * stores (row_digest_select_sql), so client and server compare apples-to-apples; object_type lets the
+	 * stores ({@see Digest_Index}), so client and server compare apples-to-apples; object_type lets the
 	 * client route each pull/prune to the right lane (products and variations share the wp_posts id space).
 	 *
 	 * @return WP_Error|WP_REST_Response WP_Error (400) when the requested collection is not a supported
