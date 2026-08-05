@@ -17,7 +17,7 @@ use Exception;
 use WC_Data;
 use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
 use WP_REST_Request;
@@ -353,6 +353,9 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	/**
 	 * Filters the WHERE clause of the query.
 	 *
+	 * Exclusion set and feature gate both come from Sync\Pos_Visibility, the single POS visibility
+	 * authority.
+	 *
 	 * @param string   $where The WHERE clause of the query.
 	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
@@ -361,18 +364,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	public function wcpos_posts_where_product_variation_exclude_online_only( string $where, WP_Query $query ) {
 		global $wpdb;
 
-		$settings_instance = Settings::instance();
-		$online_only       = $settings_instance->get_online_only_variations_visibility_settings();
-		$online_only_ids   = isset( $online_only['ids'] ) && \is_array( $online_only['ids'] ) ? $online_only['ids'] : array();
-
-		// Exclude online-only product IDs if POS only products are enabled.
-		if ( ! empty( $online_only_ids ) ) {
-			$online_only_ids = array_map( 'intval', (array) $online_only_ids );
-			$ids_format      = implode( ',', array_fill( 0, \count( $online_only_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
-		}
-
-		return $where;
+		return ( new Pos_Visibility() )->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::VARIATIONS );
 	}
 
 	/**
@@ -421,17 +413,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$sql = "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts}";
 		$sql .= " WHERE {$wpdb->posts}.post_type = 'product_variation' AND {$wpdb->posts}.post_status = 'publish'";
 
-		// If the '_pos_visibility' condition needs to be applied.
-		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$settings_instance = Settings::instance();
-			$online_only       = $settings_instance->get_online_only_variations_visibility_settings();
-
-			if ( isset( $online_only['ids'] ) && \is_array( $online_only['ids'] ) && ! empty( $online_only['ids'] ) ) {
-				$online_only_ids = array_map( 'intval', (array) $online_only['ids'] );
-				$ids_format      = implode( ',', array_fill( 0, \count( $online_only_ids ), '%d' ) );
-				$sql .= $wpdb->prepare( " AND ID NOT IN ($ids_format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- format string is safe.
-			}
-		}
+		// Drop the POS-hidden ids — Sync\Pos_Visibility owns both the exclusion set and the feature gate.
+		$sql = ( new Pos_Visibility() )->apply_to_sql_where( $sql, 'ID', Pos_Visibility::VARIATIONS );
 
 		$modified_after_date = Bulk_ID_Fast_Path::modified_after_gmt( $request );
 		if ( $modified_after_date ) {

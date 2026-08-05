@@ -131,10 +131,7 @@ final class Variable_Prices {
 		// hidden from the POS would otherwise leak its price into the served
 		// range. Subtract the POS-hidden variation ids (gated on the feature
 		// toggle inside Pos_Visibility → empty when the toggle is off).
-		$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
-		if ( array() !== $hidden ) {
-			$child_ids = array_values( array_diff( array_map( 'intval', $child_ids ), $hidden ) );
-		}
+		$child_ids = ( new Pos_Visibility() )->filter_visible_children( $child_ids );
 		$collected = array(
 			'price' => array(),
 			'regular_price' => array(),
