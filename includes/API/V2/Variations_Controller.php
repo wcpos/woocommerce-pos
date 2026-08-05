@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\API\V1\Traits\Product_Helpers;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -33,6 +34,13 @@ use WP_REST_Server;
  */
 class Variations_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
+	use Product_Helpers;
+
+	private const MAX_SKU_LENGTH    = 4096;
+	private const MAX_SKU_TERMS     = 100;
+	private const MAX_SEARCH_LENGTH = 256;
+	private const MAX_SEARCH_TERMS  = 10;
+	private const MAX_PAGE          = 1000;
 
 
 	public function register_routes(): void {
@@ -44,7 +52,17 @@ class Variations_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'get_variations' ),
 				'permission_callback' => array( $this, 'permissions_check' ),
 				'args'                => array(
-					'include' => array( 'sanitize_callback' => 'wp_parse_id_list' ),
+					'include'  => array( 'sanitize_callback' => 'wp_parse_id_list' ),
+					'search'   => array( 'sanitize_callback' => 'sanitize_text_field' ),
+					'sku'      => array( 'sanitize_callback' => 'sanitize_text_field' ),
+					'per_page' => array(
+						'default' => 10,
+						'sanitize_callback' => 'absint',
+					),
+					'page'     => array(
+						'default' => 1,
+						'sanitize_callback' => 'absint',
+					),
 				),
 			)
 		);
@@ -59,17 +77,26 @@ class Variations_Controller extends WP_REST_Controller {
 	 * (deletes are handled by the change-signal tombstone path, not here).
 	 */
 	public function get_variations( WP_REST_Request $request ) {
-		$started = microtime( true );
-		$ids     = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
-		if ( array() === $ids ) {
-			return new WP_Error( 'woocommerce_pos_sync_missing_ids', 'variations requires a non-empty include list', array( 'status' => 400 ) );
-		}
-		// Leg-3 (ADR 0014 WP-M5): drop POS-hidden (`online_only`) variations from the served set. A hidden
-		// id simply isn't hydrated → the client's targeted pull returns nothing for it → Leg-3 prunes it.
-		// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
-		$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
-		if ( array() !== $hidden ) {
-			$ids = array_values( array_diff( $ids, $hidden ) );
+		$started     = microtime( true );
+		$search_meta = null;
+		if ( $request->has_param( 'sku' ) || $request->has_param( 'search' ) ) {
+			$validation = $this->validate_search_request( $request );
+			if ( is_wp_error( $validation ) ) {
+				return $validation;
+			}
+			list( $ids, $search_meta ) = $this->search_variation_ids( $request );
+		} else {
+			$ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
+			if ( array() === $ids ) {
+				return new WP_Error( 'woocommerce_pos_sync_missing_ids', 'variations requires a non-empty include list', array( 'status' => 400 ) );
+			}
+			// Leg-3 (ADR 0014 WP-M5): drop POS-hidden (`online_only`) variations from the served set. A hidden
+			// id simply isn't hydrated → the client's targeted pull returns nothing for it → Leg-3 prunes it.
+			// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
+			$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
+			if ( array() !== $hidden ) {
+				$ids = array_values( array_diff( $ids, $hidden ) );
+			}
 		}
 
 		// Hydrate through the same filtered products-controller seam as
@@ -111,15 +138,127 @@ class Variations_Controller extends WP_REST_Controller {
 			$documents[] = $document;
 		}
 
+		$meta = array(
+			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
+			'requested'   => \count( $ids ),
+			'returned'    => \count( $documents ),
+		);
+		if ( null !== $search_meta ) {
+			$meta = array_merge( $meta, $search_meta );
+		}
+
 		return rest_ensure_response(
 			array(
 				'documents' => $documents,
-				'meta'      => array(
-					'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-					'requested'   => \count( $ids ),
-					'returned'    => \count( $documents ),
-				),
+				'meta'      => $meta,
 			)
+		);
+	}
+
+	/**
+	 * Reject search requests that could build excessively large SQL queries or offsets.
+	 *
+	 * @return true|WP_Error
+	 */
+	private function validate_search_request( WP_REST_Request $request ) {
+		if ( $request->has_param( 'sku' ) ) {
+			$sku = (string) $request->get_param( 'sku' );
+			if ( self::MAX_SKU_LENGTH < \strlen( $sku ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not exceed 4096 bytes', array( 'status' => 400 ) );
+			}
+			$skus = array_filter(
+				array_map( 'trim', explode( ',', $sku ) ),
+				static function ( string $term ): bool {
+					return '' !== $term;
+				}
+			);
+			if ( self::MAX_SKU_TERMS < \count( $skus ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not contain more than 100 comma-separated terms', array( 'status' => 400 ) );
+			}
+		} else {
+			$search = (string) $request->get_param( 'search' );
+			if ( self::MAX_SEARCH_LENGTH < \strlen( $search ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 bytes', array( 'status' => 400 ) );
+			}
+			$terms = (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+			if ( self::MAX_SEARCH_TERMS < \count( $terms ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
+			}
+		}
+
+		if ( self::MAX_PAGE < (int) $request->get_param( 'page' ) ) {
+			return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'page must not exceed 1000', array( 'status' => 400 ) );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Discover a page of published, POS-visible variation ids by SKU/barcode.
+	 */
+	private function search_variation_ids( WP_REST_Request $request ): array {
+		global $wpdb;
+
+		$per_page = max( 1, min( 100, (int) ( $request->get_param( 'per_page' ) ?? 10 ) ) );
+		$page     = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
+		$args     = array( 'product_variation', 'publish' );
+
+		if ( $request->has_param( 'sku' ) ) {
+			$skus = array_values(
+				array_filter(
+					array_map( 'trim', explode( ',', (string) $request->get_param( 'sku' ) ) ),
+					static function ( string $sku ): bool {
+						return '' !== $sku;
+					}
+				)
+			);
+			if ( array() === $skus ) {
+				$match_sql = '1 = 0';
+			} else {
+				$match_sql = 'pm.meta_key = %s AND pm.meta_value IN (' . implode( ',', array_fill( 0, \count( $skus ), '%s' ) ) . ')';
+				$args[]    = '_sku';
+				$args       = array_merge( $args, $skus );
+			}
+		} else {
+			$terms         = preg_split( '/\s+/', trim( (string) $request->get_param( 'search' ) ), -1, PREG_SPLIT_NO_EMPTY );
+			$barcode_field = $this->wcpos_get_barcode_field();
+			$fields        = '_sku' === $barcode_field ? array( '_sku' ) : array( '_sku', $barcode_field );
+			$matches       = array();
+			foreach ( $terms as $term ) {
+				foreach ( $fields as $field ) {
+					$matches[] = '(pm.meta_key = %s AND pm.meta_value LIKE %s)';
+					$args[]    = $field;
+					$args[]    = '%' . $wpdb->esc_like( $term ) . '%';
+				}
+			}
+			$match_sql = array() === $matches ? '1 = 0' : '(' . implode( ' OR ', $matches ) . ')';
+		}
+
+		$where_sql = " FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID"
+			. ' WHERE p.post_type = %s AND p.post_status = %s AND (' . $match_sql . ')';
+		$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
+		if ( array() !== $hidden ) {
+			$where_sql .= ' AND p.ID NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
+			$args       = array_merge( $args, $hidden );
+		}
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- SQL fragments are fixed; all values use placeholders.
+		$total = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(DISTINCT p.ID)' . $where_sql, $args ) );
+		$ids   = $wpdb->get_col(
+			$wpdb->prepare(
+				'SELECT DISTINCT p.ID' . $where_sql . ' ORDER BY p.ID DESC LIMIT %d OFFSET %d',
+				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+
+		return array(
+			array_map( 'intval', $ids ),
+			array(
+				'total'    => $total,
+				'page'     => $page,
+				'per_page' => $per_page,
+			),
 		);
 	}
 }
