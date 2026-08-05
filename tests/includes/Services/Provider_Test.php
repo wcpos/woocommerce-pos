@@ -201,6 +201,43 @@ class Provider_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It declares which template engines each provider can render.
+	 */
+	public function test_template_engines_matches_the_provider_table(): void {
+		$this->assertEquals( 'all', Provider::template_engines( 'printnode' ) );
+		$this->assertEquals( 'thermal', Provider::template_engines( 'star-cloudprnt' ) );
+		$this->assertEquals( 'thermal', Provider::template_engines( 'epson-sdp' ) );
+		$this->assertEquals( 'thermal', Provider::template_engines( 'star-online' ) );
+	}
+
+	/**
+	 * It treats an unknown provider as thermal-only.
+	 */
+	public function test_template_engines_unknown_provider_returns_thermal(): void {
+		$this->assertEquals( 'thermal', Provider::template_engines( 'brother-ql' ) );
+	}
+
+	/**
+	 * It exposes every provider's client-facing capabilities.
+	 */
+	public function test_client_capabilities_covers_every_provider(): void {
+		$capabilities = Provider::client_capabilities();
+
+		$this->assertEquals( Provider::valid(), array_keys( $capabilities ) );
+		foreach ( Provider::valid() as $provider ) {
+			$this->assertEquals(
+				array(
+					'polling'          => Provider::is_polling( $provider ),
+					'poll_endpoint'    => Provider::poll_endpoint( $provider ),
+					'template_engines' => Provider::template_engines( $provider ),
+				),
+				$capabilities[ $provider ],
+				$provider
+			);
+		}
+	}
+
+	/**
 	 * It always returns a key the capability lookups understand.
 	 */
 	public function test_normalize_output_is_always_a_valid_provider(): void {

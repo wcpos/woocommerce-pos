@@ -659,6 +659,10 @@ class Settings extends WP_REST_Controller {
 			$settings['printers']
 		);
 		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
+		// Read-only provider facts (which template engines a provider can
+		// render, how it is delivered). The admin app currently mirrors these
+		// in its own table; serving them keeps the server authoritative.
+		$settings['providers'] = Provider::client_capabilities();
 
 		return new WP_REST_Response( $settings, 200 );
 	}

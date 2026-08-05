@@ -2,8 +2,9 @@
 /**
  * Cloud-print provider capabilities value object.
  *
- * Single source of truth for per-provider knowledge: validity, polling,
- * content types, poll endpoints, server diagnostics and thermal wire formats.
+ * Single source of truth for per-provider knowledge: validity, the default for
+ * rows without a provider, polling, content types, poll endpoints, server
+ * diagnostics, thermal wire formats and renderable template engines.
  *
  * @package WCPOS\WooCommercePOS\Services
  */
@@ -37,6 +38,7 @@ class Provider {
 			'poll_endpoint'              => 'cloudprnt',
 			'supports_server_diagnostic' => true,
 			'thermal_wire_format'        => 'starprnt',
+			'template_engines'           => 'thermal',
 		),
 		'epson-sdp'      => array(
 			'polling'                    => true,
@@ -44,6 +46,7 @@ class Provider {
 			'poll_endpoint'              => 'epson-sdp',
 			'supports_server_diagnostic' => true,
 			'thermal_wire_format'        => 'epos-xml',
+			'template_engines'           => 'thermal',
 		),
 		'printnode'      => array(
 			'polling'                    => false,
@@ -51,6 +54,7 @@ class Provider {
 			'poll_endpoint'              => null,
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => null,
+			'template_engines'           => 'all',
 		),
 		'star-online'    => array(
 			'polling'                    => false,
@@ -58,6 +62,7 @@ class Provider {
 			'poll_endpoint'              => null,
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => 'star-markup',
+			'template_engines'           => 'thermal',
 		),
 	);
 
@@ -159,5 +164,42 @@ class Provider {
 		}
 
 		return self::CAPABILITIES[ $provider ]['thermal_wire_format'] ?? null;
+	}
+
+	/**
+	 * Receipt-template engines the provider can render for automatic jobs.
+	 *
+	 * 'all' means every active template; 'thermal' means thermal templates
+	 * only. Unknown providers are treated as thermal-only, the conservative
+	 * answer for a printer we cannot render a PDF for.
+	 *
+	 * @param string $provider Provider key.
+	 *
+	 * @return string 'all' or 'thermal'.
+	 */
+	public static function template_engines( string $provider ): string {
+		return (string) ( self::CAPABILITIES[ $provider ]['template_engines'] ?? 'thermal' );
+	}
+
+	/**
+	 * Per-provider facts the settings UI needs, keyed by provider.
+	 *
+	 * Projected into the cloud-print settings response so the admin app can
+	 * read provider capabilities from the server instead of re-declaring them
+	 * in its own table.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	public static function client_capabilities(): array {
+		$capabilities = array();
+		foreach ( self::valid() as $provider ) {
+			$capabilities[ $provider ] = array(
+				'polling'          => self::is_polling( $provider ),
+				'poll_endpoint'    => self::poll_endpoint( $provider ),
+				'template_engines' => self::template_engines( $provider ),
+			);
+		}
+
+		return $capabilities;
 	}
 }

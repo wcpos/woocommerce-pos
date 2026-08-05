@@ -809,4 +809,28 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertSame( 12, $with_store['store_id'] );
 	}
+
+	/**
+	 * It publishes per-provider capabilities alongside the stored settings.
+	 */
+	public function test_get_cloud_print_returns_provider_capabilities(): void {
+		// Arrange.
+		update_option( 'woocommerce_pos_settings_cloud_print', array() );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+
+		// Act.
+		$response = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$providers = $response->get_data()['providers'];
+		$this->assertEquals( 'all', $providers['printnode']['template_engines'] );
+		$this->assertEquals( 'thermal', $providers['star-cloudprnt']['template_engines'] );
+		$this->assertEquals( 'thermal', $providers['epson-sdp']['template_engines'] );
+		$this->assertEquals( 'thermal', $providers['star-online']['template_engines'] );
+		$this->assertTrue( $providers['star-cloudprnt']['polling'] );
+		$this->assertEquals( 'cloudprnt', $providers['star-cloudprnt']['poll_endpoint'] );
+		$this->assertFalse( $providers['printnode']['polling'] );
+		$this->assertNull( $providers['printnode']['poll_endpoint'] );
+	}
 }
