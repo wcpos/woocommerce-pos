@@ -1306,6 +1306,24 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * With no context supplied the session is recorded against the live request.
+	 *
+	 * This pins the default path: if store_refresh_token_jti() stopped calling
+	 * Session_Context::from_request() the recorded IP would be empty. The
+	 * user-agent half of the same wiring is covered by test_device_info_parsing.
+	 */
+	public function test_generate_refresh_token_without_context_records_live_request_ip(): void {
+		$expected_ip = Session_Context::client_ip_from_request();
+		$this->assertNotEmpty( $expected_ip, 'The test request is expected to carry a client IP.' );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+
+		$this->assertCount( 1, $sessions );
+		$this->assertEquals( $expected_ip, $sessions[0]['ip_address'] );
+	}
+
+	/**
 	 * Store a session against an injected context and return the stored session.
 	 *
 	 * store_refresh_token_jti() is private; the optional Session_Context
