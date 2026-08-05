@@ -30,7 +30,7 @@ use WP_REST_Server;
  * parent server-side (off the loaded WC_Product_Variation, zero extra SQL) and
  * hydrates through the SAME filtered products-controller path used by
  * resolve/changes, so the client pulls a deferred variation set in ONE round trip
- * with no parent->child dance. Extends wc/v3 in our `{API_NAMESPACE}{ROUTE_PREFIX}` namespace.
+ * with no parent->child dance. Extends wc/v3 in our `{API_NAMESPACE}` namespace.
  */
 class Variations_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
@@ -46,7 +46,7 @@ class Variations_Controller extends WP_REST_Controller {
 	public function register_routes(): void {
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'variations',
+			'/variations',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_variations' ),

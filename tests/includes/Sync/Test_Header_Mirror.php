@@ -73,7 +73,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 				$this->sent_headers[ $key ] = $value;
 			}
 		};
-		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/status' );
 
 		$api->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
@@ -94,7 +94,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 				$this->sent_headers[ $key ] = $value;
 			}
 		};
-		$request = new WP_REST_Request( 'OPTIONS', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/products' );
+		$request = new WP_REST_Request( 'OPTIONS', '/' . Api::ROUTE_NAMESPACE . '/push/products' );
 
 		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
@@ -117,7 +117,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 				$this->sent_headers[ $key ] = $value;
 			}
 		};
-		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/status' );
 
 		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 

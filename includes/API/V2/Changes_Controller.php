@@ -57,7 +57,7 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'changes/sequence-log',
+			'/changes/sequence-log',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'sequence_log' ),
@@ -76,7 +76,7 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'changes/revision-hash',
+			'/changes/revision-hash',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'revision_hash' ),
@@ -100,7 +100,7 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'changes/range-checksum',
+			'/changes/range-checksum',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'range_checksum' ),
@@ -121,7 +121,7 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'changes/tick',
+			'/changes/tick',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'tick' ),
@@ -140,7 +140,7 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'changes/config-fingerprint',
+			'/changes/config-fingerprint',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'config_fingerprint' ),

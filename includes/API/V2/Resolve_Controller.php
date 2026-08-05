@@ -43,7 +43,7 @@ class Resolve_Controller extends WP_REST_Controller {
 	public function register_routes(): void {
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'resolve/barcode',
+			'/resolve/barcode',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'resolve_barcode' ),

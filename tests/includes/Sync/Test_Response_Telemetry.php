@@ -33,7 +33,7 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_orders_pull_carries_top_level_metrics_and_headers(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
-		$request = $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'orders/pull' );
+		$request = $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/orders/pull' );
 		$request->set_param( 'limit', 1 );
 		$response = $this->server->dispatch( $request );
 
@@ -51,7 +51,7 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_change_candidates_gain_memory_alongside_duration(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
-		$request = $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'changes/sequence-log' );
+		$request = $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/changes/sequence-log' );
 		$request->set_param( 'collection', 'orders' );
 		$response = $this->server->dispatch( $request );
 
@@ -73,7 +73,7 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 			};
 			add_filter( 'rest_pre_dispatch', $pre_dispatch, 10 );
 
-			$response = $this->server->dispatch( $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' ) );
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/status' ) );
 
 			remove_filter( 'rest_pre_dispatch', $pre_dispatch, 10 );
 			$this->assertArrayHasKey( 'healthy', $response->get_data() );

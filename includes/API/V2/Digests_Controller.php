@@ -20,7 +20,7 @@ use WP_REST_Server;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
- * Leg-3 prime-pass digest endpoint (ADR 0014 increment 4c) — GET {API_NAMESPACE}{ROUTE_PREFIX}/digests?include=<ids>.
+ * Leg-3 prime-pass digest endpoint (ADR 0014 increment 4c) — GET {API_NAMESPACE}/digests?include=<ids>.
  *
  * Returns each requested product/variation id's STORED 64-bit digest, with NO payload — the compact
  * `{id, digest}` the client needs to backfill its existence-reconcile manifest for records that were
@@ -44,7 +44,7 @@ final class Digests_Controller extends WP_REST_Controller {
 	public function register_routes(): void {
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'digests',
+			'/digests',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_digests' ),

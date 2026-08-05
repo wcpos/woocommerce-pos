@@ -21,7 +21,7 @@ use WP_REST_Server;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
- * Catalog proxy endpoints — route replication READS through our `{API_NAMESPACE}{ROUTE_PREFIX}`
+ * Catalog proxy endpoints — route replication READS through our `{API_NAMESPACE}`
  * namespace instead of hitting raw `wc/v3` directly (guardrail G4: replication is
  * wrapped in our namespace so we can customize the request/response and
  * duck-punch for replication WITHOUT editing wc/v3 or the client).
@@ -56,7 +56,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			$resource = $meta[1];
 			register_rest_route(
 				Api::ROUTE_NAMESPACE,
-				'/' . Api::ROUTE_PREFIX . ltrim( $route, '/' ),
+				'/' . ltrim( $route, '/' ),
 				array(
 					'methods' => WP_REST_Server::READABLE,
 					// Closure carries the target so the handler never has to re-derive

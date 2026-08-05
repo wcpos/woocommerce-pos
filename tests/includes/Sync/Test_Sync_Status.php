@@ -64,7 +64,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	public function test_enabled_sync_status_uses_v2_without_legacy_sync_alias(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
-		$current  = $this->server->dispatch( $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' ) );
+		$current  = $this->server->dispatch( $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/status' ) );
 		$legacy   = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/sync/status' ) );
 		$old_data = $legacy->get_data();
 

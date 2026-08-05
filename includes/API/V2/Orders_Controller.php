@@ -38,7 +38,7 @@ final class Orders_Controller extends WP_REST_Controller {
 	public function register_routes(): void {
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'orders/pull',
+			'/orders/pull',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'pull_orders' ),
@@ -75,7 +75,7 @@ final class Orders_Controller extends WP_REST_Controller {
 		// table (it cannot cure a broken install, only fail against it).
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'orders/index/backfill',
+			'/orders/index/backfill',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'index_backfill' ),

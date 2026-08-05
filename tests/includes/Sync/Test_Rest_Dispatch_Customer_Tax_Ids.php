@@ -58,7 +58,7 @@ class Test_Rest_Dispatch_Customer_Tax_Ids extends Sync_REST_Store_Test_Case {
 	}
 
 	private function push_envelope( array $envelope ) {
-		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/customers' );
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/customers' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( (string) wp_json_encode( $envelope ) );
 

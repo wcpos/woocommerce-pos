@@ -96,7 +96,7 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 				),
 			),
 		);
-		$request  = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/orders' );
+		$request  = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/orders' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( (string) wp_json_encode( $envelope ) );
 

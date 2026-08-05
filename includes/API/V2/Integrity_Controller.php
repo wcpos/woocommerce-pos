@@ -56,7 +56,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	public function register_routes(): void {
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'integrity/scan',
+			'/integrity/scan',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'scan' ),
@@ -81,7 +81,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'integrity/rebuild',
+			'/integrity/rebuild',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'rebuild' ),
@@ -94,7 +94,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		// drill-down returns. The client set-differences its manifest against this to prune stale records.
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'integrity/bucket',
+			'/integrity/bucket',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'bucket_list' ),
