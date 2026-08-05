@@ -44,6 +44,9 @@ class Init {
 		add_action( 'rest_api_init', array( $this, 'init_rest_api' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
+		// Remove this once Pro settings have been moved to the new settings service.
+		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( self::class, 'remove_license_transient' ) );
+
 		// Headers for API discoverability.
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
@@ -59,6 +62,20 @@ class Init {
 		 * fires during 'init', which is BEFORE rest_api_init where our API class loads.
 		 */
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
+	}
+
+	/**
+	 * Clear cached data that depends on the Pro license.
+	 *
+	 * @param mixed $value The option value.
+	 *
+	 * @return mixed
+	 */
+	public static function remove_license_transient( $value ) {
+		delete_transient( 'woocommerce_pos_pro_license_status' );
+		delete_site_transient( 'update_plugins' );
+
+		return $value;
 	}
 
 	/**

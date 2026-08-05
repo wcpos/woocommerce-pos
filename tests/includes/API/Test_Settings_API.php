@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WP_REST_Request;
 use WP_UnitTestCase;
@@ -40,6 +41,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( 'woocommerce_pos_pro_settings_license' );
+		delete_transient( 'woocommerce_pos_pro_license_status' );
+		delete_site_transient( 'update_plugins' );
 		parent::tearDown();
 	}
 
@@ -158,6 +162,37 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$response = $this->api->get_license_settings( $this->mock_rest_request() );
 		$settings = $response->get_data();
 		$this->assertEmpty( $settings );
+	}
+
+	/**
+	 * Updating Pro license settings should invalidate all license-dependent caches.
+	 */
+	public function test_updating_pro_license_settings_clears_license_dependent_caches(): void {
+		// Arrange.
+		$this->assertNotFalse(
+			has_filter(
+				'pre_update_option_woocommerce_pos_pro_settings_license',
+				array( Init::class, 'remove_license_transient' )
+			)
+		);
+		set_transient( 'woocommerce_pos_pro_license_status', array( 'activated' => false ) );
+		set_site_transient(
+			'update_plugins',
+			(object) array(
+				'response' => array(
+					'woocommerce-pos-pro/woocommerce-pos-pro.php' => (object) array(
+						'package' => 'https://updates.wcpos.com/pro/download/1.9.16?key=old-key',
+					),
+				),
+			)
+		);
+
+		// Act.
+		update_option( 'woocommerce_pos_pro_settings_license', array( 'key' => 'new-key' ) );
+
+		// Assert.
+		$this->assertFalse( get_transient( 'woocommerce_pos_pro_license_status' ) );
+		$this->assertFalse( get_site_transient( 'update_plugins' ) );
 	}
 
 	/**

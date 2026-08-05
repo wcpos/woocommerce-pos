@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
+use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
@@ -46,9 +47,6 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function __construct() {
 		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'payment_gateways_settings' ) );
-
-		// remove this once Pro settings have been moved to the new settings service.
-		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( $this, 'remove_license_transient' ) );
 	}
 
 	/**
@@ -1093,8 +1091,6 @@ class Settings extends WP_REST_Controller {
 	 * @param mixed $value The option value.
 	 */
 	public function remove_license_transient( $value ) {
-		delete_transient( 'woocommerce_pos_pro_license_status' );
-
-		return $value;
+		return Init::remove_license_transient( $value );
 	}
 }
