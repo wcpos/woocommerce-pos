@@ -12,95 +12,6 @@ use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WP_UnitTestCase;
 
 /**
- * A product-like object that predates WC 9.1: it has NO global-unique-id
- * accessors, which is exactly what the method_exists() guards branch on.
- *
- * @internal
- */
-class Legacy_Product_Stub {
-	/**
-	 * Meta written through update_meta_data().
-	 *
-	 * @var array<string, mixed>
-	 */
-	public $meta = array();
-
-	/**
-	 * Number of full save() calls.
-	 *
-	 * @var int
-	 */
-	public $saves = 0;
-
-	/**
-	 * Number of save_meta_data() calls.
-	 *
-	 * @var int
-	 */
-	public $meta_saves = 0;
-
-	/**
-	 * The SKU.
-	 *
-	 * @var string
-	 */
-	public $sku = '';
-
-	/**
-	 * Get the SKU.
-	 *
-	 * @return string
-	 */
-	public function get_sku() {
-		return $this->sku;
-	}
-
-	/**
-	 * Set the SKU.
-	 *
-	 * @param string $sku The SKU.
-	 */
-	public function set_sku( $sku ): void {
-		$this->sku = $sku;
-	}
-
-	/**
-	 * Get a meta value.
-	 *
-	 * @param string $key The meta key.
-	 *
-	 * @return mixed
-	 */
-	public function get_meta( $key ) {
-		return $this->meta[ $key ] ?? '';
-	}
-
-	/**
-	 * Write a meta value.
-	 *
-	 * @param string $key   The meta key.
-	 * @param mixed  $value The meta value.
-	 */
-	public function update_meta_data( $key, $value ): void {
-		$this->meta[ $key ] = $value;
-	}
-
-	/**
-	 * Persist the object.
-	 */
-	public function save(): void {
-		++$this->saves;
-	}
-
-	/**
-	 * Persist only the meta.
-	 */
-	public function save_meta_data(): void {
-		++$this->meta_saves;
-	}
-}
-
-/**
  * Barcode_Field tests.
  *
  * @internal
@@ -204,6 +115,20 @@ class Test_Barcode_Field extends WP_UnitTestCase {
 	public function test_read_custom_field_without_value_returns_empty_string(): void {
 		$this->set_barcode_field( '_alg_ean' );
 		$product = ProductHelper::create_simple_product();
+
+		$this->assertSame( '', Barcode_Field::read( $product ) );
+	}
+
+	/**
+	 * A custom meta key can hold anything another plugin put there. An array is
+	 * not a barcode: it reads as an empty string rather than the literal "Array"
+	 * a cast would produce (plus a PHP warning).
+	 */
+	public function test_read_custom_field_with_array_value_returns_empty_string(): void {
+		$this->set_barcode_field( '_alg_ean' );
+		$product = ProductHelper::create_simple_product();
+		$product->update_meta_data( '_alg_ean', array( 'not', 'a', 'barcode' ) );
+		$product->save_meta_data();
 
 		$this->assertSame( '', Barcode_Field::read( $product ) );
 	}
@@ -350,7 +275,7 @@ class Test_Barcode_Field extends WP_UnitTestCase {
 	}
 
 	/**
-	 * orderby=barcode sorts on the active field in every mode.
+	 * The orderby=barcode sort uses the active field in every mode.
 	 */
 	public function test_orderby_key_is_the_active_field(): void {
 		$this->set_barcode_field( '_sku' );

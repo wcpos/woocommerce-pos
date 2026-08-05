@@ -322,9 +322,9 @@ trait WCPOS_REST_API {
 
 				// Add barcode field if it's a custom meta key. The two native keys
 				// are product properties, not postmeta this allowlist can carry.
+				// No empty check: Barcode_Field::meta_key() never returns ''.
 				$barcode_field = Barcode_Field::meta_key();
-				if ( ! empty( $barcode_field )
-					&& '_sku' !== $barcode_field && Barcode_Field::DEFAULT_FIELD !== $barcode_field ) {
+				if ( '_sku' !== $barcode_field && Barcode_Field::DEFAULT_FIELD !== $barcode_field ) {
 					$keys[] = $barcode_field;
 				}
 				$keys[] = '_woocommerce_pos_variable_prices';

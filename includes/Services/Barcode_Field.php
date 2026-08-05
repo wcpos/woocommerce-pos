@@ -71,6 +71,10 @@ final class Barcode_Field {
 	/**
 	 * Read a product's barcode.
 	 *
+	 * A custom meta key can hold anything another plugin put there, including an
+	 * array. Only scalars become a barcode — casting an array would emit an
+	 * "Array to string conversion" warning and serve the literal string "Array".
+	 *
 	 * @param \WC_Data $product The product or variation object.
 	 *
 	 * @return string
@@ -86,7 +90,9 @@ final class Barcode_Field {
 			return (string) $product->get_global_unique_id();
 		}
 
-		return (string) $product->get_meta( $barcode_field );
+		$value = $product->get_meta( $barcode_field );
+
+		return is_scalar( $value ) ? (string) $value : '';
 	}
 
 	/**
