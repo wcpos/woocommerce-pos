@@ -190,7 +190,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Exclude the POS-hidden (`online_only`) product ids from a `/products` forward via WC's REST query
+	 * Exclude the POS-hidden (`online_only`) product and variation ids from a `/products` forward via WC's REST query
 	 * builder. No-op for other resources or when nothing is hidden, so the filter is only ever attached
 	 * for the exact window it's needed.
 	 */
@@ -198,7 +198,9 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( 'products' !== $resource ) {
 			return;
 		}
-		$exclude = ( new Pos_Visibility() )->online_only_product_ids();
+		$visibility = new Pos_Visibility();
+		$exclude    = $visibility->online_only_product_ids();
+		$exclude    = array_merge( $exclude, $visibility->online_only_variation_ids() );
 		if ( array() === $exclude ) {
 			return;
 		}
