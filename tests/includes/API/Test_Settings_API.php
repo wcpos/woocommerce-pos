@@ -58,9 +58,50 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function setUp(): void {
 		Fixture_Settings_Section::register();
+
+		if ( 'test_section_with_an_unsafe_id_gets_no_route' === $this->getName() ) {
+			add_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
+		}
+
 		SettingsService::instance()->reset_sections_for_testing();
 
 		parent::setUp();
+	}
+
+	/**
+	 * Register a section whose id would otherwise be compiled into a route
+	 * regex. Public because it is used as an action callback.
+	 *
+	 * @param Section_Registry $registry The Section Registry.
+	 */
+	public function register_unsafe_section( Section_Registry $registry ): void {
+		$registry->register(
+			new class() implements Settings_Section_Interface {
+				public function id(): string {
+					return '(?P<hijack>.*)';
+				}
+
+				public function defaults(): array {
+					return array();
+				}
+
+				public function read(): array {
+					return array();
+				}
+
+				public function write( array $settings ) {
+					return $settings;
+				}
+
+				public function merge( array $existing, array $patch ): array {
+					return $patch;
+				}
+
+				public function endpoint_args(): array {
+					return array();
+				}
+			}
+		);
 	}
 
 	/**
@@ -114,6 +155,48 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( $namespace . '/settings/checkout/order-statuses', $routes );
 			$this->assertArrayHasKey( $namespace . '/settings/tax_ids/detection', $routes );
 		}
+	}
+
+	/**
+	 * Projection is additive where the hand-written table had gaps: the
+	 * visibility section had no HTTP surface at all, and license was read-only
+	 * even though the section can write. Both are deliberate.
+	 */
+	public function test_projection_covers_sections_the_legacy_table_missed(): void {
+		$routes = $this->server->get_routes();
+
+		$this->assertArrayHasKey( '/wcpos/v1/settings/visibility', $routes );
+		$this->assertEquals(
+			array( 'GET', 'POST', 'PUT', 'PATCH' ),
+			$this->allowed_methods( $routes['/wcpos/v1/settings/visibility'] )
+		);
+		$this->assertContains( 'POST', $this->allowed_methods( $routes['/wcpos/v1/settings/license'] ) );
+
+		wp_set_current_user( $this->user );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/visibility' ) );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'products', $response->get_data() );
+	}
+
+	/**
+	 * A section id becomes part of a route regex, so an id outside the
+	 * documented alphabet is refused instead of compiled into the route table.
+	 */
+	public function test_section_with_an_unsafe_id_gets_no_route(): void {
+		$this->assertTrue(
+			SettingsService::instance()->sections()->has( '(?P<hijack>.*)' ),
+			'the unsafe section should still be in the registry'
+		);
+
+		foreach ( array_keys( $this->server->get_routes() ) as $route ) {
+			$this->assertStringNotContainsString( 'hijack', $route );
+		}
+
+		// The settings namespace is not swallowed by a catch-all.
+		wp_set_current_user( $this->user );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/general' ) );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'barcode_field', $response->get_data() );
 	}
 
 	// ──────────────────────────────────────────────

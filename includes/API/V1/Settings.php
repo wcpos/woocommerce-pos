@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V1;
 
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
@@ -119,7 +120,23 @@ class Settings extends WP_REST_Controller {
 		);
 
 		foreach ( SettingsService::instance()->sections()->all() as $id => $section ) {
-			$this->register_section_routes( (string) $id, $section );
+			$id = (string) $id;
+
+			// A section id becomes part of a route regex, so anything outside the
+			// documented id alphabet is refused rather than compiled into the
+			// route table.
+			if ( ! preg_match( '/^[a-z0-9_-]+$/', $id ) ) {
+				Logger::warning(
+					\sprintf(
+						'Settings section "%s" has no REST route: section ids must match [a-z0-9_-].',
+						$id
+					)
+				);
+
+				continue;
+			}
+
+			$this->register_section_routes( $id, $section );
 		}
 
 		// Section-adjacent read-only lookups. These are not section CRUD, so they
