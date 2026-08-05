@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
 
 /**
@@ -44,27 +45,67 @@ class Cashier {
 	/**
 	 * Get cashier UUID.
 	 *
-	 * Note: usermeta is shared across all sites in a network, this can cause issues in the POS.
-	 * We need to make sure that the cashier uuid is unique per site.
+	 * Delegates to Pos_Uuid — the sole authority for `_woocommerce_pos_uuid` — so
+	 * the /cashier endpoint and auth payloads serve the SAME identity as the
+	 * /customers endpoint. The POS client keys its RxDB documents on this uuid, so
+	 * a divergent value makes one person appear as two.
+	 *
+	 * Historical note: this method used to mint its own uuid under a per-blog meta
+	 * key (`_woocommerce_pos_uuid_{blog_id}`) on multisite while every other reader
+	 * used the plain network-wide key. That per-site rule was never applied to
+	 * customers, so it forked identities instead of isolating them. Existing
+	 * per-blog values are adopted as the network identity when no plain uuid exists
+	 * yet; the legacy rows are left in place.
 	 *
 	 * @param WP_User $user User object.
 	 *
 	 * @return string UUID for the cashier.
 	 */
 	public function get_cashier_uuid( WP_User $user ): string {
-		$meta_key = '_woocommerce_pos_uuid';
+		$this->maybe_adopt_legacy_multisite_uuid( $user );
 
-		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
-			$meta_key = $meta_key . '_' . get_current_blog_id();
+		$uuid = Pos_Uuid::ensure_user_uuid( $user );
+		if ( '' !== $uuid ) {
+			return $uuid;
 		}
 
-		$uuid = get_user_meta( $user->ID, $meta_key, true );
-		if ( ! $uuid ) {
+		// Fallback when the WC_Customer adapter is unavailable: read or mint the
+		// plain network-wide key directly so auth payloads never carry an empty uuid.
+		$uuid = get_user_meta( $user->ID, Pos_Uuid::META_KEY, true );
+		if ( ! Pos_Uuid::is_uuid( $uuid ) ) {
 			$uuid = wp_generate_uuid4();
-			update_user_meta( $user->ID, $meta_key, $uuid );
+			update_user_meta( $user->ID, Pos_Uuid::META_KEY, $uuid );
 		}
 
 		return $uuid;
+	}
+
+	/**
+	 * Adopt a legacy per-blog uuid as the network-wide identity.
+	 *
+	 * Multisite installs minted `_woocommerce_pos_uuid_{blog_id}` via the old
+	 * cashier path. When the plain key holds no valid uuid yet, persist the legacy
+	 * value under the plain key so existing cashiers keep their identity; if a
+	 * plain uuid already exists it wins, because that is what /customers has
+	 * already served to clients. Ownership/duplicate checks still run afterwards
+	 * in Pos_Uuid::ensure_user_uuid().
+	 *
+	 * @param WP_User $user User object.
+	 */
+	private function maybe_adopt_legacy_multisite_uuid( WP_User $user ): void {
+		if ( ! ( \function_exists( 'is_multisite' ) && is_multisite() ) ) {
+			return;
+		}
+
+		$existing = get_user_meta( $user->ID, Pos_Uuid::META_KEY, true );
+		if ( Pos_Uuid::is_uuid( $existing ) ) {
+			return;
+		}
+
+		$legacy = get_user_meta( $user->ID, Pos_Uuid::META_KEY . '_' . get_current_blog_id(), true );
+		if ( Pos_Uuid::is_uuid( $legacy ) ) {
+			update_user_meta( $user->ID, Pos_Uuid::META_KEY, $legacy );
+		}
 	}
 
 	/**

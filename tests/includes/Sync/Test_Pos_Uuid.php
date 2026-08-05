@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_UnitTestCase;
@@ -19,10 +20,72 @@ use WP_UnitTestCase;
  */
 class Test_Pos_Uuid extends WP_UnitTestCase {
 	/**
+	 * Tear down: unregister function mocks (multisite simulation).
+	 */
+	public function tearDown(): void {
+		FunctionsMockerHack::get_hack_instance()->reset();
+		parent::tearDown();
+	}
+
+	/**
+	 * Simulate a multisite install inside plugin code (CodeHacker only rewrites
+	 * calls in includes/, so test code still sees the real single-site functions).
+	 *
+	 * @param int $blog_id Blog id reported to plugin code.
+	 */
+	private function mock_multisite( int $blog_id = 2 ): void {
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'is_multisite'        => function () {
+					return true;
+				},
+				'get_current_blog_id' => function () use ( $blog_id ) {
+					return $blog_id;
+				},
+			)
+		);
+	}
+
+	/**
 	 * The identity brain uses the shared production meta-key constant.
 	 */
 	public function test_meta_key_uses_sync_api_constant(): void {
 		$this->assertSame( Api::UUID_META_KEY, Pos_Uuid::META_KEY );
+	}
+
+	/**
+	 * On multisite, a legacy per-blog cashier uuid is adopted as the network-wide
+	 * identity by ANY caller of ensure_user_uuid — not just /cashier — so the
+	 * adopted identity is the same whichever endpoint reads the user first.
+	 */
+	public function test_ensure_user_uuid_multisite_adopts_legacy_per_blog_uuid(): void {
+		$user_id     = $this->factory->user->create();
+		$legacy_uuid = wp_generate_uuid4();
+		update_user_meta( $user_id, Pos_Uuid::META_KEY . '_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+		$this->assertSame( $legacy_uuid, $uuid );
+		$this->assertSame( $legacy_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
+	}
+
+	/**
+	 * A legacy per-blog uuid already owned by ANOTHER user's network identity is
+	 * not served as a duplicate RxDB key — the authority re-mints instead.
+	 */
+	public function test_ensure_user_uuid_multisite_rejects_legacy_uuid_owned_by_other_user(): void {
+		$owner_id  = $this->factory->user->create();
+		$victim_id = $this->factory->user->create();
+		$uuid      = wp_generate_uuid4();
+		update_user_meta( $owner_id, Pos_Uuid::META_KEY, $uuid );
+		update_user_meta( $victim_id, Pos_Uuid::META_KEY . '_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$victim_uuid = Pos_Uuid::ensure_user_uuid( $victim_id );
+
+		$this->assertTrue( Pos_Uuid::is_uuid( $victim_uuid ) );
+		$this->assertNotSame( $uuid, $victim_uuid );
 	}
 
 	/**
