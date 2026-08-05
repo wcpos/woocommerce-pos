@@ -101,6 +101,27 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Sequence-log exposes the lossy prune watermark as its horizon.
+	 */
+	public function test_sequence_log_with_pruned_history_returns_watermark_horizon(): void {
+		// Arrange.
+		$log = new Change_Log();
+		$log->record( 'product', 11, 'update', 'test', false );
+		$log->record( 'product', 22, 'update', 'test', false );
+		$controller = new Changes_Controller( $log );
+
+		// Act.
+		$before_pruning = $controller->sequence_log( $this->request() )->get_data();
+		$log->advance_prune_watermark( 7 );
+		$after_pruning = $controller->sequence_log( $this->request() )->get_data();
+		delete_option( Change_Log::PRUNE_WATERMARK_OPTION );
+
+		// Assert: zero until lossy pruning happens, then the pruned boundary.
+		$this->assertEquals( 0, $before_pruning['checkpoint']['horizon'] );
+		$this->assertEquals( 7, $after_pruning['checkpoint']['horizon'] );
+	}
+
+	/**
 	 * Sequence-log embeds the standalone config fingerprint response data.
 	 */
 	public function test_sequence_log_contains_standalone_config_fingerprint_data(): void {
@@ -137,6 +158,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * RFC 9110 If-None-Match forms all match (parser from wcpos-bot's review).
+	 *
+	 * @param string $header_template Header value template.
 	 *
 	 * @dataProvider matching_if_none_match_header_provider
 	 */

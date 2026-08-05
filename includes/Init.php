@@ -66,6 +66,7 @@ class Init {
 
 			if ( $sync_schema_latched ) {
 				( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Change_Log_Purge() )->register_hooks();
 				( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
 				( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();
 			}

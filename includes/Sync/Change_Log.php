@@ -34,6 +34,13 @@ final class Change_Log {
 	 */
 	private array $recorded_this_request = array();
 
+	/**
+	 * Option holding the highest sequence ever removed by lossy tombstone
+	 * pruning. Owned by the log (it is a property of the stream's history
+	 * completeness, not of the cron that happens to advance it).
+	 */
+	const PRUNE_WATERMARK_OPTION = 'wcpos_change_log_prune_watermark';
+
 	public function table_name(): string {
 		global $wpdb;
 		return $wpdb->prefix . Health::CHANGE_LOG_TABLE;
@@ -422,6 +429,144 @@ final class Change_Log {
 		global $wpdb;
 
 		return (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->table_name() );
+	}
+
+	/**
+	 * Oldest sequence that remains available to incremental-sync clients.
+	 */
+	public function oldest_sequence(): int {
+		global $wpdb;
+
+		return (int) $wpdb->get_var( 'SELECT MIN(sequence) FROM ' . $this->table_name() );
+	}
+
+	/**
+	 * Delete one batch of superseded rows through the supplied sequence.
+	 *
+	 * @param int $cutoff_sequence Inclusive upper sequence bound.
+	 * @param int $batch           Maximum rows to delete.
+	 *
+	 * @return int Number of rows deleted.
+	 */
+	public function compact( int $cutoff_sequence, int $batch ): int {
+		global $wpdb;
+		if ( $cutoff_sequence <= 0 || $batch <= 0 ) {
+			return 0;
+		}
+
+		$table   = $this->table_name();
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE FROM ' . $table . ' WHERE sequence <= %d AND sequence IN ('
+				. ' SELECT sequence FROM ('
+				. ' SELECT stale.sequence FROM ' . $table . ' stale'
+				. ' WHERE stale.sequence <= %d'
+				. ' AND EXISTS ('
+				. ' SELECT 1 FROM ' . $table . ' newer'
+				. ' WHERE newer.object_type = stale.object_type'
+				. ' AND newer.object_id = stale.object_id'
+				. ' AND newer.sequence > stale.sequence'
+				. ' ) ORDER BY stale.sequence ASC LIMIT %d'
+				. ' ) compactable'
+				. ' )',
+				$cutoff_sequence,
+				$cutoff_sequence,
+				$batch
+			)
+		);
+
+		return false === $deleted ? 0 : (int) $deleted;
+	}
+
+	/**
+	 * Delete one batch of expired tombstones — the log's only LOSSY deletion.
+	 *
+	 * Selects the batch first (sequence AND wall-clock checked per row — sequence
+	 * order is not guaranteed to match timestamp order under concurrent writers),
+	 * deletes by explicit sequence list, and reports the highest pruned sequence
+	 * so callers can advance the prune watermark.
+	 *
+	 * @param int    $cutoff_sequence Inclusive upper sequence bound.
+	 * @param string $cutoff_gmt      UTC datetime; only rows created before it are pruned.
+	 * @param int    $batch           Maximum rows to delete.
+	 *
+	 * @return array{deleted: int, watermark: int} Rows deleted and the highest pruned sequence (0 when none).
+	 */
+	public function prune_tombstones( int $cutoff_sequence, string $cutoff_gmt, int $batch ): array {
+		global $wpdb;
+		$none = array(
+			'deleted'   => 0,
+			'watermark' => 0,
+		);
+		if ( $cutoff_sequence <= 0 || $batch <= 0 ) {
+			return $none;
+		}
+
+		$sequences = array_map(
+			'intval',
+			$wpdb->get_col(
+				$wpdb->prepare(
+					'SELECT sequence FROM ' . $this->table_name()
+					. " WHERE change_type = 'delete' AND sequence <= %d AND created_gmt < %s"
+					. ' ORDER BY sequence ASC LIMIT %d',
+					$cutoff_sequence,
+					$cutoff_gmt,
+					$batch
+				)
+			)
+		);
+		if ( empty( $sequences ) ) {
+			return $none;
+		}
+
+		$deleted = $wpdb->query(
+			'DELETE FROM ' . $this->table_name()
+			. ' WHERE sequence IN (' . implode( ',', $sequences ) . ')'
+		);
+
+		return array(
+			'deleted'   => false === $deleted ? 0 : (int) $deleted,
+			'watermark' => max( $sequences ),
+		);
+	}
+
+	/**
+	 * Resolve a wall-clock cutoff to one stable sequence boundary.
+	 *
+	 * @param string $cutoff_gmt UTC cutoff datetime.
+	 */
+	public function sequence_at_or_before( string $cutoff_gmt ): int {
+		global $wpdb;
+
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT MAX(sequence) FROM ' . $this->table_name() . ' WHERE created_gmt < %s',
+				$cutoff_gmt
+			)
+		);
+	}
+
+	/**
+	 * Highest sequence ever removed by lossy tombstone pruning.
+	 *
+	 * The client-facing completeness boundary: a cursor at or past this value
+	 * has missed nothing (compaction is lossless); a cursor below it may have
+	 * missed pruned tombstones and must reconcile via the integrity surfaces.
+	 * Zero means no lossy pruning has ever run.
+	 */
+	public function prune_watermark(): int {
+		return (int) get_option( self::PRUNE_WATERMARK_OPTION, 0 );
+	}
+
+	/**
+	 * Advance the persisted prune watermark (never moves backwards).
+	 *
+	 * @param int $sequence Highest sequence removed by a completed prune batch.
+	 */
+	public function advance_prune_watermark( int $sequence ): void {
+		if ( $sequence > $this->prune_watermark() ) {
+			update_option( self::PRUNE_WATERMARK_OPTION, $sequence, true );
+		}
 	}
 
 	/**
