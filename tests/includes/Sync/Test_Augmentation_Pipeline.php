@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variable;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
+use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Variable_Prices;
 use WP_UnitTestCase;
 
@@ -196,6 +197,26 @@ class Test_Augmentation_Pipeline extends WP_UnitTestCase {
 		// Assert.
 		$this->assertEquals( 'proxy', $proxied[0]['external'] );
 		$this->assertEquals( 'serialized', $serialized['external'] );
+	}
+
+	/**
+	 * Invalid public-filter results cannot replace the serialized payload.
+	 */
+	public function test_serialized_product_filter_rejects_non_array_results(): void {
+		// Arrange.
+		$payload = array( 'id' => 1 );
+		add_filter(
+			Augmentation_Pipeline::SERIALIZED_FILTER,
+			static function () {
+				return false;
+			}
+		);
+
+		// Act.
+		$serialized = Product_Serializer::augment( $payload );
+
+		// Assert.
+		$this->assertSame( $payload, $serialized );
 	}
 
 	/**

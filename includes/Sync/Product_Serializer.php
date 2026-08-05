@@ -70,6 +70,11 @@ final class Product_Serializer {
 
 		$request  = $request instanceof WP_REST_Request ? $request : $this->default_request();
 		$response = rest_ensure_response( $this->controller()->prepare_object_for_response( $object, $request ) );
+		/**
+		 * WordPress response data is not guaranteed to be an array at runtime.
+		 *
+		 * @var mixed $payload
+		 */
 		$payload  = rest_get_server()->response_to_data( $response, false );
 
 		return self::augment( \is_array( $payload ) ? $payload : array(), $object, $request );
@@ -95,6 +100,11 @@ final class Product_Serializer {
 		 * @param array                $payload Serialized product payload.
 		 * @param mixed                $object  The product or variation backing the payload.
 		 * @param null|WP_REST_Request $request Serialization context.
+		 */
+		/**
+		 * Public filters can return values outside the documented contract.
+		 *
+		 * @var mixed $augmented
 		 */
 		$augmented = apply_filters( 'woocommerce_pos_sync_serialized_product', $payload, $object, $request );
 
