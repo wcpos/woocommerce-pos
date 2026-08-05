@@ -74,11 +74,11 @@ class Test_Section_Registry extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Save_settings() for an id with no registered section keeps the legacy
-	 * generic persist semantics: option written, pre_save and saved hooks
-	 * fire by id (frozen public surface for third-party ids).
+	 * Save_settings() for an id with no registered section is an error, not a
+	 * generic option write: registering a Settings Section is the only
+	 * supported way to own a settings group.
 	 */
-	public function test_save_settings_unregistered_id_keeps_generic_persist(): void {
+	public function test_save_settings_unregistered_id_is_rejected(): void {
 		$pre_save_fired = 0;
 		add_filter(
 			'woocommerce_pos_pre_save_thirdparty_settings',
@@ -91,16 +91,12 @@ class Test_Section_Registry extends WP_UnitTestCase {
 
 		$result = \WCPOS\WooCommercePOS\Services\Settings::instance()->save_settings( 'thirdparty', array( 'foo' => 'bar' ) );
 
-		$stored = get_option( 'woocommerce_pos_settings_thirdparty' );
-		$this->assertEquals( 'bar', $stored['foo'] );
-		$this->assertArrayHasKey( 'date_modified_gmt', $stored );
-		$this->assertEquals( 1, $pre_save_fired );
-		// Unknown id has no getter, so the post-save read returns WP_Error —
-		// legacy behaviour, preserved.
 		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertEquals( 'woocommerce_pos_settings_error', $result->get_error_code() );
+		$this->assertFalse( get_option( 'woocommerce_pos_settings_thirdparty' ) );
+		$this->assertEquals( 0, $pre_save_fired );
 
 		remove_all_filters( 'woocommerce_pos_pre_save_thirdparty_settings' );
-		delete_option( 'woocommerce_pos_settings_thirdparty' );
 	}
 
 	/**

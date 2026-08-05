@@ -2,19 +2,21 @@
 /**
  * Tests for the Settings API endpoint.
  *
+ * Every assertion here goes through $this->server->dispatch() so the route
+ * table, the permission callbacks, the endpoint args and the response bodies
+ * are all under test — not just the handler methods.
+ *
  * @package WCPOS\WooCommercePOS\Tests\API
  */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\V1\Settings;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Tests\Helpers\Fixture_Settings_Section;
 use WP_Error;
-use WP_REST_Request;
-use WP_UnitTestCase;
 
 /**
  * Test_Settings_API class.
@@ -23,54 +25,206 @@ use WP_UnitTestCase;
  *
  * @coversNothing
  */
-class Test_Settings_API extends WP_UnitTestCase {
+class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Settings API instance.
+	 * The legacy per-section routes and the HTTP verbs they shipped with.
+	 * These paths and verbs are frozen public interface.
 	 *
-	 * @var Settings
+	 * @var array<string, string[]>
 	 */
-	private $api;
+	private const LEGACY_SECTION_ROUTES = array(
+		'/settings/general'          => array( 'GET', 'POST' ),
+		'/settings/checkout'         => array( 'GET', 'POST' ),
+		'/settings/payment-gateways' => array( 'GET', 'POST' ),
+		'/settings/tax_ids'          => array( 'GET', 'POST' ),
+		'/settings/access'           => array( 'GET', 'POST' ),
+		'/settings/tools'            => array( 'GET', 'POST' ),
+		'/settings/license'          => array( 'GET' ),
+		'/settings/cloud-print'      => array( 'GET', 'POST' ),
+	);
+
+	/**
+	 * The WCPOS REST namespaces the settings service is published under.
+	 *
+	 * @var string[]
+	 */
+	private const NAMESPACES = array( '/wcpos/v1', '/wcpos/v2' );
 
 	/**
 	 * Set up test fixtures.
+	 *
+	 * The fixture section is registered before parent::setUp() because REST
+	 * routes are projected from the registry during rest_api_init.
 	 */
-	public function setup(): void {
-		$this->api = new Settings();
-		parent::setup();
+	public function setUp(): void {
+		Fixture_Settings_Section::register();
+		SettingsService::instance()->reset_sections_for_testing();
+
+		parent::setUp();
 	}
 
 	/**
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		Fixture_Settings_Section::unregister();
+		Fixture_Settings_Section::reset();
+		SettingsService::instance()->reset_sections_for_testing();
+
 		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( 'woocommerce_pos_settings_checkout' );
+		delete_option( 'woocommerce_pos_settings_tax_ids' );
+		delete_option( 'woocommerce_pos_settings_payment_gateways' );
+
 		parent::tearDown();
 	}
 
+	// ──────────────────────────────────────────────
+	// Route table
+	// ──────────────────────────────────────────────
+
 	/**
-	 * Create a mock WP_REST_Request with the given params.
-	 *
-	 * @param array $params JSON params to return.
-	 *
-	 * @return WP_REST_Request The mocked request.
+	 * Every legacy section route still exists, on both namespaces, with at
+	 * least the verbs it shipped with.
 	 */
-	public function mock_rest_request( array $params = array() ) {
-		$request = $this->getMockBuilder( 'WP_REST_Request' )
-			->setMethods( array( 'get_json_params' ) )
-			->getMock();
+	public function test_legacy_section_routes_are_registered_with_their_verbs(): void {
+		$routes = $this->server->get_routes();
 
-		$request->method( 'get_json_params' )
-			->willReturn( $params );
+		foreach ( self::NAMESPACES as $namespace ) {
+			foreach ( self::LEGACY_SECTION_ROUTES as $path => $verbs ) {
+				$full = $namespace . $path;
+				$this->assertArrayHasKey( $full, $routes, $full . ' should be registered' );
 
-		return $request;
+				$allowed = $this->allowed_methods( $routes[ $full ] );
+				foreach ( $verbs as $verb ) {
+					$this->assertContains( $verb, $allowed, $full . ' should allow ' . $verb );
+				}
+			}
+		}
 	}
+
+	/**
+	 * The section-adjacent read-only lookups are untouched.
+	 */
+	public function test_section_adjacent_routes_are_registered(): void {
+		$routes = $this->server->get_routes();
+
+		foreach ( self::NAMESPACES as $namespace ) {
+			$this->assertArrayHasKey( $namespace . '/settings', $routes );
+			$this->assertArrayHasKey( $namespace . '/settings/checkout/order-statuses', $routes );
+			$this->assertArrayHasKey( $namespace . '/settings/tax_ids/detection', $routes );
+		}
+	}
+
+	// ──────────────────────────────────────────────
+	// Permission parity (HIGH stakes)
+	// ──────────────────────────────────────────────
+
+	/**
+	 * Unauthenticated requests are rejected on every section route, on both
+	 * namespaces, for both verbs.
+	 */
+	public function test_unauthenticated_requests_are_rejected_on_every_section_route(): void {
+		wp_set_current_user( 0 );
+
+		foreach ( self::NAMESPACES as $namespace ) {
+			foreach ( array_keys( self::LEGACY_SECTION_ROUTES ) as $path ) {
+				$get = $this->server->dispatch( $this->wp_rest_get_request( $namespace . $path ) );
+				$this->assertEquals( 401, $get->get_status(), 'GET ' . $namespace . $path );
+				$this->assertEquals( 'woocommerce_pos_rest_unauthorized', $get->get_data()['code'] );
+
+				$post = $this->server->dispatch( $this->wp_rest_post_request( $namespace . $path ) );
+				$this->assertEquals( 401, $post->get_status(), 'POST ' . $namespace . $path );
+				$this->assertEquals( 'woocommerce_pos_rest_unauthorized', $post->get_data()['code'] );
+			}
+		}
+	}
+
+	/**
+	 * A POS user without manage_woocommerce_pos may not read or write settings
+	 * — except the server-owned Cloud Printer targets, which POS clients read.
+	 */
+	public function test_pos_user_without_management_capability_is_rejected(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		get_user_by( 'id', $user_id )->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $user_id );
+
+		foreach ( self::NAMESPACES as $namespace ) {
+			foreach ( array_keys( self::LEGACY_SECTION_ROUTES ) as $path ) {
+				$expected_read = '/settings/cloud-print' === $path ? 200 : 403;
+
+				$get = $this->server->dispatch( $this->wp_rest_get_request( $namespace . $path ) );
+				$this->assertEquals( $expected_read, $get->get_status(), 'GET ' . $namespace . $path );
+
+				$post = $this->server->dispatch( $this->wp_rest_post_request( $namespace . $path ) );
+				$this->assertEquals( 403, $post->get_status(), 'POST ' . $namespace . $path );
+			}
+		}
+
+		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * Access writes mutate WordPress role capabilities, so manage_woocommerce_pos
+	 * is not enough — edit_users AND promote_users are both required.
+	 */
+	public function test_access_update_requires_user_management_capabilities(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos' );
+		wp_set_current_user( $user_id );
+
+		foreach ( self::NAMESPACES as $namespace ) {
+			// Reads are allowed at the settings-management level.
+			$read = $this->server->dispatch( $this->wp_rest_get_request( $namespace . '/settings/access' ) );
+			$this->assertEquals( 200, $read->get_status(), 'GET ' . $namespace . '/settings/access' );
+
+			// Writes are not.
+			$write = $this->server->dispatch( $this->wp_rest_post_request( $namespace . '/settings/access' ) );
+			$this->assertEquals( 403, $write->get_status(), 'POST ' . $namespace . '/settings/access' );
+
+			$user->add_cap( 'edit_users' );
+			$write = $this->server->dispatch( $this->wp_rest_post_request( $namespace . '/settings/access' ) );
+			$this->assertEquals( 403, $write->get_status(), 'edit_users alone must not be enough' );
+
+			$user->add_cap( 'promote_users' );
+			$write = $this->server->dispatch( $this->wp_rest_post_request( $namespace . '/settings/access' ) );
+			$this->assertEquals( 200, $write->get_status(), 'edit_users + promote_users must be accepted' );
+
+			$user->remove_cap( 'edit_users' );
+			$user->remove_cap( 'promote_users' );
+		}
+
+		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * An administrator can read every section route on both namespaces.
+	 */
+	public function test_administrator_can_read_every_section_route(): void {
+		wp_set_current_user( $this->user );
+
+		foreach ( self::NAMESPACES as $namespace ) {
+			foreach ( array_keys( self::LEGACY_SECTION_ROUTES ) as $path ) {
+				$response = $this->server->dispatch( $this->wp_rest_get_request( $namespace . $path ) );
+				$this->assertEquals( 200, $response->get_status(), 'GET ' . $namespace . $path );
+			}
+		}
+	}
+
+	// ──────────────────────────────────────────────
+	// Read parity
+	// ──────────────────────────────────────────────
 
 	/**
 	 * Test default general settings.
 	 */
 	public function test_get_general_default_settings(): void {
-		$response = $this->api->get_general_settings( $this->mock_rest_request() );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/general' ) );
 		$settings = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertTrue( $settings['force_ssl'] );
 		$this->assertFalse( $settings['pos_only_products'] );
 		$this->assertTrue( $settings['generate_username'] );
@@ -84,8 +238,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 * Test default checkout settings.
 	 */
 	public function test_get_checkout_default_settings(): void {
-		$response = $this->api->get_checkout_settings( $this->mock_rest_request() );
-		$settings = $response->get_data();
+		$settings = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/checkout' ) )->get_data();
+
 		$this->assertArrayNotHasKey( 'order_status', $settings );
 		$this->assertEquals( 'fiscal', $settings['receipt_default_mode'] );
 		$this->assertIsArray( $settings['admin_emails'] );
@@ -100,22 +254,19 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 * Test default payment gateways settings.
 	 */
 	public function test_get_payment_gateways_default_settings(): void {
-		$response = $this->api->get_payment_gateways_settings( $this->mock_rest_request() );
-		$settings = $response->get_data();
+		$settings = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/payment-gateways' ) )->get_data();
+
 		$this->assertEquals( 'pos_cash', $settings['default_gateway'] );
 		$this->assertIsArray( $settings['gateways'] );
-
-		$gateways = $settings['gateways'];
-		$this->assertTrue( $gateways['pos_cash']['enabled'] );
-		$this->assertEquals( 0, $gateways['pos_cash']['order'] );
+		$this->assertTrue( $settings['gateways']['pos_cash']['enabled'] );
+		$this->assertEquals( 0, $settings['gateways']['pos_cash']['order'] );
 	}
 
 	/**
 	 * Test default access settings.
 	 */
 	public function test_get_access_default_settings(): void {
-		$response      = $this->api->get_access_settings( $this->mock_rest_request() );
-		$settings      = $response->get_data();
+		$settings      = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/access' ) )->get_data();
 		$administrator = $settings['administrator'];
 
 		$this->assertTrue( $administrator['capabilities']['wcpos']['access_woocommerce_pos'] );
@@ -123,12 +274,217 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test default license settings.
+	 */
+	public function test_get_license_default_settings(): void {
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/license' ) );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEmpty( $response->get_data() );
+	}
+
+	/**
+	 * The tax_ids/detection endpoint surfaces only customer-applicable types.
+	 *
+	 * Business-register identifiers (de_ust_id, nl_kvk, fr_siret, etc.) describe
+	 * the store, not the customer, so they must not appear in the write-map UI.
+	 */
+	public function test_tax_ids_detection_excludes_business_register_types(): void {
+		$data = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/tax_ids/detection' ) )->get_data();
+
+		$this->assertArrayHasKey( 'types', $data );
+		$this->assertSame( Tax_Id_Types::customer_applicable_types(), $data['types'] );
+
+		foreach ( Tax_Id_Types::business_register_types() as $business_type ) {
+			$this->assertNotContains(
+				$business_type,
+				$data['types'],
+				"Business-register type {$business_type} must not appear in detection response"
+			);
+		}
+	}
+
+	// ──────────────────────────────────────────────
+	// Write parity
+	// ──────────────────────────────────────────────
+
+	/**
+	 * Test updating general settings.
+	 */
+	public function test_update_general_settings(): void {
+		$response = $this->post_settings( '/wcpos/v1/settings/general', array( 'pos_only_products' => false ) );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['pos_only_products'] );
+
+		$response = $this->post_settings( '/wcpos/v1/settings/general', array( 'pos_only_products' => true ) );
+		$this->assertTrue( $response->get_data()['pos_only_products'] );
+	}
+
+	/**
+	 * Test that store_tax_ids round-trips with sanitization applied.
+	 */
+	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'    => 'de_steuernummer',
+						'value'   => ' 12/345/67890 ',
+						'country' => 'de',
+						'label'   => ' Steuernummer ',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => '',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => 'HRB 12345',
+					),
+				),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'type'    => 'de_steuernummer',
+					'value'   => '12/345/67890',
+					'country' => 'DE',
+					'label'   => 'Steuernummer',
+				),
+				array(
+					'type'  => 'de_hrb',
+					'value' => 'HRB 12345',
+				),
+			),
+			$response->get_data()['store_tax_ids']
+		);
+	}
+
+	/**
+	 * Test that updating with an empty array replaces the stored store_tax_ids.
+	 */
+	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'  => 'de_steuernummer',
+						'value' => '12/345/67890',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => 'HRB 12345',
+					),
+				),
+			)
+		);
+
+		$response = $this->post_settings( '/wcpos/v1/settings/general', array( 'store_tax_ids' => array() ) );
+
+		$this->assertSame( array(), $response->get_data()['store_tax_ids'] );
+	}
+
+	/**
+	 * Test updating checkout settings with array email format.
+	 */
+	public function test_update_checkout_settings(): void {
+		$disabled_emails = array(
+			'enabled'         => false,
+			'new_order'       => true,
+			'cancelled_order' => true,
+			'failed_order'    => true,
+		);
+		$response        = $this->post_settings( '/wcpos/v1/settings/checkout', array( 'admin_emails' => $disabled_emails ) );
+		$this->assertIsArray( $response->get_data()['admin_emails'] );
+		$this->assertFalse( $response->get_data()['admin_emails']['enabled'] );
+
+		$enabled_emails = array(
+			'enabled'         => true,
+			'new_order'       => true,
+			'cancelled_order' => true,
+			'failed_order'    => true,
+		);
+		$response       = $this->post_settings( '/wcpos/v1/settings/checkout', array( 'admin_emails' => $enabled_emails ) );
+		$this->assertTrue( $response->get_data()['admin_emails']['enabled'] );
+
+		$response = $this->post_settings( '/wcpos/v1/settings/checkout', array( 'receipt_default_mode' => 'live' ) );
+		$this->assertEquals( 'live', $response->get_data()['receipt_default_mode'] );
+	}
+
+	/**
+	 * Checkout saves must not persist payment-gateway-owned fields.
+	 */
+	public function test_update_checkout_settings_drops_payment_gateway_fields(): void {
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/checkout',
+			array(
+				'receipt_default_mode' => 'live',
+				'auto_print_receipt'   => 'not-a-bool',
+				'default_gateway'      => array( 'not-a-string' ),
+				'gateways'             => 'not-an-array',
+			)
+		);
+		$data     = $response->get_data();
+		$raw      = get_option( 'woocommerce_pos_settings_checkout' );
+
+		$this->assertEquals( 'live', $data['receipt_default_mode'] );
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $data );
+		$this->assertArrayNotHasKey( 'default_gateway', $data );
+		$this->assertArrayNotHasKey( 'gateways', $data );
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $raw );
+		$this->assertArrayNotHasKey( 'default_gateway', $raw );
+		$this->assertArrayNotHasKey( 'gateways', $raw );
+	}
+
+	/**
+	 * Test updating payment gateways settings.
+	 */
+	public function test_update_payment_gateways_settings(): void {
+		$response = $this->post_settings( '/wcpos/v1/settings/payment-gateways', array( 'default_gateway' => 'pos_cash' ) );
+		$this->assertEquals( 'pos_cash', $response->get_data()['default_gateway'] );
+
+		$response = $this->post_settings( '/wcpos/v1/settings/payment-gateways', array( 'default_gateway' => 'pos_card' ) );
+		$this->assertEquals( 'pos_card', $response->get_data()['default_gateway'] );
+
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/payment-gateways',
+			array(
+				'gateways' => array(
+					'pos_cash' => array(
+						'enabled' => false,
+					),
+				),
+			)
+		);
+		$this->assertFalse( $response->get_data()['gateways']['pos_cash']['enabled'] );
+	}
+
+	/**
+	 * Endpoint args are projected from the section that owns them, so an
+	 * invalid payload is rejected by the route before the section sees it.
+	 */
+	public function test_endpoint_args_are_projected_from_the_owning_section(): void {
+		$response = $this->post_settings( '/wcpos/v1/settings/general', array( 'pos_only_products' => 'not-a-bool' ) );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'rest_invalid_param', $response->get_data()['code'] );
+
+		// Payment-gateway validation belongs to the payment-gateways route,
+		// not the checkout route.
+		$response = $this->post_settings( '/wcpos/v1/settings/payment-gateways', array( 'default_gateway' => array( 'not-a-string' ) ) );
+		$this->assertEquals( 400, $response->get_status() );
+	}
+
+	/**
 	 * Test updating access settings.
 	 */
 	public function test_update_access_settings(): void {
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-
-		$request = $this->mock_rest_request(
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/access',
 			array(
 				'administrator' => array(
 					'capabilities' => array(
@@ -139,10 +495,10 @@ class Test_Settings_API extends WP_UnitTestCase {
 				),
 			)
 		);
-		$response = $this->api->update_access_settings( $request );
-		$this->assertFalse( $response['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
+		$this->assertFalse( $response->get_data()['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
 
-		$request = $this->mock_rest_request(
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/access',
 			array(
 				'administrator' => array(
 					'capabilities' => array(
@@ -153,14 +509,13 @@ class Test_Settings_API extends WP_UnitTestCase {
 				),
 			)
 		);
-		$response = $this->api->update_access_settings( $request );
-		$this->assertTrue( $response['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
+		$this->assertTrue( $response->get_data()['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
 	}
 
 	/**
-	 * Test access update preserves write errors from registered sections.
+	 * A section's write error is returned to the client untouched.
 	 */
-	public function test_update_access_settings_returns_section_write_error(): void {
+	public function test_section_write_error_is_returned_to_the_client(): void {
 		$error  = new WP_Error( 'woocommerce_pos_settings_error', 'Write failed.', array( 'status' => 500 ) );
 		$filter = static function ( Section_Registry $registry ) use ( $error ): void {
 			$registry->register(
@@ -193,7 +548,7 @@ class Test_Settings_API extends WP_UnitTestCase {
 					}
 
 					public function merge( array $existing, array $patch ): array {
-						return array_replace_recursive( $existing, $patch );
+						return $patch;
 					}
 
 					public function endpoint_args(): array {
@@ -207,222 +562,150 @@ class Test_Settings_API extends WP_UnitTestCase {
 		SettingsService::instance()->reset_sections_for_testing();
 
 		try {
-			$response = $this->api->update_access_settings( $this->mock_rest_request() );
+			$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v1/settings/access' ) );
 		} finally {
 			remove_action( 'woocommerce_pos_register_settings_sections', $filter );
 			SettingsService::instance()->reset_sections_for_testing();
 		}
 
-		$this->assertSame( $error, $response );
+		$this->assertEquals( 500, $response->get_status() );
+		$this->assertEquals( 'woocommerce_pos_settings_error', $response->get_data()['code'] );
+		$this->assertEquals( 'Write failed.', $response->get_data()['message'] );
 	}
 
 	/**
-	 * Test default license settings.
+	 * Cloud-print write failures keep their flat { code, message } body.
 	 */
-	public function test_get_license_default_settings(): void {
-		$response = $this->api->get_license_settings( $this->mock_rest_request() );
-		$settings = $response->get_data();
-		$this->assertEmpty( $settings );
-	}
-
-	/**
-	 * Test updating general settings.
-	 */
-	public function test_update_general_settings(): void {
-		$request  = $this->mock_rest_request( array( 'pos_only_products' => false ) );
-		$response = $this->api->update_general_settings( $request );
-		$this->assertFalse( $response['pos_only_products'] );
-
-		$request  = $this->mock_rest_request( array( 'pos_only_products' => true ) );
-		$response = $this->api->update_general_settings( $request );
-		$this->assertTrue( $response['pos_only_products'] );
-	}
-
-	/**
-	 * Test that store_tax_ids round-trips with sanitization applied.
-	 */
-	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
-		$request = $this->mock_rest_request(
+	public function test_cloud_print_write_error_keeps_flat_body(): void {
+		$response = $this->post_settings(
+			'/wcpos/v1/settings/cloud-print',
 			array(
-				'store_tax_ids' => array(
+				'printers' => array(
 					array(
-						'type'    => 'de_steuernummer',
-						'value'   => ' 12/345/67890 ',
-						'country' => 'de',
-						'label'   => ' Steuernummer ',
-					),
-					array(
-						'type'  => 'de_hrb',
-						'value' => '',
-					),
-					array(
-						'type'  => 'de_hrb',
-						'value' => 'HRB 12345',
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY-1',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => '',
 					),
 				),
 			)
 		);
-
-		$response = $this->api->update_general_settings( $request );
-
-		$this->assertSame(
-			array(
-				array(
-					'type'    => 'de_steuernummer',
-					'value'   => '12/345/67890',
-					'country' => 'DE',
-					'label'   => 'Steuernummer',
-				),
-				array(
-					'type'  => 'de_hrb',
-					'value' => 'HRB 12345',
-				),
-			),
-			$response['store_tax_ids']
-		);
-	}
-
-	/**
-	 * Test that updating with an empty array replaces the stored store_tax_ids.
-	 */
-	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
-		update_option(
-			'woocommerce_pos_settings_general',
-			array(
-				'store_tax_ids' => array(
-					array(
-						'type'  => 'de_steuernummer',
-						'value' => '12/345/67890',
-					),
-					array(
-						'type'  => 'de_hrb',
-						'value' => 'HRB 12345',
-					),
-				),
-			)
-		);
-
-		$request  = $this->mock_rest_request( array( 'store_tax_ids' => array() ) );
-		$response = $this->api->update_general_settings( $request );
-
-		$this->assertSame( array(), $response['store_tax_ids'] );
-	}
-
-	/**
-	 * Test updating checkout settings with array email format.
-	 */
-	public function test_update_checkout_settings(): void {
-		$disabled_emails = array(
-			'enabled'         => false,
-			'new_order'       => true,
-			'cancelled_order' => true,
-			'failed_order'    => true,
-		);
-		$request         = $this->mock_rest_request( array( 'admin_emails' => $disabled_emails ) );
-		$response        = $this->api->update_checkout_settings( $request );
-		$this->assertIsArray( $response['admin_emails'] );
-		$this->assertFalse( $response['admin_emails']['enabled'] );
-
-		$enabled_emails = array(
-			'enabled'         => true,
-			'new_order'       => true,
-			'cancelled_order' => true,
-			'failed_order'    => true,
-		);
-		$request        = $this->mock_rest_request( array( 'admin_emails' => $enabled_emails ) );
-		$response       = $this->api->update_checkout_settings( $request );
-		$this->assertIsArray( $response['admin_emails'] );
-		$this->assertTrue( $response['admin_emails']['enabled'] );
-
-		$request  = $this->mock_rest_request( array( 'receipt_default_mode' => 'live' ) );
-		$response = $this->api->update_checkout_settings( $request );
-		$this->assertEquals( 'live', $response['receipt_default_mode'] );
-	}
-
-	/**
-	 * Payment-gateway update validation belongs to the payment-gateway section,
-	 * not the checkout section.
-	 */
-	public function test_payment_gateways_endpoint_args_are_owned_by_payment_gateways_section(): void {
-		$checkout_args = $this->api->get_checkout_endpoint_args();
-		$this->assertArrayNotHasKey( 'auto_print_receipt', $checkout_args );
-		$this->assertArrayNotHasKey( 'default_gateway', $checkout_args );
-		$this->assertArrayNotHasKey( 'gateways', $checkout_args );
-
-		$payment_gateway_args = $this->api->get_payment_gateways_endpoint_args();
-		$this->assertArrayHasKey( 'auto_print_receipt', $payment_gateway_args );
-		$this->assertArrayHasKey( 'default_gateway', $payment_gateway_args );
-		$this->assertArrayHasKey( 'gateways', $payment_gateway_args );
-	}
-
-	/**
-	 * Checkout saves must not persist payment-gateway-owned fields.
-	 */
-	public function test_update_checkout_settings_drops_payment_gateway_fields(): void {
-		$request  = $this->mock_rest_request(
-			array(
-				'receipt_default_mode' => 'live',
-				'auto_print_receipt'   => 'not-a-bool',
-				'default_gateway'      => array( 'not-a-string' ),
-				'gateways'             => 'not-an-array',
-			)
-		);
-		$response = $this->api->update_checkout_settings( $request );
-		$raw      = get_option( 'woocommerce_pos_settings_checkout' );
-
-		$this->assertEquals( 'live', $response['receipt_default_mode'] );
-		$this->assertArrayNotHasKey( 'auto_print_receipt', $response );
-		$this->assertArrayNotHasKey( 'default_gateway', $response );
-		$this->assertArrayNotHasKey( 'gateways', $response );
-		$this->assertArrayNotHasKey( 'auto_print_receipt', $raw );
-		$this->assertArrayNotHasKey( 'default_gateway', $raw );
-		$this->assertArrayNotHasKey( 'gateways', $raw );
-	}
-
-	/**
-	 * Test updating payment gateways settings.
-	 */
-	public function test_update_payment_gateways_settings(): void {
-		$request  = $this->mock_rest_request( array( 'default_gateway' => 'pos_cash' ) );
-		$response = $this->api->update_payment_gateways_settings( $request );
-		$this->assertEquals( 'pos_cash', $response['default_gateway'] );
-
-		$request  = $this->mock_rest_request( array( 'default_gateway' => 'pos_card' ) );
-		$response = $this->api->update_payment_gateways_settings( $request );
-		$this->assertEquals( 'pos_card', $response['default_gateway'] );
-
-		$request = $this->mock_rest_request(
-			array(
-				'gateways' => array(
-					'pos_cash' => array(
-						'enabled' => false,
-					),
-				),
-			)
-		);
-		$response = $this->api->update_payment_gateways_settings( $request );
-		$this->assertFalse( $response['gateways']['pos_cash']['enabled'] );
-	}
-
-	/**
-	 * The tax_ids/detection endpoint surfaces only customer-applicable types.
-	 *
-	 * Business-register identifiers (de_ust_id, nl_kvk, fr_siret, etc.) describe
-	 * the store, not the customer, so they must not appear in the write-map UI.
-	 */
-	public function test_tax_ids_detection_excludes_business_register_types(): void {
-		$response = $this->api->get_tax_ids_detection( $this->mock_rest_request() );
 		$data     = $response->get_data();
 
-		$this->assertArrayHasKey( 'types', $data );
-		$this->assertSame( Tax_Id_Types::customer_applicable_types(), $data['types'] );
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'wcpos_cloud_print_star_online_invalid', $data['code'] );
+		$this->assertArrayHasKey( 'message', $data );
+		$this->assertArrayNotHasKey( 'data', $data );
+	}
 
-		foreach ( Tax_Id_Types::business_register_types() as $business_type ) {
-			$this->assertNotContains(
-				$business_type,
-				$data['types'],
-				"Business-register type {$business_type} must not appear in detection response"
-			);
+	// ──────────────────────────────────────────────
+	// Extension surface (the registry seam)
+	// ──────────────────────────────────────────────
+
+	/**
+	 * A section registered through the public seam gets a GET route, on both
+	 * namespaces, with no controller changes. This is the path Pro's
+	 * License_Section takes.
+	 */
+	public function test_registered_section_gets_a_read_route(): void {
+		foreach ( self::NAMESPACES as $namespace ) {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( $namespace . '/settings/test-fixture' ) );
+
+			$this->assertEquals( 200, $response->get_status(), 'GET ' . $namespace . '/settings/test-fixture' );
+			$this->assertEquals( 'default-alpha', $response->get_data()['alpha'] );
+			$this->assertEquals( 0, $response->get_data()['beta'] );
 		}
+	}
+
+	/**
+	 * A section registered through the public seam gets a PATCH-semantics POST
+	 * route that persists through the section's own write().
+	 */
+	public function test_registered_section_gets_a_write_route(): void {
+		$response = $this->post_settings( '/wcpos/v1/settings/test-fixture', array( 'alpha' => 'written' ) );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'written', $response->get_data()['alpha'] );
+
+		// A second partial write must not drop the first one — the controller
+		// merges the patch over the section's existing view.
+		$response = $this->post_settings( '/wcpos/v1/settings/test-fixture', array( 'beta' => 7 ) );
+
+		$this->assertEquals( 'written', $response->get_data()['alpha'] );
+		$this->assertEquals( 7, $response->get_data()['beta'] );
+
+		$read = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/test-fixture' ) );
+		$this->assertEquals( 'written', $read->get_data()['alpha'] );
+	}
+
+	/**
+	 * The registered section's endpoint_args() validate its own route.
+	 */
+	public function test_registered_section_endpoint_args_reject_invalid_payloads(): void {
+		$response = $this->post_settings( '/wcpos/v1/settings/test-fixture', array( 'beta' => 'not-an-int' ) );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	/**
+	 * The registered section inherits the same permission gates as the core
+	 * sections — no extension opt-out.
+	 */
+	public function test_registered_section_inherits_the_settings_permission_gates(): void {
+		wp_set_current_user( 0 );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/test-fixture' ) );
+		$this->assertEquals( 401, $response->get_status() );
+
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		get_user_by( 'id', $user_id )->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $user_id );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/test-fixture' ) );
+		$this->assertEquals( 403, $response->get_status() );
+
+		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v1/settings/test-fixture' ) );
+		$this->assertEquals( 403, $response->get_status() );
+
+		wp_delete_user( $user_id );
+	}
+
+	// ──────────────────────────────────────────────
+	// Helpers
+	// ──────────────────────────────────────────────
+
+	/**
+	 * Dispatch a POST to a settings route with a body payload.
+	 *
+	 * @param string $path   Route path.
+	 * @param array  $params Body params.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function post_settings( string $path, array $params = array() ) {
+		$request = $this->wp_rest_post_request( $path );
+		$request->set_body_params( $params );
+
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * Collect the HTTP verbs a registered route responds to.
+	 *
+	 * @param array $handlers Route handlers as stored by the REST server.
+	 *
+	 * @return string[]
+	 */
+	private function allowed_methods( array $handlers ): array {
+		$allowed = array();
+
+		foreach ( $handlers as $handler ) {
+			foreach ( array_keys( $handler['methods'] ) as $method ) {
+				$allowed[ $method ] = true;
+			}
+		}
+
+		return array_keys( $allowed );
 	}
 }

@@ -202,15 +202,21 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
-	 * PATCH merge for this section (interface default: array_replace_recursive).
+	 * Full replacement, not a merge: the incoming payload IS the write.
+	 *
+	 * write() mutates exactly one role per call and identifies that role by the
+	 * payload carrying a single known role slug. Merging the existing view in
+	 * would hand write() every role on the site and silently turn a capability
+	 * update into a no-op, so this section opts out of the default
+	 * array_replace_recursive PATCH strategy.
 	 *
 	 * @param array $existing Existing settings view.
-	 * @param array $patch    Incoming partial payload.
+	 * @param array $patch    Incoming payload keyed by role slug.
 	 *
 	 * @return array
 	 */
 	public function merge( array $existing, array $patch ): array {
-		return array_replace_recursive( $existing, $patch );
+		return $patch;
 	}
 
 	/**
