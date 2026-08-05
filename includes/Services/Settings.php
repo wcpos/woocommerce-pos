@@ -150,55 +150,27 @@ class Settings {
 	public function get_settings( string $id, $key = null ) {
 		$section = $this->sections()->get( $id );
 
-		if ( $section instanceof Settings_Section_Interface ) {
-			$settings = $section->read();
-
-			// If key is not provided, return the entire settings.
-			if ( ! \is_string( $key ) ) {
-				return $settings;
-			}
-
-			if ( ! isset( $settings[ $key ] ) ) {
-				return new WP_Error(
-					'woocommerce_pos_settings_error',
-					// translators: 1. %s: Settings group id, 2. %s: Settings key.
-					\sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
-					array( 'status' => 400 )
-				);
-			}
-
-			return $settings[ $key ];
+		if ( ! $section instanceof Settings_Section_Interface ) {
+			return $this->unknown_section_error( $id );
 		}
 
-		// Supported legacy fallback for public get_{id}_settings() delegates
-		// and third-party ids that have not registered a Settings Section.
-		$method_name = 'get_' . $id . '_settings';
+		$settings = $section->read();
 
-		if ( method_exists( $this, $method_name ) ) {
-			$settings = $this->$method_name();
-
-			if ( ! \is_string( $key ) ) {
-				return $settings;
-			}
-
-			if ( ! isset( $settings[ $key ] ) ) {
-				return new WP_Error(
-					'woocommerce_pos_settings_error',
-					// translators: 1. %s: Settings group id, 2. %s: Settings key.
-					\sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
-					array( 'status' => 400 )
-				);
-			}
-
-			return $settings[ $key ];
+		// If key is not provided, return the entire settings.
+		if ( ! \is_string( $key ) ) {
+			return $settings;
 		}
 
-		return new WP_Error(
-			'woocommerce_pos_settings_error',
-			// translators: %s: Settings group id, ie: 'general' or 'checkout'.
-			\sprintf( __( 'Settings with id %s not found', 'woocommerce-pos' ), $id ),
-			array( 'status' => 400 )
-		);
+		if ( ! isset( $settings[ $key ] ) ) {
+			return new WP_Error(
+				'woocommerce_pos_settings_error',
+				// translators: 1. %s: Settings group id, 2. %s: Settings key.
+				\sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
+				array( 'status' => 400 )
+			);
+		}
+
+		return $settings[ $key ];
 	}
 
 	/**
@@ -224,73 +196,32 @@ class Settings {
 	 */
 	public function save_settings( string $id, array $settings ) {
 		$section = $this->sections()->get( $id );
-		if ( $section instanceof Settings_Section_Interface ) {
-			return $section->write( $settings );
+
+		if ( ! $section instanceof Settings_Section_Interface ) {
+			return $this->unknown_section_error( $id );
 		}
 
-		// Supported legacy generic persist path for third-party ids that have
-		// not registered a Settings Section. Preserves the frozen option name
-		// and pre_save/saved hook contract.
-		$sanitize_method = 'sanitize_' . $id . '_settings';
-		if ( method_exists( $this, $sanitize_method ) ) {
-			$settings = $this->$sanitize_method( $settings );
-		}
+		return $section->write( $settings );
+	}
 
-		$settings = array_merge(
-			$settings,
-			array( 'date_modified_gmt' => current_time( 'mysql', true ) )
+	/**
+	 * The error returned for a settings id with no registered Settings Section.
+	 *
+	 * Registering a section through the
+	 * `woocommerce_pos_register_settings_sections` action is the only supported
+	 * way to add a settings group; there is no generic option fallback.
+	 *
+	 * @param string $id The settings section ID.
+	 *
+	 * @return WP_Error
+	 */
+	private function unknown_section_error( string $id ): WP_Error {
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			// translators: %s: Settings group id, ie: 'general' or 'checkout'.
+			\sprintf( __( 'Settings with id %s not found', 'woocommerce-pos' ), $id ),
+			array( 'status' => 400 )
 		);
-
-		/**
-		 * Filters the settings before they are saved.
-		 *
-		 * Allows modification of the settings array for a specific section before it is saved to the database.
-		 *
-		 * @since 1.4.12
-		 *
-		 * @param array  $settings The settings array about to be saved.
-		 * @param string $id       The ID of the settings section being saved.
-		 */
-		$settings = apply_filters( "woocommerce_pos_pre_save_{$id}_settings", $settings, $id );
-
-		$option_name    = static::$db_prefix . $id;
-		$previous_value = get_option( $option_name, null );
-		$success        = update_option( $option_name, $settings, false );
-
-		if ( ! $success ) {
-			// update_option() returns false both when the value is unchanged (no DB write) and on
-			// actual failure. Use the value read *before* the write attempt to avoid a post-write
-			// race: a concurrent request could change the option between our write and a re-read.
-			$is_noop = null !== $previous_value
-				&& maybe_serialize( $previous_value ) === maybe_serialize( $settings );
-
-			if ( ! $is_noop ) {
-				return new WP_Error(
-					'woocommerce_pos_settings_error',
-					// translators: %s: Settings group id, ie: 'general' or 'checkout'.
-					\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
-					array( 'status' => 400 )
-				);
-			}
-		}
-
-		$saved_settings = $this->get_settings( $id );
-
-		if ( $success ) {
-			/*
-			 * Fires after settings for a specific section are successfully saved.
-			 *
-			 * Provides a way to execute additional logic after a specific settings section is updated.
-			 *
-			 * @since 1.4.12
-			 *
-			 * @param array  $saved_settings The settings array that was just saved.
-			 * @param string $id             The ID of the settings section that was saved.
-			 */
-			do_action( "woocommerce_pos_saved_{$id}_settings", $saved_settings, $id );
-		}
-
-		return $saved_settings;
 	}
 
 	/*

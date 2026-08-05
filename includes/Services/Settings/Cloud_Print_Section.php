@@ -102,6 +102,25 @@ class Cloud_Print_Section extends Abstract_Section {
 	}
 
 	/**
+	 * Full replacement, not a merge: the incoming payload IS the write.
+	 *
+	 * Writes replace printers and assignments wholesale, and read() decorates
+	 * the view with runtime-only fields (status, last_seen, relay) while
+	 * stripping secrets. Merging that view into the payload would both write
+	 * runtime fields into the option and resurrect printers the client just
+	 * deleted, so this section opts out of the default array_replace_recursive
+	 * PATCH strategy.
+	 *
+	 * @param array $existing Existing settings view.
+	 * @param array $patch    Incoming payload.
+	 *
+	 * @return array
+	 */
+	public function merge( array $existing, array $patch ): array {
+		return $patch;
+	}
+
+	/**
 	 * Replace cloud-print settings (full replacement, not PATCH).
 	 *
 	 * @param array $settings Payload with printers/assignments arrays.

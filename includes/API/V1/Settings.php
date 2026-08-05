@@ -7,7 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API\V1;
 
-use Closure;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
@@ -22,8 +23,62 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
 
 /**
  * Class Settings REST API.
+ *
+ * The per-section routes are projected from the Section Registry rather than
+ * hand-written: every registered Settings Section gets a GET/POST pair at
+ * /settings/{slug} whose args come from the section's endpoint_args(), whose
+ * reads call read(), and whose writes call write( merge( read(), $patch ) ).
+ * Registering a section through the
+ * `woocommerce_pos_register_settings_sections` action is therefore all an
+ * extension needs to do to gain an HTTP surface.
  */
 class Settings extends WP_REST_Controller {
+	/**
+	 * Sections whose read route uses a permission callback other than the
+	 * default manage_woocommerce_pos check.
+	 *
+	 * Frozen legacy parity, not policy: POS clients need to read server-owned
+	 * Cloud Printer targets configured by a manager, so cloud_print reads only
+	 * require access_woocommerce_pos.
+	 *
+	 * @var array<string, string>
+	 */
+	private const READ_PERMISSION_CALLBACKS = array(
+		'cloud_print' => 'cloud_print_read_permission_check',
+	);
+
+	/**
+	 * Sections whose update route uses a permission callback other than the
+	 * default manage_woocommerce_pos check.
+	 *
+	 * The access section mutates WordPress role capabilities, so its writes
+	 * require edit_users + promote_users.
+	 *
+	 * @var array<string, string>
+	 */
+	private const UPDATE_PERMISSION_CALLBACKS = array(
+		'access' => 'update_access_permission_check',
+	);
+
+	/**
+	 * Route slugs that are not the dashed form of the section id. Published
+	 * URLs are frozen public interface — tax_ids shipped with an underscore.
+	 *
+	 * @var array<string, string>
+	 */
+	private const LEGACY_ROUTE_SLUGS = array(
+		'tax_ids' => 'tax_ids',
+	);
+
+	/**
+	 * Sections whose update route answers a write failure with a flat
+	 * { code, message } body at 400 instead of the WP_Error envelope. Frozen
+	 * wire contract — cloud-print clients do not expect the extra data key.
+	 *
+	 * @var string[]
+	 */
+	private const FLAT_ERROR_SECTIONS = array( 'cloud_print' );
+
 	/**
 	 * Endpoint namespace.
 	 *
@@ -54,6 +109,7 @@ class Settings extends WP_REST_Controller {
 	 * @return void
 	 */
 	public function register_routes(): void {
+		$route_slugs = array();
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,
@@ -64,47 +120,33 @@ class Settings extends WP_REST_Controller {
 			)
 		);
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/general',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_general_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
+		foreach ( SettingsService::instance()->sections()->all() as $id => $section ) {
+			$id = (string) $id;
 
-		// register_rest_route(
-		// $this->namespace,
-		// '/' . $this->rest_base . '/general/barcodes',
-		// array(
-		// 'methods' => WP_REST_Server::READABLE,
-		// 'callback' => array( $this, 'get_barcodes' ),
-		// 'permission_callback' => array( $this, 'read_permission_check' ),
-		// )
-		// );.
+			// A section id becomes part of a route regex, so anything outside the
+			// documented id alphabet is refused rather than compiled into the
+			// route table.
+			if ( ! preg_match( '/^[a-z0-9_-]+$/', $id ) ) {
+				Logger::warning(
+					\sprintf(
+						'Settings section "%s" has no REST route: section ids must match [a-z0-9_-].',
+						$id
+					)
+				);
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/general',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'update_general_settings' ),
-				'permission_callback' => array( $this, 'update_permission_check' ),
-				'args'                => $this->get_general_endpoint_args(),
-			)
-		);
+				continue;
+			}
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/checkout',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_checkout_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
+			if ( isset( $route_slugs[ $this->route_slug( $id ) ] ) ) {
+				Logger::warning( sprintf( 'Settings section "%s" has no REST route: route slug already registered.', $id ) );
+				continue;
+			}
+			$route_slugs[ $this->route_slug( $id ) ] = true;
+			$this->register_section_routes( $id, $section );
+		}
 
+		// Section-adjacent read-only lookups. These are not section CRUD, so they
+		// stay hand-registered.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/checkout/order-statuses',
@@ -117,59 +159,6 @@ class Settings extends WP_REST_Controller {
 
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/checkout',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'update_checkout_settings' ),
-				'permission_callback' => array( $this, 'update_permission_check' ),
-				'args'                => $this->get_checkout_endpoint_args(),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/payment-gateways',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_payment_gateways_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/payment-gateways',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'update_payment_gateways_settings' ),
-				'permission_callback' => array( $this, 'update_permission_check' ),
-				'args'                => $this->get_payment_gateways_endpoint_args(),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/tax_ids',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_tax_ids_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/tax_ids',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'update_tax_ids_settings' ),
-				'permission_callback' => array( $this, 'update_permission_check' ),
-				'args'                => $this->get_tax_ids_endpoint_args(),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
 			'/' . $this->rest_base . '/tax_ids/detection',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -177,233 +166,76 @@ class Settings extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'read_permission_check' ),
 			)
 		);
+	}
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/access',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_access_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
+	/**
+	 * The route slug for a section id.
+	 *
+	 * @param string $id Section id.
+	 *
+	 * @return string
+	 */
+	public function route_slug( string $id ): string {
+		return self::LEGACY_ROUTE_SLUGS[ $id ] ?? str_replace( '_', '-', $id );
+	}
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/access',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'update_access_settings' ),
-				'permission_callback' => array( $this, 'update_access_permission_check' ),
-			)
-		);
+	/**
+	 * Read a section's public view.
+	 *
+	 * @param string          $id      Section id.
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function get_section_settings( string $id, WP_REST_Request $request ) {
+		$section = SettingsService::instance()->sections()->get( $id );
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/tools',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_tools_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
+		if ( ! $section instanceof Settings_Section_Interface ) {
+			return $this->section_not_registered_error();
+		}
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/tools',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'update_tools_settings' ),
-				'permission_callback' => array( $this, 'update_permission_check' ),
-			)
-		);
+		return new WP_REST_Response( $section->read(), 200 );
+	}
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/license',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_license_settings' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
+	/**
+	 * Update a section.
+	 *
+	 * POST data is treated as PATCH, ie: partial, so it is merged over the
+	 * existing view before the section persists it. Sections whose payload is a
+	 * full replacement (access, cloud_print) say so by overriding merge().
+	 *
+	 * @param string          $id      Section id.
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error|WP_REST_Response
+	 */
+	public function update_section_settings( string $id, WP_REST_Request $request ) {
+		$section = SettingsService::instance()->sections()->get( $id );
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/cloud-print',
-			array(
+		if ( ! $section instanceof Settings_Section_Interface ) {
+			return $this->section_not_registered_error();
+		}
+
+		$payload = $request->get_json_params();
+		if ( empty( $payload ) ) {
+			$payload = $request->get_body_params();
+		}
+
+		$result = $section->write( $section->merge( $section->read(), (array) $payload ) );
+
+		if ( is_wp_error( $result ) && \in_array( $id, self::FLAT_ERROR_SECTIONS, true ) ) {
+			// Keep the historical error body shape {code, message} — clients do
+			// not expect WP_Error's extra data envelope here.
+			return new WP_REST_Response(
 				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'get_cloud_print_settings' ),
-					'permission_callback' => array( $this, 'cloud_print_read_permission_check' ),
+					'code'    => $result->get_error_code(),
+					'message' => $result->get_error_message(),
 				),
-				array(
-					'methods'             => WP_REST_Server::EDITABLE,
-					'callback'            => array( $this, 'update_cloud_print_settings' ),
-					'permission_callback' => array( $this, 'update_permission_check' ),
-				),
-			)
-		);
-	}
-
-	/**
-	 * Get general endpoint arguments.
-	 *
-	 * Delegates to the registered General Settings Section.
-	 *
-	 * @return Closure[][]
-	 */
-	public function get_general_endpoint_args(): array {
-		$section = SettingsService::instance()->sections()->get( 'general' );
-
-		return $section ? $section->endpoint_args() : array();
-	}
-
-	/**
-	 * Get tax IDs endpoint arguments.
-	 *
-	 * Delegates to the registered Tax IDs Settings Section.
-	 *
-	 * @return Closure[][]
-	 */
-	public function get_tax_ids_endpoint_args(): array {
-		$section = SettingsService::instance()->sections()->get( 'tax_ids' );
-
-		return $section ? $section->endpoint_args() : array();
-	}
-
-	/**
-	 * Get checkout endpoint arguments.
-	 *
-	 * Delegates to the registered Checkout Settings Section.
-	 *
-	 * @return Closure[][]
-	 */
-	public function get_checkout_endpoint_args(): array {
-		$section = SettingsService::instance()->sections()->get( 'checkout' );
-
-		return $section ? $section->endpoint_args() : array();
-	}
-
-	/**
-	 * Get payment gateways endpoint arguments.
-	 *
-	 * Delegates to the registered Payment Gateways Settings Section.
-	 *
-	 * @return Closure[][]
-	 */
-	public function get_payment_gateways_endpoint_args(): array {
-		$section = SettingsService::instance()->sections()->get( 'payment_gateways' );
-
-		return $section ? $section->endpoint_args() : array();
-	}
-
-	/**
-	 * Get general settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_general_settings( WP_REST_Request $request ) {
-		$general_settings = woocommerce_pos_get_settings( 'general' );
-
-		if ( is_wp_error( $general_settings ) ) {
-			return $general_settings;
+				400
+			);
 		}
 
-		// Create the response object.
-		$response = new WP_REST_Response( $general_settings );
-
-		// Set the status code of the response.
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Get checkout settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_checkout_settings( WP_REST_Request $request ) {
-		$checkout_settings = woocommerce_pos_get_settings( 'checkout' );
-
-		if ( is_wp_error( $checkout_settings ) ) {
-			return $checkout_settings;
-		}
-
-		// Create the response object.
-		$response = new WP_REST_Response( $checkout_settings );
-
-		// Set the status code of the response.
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Get payment gateways settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_payment_gateways_settings( WP_REST_Request $request ) {
-		$payment_gateways_settings = woocommerce_pos_get_settings( 'payment_gateways' );
-
-		if ( is_wp_error( $payment_gateways_settings ) ) {
-			return $payment_gateways_settings;
-		}
-
-		// Create the response object.
-		$response = new WP_REST_Response( $payment_gateways_settings );
-
-		// Set the status code of the response.
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Get tax IDs settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_tax_ids_settings( WP_REST_Request $request ) {
-		$tax_ids_settings = woocommerce_pos_get_settings( 'tax_ids' );
-
-		if ( is_wp_error( $tax_ids_settings ) ) {
-			return $tax_ids_settings;
-		}
-
-		$response = new WP_REST_Response( $tax_ids_settings );
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Update tax IDs settings. POST data is treated as PATCH (partial), merged
-	 * with existing settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	public function update_tax_ids_settings( WP_REST_Request $request ) {
-		$settings_service = SettingsService::instance();
-		$section          = $settings_service->sections()->get( 'tax_ids' );
-		if ( ! $section ) {
-			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
-		}
-		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
-
-		return $settings_service->save_settings( 'tax_ids', $settings );
+		return $result;
 	}
 
 	/**
@@ -438,130 +270,6 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
-	 * Get access settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_access_settings( WP_REST_Request $request ) {
-		$access_settings = woocommerce_pos_get_settings( 'access' );
-
-		if ( is_wp_error( $access_settings ) ) {
-			return $access_settings;
-		}
-
-		// Create the response object.
-		$response = new WP_REST_Response( $access_settings );
-
-		// Set the status code of the response.
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Get tools settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_tools_settings( WP_REST_Request $request ) {
-		$tools_settings = woocommerce_pos_get_settings( 'tools' );
-
-		if ( is_wp_error( $tools_settings ) ) {
-			return $tools_settings;
-		}
-
-		// Create the response object.
-		$response = new WP_REST_Response( $tools_settings );
-
-		// Set the status code of the response.
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Get license settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error|WP_REST_Response
-	 */
-	public function get_license_settings( WP_REST_Request $request ) {
-		$license_settings = woocommerce_pos_get_settings( 'license' );
-
-		if ( is_wp_error( $license_settings ) ) {
-			return $license_settings;
-		}
-
-		// Create the response object.
-		$response = new WP_REST_Response( $license_settings );
-
-		// Set the status code of the response.
-		$response->set_status( 200 );
-
-		return $response;
-	}
-
-	/**
-	 * Get cloud-print settings.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function get_cloud_print_settings() {
-		$section = SettingsService::instance()->sections()->get( 'cloud_print' );
-		if ( ! $section ) {
-			return new WP_REST_Response( array(), 200 );
-		}
-
-		return new WP_REST_Response( $section->read(), 200 );
-	}
-
-	/**
-	 * Replace cloud-print settings.
-	 *
-	 * @param WP_REST_Request $request Request.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function update_cloud_print_settings( WP_REST_Request $request ) {
-		$section = SettingsService::instance()->sections()->get( 'cloud_print' );
-		if ( ! $section ) {
-			return new WP_REST_Response(
-				array(
-					'code'    => 'woocommerce_pos_settings_error',
-					'message' => 'Cloud print section not registered.',
-				),
-				500
-			);
-		}
-
-		$payload = $request->get_json_params();
-		if ( empty( $payload ) ) {
-			$payload = $request->get_body_params();
-		}
-
-		$result = $section->write( (array) $payload );
-
-		if ( is_wp_error( $result ) ) {
-			// Keep the historical error body shape {code, message} — clients do
-			// not expect WP_Error's extra data envelope here.
-			return new WP_REST_Response(
-				array(
-					'code'    => $result->get_error_code(),
-					'message' => $result->get_error_message(),
-				),
-				400
-			);
-		}
-
-		return new WP_REST_Response( $result, 200 );
-	}
-
-	/**
 	 * Sanitize a cloud assignment entry.
 	 *
 	 * Kept for backward compatibility — the Settings_CloudPrint_Test conformance
@@ -587,103 +295,30 @@ class Settings extends WP_REST_Controller {
 		return $assignment;
 	}
 
-
 	/**
-	 * Update payment gateways settings.
+	 * Check read permissions for a section.
 	 *
-	 * @param WP_REST_Request $request Full details about the request.
+	 * @param string $id Section id.
 	 *
-	 * @return array|WP_Error
+	 * @return bool
 	 */
-	public function update_payment_gateways_settings( WP_REST_Request $request ) {
-		$settings_service = SettingsService::instance();
-		$section          = $settings_service->sections()->get( 'payment_gateways' );
-		if ( ! $section ) {
-			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
-		}
-		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
+	public function section_read_permission_check( string $id ): bool {
+		$callback = self::READ_PERMISSION_CALLBACKS[ $id ] ?? 'read_permission_check';
 
-		return $settings_service->save_settings( 'payment_gateways', $settings );
+		return (bool) \call_user_func( array( $this, $callback ) );
 	}
 
 	/**
-	 * POST data comes in as PATCH, ie: partial, so we need to merge with existing data.
+	 * Check update permissions for a section.
 	 *
-	 * @TODO - shouldn't the update return a WP_REST_Response?
+	 * @param string $id Section id.
 	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
+	 * @return bool
 	 */
-	public function update_general_settings( WP_REST_Request $request ) {
-		$settings_service = SettingsService::instance();
-		$section          = $settings_service->sections()->get( 'general' );
-		if ( ! $section ) {
-			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
-		}
-		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
+	public function section_update_permission_check( string $id ): bool {
+		$callback = self::UPDATE_PERMISSION_CALLBACKS[ $id ] ?? 'update_permission_check';
 
-		return $settings_service->save_settings( 'general', $settings );
-	}
-
-
-
-	/**
-	 * Update checkout settings.
-	 *
-	 * @TODO - shouldn't the update return a WP_REST_Response?
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	public function update_checkout_settings( WP_REST_Request $request ) {
-		$settings_service = SettingsService::instance();
-		$section          = $settings_service->sections()->get( 'checkout' );
-		if ( ! $section ) {
-			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
-		}
-		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
-
-		return $settings_service->save_settings( 'checkout', $settings );
-	}
-
-
-
-	/**
-	 * Update access settings.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	public function update_access_settings( WP_REST_Request $request ) {
-		$section = SettingsService::instance()->sections()->get( 'access' );
-		if ( ! $section ) {
-			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
-		}
-
-		return $section->write( (array) $request->get_json_params() );
-	}
-
-	/**
-	 * POST data comes in as PATCH, ie: partial, so we need to merge with existing data.
-	 *
-	 * @TODO - shouldn't the update return a WP_REST_Response?
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	public function update_tools_settings( WP_REST_Request $request ) {
-		$settings_service = SettingsService::instance();
-		$section          = $settings_service->sections()->get( 'tools' );
-		if ( ! $section ) {
-			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
-		}
-		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
-
-		return $settings_service->save_settings( 'tools', $settings );
+		return (bool) \call_user_func( array( $this, $callback ) );
 	}
 
 	/**
@@ -755,5 +390,54 @@ class Settings extends WP_REST_Controller {
 		delete_transient( 'woocommerce_pos_pro_license_status' );
 
 		return $value;
+	}
+
+	/**
+	 * Register the GET/POST pair for one Settings Section.
+	 *
+	 * @param string                     $id      Section id.
+	 * @param Settings_Section_Interface $section The section.
+	 *
+	 * @return void
+	 */
+	private function register_section_routes( string $id, Settings_Section_Interface $section ): void {
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/' . $this->route_slug( $id ),
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => function ( WP_REST_Request $request ) use ( $id ) {
+						return $this->get_section_settings( $id, $request );
+					},
+					'permission_callback' => function () use ( $id ) {
+						return $this->section_read_permission_check( $id );
+					},
+				),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => function ( WP_REST_Request $request ) use ( $id ) {
+						return $this->update_section_settings( $id, $request );
+					},
+					'permission_callback' => function () use ( $id ) {
+						return $this->section_update_permission_check( $id );
+					},
+					'args'                => $section->endpoint_args(),
+				),
+			)
+		);
+	}
+
+	/**
+	 * The error returned when a route outlives its section.
+	 *
+	 * @return WP_Error
+	 */
+	private function section_not_registered_error(): WP_Error {
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			__( 'Settings section not registered.', 'woocommerce-pos' ),
+			array( 'status' => 500 )
+		);
 	}
 }
