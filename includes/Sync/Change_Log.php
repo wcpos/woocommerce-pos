@@ -409,18 +409,90 @@ final class Change_Log {
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 	}
 
+	/**
+	 * Head of the global sequence space — the change stream's current end.
+	 *
+	 * The sequence is ONE monotonic AUTO_INCREMENT space across every
+	 * object_type, so MAX over the whole table is a valid head (and a valid
+	 * baseline bound) for every scope. A FRESH client jumps its cursor straight
+	 * here in one request instead of draining the historical log a page at a
+	 * time — see finding F1 in docs/pos-replication-model.md.
+	 */
+	public function head_sequence(): int {
+		global $wpdb;
+
+		return (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->table_name() );
+	}
+
+	/**
+	 * One page of the change stream past a cursor, plus the head it was read against.
+	 *
+	 * The ONLY read the change log exposes: callers name object TYPES, a cursor
+	 * and a page size — never a table, a column or a WHERE clause. An EMPTY
+	 * `$object_types` is the unified stream (every collection in one page,
+	 * ordered by the single global sequence); one or more types narrow it (the
+	 * products stream spans `product` AND `variation`, which is why the argument
+	 * is a list). `WHERE sequence > N` is a primary-key range scan either way —
+	 * the fastest query available.
+	 *
+	 * `head` is read AFTER the page so it can never be behind a served row: a
+	 * row landing between the two reads must not produce an envelope whose head
+	 * trails its own changes.
+	 *
+	 * @param string[] $object_types Change-log object types to include; empty = all.
+	 * @param int      $since        Exclusive sequence cursor.
+	 * @param int      $limit        Maximum rows to return.
+	 *
+	 * @return array{rows: array<int, array<string, mixed>>, head: int}
+	 */
+	public function page( array $object_types, int $since, int $limit ): array {
+		global $wpdb;
+		$types = array();
+		foreach ( $object_types as $object_type ) {
+			$object_type = (string) $object_type;
+			if ( '' !== $object_type ) {
+				$types[] = $object_type;
+			}
+		}
+
+		$sql  = 'SELECT sequence, object_id, object_type, change_type, modified_gmt FROM ' . $this->table_name() . ' WHERE ';
+		$args = array();
+		if ( array() !== $types ) {
+			$sql .= 'object_type IN (' . implode( ',', array_fill( 0, count( $types ), '%s' ) ) . ') AND ';
+			$args = $types;
+		}
+		$sql .= 'sequence > %d ORDER BY sequence ASC LIMIT %d';
+		$args[] = max( 0, $since );
+		$args[] = max( 1, $limit );
+
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, ...$args ), ARRAY_A );
+
+		return array(
+			'rows' => array_map(
+				static function ( array $row ): array {
+					return self::normalize_row( $row );
+				},
+				is_array( $rows ) ? $rows : array()
+			),
+			'head' => $this->head_sequence(),
+		);
+	}
+
+	/**
+	 * Single-type page + that type's own max sequence.
+	 *
+	 * @deprecated Use {@see page()}, which spans types and reports the GLOBAL head.
+	 */
 	public function changes_since( string $object_type, int $since_sequence, int $limit ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT sequence, object_id, change_type, modified_gmt FROM ' . $this->table_name() . ' WHERE object_type = %s AND sequence > %d ORDER BY sequence ASC LIMIT %d',
-				$object_type,
-				max( 0, $since_sequence ),
-				max( 1, $limit )
-			),
-			ARRAY_A
+		$rows = array_map(
+			static function ( array $row ): array {
+				unset( $row['object_type'] );
+
+				return $row;
+			},
+			$this->page( array( $object_type ), $since_sequence, $limit )['rows']
 		);
-		$rows = is_array( $rows ) ? $rows : array();
 		$max_sequence = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				'SELECT MAX(sequence) FROM ' . $this->table_name() . ' WHERE object_type = %s',
@@ -429,18 +501,22 @@ final class Change_Log {
 		);
 
 		return array(
-			'rows' => array_map(
-				static function ( array $row ): array {
-					return array(
-						'sequence' => isset( $row['sequence'] ) ? (int) $row['sequence'] : 0,
-						'object_id' => isset( $row['object_id'] ) ? (int) $row['object_id'] : 0,
-						'change_type' => isset( $row['change_type'] ) ? (string) $row['change_type'] : '',
-						'modified_gmt' => isset( $row['modified_gmt'] ) ? (string) $row['modified_gmt'] : gmdate( 'Y-m-d H:i:s' ),
-					);
-				},
-				$rows
-			),
+			'rows' => $rows,
 			'max_sequence' => $max_sequence,
+		);
+	}
+
+	/**
+	 * Coerce one raw change-log row to the served shape (ids as ints, everything
+	 * else as strings) so no consumer has to re-type the DB's string columns.
+	 */
+	private static function normalize_row( array $row ): array {
+		return array(
+			'sequence' => isset( $row['sequence'] ) ? (int) $row['sequence'] : 0,
+			'object_id' => isset( $row['object_id'] ) ? (int) $row['object_id'] : 0,
+			'object_type' => isset( $row['object_type'] ) ? (string) $row['object_type'] : '',
+			'change_type' => isset( $row['change_type'] ) ? (string) $row['change_type'] : '',
+			'modified_gmt' => isset( $row['modified_gmt'] ) ? (string) $row['modified_gmt'] : gmdate( 'Y-m-d H:i:s' ),
 		);
 	}
 }

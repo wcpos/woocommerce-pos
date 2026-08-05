@@ -164,13 +164,12 @@ final class Changes_Controller extends WP_REST_Controller {
 		$limit      = $this->int_param( $request, 'limit', 100, 1, 1000 );
 		$since      = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
 
-		global $wpdb;
 		// Embed the FULL fingerprint set regardless of this stream's `collection`
 		// param: the products stream serves product AND variation rows, and a client
 		// replacing its standalone all-collections fingerprint poll with this
 		// embedded member must never see a narrowed snapshot (stale variations).
 		$config_fingerprint = $this->config_fingerprint_data( $request, $started, true );
-		$head_sequence      = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
+		$head_sequence      = $this->change_log->head_sequence();
 		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 		$headers            = array(
 			'ETag'          => $etag,
@@ -197,40 +196,12 @@ final class Changes_Controller extends WP_REST_Controller {
 			return new \WP_REST_Response( null, 304, $headers );
 		}
 
-		if ( 'tax_rates' === $collection ) {
-			$rows = $this->change_log->changes_since( 'tax_rate', $since, $limit )['rows'];
-		} elseif ( 'all' === $collection ) {
-			// UNIFIED stream: every collection in one page, ordered by the single
-			// global AUTO_INCREMENT `sequence`. Because the sequence is one
-			// monotonic space across all object_types, ONE cursor (the global
-			// sequence) drains every collection — there are no separate
-			// per-collection streams to merge. Each row keeps its object_type so
-			// the client tags it by collection. `WHERE sequence > N` is a
-			// primary-key range scan (the fastest query available).
-			$rows = $wpdb->get_results(
-				$wpdb->prepare(
-					'SELECT sequence, object_id, object_type, change_type, modified_gmt FROM ' . $this->change_log->table_name()
-					. ' WHERE sequence > %d ORDER BY sequence ASC LIMIT %d',
-					$since,
-					$limit
-				),
-				ARRAY_A
-			);
-			$rows = \is_array( $rows ) ? $rows : array();
-		} else {
-			// Products span two object_types in one global sequence. The change-log
-			// class API stays untouched; query its table directly for the IN case.
-			$rows = $wpdb->get_results(
-				$wpdb->prepare(
-					'SELECT sequence, object_id, object_type, change_type, modified_gmt FROM ' . $this->change_log->table_name()
-					. " WHERE object_type IN ('product','variation') AND sequence > %d ORDER BY sequence ASC LIMIT %d",
-					$since,
-					$limit
-				),
-				ARRAY_A
-			);
-			$rows = \is_array( $rows ) ? $rows : array();
-		}
+		// The UNIFIED `all` stream asks for every object_type (empty list); the
+		// narrowed streams name theirs — products span TWO of them in the one
+		// global sequence. The page's `head` is read after the rows, which is the
+		// head this envelope must carry (see its use below).
+		$page = $this->change_log->page( $this->object_types_for_collection( $collection ), $since, $limit );
+		$rows = $page['rows'];
 
 		$changes          = array();
 		$checkpoint_since = $since;
@@ -274,12 +245,11 @@ final class Changes_Controller extends WP_REST_Controller {
 		// baseline — instead of draining the entire historical change-log
 		// 100/page. The existing catalog is the baseline (built by greedy/on-demand
 		// pulls); only changes AFTER head need replaying. See finding F1 in
-		// docs/pos-replication-model.md. MAX over the whole table is a valid
-		// baseline bound for every scope (the sequence is one global monotonic space).
-		// Re-read AFTER building the page: the envelope's head must stay >= every
-		// served row (a row can land between the early ETag head-read and the page
-		// query). The early read above serves only the 304 short-circuit.
-		$head_sequence = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->change_log->table_name() );
+		// docs/pos-replication-model.md. The page reads it AFTER its rows, so the
+		// envelope's head stays >= every served row (a row can land between the
+		// early ETag head-read and the page query). The early read above serves
+		// only the 304 short-circuit.
+		$head_sequence = $page['head'];
 
 		// Rebuild the served ETag from the refreshed head (CodeRabbit review): if a
 		// row landed between the reads, an ETag stamped with the stale head could
@@ -684,6 +654,26 @@ final class Changes_Controller extends WP_REST_Controller {
 		// branch, so they must never see it or they would label product rows as
 		// collection:"all".
 		return 'tax_rates' === (string) $request->get_param( 'collection' ) ? 'tax_rates' : 'products';
+	}
+
+	/**
+	 * The change-log object_types one stream serves. `all` is the unified stream
+	 * (every type — an empty list), `tax_rates` is a single type, and `products`
+	 * spans product AND variation because a variation change is a products-stream
+	 * event. This is the only place the endpoint names object types; the log
+	 * itself owns the query.
+	 *
+	 * @return string[]
+	 */
+	private function object_types_for_collection( string $collection ): array {
+		if ( 'all' === $collection ) {
+			return array();
+		}
+		if ( 'tax_rates' === $collection ) {
+			return array( 'tax_rate' );
+		}
+
+		return array( 'product', 'variation' );
 	}
 
 	/**
