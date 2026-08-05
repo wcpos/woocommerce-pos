@@ -1495,6 +1495,57 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A stale persisted _woocommerce_pos_variable_prices meta row must not be served —
+	 * the response must reflect the range recomputed from current variation prices.
+	 */
+	public function test_variable_product_price_metadata_uses_recomputed_in_memory_value(): void {
+		$product = ProductHelper::create_variation_product();
+		$product->update_meta_data(
+			'_woocommerce_pos_variable_prices',
+			wp_json_encode(
+				array(
+					'price'         => array(
+						'min' => '99',
+						'max' => '99',
+					),
+					'regular_price' => array(
+						'min' => '99',
+						'max' => '99',
+					),
+					'sale_price'    => array(
+						'min' => '99',
+						'max' => '99',
+					),
+				)
+			)
+		);
+		$product->save();
+
+		$variation = new \WC_Product_Variation( $product->get_children()[0] );
+		$variation->set_regular_price( '12' );
+		$variation->set_price( '12' );
+		$variation->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$variable_prices = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$variable_prices = json_decode( $meta['value'], true );
+				break;
+			}
+		}
+
+		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
+		$this->assertSame( '12.00', $variable_prices['price']['min'] );
+		$this->assertSame( '15.00', $variable_prices['price']['max'] );
+	}
+
+	/**
 	 * A variable product converted from a simple product must not expose its old simple price.
 	 */
 	public function test_variable_product_converted_from_simple_uses_current_variation_price(): void {

@@ -65,7 +65,14 @@ trait WCPOS_REST_API {
 		$raw_meta  = $object->get_meta_data();
 		$meta_data = array_map(
 			function ( $meta_data ) {
-				return $meta_data->get_data();
+				$data = $meta_data->get_data();
+				return array_merge(
+					$data,
+					array(
+						'key' => $meta_data->key,
+						'value' => $meta_data->value,
+					)
+				);
 			},
 			$raw_meta
 		);
