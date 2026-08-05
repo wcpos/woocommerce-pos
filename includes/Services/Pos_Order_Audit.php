@@ -53,28 +53,22 @@ final class Pos_Order_Audit {
 	/**
 	 * A `meta_data` array safe to apply on order CREATE: the server-derived keys
 	 * are removed (the write path re-stamps them from the authenticated request),
-	 * and till entries are kept only when their value is valid.
+	 * and till entries use the same last-entry-wins parser as the v2 create path.
 	 *
 	 * @param array $meta_data REST `meta_data` entries (arrays or objects with key/value).
 	 *
 	 * @return array
 	 */
 	public static function sanitize_create_meta( array $meta_data ): array {
-		return array_values(
-			array_filter(
-				$meta_data,
-				static function ( $entry ) {
-					$key = self::entry_key( $entry );
-					if ( \in_array( $key, self::SERVER_META_KEYS, true ) ) {
-						return false;
-					}
-					if ( \in_array( $key, self::TILL_META_KEYS, true ) ) {
-						return self::is_valid_till_value( $key, self::entry_value( $entry ) );
-					}
-					return true;
-				}
-			)
-		);
+		$sanitized = self::strip_audit_meta( $meta_data );
+		foreach ( self::till_meta_from_payload( $meta_data ) as $key => $value ) {
+			$sanitized[] = array(
+				'key'   => $key,
+				'value' => $value,
+			);
+		}
+
+		return $sanitized;
 	}
 
 	/**
