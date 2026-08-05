@@ -1094,6 +1094,7 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function remove_license_transient( $value ) {
 		delete_transient( 'woocommerce_pos_pro_license_status' );
+		delete_site_transient( 'update_plugins' );
 
 		return $value;
 	}
