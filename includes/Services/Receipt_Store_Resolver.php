@@ -154,6 +154,87 @@ class Receipt_Store_Resolver {
 	}
 
 	/**
+	 * Assemble the template-facing `store` section from the POS store object.
+	 *
+	 * Every field is read through get_store_value(), so partial store objects —
+	 * including the bare \stdClass used for orders whose store has since been
+	 * deleted — fall back field by field instead of fataling. Blank values count
+	 * as "not set" for the fields that accept a fallback, which is how both
+	 * builders have always treated empty store settings.
+	 *
+	 * @param array<string,mixed> $fallbacks Optional per-field fallbacks. Recognised keys:
+	 *                                       `id` (int, default 0),
+	 *                                       `name` (string, default site title),
+	 *                                       `opening_hours` (array, default empty — renders null),
+	 *                                       `opening_hours_notes`, `personal_notes`,
+	 *                                       `policies_and_conditions` and `footer_imprint`
+	 *                                       (string|null, default null).
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function build_store_section( array $fallbacks = array() ): array {
+		$address = array(
+			'address_1' => (string) $this->get_store_value( 'get_store_address', '' ),
+			'address_2' => (string) $this->get_store_value( 'get_store_address_2', '' ),
+			'city'      => (string) $this->get_store_value( 'get_store_city', '' ),
+			'state'     => (string) $this->get_store_value( 'get_store_state', '' ),
+			'postcode'  => (string) $this->get_store_value( 'get_store_postcode', '' ),
+			'country'   => (string) $this->get_store_value( 'get_store_country', '' ),
+		);
+
+		$tax_ids = $this->get_store_value( 'get_tax_ids', array() );
+		if ( ! \is_array( $tax_ids ) ) {
+			$tax_ids = array();
+		}
+
+		$store = array(
+			'id'            => (int) $this->get_store_value( 'get_id', $fallbacks['id'] ?? 0 ),
+			// Enum-style resolution: a blank store name falls back to the site title.
+			'name'          => $this->resolve_store_option_string( 'get_name', $fallbacks['name'] ?? get_bloginfo( 'name' ) ),
+			// Structured address parts mirror customer.billing_address — templates that
+			// want country-specific layouts compose from these. address_lines[] is the
+			// pre-formatted default for templates that just iterate, composed via
+			// WC_Countries::get_formatted_address() so per-country layouts are honoured.
+			'address'       => $address,
+			'address_lines' => self::compose_address_lines( $address ),
+			'tax_ids'       => self::with_store_tax_id_labels( $tax_ids, $this->resolve_locale() ),
+			'phone'         => (string) $this->get_store_value( 'get_phone', '' ),
+			'email'         => (string) $this->get_store_value( 'get_email', '' ),
+			'logo'          => Store_Logo_Resolver::resolve( $this->pos_store ),
+		);
+
+		$opening_hours = $this->get_store_value( 'get_opening_hours', array() );
+		$has_structured_hours = \is_array( $opening_hours ) && ! empty( $opening_hours );
+		$has_legacy_hours     = \is_string( $opening_hours ) && '' !== trim( $opening_hours );
+		if ( ! $has_structured_hours && ! $has_legacy_hours ) {
+			$opening_hours        = $fallbacks['opening_hours'] ?? array();
+			$has_structured_hours = \is_array( $opening_hours ) && ! empty( $opening_hours );
+		}
+
+		if ( $has_structured_hours ) {
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours );
+		} elseif ( $has_legacy_hours ) {
+			// Legacy free-text hours have no per-day structure to reformat.
+			$store['opening_hours']          = $opening_hours;
+			$store['opening_hours_vertical'] = null;
+			$store['opening_hours_inline']   = null;
+		} else {
+			$store['opening_hours']          = null;
+			$store['opening_hours_vertical'] = null;
+			$store['opening_hours_inline']   = null;
+		}
+
+		$store['opening_hours_notes']     = $this->resolve_optional_text( 'get_opening_hours_notes', $fallbacks['opening_hours_notes'] ?? null );
+		$store['personal_notes']          = $this->resolve_optional_text( 'get_personal_notes', $fallbacks['personal_notes'] ?? null );
+		$store['policies_and_conditions'] = $this->resolve_optional_text( 'get_policies_and_conditions', $fallbacks['policies_and_conditions'] ?? null );
+		$store['footer_imprint']          = $this->resolve_optional_text( 'get_footer_imprint', $fallbacks['footer_imprint'] ?? null );
+
+		return $store;
+	}
+
+	/**
 	 * Build price, currency, and locale presentation hints for renderers.
 	 *
 	 * @param string    $currency           Currency code.
@@ -261,5 +342,19 @@ class Receipt_Store_Resolver {
 			},
 			$tax_ids
 		);
+	}
+
+	/**
+	 * Resolve an optional free-text store field, treating a blank value as unset.
+	 *
+	 * @param string      $getter   Store getter method.
+	 * @param string|null $fallback Value used when the store has nothing set.
+	 *
+	 * @return string|null
+	 */
+	private function resolve_optional_text( string $getter, ?string $fallback ): ?string {
+		$value = (string) $this->get_store_value( $getter, '' );
+
+		return '' !== $value ? $value : $fallback;
 	}
 }
