@@ -38,7 +38,15 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$result = Pos_Order_Audit::sanitize_create_meta( $meta );
 
 		// Assert.
-		$this->assertEquals( array( array( 'key' => '_woocommerce_pos_uuid', 'value' => 'abc-123' ) ), $result );
+		$this->assertEquals(
+			array(
+				array(
+					'key' => '_woocommerce_pos_uuid',
+					'value' => 'abc-123',
+				),
+			),
+			$result
+		);
 	}
 
 	/**
@@ -151,7 +159,15 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$result = Pos_Order_Audit::strip_audit_meta( $meta );
 
 		// Assert.
-		$this->assertEquals( array( array( 'key' => 'unrelated', 'value' => 'kept' ) ), $result );
+		$this->assertEquals(
+			array(
+				array(
+					'key' => 'unrelated',
+					'value' => 'kept',
+				),
+			),
+			$result
+		);
 	}
 
 	/**
@@ -177,7 +193,16 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$result = Pos_Order_Audit::strip_audit_meta( $meta, array( 25 ) );
 
 		// Assert.
-		$this->assertEquals( array( array( 'id' => 30, 'key' => 'safe', 'value' => 'kept' ) ), $result );
+		$this->assertEquals(
+			array(
+				array(
+					'id' => 30,
+					'key' => 'safe',
+					'value' => 'kept',
+				),
+			),
+			$result
+		);
 	}
 
 	/**
