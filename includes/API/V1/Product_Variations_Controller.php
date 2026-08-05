@@ -17,6 +17,7 @@ use Exception;
 use WC_Data;
 use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
@@ -211,25 +212,9 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param bool            $creating True when creating object, false when updating.
 	 */
 	public function wcpos_insert_product_variation_object( WC_Data $object, WP_REST_Request $request, $creating ): void {
-		$barcode_field = $this->wcpos_get_barcode_field();
+		// Update the barcode if it is set in the request.
 		if ( $request->has_param( 'barcode' ) ) {
-			$barcode = $request->get_param( 'barcode' );
-			if ( '_sku' === $barcode_field ) {
-				$object->set_sku( $barcode );
-				$object->save();
-			} elseif ( '_global_unique_id' === $barcode_field ) {
-				if ( method_exists( $object, 'set_global_unique_id' ) ) {
-					$object->set_global_unique_id( $barcode );
-				} else {
-					// WC < 9.1 has no GTIN setter — write the same postmeta key it uses.
-					$object->update_meta_data( $barcode_field, $barcode );
-				}
-				// Full save (not save_meta_data) so product update hooks fire for sync.
-				$object->save();
-			} else {
-				$object->update_meta_data( $barcode_field, $barcode );
-				$object->save_meta_data();
-			}
+			Barcode_Field::write( $object, $request->get_param( 'barcode' ) );
 		}
 	}
 
@@ -258,11 +243,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$post_fields = array(); // nothing at the moment for variations.
 
 		// Meta fields to search.
-		$meta_fields   = array( '_sku' );
-		$barcode_field = $this->wcpos_get_barcode_field();
-		if ( '_sku' !== $barcode_field ) {
-			$meta_fields[] = $barcode_field;
-		}
+		$meta_fields = Barcode_Field::search_keys();
 
 		$search_conditions = array();
 
@@ -455,8 +436,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @return array|WP_Error
 	 */
 	protected function prepare_objects_query( $request ) {
-		$args          = parent::prepare_objects_query( $request );
-		$barcode_field = $this->wcpos_get_barcode_field();
+		$args = parent::prepare_objects_query( $request );
 
 		// Add custom 'orderby' options.
 		if ( isset( $request['orderby'] ) ) {
@@ -467,7 +447,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 					break;
 				case 'barcode':
-					$args['meta_key'] = '_sku' !== $barcode_field ? $barcode_field : '_sku';
+					$args['meta_key'] = Barcode_Field::orderby_key();
 					$args['orderby']  = 'meta_value';
 
 					break;
