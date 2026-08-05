@@ -7,6 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WC_Product_Variable;
+use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
@@ -83,18 +86,24 @@ final class Variable_Prices {
 	}
 
 	/**
-	 * Shared per-product stamp: if `$product` is a `type: 'variable'` array and `$object` can
-	 * enumerate visible children, inject the freshly-recomputed `_woocommerce_pos_variable_prices`
-	 * range. Otherwise pass through untouched. The single source both variable-price filters use.
+	 * Shared per-product stamp: if `$product` is a `type: 'variable'` array backed by a
+	 * variable product object, inject the freshly-recomputed
+	 * `_woocommerce_pos_variable_prices` range. Otherwise pass through untouched.
 	 *
-	 * @param mixed      $object
-	 * @param null|mixed $request
+	 * The range itself comes from {@see Variable_Price_Range}, THE canonical
+	 * computation shared with the V1 products controller; this method only renders
+	 * it onto the wire — raw child strings, and a sub-range omitted entirely when it
+	 * has no values (e.g. nothing on sale) rather than emitted as empty strings.
+	 *
+	 * @param mixed      $object  Product object backing the payload.
+	 * @param null|mixed $request Request context, read for the `dp` precision.
 	 */
 	private static function inject_variable_price_range( array $product, $object, $request = null ): array {
-		if ( 'variable' !== ( $product['type'] ?? '' ) || ! \is_object( $object ) || ! \is_callable( array( $object, 'get_children' ) ) ) {
+		if ( 'variable' !== ( $product['type'] ?? '' ) || ! $object instanceof WC_Product_Variable ) {
 			return $product;
 		}
-		$ranges = self::visible_variation_price_ranges( $object );
+		$computed = Variable_Price_Range::for( $object, Variable_Price_Range::FORMAT_RAW );
+		$ranges   = self::wire_ranges( $computed );
 
 		// A simple-to-variable conversion can leave old simple price fields on the
 		// parent. Clear them even when no visible child has a price. When prices do
@@ -113,103 +122,31 @@ final class Variable_Prices {
 			if ( $request instanceof \WP_REST_Request && null !== $request->get_param( 'dp' ) ) {
 				$decimals = absint( $request->get_param( 'dp' ) );
 			}
-			$product['price'] = wc_format_decimal( $ranges['price']['min'] ?? '', $decimals );
+			$product['price'] = wc_format_decimal( $computed['minimum_price'], $decimals );
 		}
 
 		return self::inject_meta_entry( $product, self::META_KEY, $ranges );
 	}
 
 	/**
-	 * Recompute the price / regular_price / sale_price ranges by reading each VISIBLE child
-	 * variation directly (get_price/get_regular_price/get_sale_price) — bypassing the stale
-	 * `wc_var_prices_*` transient this fix exists to correct. Each sub-range is omitted when
-	 * that field has no values across the visible variations (e.g. nothing on sale). Returns
-	 * null when no visible variation carries any price at all.
+	 * Render the canonical range onto the sync wire: drop every empty sub-range, and
+	 * report null when no visible variation carries any price at all.
 	 *
-	 * @param mixed $object
+	 * @param array $computed The Variable_Price_Range result.
 	 */
-	private static function visible_variation_price_ranges( $object ): ?array {
-		// Prefer WooCommerce's own visible-children resolution — it applies the store's
-		// hide-hidden / hide-out-of-stock rules, which a per-variation `variation_is_visible()`
-		// check does not. Fall back to all children + the per-variation check for objects that
-		// can't report a visible set.
-		if ( \is_callable( array( $object, 'get_visible_children' ) ) ) {
-			$child_ids   = (array) $object->get_visible_children();
-			$prefiltered = true;
-		} else {
-			$child_ids   = (array) $object->get_children();
-			$prefiltered = false;
-		}
-		// Review finding 6: WC's visible-children resolution applies the store's
-		// WEB visibility rules, NOT the POS `online_only` exclusion. A child
-		// hidden from the POS would otherwise leak its price into the served
-		// range. Subtract the POS-hidden variation ids (gated on the feature
-		// toggle inside Pos_Visibility → empty when the toggle is off).
-		$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
-		if ( array() !== $hidden ) {
-			$child_ids = array_values( array_diff( array_map( 'intval', $child_ids ), $hidden ) );
-		}
-		$collected = array(
-			'price' => array(),
-			'regular_price' => array(),
-			'sale_price' => array(),
-		);
-		foreach ( $child_ids as $child_id ) {
-			$variation = wc_get_product( (int) $child_id );
-			if ( ! $variation ) {
-				continue;
-			}
-			// On the fallback path only, still drop a per-variation-hidden child.
-			if ( ! $prefiltered && \is_callable( array( $variation, 'variation_is_visible' ) ) && ! $variation->variation_is_visible() ) {
-				continue;
-			}
-			foreach ( array(
-				'price' => 'get_price',
-				'regular_price' => 'get_regular_price',
-				'sale_price' => 'get_sale_price',
-			) as $field => $getter ) {
-				$value = $variation->$getter();
-				if ( '' !== $value && null !== $value ) {
-					$collected[ $field ][] = (string) $value;
-				}
-			}
+	private static function wire_ranges( array $computed ): ?array {
+		if ( ! $computed['has_prices'] ) {
+			return null;
 		}
 		$ranges = array();
-		foreach ( $collected as $field => $values ) {
-			$range = self::min_max_range( $values );
-			if ( null !== $range ) {
-				$ranges[ $field ] = $range;
+		foreach ( $computed['ranges'] as $field => $range ) {
+			if ( '' === $range['min'] && '' === $range['max'] ) {
+				continue;
 			}
+			$ranges[ $field ] = $range;
 		}
 
 		return empty( $ranges ) ? null : $ranges;
-	}
-
-	/**
-	 * Min/max over a list of price strings. Compares NUMERICALLY (a string min/max would order
-	 * '10' before '9') but RETURNS the original string, so no float round-trip mangles decimal
-	 * precision (gap-analysis §4.3). Null for an empty list.
-	 */
-	private static function min_max_range( array $values ): ?array {
-		if ( empty( $values ) ) {
-			return null;
-		}
-		$min = null;
-		$max = null;
-		foreach ( $values as $price ) {
-			$value = (float) $price;
-			if ( null === $min || $value < (float) $min ) {
-				$min = (string) $price;
-			}
-			if ( null === $max || $value > (float) $max ) {
-				$max = (string) $price;
-			}
-		}
-
-		return array(
-			'min' => $min,
-			'max' => $max,
-		);
 	}
 
 	/**

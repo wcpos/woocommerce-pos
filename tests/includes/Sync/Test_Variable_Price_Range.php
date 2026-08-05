@@ -72,11 +72,12 @@ class Test_Variable_Price_Range extends WP_UnitTestCase {
 			$variation = new WC_Product_Variation();
 			$variation->set_props(
 				array(
-					'parent_id'     => $product->get_id(),
-					'sku'           => uniqid( 'RANGE VAR' ),
-					'regular_price' => $prices['regular'],
-					'sale_price'    => $prices['sale'],
-					'price'         => $prices['price'],
+					'parent_id'          => $product->get_id(),
+					'sku'                => uniqid( 'RANGE VAR' ),
+					'regular_price'      => $prices['regular'],
+					'sale_price'         => $prices['sale'],
+					'date_on_sale_from'  => $prices['sale_from'] ?? null,
+					'price'              => $prices['price'],
 				)
 			);
 			$variation->set_attributes( array( $attribute_data['attribute_taxonomy'] => $slugs[ $index ] ) );
@@ -307,18 +308,19 @@ class Test_Variable_Price_Range extends WP_UnitTestCase {
 	/**
 	 * DELIBERATE CHANGE (b): a stale sale price that is not the active price no longer pairs.
 	 *
-	 * WooCommerce leaves `_sale_price` on a variation after a scheduled sale ends, so a
+	 * WooCommerce keeps `_sale_price` on a variation whose sale has not started yet, so a
 	 * non-empty sale price is NOT proof of a sale. V1 only pairs a sale price that equals
 	 * the variation's active price; the sync lane now follows the same rule.
 	 */
 	public function test_sync_lane_drops_inactive_sale_price_from_range(): void {
-		// Arrange: sale price left behind, active price is the regular price.
+		// Arrange: the sale is scheduled for the future, so the active price is regular.
 		$product = $this->make_variable_product(
 			array(
 				array(
-					'regular' => '20',
-					'sale'    => '15',
-					'price'   => '20',
+					'regular'   => '20',
+					'sale'      => '15',
+					'sale_from' => time() + WEEK_IN_SECONDS,
+					'price'     => '20',
 				),
 			)
 		);
