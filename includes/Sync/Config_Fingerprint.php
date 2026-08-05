@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
-use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
@@ -50,11 +50,6 @@ use WCPOS\WooCommercePOS\Services\Settings;
  * representation-affecting settings are added.
  */
 final class Config_Fingerprint {
-	/**
-	 * Default barcode meta key when the option is unset/blank.
-	 */
-	public const DEFAULT_BARCODE_FIELD = '_global_unique_id';
-
 	/**
 	 * Bump when a new one-time cleanup step is added to maybe_cleanup_legacy_options().
 	 * Stored per-site so the sweep runs exactly once per upgrade, not once per request.
@@ -111,17 +106,6 @@ final class Config_Fingerprint {
 	}
 
 	/**
-	 * The active barcode META key, read from production settings and coerced to a
-	 * non-empty string (a blank option falls back to the default mapping rather
-	 * than producing an empty representation).
-	 */
-	public function active_barcode_meta_key(): string {
-		$value = Settings::instance()->barcode_field();
-
-		return '' === trim( $value ) ? self::DEFAULT_BARCODE_FIELD : $value;
-	}
-
-	/**
 	 * The canonicalized representation-affecting settings for a collection.
 	 * DELIBERATELY A SUPERSET: this set must GROW as new representation settings
 	 * are added, because an omitted setting would silently miss its config
@@ -131,7 +115,7 @@ final class Config_Fingerprint {
 	 */
 	public function representation_settings( string $collection ): array {
 		if ( \in_array( $collection, self::barcode_collections(), true ) ) {
-			$settings = array( 'barcode_field' => $this->active_barcode_meta_key() );
+			$settings = array( 'barcode_field' => Barcode_Field::meta_key() );
 		} else {
 			// tax_rates (and any non-barcode collection): no representation
 			// setting tracked yet. Still hashed, so adding one later just widens
@@ -163,7 +147,7 @@ final class Config_Fingerprint {
 		if ( ! \in_array( $collection, self::barcode_collections(), true ) ) {
 			return array();
 		}
-		$meta_key = $this->active_barcode_meta_key();
+		$meta_key = Barcode_Field::meta_key();
 
 		if ( ! \array_key_exists( $meta_key, self::BARCODE_META_TO_PAYLOAD ) ) {
 			// @phpstan-ignore-next-line -- WC_Data_Store forwards this public method to its loaded store.

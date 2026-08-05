@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
-use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
@@ -77,7 +77,7 @@ class Resolve_Controller extends WP_REST_Controller {
 		// hard-coded barcode-bearing keys are consulted ONLY as a fallback when
 		// the active field yields no match at all. GROUP BY collapses records
 		// matching on several keys within a phase.
-		$barcode_field = Settings::instance()->barcode_field();
+		$barcode_field = Barcode_Field::meta_key();
 		$matches       = $this->discover_by_meta_key( $code, $barcode_field );
 		if ( array() === $matches ) {
 			$matches = $this->discover_by_fallback_keys( $code, $barcode_field );
@@ -135,8 +135,10 @@ class Resolve_Controller extends WP_REST_Controller {
 
 	/**
 	 * Discover candidate {id,type} matches on a SINGLE meta key (the active
-	 * barcode field). Empty meta key (unconfigured) → no matches, so the caller
-	 * falls through to the hard-coded keys.
+	 * barcode field). The empty-key guard is now defensive only: Barcode_Field
+	 * coerces a blank setting to the default key, so an unconfigured install
+	 * resolves against the GTIN first and reaches the hard-coded keys through
+	 * the normal no-match fallback rather than through an empty key.
 	 */
 	private function discover_by_meta_key( string $code, string $meta_key ): array {
 		if ( '' === trim( $meta_key ) ) {

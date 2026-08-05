@@ -8,7 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\API\V1\Traits\Product_Helpers;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -34,7 +34,6 @@ use WP_REST_Server;
  */
 class Variations_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
-	use Product_Helpers;
 
 	private const MAX_SKU_LENGTH    = 4096;
 	private const MAX_SKU_TERMS     = 100;
@@ -213,10 +212,9 @@ class Variations_Controller extends WP_REST_Controller {
 				$args       = array_merge( $args, $skus );
 			}
 		} else {
-			$terms         = preg_split( '/\s+/', trim( (string) $request->get_param( 'search' ) ), -1, PREG_SPLIT_NO_EMPTY );
-			$barcode_field = $this->wcpos_get_barcode_field();
-			$fields        = '_sku' === $barcode_field ? array( '_sku' ) : array( '_sku', $barcode_field );
-			$matches       = array();
+			$terms   = preg_split( '/\s+/', trim( (string) $request->get_param( 'search' ) ), -1, PREG_SPLIT_NO_EMPTY );
+			$fields  = Barcode_Field::search_keys();
+			$matches = array();
 			foreach ( $terms as $term ) {
 				foreach ( $fields as $field ) {
 					$matches[] = '(pm.meta_key = %s AND pm.meta_value LIKE %s)';
