@@ -10,9 +10,9 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
-use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
 use WP_Error;
 use WP_REST_Controller;
@@ -21,7 +21,6 @@ use WP_REST_Response;
 use WP_REST_Server;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Queries use internal table names and generated SQL fragments.
 
 /**
  * Hash-backed range-checksum scan — the missing experiment between
@@ -33,6 +32,10 @@ use WP_REST_Server;
  * canonical expression) against the BIT_XOR aggregate of STORED hook-time
  * digests — one SQL pass per side. ?bucket=<n> drills into a single bucket
  * and returns the mismatching ids.
+ *
+ * Every one of those questions is asked through {@see Digest_Index}: this
+ * controller validates the request, shapes the envelope and owns the
+ * rebuild-scheduling policy — it knows no table, column or JOIN.
  */
 final class Integrity_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
@@ -43,8 +46,11 @@ final class Integrity_Controller extends WP_REST_Controller {
 
 	private Integrity_Digest $digests;
 
-	public function __construct( ?Integrity_Digest $digests = null ) {
+	private Digest_Index $index;
+
+	public function __construct( ?Integrity_Digest $digests = null, ?Digest_Index $index = null ) {
 		$this->digests = $digests ?? new Integrity_Digest();
+		$this->index   = $index ?? new Digest_Index();
 	}
 
 	public function register_routes(): void {
@@ -151,7 +157,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 *                                   id-space bucket; a bucket listing otherwise.
 	 */
 	public function bucket_list( WP_REST_Request $request ) {
-		global $wpdb;
 		$bucket      = $this->int_param( $request, 'bucket', 0, 0, PHP_INT_MAX );
 		$bucket_size = $this->int_param( $request, 'bucket_size', self::DEFAULT_BUCKET_SIZE, 1, 10000 );
 		$collection  = $request->get_param( 'collection' );
@@ -174,72 +179,17 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$range_end   = $range_start + $bucket_size;
 
 		// Each collection has its OWN digest source + id-space (ADR 0015): products/variations over
-		// wp_posts (p.ID), customers over wp_users (u.ID). Same 64-bit formula, so digests compare
-		// apples-to-apples with the manifest the client stored on pull.
-		$servable_join   = '';
-		$servable_filter = '';
-		$servable_args   = array();
-		if ( 'customers' === $collection ) {
-			$inner_sql = $this->digests->customer_digest_select_sql( 'u.ID >= %d AND u.ID < %d' );
-		} elseif ( 'orders' === $collection ) {
-			// Orders bucket over their own id-space (HPOS o.id / CPT p.ID) via the {id} placeholder.
-			$inner_sql = $this->digests->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
-		} else {
-			$inner_sql = $this->digests->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
-			if ( 'publish' === $request->get_param( 'status' ) ) {
-				$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id"
-					. " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent"
-					. " AND catalog_post.post_type = 'product_variation'";
-				$servable_filter = " WHERE ((cur.object_type = 'product' AND catalog_post.post_status = 'publish')"
-					. " OR (cur.object_type = 'variation' AND parent_product.post_type = 'product'"
-					. " AND parent_product.post_status = 'publish'))";
-			}
-			// Leg-3 (ADR 0014 WP-M5): the authoritative served set must AGREE with the pull filter — drop
-			// the POS-hidden (`online_only`) products/variations here so this bucket-list omits them and the
-			// reconcile prunes any that were pulled BEFORE being toggled online_only. READ-SIDE ONLY: a
-			// toggle changes no product row (no hook fires), so stored per-record digests are never touched;
-			// omitting the ids from this read is enough because the client folds THIS list. Products and
-			// variations share the wp_posts id-space, so their two hidden lists union safely on cur.id.
-			$visibility = new Pos_Visibility();
-			$hidden     = array_values(
-				array_unique(
-					array_merge(
-						$visibility->online_only_product_ids(),
-						$visibility->online_only_variation_ids()
-					)
-				)
-			);
-			if ( array() !== $hidden ) {
-				$servable_filter .= ( '' === $servable_filter ? ' WHERE ' : ' AND ' )
-					. 'cur.id NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
-				$servable_args    = array_map( 'intval', $hidden );
-			}
-		}
-
-		// Same-formula invariant + GROUP_CONCAT stability, exactly as the scan's current side.
-		$this->digests->raise_group_concat_max_len();
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT cur.id AS id, cur.crc AS digest, cur.object_type AS object_type FROM ('
-				. $inner_sql
-				. ') cur' . $servable_join . $servable_filter . ' ORDER BY cur.id ASC',
-				$range_start,
-				$range_end,
-				...$servable_args
+		// wp_posts, customers over wp_users, orders over HPOS/CPT — the index picks the source from the
+		// collection name. Products carry the servable scoping (readable-catalog `status` + the
+		// POS-hidden `online_only` ids) so this authoritative list AGREES with the pull filter and the
+		// reconcile prunes anything toggled hidden after it was pulled (ADR 0014 WP-M5).
+		$ids = $this->index->bucket_listing(
+			$collection,
+			array(
+				'start' => $range_start,
+				'end' => $range_end,
 			),
-			ARRAY_A
-		);
-
-		$ids = array_map(
-			function ( array $row ): array {
-				return array(
-					'id' => (int) $row['id'],
-					// Unsigned 64-bit (ADR 0014 M1): keep as a string — (int)/JS Number lose precision above 2^53.
-					'digest'      => (string) $row['digest'],
-					'object_type' => (string) $row['object_type'],
-				);
-			},
-			\is_array( $rows ) ? $rows : array()
+			array( 'status' => (string) $request->get_param( 'status' ) )
 		);
 
 		return new WP_REST_Response(
@@ -326,80 +276,16 @@ final class Integrity_Controller extends WP_REST_Controller {
 			);
 		}
 
-		global $wpdb;
-
-		// Current side: one SQL pass — per-row canonical digests aggregated
-		// per bucket inside the DB engine. Raw rows are digested for
-		// DETECTION only; hydration goes through filtered REST (ADR 0003).
-		// Raise group_concat_max_len so the current-side digest matches the
-		// stored-side (written by the hook) byte-for-byte (ADR 0014 / no truncation drift).
-		$this->digests->raise_group_concat_max_len();
-		$current_rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT FLOOR(t.id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(t.crc) AS digest'
-				. ' FROM (' . $this->digests->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' ) . ') t'
-				. ' GROUP BY bucket ORDER BY bucket',
-				$bucket_size,
-				$window_start,
-				$window_end
-			),
-			ARRAY_A
-		);
-
-		// Stored side: one SQL pass over the hook-maintained digest table.
-		$stored_rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT FLOOR(object_id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(digest) AS digest'
-				. ' FROM ' . $this->digests->table_name()
-				. ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL
-				. ' AND object_id >= %d AND object_id < %d'
-				. ' GROUP BY bucket ORDER BY bucket',
-				$bucket_size,
-				$window_start,
-				$window_end
-			),
-			ARRAY_A
-		);
-
-		$buckets = array();
-		foreach ( \is_array( $stored_rows ) ? $stored_rows : array() as $row ) {
-			$buckets[ (int) $row['bucket'] ]['stored'] = $row;
-		}
-		foreach ( \is_array( $current_rows ) ? $current_rows : array() as $row ) {
-			$buckets[ (int) $row['bucket'] ]['current'] = $row;
-		}
-		ksort( $buckets );
-
-		$changes = array();
-		foreach ( $buckets as $bucket => $sides ) {
-			$stored_count  = isset( $sides['stored'] ) ? (int) $sides['stored']['record_count'] : 0;
-			$current_count = isset( $sides['current'] ) ? (int) $sides['current']['record_count'] : 0;
-			// Digests are unsigned 64-bit (ADR 0014 M1) — above PHP_INT_MAX, so a (int) cast would
-			// SATURATE two distinct high-bit values to the same number and report a drifted bucket as
-			// `match`, hiding drift. Compare as strings (mysqli already returns them as decimal strings).
-			$stored_digest  = isset( $sides['stored'] ) ? (string) $sides['stored']['digest'] : '';
-			$current_digest = isset( $sides['current'] ) ? (string) $sides['current']['digest'] : '';
-			$changes[]      = array(
-				'bucket'         => $bucket,
-				'range'          => array(
-					'start' => $bucket * $bucket_size,
-					'end' => ( $bucket + 1 ) * $bucket_size,
-				),
-				'stored_count'   => $stored_count,
-				'current_count'  => $current_count,
-				'stored_digest'  => $stored_digest,
-				'current_digest' => $current_digest,
-				'match'          => $stored_count === $current_count && $stored_digest === $current_digest,
-			);
-		}
-
-		// Completion is judged against the larger of both sides' max id so
-		// orphaned stored digests past the last live post still get scanned.
-		$max_id = (int) $wpdb->get_var(
-			'SELECT GREATEST('
-			. "COALESCE((SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_type IN ('product','product_variation') AND post_status NOT IN ('trash','auto-draft')), 0),"
-			. ' COALESCE((SELECT MAX(object_id) FROM ' . $this->digests->table_name()
-			. ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL . '), 0))'
+		// Both sides in one call: the stored hook-time aggregate and the current
+		// raw-row aggregate over the SAME id window, plus the max id completion is
+		// judged against (the larger of both sides, so orphaned stored digests past
+		// the last live post still get scanned).
+		$aggregates = $this->index->bucket_aggregates(
+			array(
+				'bucket_size' => $bucket_size,
+				'start' => $window_start,
+				'end' => $window_end,
+			)
 		);
 
 		return rest_ensure_response(
@@ -408,8 +294,8 @@ final class Integrity_Controller extends WP_REST_Controller {
 					'bucket_size' => $bucket_size,
 					'after_id' => $window_end - 1,
 				),
-				$changes,
-				$window_end > $max_id,
+				$aggregates['buckets'],
+				$window_end > $aggregates['max_id'],
 				$started,
 				'stored hook-time digests vs current raw-row digests, BIT_XOR(64-bit MD5-derived) per bucket; mismatch = content changed without hooks (or stored side not yet backfilled).'
 			)
@@ -423,41 +309,21 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * deleted (stored digest whose row is gone — hook-bypassing delete).
 	 */
 	private function drill_down( int $bucket, int $bucket_size, float $started ) {
-		global $wpdb;
 		$range_start = $bucket * $bucket_size;
 		$range_end   = $range_start + $bucket_size;
-		$table       = $this->digests->table_name();
 
-		// Same-formula invariant: the current side must digest identically to the stored side.
-		$this->digests->raise_group_concat_max_len();
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT cur.id AS id,'
-				. " CASE WHEN d.digest IS NULL THEN 'missing_stored' ELSE 'changed' END AS status,"
-				. ' d.digest AS stored_digest, cur.crc AS current_digest, cur.object_type AS object_type'
-				. ' FROM (' . $this->digests->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' ) . ') cur'
-				. " LEFT JOIN {$table} d ON d.object_id = cur.id AND d.object_type = cur.object_type"
-				. ' WHERE d.digest IS NULL OR d.digest <> cur.crc'
-				. ' UNION ALL'
-				. " SELECT d.object_id AS id, 'deleted' AS status, d.digest AS stored_digest, NULL AS current_digest, d.object_type AS object_type"
-				. " FROM {$table} d"
-				. ' WHERE d.object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL
-				. ' AND d.object_id >= %d AND d.object_id < %d'
-				. ' AND NOT ' . $this->digests->live_row_exists_sql( 'd.object_id' )
-				. ' ORDER BY id ASC',
-				$range_start,
-				$range_end,
-				$range_start,
-				$range_end
-			),
-			ARRAY_A
+		$rows = $this->index->bucket_drift(
+			array(
+				'start' => $range_start,
+				'end' => $range_end,
+			)
 		);
 
 		// Each drifted id carries its collection (the hash-checksum id-space holds
 		// BOTH products and variations) so the host pulls the right path instead of
 		// assuming 'products' (ADR 0005 — engine reads DriftedId.collection).
 		$changes = array();
-		foreach ( \is_array( $rows ) ? $rows : array() as $row ) {
+		foreach ( $rows as $row ) {
 			$collection = $this->collection_for_object_type( (string) ( $row['object_type'] ?? '' ) );
 			if ( null === $collection ) {
 				// Fail closed (#421 increment 5): the digest SQL constrains
@@ -511,15 +377,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * Schedule one guarded rebuild when product-space digests are unexpectedly empty.
 	 */
 	private function maybe_schedule_empty_digest_rebuild(): bool {
-		global $wpdb;
-
-		$needs_rebuild = (bool) $wpdb->get_var(
-			'SELECT EXISTS (SELECT 1 FROM ' . $wpdb->posts
-			. " WHERE post_type IN ('product','product_variation') AND post_status NOT IN ('trash','auto-draft') LIMIT 1)"
-			. ' AND NOT EXISTS (SELECT 1 FROM ' . $this->digests->table_name()
-			. ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL . ' LIMIT 1)'
-		);
-		if ( ! $needs_rebuild ) {
+		if ( ! $this->index->needs_product_rebuild() ) {
 			return false;
 		}
 

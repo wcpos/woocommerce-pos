@@ -34,6 +34,11 @@ use RuntimeException;
  * documented too: a raw-row digest cannot see a plugin changing the served
  * representation without touching the row — that staleness case remains
  * revision-hash territory.
+ *
+ * This class is the WRITE half. The READ half — every question the REST read
+ * surface asks of the store, plus the canonical digest SQL both halves share —
+ * lives in {@see Digest_Index}. The SQL-fragment accessors that used to hang off
+ * this class are kept as deprecated delegates so existing callers keep working.
  */
 final class Integrity_Digest {
 
@@ -45,43 +50,35 @@ final class Integrity_Digest {
 	 */
 	public static float $request_write_ms = 0.0;
 
-	/**
-	 * Postmeta keys covered by the digest. Must include every key the
-	 * sql-bypass fixture mutates (_price and _regular_price today — see
-	 * class-fixtures-controller.php sql_bypass()) plus the keys a
-	 * hook-bypassing import/inventory tool plausibly touches.
-	 */
-	public const DIGESTED_META_KEYS = array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
+	/** @see Digest_Index::DIGESTED_META_KEYS The digest formula's home. */
+	public const DIGESTED_META_KEYS = Digest_Index::DIGESTED_META_KEYS;
 
-	/**
-	 * Customer usermeta folded into the digest (ADR 0015, Leg-3 phase 7). Kept small + stable —
-	 * identity/existence fields the POS keys on, NOT every usermeta row (a churny meta bloats the digest
-	 * with irrelevant drift). The customer's core columns (email, display name, registered) come from
-	 * wp_users directly; these four are the identifying usermeta. The site-prefixed `capabilities`
-	 * meta joins them at runtime in {@see customer_digest_select_sql} (the prefix is per-site, so it
-	 * cannot live in a const): roles are part of the served record under #1379, and a hookless
-	 * capabilities write (direct update_user_meta/SQL/import) must drift the digest so the
-	 * integrity scan can repair the stale role — no role/profile hook fires for those writes.
-	 */
-	public const CUSTOMER_DIGESTED_META_KEYS = array( 'first_name', 'last_name', 'billing_email', 'billing_phone' );
+	/** @see Digest_Index::CUSTOMER_DIGESTED_META_KEYS The digest formula's home. */
+	public const CUSTOMER_DIGESTED_META_KEYS = Digest_Index::CUSTOMER_DIGESTED_META_KEYS;
 
-	/**
-	 * Order postmeta folded into the digest under the CPT (legacy) storage path (ADR 0015, Leg-3 phase 7).
-	 * Under HPOS these live as wc_orders COLUMNS (total_amount, customer_id) so no meta join is needed;
-	 * this allowlist only applies to the wp_posts fallback. Kept minimal — existence/identity signal.
-	 */
-	public const ORDER_DIGESTED_META_KEYS = array( '_order_total', '_customer_user' );
+	/** @see Digest_Index::ORDER_DIGESTED_META_KEYS The digest formula's home. */
+	public const ORDER_DIGESTED_META_KEYS = Digest_Index::ORDER_DIGESTED_META_KEYS;
 
-	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
-	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
-	public const OBJECT_TYPES_SQL = "('product','variation')";
+	/** @see Digest_Index::OBJECT_TYPES_SQL The product-space object types. */
+	public const OBJECT_TYPES_SQL = Digest_Index::OBJECT_TYPES_SQL;
+
 	public const REBUILD_HOOK     = 'wcpos_integrity_digest_rebuild';
 	public const REBUILD_LOCK     = 'wcpos_integrity_digest_rebuild_lock';
 	public const REBUILD_LOCK_TTL = 300;
 
+	/**
+	 * The read half + the canonical digest SQL. The write statements below compose
+	 * their INSERT…SELECT sources from it, so stored and current digests are
+	 * computed by ONE expression — the invariant the whole scan rests on.
+	 */
+	private Digest_Index $index;
+
+	public function __construct( ?Digest_Index $index = null ) {
+		$this->index = $index ?? new Digest_Index();
+	}
+
 	public function table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . Health::STORED_DIGEST_TABLE;
+		return $this->index->table_name();
 	}
 
 	/**
@@ -184,33 +181,12 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Canonical per-row digest SELECT, shared verbatim by the hook upsert,
-	 * the scan's current-side aggregate, the drill-down and the rebuild —
-	 * the stored-vs-current comparison is only sound when every consumer
-	 * computes the digest with the byte-identical expression.
+	 * Raise the session `group_concat_max_len` before ANY query built on the digest expression.
 	 *
-	 * 64-bit digest — CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', ...)),1,16),16,10) AS UNSIGNED) — over the wp_posts content columns plus
-	 * the DIGESTED_META_KEYS rows (key=value pairs ordered by meta_key then
-	 * meta_id, so duplicate meta rows digest deterministically). Every
-	 * nullable operand is COALESCE'd because CONCAT_WS silently SKIPS NULL
-	 * arguments — ('a', NULL, 'b') would collide with ('a', 'b', '') —
-	 * while COALESCE keeps every position present and deterministic.
-	 *
-	 * $where_sql may reference alias p and contain placeholders; callers
-	 * run the final statement through $wpdb->prepare.
-	 */
-	/**
-	 * Raise the session `group_concat_max_len` before ANY query built on {@see row_digest_select_sql}.
-	 * That expression GROUP_CONCATs the digested meta; MySQL's default (1024 bytes) SILENTLY TRUNCATES
-	 * for a row with many/large meta. And because the four consumers (hook upsert, rebuild, scan,
-	 * drill-down) MUST produce byte-identical digests (the docblock invariant below), a truncation on
-	 * one path but not another is a PERMANENT false-drift bug — the bucket never converges. So raise it
-	 * identically everywhere the expression runs. (The sibling range-checksum path already does this at
-	 * class-changes-controller.php; the digest path historically did NOT — this closes that gap.)
+	 * @deprecated Use {@see Digest_Index::raise_group_concat_max_len()}.
 	 */
 	public function raise_group_concat_max_len(): void {
-		global $wpdb;
-		$wpdb->query( 'SET SESSION group_concat_max_len = 1048576' );
+		$this->index->raise_group_concat_max_len();
 	}
 
 	/**
@@ -390,117 +366,31 @@ final class Integrity_Digest {
 		return $data;
 	}
 
+	/**
+	 * Canonical per-row digest SELECT.
+	 *
+	 * @deprecated Use {@see Digest_Index::row_digest_select_sql()}.
+	 */
 	public function row_digest_select_sql( string $where_sql = '' ): string {
-		global $wpdb;
-		$meta_keys_sql = "('" . implode( "','", self::DIGESTED_META_KEYS ) . "')";
-
-		return 'SELECT p.ID AS id,'
-			. " CASE WHEN p.post_type = 'product_variation' THEN 'variation' ELSE 'product' END AS object_type,"
-			. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
-			. ' p.ID,'
-			. " COALESCE(p.post_title,''),"
-			. " COALESCE(p.post_excerpt,''),"
-			. " COALESCE(p.post_content,''),"
-			. " COALESCE(p.post_status,''),"
-			. ' COALESCE(p.post_parent,0),'
-			. ' COALESCE(p.menu_order,0),'
-			. " COALESCE(p.post_modified_gmt,''),"
-			. " COALESCE(GROUP_CONCAT(CONCAT(pm.meta_key,'=',COALESCE(pm.meta_value,'')) ORDER BY pm.meta_key ASC, pm.meta_id ASC SEPARATOR '|'),'')"
-			// 64-bit digest (ADR 0014 M1): the top 16 hex of MD5 → an integer that still folds under
-			// BIT_XOR and fits the BIGINT UNSIGNED column, dropping the CRC32 collision floor from
-			// 2^-32 to 2^-64 (a stable per-bucket false "in sync" is unacceptable in a convergence
-			// backstop, and CRC32 is linear so structured bulk edits correlate collisions).
-			. ')),1,16),16,10) AS UNSIGNED) AS crc'
-			. " FROM {$wpdb->posts} p"
-			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
-			. ' WHERE p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND p.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
-			. ( '' === $where_sql ? '' : ' AND ' . $where_sql )
-			. ' GROUP BY p.ID';
+		return $this->index->row_digest_select_sql( $where_sql );
 	}
 
 	/**
-	 * Canonical per-CUSTOMER digest SELECT (ADR 0015, Leg-3 phase 7) — the wp_users analogue of
-	 * {@see row_digest_select_sql}. Same 64-bit MD5-derived formula (BIT_XOR-foldable), over a customer's
-	 * identity columns + the allowlisted usermeta. ALL wp_users rows are POS customers under #1379
-	 * (1.9 parity). `$where_sql` narrows to a single user for the hook upsert (`u.ID = %d`);
-	 * empty selects every user.
+	 * Canonical per-CUSTOMER digest SELECT (ADR 0015, Leg-3 phase 7).
+	 *
+	 * @deprecated Use {@see Digest_Index::customer_digest_select_sql()}.
 	 */
 	public function customer_digest_select_sql( string $where_sql = '' ): string {
-		global $wpdb;
-		$meta_keys_sql = "('" . implode( "','", array_merge( self::CUSTOMER_DIGESTED_META_KEYS, array( $wpdb->prefix . 'capabilities' ) ) ) . "')";
-
-		return 'SELECT u.ID AS id,'
-			. " 'customer' AS object_type,"
-			. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
-			. ' u.ID,'
-			. " COALESCE(u.user_email,''),"
-			. " COALESCE(u.display_name,''),"
-			. " COALESCE(u.user_registered,''),"
-			. " COALESCE(GROUP_CONCAT(CONCAT(um.meta_key,'=',COALESCE(um.meta_value,'')) ORDER BY um.meta_key ASC, um.umeta_id ASC SEPARATOR '|'),'')"
-			// 64-bit digest (ADR 0014 M1): top 16 hex of MD5 → BIGINT UNSIGNED, folds under BIT_XOR.
-			. ')),1,16),16,10) AS UNSIGNED) AS crc'
-			. " FROM {$wpdb->users} u"
-			. " LEFT JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key IN {$meta_keys_sql}"
-			. ( '' === $where_sql ? '' : ' WHERE ' . $where_sql )
-			. ' GROUP BY u.ID';
-	}
-
-	/** True when orders use HPOS (WooCommerce's own tables); false → legacy CPT (wp_posts). */
-	private function orders_are_hpos(): bool {
-		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
-		if ( class_exists( $order_util ) && method_exists( $order_util, 'custom_orders_table_usage_is_enabled' ) ) {
-			return (bool) call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
-		}
-		return false; // no WC / older WC → CPT
+		return $this->index->customer_digest_select_sql( $where_sql );
 	}
 
 	/**
-	 * Canonical per-ORDER digest SELECT (ADR 0015, Leg-3 phase 7) — HPOS/CPT-aware. Under HPOS orders live
-	 * in WooCommerce's own {prefix}wc_orders table (status/total/customer are COLUMNS); under legacy CPT
-	 * they're wp_posts + postmeta. Per install exactly ONE path runs (an install is HPOS or CPT, never both),
-	 * so stored-vs-current always uses the same path — self-consistent. Same 64-bit formula.
+	 * Canonical per-ORDER digest SELECT (ADR 0015, Leg-3 phase 7) — HPOS/CPT-aware.
 	 *
-	 * `$id_condition` narrows to a single order / a bucket range using the neutral `{id}` placeholder,
-	 * substituted with the path's real id column (o.id HPOS, p.ID CPT) so callers stay path-agnostic.
-	 *
-	 * LIVE-VERIFY: the HPOS column set is shape-asserted here (fake wpdb); verify against a real HPOS store.
+	 * @deprecated Use {@see Digest_Index::order_digest_select_sql()}.
 	 */
 	public function order_digest_select_sql( string $id_condition = '' ): string {
-		global $wpdb;
-		$hpos = $this->orders_are_hpos();
-		$id_col = $hpos ? 'o.id' : 'p.ID';
-		$condition = '' === $id_condition ? '' : ' AND ' . str_replace( '{id}', $id_col, $id_condition );
-
-		if ( $hpos ) {
-			$orders_table = $wpdb->prefix . 'wc_orders';
-			return 'SELECT o.id AS id,'
-				. " 'order' AS object_type,"
-				. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
-				. ' o.id,'
-				. " COALESCE(o.status,''),"
-				. " COALESCE(o.type,''),"
-				. " COALESCE(o.total_amount,''),"
-				. ' COALESCE(o.customer_id,0),'
-				. " COALESCE(o.date_updated_gmt,''))),1,16),16,10) AS UNSIGNED) AS crc"
-				. " FROM {$orders_table} o"
-				. " WHERE o.type = 'shop_order' AND o.status NOT IN ('trash','auto-draft')"
-				. $condition;
-		}
-
-		$meta_keys_sql = "('" . implode( "','", self::ORDER_DIGESTED_META_KEYS ) . "')";
-		return 'SELECT p.ID AS id,'
-			. " 'order' AS object_type,"
-			. " CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|',"
-			. ' p.ID,'
-			. " COALESCE(p.post_status,''),"
-			. " COALESCE(p.post_modified_gmt,''),"
-			. " COALESCE(GROUP_CONCAT(CONCAT(pm.meta_key,'=',COALESCE(pm.meta_value,'')) ORDER BY pm.meta_key ASC, pm.meta_id ASC SEPARATOR '|'),''))),1,16),16,10) AS UNSIGNED) AS crc"
-			. " FROM {$wpdb->posts} p"
-			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
-			. " WHERE p.post_type = 'shop_order' AND p.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL
-			. $condition
-			. ' GROUP BY p.ID';
+		return $this->index->order_digest_select_sql( $id_condition );
 	}
 
 	/**
@@ -539,20 +429,22 @@ final class Integrity_Digest {
 		return $out;
 	}
 
-	/** Live-row predicate reused by the drill-down's deleted branch and the rebuild's orphan prune. */
+	/**
+	 * Live-row predicate reused by the drill-down's deleted branch and the rebuild's orphan prune.
+	 *
+	 * @deprecated Use {@see Digest_Index::live_row_exists_sql()}.
+	 */
 	public function live_row_exists_sql( string $id_expr ): string {
-		global $wpdb;
-
-		return "EXISTS (SELECT 1 FROM {$wpdb->posts} lp WHERE lp.ID = {$id_expr}"
-			. ' AND lp.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND lp.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . ')';
+		return $this->index->live_row_exists_sql( $id_expr );
 	}
 
-	/** Customer analogue of {@see live_row_exists_sql}: the id still names any WordPress user (ADR 0015). */
+	/**
+	 * Customer analogue of {@see live_row_exists_sql}: the id still names any WordPress user (ADR 0015).
+	 *
+	 * @deprecated Use {@see Digest_Index::customer_live_row_exists_sql()}.
+	 */
 	public function customer_live_row_exists_sql( string $id_expr ): string {
-		global $wpdb;
-
-		return "EXISTS (SELECT 1 FROM {$wpdb->users} lu WHERE lu.ID = {$id_expr})";
+		return $this->index->customer_live_row_exists_sql( $id_expr );
 	}
 
 	/**
@@ -607,16 +499,13 @@ final class Integrity_Digest {
 		}
 	}
 
-	/** Order analogue of {@see live_row_exists_sql} — HPOS/CPT-aware (ADR 0015, Leg-3 phase 7). */
+	/**
+	 * Order analogue of {@see live_row_exists_sql} — HPOS/CPT-aware (ADR 0015, Leg-3 phase 7).
+	 *
+	 * @deprecated Use {@see Digest_Index::order_live_row_exists_sql()}.
+	 */
 	public function order_live_row_exists_sql( string $id_expr ): string {
-		global $wpdb;
-		if ( $this->orders_are_hpos() ) {
-			$orders_table = $wpdb->prefix . 'wc_orders';
-			return "EXISTS (SELECT 1 FROM {$orders_table} lo WHERE lo.id = {$id_expr}"
-				. " AND lo.type = 'shop_order' AND lo.status NOT IN ('trash','auto-draft'))";
-		}
-		return "EXISTS (SELECT 1 FROM {$wpdb->posts} lp WHERE lp.ID = {$id_expr}"
-			. " AND lp.post_type = 'shop_order' AND lp.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL . ')';
+		return $this->index->order_live_row_exists_sql( $id_expr );
 	}
 
 	/**
@@ -659,12 +548,12 @@ final class Integrity_Digest {
 	public function upsert_order_digest( int $order_id ): void {
 		global $wpdb;
 		$started = microtime( true );
-		$this->raise_group_concat_max_len();
+		$this->index->raise_group_concat_max_len();
 		$result = $wpdb->query(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-				. ' FROM (' . $this->order_digest_select_sql( '{id} = %d' ) . ') t'
+				. ' FROM (' . $this->index->order_digest_select_sql( '{id} = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$order_id
 			)
@@ -741,12 +630,12 @@ final class Integrity_Digest {
 		// Time from BEFORE the session setup so timing.digest_ms covers ALL digest hook work
 		// (the raise runs inside the save hook — codex P3).
 		$started = microtime( true );
-		$this->raise_group_concat_max_len();
+		$this->index->raise_group_concat_max_len();
 		$result = $wpdb->query(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-				. ' FROM (' . $this->row_digest_select_sql( 'p.ID = %d' ) . ') t'
+				. ' FROM (' . $this->index->row_digest_select_sql( 'p.ID = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$post_id
 			)
@@ -765,12 +654,12 @@ final class Integrity_Digest {
 	public function upsert_customer_digest( int $user_id ): void {
 		global $wpdb;
 		$started = microtime( true );
-		$this->raise_group_concat_max_len();
+		$this->index->raise_group_concat_max_len();
 		$result = $wpdb->query(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-				. ' FROM (' . $this->customer_digest_select_sql( 'u.ID = %d' ) . ') t'
+				. ' FROM (' . $this->index->customer_digest_select_sql( 'u.ID = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$user_id
 			)
@@ -789,13 +678,13 @@ final class Integrity_Digest {
 	 */
 	public function rebuild(): array {
 		global $wpdb;
-		$this->raise_group_concat_max_len();
+		$this->index->raise_group_concat_max_len();
 		$started = microtime( true );
 
 		$orphans_deleted = $wpdb->query(
 			'DELETE FROM ' . $this->table_name()
 			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL
-			. ' AND NOT ' . $this->live_row_exists_sql( 'object_id' )
+			. ' AND NOT ' . $this->index->live_row_exists_sql( 'object_id' )
 		);
 		if ( false === $orphans_deleted ) {
 			throw new RuntimeException( 'prune orphan stored digests failed: ' . $wpdb->last_error );
@@ -812,7 +701,7 @@ final class Integrity_Digest {
 		$writes = $wpdb->query(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-			. ' FROM (' . $this->row_digest_select_sql() . ') t'
+			. ' FROM (' . $this->index->row_digest_select_sql() . ') t'
 			. ' ON DUPLICATE KEY UPDATE'
 			. ' updated_gmt = IF(digest <=> VALUES(digest), updated_gmt, VALUES(updated_gmt)),'
 			. ' digest = VALUES(digest)'
@@ -828,7 +717,7 @@ final class Integrity_Digest {
 		$customer_orphans = $wpdb->query(
 			'DELETE FROM ' . $this->table_name()
 			. " WHERE object_type = 'customer'"
-			. ' AND NOT ' . $this->customer_live_row_exists_sql( 'object_id' )
+			. ' AND NOT ' . $this->index->customer_live_row_exists_sql( 'object_id' )
 		);
 		if ( false === $customer_orphans ) {
 			throw new RuntimeException( 'prune orphan customer digests failed: ' . $wpdb->last_error );
@@ -836,7 +725,7 @@ final class Integrity_Digest {
 		$customer_writes = $wpdb->query(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-			. ' FROM (' . $this->customer_digest_select_sql() . ') t'
+			. ' FROM (' . $this->index->customer_digest_select_sql() . ') t'
 			. ' ON DUPLICATE KEY UPDATE'
 			. ' updated_gmt = IF(digest <=> VALUES(digest), updated_gmt, VALUES(updated_gmt)),'
 			. ' digest = VALUES(digest)'
@@ -851,7 +740,7 @@ final class Integrity_Digest {
 		$order_orphans = $wpdb->query(
 			'DELETE FROM ' . $this->table_name()
 			. " WHERE object_type = 'order'"
-			. ' AND NOT ' . $this->order_live_row_exists_sql( 'object_id' )
+			. ' AND NOT ' . $this->index->order_live_row_exists_sql( 'object_id' )
 		);
 		if ( false === $order_orphans ) {
 			throw new RuntimeException( 'prune orphan order digests failed: ' . $wpdb->last_error );
@@ -859,7 +748,7 @@ final class Integrity_Digest {
 		$order_writes = $wpdb->query(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-			. ' FROM (' . $this->order_digest_select_sql() . ') t'
+			. ' FROM (' . $this->index->order_digest_select_sql() . ') t'
 			. ' ON DUPLICATE KEY UPDATE'
 			. ' updated_gmt = IF(digest <=> VALUES(digest), updated_gmt, VALUES(updated_gmt)),'
 			. ' digest = VALUES(digest)'
