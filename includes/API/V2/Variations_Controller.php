@@ -93,10 +93,7 @@ class Variations_Controller extends WP_REST_Controller {
 			// Leg-3 (ADR 0014 WP-M5): drop POS-hidden (`online_only`) variations from the served set. A hidden
 			// id simply isn't hydrated → the client's targeted pull returns nothing for it → Leg-3 prunes it.
 			// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
-			$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
-			if ( array() !== $hidden ) {
-				$ids = array_values( array_diff( $ids, $hidden ) );
-			}
+			$ids = ( new Pos_Visibility() )->filter_visible_children( $ids );
 		}
 
 		// Hydrate through the same filtered products-controller seam as
@@ -236,7 +233,9 @@ class Variations_Controller extends WP_REST_Controller {
 
 		$where_sql = " FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID"
 			. ' WHERE p.post_type = %s AND p.post_status = %s AND (' . $match_sql . ')';
-		$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
+		// This fragment is prepared once at the end with the rest of $args, so the ids ride the same
+		// placeholder list rather than going through Pos_Visibility::apply_to_sql_where().
+		$hidden = ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::VARIATIONS );
 		if ( array() !== $hidden ) {
 			$where_sql .= ' AND p.ID NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
 			$args       = array_merge( $args, $hidden );
