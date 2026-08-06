@@ -180,4 +180,68 @@ class Print_Format_Resolver_Test extends WP_UnitTestCase {
 			$actual
 		);
 	}
+
+	/**
+	 * It returns each provider's declared content type when no template is in hand.
+	 */
+	public function test_content_type_for_printer_matches_provider_declaration(): void {
+		// Arrange.
+		$resolver = new Print_Format_Resolver();
+		$expected = array(
+			'star-cloudprnt' => 'application/vnd.star.starprnt',
+			'epson-sdp'      => 'application/xml',
+			'printnode'      => 'application/pdf',
+			'star-online'    => 'text/vnd.star.markup',
+		);
+
+		foreach ( $expected as $provider => $content_type ) {
+			// Act / Assert.
+			$this->assertEquals(
+				$content_type,
+				$resolver->content_type_for_printer( array( 'provider' => $provider ) ),
+				$provider
+			);
+		}
+	}
+
+	/**
+	 * A printer with a missing or unusable provider is normalized to the default
+	 * provider before format selection — legacy rows saved before the provider
+	 * field existed must keep printing as Star CloudPRNT, not fall back to
+	 * octet-stream (the 510 Incompatible Media Type failure mode).
+	 */
+	public function test_content_type_for_printer_unknown_provider_normalizes_to_default(): void {
+		// Arrange.
+		$resolver = new Print_Format_Resolver();
+
+		// Act / Assert.
+		$this->assertEquals( 'application/vnd.star.starprnt', $resolver->content_type_for_printer( array() ) );
+		$this->assertEquals(
+			'application/vnd.star.starprnt',
+			$resolver->content_type_for_printer( array( 'provider' => 'brother-ql' ) )
+		);
+	}
+
+	/**
+	 * It deliberately ignores the PrintNode raw format without a template.
+	 *
+	 * The template-aware path answers octet-stream for the same printer; the
+	 * template-agnostic path keeps the provider default. Locking both in keeps
+	 * the divergence visible if either side is changed (see issue #1351).
+	 */
+	public function test_content_type_for_printer_printnode_raw_keeps_pdf_default(): void {
+		// Arrange.
+		$resolver = new Print_Format_Resolver();
+		$printer  = array(
+			'provider' => 'printnode',
+			'printnode_format' => 'raw',
+		);
+
+		// Act / Assert.
+		$this->assertEquals( 'application/pdf', $resolver->content_type_for_printer( $printer ) );
+		$this->assertEquals(
+			'application/octet-stream',
+			$resolver->resolve( $printer, array( 'engine' => 'thermal' ) )['content_type']
+		);
+	}
 }
