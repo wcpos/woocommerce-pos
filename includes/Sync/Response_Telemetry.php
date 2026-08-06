@@ -212,7 +212,7 @@ final class Response_Telemetry {
 	 * @param string $route Request route.
 	 */
 	private static function is_metrics_route( string $route ): bool {
-		$base = '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX;
+		$base = '/' . Api::ROUTE_NAMESPACE . '/';
 
 		// Only the pull carries a body metrics object. Push responses (success,
 		// delete and error) are golden-shaped write-contract surfaces and stay
@@ -226,7 +226,7 @@ final class Response_Telemetry {
 	 * @param string $route Request route.
 	 */
 	private static function is_changes_route( string $route ): bool {
-		$base = '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX;
+		$base = '/' . Api::ROUTE_NAMESPACE . '/';
 
 		return 0 === strpos( $route, $base . 'changes/' );
 	}
@@ -237,7 +237,7 @@ final class Response_Telemetry {
 	 * @param string $route Request route.
 	 */
 	private static function is_sync_route( string $route ): bool {
-		$base  = '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX;
+		$base  = '/' . Api::ROUTE_NAMESPACE . '/';
 		$route = untrailingslashit( $route );
 		if ( 0 !== strpos( $route, $base ) ) {
 			return false;

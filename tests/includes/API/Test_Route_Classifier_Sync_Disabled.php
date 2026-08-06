@@ -40,7 +40,7 @@ class Test_Route_Classifier_Sync_Disabled extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $operator_id );
 
 		$response = $this->server->dispatch(
-			$this->wp_rest_post_request( '/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX . 'uuid/backfill' )
+			$this->wp_rest_post_request( '/' . Sync_Api::ROUTE_NAMESPACE . '/uuid/backfill' )
 		);
 
 		$this->assertSame( 404, $response->get_status() );

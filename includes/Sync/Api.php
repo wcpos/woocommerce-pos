@@ -23,7 +23,6 @@ use WCPOS\WooCommercePOS\API\V2\Write_Controller;
  */
 final class Api {
 	public const ROUTE_NAMESPACE = 'wcpos/v2';
-	public const ROUTE_PREFIX    = '';
 	public const ADMIN_OP_PATHS  = array( 'uuid/backfill', 'orders/index/backfill', 'integrity/rebuild' );
 	public const OPTION_ENABLED  = 'woocommerce_pos_sync_api_enabled';
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
@@ -48,12 +47,12 @@ final class Api {
 		$admin_routes = array();
 
 		foreach ( self::ADMIN_OP_PATHS as $path ) {
-			$admin_routes[] = '/' . self::ROUTE_NAMESPACE . '/' . self::ROUTE_PREFIX . $path;
+			$admin_routes[] = '/' . self::ROUTE_NAMESPACE . '/' . $path;
 		}
 
 		return array(
 			'admin_op'       => $admin_routes,
-			'rewrite_exempt' => array( '/' . self::ROUTE_NAMESPACE . '/' . self::ROUTE_PREFIX ),
+			'rewrite_exempt' => array( '/' . self::ROUTE_NAMESPACE . '/' ),
 		);
 	}
 

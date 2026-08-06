@@ -38,7 +38,7 @@ use const WCPOS\WooCommercePOS\VERSION;
 /**
  * The generic server write surface (P1-0) — ONE controller for EVERY collection's
  * writes (guardrail G1), the server half of the client push path. Registered at
- * `POST /{API_NAMESPACE}{ROUTE_PREFIX}/push/{collection}`; it dispatches on the envelope's
+ * `POST /{API_NAMESPACE}/push/{collection}`; it dispatches on the envelope's
  * `operation` (not the HTTP verb — the client always POSTs the envelope) and
  * applies each create/update/delete through the collection's Woo write seam:
  * every collection forwards to its `wc/v3` controller, including the nested,
@@ -109,7 +109,7 @@ class Write_Controller extends WP_REST_Controller {
 	public function register_routes(): void {
 		register_rest_route(
 			Api::ROUTE_NAMESPACE,
-			'/' . Api::ROUTE_PREFIX . 'push/(?P<collection>[a-z0-9_]+)',
+			'/push/(?P<collection>[a-z0-9_]+)',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'push' ),

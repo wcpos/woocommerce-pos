@@ -165,7 +165,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	private function request( string $collection, array $envelope, array $headers = array() ): WP_REST_Request {
-		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/' . $collection );
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/' . $collection );
 		$request->set_header( 'Content-Type', 'application/json' );
 		foreach ( $headers as $name => $value ) {
 			$request->set_header( $name, $value );
@@ -393,7 +393,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 	public function test_push_requires_application_json(): void {
 		$fixture = $this->fixture( 'product-create' );
-		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/products' );
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/products' );
 		$request->set_header( 'Content-Type', 'application/x-www-form-urlencoded' );
 		$request->set_body_params( $fixture['envelope'] );
 

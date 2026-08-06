@@ -47,7 +47,7 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 		$routes = rest_get_server()->get_routes( Sync_Api::ROUTE_NAMESPACE );
 
 		foreach ( Sync_Api::ADMIN_OP_PATHS as $path ) {
-			$route = '/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX . $path;
+			$route = '/' . Sync_Api::ROUTE_NAMESPACE . '/' . $path;
 			$this->assertArrayHasKey( $route, $routes, $route );
 		}
 	}
@@ -67,7 +67,7 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_v2_admin_gated_routes_appear_in_admin_op_paths(): void {
 		// Arrange.
-		$base   = '/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX;
+		$base   = '/' . Sync_Api::ROUTE_NAMESPACE . '/';
 		$routes = rest_get_server()->get_routes( Sync_Api::ROUTE_NAMESPACE );
 
 		// Act.
