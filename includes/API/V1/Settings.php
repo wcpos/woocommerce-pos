@@ -146,16 +146,6 @@ class Settings extends WP_REST_Controller {
 		// stay hand-registered.
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/checkout/order-statuses',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_order_statuses' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
-
-		register_rest_route(
-			$this->namespace,
 			'/' . $this->rest_base . '/tax_ids/detection',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
