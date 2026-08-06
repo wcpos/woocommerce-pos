@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WP_REST_Request;
 
@@ -24,6 +25,7 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
 		parent::tearDown();
 	}
 
@@ -336,5 +338,62 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertLessThan( 300, $response->get_status() );
+	}
+
+	/**
+	 * A same-user WCPOS token does not override cookie authentication.
+	 */
+	public function test_audit_guard_cookie_order_create_with_same_user_bearer_token_succeeds(): void {
+		// Arrange.
+		$user                          = get_user_by( 'id', $this->user );
+		$token                         = Auth::instance()->generate_access_token( $user );
+		$_COOKIE[ LOGGED_IN_COOKIE ]   = wp_generate_auth_cookie( $this->user, time() + HOUR_IN_SECONDS, 'logged_in' );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- force cookie authentication.
+		$request = new WP_REST_Request( 'POST', '/wc/v3/orders' );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => 'cookie-write',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertLessThan( 300, $response->get_status() );
+	}
+
+	/**
+	 * Protected order audit key names remain valid metadata on non-order routes.
+	 */
+	public function test_audit_guard_jwt_product_update_with_audit_key_succeeds(): void {
+		// Arrange.
+		$product = ProductHelper::create_simple_product();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/products/' . $product->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_store',
+						'value' => 'product-meta',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'product-meta', wc_get_product( $product->get_id() )->get_meta( '_pos_store' ) );
 	}
 }

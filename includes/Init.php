@@ -88,23 +88,23 @@ class Init {
 		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
 
 		/*
-		 * Add JWT authentication filter.
+		 * Add the global JWT authentication filter and its core-route audit guard.
 		 *
 		 * Hook order: plugins_loaded -> init (determine_current_user) -> rest_api_init
 		 *
-		 * This filter runs at priority 20 (after WordPress core's cookie auth at priority 10).
+		 * This filter runs at priority 20, after WordPress core's cookie auth handlers.
 		 * It must be registered here (during plugins_loaded) because determine_current_user
 		 * fires during 'init', which is BEFORE rest_api_init where our API class loads.
-		 */
-		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
-
-		/*
-		 * Because the filter above authenticates WCPOS Bearer tokens on EVERY
+		 * Because it authenticates WCPOS Bearer tokens on EVERY
 		 * REST request (marked or not), the audit-meta guard for core routes
 		 * must be registered just as unconditionally — never from the
 		 * X-WCPOS-gated API class, whose marker an attacker simply omits.
+		 * Registering it first lets its priority-20 provenance filter run after
+		 * core's cookie handlers but before WCPOS's JWT filter.
 		 */
 		( new Services\Core_Order_Audit_Guard() )->register_hooks();
+
+		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
 	}
 
 	/**

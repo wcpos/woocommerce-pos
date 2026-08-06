@@ -32,10 +32,31 @@ use WCPOS\WooCommercePOS\API;
  */
 final class Core_Order_Audit_Guard {
 	/**
+	 * User authenticated before WCPOS's priority-20 JWT filter.
+	 *
+	 * @var int
+	 */
+	private $pre_wcpos_user_id = 0;
+
+	/**
 	 * Register the guard on the REST dispatch pipeline.
 	 */
 	public function register_hooks(): void {
+		add_filter( 'determine_current_user', array( $this, 'record_prior_authentication' ), 20 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+	}
+
+	/**
+	 * Record authentication completed before WCPOS's priority-20 JWT filter.
+	 *
+	 * @param false|int|WP_Error $user_id User ID if already authenticated, false or error otherwise.
+	 *
+	 * @return false|int|WP_Error
+	 */
+	public function record_prior_authentication( $user_id ) {
+		$this->pre_wcpos_user_id = \is_numeric( $user_id ) ? absint( $user_id ) : 0;
+
+		return $user_id;
 	}
 
 	/**
@@ -48,7 +69,8 @@ final class Core_Order_Audit_Guard {
 	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
-		$error = $this->guard( $request );
+		$error                   = $this->guard( $request );
+		$this->pre_wcpos_user_id = 0;
 
 		return is_wp_error( $error ) ? $error : $result;
 	}
@@ -71,6 +93,9 @@ final class Core_Order_Audit_Guard {
 		$route = $request->get_route();
 		if ( $this->is_wcpos_route( $route ) ) {
 			// The wcpos controllers enforce server-authoritative audit meta themselves.
+			return null;
+		}
+		if ( ! preg_match( '#/orders(?:/\d+|/batch)?/?$#i', $route ) ) {
 			return null;
 		}
 
@@ -232,18 +257,20 @@ final class Core_Order_Audit_Guard {
 	/**
 	 * Whether the current request was authenticated by a WCPOS Bearer token.
 	 *
-	 * There is no single flag to consult: Init::determine_current_user_early()
-	 * authenticates the token on unmarked requests, while the API class does so
-	 * on marked ones, and neither records the outcome anywhere this always-on
-	 * guard can read. So re-validate the Bearer token and require it to resolve
-	 * to the current user — a request authenticated as a different user (e.g.
-	 * via cookie) is not treated as WCPOS-authenticated.
+	 * Authentication filters before WCPOS's priority-20 filter retain provenance
+	 * for cookie and other credentials. If determine_current_user was skipped
+	 * because the user was already loaded, that also represents prior auth.
+	 * Otherwise, re-validate the Bearer token and require it to resolve to the
+	 * current user.
 	 *
 	 * @return bool
 	 */
 	private function is_wcpos_jwt_authenticated(): bool {
 		$user_id = get_current_user_id();
 		if ( $user_id <= 0 ) {
+			return false;
+		}
+		if ( $this->pre_wcpos_user_id > 0 ) {
 			return false;
 		}
 
