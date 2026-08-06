@@ -55,6 +55,25 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Configure a product as hidden from the POS.
+	 *
+	 * @param int $product_id Product ID.
+	 */
+	private function hide_product( int $product_id ): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $product_id ) ),
+					),
+				),
+			)
+		);
+	}
+
+	/**
 	 * Read products through the v2 catalog proxy.
 	 *
 	 * @param array $params Query parameters.
@@ -121,5 +140,19 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$ids = array_map( 'intval', wp_list_pluck( $this->read_products(), 'id' ) );
 
 		$this->assertContains( $product->get_id(), $ids );
+	}
+
+	/**
+	 * Plain product browsing excludes online-only products through post__not_in.
+	 */
+	public function test_plain_browse_excludes_online_only_products(): void {
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->hide_product( $hidden->get_id() );
+
+		$ids = array_map( 'intval', wp_list_pluck( $this->read_products(), 'id' ) );
+
+		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertNotContains( $hidden->get_id(), $ids );
 	}
 }
