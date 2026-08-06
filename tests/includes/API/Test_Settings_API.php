@@ -769,6 +769,34 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The legacy checkout status is removed only after gateway statuses persist it.
+	 */
+	public function test_payment_gateways_save_clears_legacy_checkout_order_status(): void {
+		update_option(
+			'woocommerce_pos_settings_checkout',
+			array(
+				'order_status'         => 'wc-processing',
+				'receipt_default_mode' => 'fiscal',
+			)
+		);
+
+		$checkout = $this->post_settings( '/wcpos/v1/settings/checkout', array( 'receipt_default_mode' => 'live' ) );
+		$this->assertSame( 200, $checkout->get_status() );
+		$this->assertArrayHasKey( 'order_status', get_option( 'woocommerce_pos_settings_checkout' ) );
+
+		$gateways = $this->post_settings( '/wcpos/v1/settings/payment-gateways', array( 'default_gateway' => 'pos_cash' ) );
+		$this->assertSame( 200, $gateways->get_status() );
+		$this->assertSame(
+			'wc-processing',
+			get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways']['pos_cash']['order_status']
+		);
+
+		$checkout = $this->post_settings( '/wcpos/v1/settings/checkout', array( 'receipt_default_mode' => 'fiscal' ) );
+		$this->assertSame( 200, $checkout->get_status() );
+		$this->assertArrayNotHasKey( 'order_status', get_option( 'woocommerce_pos_settings_checkout' ) );
+	}
+
+	/**
 	 * Endpoint args are projected from the section that owns them, so an
 	 * invalid payload is rejected by the route before the section sees it.
 	 */

@@ -47,7 +47,6 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 
 		$this->assertSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ) );
 		$this->assertNotSame( Order_Serializer::canonical_revision( $with ), Order_Serializer::canonical_revision( array_merge( $with, array( 'total' => '10.99' ) ) ) );
-		$this->assertCount( 2, $with['meta_data'] );
 	}
 
 	/**
@@ -85,6 +84,7 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		);
 		$with    = Order_Serializer::add_pos_links( $without, $order );
 
+		$this->assertArrayHasKey( 'links', $with );
 		$this->assertSame( Order_Serializer::legacy_revision( $without ), Order_Serializer::legacy_revision( $with ) );
 	}
 

@@ -240,9 +240,7 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$stores   = $response->get_data();
 
-		if ( empty( $stores ) ) {
-			$this->markTestSkipped( 'No stores available for testing' );
-		}
+		$this->assertNotEmpty( $stores, 'Free ships a default store; an empty list is the regression.' );
 
 		$store_id = $stores[0]['id'];
 

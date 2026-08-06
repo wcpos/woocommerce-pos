@@ -419,7 +419,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 					'payment_method' => '_payment_method_title',
 					'total'          => '_order_total',
 				)[ $orderby ];
-				$args['orderby'] = 'customer_id' === $orderby ? 'meta_value_num' : 'meta_value';
+				$args['orderby'] = \in_array( $orderby, array( 'customer_id', 'total' ), true ) ? 'meta_value_num' : 'meta_value';
 				$args['order']   = $order;
 			}
 

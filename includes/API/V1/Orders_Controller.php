@@ -1369,7 +1369,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					break;
 				case 'total':
 					$args['meta_key'] = '_order_total';
-					$args['orderby']  = 'meta_value';
+					$args['orderby']  = 'meta_value_num';
 
 					break;
 			}

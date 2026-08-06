@@ -341,10 +341,16 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * (WP-CLI does this), referencing the bare constant is a fatal error.
 	 * Mirror the fallback WordPress core uses when defining the constant.
 	 *
+	 * @param bool|null $constant_defined Override for the defined() check — tests
+	 *                                    force the fallback branch, which is
+	 *                                    otherwise unreachable once anything in
+	 *                                    the process has called WP_Filesystem().
+	 *
 	 * @return int
 	 */
-	protected function get_fs_chmod_file(): int {
-		if ( \defined( 'FS_CHMOD_FILE' ) ) {
+	protected function get_fs_chmod_file( ?bool $constant_defined = null ): int {
+		$constant_defined = null === $constant_defined ? \defined( 'FS_CHMOD_FILE' ) : $constant_defined;
+		if ( $constant_defined ) {
 			return FS_CHMOD_FILE;
 		}
 
@@ -356,12 +362,13 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	/**
 	 * Write translation content to a file using WP_Filesystem.
 	 *
-	 * @param string $file The target file path.
-	 * @param string $body The file content to write.
+	 * @param string    $file             The target file path.
+	 * @param string    $body             The file content to write.
+	 * @param bool|null $constant_defined Override for the FS_CHMOD_FILE check.
 	 *
 	 * @return bool Whether the write was successful.
 	 */
-	protected function write_translation_file( string $file, string $body ): bool {
+	protected function write_translation_file( string $file, string $body, ?bool $constant_defined = null ): bool {
 		$dir = dirname( $file );
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
@@ -377,7 +384,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return false;
 		}
 
-		if ( ! $wp_filesystem->put_contents( $file, $body, $this->get_fs_chmod_file() ) ) {
+		if ( ! $wp_filesystem->put_contents( $file, $body, $this->get_fs_chmod_file( $constant_defined ) ) ) {
 			return false;
 		}
 

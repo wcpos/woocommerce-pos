@@ -10,11 +10,9 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
-use WP_REST_Request;
 use WP_REST_Response;
 
 /**
@@ -117,17 +115,22 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Read the canonical revision used by the product write precondition.
+	 * Read the client-visible revision from the v2 product lane.
 	 *
 	 * @param int $product_id Product ID.
 	 */
 	private function product_revision( int $product_id ): string {
-		$request  = new WP_REST_Request( 'GET', '/wc/v3/products/' . $product_id );
-		$response = rest_do_request( $request );
+		// The proxy revision stamper is opt-in for tests (Test_Sync_Read_Controllers
+		// pattern) — register it for this read so we get the CLIENT-visible revision.
+		Revision::register_proxy_stamps();
+		try {
+			$product = $this->read_product( $product_id );
+		} finally {
+			Revision::unregister_proxy_stamps();
+		}
+		$this->assertArrayHasKey( '_rxdb_revision', $product );
 
-		$this->assertSame( 200, $response->get_status() );
-
-		return Revision::compute( Meta_Normalizer::normalize( $response->get_data() ) );
+		return $product['_rxdb_revision'];
 	}
 
 	/**

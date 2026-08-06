@@ -1466,10 +1466,6 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 	 * @covers ::write_translation_file
 	 */
 	public function test_write_translation_file_works_with_preset_filesystem_and_no_chmod_constant(): void {
-		if ( \defined( 'FS_CHMOD_FILE' ) ) {
-			$this->markTestSkipped( 'FS_CHMOD_FILE is already defined in this process; the undefined-constant branch cannot be exercised.' );
-		}
-
 		// Arrange: pre-populate $wp_filesystem the way WP-CLI does, without
 		// WP_Filesystem() (which is what defines FS_CHMOD_FILE).
 		global $wp_filesystem;
@@ -1479,16 +1475,25 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		$wp_filesystem       = new \WP_Filesystem_Direct( false ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP-CLI runtime state.
 
 		try {
-			$i18n   = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+			$i18n = new class( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir ) extends i18n {
+				public bool $fallback_was_forced = false;
+
+				protected function get_fs_chmod_file( ?bool $constant_defined = null ): int {
+					$this->fallback_was_forced = false === $constant_defined;
+
+					return parent::get_fs_chmod_file( $constant_defined );
+				}
+			};
 			$file   = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
 			$method = new \ReflectionMethod( $i18n, 'write_translation_file' );
 			$method->setAccessible( true );
 
-			// Act.
-			$result = $method->invoke( $i18n, $file, "<?php\nreturn array( 'messages' => array() );" );
+			// Act: force the constant-undefined branch through the write path.
+			$result = $method->invoke( $i18n, $file, "<?php\nreturn array( 'messages' => array() );", false );
 
 			// Assert.
 			$this->assertTrue( $result );
+			$this->assertTrue( $i18n->fallback_was_forced );
 			$this->assertFileExists( $file );
 		} finally {
 			$wp_filesystem = $previous_filesystem; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring global state.
@@ -1503,18 +1508,17 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 	 * @covers ::get_fs_chmod_file
 	 */
 	public function test_get_fs_chmod_file_without_constant_derives_mode_from_a_file(): void {
-		if ( \defined( 'FS_CHMOD_FILE' ) ) {
-			$this->markTestSkipped( 'FS_CHMOD_FILE is already defined in this process; the fallback branch cannot be exercised.' );
-		}
-
-		// Arrange: this is the exact expression WP_Filesystem() uses to define FS_CHMOD_FILE.
+		// Arrange: this is the exact expression WP_Filesystem() uses to define
+		// FS_CHMOD_FILE. The suite bootstrap always defines the constant, so the
+		// undefined branch is forced via the parameter — the branch itself is
+		// what guards the WP-CLI bare-constant fatal (postmortem).
 		$expected = ( fileperms( ABSPATH . 'index.php' ) & 0777 ) | 0644;
 		$i18n     = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 		$method   = new \ReflectionMethod( $i18n, 'get_fs_chmod_file' );
 		$method->setAccessible( true );
 
-		// Act.
-		$mode = $method->invoke( $i18n );
+		// Act: force the constant-undefined branch.
+		$mode = $method->invoke( $i18n, false );
 
 		// Assert.
 		$this->assertEquals( $expected, $mode );

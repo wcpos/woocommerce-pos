@@ -156,15 +156,12 @@ class Gateways {
 		/*
 		 * Order the available gateways according to the settings.
 		 *
-		 * KNOWN ISSUE (pre-existing, deliberately preserved): the `order` key is
-		 * read unguarded, so a gateway configured without one emits an undefined
-		 * index warning and sorts as if its order were null. This is characterised
-		 * by Test_Gateways::test_order_gateways_missing_order_key_warns_and_sorts_null_first().
+		 * Gateways without an explicit order sort after configured gateways.
 		 */
 		uksort(
 			$_available_gateways,
 			function ( $a, $b ) use ( $settings ) {
-				return $settings['gateways'][ $a ]['order'] <=> $settings['gateways'][ $b ]['order'];
+				return ( $settings['gateways'][ $a ]['order'] ?? PHP_INT_MAX ) <=> ( $settings['gateways'][ $b ]['order'] ?? PHP_INT_MAX );
 			}
 		);
 

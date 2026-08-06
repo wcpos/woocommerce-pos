@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
@@ -74,8 +73,8 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 		$record_id          = Pos_Uuid::ensure_uuid( $customer );
 		$cashier_id         = $this->create_cashier_without( array( 'edit_users' ) );
 		wp_set_current_user( $cashier_id );
-		// Computed as the pusher: the conflict check's inner read runs with the
-		// pusher's permissions, and the revision must match those bytes.
+		// Read as the pusher: the client must send back the revision served under
+		// the pusher's permissions.
 		$revision = $this->customer_revision( $customer->get_id() );
 
 		$response = $this->server->dispatch(
@@ -162,14 +161,25 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Compute the revision the write controller will compare before update/delete.
+	 * Read the client-visible revision from the v2 customer lane.
 	 */
 	private function customer_revision( int $customer_id ): string {
-		$request  = new WP_REST_Request( 'GET', '/wc/v3/customers/' . $customer_id );
-		$response = $this->server->dispatch( $request );
+		// The proxy revision stamper is opt-in for tests — register it for this
+		// read so we take the CLIENT-visible revision, not a recomputation.
+		Revision::register_proxy_stamps();
+		try {
+			$request  = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_param( 'include', array( $customer_id ) );
+			$response = $this->server->dispatch( $request );
+		} finally {
+			Revision::unregister_proxy_stamps();
+		}
+		$rows = $response->get_data();
 
 		$this->assertEquals( 200, $response->get_status() );
+		$this->assertCount( 1, $rows );
+		$this->assertArrayHasKey( '_rxdb_revision', $rows[0] );
 
-		return Revision::compute( Meta_Normalizer::normalize( $response->get_data() ) );
+		return $rows[0]['_rxdb_revision'];
 	}
 }

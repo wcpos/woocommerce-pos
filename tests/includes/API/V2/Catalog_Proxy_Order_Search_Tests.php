@@ -286,9 +286,9 @@ trait Catalog_Proxy_Order_Search_Tests {
 
 	/** Order total sorting retains V1 semantics in both directions. */
 	public function test_orderby_total_matches_v1(): void {
-		$low    = $this->create_orderby_order( array( 'total' => 100 ) );
-		$middle = $this->create_orderby_order( array( 'total' => 200 ) );
-		$high   = $this->create_orderby_order( array( 'total' => 300 ) );
+		$low    = $this->create_orderby_order( array( 'total' => 9.99 ) );
+		$middle = $this->create_orderby_order( array( 'total' => 100.00 ) );
+		$high   = $this->create_orderby_order( array( 'total' => 1000.00 ) );
 
 		$this->assert_orderby_sequences(
 			'total',
