@@ -175,6 +175,51 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * WordPress matches REST routes case-insensitively (the route regex carries
+	 * the `i` flag), so every classifier predicate must match the same way or a
+	 * mixed-case path dispatches to the real controller while skipping the gate.
+	 */
+	public function test_mixed_case_routes_match_every_classifier_predicate(): void {
+		$classifier = $this->api->get_route_classifier();
+
+		$this->assertTrue( $classifier->in_wcpos_namespace( '/WCPOS/V1/products' ) );
+		$this->assertTrue( $classifier->in_wcpos_namespace( '/Wcpos/v2/orders' ) );
+		$this->assertTrue( $classifier->is_public( '/WCPOS/v1/AUTH/test' ) );
+		$this->assertTrue( $classifier->is_printer_token( '/WCPOS/V1/print-jobs/CLOUDPRNT' ) );
+		$this->assertTrue( $classifier->is_printer_token( '/WCPOS/V1/print-jobs/cloudprnt/abc123/secret' ) );
+		$this->assertTrue( $classifier->is_admin_op( '/WCPOS/V2/uuid/BACKFILL' ) );
+		$this->assertTrue( $classifier->is_permission_error_passthrough( '/WCPOS/v1/RECEIPTS/123' ) );
+		$this->assertTrue( $classifier->is_rewrite_exempt( '/WCPOS/V2/anything' ) );
+		$this->assertFalse( $classifier->in_wcpos_namespace( '/wc/v3/products' ) );
+	}
+
+	/**
+	 * A mixed-case path to a registered route dispatches to the real controller
+	 * (WordPress route matching is case-insensitive), so the anonymous gate must
+	 * intercept it — not fall through to the controller's own permission error.
+	 */
+	public function test_mixed_case_registered_route_receives_anonymous_gate_401(): void {
+		wp_set_current_user( 0 );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/WCPOS/V1/products' ) );
+
+		$this->assertSame( 401, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $response->get_data()['code'] );
+	}
+
+	/**
+	 * The anonymous gate covers unknown v2 routes regardless of path casing.
+	 */
+	public function test_mixed_case_unknown_v2_route_receives_anonymous_gate_401(): void {
+		wp_set_current_user( 0 );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/WCPOS/V2/anything' ) );
+
+		$this->assertSame( 401, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $response->get_data()['code'] );
+	}
+
+	/**
 	 * The core gate covers unknown v2 routes.
 	 */
 	public function test_unknown_v2_route_receives_anonymous_gate_401(): void {
