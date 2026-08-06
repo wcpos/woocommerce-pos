@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Product;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -569,6 +570,8 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Persist the POS audit meta + created_via for an order (both the create and born-twice paths).
+	 *
 	 * The POS audit meta map to persist on an order create (gap §3.3 — Pro analytics joins on
 	 * these). The controller owns the POLICY (which values); the store owns the HPOS-safe write.
 	 *   - `_pos_user` = the authenticated user (the cashier) and `_woocommerce_pos_version` =
@@ -576,13 +579,9 @@ class Write_Controller extends WP_REST_Controller {
 	 *   - `_pos_store` + cash-tender meta (`_pos_cash_amount_tendered` / `_pos_cash_change` /
 	 *     `_pos_card_cashback`) = PRESERVED from the client payload — those originate at the till.
 	 * (created_via is passed to the store separately — it's an order property, not meta.)
+	 * The key lists and till-value validation live in {@see Pos_Order_Audit}, shared
+	 * with the wcpos/v1 orders controller so the two surfaces cannot drift.
 	 */
-	/** Till-sourced POS audit meta keys — preserved from the client payload as-sent. */
-	private const POS_TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
-	/** The subset that are monetary AMOUNTS (must be numeric); `_pos_store` is an identifier, not an amount. */
-	private const POS_CASH_META_KEYS = array( '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
-
-	/** Persist the POS audit meta + created_via for an order (both the create and born-twice paths). */
 	private function stamp_order_audit( int $id, $payload, bool $stamp_version = false ): void {
 		$this->store->persist_order_audit_meta( $id, $this->order_audit_meta( is_array( $payload ) ? $payload : array(), $stamp_version ), 'woocommerce-pos' );
 	}
@@ -603,37 +602,14 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	private function order_audit_meta( array $payload, bool $stamp_version ): array {
-		$client = array();
-		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
-			$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
-			// A malformed entry whose `key` is an array/object must not be used as an array offset
-			// (PHP fatal "Illegal offset type") — skip it, don't crash the write.
-			if ( is_scalar( $key ) ) {
-				$client[ (string) $key ] = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( $entry->value ?? '' );
-			}
-		}
 		$meta = array( '_pos_user' => (string) ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 ) );
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
 		}
-		foreach ( self::POS_TILL_META_KEYS as $key ) {
-			// Till values persist directly, bypassing wc/v3's own validation, so guard them: never
-			// store an empty/non-scalar value, and require the CASH AMOUNTS to be numeric (a malformed
-			// amount would break Pro analytics aggregations). `_pos_store` is an identifier — the
-			// store-scope model allows numeric ids, uuids, or slugs — so any non-empty scalar is kept.
-			if ( ! array_key_exists( $key, $client ) ) {
-				continue;
-			}
-			$value = $client[ $key ];
-			if ( ! is_scalar( $value ) || '' === (string) $value ) {
-				continue;
-			}
-			if ( in_array( $key, self::POS_CASH_META_KEYS, true ) && ! is_numeric( $value ) ) {
-				continue;
-			}
-			$meta[ $key ] = (string) $value;
-		}
-		return $meta;
+		$meta_data = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
+		// Till values persist directly, bypassing wc/v3's own validation — the service
+		// drops empty/non-scalar values and cash amounts that are not unsigned plain decimals.
+		return array_merge( $meta, Pos_Order_Audit::till_meta_from_payload( $meta_data ) );
 	}
 
 	/**
@@ -643,18 +619,12 @@ class Write_Controller extends WP_REST_Controller {
 	 * these before forwarding makes the server the sole, authoritative writer of the audit trail
 	 * (the till-sourced values are re-applied by persist_order_audit_meta, not the forward).
 	 */
-	private function without_pos_audit_meta( array $payload ): array {
-		$strip = array_merge( self::POS_TILL_META_KEYS, array( '_pos_user', '_woocommerce_pos_version' ) );
-		$meta  = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
-		return array_values(
-			array_filter(
-				$meta,
-				static function ( $entry ) use ( $strip ) {
-					$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
-					return ! in_array( $key, $strip, true );
-				}
-			)
-		);
+	private function without_pos_audit_meta( array $payload, int $order_id = 0 ): array {
+		$meta      = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
+		$protected = $order_id > 0 && function_exists( 'wc_get_order' )
+			? Pos_Order_Audit::audit_meta_ids( wc_get_order( $order_id ) )
+			: array();
+		return Pos_Order_Audit::strip_audit_meta( $meta, $protected );
 	}
 
 
@@ -787,7 +757,7 @@ class Write_Controller extends WP_REST_Controller {
 			unset( $update_payload['created_via'] );
 			unset( $update_payload['tax_ids'] );
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
-				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload );
+				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload, (int) $id );
 			}
 			$clear_billing_email = isset( $update_payload['billing'] )
 				&& is_array( $update_payload['billing'] )
