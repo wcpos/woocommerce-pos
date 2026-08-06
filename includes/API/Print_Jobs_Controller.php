@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
+use WCPOS\WooCommercePOS\Services\Print_Format_Resolver;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
@@ -532,7 +533,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				// defaults to star-cloudprnt exactly like the print path, so
 				// legacy rows without the field keep their stale warnings.
 				'polling'            => Provider::is_polling(
-					'' !== (string) ( $printer['provider'] ?? '' ) ? (string) $printer['provider'] : 'star-cloudprnt'
+					Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null )
 				),
 				'pending'            => $waiting,
 				'oldest_pending_gmt' => $oldest,
@@ -604,7 +605,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( '' !== $source['template_id'] ) {
 			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
 			if ( null !== $printer ) {
-				$content_type = Provider::content_type( (string) ( $printer['provider'] ?? '' ) );
+				$content_type = ( new Print_Format_Resolver() )->content_type_for_printer( $printer );
 			}
 		}
 		$new_id = $this->jobs->create(
@@ -1067,7 +1068,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		try {
-			$diag = ( new Cloud_Print_Diagnostic() )->build( (string) $printer['provider'], (string) $printer['name'] );
+			$diag = ( new Cloud_Print_Diagnostic() )->build( $provider, (string) $printer['name'] );
 		} catch ( \RuntimeException $e ) {
 			return new WP_Error(
 				'wcpos_print_job_no_diagnostic',
@@ -1106,13 +1107,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	private function test_print_star_online( string $printer_id, array $printer ) {
-		$date    = gmdate( 'Y-m-d H:i' );
-		$markup  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
-		$markup .= 'Cloud Print Test' . "\n" . '[align: left]';
-		$markup .= 'Printer: ' . $this->star_escape( (string) $printer['name'] ) . "\n";
-		$markup .= 'Date: ' . $date . "\n";
-		$markup .= 'If you can read this, printing works!' . "\n";
-		$markup .= '[feed][cut]';
+		$markup = ( new Cloud_Print_Diagnostic() )->star_markup( (string) $printer['name'] );
 
 		$id = $this->jobs->create(
 			array(
@@ -1136,17 +1131,6 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$response->set_status( 201 );
 
 		return $response;
-	}
-
-	/**
-	 * Escape brackets for Star Document Markup text.
-	 *
-	 * @param string $value Text.
-	 *
-	 * @return string
-	 */
-	private function star_escape( string $value ): string {
-		return str_replace( array( '[', ']' ), array( '[[', ']]' ), $value );
 	}
 
 	/**
@@ -1245,7 +1229,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( null === $printer ) {
 			return true;
 		}
-		$provider = $printer['provider'] ?? 'star-cloudprnt';
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 
 		if ( 'epos-xml' === Provider::wire_format( $provider, 'thermal' ) ) {
 			if ( '' !== $payload ) {

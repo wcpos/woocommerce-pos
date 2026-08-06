@@ -272,7 +272,7 @@ class Print_Job_Service {
 			}
 
 			$printer  = ( new Cloud_Print_Registry() )->get_printer( (string) $job['printer_id'] );
-			$provider = $printer['provider'] ?? 'star-cloudprnt';
+			$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 			$wire     = Provider::wire_format( $provider, (string) ( $template['engine'] ?? '' ) );
 			if ( null === $wire ) {
 				return '';
