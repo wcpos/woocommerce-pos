@@ -383,7 +383,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	 * Cashier write forwarding relaxes the catalog mutation checks, and re-maps
 	 * shop_order contexts through the caps the cashier actually holds (never wider).
 	 */
-	public function test_cashier_push_scoped_inner_permissions_allow_catalog_mutations(): void {
+	public function test_cashier_push_requires_real_catalog_capabilities(): void {
 		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
 		wp_set_current_user( $cashier_id );
 		$this->setRestResponse( array( 'id' => 4242 ), 201 );
@@ -396,9 +396,12 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 
+		// Product decision 2026-08-06: NO POS-tier widening for catalog or
+		// coupon writes — the cashier role is read-only on catalog, so every
+		// mutation context must stay denied at the inner wc/v3 check.
 		foreach ( array( 'product', 'product_variation', 'shop_coupon' ) as $post_type ) {
 			foreach ( array( 'create', 'edit', 'delete' ) as $context ) {
-				$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions'][ $post_type ][ $context ], $post_type . ':' . $context );
+				$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions'][ $post_type ][ $context ], $post_type . ':' . $context );
 			}
 		}
 		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] );

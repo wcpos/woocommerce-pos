@@ -1573,9 +1573,13 @@ class Write_Controller extends WP_REST_Controller {
 	 * @return bool
 	 */
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		if ( ! $permission && current_user_can( 'access_woocommerce_pos' ) && \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true ) && \in_array( $context, array( 'create', 'edit', 'delete' ), true ) ) {
-			$permission = true;
-		}
+		// Catalog and coupon WRITES require the user's real WooCommerce
+		// capabilities — no POS-tier widening. The cashier role is deliberately
+		// read-only on catalog (Activator), and a blanket grant here handed
+		// every POS user product deletion and coupon minting. Product decision
+		// 2026-08-06: strict wc/v3 parity for catalog mutations; only the
+		// HPOS placeholder remap below (orders) adjusts anything, and it never
+		// grants beyond the user's own role caps.
 
 		// Orders: with HPOS enabled (sync off), get_post() yields shop_order_placehold
 		// (map_meta_cap = false, no capability_type), so WooCommerce's REST check maps
