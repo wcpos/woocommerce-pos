@@ -765,6 +765,21 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'woocommerce_pos_rest_invalid_date_created_gmt', $result->get_error_code() );
 	}
 
+	public function test_order_create_rejects_non_utc_client_date_created_gmt(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'date_created_gmt' => '2026-05-07T12:30:45-05:00' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_date_created_gmt', $result->get_error_code() );
+	}
+
 	public function test_order_create_rejects_client_date_created_gmt_more_than_24_hours_future(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
@@ -793,6 +808,23 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 201, $created->get_status() );
 		$this->assertNotFalse( wc_get_order( (int) $created->get_data()['document']['id'] ) );
+	}
+
+	public function test_order_create_without_customer_keeps_guest_customer_id_zero(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$created = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload'    => array( 'status' => 'pending' ),
+			)
+		);
+
+		$this->assertSame( 201, $created->get_status() );
+		$order = wc_get_order( (int) $created->get_data()['document']['id'] );
+		$this->assertInstanceOf( \WC_Order::class, $order );
+		$this->assertSame( 0, $order->get_customer_id() );
 	}
 
 	public function test_order_create_persists_explicit_tax_ids_and_returns_them_in_ack(): void {
@@ -1452,38 +1484,37 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 	public function test_order_update_strips_audit_meta_from_the_forwarded_body(): void {
-		list($order_id, $bare) = $this->real_order_payload();
-		$store = new Fake_Mutation_Store();
-		$store->resolve = $order_id;
-		$revision = Order_Serializer::canonical_revision( $bare );
-		$this->setRestResponse( $bare, 200 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_woocommerce_pos_version', 'trusted-version' );
+		$order->save();
 
-		$this->push(
-			$store,
+		$result = $this->updateOrder(
+			$order,
 			array(
-				'operation' => 'update',
-				'collection' => 'orders',
-				'baseRevision' => $revision,
-				'payload' => array(
-					'status' => 'completed',
-					'created_via' => 'online',
-					'meta_data' => array(
-						array(
-							'key' => '_pos_user',
-							'value' => '999',
-						),
-						array(
-							'key' => '_pos_store',
-							'value' => '5',
-						),
-						array(
-							'key' => 'custom',
-							'value' => 'keep',
-						),
+				'status'      => 'completed',
+				'created_via' => 'online',
+				'meta_data'   => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => '999',
+					),
+					array(
+						'key'   => '_pos_store',
+						'value' => '5',
+					),
+					array(
+						'key'   => '_woocommerce_pos_version',
+						'value' => 'forged-version',
+					),
+					array(
+						'key'   => 'custom',
+						'value' => 'keep',
 					),
 				),
 			)
 		);
+		$this->assertSame( 200, $result->get_status() );
 
 		$put = null;
 		foreach ( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] as $call ) {
@@ -1496,8 +1527,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$keys = array_map( static fn( $entry ) => $entry['key'], $body['meta_data'] );
 		$this->assertNotContains( '_pos_user', $keys );
 		$this->assertNotContains( '_pos_store', $keys );
+		$this->assertNotContains( '_woocommerce_pos_version', $keys );
 		$this->assertContains( 'custom', $keys );
 		$this->assertArrayNotHasKey( 'created_via', $body );
+		$this->assertSame( 'trusted-version', wc_get_order( $order->get_id() )->get_meta( '_woocommerce_pos_version' ) );
 	}
 
 

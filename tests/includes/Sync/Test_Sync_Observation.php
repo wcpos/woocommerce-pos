@@ -12,9 +12,11 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\API\V2\Changes_Controller;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WP_REST_Request;
 
 /**
  * Sync observation tests adapted from the lab hook suites.
@@ -526,6 +528,38 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			);
 			$this->assertSame( 'update', $latest_change, $object_type . ' restore must supersede its delete tombstone.' );
 		}
+	}
+
+	/**
+	 * Editing a coupon amount emits an update through the sequence-log surface.
+	 */
+	public function test_coupon_amount_edit_appends_update_change_log_row(): void {
+		$coupon = CouponHelper::create_coupon( 'amount-edit-' . wp_generate_password( 8, false ) );
+		$before = $this->change_log->head_sequence();
+
+		$coupon->set_amount( '7.50' );
+		$coupon->save();
+
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/changes/sequence-log' );
+		$request->set_query_params(
+			array(
+				'collection' => 'all',
+				'since'      => $before,
+				'limit'      => 10,
+			)
+		);
+		$changes = ( new Changes_Controller( $this->change_log ) )->sequence_log( $request )->get_data()['changes'];
+		$matches = array_values(
+			array_filter(
+				$changes,
+				static fn( array $change ): bool => 'coupons' === ( $change['collection'] ?? '' )
+					&& $coupon->get_id() === ( $change['id'] ?? 0 )
+			)
+		);
+
+		$this->assertCount( 1, $matches );
+		$this->assertSame( 'update', $matches[0]['type'] );
+		$this->assertGreaterThan( $before, $matches[0]['sequence'] );
 	}
 
 	/**
