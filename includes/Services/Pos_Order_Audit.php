@@ -42,6 +42,16 @@ final class Pos_Order_Audit {
 	private const CASH_META_KEYS = array( '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
 
 	/**
+	 * The monetary till keys, for callers that stamp cash amounts
+	 * (Write_Controller::stamp_order_till_meta on the v2 update path).
+	 *
+	 * @return string[]
+	 */
+	public static function cash_meta_keys(): array {
+		return self::CASH_META_KEYS;
+	}
+
+	/**
 	 * Every audit key: the server-derived and the till-sourced set.
 	 *
 	 * @return string[]
