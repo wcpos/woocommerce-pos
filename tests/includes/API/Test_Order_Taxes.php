@@ -413,6 +413,14 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 201, $response->get_status() );
 		$this->assertSame( 0.0, (float) $data['line_items'][0]['total_tax'], 'The POS tax_status override should make the line non-taxable.' );
 
+		$order            = wc_get_order( $data['id'] );
+		$item             = current( $order->get_items() );
+		$input_product    = wc_get_product( $product->get_id() );
+		$filtered_product = apply_filters( 'woocommerce_order_item_product', $input_product, $item );
+		$this->assertNotSame( $input_product, $filtered_product, 'The POS tax override should use an isolated product instance.' );
+		$this->assertEquals( 'taxable', $input_product->get_tax_status(), 'The input product instance should remain unchanged.' );
+		$this->assertEquals( 'none', $filtered_product->get_tax_status(), 'The isolated product should receive the POS tax_status override.' );
+
 		$db_product = wc_get_product( $product->get_id() );
 		$this->assertEquals( 'taxable', $db_product->get_tax_status(), 'Product tax_status should not be permanently changed by line item override.' );
 		$this->assertEquals( '', $db_product->get_tax_class(), 'Product tax_class should remain unchanged.' );
