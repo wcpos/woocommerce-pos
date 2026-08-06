@@ -86,75 +86,19 @@ class Receipt_Data_Builder {
 		);
 		$presentation_hints = $store_resolver->build_presentation_hints( (string) $order->get_currency() );
 		$tax                = $store_resolver->build_tax_section();
-		$store_id              = (int) $store_resolver->get_store_value( 'get_id', 0 );
-		$store_name            = (string) $store_resolver->get_store_value( 'get_name', '' );
+
+		// $missing_order_store_id > 0 only ever happens alongside the bare \stdClass
+		// assigned above, so no getter resolves and every fallback below is taken.
+		// That is what keeps a deleted store's receipt showing the recorded store ID
+		// rather than silently borrowing the current store's name and address.
+		$store_fallbacks = array();
 		if ( $missing_order_store_id > 0 ) {
-			$store_id = $missing_order_store_id;
+			$store_fallbacks['id'] = $missing_order_store_id;
 			// translators: %d: Historical POS store ID that no longer exists.
-			$store_name = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_order_store_id );
+			$store_fallbacks['name'] = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_order_store_id );
 		}
-		$store_address         = (string) $store_resolver->get_store_value( 'get_store_address', '' );
-		$store_address_2       = (string) $store_resolver->get_store_value( 'get_store_address_2', '' );
-		$store_city            = (string) $store_resolver->get_store_value( 'get_store_city', '' );
-		$store_postcode        = (string) $store_resolver->get_store_value( 'get_store_postcode', '' );
-		$store_country         = (string) $store_resolver->get_store_value( 'get_store_country', '' );
-		$store_state           = (string) $store_resolver->get_store_value( 'get_store_state', '' );
-		$store_phone           = (string) $store_resolver->get_store_value( 'get_phone', '' );
-		$store_email           = (string) $store_resolver->get_store_value( 'get_email', '' );
 
-		$store_tax_ids = $store_resolver->get_store_value( 'get_tax_ids', array() );
-		if ( ! is_array( $store_tax_ids ) ) {
-			$store_tax_ids = array();
-		}
-		$store_tax_ids = Receipt_Store_Resolver::with_store_tax_id_labels( $store_tax_ids, $presentation_hints['locale'] ?? '' );
-
-		$store_address_parts = array(
-			'address_1' => $store_address,
-			'address_2' => $store_address_2,
-			'city'      => $store_city,
-			'state'     => $store_state,
-			'postcode'  => $store_postcode,
-			'country'   => $store_country,
-		);
-
-		$store = array(
-			'id'            => $store_id,
-			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
-			// Structured address parts mirror customer.billing_address — templates that
-			// want country-specific layouts compose from these. address_lines[] is the
-			// pre-formatted default for templates that just iterate, composed via
-			// WC_Countries::get_formatted_address() so per-country layouts are honoured.
-			'address'       => $store_address_parts,
-			'address_lines' => Receipt_Store_Resolver::compose_address_lines( $store_address_parts ),
-			'tax_ids'       => $store_tax_ids,
-			'phone'         => $store_phone,
-			'email'         => $store_email,
-		);
-
-		$opening_hours_raw       = $store_resolver->get_store_value( 'get_opening_hours', array() );
-		$personal_notes          = (string) $store_resolver->get_store_value( 'get_personal_notes', '' );
-		$policies_and_conditions = (string) $store_resolver->get_store_value( 'get_policies_and_conditions', '' );
-		$footer_imprint          = (string) $store_resolver->get_store_value( 'get_footer_imprint', '' );
-
-		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
-		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
-			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
-			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
-			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
-		} elseif ( \is_string( $opening_hours_raw ) && '' !== trim( $opening_hours_raw ) ) {
-			$store['opening_hours']          = $opening_hours_raw;
-			$store['opening_hours_vertical'] = null;
-			$store['opening_hours_inline']   = null;
-		} else {
-			$store['opening_hours']          = null;
-			$store['opening_hours_vertical'] = null;
-			$store['opening_hours_inline']   = null;
-		}
-		$opening_hours_notes              = (string) $store_resolver->get_store_value( 'get_opening_hours_notes', '' );
-		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
-		$store['personal_notes']          = $personal_notes ? $personal_notes : null;
-		$store['policies_and_conditions'] = $policies_and_conditions ? $policies_and_conditions : null;
-		$store['footer_imprint']          = $footer_imprint ? $footer_imprint : null;
+		$store = $store_resolver->build_store_section( $store_fallbacks );
 
 		$cashier = array(
 			'id'   => (int) $order->get_meta( '_pos_user' ),
