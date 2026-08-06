@@ -237,6 +237,40 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A license write that changes neither the key nor the activation state —
+	 * Pro's read-side instance mint — must clear the license-status transient
+	 * but leave update_plugins alone: Pro reacts to that deletion by clearing
+	 * its update-data cache, which empties an in-flight update check.
+	 */
+	public function test_license_write_without_key_or_activation_change_keeps_update_plugins(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_pro_settings_license',
+			array(
+				'key'       => 'same-key',
+				'activated' => true,
+				'instance'  => '',
+			)
+		);
+		set_transient( 'woocommerce_pos_pro_license_status', array( 'activated' => true ) );
+		set_site_transient( 'update_plugins', (object) array( 'response' => array() ) );
+
+		// Act: the shape of Pro's mint — same key, same activation, new instance.
+		update_option(
+			'woocommerce_pos_pro_settings_license',
+			array(
+				'key'       => 'same-key',
+				'activated' => true,
+				'instance'  => 'minted-instance',
+			)
+		);
+
+		// Assert.
+		$this->assertFalse( get_transient( 'woocommerce_pos_pro_license_status' ) );
+		$this->assertNotFalse( get_site_transient( 'update_plugins' ) );
+	}
+
+	/**
 	 * Test updating general settings.
 	 */
 	public function test_update_general_settings(): void {

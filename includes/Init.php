@@ -45,7 +45,7 @@ class Init {
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
 		// Remove this once Pro settings have been moved to the new settings service.
-		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( self::class, 'remove_license_transient' ) );
+		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( self::class, 'remove_license_transient' ), 10, 2 );
 
 		// Headers for API discoverability.
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
@@ -67,11 +67,12 @@ class Init {
 	/**
 	 * Clear cached data that depends on the Pro license.
 	 *
-	 * @param mixed $value The option value.
+	 * @param mixed $value     The new option value.
+	 * @param mixed $old_value The previous option value (false when unset).
 	 *
 	 * @return mixed
 	 */
-	public static function remove_license_transient( $value ) {
+	public static function remove_license_transient( $value, $old_value = false ) {
 		// Pro's updater can react to the update_plugins deletion by reading —
 		// and, when the stored instance id is blank, re-saving — the license
 		// option, which re-enters this filter. Without the guard that cycle is
@@ -82,7 +83,20 @@ class Init {
 		}
 		$clearing = true;
 		delete_transient( 'woocommerce_pos_pro_license_status' );
-		delete_site_transient( 'update_plugins' );
+
+		// The update caches bind to the license key and activation state. A
+		// write that changes neither — e.g. Pro's read-side instance mint —
+		// must not wipe update_plugins: Pro reacts to that deletion by
+		// clearing its own update-data cache, which empties the payload of an
+		// update check that is in flight when the mint occurs.
+		$old = \is_array( $old_value ) ? $old_value : array();
+		$new = \is_array( $value ) ? $value : array();
+		if (
+			(string) ( $old['key'] ?? '' ) !== (string) ( $new['key'] ?? '' )
+			|| ! empty( $old['activated'] ) !== ! empty( $new['activated'] )
+		) {
+			delete_site_transient( 'update_plugins' );
+		}
 		$clearing = false;
 
 		return $value;
