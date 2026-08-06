@@ -50,6 +50,9 @@
         },
         "payload": {
           "type": "object"
+        },
+        "force": {
+          "type": "boolean"
         }
       },
       "allOf": [
@@ -71,7 +74,12 @@
           "else": {
             "required": [
               "payload"
-            ]
+            ],
+            "not": {
+              "required": [
+                "force"
+              ]
+            }
           }
         }
       ],

@@ -175,7 +175,36 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		return $request;
 	}
 
-	private function stock_order_delete_request( bool $restore_stock = true ): array {
+	private function order_delete_request( \WC_Order $order, string $mutation_id, string $record_id, $force = null ): WP_REST_Request {
+		// The client's held revision is computed over a WCPOS-lane document,
+		// and every WCPOS order surface serializes money at six decimals.
+		$current_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
+		$current_request->set_param( 'dp', '6' );
+		$current = rest_do_request( $current_request )->get_data();
+		$current = Meta_Normalizer::normalize( $current );
+		$current = Order_Serializer::add_payment_link( $current, $order );
+		$revision = Order_Serializer::canonical_revision( $current );
+		$envelope = array(
+			'mutationId'   => $mutation_id,
+			'operation'    => 'delete',
+			'collection'   => 'orders',
+			'recordId'     => $record_id,
+			'baseRevision' => $revision,
+		);
+		if ( null !== $force ) {
+			$envelope['force'] = $force;
+		}
+		$headers = array(
+			'Idempotency-Key' => $envelope['mutationId'],
+			'If-Match'        => '"' . $revision . '"',
+		);
+		$this->store->resolve = $order->get_id();
+		$GLOBALS['wcpos_sync_contract_calls'] = array();
+
+		return $this->request( 'orders', $envelope, $headers );
+	}
+
+	private function stock_order_delete_request( bool $restore_stock = true, ?bool $force = true ): array {
 		update_option( 'woocommerce_manage_stock', 'yes' );
 		update_option( 'woocommerce_pos_settings_general', array( 'restore_stock_on_delete' => $restore_stock ) );
 		$product = ProductHelper::create_simple_product(
@@ -191,32 +220,29 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		wc_maybe_reduce_stock_levels( $order->get_id() );
 		$this->assertEquals( 6, wc_get_product( $product->get_id() )->get_stock_quantity() );
 
-		// The client's held revision is computed over a WCPOS-lane document,
-		// and every WCPOS order surface serializes money at six decimals.
-		$current_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
-		$current_request->set_param( 'dp', '6' );
-		$current = rest_do_request( $current_request )->get_data();
-		$current = Meta_Normalizer::normalize( $current );
-		$current = Order_Serializer::add_payment_link( $current, $order );
-		$revision = Order_Serializer::canonical_revision( $current );
-		$envelope = array(
-			'mutationId'   => '10000000-0000-4000-8000-000000000071',
-			'operation'    => 'delete',
-			'collection'   => 'orders',
-			'recordId'     => '20000000-0000-4000-8000-000000000071',
-			'baseRevision' => $revision,
+		$request = $this->order_delete_request(
+			$order,
+			'10000000-0000-4000-8000-000000000071',
+			'20000000-0000-4000-8000-000000000071',
+			$force
 		);
-		$headers = array(
-			'Idempotency-Key' => $envelope['mutationId'],
-			'If-Match'        => '"' . $revision . '"',
-		);
-		$this->store->resolve = $order->get_id();
-		$GLOBALS['wcpos_sync_contract_calls'] = array();
 
-		return array( $product->get_id(), $order->get_id(), $this->request( 'orders', $envelope, $headers ) );
+		return array( $product->get_id(), $order->get_id(), $request );
 	}
 
-	public function test_order_force_delete_restores_stock_when_enabled(): void {
+	public function test_order_delete_defaults_to_trash(): void {
+		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request( true, null );
+
+		$response = $this->server->dispatch( $request );
+		$order    = wc_get_order( $order_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertInstanceOf( \WC_Order::class, $order );
+		$this->assertSame( 'trash', $order->get_status() );
+		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_order_delete_with_force_true_deletes_permanently(): void {
 		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request();
 
 		$response = $this->server->dispatch( $request );
@@ -224,6 +250,77 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertFalse( wc_get_order( $order_id ) );
 		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_order_trash_then_force_delete_does_not_double_restore(): void {
+		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request( true, null );
+
+		$trash_response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $trash_response->get_status() );
+		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+
+		$force_envelope               = $request->get_json_params();
+		$force_envelope['mutationId'] = '10000000-0000-4000-8000-000000000072';
+		$force_envelope['force']      = true;
+		$this->store->resolve         = 0; // Production UUID resolution excludes trashed orders.
+		$force_request                = $this->request(
+			'orders',
+			$force_envelope,
+			array(
+				'Idempotency-Key' => $force_envelope['mutationId'],
+				'If-Match'        => '"' . $force_envelope['baseRevision'] . '"',
+			)
+		);
+		$force_response = $this->server->dispatch( $force_request );
+
+		$this->assertSame( 200, $force_response->get_status() );
+		$this->assertSame( 'trash', wc_get_order( $order_id )->get_status() );
+		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_order_delete_without_prior_stock_reduction_leaves_stock_unchanged(): void {
+		update_option( 'woocommerce_manage_stock', 'yes' );
+		update_option( 'woocommerce_pos_settings_general', array( 'restore_stock_on_delete' => true ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 10,
+				'regular_price'  => 10,
+			)
+		);
+		$order = OrderHelper::create_order( array( 'product' => $product ) );
+		$order->set_status( 'pending' );
+		$order->save();
+		$request = $this->order_delete_request(
+			$order,
+			'10000000-0000-4000-8000-000000000073',
+			'20000000-0000-4000-8000-000000000073'
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'trash', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertEquals( 10, wc_get_product( $product->get_id() )->get_stock_quantity() );
+	}
+
+	public function test_order_delete_with_non_boolean_force_is_rejected(): void {
+		$order           = OrderHelper::create_order();
+		$original_status = $order->get_status();
+		$request         = $this->order_delete_request(
+			$order,
+			'10000000-0000-4000-8000-000000000074',
+			'20000000-0000-4000-8000-000000000074',
+			'yes'
+		);
+
+		$response  = $this->server->dispatch( $request );
+		$persisted = wc_get_order( $order->get_id() );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_bad_payload', $response->get_data()['code'] );
+		$this->assertInstanceOf( \WC_Order::class, $persisted );
+		$this->assertSame( $original_status, $persisted->get_status() );
 	}
 
 	public function test_order_force_delete_does_not_restore_stock_when_disabled(): void {
