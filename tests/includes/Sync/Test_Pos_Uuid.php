@@ -8,9 +8,12 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
+use WC_Customer;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_UnitTestCase;
+use wpdb;
 
 /**
  * Pos UUID tests.
@@ -19,10 +22,132 @@ use WP_UnitTestCase;
  */
 class Test_Pos_Uuid extends WP_UnitTestCase {
 	/**
+	 * Tear down: unregister function mocks (multisite simulation).
+	 */
+	public function tearDown(): void {
+		FunctionsMockerHack::get_hack_instance()->reset();
+		parent::tearDown();
+	}
+
+	/**
+	 * Simulate a multisite install inside plugin code (CodeHacker only rewrites
+	 * calls in includes/, so test code still sees the real single-site functions).
+	 *
+	 * @param int $blog_id Blog id reported to plugin code.
+	 */
+	private function mock_multisite( int $blog_id = 2 ): void {
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'is_multisite'        => function () {
+					return true;
+				},
+				'get_current_blog_id' => function () use ( $blog_id ) {
+					return $blog_id;
+				},
+			)
+		);
+	}
+
+	/**
 	 * The identity brain uses the shared production meta-key constant.
 	 */
 	public function test_meta_key_uses_sync_api_constant(): void {
 		$this->assertSame( Api::UUID_META_KEY, Pos_Uuid::META_KEY );
+	}
+
+	/**
+	 * On multisite, a legacy per-blog cashier uuid is adopted as the network-wide
+	 * identity by ANY caller of ensure_user_uuid — not just /cashier — so the
+	 * adopted identity is the same whichever endpoint reads the user first.
+	 */
+	public function test_ensure_user_uuid_multisite_adopts_legacy_per_blog_uuid(): void {
+		$user_id     = $this->factory->user->create();
+		$legacy_uuid = wp_generate_uuid4();
+		update_user_meta( $user_id, Pos_Uuid::META_KEY . '_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+		$this->assertSame( $legacy_uuid, $uuid );
+		$this->assertSame( $legacy_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
+	}
+
+	/**
+	 * A legacy per-blog uuid already owned by ANOTHER user's network identity is
+	 * not served as a duplicate RxDB key — the authority re-mints instead.
+	 */
+	public function test_ensure_user_uuid_multisite_rejects_legacy_uuid_owned_by_other_user(): void {
+		$owner_id  = $this->factory->user->create();
+		$victim_id = $this->factory->user->create();
+		$uuid      = wp_generate_uuid4();
+		update_user_meta( $owner_id, Pos_Uuid::META_KEY, $uuid );
+		update_user_meta( $victim_id, Pos_Uuid::META_KEY . '_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$victim_uuid = Pos_Uuid::ensure_user_uuid( $victim_id );
+
+		$this->assertTrue( Pos_Uuid::is_uuid( $victim_uuid ) );
+		$this->assertNotSame( $uuid, $victim_uuid );
+	}
+
+	/**
+	 * A valid canonical duplicate wins even when an invalid row precedes it.
+	 */
+	public function test_ensure_user_uuid_multisite_preserves_later_valid_canonical_uuid(): void {
+		$user_id        = $this->factory->user->create();
+		$canonical_uuid = wp_generate_uuid4();
+		$legacy_uuid    = wp_generate_uuid4();
+		add_user_meta( $user_id, Pos_Uuid::META_KEY, 'invalid' );
+		add_user_meta( $user_id, Pos_Uuid::META_KEY, $canonical_uuid );
+		update_user_meta( $user_id, Pos_Uuid::META_KEY . '_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+		$this->assertSame( $canonical_uuid, $uuid );
+		$this->assertSame( array( $canonical_uuid ), get_user_meta( $user_id, Pos_Uuid::META_KEY, false ) );
+	}
+
+	/**
+	 * Direct customer stamping uses the same multisite legacy adoption path.
+	 */
+	public function test_ensure_uuid_multisite_customer_adopts_legacy_per_blog_uuid(): void {
+		$user_id     = $this->factory->user->create();
+		$legacy_uuid = wp_generate_uuid4();
+		update_user_meta( $user_id, Pos_Uuid::META_KEY . '_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$uuid = Pos_Uuid::ensure_uuid(
+			new WC_Customer( $user_id ),
+			array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other_user' ) )
+		);
+
+		$this->assertSame( $legacy_uuid, $uuid );
+		$this->assertSame( $legacy_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
+	}
+
+	/**
+	 * A request cannot promote its legacy UUID while another connection owns the
+	 * same user's adoption lock.
+	 */
+	public function test_ensure_user_uuid_multisite_does_not_overwrite_while_adoption_is_locked(): void {
+		$user_id     = $this->factory->user->create();
+		$legacy_uuid = wp_generate_uuid4();
+		$lock_name   = 'wcpos_user_uuid_' . $user_id;
+		$locker      = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		update_user_meta( $user_id, Pos_Uuid::META_KEY . '_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 0 ) ) );
+
+		try {
+			$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+			$this->assertSame( '', $uuid );
+			$this->assertSame( array(), get_user_meta( $user_id, Pos_Uuid::META_KEY, false ) );
+		} finally {
+			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			$locker->close();
+		}
 	}
 
 	/**
