@@ -97,6 +97,14 @@ class Init {
 		 * fires during 'init', which is BEFORE rest_api_init where our API class loads.
 		 */
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
+
+		/*
+		 * Because the filter above authenticates WCPOS Bearer tokens on EVERY
+		 * REST request (marked or not), the audit-meta guard for core routes
+		 * must be registered just as unconditionally — never from the
+		 * X-WCPOS-gated API class, whose marker an attacker simply omits.
+		 */
+		( new Services\Core_Order_Audit_Guard() )->register_hooks();
 	}
 
 	/**
