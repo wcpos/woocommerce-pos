@@ -50,6 +50,13 @@ if [[ "$args" == pr\ view* ]]; then
     echo "mock: merge-state lookup unavailable" >&2
     exit 1
   fi
+  if [[ -n "${MOCK_MERGE_STATE_SEQUENCE:-}" ]]; then
+    count="$(cat "$MOCK_MERGE_STATE_COUNTER_FILE" 2>/dev/null || printf 0)"
+    read -r -a states <<< "$MOCK_MERGE_STATE_SEQUENCE"
+    printf '%s\n' "$((count + 1))" > "$MOCK_MERGE_STATE_COUNTER_FILE"
+    printf '%s\n' "${states[$count]}"
+    exit 0
+  fi
   printf '%s\n' "${MOCK_MERGE_STATE:-CLEAN}"
   exit 0
 fi
@@ -104,6 +111,7 @@ run_case() {
   local name="$1" expected="$2"
   shift 2
   local checks_sentinel="$tmpdir/checks-invoked"
+  local merge_state_counter="$tmpdir/merge-state-count"
   local no_checks_expected=false assignment
   for assignment in "$@"; do
     if [[ "$assignment" == "MOCK_NO_CHECKS_EXPECTED=true" ]]; then
@@ -111,11 +119,13 @@ run_case() {
     fi
   done
   rm -f "$checks_sentinel"
+  rm -f "$merge_state_counter"
   echo "Running $name"
   set +e
   env \
     PATH="$tmpdir:$PATH" \
     MOCK_CHECKS_SENTINEL="$checks_sentinel" \
+    MOCK_MERGE_STATE_COUNTER_FILE="$merge_state_counter" \
     GITHUB_REPOSITORY="wcpos/test" \
     PR_NUMBER="123" \
     MERGE_GATE_REQUIRED_CHECKS="$TEST_REQUIRED_CHECKS" \
@@ -242,7 +252,29 @@ run_case "indeterminate merge state fails closed despite allowlist" fail \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_patch" \
   MOCK_MERGE_STATE="UNKNOWN" \
+  MERGE_GATE_MERGE_STATE_MAX_ATTEMPTS="2" \
   MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "merge state stuck at UNKNOWN fails closed" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE="UNKNOWN" \
+  MERGE_GATE_MERGE_STATE_MAX_ATTEMPTS="2" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "merge state UNKNOWN then CLEAN proceeds" pass \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE_SEQUENCE="UNKNOWN CLEAN" \
+  MERGE_GATE_MERGE_STATE_MAX_ATTEMPTS="2"
+if [[ "$(cat "$tmpdir/merge-state-count")" != "2" ]]; then
+  echo "Expected merge state to be queried twice" >&2
+  exit 1
+fi
 
 run_case "human PR passes when required checks pass" pass \
   PR_AUTHOR="kilbot" \

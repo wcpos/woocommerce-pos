@@ -110,8 +110,6 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$sequence_data   = $controller->sequence_log( $this->request() )->get_data();
 		$standalone_data = $controller->config_fingerprint( $this->request() )->get_data();
 
-		// Request timing is intentionally volatile; the remaining response data must match.
-		unset( $sequence_data['config_fingerprint']['meta']['duration_ms'], $standalone_data['meta']['duration_ms'] );
 		$this->assertSame( $standalone_data, $sequence_data['config_fingerprint'] );
 	}
 
@@ -137,6 +135,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * RFC 9110 If-None-Match forms all match (parser from wcpos-bot's review).
+	 *
+	 * @param string $header_template Conditional request header template.
 	 *
 	 * @dataProvider matching_if_none_match_header_provider
 	 */
@@ -267,6 +267,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$this->assertArrayHasKey( 'tax_rates', $after['fingerprints'] );
 		$this->assertNotSame( $before['fingerprints']['products'], $after['fingerprints']['products'] );
 		$this->assertSame( array( 'global_unique_id' ), $after['barcode_fields']['products'] );
+		$this->assertArrayNotHasKey( 'candidate', $after );
+		$this->assertSame( array( 'supported' => true ), $after['meta'] );
 	}
 
 	/**

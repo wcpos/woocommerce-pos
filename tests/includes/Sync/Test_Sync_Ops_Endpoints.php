@@ -246,7 +246,7 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/integrity/rebuild' ) );
 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		$this->assertSame( 'hash-checksum', $response->get_data()['candidate'] );
+		$this->assertArrayNotHasKey( 'candidate', $response->get_data() );
 		$this->assertSame( 'products', $response->get_data()['collection'] );
 		$this->assertGreaterThanOrEqual( 1, $response->get_data()['stored_total'] );
 		$this->assertTrue( $response->get_data()['meta']['supported'] );

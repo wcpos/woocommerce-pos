@@ -191,7 +191,11 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		wc_maybe_reduce_stock_levels( $order->get_id() );
 		$this->assertEquals( 6, wc_get_product( $product->get_id() )->get_stock_quantity() );
 
-		$current = rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() ) )->get_data();
+		// The client's held revision is computed over a WCPOS-lane document,
+		// and every WCPOS order surface serializes money at six decimals.
+		$current_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
+		$current_request->set_param( 'dp', '6' );
+		$current = rest_do_request( $current_request )->get_data();
 		$current = Meta_Normalizer::normalize( $current );
 		$current = Order_Serializer::add_payment_link( $current, $order );
 		$revision = Order_Serializer::canonical_revision( $current );

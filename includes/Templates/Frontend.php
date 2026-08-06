@@ -10,9 +10,9 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
-use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Template_Router;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
@@ -191,11 +191,9 @@ class Frontend {
 			$opfs_worker_hash = VERSION;
 		}
 
-		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
-		if ( ! $user_uuid ) {
-			$user_uuid = Uuid::uuid4()->toString();
-			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $user_uuid );
-		}
+		// Pos_Uuid is the sole authority for `_woocommerce_pos_uuid`: the value here
+		// must match what /cashier and /customers serve, or the client forks identities.
+		$user_uuid = Pos_Uuid::ensure_user_uuid( $user );
 
 		$vars = array(
 			'version'        => VERSION,

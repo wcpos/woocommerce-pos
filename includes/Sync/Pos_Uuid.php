@@ -23,14 +23,15 @@ use WCPOS\WooCommercePOS\Logger;
  * G1): a record carries the SAME identity on the server and the client, may be
  * born on either side, and is NEVER re-keyed. This is the server half of that
  * contract — a record pulled from the lab namespace arrives WITH its uuid, so the
- * client never has to mint a divergent one for a server-born record.
+ * client never has to mint a divergent one for a server-born record. Multisite
+ * customer first-stamps are serialized while adopting legacy per-blog values.
  *
  * Reads an existing valid uuid from the record's meta; if absent/invalid it
  * generates one and PERSISTS it (so it is stable across pulls), then mirrors it
  * into the serialized payload's `meta_data`. Duck-typed on the WC_Data methods so
  * it stays unit-testable without WooCommerce loaded. UUID convergence does not
- * use a second object-cache lock; sync writes are serialized by their record
- * lock, while stamping deterministically converges duplicate meta rows.
+ * use an object-cache lock; sync writes are serialized by their record lock,
+ * while stamping deterministically converges duplicate meta rows.
  */
 class Pos_Uuid {
 	public const META_KEY = Api::UUID_META_KEY;
@@ -82,6 +83,24 @@ class Pos_Uuid {
 		if ( ! \is_object( $object ) || ! method_exists( $object, 'get_meta_data' ) ) {
 			return '';
 		}
+		if (
+			$object instanceof WC_Customer
+			&& \function_exists( 'is_multisite' )
+			&& is_multisite()
+			&& '' === self::read_valid_uuid_from_meta( (array) $object->get_meta_data() )
+		) {
+			return self::ensure_multisite_customer_uuid( $object, $opts );
+		}
+
+		return self::ensure_uuid_without_user_lock( $object, $opts );
+	}
+
+	/**
+	 * Ensure a UUID after any customer-specific coordination has completed.
+	 *
+	 * @param mixed $object
+	 */
+	private static function ensure_uuid_without_user_lock( $object, array $opts ): string {
 		$collides = $opts['collides'] ?? null;
 		$persist  = $opts['persist'] ?? true;
 		$existing = self::read_valid_uuid_from_meta( (array) $object->get_meta_data() );
@@ -138,6 +157,59 @@ class Pos_Uuid {
 			$customer,
 			array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_user' ) )
 		);
+	}
+
+	/**
+	 * Promote a legacy per-blog cashier uuid to the network-wide key.
+	 *
+	 * Before identity consolidated here, the cashier endpoint minted
+	 * `_woocommerce_pos_uuid_{blog_id}` on multisite while every other reader used
+	 * the plain network-wide key — forking one user into two RxDB identities. When
+	 * the plain key holds no valid uuid yet, adopt the current blog's legacy value
+	 * so existing multisite cashiers keep their identity regardless of which
+	 * endpoint reads them first. An existing valid plain uuid wins, because it is
+	 * what /customers has already served to clients. Legacy rows are left in place
+	 * (harmless, rollback-safe); ownership/duplicate checks still run in
+	 * ensure_uuid() after adoption, so a copied legacy value owned by another user
+	 * is re-minted rather than served as a duplicate key.
+	 *
+	 * @param WC_Customer $customer Customer being stamped.
+	 */
+	private static function adopt_legacy_multisite_user_uuid( WC_Customer $customer ): void {
+		$existing = self::read_valid_uuid_from_meta( (array) $customer->get_meta_data() );
+		if ( self::is_uuid( $existing ) ) {
+			return;
+		}
+
+		$user_id = (int) $customer->get_id();
+		$legacy = get_user_meta( $user_id, self::META_KEY . '_' . get_current_blog_id(), true );
+		if ( self::is_uuid( $legacy ) ) {
+			update_user_meta( $user_id, self::META_KEY, $legacy );
+		}
+	}
+
+	/**
+	 * Serialize first-stamp and legacy adoption for one multisite customer.
+	 */
+	private static function ensure_multisite_customer_uuid( WC_Customer $customer, array $opts ): string {
+		global $wpdb;
+
+		$user_id   = (int) $customer->get_id();
+		$lock_name = 'wcpos_user_uuid_' . $user_id;
+		$acquired  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
+		if ( '1' !== (string) $acquired ) {
+			return '';
+		}
+
+		try {
+			$customer->read_meta_data( true );
+			self::adopt_legacy_multisite_user_uuid( $customer );
+			$customer->read_meta_data( true );
+
+			return self::ensure_uuid_without_user_lock( $customer, $opts );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
 	}
 
 	/**

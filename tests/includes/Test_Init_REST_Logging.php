@@ -67,17 +67,17 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * It logs the exact v1 endpoint before an unmarked route is rejected.
+	 * It logs the exact v1 endpoint when the request marker is missing.
 	 */
 	public function test_v1_request_without_marker_logs_exact_endpoint(): void {
 		global $wp;
 
 		$wp->query_vars = array( 'rest_route' => '/wcpos/v1/print-jobs/cloudprnt' );
 
-		$this->init->init_rest_api();
+		$this->invoke_log_unmarked_wcpos_rest_request();
 
 		$this->assertEquals(
-			array( '/wcpos/v1/print-jobs/cloudprnt: missing WCPOS request marker.' ),
+			array( '/wcpos/v1/print-jobs/cloudprnt: request marker missing (routes still registered via namespace detection).' ),
 			$this->logged_messages
 		);
 	}
@@ -90,10 +90,10 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 
 		$wp->query_vars = array( 'rest_route' => '/wcpos/v2/orders' );
 
-		$this->init->init_rest_api();
+		$this->invoke_log_unmarked_wcpos_rest_request();
 
 		$this->assertEquals(
-			array( '/wcpos/v2/orders: missing WCPOS request marker.' ),
+			array( '/wcpos/v2/orders: request marker missing (routes still registered via namespace detection).' ),
 			$this->logged_messages
 		);
 	}
@@ -106,7 +106,7 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 
 		$wp->query_vars = array( 'rest_route' => '/wp/v2/users' );
 
-		$this->init->init_rest_api();
+		$this->invoke_log_unmarked_wcpos_rest_request();
 
 		$this->assertCount( 0, $this->logged_messages );
 	}
@@ -118,12 +118,21 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 		global $wp;
 
 		$wp->query_vars = array( 'rest_route' => '/wcpos/v1/print-jobs/cloudprnt' );
-		$this->init->init_rest_api();
+		$this->invoke_log_unmarked_wcpos_rest_request();
 
 		Logger::reset_dedup_state();
 		$wp->query_vars = array( 'rest_route' => '/wcpos/v1/orders' );
-		$this->init->init_rest_api();
+		$this->invoke_log_unmarked_wcpos_rest_request();
 
 		$this->assertCount( 1, $this->logged_messages );
+	}
+
+	/**
+	 * Invoke the private missing-marker logger in isolation.
+	 */
+	private function invoke_log_unmarked_wcpos_rest_request(): void {
+		$method = ( new ReflectionClass( $this->init ) )->getMethod( 'log_unmarked_wcpos_rest_request' );
+		$method->setAccessible( true );
+		$method->invoke( $this->init );
 	}
 }
