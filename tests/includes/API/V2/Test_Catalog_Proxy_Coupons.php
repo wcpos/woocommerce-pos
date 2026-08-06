@@ -96,4 +96,48 @@ class Test_Catalog_Proxy_Coupons extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $match->get_id(), $ids );
 		$this->assertNotContains( $other->get_id(), $ids );
 	}
+
+	/**
+	 * Coupon rows expose the complete v2 field set.
+	 */
+	public function test_coupon_row_has_full_v2_field_set(): void {
+		$coupon = CouponHelper::create_coupon( 'v2-coupon-field-set' );
+
+		$rows = $this->read( array( 'include' => array( $coupon->get_id() ) ) );
+
+		$this->assertEqualsCanonicalizing(
+			array(
+				'id',
+				'code',
+				'amount',
+				'status',
+				'date_created',
+				'date_created_gmt',
+				'date_modified',
+				'date_modified_gmt',
+				'discount_type',
+				'description',
+				'date_expires',
+				'date_expires_gmt',
+				'usage_count',
+				'individual_use',
+				'product_ids',
+				'excluded_product_ids',
+				'usage_limit',
+				'usage_limit_per_user',
+				'limit_usage_to_x_items',
+				'free_shipping',
+				'product_categories',
+				'excluded_product_categories',
+				'exclude_sale_items',
+				'minimum_amount',
+				'maximum_amount',
+				'email_restrictions',
+				'used_by',
+				'meta_data',
+				'_links',
+			),
+			array_keys( $rows[0] )
+		);
+	}
 }

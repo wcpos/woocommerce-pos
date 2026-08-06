@@ -137,28 +137,33 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	 * @param string $record_id     Record UUID.
 	 * @param string $base_revision Current record revision.
 	 * @param string $barcode       New barcode value.
+	 * @param string $field         Payload field, or custom meta key.
 	 */
 	private function push_barcode_update(
 		string $collection,
 		string $record_id,
 		string $base_revision,
-		string $barcode
+		string $barcode,
+		string $field = '_barcode'
 	): WP_REST_Response {
 		$mutation_id = wp_generate_uuid4();
+		$payload     = 'global_unique_id' === $field
+			? array( 'global_unique_id' => $barcode )
+			: array(
+				'meta_data' => array(
+					array(
+						'key'   => $field,
+						'value' => $barcode,
+					),
+				),
+			);
 		$envelope    = array(
 			'mutationId'   => $mutation_id,
 			'operation'    => 'update',
 			'collection'   => $collection,
 			'recordId'     => $record_id,
 			'baseRevision' => $base_revision,
-			'payload'      => array(
-				'meta_data' => array(
-					array(
-						'key'   => '_barcode',
-						'value' => $barcode,
-					),
-				),
-			),
+			'payload'      => $payload,
 		);
 		$request     = $this->wp_rest_post_request( '/wcpos/v2/push/' . $collection );
 		$request->set_header( 'Content-Type', 'application/json' );
@@ -290,6 +295,35 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'PRODUCT-NEW-1372', $this->meta_data( $after )['_barcode'] );
+		$this->assertTrue( $resolved->get_data()['found'] );
+		$this->assertSame( $product->get_id(), $resolved->get_data()['match']['id'] );
+		$this->assertSame( 'product', $resolved->get_data()['match']['type'] );
+	}
+
+	/**
+	 * A GTIN barcode push persists through WooCommerce's global_unique_id field.
+	 */
+	public function test_product_push_updates_gtin_barcode_and_resolution(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+		$record_id = wp_generate_uuid4();
+		$product   = ProductHelper::create_simple_product();
+		$product->update_meta_data( Pos_Uuid::META_KEY, $record_id );
+		$product->set_global_unique_id( '4006381333931' );
+		$product->save();
+
+		$response = $this->push_barcode_update(
+			'products',
+			$record_id,
+			$this->product_revision( $product->get_id() ),
+			'9780201379624',
+			'global_unique_id'
+		);
+		$after    = $this->read_product( $product->get_id() );
+		$resolved = $this->resolve_barcode( '9780201379624' );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( '9780201379624', $after['global_unique_id'] );
+		$this->assertSame( '9780201379624', wc_get_product( $product->get_id() )->get_global_unique_id() );
 		$this->assertTrue( $resolved->get_data()['found'] );
 		$this->assertSame( $product->get_id(), $resolved->get_data()['match']['id'] );
 		$this->assertSame( 'product', $resolved->get_data()['match']['type'] );

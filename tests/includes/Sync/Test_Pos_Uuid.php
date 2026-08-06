@@ -128,7 +128,8 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 
 	/**
 	 * A request cannot promote its legacy UUID while another connection owns the
-	 * same user's adoption lock.
+	 * same user's adoption lock — but it must still serve the adoptable legacy
+	 * value (never ''), because the uuid is the client's RxDB primary key.
 	 */
 	public function test_ensure_user_uuid_multisite_does_not_overwrite_while_adoption_is_locked(): void {
 		$user_id     = $this->factory->user->create();
@@ -142,8 +143,122 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 		try {
 			$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
 
-			$this->assertSame( '', $uuid );
-			$this->assertSame( array(), get_user_meta( $user_id, Pos_Uuid::META_KEY, false ) );
+			$this->assertSame( $legacy_uuid, $uuid, 'The adoptable legacy uuid should be served read-only.' );
+			$this->assertSame( array(), get_user_meta( $user_id, Pos_Uuid::META_KEY, false ), 'Nothing may be written while the adoption lock is held elsewhere.' );
+		} finally {
+			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			$locker->close();
+		}
+	}
+
+	/**
+	 * A first stamp under lock contention (no canonical, no legacy) mints a
+	 * fallback rather than serving '' — an empty uuid is a client-side identity
+	 * failure on first login.
+	 */
+	public function test_ensure_user_uuid_multisite_first_stamp_under_contention_mints_fallback(): void {
+		$user_id   = $this->factory->user->create();
+		$lock_name = 'wcpos_user_uuid_' . $user_id;
+		$locker    = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$this->mock_multisite( 2 );
+		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 0 ) ) );
+
+		try {
+			$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+			$this->assertTrue( Pos_Uuid::is_uuid( $uuid ), 'A valid uuid must be served even under lock contention.' );
+			$this->assertSame( $uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ), 'The fallback must be persisted so the next read serves the same identity.' );
+		} finally {
+			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			$locker->close();
+		}
+	}
+
+	/**
+	 * A lock-contended read serves a concurrently persisted winner instead of
+	 * minting its own uuid.
+	 */
+	public function test_ensure_user_uuid_multisite_contention_serves_concurrent_winner(): void {
+		$user_id     = $this->factory->user->create();
+		$winner_uuid = wp_generate_uuid4();
+		$lock_name   = 'wcpos_user_uuid_' . $user_id;
+		$locker      = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$this->mock_multisite( 2 );
+		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 0 ) ) );
+		add_user_meta( $user_id, Pos_Uuid::META_KEY, $winner_uuid, true );
+
+		try {
+			$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+			$this->assertSame( $winner_uuid, $uuid );
+			$this->assertSame( array( $winner_uuid ), get_user_meta( $user_id, Pos_Uuid::META_KEY, false ) );
+		} finally {
+			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			$locker->close();
+		}
+	}
+
+	/**
+	 * A legacy per-blog uuid owned by ANOTHER user under a LEGACY key (not the
+	 * network key) is never adopted: the first reader must not claim a shared
+	 * legacy value, or the rightful owner's identity forks when they read later.
+	 */
+	public function test_ensure_user_uuid_multisite_rejects_legacy_uuid_owned_by_other_user_legacy_key(): void {
+		$owner_id  = $this->factory->user->create();
+		$victim_id = $this->factory->user->create();
+		$uuid      = wp_generate_uuid4();
+		update_user_meta( $owner_id, Pos_Uuid::META_KEY . '_2', $uuid );
+		update_user_meta( $victim_id, Pos_Uuid::META_KEY . '_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$victim_uuid = Pos_Uuid::ensure_user_uuid( $victim_id );
+
+		$this->assertTrue( Pos_Uuid::is_uuid( $victim_uuid ) );
+		$this->assertNotSame( $uuid, $victim_uuid, 'A shared legacy value must not be claimed as the victim\'s identity.' );
+		$this->assertSame(
+			$uuid,
+			get_user_meta( $owner_id, Pos_Uuid::META_KEY . '_2', true ),
+			'The rightful owner\'s legacy row must be left in place.'
+		);
+	}
+
+	/**
+	 * A live network identity is NEVER discarded because a stale duplicated
+	 * legacy row on another user carries the same value — the legacy-key
+	 * ownership check is an adoption gate, not a live-collision predicate.
+	 */
+	public function test_ensure_user_uuid_multisite_keeps_live_identity_despite_stale_legacy_duplicate(): void {
+		$user_id  = $this->factory->user->create();
+		$other_id = $this->factory->user->create();
+		$live     = wp_generate_uuid4();
+		update_user_meta( $user_id, Pos_Uuid::META_KEY, $live );
+		update_user_meta( $other_id, Pos_Uuid::META_KEY . '_2', $live );
+		$this->mock_multisite( 2 );
+
+		$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+		$this->assertSame( $live, $uuid, 'The already-served identity must be kept.' );
+		$this->assertSame( array( $live ), get_user_meta( $user_id, Pos_Uuid::META_KEY, false ) );
+	}
+
+	/**
+	 * A lock-contended first stamp with a corrupt stored row persists its
+	 * fallback (compare-and-swap on the invalid row) instead of returning a uuid
+	 * that was never written.
+	 */
+	public function test_ensure_user_uuid_multisite_contention_replaces_corrupt_row_with_persisted_fallback(): void {
+		$user_id   = $this->factory->user->create();
+		$lock_name = 'wcpos_user_uuid_' . $user_id;
+		$locker    = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		update_user_meta( $user_id, Pos_Uuid::META_KEY, 'garbage' );
+		$this->mock_multisite( 2 );
+		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 0 ) ) );
+
+		try {
+			$uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+
+			$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
+			$this->assertSame( $uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ), 'The served uuid must be the persisted one.' );
 		} finally {
 			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 			$locker->close();

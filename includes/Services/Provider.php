@@ -2,8 +2,9 @@
 /**
  * Cloud-print provider capabilities value object.
  *
- * Single source of truth for per-provider knowledge: validity, polling,
- * content types, poll endpoints, server diagnostics and thermal wire formats.
+ * Single source of truth for per-provider knowledge: validity, the default for
+ * rows without a provider, polling, content types, poll endpoints, server
+ * diagnostics, thermal wire formats and renderable template engines.
  *
  * @package WCPOS\WooCommercePOS\Services
  */
@@ -14,6 +15,14 @@ namespace WCPOS\WooCommercePOS\Services;
  * Provider class.
  */
 class Provider {
+	/**
+	 * Provider assumed for printer rows that predate the provider field.
+	 *
+	 * Star CloudPRNT was the only provider before the field existed, so a row
+	 * without one is a Star CloudPRNT printer.
+	 */
+	public const DEFAULT_PROVIDER = 'star-cloudprnt';
+
 	/**
 	 * Per-provider capability map.
 	 *
@@ -29,6 +38,7 @@ class Provider {
 			'poll_endpoint'              => 'cloudprnt',
 			'supports_server_diagnostic' => true,
 			'thermal_wire_format'        => 'starprnt',
+			'template_engines'           => 'thermal',
 		),
 		'epson-sdp'      => array(
 			'polling'                    => true,
@@ -36,6 +46,7 @@ class Provider {
 			'poll_endpoint'              => 'epson-sdp',
 			'supports_server_diagnostic' => true,
 			'thermal_wire_format'        => 'epos-xml',
+			'template_engines'           => 'thermal',
 		),
 		'printnode'      => array(
 			'polling'                    => false,
@@ -43,6 +54,7 @@ class Provider {
 			'poll_endpoint'              => null,
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => null,
+			'template_engines'           => 'all',
 		),
 		'star-online'    => array(
 			'polling'                    => false,
@@ -50,6 +62,7 @@ class Provider {
 			'poll_endpoint'              => null,
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => 'star-markup',
+			'template_engines'           => 'thermal',
 		),
 	);
 
@@ -60,6 +73,22 @@ class Provider {
 	 */
 	public static function valid(): array {
 		return array_keys( self::CAPABILITIES );
+	}
+
+	/**
+	 * Resolve a stored printer row's provider to a known provider key.
+	 *
+	 * Callers read `$printer['provider']` from an option that predates the
+	 * field, so the value can be missing, empty, or (for hand-edited options)
+	 * a key this build does not know. All three resolve to the default rather
+	 * than to a silent no-provider state.
+	 *
+	 * @param string|null $provider Raw provider value from a printer row.
+	 *
+	 * @return string A key from self::valid().
+	 */
+	public static function normalize( ?string $provider ): string {
+		return \in_array( $provider, self::valid(), true ) ? (string) $provider : self::DEFAULT_PROVIDER;
 	}
 
 	/**
@@ -135,5 +164,43 @@ class Provider {
 		}
 
 		return self::CAPABILITIES[ $provider ]['thermal_wire_format'] ?? null;
+	}
+
+	/**
+	 * Receipt-template engines the provider can render for automatic jobs.
+	 *
+	 * 'all' means every active template; 'thermal' means thermal templates
+	 * only. Unknown providers are treated as thermal-only, the conservative
+	 * answer for a printer we cannot render a PDF for.
+	 *
+	 * @param string $provider Provider key.
+	 *
+	 * @return string 'all' or 'thermal'.
+	 */
+	public static function template_engines( string $provider ): string {
+		return (string) ( self::CAPABILITIES[ $provider ]['template_engines'] ?? 'thermal' );
+	}
+
+	/**
+	 * Per-provider facts the settings screen cannot derive, keyed by provider.
+	 *
+	 * Projected onto the cloud-print settings response (cf.
+	 * Cloud_Print_Relay_Service::public_state()) so the admin app can read the
+	 * provider table from the server instead of re-declaring it. Deliberately
+	 * narrow: presentation (labels, badges) stays in the client, and facts the
+	 * client already renders from its own table are not duplicated here until
+	 * something reads them.
+	 *
+	 * @return array<string, array<string, string>>
+	 */
+	public static function public_capabilities(): array {
+		$capabilities = array();
+		foreach ( self::valid() as $provider ) {
+			$capabilities[ $provider ] = array(
+				'template_engines' => self::template_engines( $provider ),
+			);
+		}
+
+		return $capabilities;
 	}
 }
