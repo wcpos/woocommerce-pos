@@ -659,6 +659,10 @@ class Settings extends WP_REST_Controller {
 			$settings['printers']
 		);
 		$settings['relay'] = Cloud_Print_Relay_Service::public_state();
+		// Read-only provider facts (currently: which template engines a
+		// provider can render). The admin app mirrors this in its own table;
+		// serving it makes the server the authority.
+		$settings['providers'] = Provider::public_capabilities();
 
 		return new WP_REST_Response( $settings, 200 );
 	}
@@ -788,6 +792,10 @@ class Settings extends WP_REST_Controller {
 				'printers'    => $response_printers,
 				'assignments' => $clean['assignments'],
 				'generated'   => $generated,
+				// Repeated from the GET shape: the admin app rebuilds its cache
+				// from this response, so a field served only on GET would be
+				// dropped by the first save.
+				'providers'   => Provider::public_capabilities(),
 			),
 			200
 		);
@@ -802,8 +810,7 @@ class Settings extends WP_REST_Controller {
 	 */
 	private function sanitize_cloud_printer( $printer ): array {
 		$printer  = \is_array( $printer ) ? $printer : array();
-		$provider = \in_array( $printer['provider'] ?? '', Provider::valid(), true )
-			? $printer['provider'] : 'star-cloudprnt';
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 
 		$clean = array(
 			'id'               => sanitize_text_field( $printer['id'] ?? '' ),

@@ -24,7 +24,13 @@ export interface ProviderMeta {
 	isPolling: boolean;
 	/** REST poll endpoint slug, or `null` for push providers. */
 	pollEndpoint: 'cloudprnt' | 'epson-sdp' | null;
-	/** Receipt-template engines this provider can render for automatic jobs. */
+	/**
+	 * Receipt-template engines this provider can render for automatic jobs.
+	 *
+	 * The server owns this fact too: `Provider::template_engines()` in PHP, served
+	 * as `providers[<id>].template_engines` on `GET settings/cloud-print`. Keep the
+	 * two in step until this table reads the response instead.
+	 */
 	templateEngines: 'all' | 'thermal';
 }
 

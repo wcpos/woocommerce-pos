@@ -472,6 +472,31 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test get_term_uuid persistently replaces corrupt term metadata.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_term_uuid
+	 */
+	public function test_get_term_uuid_replaces_corrupt_metadata_persistently(): void {
+		// Arrange.
+		$term_id = wp_insert_term( 'Corrupt UUID Category', 'product_cat' );
+		$term    = get_term( $term_id['term_id'], 'product_cat' );
+		add_term_meta( $term->term_id, '_woocommerce_pos_uuid', array( 'corrupt' ), true );
+
+		// Act.
+		$first_uuid  = $this->handler->test_get_term_uuid( $term );
+		$second_uuid = $this->handler->test_get_term_uuid( $term );
+		$stored_uuid = get_term_meta( $term->term_id, '_woocommerce_pos_uuid', true );
+
+		// Assert.
+		$this->assertEquals( $first_uuid, $second_uuid, 'Successive reads should return the same replacement UUID.' );
+		$this->assertEquals( $first_uuid, $stored_uuid, 'The replacement UUID should be persisted.' );
+		$this->assertIsString( $stored_uuid );
+		$this->assertTrue( Uuid::isValid( $stored_uuid ), 'Stored UUID should be valid.' );
+
+		wp_delete_term( $term->term_id, 'product_cat' );
+	}
+
+	/**
 	 * Test uuid_postmeta_exists returns false for unique UUID.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_postmeta_exists
