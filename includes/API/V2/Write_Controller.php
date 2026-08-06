@@ -587,6 +587,21 @@ class Write_Controller extends WP_REST_Controller {
 		$this->store->persist_order_audit_meta( $id, $this->order_audit_meta( is_array( $payload ) ? $payload : array(), $stamp_version ), 'woocommerce-pos' );
 	}
 
+	/** Persist missing cash-tender meta from the original update payload. */
+	private function stamp_order_till_meta( int $id, array $payload ): void {
+		$meta = array();
+		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
+			$key   = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+			$value = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( is_object( $entry ) ? ( $entry->value ?? '' ) : '' );
+			if ( is_scalar( $key ) && in_array( (string) $key, self::POS_CASH_META_KEYS, true ) && is_scalar( $value ) && '' !== (string) $value ) {
+				$meta[ (string) $key ] = (string) $value;
+			}
+		}
+		if ( $meta ) {
+			$this->store->persist_order_audit_meta( $id, $meta );
+		}
+	}
+
 	private function order_audit_meta( array $payload, bool $stamp_version ): array {
 		$client = array();
 		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
@@ -793,6 +808,7 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$this->stamp_order_till_meta( $id, $m['payload'] );
 			$this->persist_order_tax_ids( $id, $m['payload'], false );
 			$order = wc_get_order( $id );
 			$data = $response->get_data();
