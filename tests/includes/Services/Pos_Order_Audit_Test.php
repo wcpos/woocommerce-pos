@@ -238,6 +238,32 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Both create surfaces use last-entry-wins semantics, including when the
+	 * last duplicate is invalid and therefore removes the till key.
+	 */
+	public function test_duplicate_till_key_with_invalid_last_value_is_dropped_by_both_create_paths(): void {
+		// Arrange.
+		$meta = array(
+			array(
+				'key'   => '_pos_cash_amount_tendered',
+				'value' => '20.00',
+			),
+			array(
+				'key'   => '_pos_cash_amount_tendered',
+				'value' => 'not-a-number',
+			),
+		);
+
+		// Act.
+		$v1_meta = Pos_Order_Audit::sanitize_create_meta( $meta );
+		$v2_meta = Pos_Order_Audit::till_meta_from_payload( $meta );
+
+		// Assert.
+		$this->assertSame( array(), $v1_meta );
+		$this->assertSame( array(), $v2_meta );
+	}
+
+	/**
 	 * Cash amounts must be numeric; the store id is any non-empty scalar.
 	 */
 	public function test_is_valid_till_value_rules(): void {

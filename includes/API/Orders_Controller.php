@@ -61,11 +61,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	protected $wcpos_request;
 
 	/**
-	 * Whether we are creating a new order.
+	 * The order object being created by the current request.
 	 *
-	 * @var bool
+	 * @var WC_Abstract_Order|null
 	 */
-	private $is_creating = false;
+	private $creating_order;
 
 	/**
 	 * Whether High Performance Orders is enabled.
@@ -424,8 +424,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$request->set_param( 'meta_data', Pos_Order_Audit::sanitize_create_meta( $request['meta_data'] ) );
 		}
 
-		// Set the creating flag, used in woocommerce_before_order_object_save.
-		$this->is_creating = true;
+		$this->creating_order = null;
 
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
 
@@ -434,7 +433,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$response = parent::create_item( $request );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
-			$this->is_creating = false;
+			$this->creating_order = null;
 		}
 
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
@@ -458,9 +457,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return WC_Data|WP_Error
 	 */
 	public function wcpos_preserve_client_created_date_gmt( $order, WP_REST_Request $request, bool $creating ) {
-		if ( ! $creating || is_wp_error( $order ) ) {
+		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
 			return $order;
 		}
+		$this->creating_order = $order;
 
 		$body = $request->get_json_params();
 
@@ -1100,7 +1100,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws \WC_Data_Exception If order data is invalid.
 	 */
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
-		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
+		$is_creating_order = $order === $this->creating_order;
+
+		if ( $is_creating_order && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
 			// This is the server plugin version that accepted the new order. The
 			// line-item storage shape remains authoritative for offline-synced orders.
@@ -1112,11 +1114,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * being created is always stamped with the authenticated user (any client-
 		 * supplied value was stripped before the write); on later saves only a missing
 		 * value is filled, so an edit under a different user never reassigns the
-		 * recorded cashier. The forced stamp is limited to the not-yet-inserted order
-		 * (id 0) — an extension saving an unrelated order mid-create must not have that
-		 * order's cashier overwritten.
+		 * recorded cashier. The forced stamp is limited to the exact order prepared
+		 * for this request — an extension saving another new order mid-create must not
+		 * have that order's cashier overwritten.
 		 */
-		if ( ( $this->is_creating && ! $order->get_id() ) || ! $order->get_meta( '_pos_user' ) ) {
+		if ( $is_creating_order || ! $order->get_meta( '_pos_user' ) ) {
 			$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
 		}
 	}

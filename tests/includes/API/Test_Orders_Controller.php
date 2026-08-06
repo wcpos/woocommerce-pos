@@ -1713,6 +1713,51 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A nested order is still id 0 in its before-save callback, so the create
+	 * stamp must distinguish it from the request order by object identity.
+	 */
+	public function test_create_order_does_not_restamp_new_order_saved_mid_create(): void {
+		// Arrange.
+		$other_cashier = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$other_order   = null;
+		$order_created = false;
+		$hook          = static function () use ( &$other_order, &$order_created, $other_cashier ): void {
+			if ( $order_created ) {
+				return;
+			}
+			$order_created = true;
+			$other_order   = new WC_Order();
+			$other_order->update_meta_data( '_pos_user', (string) $other_cashier );
+			$other_order->save();
+		};
+		add_action( 'woocommerce_new_order', $hook );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		// Act.
+		try {
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_action( 'woocommerce_new_order', $hook );
+		}
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertInstanceOf( WC_Order::class, $other_order );
+		$this->assertSame( (string) $other_cashier, wc_get_order( $other_order->get_id() )->get_meta( '_pos_user' ) );
+	}
+
+	/**
 	 * WooCommerce resolves a meta_data entry by its `id` BEFORE its `key` and
 	 * overwrites both — so an entry carrying an audit row's id under a harmless
 	 * key would rename the audit row away (and the fill-if-missing stamp would
