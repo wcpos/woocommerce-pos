@@ -217,6 +217,8 @@ final class Response_Telemetry {
 		// Only the pull carries a body metrics object. Push responses (success,
 		// delete and error) are golden-shaped write-contract surfaces and stay
 		// byte-identical — they get headers only.
+		$route = strtolower( $route );
+
 		return $base . 'orders/pull' === $route;
 	}
 
@@ -228,7 +230,7 @@ final class Response_Telemetry {
 	private static function is_changes_route( string $route ): bool {
 		$base = '/' . Api::ROUTE_NAMESPACE . '/';
 
-		return 0 === strpos( $route, $base . 'changes/' );
+		return 0 === strpos( strtolower( $route ), $base . 'changes/' );
 	}
 
 	/**
@@ -237,8 +239,9 @@ final class Response_Telemetry {
 	 * @param string $route Request route.
 	 */
 	private static function is_sync_route( string $route ): bool {
+		// WordPress matches REST routes case-insensitively, so route detection must too.
 		$base  = '/' . Api::ROUTE_NAMESPACE . '/';
-		$route = untrailingslashit( $route );
+		$route = strtolower( untrailingslashit( $route ) );
 		if ( 0 !== strpos( $route, $base ) ) {
 			return false;
 		}
