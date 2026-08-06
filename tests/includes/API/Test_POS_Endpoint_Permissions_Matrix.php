@@ -17,6 +17,8 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use WCPOS\WooCommercePOS\Sync\Api as SyncApi;
+use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 use WP_Error;
 use WP_REST_Request;
 use WP_User;
@@ -28,7 +30,7 @@ use WP_User;
  *
  * @coversNothing
  */
-class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
+class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 	/**
 	 * @var AuthService
 	 */
@@ -67,6 +69,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 	);
 
 	public function setUp(): void {
+		update_option( SyncApi::OPTION_ENABLED, true );
 		parent::setUp();
 
 		$this->auth_service = AuthService::instance();
@@ -100,6 +103,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		parent::tearDown();
+		delete_option( SyncApi::OPTION_ENABLED );
 	}
 
 	/**
@@ -262,6 +266,56 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test an expired access token and refresh round trip against the v2 surface.
+	 */
+	public function test_v2_expired_access_token_denies_then_refresh_restores_access(): void {
+		$user   = $this->role_users['cashier'];
+		$tokens = $this->auth_service->generate_token_pair( $user );
+		$this->assertIsArray( $tokens );
+
+		$expire_access_token = function ( $expire, $issued_at ) {
+			return $issued_at - 1;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+		$expired_access_token = $this->auth_service->generate_access_token( $user );
+		remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+
+		$this->assertIsString( $expired_access_token );
+
+		$expired_response = $this->dispatch_path_as_access_token( '/wcpos/v2/products', $expired_access_token );
+		$expired_data     = $expired_response->get_data();
+
+		$this->assertEquals( 401, $expired_response->get_status() );
+		$this->assertEquals(
+			'woocommerce_pos_rest_unauthorized',
+			\is_array( $expired_data ) && isset( $expired_data['code'] ) ? $expired_data['code'] : ''
+		);
+		$this->assertEquals( 0, get_current_user_id(), 'An expired v2 Bearer token must not authenticate a user.' );
+
+		$refreshed = $this->auth_service->refresh_access_token( $tokens['refresh_token'] );
+		$this->assertIsArray( $refreshed );
+
+		$refreshed_response = $this->dispatch_path_as_access_token( '/wcpos/v2/products', $refreshed['access_token'] );
+		$this->assertEquals( 200, $refreshed_response->get_status() );
+	}
+
+	/**
+	 * Test malformed Bearer authentication against the v2 surface.
+	 */
+	public function test_v2_malformed_access_token_returns_401(): void {
+		$response = $this->dispatch_path_as_access_token( '/wcpos/v2/products', 'not-a-valid-access-token' );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 401, $response->get_status() );
+		$this->assertEquals(
+			'woocommerce_pos_rest_unauthorized',
+			\is_array( $data ) && isset( $data['code'] ) ? $data['code'] : ''
+		);
+		$this->assertEquals( 0, get_current_user_id(), 'A malformed v2 Bearer token must not authenticate a user.' );
+	}
+
+	/**
 	 * Ensure the cashier role has the capabilities needed for normal POS operation.
 	 */
 	private function ensure_cashier_role_caps(): void {
@@ -312,7 +366,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 		$all_roles        = array( 'administrator' => true, 'shop_manager' => true, 'cashier' => true );
 		$management_roles = array( 'administrator' => true, 'shop_manager' => true, 'cashier' => false );
 
-		return array(
+		$endpoints = array(
 			array( 'id' => 'settings index', 'method' => 'GET', 'path' => '/wcpos/v1/settings', 'roles' => $all_roles ),
 			array( 'id' => 'stores index', 'method' => 'GET', 'path' => '/wcpos/v1/stores', 'roles' => $all_roles ),
 			array( 'id' => 'cashier profile', 'method' => 'GET', 'path' => function ( WP_User $user ) { return '/wcpos/v1/cashier/' . $user->ID; }, 'roles' => $all_roles ),
@@ -378,6 +432,65 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 			array( 'id' => 'extensions index', 'method' => 'GET', 'path' => '/wcpos/v1/extensions', 'roles' => $management_roles ),
 			array( 'id' => 'logs index', 'method' => 'GET', 'path' => '/wcpos/v1/logs', 'roles' => $management_roles ),
 		);
+
+		foreach (
+			array(
+				'/wcpos/v2/status',
+				'/wcpos/v2/products',
+				'/wcpos/v2/variations',
+				'/wcpos/v2/customers',
+				'/wcpos/v2/orders',
+				'/wcpos/v2/orders/pull',
+				'/wcpos/v2/coupons',
+				'/wcpos/v2/taxes',
+				'/wcpos/v2/products/categories',
+				'/wcpos/v2/products/brands',
+				'/wcpos/v2/products/tags',
+				'/wcpos/v2/changes/sequence-log',
+				'/wcpos/v2/changes/revision-hash',
+				'/wcpos/v2/changes/range-checksum',
+				'/wcpos/v2/changes/config-fingerprint',
+				'/wcpos/v2/changes/tick',
+				'/wcpos/v2/digests',
+				'/wcpos/v2/integrity/scan',
+				'/wcpos/v2/integrity/bucket',
+				'/wcpos/v2/resolve/barcode',
+			) as $path
+		) {
+			$query = array();
+			if ( \in_array( $path, array( '/wcpos/v2/variations', '/wcpos/v2/digests' ), true ) ) {
+				$query = array( 'include' => '1' );
+			} elseif ( '/wcpos/v2/resolve/barcode' === $path ) {
+				$query = array( 'code' => 'missing' );
+			}
+			$endpoints[] = array(
+				'id'     => 'sync read ' . $path,
+				'method' => 'GET',
+				'path'   => $path,
+				'query'  => $query,
+				'roles'  => $all_roles,
+			);
+		}
+
+		$endpoints[] = array(
+			'id'     => 'sync orders create',
+			'method' => 'POST',
+			'path'   => '/wcpos/v2/push/orders',
+			'json'   => true,
+			'body'   => function ( WP_User $_user ) {
+				return array(
+					'mutationId'   => wp_generate_uuid4(),
+					'operation'    => 'create',
+					'collection'   => 'orders',
+					'recordId'     => wp_generate_uuid4(),
+					'baseRevision' => null,
+					'payload'      => array( 'status' => 'pending' ),
+				);
+			},
+			'roles'  => $all_roles,
+		);
+
+		return $endpoints;
 	}
 
 	/**
@@ -392,7 +505,14 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 		$path = $this->resolve_endpoint_path( $endpoint, $user );
 		$body = $this->resolve_endpoint_body( $endpoint, $user );
 
-		return $this->dispatch_path_as_access_token( $path, $token, $endpoint['method'], $body, $endpoint['query'] ?? array() );
+		return $this->dispatch_path_as_access_token(
+			$path,
+			$token,
+			$endpoint['method'],
+			$body,
+			$endpoint['query'] ?? array(),
+			$endpoint['json'] ?? false
+		);
 	}
 
 	/**
@@ -401,7 +521,14 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 	 * @param array<string, mixed> $body Body params.
 	 * @param array<string, mixed> $query Query params.
 	 */
-	private function dispatch_path_as_access_token( string $path, string $access_token, string $method = 'GET', array $body = array(), array $query = array() ) {
+	private function dispatch_path_as_access_token(
+		string $path,
+		string $access_token,
+		string $method = 'GET',
+		array $body = array(),
+		array $query = array(),
+		bool $json = false
+	) {
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 
 		global $current_user;
@@ -412,7 +539,12 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 			$request->set_query_params( $query );
 		}
 		if ( ! empty( $body ) ) {
-			$request->set_body_params( $body );
+			if ( $json ) {
+				$request->set_header( 'Content-Type', 'application/json' );
+				$request->set_body( (string) wp_json_encode( $body ) );
+			} else {
+				$request->set_body_params( $body );
+			}
 		}
 
 		$response = $this->server->dispatch( $request );
