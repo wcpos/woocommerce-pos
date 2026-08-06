@@ -148,29 +148,7 @@ class Orders {
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
 		if ( woocommerce_pos_request() ) {
-			$gateway_status = $this->get_gateway_order_status( $order->get_payment_method() );
-
-			// This filter expects statuses without the 'wc-' prefix.
-			$normalized_status = 0 === strpos( $gateway_status, 'wc-' )
-				? substr( $gateway_status, 3 )
-				: $gateway_status;
-
-			if ( '' === $normalized_status ) {
-				return $status;
-			}
-
-			$valid_statuses = array_map(
-				function ( string $order_status ): string {
-					return 0 === strpos( $order_status, 'wc-' )
-						? substr( $order_status, 3 )
-						: $order_status;
-				},
-				array_keys( wc_get_order_statuses() )
-			);
-
-			return \in_array( $normalized_status, $valid_statuses, true )
-				? $normalized_status
-				: $status;
+			return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
 		}
 
 		return $status;
@@ -197,14 +175,29 @@ class Orders {
 			return $status;
 		}
 
-		$gateway_order_status = $this->get_gateway_order_status( $order->get_payment_method() );
+		return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
+	}
 
-		$normalized_status = 0 === strpos( $gateway_order_status, 'wc-' )
-			? substr( $gateway_order_status, 3 )
-			: $gateway_order_status;
+	/**
+	 * Normalise a configured gateway order status for the WooCommerce status filters.
+	 *
+	 * Both `woocommerce_payment_complete_order_status` and the offline gateway
+	 * `*_process_payment_order_status` filters expect a status *without* the `wc-`
+	 * prefix, so the prefix is stripped and the result validated against the
+	 * registered order statuses. Anything empty or unrecognised falls back.
+	 *
+	 * @param string $candidate The configured status, which may carry the `wc-` prefix.
+	 * @param string $fallback  Status to return when the candidate is empty or unknown.
+	 *
+	 * @return string
+	 */
+	private function normalize_status( string $candidate, string $fallback ): string {
+		$normalized_status = 0 === strpos( $candidate, 'wc-' )
+			? substr( $candidate, 3 )
+			: $candidate;
 
 		if ( '' === $normalized_status ) {
-			return $status;
+			return $fallback;
 		}
 
 		$valid_statuses = array_map(
@@ -218,7 +211,7 @@ class Orders {
 
 		return \in_array( $normalized_status, $valid_statuses, true )
 			? $normalized_status
-			: $status;
+			: $fallback;
 	}
 
 	/**
