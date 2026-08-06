@@ -432,8 +432,9 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_update_response_document_emits_typed_meta_and_plain_uuid(): void {
+		$coupon_id = $this->factory->post->create( array( 'post_type' => 'shop_coupon' ) );
 		$current = array(
-			'id' => 601,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '10.00',
 			'meta_data' => array(
@@ -441,7 +442,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			),
 		);
 		$updated = array(
-			'id' => 601,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '12.00',
 			'meta_data' => array(
@@ -449,10 +450,10 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			),
 		);
 		$revision            = Revision::compute( Meta_Normalizer::normalize( $current ) );
-		$this->store->resolve = 601;
+		$this->store->resolve = $coupon_id;
 		$GLOBALS['wcpos_sync_contract_responses'] = array(
 			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => 601 ), 200 ),
+			new WP_REST_Response( array( 'id' => $coupon_id ), 200 ),
 			new WP_REST_Response( $updated, 200 ),
 		);
 		$fixture                             = $this->fixture( 'coupon-update' );
@@ -640,21 +641,22 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_coupon_update_and_delete_use_wc_routes_and_cas(): void {
+		$coupon_id = $this->factory->post->create( array( 'post_type' => 'shop_coupon' ) );
 		$current  = array(
-			'id' => 301,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '10.00',
 		);
 		$updated  = array(
-			'id' => 301,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '12.00',
 		);
 		$revision = Revision::compute( $current );
-		$this->store->resolve = 301;
+		$this->store->resolve = $coupon_id;
 		$GLOBALS['wcpos_sync_contract_responses'] = array(
 			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => 301 ), 200 ),
+			new WP_REST_Response( array( 'id' => $coupon_id ), 200 ),
 			new WP_REST_Response( $updated, 200 ),
 		);
 		$fixture                             = $this->fixture( 'coupon-update' );
@@ -677,7 +679,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$GLOBALS['wcpos_sync_contract_calls']     = array();
 		$GLOBALS['wcpos_sync_contract_responses'] = array(
 			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => 301 ), 200 ),
+			new WP_REST_Response( array( 'id' => $coupon_id ), 200 ),
 		);
 		$fixture                             = $this->fixture( 'coupon-delete' );
 		$fixture['envelope']['baseRevision'] = $revision;
