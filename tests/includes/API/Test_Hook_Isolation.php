@@ -188,6 +188,7 @@ class Test_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_route_map_only_contains_wcpos_routes(): void {
 		$api = new \WCPOS\WooCommercePOS\API();
+		$this->assertSame( array( 'wcpos/v1', 'wcpos/v2' ), $api->get_route_namespaces() );
 
 		$reflection = new \ReflectionClass( $api );
 		$property   = $reflection->getProperty( 'route_map' );

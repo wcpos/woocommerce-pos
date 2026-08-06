@@ -339,8 +339,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_orderby_total(): void {
-		$order1    = OrderHelper::create_order( array( 'total' => 100 ) );
-		$order2    = OrderHelper::create_order( array( 'total' => 200 ) );
+		$order1    = OrderHelper::create_order( array( 'total' => 9.99 ) );
+		$order2    = OrderHelper::create_order( array( 'total' => 100.00 ) );
+		$order3    = OrderHelper::create_order( array( 'total' => 1000.00 ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params(
 			array(
@@ -352,7 +353,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$totals   = wp_list_pluck( $data, 'total' );
 
-		$this->assertEquals( $totals, array( 100, 200 ) );
+		$this->assertEquals( $totals, array( 9.99, 100.00, 1000.00 ) );
 
 		// reverse order
 		$request->set_query_params(
@@ -365,7 +366,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$totals   = wp_list_pluck( $data, 'total' );
 
-		$this->assertEquals( $totals, array( 200, 100 ) );
+		$this->assertEquals( $totals, array( 1000.00, 100.00, 9.99 ) );
 	}
 
 	/**

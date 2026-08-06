@@ -257,25 +257,40 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 		$trash_response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $trash_response->get_status() );
+		$this->assertSame( 'trash', wc_get_order( $order_id )->get_status() );
 		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
 
-		$force_envelope               = $request->get_json_params();
-		$force_envelope['mutationId'] = '10000000-0000-4000-8000-000000000072';
-		$force_envelope['force']      = true;
-		$this->store->resolve         = 0; // Production UUID resolution excludes trashed orders.
-		$force_request                = $this->request(
-			'orders',
-			$force_envelope,
-			array(
-				'Idempotency-Key' => $force_envelope['mutationId'],
-				'If-Match'        => '"' . $force_envelope['baseRevision'] . '"',
-			)
+		$force_request = $this->order_delete_request(
+			wc_get_order( $order_id ),
+			'10000000-0000-4000-8000-000000000072',
+			'20000000-0000-4000-8000-000000000071',
+			true
 		);
+		$this->store->resolve = $order_id;
 		$force_response = $this->server->dispatch( $force_request );
 
 		$this->assertSame( 200, $force_response->get_status() );
-		$this->assertSame( 'trash', wc_get_order( $order_id )->get_status() );
+		$this->assertFalse( wc_get_order( $order_id ) );
 		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	public function test_delete_of_an_unresolvable_uuid_is_an_idempotent_noop(): void {
+		$order           = OrderHelper::create_order();
+		$original_status = $order->get_status();
+		$request         = $this->order_delete_request(
+			$order,
+			'10000000-0000-4000-8000-000000000075',
+			'20000000-0000-4000-8000-000000000075',
+			true
+		);
+		$this->store->resolve = 0;
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $original_status, wc_get_order( $order->get_id() )->get_status() );
+		$this->assertSame( 0, $this->store->finalized['10000000-0000-4000-8000-000000000075'] );
+		$this->assertSame( array(), $GLOBALS['wcpos_sync_contract_calls'] );
 	}
 
 	public function test_order_delete_without_prior_stock_reduction_leaves_stock_unchanged(): void {

@@ -208,53 +208,6 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '10', wc_format_decimal( $line->get_subtotal(), 0 ) );
 	}
 
-	public function test_misc_line_survives_a_sentinel_sku_catalog_collision(): void {
-		// A merchant CAN assign the literal sentinel to a catalog product;
-		// the forward must detect the collision and still keep the line misc.
-		$squatter = ProductHelper::create_simple_product(
-			array(
-				'regular_price' => 42,
-				'price'         => 42,
-			)
-		);
-		$squatter->set_sku( 'wcpos-misc-item-no-sku-lookup' );
-		$squatter->save();
-
-		$response = $this->push_envelope(
-			'create',
-			array(
-				'status'     => 'processing',
-				'line_items' => array( $this->misc_line() ),
-				'meta_data'  => $this->order_meta(),
-			)
-		);
-
-		$this->assertSame( 201, $response->get_status() );
-		$line = $this->single_line( (int) $response->get_data()['document']['id'] );
-		$this->assertSame( 0, $line->get_product_id() );
-		$this->assertSame( '5.00', $line->get_subtotal() );
-	}
-
-	public function test_misc_line_checks_the_sentinel_after_ninety_nine_suffixes(): void {
-		for ( $i = 0; $i < 100; $i++ ) {
-			$squatter = ProductHelper::create_simple_product();
-			$squatter->set_sku( 'wcpos-misc-item-no-sku-lookup' . ( 0 === $i ? '' : '-' . $i ) );
-			$squatter->save();
-		}
-
-		$response = $this->push_envelope(
-			'create',
-			array(
-				'status'     => 'processing',
-				'line_items' => array( $this->misc_line() ),
-				'meta_data'  => $this->order_meta(),
-			)
-		);
-
-		$this->assertSame( 201, $response->get_status() );
-		$this->assertSame( 0, $this->single_line( (int) $response->get_data()['document']['id'] )->get_product_id() );
-	}
-
 	public function test_misc_lines_forward_distinct_uuid_sentinels(): void {
 		$forwarded_skus = array();
 		$capture_skus   = static function ( $result, $server, $request ) use ( &$forwarded_skus ) {

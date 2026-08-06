@@ -21,6 +21,20 @@ use WP_REST_Request;
  */
 class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * Skip only the wc-analytics probe when that route is unavailable.
+	 */
+	public function setUp(): void {
+		parent::setUp();
+
+		if (
+			'test_audit_guard_jwt_wc_analytics_order_update_with_audit_key_returns_forbidden' === $this->getName()
+			&& ! \array_key_exists( '/wc-analytics/orders/(?P<id>[\d]+)', $this->server->get_routes() )
+		) {
+			$this->markTestSkipped( 'wc-analytics REST routes not registered in this environment.' );
+		}
+	}
+
+	/**
 	 * Remove the Authorization header after each test.
 	 */
 	public function tearDown(): void {
@@ -274,11 +288,7 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$response = $this->server->dispatch( $request );
 
-		// Assert: 404 would mean the namespace is not registered in this
-		// environment; anything else must be the guard's 403.
-		if ( 404 === $response->get_status() ) {
-			$this->markTestSkipped( 'wc-analytics REST routes not registered in this environment.' );
-		}
+		// Assert.
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'original', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
 	}

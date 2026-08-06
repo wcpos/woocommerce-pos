@@ -122,7 +122,8 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 				$code                          = \is_array( $data ) && isset( $data['code'] ) ? $data['code'] : '';
 
 				if ( $expected_allowed ) {
-					$message = \sprintf(
+					$expected_status = $endpoint['expected_status'] ?? 200;
+					$message         = \sprintf(
 						'%s should access %s %s with a valid access token. Got %d %s.',
 						$role,
 						$endpoint['method'],
@@ -131,12 +132,13 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 						$code
 					);
 
+					$this->assertSame( $expected_status, $status, $message );
 					$this->assertNotContains(
 						$status,
 						array( 401, 403 ),
 						$message
 					);
-					$this->assertLessThan( 500, $status, $message );
+					$this->assertLessThan( 400, $status, $message );
 				} else {
 					$this->assertEquals(
 						403,
@@ -194,13 +196,14 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 
 			$refreshed_response = $this->dispatch_path_as_access_token( '/wcpos/v1/products', $refreshed['access_token'] );
 			$refreshed_status   = $refreshed_response->get_status();
+			$this->assertSame( 200, $refreshed_status, $role . ' refreshed access token should restore access to products.' );
 			$this->assertNotContains(
 				$refreshed_status,
 				array( 401, 403 ),
 				$role . ' refreshed access token should restore access to products.'
 			);
 			$this->assertLessThan(
-				500,
+				400,
 				$refreshed_status,
 				$role . ' refreshed access token should restore access to products.'
 			);
@@ -367,7 +370,10 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 		$management_roles = array( 'administrator' => true, 'shop_manager' => true, 'cashier' => false );
 
 		$endpoints = array(
-			array( 'id' => 'settings index', 'method' => 'GET', 'path' => '/wcpos/v1/settings', 'roles' => $all_roles ),
+			// The settings root has no GET handler (sections only) — the old loose
+			// assertion masked a 405 here for the suite's whole life. Sections are
+			// manage-tier: cashiers land in the denied leg (403), which is the contract.
+			array( 'id' => 'settings general', 'method' => 'GET', 'path' => '/wcpos/v1/settings/general', 'roles' => $management_roles ),
 			array( 'id' => 'stores index', 'method' => 'GET', 'path' => '/wcpos/v1/stores', 'roles' => $all_roles ),
 			array( 'id' => 'cashier profile', 'method' => 'GET', 'path' => function ( WP_User $user ) { return '/wcpos/v1/cashier/' . $user->ID; }, 'roles' => $all_roles ),
 			array( 'id' => 'cashier stores', 'method' => 'GET', 'path' => function ( WP_User $user ) { return '/wcpos/v1/cashier/' . $user->ID . '/stores'; }, 'roles' => $all_roles ),
@@ -380,7 +386,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 			array( 'id' => 'coupons index', 'method' => 'GET', 'path' => '/wcpos/v1/coupons', 'roles' => $all_roles ),
 
 			array( 'id' => 'orders index', 'method' => 'GET', 'path' => '/wcpos/v1/orders', 'roles' => $all_roles ),
-			array( 'id' => 'orders create', 'method' => 'POST', 'path' => '/wcpos/v1/orders', 'body' => array( 'status' => 'pending' ), 'roles' => $all_roles ),
+			array( 'id' => 'orders create', 'method' => 'POST', 'path' => '/wcpos/v1/orders', 'body' => array( 'status' => 'pending' ), 'roles' => $all_roles, 'expected_status' => 201 ),
 			array(
 				'id'     => 'orders update',
 				'method' => 'PATCH',
@@ -392,19 +398,20 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 			),
 			array( 'id' => 'order checkout read', 'method' => 'GET', 'path' => '/wcpos/v1/orders/' . $order->get_id() . '/checkout', 'roles' => $all_roles ),
 			array(
-				'id'     => 'order checkout create',
-				'method' => 'POST',
-				'path'   => function ( WP_User $_user ) {
+				'id'      => 'order checkout create',
+				'method'  => 'POST',
+				'path'    => function ( WP_User $_user ) {
 					return '/wcpos/v1/orders/' . OrderHelper::create_order()->get_id() . '/checkout';
 				},
-				'body'   => array( 'gateway_id' => 'pos_cash' ),
-				'roles'  => $all_roles,
+				'body'    => array( 'gateway_id' => 'pos_cash', 'action' => 'start' ),
+				'headers' => array( 'X-WCPOS-Idempotency-Key' => wp_generate_uuid4() ),
+				'roles'   => $all_roles,
 			),
 			array( 'id' => 'receipt live read', 'method' => 'GET', 'path' => '/wcpos/v1/receipts/' . $order->get_id(), 'query' => array( 'mode' => 'live' ), 'roles' => $all_roles ),
 			array( 'id' => 'order statuses', 'method' => 'GET', 'path' => '/wcpos/v1/data/order_statuses', 'roles' => $all_roles ),
 
 			array( 'id' => 'customers index', 'method' => 'GET', 'path' => '/wcpos/v1/customers', 'roles' => $all_roles ),
-			array( 'id' => 'customers create', 'method' => 'POST', 'path' => '/wcpos/v1/customers', 'body' => function ( WP_User $user ) { return array( 'email' => 'matrix-' . $user->ID . '-' . wp_generate_uuid4() . '@example.com', 'first_name' => 'Matrix', 'last_name' => 'Customer' ); }, 'roles' => $all_roles ),
+			array( 'id' => 'customers create', 'method' => 'POST', 'path' => '/wcpos/v1/customers', 'body' => function ( WP_User $user ) { return array( 'email' => 'matrix-' . $user->ID . '-' . wp_generate_uuid4() . '@example.com', 'first_name' => 'Matrix', 'last_name' => 'Customer' ); }, 'roles' => $all_roles, 'expected_status' => 201 ),
 			array(
 				'id'     => 'customers update',
 				'method' => 'PATCH',
@@ -473,11 +480,12 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 		}
 
 		$endpoints[] = array(
-			'id'     => 'sync orders create',
-			'method' => 'POST',
-			'path'   => '/wcpos/v2/push/orders',
-			'json'   => true,
-			'body'   => function ( WP_User $_user ) {
+			'id'              => 'sync orders create',
+			'method'          => 'POST',
+			'path'            => '/wcpos/v2/push/orders',
+			'json'            => true,
+			'expected_status' => 201,
+			'body'            => function ( WP_User $_user ) {
 				return array(
 					'mutationId'   => wp_generate_uuid4(),
 					'operation'    => 'create',
@@ -487,7 +495,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 					'payload'      => array( 'status' => 'pending' ),
 				);
 			},
-			'roles'  => $all_roles,
+			'roles'           => $all_roles,
 		);
 
 		return $endpoints;
@@ -511,7 +519,8 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 			$endpoint['method'],
 			$body,
 			$endpoint['query'] ?? array(),
-			$endpoint['json'] ?? false
+			$endpoint['json'] ?? false,
+			$endpoint['headers'] ?? array()
 		);
 	}
 
@@ -520,6 +529,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 	 *
 	 * @param array<string, mixed> $body Body params.
 	 * @param array<string, mixed> $query Query params.
+	 * @param array<string, string> $headers Request headers.
 	 */
 	private function dispatch_path_as_access_token(
 		string $path,
@@ -527,7 +537,8 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 		string $method = 'GET',
 		array $body = array(),
 		array $query = array(),
-		bool $json = false
+		bool $json = false,
+		array $headers = array()
 	) {
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 
@@ -535,6 +546,9 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		$request = $this->create_request( $method, $path );
+		foreach ( $headers as $name => $value ) {
+			$request->set_header( $name, $value );
+		}
 		if ( ! empty( $query ) ) {
 			$request->set_query_params( $query );
 		}

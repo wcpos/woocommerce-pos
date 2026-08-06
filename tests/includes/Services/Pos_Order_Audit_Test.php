@@ -216,7 +216,7 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 				'key'   => '_pos_cash_amount_tendered',
 				'value' => '10.00',
 			),
-			array(
+			(object) array(
 				'key'   => '_pos_cash_amount_tendered',
 				'value' => '20.00',
 			),

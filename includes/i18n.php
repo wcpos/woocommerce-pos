@@ -341,10 +341,16 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * (WP-CLI does this), referencing the bare constant is a fatal error.
 	 * Mirror the fallback WordPress core uses when defining the constant.
 	 *
+	 * @param bool|null $constant_defined Override for the defined() check — tests
+	 *                                    force the fallback branch, which is
+	 *                                    otherwise unreachable once anything in
+	 *                                    the process has called WP_Filesystem().
+	 *
 	 * @return int
 	 */
-	protected function get_fs_chmod_file(): int {
-		if ( \defined( 'FS_CHMOD_FILE' ) ) {
+	protected function get_fs_chmod_file( ?bool $constant_defined = null ): int {
+		$constant_defined = null === $constant_defined ? \defined( 'FS_CHMOD_FILE' ) : $constant_defined;
+		if ( $constant_defined ) {
 			return FS_CHMOD_FILE;
 		}
 

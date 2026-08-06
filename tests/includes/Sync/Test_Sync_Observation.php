@@ -61,6 +61,13 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * The order post type this storage variant expects (HPOS twin overrides).
+	 */
+	protected function expected_order_post_type(): string {
+		return 'shop_order';
+	}
+
+	/**
 	 * Unhook every registered callback bound to the given observer instances.
 	 *
 	 * @param array $observers Observer objects whose hooks should be removed.
@@ -483,9 +490,9 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$order    = wc_create_order();
 		$order_id = $order->get_id();
 
-		if ( 'shop_order' !== get_post_type( $order_id ) ) {
-			$this->markTestSkipped( 'CPT order restore coverage requires legacy order storage.' );
-		}
+		// Assert (never skip) the storage this class variant expects — a silent
+		// storage-default flip must fail loudly, not sleep the only coverage.
+		$this->assertSame( $this->expected_order_post_type(), get_post_type( $order_id ) );
 
 		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
 

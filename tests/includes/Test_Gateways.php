@@ -65,17 +65,13 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Run a callback with PHP diagnostics captured instead of thrown.
+	 * Run a callback while collecting PHP diagnostics (used by tests that pin
+	 * a warning contract, e.g. the non-array gateways guard).
 	 *
-	 * PHPUnit is configured with convertWarningsToExceptions/convertNoticesToExceptions,
-	 * which would abort before the characterisation tests can assert on the result.
-	 * The handler is restored in a `finally` so a throw inside the callback cannot
-	 * leak it into the rest of the suite.
+	 * @param callable $callback    Code under test.
+	 * @param array    $diagnostics Collected diagnostic messages (by ref).
 	 *
-	 * @param callable $callback    The code to run.
-	 * @param array    $diagnostics Collects the captured diagnostic messages.
-	 *
-	 * @return mixed The callback's return value.
+	 * @return mixed
 	 */
 	private function capture_diagnostics( callable $callback, array &$diagnostics ) {
 		set_error_handler(
@@ -128,19 +124,9 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Characterisation test for a pre-existing bug.
-	 *
-	 * The uksort comparator in Gateways::order_gateways() reads
-	 * `$settings['gateways'][ $id ]['order'] ` without an isset() guard, so a
-	 * gateway configured without an `order` key raises an undefined-index
-	 * warning/notice and is compared as if its order were null. Under PHP's
-	 * comparison rules `null` loses against any truthy order value, so the
-	 * misconfigured gateway sorts first.
-	 *
-	 * This documents current behaviour; it is NOT an endorsement. Guarding the
-	 * lookup is a candidate follow-up fix and would change this expectation.
+	 * A gateway without an order setting sorts after configured gateways.
 	 */
-	public function test_order_gateways_missing_order_key_warns_and_sorts_null_first(): void {
+	public function test_order_gateways_missing_order_key_sorts_last_without_warning(): void {
 		// Arrange.
 		$gateways = array(
 			$this->make_gateway( 'pos_cash' ),
@@ -159,20 +145,11 @@ class Test_Gateways extends WC_Unit_Test_Case {
 			)
 		);
 
-		// Act. Capture the PHP diagnostic ourselves so PHPUnit's
-		// convertWarningsToExceptions/convertNoticesToExceptions does not abort
-		// the run before we can assert on the resulting order.
-		$diagnostics = array();
-		$result      = $this->capture_diagnostics(
-			function () use ( $gateways, $settings ) {
-				return Gateways::order_gateways( $gateways, $settings );
-			},
-			$diagnostics
-		);
+		// Act.
+		$result = Gateways::order_gateways( $gateways, $settings );
 
 		// Assert.
-		$this->assertNotEmpty( $diagnostics, 'Expected an undefined-index diagnostic from the unguarded order lookup.' );
-		$this->assertEquals( array( 'pos_card', 'pos_cash' ), array_keys( $result ) );
+		$this->assertEquals( array( 'pos_cash', 'pos_card' ), array_keys( $result ) );
 	}
 
 	/**

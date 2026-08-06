@@ -346,9 +346,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	public function test_has_store_access(): void {
 		$stores = $this->service->get_accessible_stores( $this->user );
 
-		if ( empty( $stores ) ) {
-			$this->markTestSkipped( 'No stores available for testing' );
-		}
+		$this->assertNotEmpty( $stores, 'Free ships a default store; an empty list is the regression.' );
 
 		$store_id   = $stores[0]->get_id();
 		$has_access = $this->service->has_store_access( $this->user, $store_id );
@@ -371,9 +369,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	public function test_get_accessible_store_returns_store(): void {
 		$stores = $this->service->get_accessible_stores( $this->user );
 
-		if ( empty( $stores ) ) {
-			$this->markTestSkipped( 'No stores available for testing' );
-		}
+		$this->assertNotEmpty( $stores, 'Free ships a default store; an empty list is the regression.' );
 
 		$store_id = $stores[0]->get_id();
 		$store    = $this->service->get_accessible_store( $this->user, $store_id );
