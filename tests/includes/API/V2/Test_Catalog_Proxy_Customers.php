@@ -245,11 +245,10 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Every value V1 widens the enum with is served rather than 400'd.
 	 *
-	 * Acceptance only — `role` sorts on the serialized `wp_capabilities` meta,
-	 * so its ordering is not meaningful (V1's own `test_orderby_role` is
-	 * skipped for the same reason). It is still re-applied rather than
-	 * rejected, so the proxy stays at V1 parity. The fields whose ordering IS
-	 * meaningful are pinned by `test_extended_orderby_orders_results`.
+	 * `role` ordering is pinned end-to-end by
+	 * `test_extended_orderby_role_orders_by_hierarchy` below; the other fields
+	 * are pinned by `test_extended_orderby_orders_results`. This case just keeps
+	 * the whole widened enum from ever 400'ing on the inner wc/v3 request.
 	 *
 	 * @dataProvider extended_orderby_provider
 	 *
@@ -356,6 +355,63 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
 		$this->assertSame( $expected, array_column( $data, 'id' ) );
+	}
+
+	/**
+	 * `orderby=role` sorts by role hierarchy through the full proxy path.
+	 *
+	 * Proves #1488's re-application actually orders (not just accepts): the
+	 * proxy strips `role` off the inner wc/v3 request and re-applies it via
+	 * `V1_Customers_Controller::wcpos_customer_query`, whose `pre_user_query`
+	 * ranks users administrator > shop_manager > cashier > … > customer >
+	 * subscriber, with multi-role users at their highest privilege. The
+	 * response is filtered to the created ids so interleaved fixtures do not
+	 * affect the assertion.
+	 */
+	public function test_extended_orderby_role_orders_by_hierarchy(): void {
+		$admin_id      = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id    = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$customer_id   = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$subscriber_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+
+		// Multi-role: customer + shop_manager must sort as staff (shop_manager).
+		$multi_id   = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$multi_user = new \WP_User( $multi_id );
+		$multi_user->add_role( 'shop_manager' );
+
+		$expected_asc = array( $admin_id, $multi_id, $cashier_id, $customer_id, $subscriber_id );
+		$my_ids       = $expected_asc;
+
+		$response = $this->dispatch_customers(
+			array(
+				'role'     => 'all',
+				'orderby'  => 'role',
+				'order'    => 'asc',
+				'per_page' => 100,
+			)
+		);
+		$data = $response->get_data();
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame(
+			$expected_asc,
+			array_values( array_intersect( array_column( $data, 'id' ), $my_ids ) )
+		);
+
+		// Reverse order.
+		$response = $this->dispatch_customers(
+			array(
+				'role'     => 'all',
+				'orderby'  => 'role',
+				'order'    => 'desc',
+				'per_page' => 100,
+			)
+		);
+		$data = $response->get_data();
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame(
+			array_reverse( $expected_asc ),
+			array_values( array_intersect( array_column( $data, 'id' ), $my_ids ) )
+		);
 	}
 
 	/**
