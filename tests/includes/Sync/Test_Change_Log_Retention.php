@@ -61,12 +61,39 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 		$only = $this->log->head_sequence();
 
 		// Act.
-		$deleted   = $this->log->compact( $inside_cutoff, 500 );
+		$deleted   = $this->log->compact( $inside_cutoff, $this->future_gmt(), 500 );
 		$sequences = array_column( $this->log->page( array(), 0, 20 )['rows'], 'sequence' );
 
 		// Assert.
 		$this->assertEquals( 1, $deleted );
 		$this->assertEquals( array( $above_cutoff, $latest, $only ), $sequences );
+	}
+
+	/**
+	 * Compaction checks each row's wall clock when sequence and time order differ.
+	 */
+	public function test_compact_with_recent_lower_sequence_keeps_it_when_higher_sequence_is_old(): void {
+		global $wpdb;
+
+		// Arrange: a recent superseded row sorts below an unrelated old row.
+		$this->log->record( 'product', 11, 'create', 'test', false );
+		$recent = $this->log->head_sequence();
+		$this->log->record( 'product', 22, 'update', 'test', false );
+		$old = $this->log->head_sequence();
+		$this->log->record( 'product', 11, 'update', 'test', false );
+		$cutoff_gmt = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+		$wpdb->update(
+			$this->log->table_name(),
+			array( 'created_gmt' => gmdate( 'Y-m-d H:i:s', time() - 2 * DAY_IN_SECONDS ) ),
+			array( 'sequence' => $old )
+		);
+
+		// Act.
+		$deleted = $this->log->compact( $this->log->sequence_at_or_before( $cutoff_gmt ), $cutoff_gmt, 500 );
+
+		// Assert.
+		$this->assertEquals( 0, $deleted );
+		$this->assertContains( $recent, array_column( $this->log->page( array(), 0, 20 )['rows'], 'sequence' ) );
 	}
 
 	/**
@@ -85,7 +112,7 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 		$update = $this->log->head_sequence();
 
 		// Act.
-		$compacted = $this->log->compact( $update, 500 );
+		$compacted = $this->log->compact( $update, $this->future_gmt(), 500 );
 		$after_compaction = $this->log->page( array(), 0, 20 )['rows'];
 		$pruned = $this->log->prune_tombstones( $first_tombstone, $this->future_gmt(), 500 );
 		$after_pruning = $this->log->page( array(), 0, 20 )['rows'];
@@ -122,7 +149,7 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 		$head = $this->log->head_sequence();
 
 		// Act.
-		$this->log->compact( $head, 500 );
+		$this->log->compact( $head, $this->future_gmt(), 500 );
 		$after_compaction = $this->log->head_sequence();
 		$this->log->prune_tombstones( $tombstone, $this->future_gmt(), 500 );
 		$after_pruning = $this->log->head_sequence();
@@ -166,9 +193,9 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 		$head = $this->log->head_sequence();
 
 		// Act.
-		$first  = $this->log->compact( $head, 2 );
-		$second = $this->log->compact( $head, 2 );
-		$third  = $this->log->compact( $head, 2 );
+		$first  = $this->log->compact( $head, $this->future_gmt(), 2 );
+		$second = $this->log->compact( $head, $this->future_gmt(), 2 );
+		$third  = $this->log->compact( $head, $this->future_gmt(), 2 );
 
 		// Assert.
 		$this->assertEquals( 2, $first );
@@ -210,6 +237,28 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A worker with a stale option cache cannot overwrite a newer watermark.
+	 */
+	public function test_advance_prune_watermark_with_stale_cache_keeps_concurrent_higher_value(): void {
+		global $wpdb;
+
+		// Arrange: this worker cached 10 while another worker persisted 50.
+		update_option( Change_Log::PRUNE_WATERMARK_OPTION, 10, true );
+		$this->assertEquals( 10, $this->log->prune_watermark() );
+		$wpdb->update(
+			$wpdb->options,
+			array( 'option_value' => 50 ),
+			array( 'option_name' => Change_Log::PRUNE_WATERMARK_OPTION )
+		);
+
+		// Act.
+		$this->log->advance_prune_watermark( 40 );
+
+		// Assert.
+		$this->assertEquals( 50, $this->log->prune_watermark() );
+	}
+
+	/**
 	 * A capped prune batch reports the highest sequence it actually removed.
 	 */
 	public function test_prune_tombstones_with_small_batch_reports_partial_watermark(): void {
@@ -240,7 +289,7 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 		$survivor = $this->log->head_sequence();
 
 		// Act.
-		$this->log->compact( $compacted, 500 );
+		$this->log->compact( $compacted, $this->future_gmt(), 500 );
 		$rows = $this->log->page( array(), $compacted - 1, 20 )['rows'];
 
 		// Assert.

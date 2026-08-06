@@ -449,12 +449,13 @@ final class Change_Log {
 	/**
 	 * Delete one batch of superseded rows through the supplied sequence.
 	 *
-	 * @param int $cutoff_sequence Inclusive upper sequence bound.
-	 * @param int $batch           Maximum rows to delete.
+	 * @param int    $cutoff_sequence Inclusive upper sequence bound.
+	 * @param string $cutoff_gmt      UTC datetime; only rows created before it are compacted.
+	 * @param int    $batch           Maximum rows to delete.
 	 *
 	 * @return int Number of rows deleted.
 	 */
-	public function compact( int $cutoff_sequence, int $batch ): int {
+	public function compact( int $cutoff_sequence, string $cutoff_gmt, int $batch ): int {
 		global $wpdb;
 		if ( $cutoff_sequence <= 0 || $batch <= 0 ) {
 			return 0;
@@ -467,6 +468,7 @@ final class Change_Log {
 				. ' SELECT sequence FROM ('
 				. ' SELECT stale.sequence FROM ' . $table . ' stale'
 				. ' WHERE stale.sequence <= %d'
+				. ' AND stale.created_gmt < %s'
 				. ' AND EXISTS ('
 				. ' SELECT 1 FROM ' . $table . ' newer'
 				. ' WHERE newer.object_type = stale.object_type'
@@ -477,6 +479,7 @@ final class Change_Log {
 				. ' )',
 				$cutoff_sequence,
 				$cutoff_sequence,
+				$cutoff_gmt,
 				$batch
 			)
 		);
@@ -575,9 +578,23 @@ final class Change_Log {
 	 * @param int $sequence Highest sequence approved for lossy pruning.
 	 */
 	public function advance_prune_watermark( int $sequence ): void {
-		if ( $sequence > $this->prune_watermark() ) {
-			update_option( self::PRUNE_WATERMARK_OPTION, $sequence, true );
+		global $wpdb;
+		if ( $sequence <= 0 ) {
+			return;
 		}
+
+		$wpdb->query(
+			$wpdb->prepare(
+				'INSERT INTO ' . $wpdb->options . " (option_name, option_value, autoload) VALUES (%s, %d, 'yes')"
+				. ' ON DUPLICATE KEY UPDATE option_value = GREATEST(CAST(option_value AS UNSIGNED), %d)',
+				self::PRUNE_WATERMARK_OPTION,
+				$sequence,
+				$sequence
+			)
+		);
+		wp_cache_delete( self::PRUNE_WATERMARK_OPTION, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
 	}
 
 	/**

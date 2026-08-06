@@ -84,6 +84,8 @@ class Test_Change_Log_Purge extends Sync_Store_Test_Case {
 	 * Tombstones older than the retention window are pruned by a run.
 	 */
 	public function test_purge_expired_with_aged_tombstone_prunes_it_and_advances_watermark(): void {
+		global $wpdb;
+
 		// Arrange.
 		$this->log->record( 'product', 11, 'delete', 'test', false );
 		$aged_tombstone = $this->log->head_sequence();
@@ -91,15 +93,21 @@ class Test_Change_Log_Purge extends Sync_Store_Test_Case {
 		$recent_tombstone = $this->log->head_sequence();
 		$this->log->record( 'product', 33, 'update', 'test', false );
 		$this->age_row( $aged_tombstone, 91 );
-		$block_watermark = static function (): int {
-			return 0;
+		$block_watermark = static function ( string $query ): string {
+			if ( false !== strpos( $query, 'INSERT INTO' ) && false !== strpos( $query, Change_Log::PRUNE_WATERMARK_OPTION ) ) {
+				return 'SELECT * FROM wcpos_missing_watermark_table';
+			}
+
+			return $query;
 		};
-		add_filter( 'pre_update_option_' . Change_Log::PRUNE_WATERMARK_OPTION, $block_watermark );
+		$previous_suppress_errors = $wpdb->suppress_errors();
+		add_filter( 'query', $block_watermark );
 
 		// Act.
 		( new Change_Log_Purge( $this->log ) )->purge_expired();
 		$after_failed_watermark = array_column( $this->log->page( array(), 0, 20 )['rows'], 'sequence' );
-		remove_filter( 'pre_update_option_' . Change_Log::PRUNE_WATERMARK_OPTION, $block_watermark );
+		remove_filter( 'query', $block_watermark );
+		$wpdb->suppress_errors( $previous_suppress_errors );
 		( new Change_Log_Purge( $this->log ) )->purge_expired();
 		$sequences = array_column( $this->log->page( array(), 0, 20 )['rows'], 'sequence' );
 

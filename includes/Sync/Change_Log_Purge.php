@@ -64,7 +64,8 @@ final class Change_Log_Purge {
 		$now   = time();
 
 		$compaction_hours  = max( 0, (int) apply_filters( 'woocommerce_pos_change_log_compaction_window_hours', 24 ) );
-		$compaction_cutoff = $this->change_log->sequence_at_or_before( gmdate( 'Y-m-d H:i:s', $now - $compaction_hours * HOUR_IN_SECONDS ) );
+		$compaction_gmt    = gmdate( 'Y-m-d H:i:s', $now - $compaction_hours * HOUR_IN_SECONDS );
+		$compaction_cutoff = $this->change_log->sequence_at_or_before( $compaction_gmt );
 
 		$tombstone_days = (int) apply_filters( 'woocommerce_pos_change_log_tombstone_retention_days', 90 );
 		$tombstone_gmt  = gmdate( 'Y-m-d H:i:s', $now - $tombstone_days * DAY_IN_SECONDS );
@@ -81,7 +82,7 @@ final class Change_Log_Purge {
 			if ( $limit <= 0 ) {
 				break;
 			}
-			$count    = $this->change_log->compact( $compaction_cutoff, $limit );
+			$count    = $this->change_log->compact( $compaction_cutoff, $compaction_gmt, $limit );
 			$deleted += $count;
 		} while ( $count === $limit && $deleted < self::MAX_DELETES_PER_RUN );
 
