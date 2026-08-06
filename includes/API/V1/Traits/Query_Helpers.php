@@ -13,6 +13,11 @@ trait Query_Helpers {
 	/**
 	 * Combine two meta_query arrays.
 	 *
+	 * @deprecated The only caller, Customers_Controller, now has its own private
+	 *             wcpos_merge_meta_queries(). Kept because this trait is aliased as
+	 *             public API in includes/API/class-aliases.php, so callers outside
+	 *             this repository may still use it.
+	 *
 	 * @param array $meta_query1 First meta query array.
 	 * @param array $meta_query2 Second meta query array.
 	 *

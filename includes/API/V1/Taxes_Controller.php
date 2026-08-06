@@ -26,7 +26,6 @@ use WP_REST_Response;
  * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Taxes_Controller methods
  */
 class Taxes_Controller extends WC_REST_Taxes_Controller {
-	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
 	/**
