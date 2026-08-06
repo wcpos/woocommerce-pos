@@ -1712,4 +1712,398 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $uuids, 'There should be exactly one uuid after regeneration.' );
 		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated uuid should be valid.' );
 	}
+	/**
+	 * The audit trail records who rang up the sale, so `_pos_user` is server-derived:
+	 * a client-supplied value must never win over the authenticated user.
+	 */
+	public function test_create_order_forged_pos_user_records_authenticated_cashier(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'  => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => '999999',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $data['id'] );
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( (string) $this->user, $order->get_meta( '_pos_user' ) );
+	}
+	/**
+	 * The real POS client sends a JSON body (not form params) — the strip must
+	 * cover the JSON parameter source too.
+	 */
+	public function test_create_order_forged_pos_user_in_json_body_records_authenticated_cashier(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'line_items' => array(
+						array(
+							'product_id' => 1,
+							'quantity'   => 1,
+						),
+					),
+					'meta_data'  => array(
+						array(
+							'key'   => '_pos_user',
+							'value' => '999999',
+						),
+					),
+				)
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $data['id'] );
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( (string) $this->user, $order->get_meta( '_pos_user' ) );
+	}
+	/**
+	 * `_pos_user` is write-once at the sale: an update must not let a client
+	 * reassign the recorded cashier.
+	 */
+	public function test_update_order_forged_pos_user_preserves_original_cashier(): void {
+		// Arrange.
+		$original_cashier = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$order            = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) $original_cashier );
+		$order->save();
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => '999999',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( (string) $original_cashier, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+	}
+	/**
+	 * The cash audit values feed Pro analytics aggregations, so a malformed
+	 * (non-numeric) amount must be dropped rather than persisted.
+	 */
+	public function test_create_order_non_numeric_pos_cash_meta_is_dropped(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'  => array(
+					array(
+						'key'   => '_pos_cash_amount_tendered',
+						'value' => 'not-a-number',
+					),
+					array(
+						'key'   => '_pos_cash_change',
+						'value' => '10.00;DROP TABLE',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $data['id'] );
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( '', $order->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '', $order->get_meta( '_pos_cash_change' ) );
+	}
+	/**
+	 * Offline-synced orders legitimately carry the till values in the create
+	 * payload — valid store/cash meta must still persist.
+	 */
+	public function test_create_order_valid_till_meta_persists(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'  => array(
+					array(
+						'key'   => '_pos_store',
+						'value' => 'store-7',
+					),
+					array(
+						'key'   => '_pos_cash_amount_tendered',
+						'value' => '20.00',
+					),
+					array(
+						'key'   => '_pos_cash_change',
+						'value' => '5.00',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $data['id'] );
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( 'store-7', $order->get_meta( '_pos_store' ) );
+		$this->assertSame( '20.00', $order->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '5.00', $order->get_meta( '_pos_cash_change' ) );
+	}
+	/**
+	 * An extension saving an unrelated order while a POS create is in flight
+	 * must not have that order's recorded cashier overwritten by the create
+	 * stamp.
+	 */
+	public function test_create_order_does_not_restamp_other_order_saved_mid_create(): void {
+		// Arrange.
+		$other_cashier = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$other_order   = OrderHelper::create_order();
+		$other_order->update_meta_data( '_pos_user', (string) $other_cashier );
+		$other_order->save();
+
+		$other_id = $other_order->get_id();
+		$hook     = static function () use ( $other_id ): void {
+			$order = wc_get_order( $other_id );
+			$order->set_customer_note( 'touched mid-create' );
+			$order->save();
+		};
+		add_action( 'woocommerce_new_order', $hook );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		// Act.
+		try {
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_action( 'woocommerce_new_order', $hook );
+		}
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( (string) $other_cashier, wc_get_order( $other_id )->get_meta( '_pos_user' ) );
+	}
+	/**
+	 * A nested order is still id 0 in its before-save callback, so the create
+	 * stamp must distinguish it from the request order by object identity.
+	 */
+	public function test_create_order_does_not_restamp_new_order_saved_mid_create(): void {
+		// Arrange.
+		$other_cashier = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$other_order   = null;
+		$order_created = false;
+		$hook          = static function () use ( &$other_order, &$order_created, $other_cashier ): void {
+			if ( $order_created ) {
+				return;
+			}
+			$order_created = true;
+			$other_order   = new WC_Order();
+			$other_order->update_meta_data( '_pos_user', (string) $other_cashier );
+			$other_order->save();
+		};
+		add_action( 'woocommerce_new_order', $hook );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		// Act.
+		try {
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_action( 'woocommerce_new_order', $hook );
+		}
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertInstanceOf( WC_Order::class, $other_order );
+		$this->assertSame( (string) $other_cashier, wc_get_order( $other_order->get_id() )->get_meta( '_pos_user' ) );
+	}
+	/**
+	 * WooCommerce resolves a meta_data entry by its `id` BEFORE its `key` and
+	 * overwrites both — so an entry carrying an audit row's id under a harmless
+	 * key would rename the audit row away (and the fill-if-missing stamp would
+	 * then record the attacker). Id-addressed entries targeting audit rows must
+	 * be dropped.
+	 */
+	public function test_update_order_meta_id_targeting_cannot_rename_audit_rows(): void {
+		// Arrange.
+		$original_cashier = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$order            = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) $original_cashier );
+		$order->update_meta_data( '_pos_cash_amount_tendered', '10.00' );
+		$order->save();
+
+		$user_meta_id = 0;
+		$cash_meta_id = 0;
+		foreach ( $order->get_meta_data() as $meta ) {
+			$data = $meta->get_data();
+			if ( '_pos_user' === $data['key'] ) {
+				$user_meta_id = (int) $data['id'];
+			}
+			if ( '_pos_cash_amount_tendered' === $data['key'] ) {
+				$cash_meta_id = (int) $data['id'];
+			}
+		}
+		$this->assertGreaterThan( 0, $user_meta_id );
+		$this->assertGreaterThan( 0, $cash_meta_id );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'id'    => $user_meta_id,
+						'key'   => '_x',
+						'value' => '1',
+					),
+					array(
+						'id'    => $cash_meta_id,
+						'key'   => '_y',
+						'value' => '2',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$updated = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) $original_cashier, $updated->get_meta( '_pos_user' ) );
+		$this->assertSame( '10.00', $updated->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '', $updated->get_meta( '_x' ) );
+		$this->assertSame( '', $updated->get_meta( '_y' ) );
+	}
+	/**
+	 * `_woocommerce_pos_version` records the accepting server's version at create;
+	 * an update must not let a client write or alter it.
+	 */
+	public function test_update_order_forged_wcpos_version_is_not_persisted(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_woocommerce_pos_version',
+						'value' => '9.9.9',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_woocommerce_pos_version' ) );
+	}
+	/**
+	 * The till values are write-once at the sale (captured by the gateway or the
+	 * offline-synced create): an update must not rewrite the cash amounts or store.
+	 */
+	public function test_update_order_forged_pos_till_meta_preserves_original_values(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_store', 'store-1' );
+		$order->update_meta_data( '_pos_cash_amount_tendered', '10.00' );
+		$order->update_meta_data( '_pos_cash_change', '0' );
+		$order->save();
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_store',
+						'value' => 'other-store',
+					),
+					array(
+						'key'   => '_pos_cash_amount_tendered',
+						'value' => '9999.00',
+					),
+					array(
+						'key'   => '_pos_cash_change',
+						'value' => '500.00',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$updated = wc_get_order( $order->get_id() );
+		$this->assertSame( 'store-1', $updated->get_meta( '_pos_store' ) );
+		$this->assertSame( '10.00', $updated->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '0', $updated->get_meta( '_pos_cash_change' ) );
+	}
+
 }

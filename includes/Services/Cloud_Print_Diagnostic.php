@@ -41,7 +41,7 @@ class Cloud_Print_Diagnostic {
 		}
 
 		return array(
-			'content_type' => Provider::content_type( $provider ),
+			'content_type' => ( new Print_Format_Resolver() )->content_type_for_printer( array( 'provider' => $provider ) ),
 			'payload'      => base64_encode( $payload ),
 		);
 	}
@@ -76,6 +76,45 @@ class Cloud_Print_Diagnostic {
 		$html .= '</body></html>';
 
 		return ( new Pdf_Renderer() )->render_html( $html );
+	}
+
+	/**
+	 * Build a Star Document Markup diagnostic receipt.
+	 *
+	 * Star Online is a push provider: the markup is rendered by stario.online,
+	 * not by this server, so it is returned as text rather than through
+	 * build(). Kept here so every provider's diagnostic lives in one class.
+	 *
+	 * Unlike build(), the name is not stripped of control bytes: this is markup
+	 * text, not a raw command stream, so the escaping that matters is of the
+	 * markup's own brackets. Stored printer names are sanitize_text_field()'d
+	 * on the way in, which already removes control characters.
+	 *
+	 * @param string $printer_name Display name.
+	 *
+	 * @return string Star Document Markup source.
+	 */
+	public function star_markup( string $printer_name ): string {
+		$date    = gmdate( 'Y-m-d H:i' );
+		$markup  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
+		$markup .= 'Cloud Print Test' . "\n" . '[align: left]';
+		$markup .= 'Printer: ' . $this->star_escape( $printer_name ) . "\n";
+		$markup .= 'Date: ' . $date . "\n";
+		$markup .= 'If you can read this, printing works!' . "\n";
+		$markup .= '[feed][cut]';
+
+		return $markup;
+	}
+
+	/**
+	 * Escape brackets for Star Document Markup text.
+	 *
+	 * @param string $value Text.
+	 *
+	 * @return string
+	 */
+	private function star_escape( string $value ): string {
+		return str_replace( array( '[', ']' ), array( '[[', ']]' ), $value );
 	}
 
 	/**

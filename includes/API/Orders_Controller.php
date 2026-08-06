@@ -24,6 +24,7 @@ use WC_Order_Item_Product;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -60,11 +61,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	protected $wcpos_request;
 
 	/**
-	 * Whether we are creating a new order.
+	 * The order object being created by the current request.
 	 *
-	 * @var bool
+	 * @var WC_Abstract_Order|null
 	 */
-	private $is_creating = false;
+	private $creating_order;
 
 	/**
 	 * Whether High Performance Orders is enabled.
@@ -420,8 +421,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $valid_email;
 		}
 
-		// Set the creating flag, used in woocommerce_before_order_object_save.
-		$this->is_creating = true;
+		// The POS audit meta is server-authoritative: WooCommerce applies `meta_data`
+		// (incl. `_`-prefixed) at create, and the before-save stamp only fills a MISSING
+		// `_pos_user` — so a client-forged value would land first and win. Strip the
+		// server-derived keys and drop invalid till values before the write.
+		if ( isset( $request['meta_data'] ) && \is_array( $request['meta_data'] ) ) {
+			$request->set_param( 'meta_data', Pos_Order_Audit::sanitize_create_meta( $request['meta_data'] ) );
+		}
+
+		$this->creating_order = null;
 
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
 
@@ -430,7 +438,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$response = parent::create_item( $request );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
-			$this->is_creating = false;
+			$this->creating_order = null;
 		}
 
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
@@ -454,9 +462,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return WC_Data|WP_Error
 	 */
 	public function wcpos_preserve_client_created_date_gmt( $order, WP_REST_Request $request, bool $creating ) {
-		if ( ! $creating || is_wp_error( $order ) ) {
+		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
 			return $order;
 		}
+		$this->creating_order = $order;
 
 		$body = $request->get_json_params();
 
@@ -534,6 +543,20 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$valid_email = $this->wcpos_validate_billing_email( $request );
 		if ( is_wp_error( $valid_email ) ) {
 			return $valid_email;
+		}
+
+		// The audit trail is write-once at the sale: an update must not rewrite the
+		// cashier, store, or cash amounts (the gateway and Pro's store stamp remain
+		// the only writers after create). The existing audit rows' meta ids are
+		// protected too — an id-addressed entry would otherwise rename a row away.
+		if ( isset( $request['meta_data'] ) && \is_array( $request['meta_data'] ) ) {
+			$request->set_param(
+				'meta_data',
+				Pos_Order_Audit::strip_audit_meta(
+					$request['meta_data'],
+					Pos_Order_Audit::audit_meta_ids( wc_get_order( (int) $request['id'] ) )
+				)
+			);
 		}
 
 		// Proceed with the parent method to handle the update.
@@ -1087,7 +1110,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws \WC_Data_Exception If order data is invalid.
 	 */
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
-		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
+		$is_creating_order = $order === $this->creating_order;
+
+		if ( $is_creating_order && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
 			// This is the server plugin version that accepted the new order. The
 			// line-item storage shape remains authoritative for offline-synced orders.
@@ -1095,14 +1120,16 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		/**
-		 * Add cashier user id to order meta
-		 * Note: There should only be one cashier per order, currently this will overwrite previous cashier id.
+		 * `_pos_user` records who rang up the sale and is server-derived: the order
+		 * being created is always stamped with the authenticated user (any client-
+		 * supplied value was stripped before the write); on later saves only a missing
+		 * value is filled, so an edit under a different user never reassigns the
+		 * recorded cashier. The forced stamp is limited to the exact order prepared
+		 * for this request — an extension saving another new order mid-create must not
+		 * have that order's cashier overwritten.
 		 */
-		$user_id    = get_current_user_id();
-		$cashier_id = $order->get_meta( '_pos_user' );
-
-		if ( ! $cashier_id ) {
-			$order->update_meta_data( '_pos_user', (string) $user_id );
+		if ( $is_creating_order || ! $order->get_meta( '_pos_user' ) ) {
+			$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
 		}
 	}
 

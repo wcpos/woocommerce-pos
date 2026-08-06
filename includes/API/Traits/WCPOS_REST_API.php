@@ -11,6 +11,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use Ramsey\Uuid\Uuid;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -341,14 +342,12 @@ trait WCPOS_REST_API {
 					$id_col  = 'post_id';
 					$meta_id = 'meta_id';
 				}
+				// The audit keys come from the shared authority so a new audit key
+				// reaches this degraded-meta read path without a second edit.
 				$keys = array_merge(
 					$keys,
+					Pos_Order_Audit::audit_meta_keys(),
 					array(
-						'_pos_user',
-						'_pos_store',
-						'_pos_cash_amount_tendered',
-						'_pos_cash_change',
-						'_pos_card_cashback',
 						'_woocommerce_pos_tax_based_on',
 					)
 				);
