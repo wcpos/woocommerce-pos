@@ -1096,4 +1096,36 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 2, \count( $data ) );
 		$this->assertEqualsCanonicalizing( array( $variation_ids2[0], $variation_ids3[0] ), $ids );
 	}
+
+	/**
+	 * WC's batch_items() calls create_item() directly, bypassing per-item
+	 * schema validation, so malformed meta_data entries must be dropped before
+	 * WC core's unguarded $meta['key'] access fatals mid-batch on PHP 8.
+	 */
+	public function test_batch_create_variation_with_string_meta_data_entry_creates_variation(): void {
+		// Arrange.
+		$product = ProductHelper::create_variation_product();
+		$request = $this->wp_rest_post_request( '/wcpos/v1/products/' . $product->get_id() . '/variations/batch' );
+		$request->set_param( 'product_id', $product->get_id() );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'regular_price' => '12',
+						'meta_data'     => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+	}
 }

@@ -99,6 +99,38 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	}
 
 	/**
+	 * Create a single variation.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function create_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		return parent::create_item( $request );
+	}
+
+	/**
+	 * Update a single variation.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		return parent::update_item( $request );
+	}
+
+	/**
 	 * Add custom fields to the product schema.
 	 */
 	public function get_item_schema() {
