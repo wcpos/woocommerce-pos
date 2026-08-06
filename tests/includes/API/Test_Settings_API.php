@@ -494,6 +494,30 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The license cache-clear handler is registered exactly once, by Init.
+	 *
+	 * The v1 Settings controller used to add its own copy in its constructor;
+	 * the #1444 merge past #1447's file move resurrected it once already, so
+	 * pin the count after the controller has been constructed via a dispatch.
+	 */
+	public function test_license_cache_clear_handler_registered_exactly_once(): void {
+		// Arrange: dispatch a settings request so the v1 controller (whose
+		// constructor used to register a duplicate) has been constructed.
+		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/general' ) );
+
+		// Act.
+		global $wp_filter;
+		$hook      = $wp_filter['pre_update_option_woocommerce_pos_pro_settings_license'] ?? null;
+		$callbacks = 0;
+		foreach ( null === $hook ? array() : $hook->callbacks as $priority_callbacks ) {
+			$callbacks += \count( $priority_callbacks );
+		}
+
+		// Assert.
+		$this->assertSame( 1, $callbacks );
+	}
+
+	/**
 	 * Test updating general settings.
 	 */
 	public function test_update_general_settings(): void {
