@@ -380,8 +380,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Cashier write forwarding relaxes the catalog mutation checks, and re-maps
-	 * shop_order contexts through the caps the cashier actually holds (never wider).
+	 * Cashier forwarding does not widen catalog or coupon mutation authorization.
+	 * Order contexts are re-mapped only through capabilities the cashier holds.
 	 */
 	public function test_cashier_push_requires_real_catalog_capabilities(): void {
 		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
@@ -413,6 +413,49 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['read'] );
 		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['delete'] );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
+	}
+
+	/** @dataProvider deniedCatalogMutationPreconditions */
+	public function test_catalog_permissions_precede_mutation_preconditions( string $collection, string $post_type, string $operation, ?string $base_revision ): void {
+		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$post_id    = self::factory()->post->create(
+			array(
+				'post_type'   => $post_type,
+				'post_status' => 'publish',
+			)
+		);
+		$store      = new Fake_Mutation_Store();
+		$store->resolve = $post_id;
+		wp_set_current_user( $cashier_id );
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => $collection,
+				'operation'    => $operation,
+				'baseRevision' => $base_revision,
+				'payload'      => 'delete' === $operation ? null : array( 'name' => 'Denied update' ),
+			)
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'woocommerce_rest_cannot_' . ( 'update' === $operation ? 'edit' : 'delete' ), $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] );
+		$this->assertSame( array( self::MID ), $store->released );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
+	}
+
+	public static function deniedCatalogMutationPreconditions(): array {
+		$cases = array();
+
+		foreach ( array( 'products' => 'product', 'variations' => 'product_variation', 'coupons' => 'shop_coupon' ) as $collection => $post_type ) {
+			foreach ( array( 'update', 'delete' ) as $operation ) {
+				$cases[ "$collection $operation without revision" ] = array( $collection, $post_type, $operation, null );
+				$cases[ "$collection $operation with stale revision" ] = array( $collection, $post_type, $operation, 'sha256:stale' );
+			}
+		}
+
+		return $cases;
 	}
 
 	public function test_order_edit_permission_respects_order_ownership(): void {

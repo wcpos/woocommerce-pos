@@ -694,6 +694,11 @@ class Write_Controller extends WP_REST_Controller {
 		if ( 0 === $id ) {
 			return new WP_Error( 'woo_rxdb_sync_record_not_found', 'No record for recordId.', array( 'status' => 404 ) );
 		}
+		$post_type = (string) ( $meta['post_type'] ?? '' );
+		if ( \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true )
+			&& ! wc_rest_check_post_permissions( $post_type, 'edit', $id ) ) {
+			return new WP_Error( 'woocommerce_rest_cannot_edit', __( 'Sorry, you are not allowed to edit this resource.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
+		}
 
 		// Envelope-level payload validation runs BEFORE any wc/v3 read or write —
 		// mirroring create, and keeping "rejected before the forward" true on every
@@ -882,6 +887,11 @@ class Write_Controller extends WP_REST_Controller {
 				return $finalized;
 			}
 			return new WP_REST_Response( (object) array(), 200 );
+		}
+		$post_type = (string) ( $meta['post_type'] ?? '' );
+		if ( \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true )
+			&& ! wc_rest_check_post_permissions( $post_type, 'delete', $id ) ) {
+			return new WP_Error( 'woocommerce_rest_cannot_delete', __( 'Sorry, you are not allowed to delete this resource.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		// A delete of an EXISTING record MUST carry a baseRevision precondition: an

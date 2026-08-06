@@ -68,6 +68,54 @@ class Test_Access_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Catalog mutation capabilities can be granted through Access settings.
+	 */
+	public function test_write_grants_catalog_mutation_capabilities(): void {
+		$capabilities = array(
+			'edit_product',
+			'edit_products',
+			'edit_others_products',
+			'edit_private_products',
+			'edit_published_products',
+			'publish_products',
+			'delete_product',
+			'delete_products',
+			'delete_others_products',
+			'delete_private_products',
+			'delete_published_products',
+			'publish_shop_coupons',
+			'edit_shop_coupons',
+			'edit_others_shop_coupons',
+			'edit_private_shop_coupons',
+			'edit_published_shop_coupons',
+			'delete_shop_coupons',
+			'delete_others_shop_coupons',
+			'delete_private_shop_coupons',
+			'delete_published_shop_coupons',
+		);
+		$role         = get_role( 'subscriber' );
+
+		foreach ( $capabilities as $capability ) {
+			$role->remove_cap( $capability );
+		}
+
+		$result = $this->section->write(
+			array(
+				'subscriber' => array(
+					'capabilities' => array(
+						'wc' => array_fill_keys( $capabilities, true ),
+					),
+				),
+			)
+		);
+
+		foreach ( $capabilities as $capability ) {
+			$this->assertTrue( $role->has_cap( $capability ), $capability );
+			$this->assertTrue( $result['subscriber']['capabilities']['wc'][ $capability ], $capability );
+		}
+	}
+
+	/**
 	 * Verify write() grants/revokes a capability on the cashier role and returns the fresh view.
 	 */
 	public function test_write_grants_and_revokes_capability_on_cashier_role(): void {
