@@ -85,13 +85,19 @@ trait Uuid_Handler {
 			return;
 		}
 		try {
+			// Persist any pending meta, then check the STORED uuid directly —
+			// a full read_meta_data(true) reload would clobber sibling in-memory
+			// meta on lanes where the datastore cache lags (HPOS misc `_sku`).
 			$item->save_meta_data();
-			$item->read_meta_data( true );
-			$uuid = $item->get_meta( Pos_Uuid::META_KEY );
+			$uuid = wc_get_order_item_meta( $item->get_id(), Pos_Uuid::META_KEY, true );
 			if ( ! Pos_Uuid::is_uuid( $uuid ) ) {
 				$uuid = Uuid::uuid4()->toString();
 				$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
 				$item->save_meta_data();
+			} elseif ( $uuid !== $item->get_meta( Pos_Uuid::META_KEY ) ) {
+				// A concurrent request minted first; converge the stale in-memory
+				// item on the stored winner so the served payload carries it.
+				$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
 			}
 		} finally {
 			$this->release_order_item_uuid_lock( $lock_key );
