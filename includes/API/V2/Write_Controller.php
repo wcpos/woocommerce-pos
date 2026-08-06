@@ -779,6 +779,7 @@ class Write_Controller extends WP_REST_Controller {
 				&& array_key_exists( 'email', $update_payload['billing'] )
 				&& '' === $update_payload['billing']['email'];
 			$update_payload = $this->reconcile_order_item_ids( $id, $update_payload );
+			$update_payload = $this->remove_omitted_order_items( $id, $update_payload );
 			$update_payload = $this->reconcile_order_coupon_lines( $id, $update_payload );
 			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
 		}
@@ -1349,6 +1350,55 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 
+		return $payload;
+	}
+
+	/**
+	 * Add wc/v3 deletion markers for stored items omitted from posted line collections.
+	 *
+	 * @param int   $order_id Resolved order id.
+	 * @param array $payload  Reconciled update payload.
+	 * @return array Payload containing deletion markers for omitted items.
+	 */
+	private function remove_omitted_order_items( int $order_id, array $payload ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return $payload;
+		}
+		$types = array(
+			'line_items'     => array( 'line_item', 'product_id' ),
+			'fee_lines'      => array( 'fee', 'name' ),
+			'shipping_lines' => array( 'shipping', 'method_id' ),
+		);
+		foreach ( $types as $payload_key => $type ) {
+			if ( ! array_key_exists( $payload_key, $payload ) || ! is_array( $payload[ $payload_key ] ) ) {
+				continue;
+			}
+			$stored_items = $order->get_items( $type[0] );
+			$posted_ids   = array();
+			foreach ( $payload[ $payload_key ] as $line ) {
+				if ( is_array( $line ) && ! empty( $line['id'] ) && is_numeric( $line['id'] ) ) {
+					$posted_ids[] = (int) $line['id'];
+					continue;
+				}
+				$uuid = is_array( $line ) && is_array( $line['meta_data'] ?? null )
+					? Pos_Uuid::read_valid_uuid_from_meta( $line['meta_data'] )
+					: '';
+				foreach ( $stored_items as $item ) {
+					if ( '' !== $uuid && $uuid === $item->get_meta( Pos_Uuid::META_KEY, true ) ) {
+						$posted_ids[] = $item->get_id();
+					}
+				}
+			}
+			foreach ( $stored_items as $item ) {
+				if ( ! in_array( $item->get_id(), $posted_ids, true ) ) {
+					$payload[ $payload_key ][] = array(
+						'id'      => $item->get_id(),
+						$type[1]  => null,
+					);
+				}
+			}
+		}
 		return $payload;
 	}
 

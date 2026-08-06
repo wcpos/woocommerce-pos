@@ -330,6 +330,7 @@ class Test_Rest_Dispatch_Line_Reconciliation extends Sync_REST_Store_Test_Case {
 		$order->save();
 		$stored_ids  = array( $existing->get_id(), $duplicate->get_id() );
 		$posted_line = $this->strip_item_ids( $created['document'] )['line_items'][0];
+		$posted_line['id'] = 0;
 
 		// Act.
 		$response = $this->push_envelope(
