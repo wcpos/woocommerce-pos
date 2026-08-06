@@ -98,9 +98,6 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function __construct() {
 		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'payment_gateways_settings' ) );
-
-		// remove this once Pro settings have been moved to the new settings service.
-		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( $this, 'remove_license_transient' ) );
 	}
 
 	/**
@@ -381,16 +378,6 @@ class Settings extends WP_REST_Controller {
 		return $options;
 	}
 
-	/**
-	 * Temporary fix for stale license status transient. Remove when possible.
-	 *
-	 * @param mixed $value The option value.
-	 */
-	public function remove_license_transient( $value ) {
-		delete_transient( 'woocommerce_pos_pro_license_status' );
-
-		return $value;
-	}
 
 	/**
 	 * Register the GET/POST pair for one Settings Section.
