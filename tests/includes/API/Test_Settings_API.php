@@ -196,6 +196,47 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Pro's updater can react to the update_plugins deletion by reading — and,
+	 * when the stored instance is blank, re-saving — the license option, which
+	 * re-enters remove_license_transient and recursed unbounded (OOM on first
+	 * license activation). The guard must break the cycle: the write-back's
+	 * nested update happens without re-clearing, so the reaction fires once.
+	 */
+	public function test_license_option_write_back_during_transient_clear_does_not_recurse(): void {
+		// Arrange: simulate Pro's clear-update reaction writing the option back.
+		$write_backs = 0;
+		$write_back  = function () use ( &$write_backs ): void {
+			++$write_backs;
+			if ( $write_backs > 3 ) {
+				// Circuit breaker: let the assertion below fail instead of OOM.
+				return;
+			}
+			update_option(
+				'woocommerce_pos_pro_settings_license',
+				array(
+					'key' => 'k',
+					'instance' => (string) $write_backs,
+				)
+			);
+		};
+		add_action( 'delete_site_transient_update_plugins', $write_back );
+
+		// Act.
+		update_option(
+			'woocommerce_pos_pro_settings_license',
+			array(
+				'key' => 'k',
+				'instance' => '',
+			)
+		);
+
+		remove_action( 'delete_site_transient_update_plugins', $write_back );
+
+		// Assert.
+		$this->assertSame( 1, $write_backs );
+	}
+
+	/**
 	 * Test updating general settings.
 	 */
 	public function test_update_general_settings(): void {
@@ -208,6 +249,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertTrue( $response['pos_only_products'] );
 	}
 
+	/**
+	 * Store tax ids round-trip through update with sanitization applied.
+	 */
 	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
 		$request = $this->mock_rest_request(
 			array(
@@ -249,6 +293,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Updating store tax ids replaces the stored array wholesale.
+	 */
 	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
 		update_option(
 			'woocommerce_pos_settings_general',

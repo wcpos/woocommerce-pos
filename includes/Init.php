@@ -72,8 +72,18 @@ class Init {
 	 * @return mixed
 	 */
 	public static function remove_license_transient( $value ) {
+		// Pro's updater can react to the update_plugins deletion by reading —
+		// and, when the stored instance id is blank, re-saving — the license
+		// option, which re-enters this filter. Without the guard that cycle is
+		// unbounded and OOMs the first license activation on a fresh install.
+		static $clearing = false;
+		if ( $clearing ) {
+			return $value;
+		}
+		$clearing = true;
 		delete_transient( 'woocommerce_pos_pro_license_status' );
 		delete_site_transient( 'update_plugins' );
+		$clearing = false;
 
 		return $value;
 	}
