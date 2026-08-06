@@ -108,14 +108,25 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 				'key'   => 'custom',
 				'value' => 'kept',
 			),
+			(object) array(
+				'key'   => '_pos_cash_amount_tendered',
+				'value' => '20.00',
+			),
 		);
 
 		// Act.
 		$result = Pos_Order_Audit::sanitize_create_meta( $meta );
 
 		// Assert.
-		$this->assertCount( 1, $result );
+		$this->assertCount( 2, $result );
 		$this->assertEquals( 'custom', $result[0]->key );
+		$this->assertSame(
+			array(
+				'key'   => '_pos_cash_amount_tendered',
+				'value' => '20.00',
+			),
+			$result[1]
+		);
 	}
 
 	/**
