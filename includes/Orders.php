@@ -621,7 +621,24 @@ class Orders {
 	 * @return void
 	 */
 	public static function fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
-		if ( ! wcpos_request() || $fee_item->get_total() >= 0 ) {
+		if ( $fee_item->get_total() >= 0 ) {
+			return;
+		}
+
+		// Gate on the ORDER being a POS order (durable — survives wp-admin
+		// Recalculate, bulk actions, and third-party recalculations), with the
+		// POS request marker only as the supplement for the creation moment,
+		// before the order is marked. A per-request-only gate silently flipped a
+		// POS order's fee tax whenever a non-POS caller recalculated it.
+		//
+		// STOPGAP (2026-08-06 ruling): this preserves the existing POS fee-tax
+		// semantics consistently, but the semantics themselves are slated for
+		// replacement — negative fees are disowned by WooCommerce and the
+		// override over-declares VAT on tax-inclusive stores. The plan of record
+		// is migrating till discounts to virtual percent coupons; see
+		// .claude/research/2026-08-06-wc-negative-fee-tax.md.
+		// wcpos_is_pos_order() safely returns false for any non-order input.
+		if ( ! wcpos_is_pos_order( $fee_item->get_order() ) && ! wcpos_request() ) {
 			return;
 		}
 

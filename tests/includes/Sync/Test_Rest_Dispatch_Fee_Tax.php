@@ -205,8 +205,9 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_non_pos_wc_requests_keep_stock_negative_fee_behavior(): void {
-		// The handler is request-gated: a plain wc/v3 write (no X-WCPOS header)
-		// must keep WooCommerce's stock discount-tax allocation untouched.
+		// The handler is gated on the ORDER: a plain wc/v3 write creating a
+		// NON-POS order (no X-WCPOS header, no POS marker) must keep
+		// WooCommerce's stock discount-tax allocation untouched.
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		$product = ProductHelper::create_simple_product(
 			array(
@@ -238,6 +239,40 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 201, $response->get_status() );
 		$fee = $this->single_fee( (int) $response->get_data()['id'] );
 		$this->assertSame( '-0.20', wc_format_decimal( $fee->get_total_tax(), 2 ) );
+	}
+
+	public function test_pos_order_keeps_pos_fee_semantics_when_recalculated_by_non_pos_caller(): void {
+		// THE property that was broken: a POS order's fee-tax semantics belong
+		// to the ORDER, not the requester. An admin hitting Recalculate (or any
+		// non-POS recalculation) must not flip the fee tax back to WC's stock
+		// allocation and silently change the order total.
+		$create = $this->push_order_create(
+			array(
+				array(
+					'name'       => 'POS discount',
+					'total'      => '-2.00',
+					'tax_status' => 'none',
+				),
+			),
+			'b2c3d4e5-2222-4333-8444-000000000099'
+		);
+		$this->assertEquals( 201, $create->get_status(), wp_json_encode( $create->get_data() ) );
+		$order_id = (int) $create->get_data()['document']['id'];
+		$this->assertSame( 0.0, (float) $this->single_fee( $order_id )->get_total_tax() );
+
+		// A non-POS caller recalculates the POS order.
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		$order = wc_get_order( $order_id );
+		$order->calculate_taxes();
+		$order->calculate_totals( false );
+		$order->save();
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$this->assertSame(
+			0.0,
+			(float) $this->single_fee( $order_id )->get_total_tax(),
+			'A POS order must keep POS fee-tax semantics regardless of who recalculates.'
+		);
 	}
 
 	public function test_v1_orders_route_still_zeroes_negative_none_fee(): void {
