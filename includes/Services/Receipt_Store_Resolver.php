@@ -187,10 +187,15 @@ class Receipt_Store_Resolver {
 			$tax_ids = array();
 		}
 
+		// Resolved lazily so the bloginfo filters only run when they are actually needed.
+		$name = $this->resolve_optional_text( 'get_name', null );
+		if ( null === $name ) {
+			$name = isset( $fallbacks['name'] ) ? (string) $fallbacks['name'] : (string) get_bloginfo( 'name' );
+		}
+
 		$store = array(
 			'id'            => (int) $this->get_store_value( 'get_id', $fallbacks['id'] ?? 0 ),
-			// Enum-style resolution: a blank store name falls back to the site title.
-			'name'          => $this->resolve_store_option_string( 'get_name', $fallbacks['name'] ?? get_bloginfo( 'name' ) ),
+			'name'          => $name,
 			// Structured address parts mirror customer.billing_address — templates that
 			// want country-specific layouts compose from these. address_lines[] is the
 			// pre-formatted default for templates that just iterate, composed via

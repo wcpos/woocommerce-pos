@@ -87,9 +87,10 @@ class Receipt_Data_Builder {
 		$presentation_hints = $store_resolver->build_presentation_hints( (string) $order->get_currency() );
 		$tax                = $store_resolver->build_tax_section();
 
-		// A deleted historical store resolves to a bare \stdClass, so every getter
-		// falls back: the receipt shows the recorded store ID instead of silently
-		// borrowing the current store's details.
+		// $missing_order_store_id > 0 only ever happens alongside the bare \stdClass
+		// assigned above, so no getter resolves and every fallback below is taken.
+		// That is what keeps a deleted store's receipt showing the recorded store ID
+		// rather than silently borrowing the current store's name and address.
 		$store_fallbacks = array();
 		if ( $missing_order_store_id > 0 ) {
 			$store_fallbacks['id'] = $missing_order_store_id;
