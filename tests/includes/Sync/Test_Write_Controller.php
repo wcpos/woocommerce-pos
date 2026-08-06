@@ -1216,6 +1216,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 900, $call['id'] );
 		$this->assertSame( 'woocommerce-pos', $call['created_via'] );          // channel enforced
 		$this->assertSame( (string) $cashier_id, $call['meta']['_pos_user'] );                 // server-derived cashier, not client's 999
+		$this->assertSame( (string) $cashier_id, $call['meta']['_pos_user_created'] );         // immutable creator anchor, stamped at create
 		$this->assertSame( VERSION, $call['meta']['_woocommerce_pos_version'] ); // accepting server version
 		$this->assertSame( '3', $call['meta']['_pos_store'] );                 // till store preserved
 		$this->assertSame( '20.00', $call['meta']['_pos_cash_amount_tendered'] ); // cash meta preserved
@@ -1301,6 +1302,45 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( (string) $new_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
 		$this->assertSame( (string) $new_id, (string) $this->metaValue( $result->get_data()['document'], '_pos_user' ) );
 		$this->assertContains( 'POS cashier changed from Old Cashier to New Cashier.', $this->noteContents( $order->get_id() ) );
+	}
+
+	public function test_creator_anchor_survives_reassignment_and_forgery(): void {
+		// 2026-08-07 ruling: `_pos_user` is reassignable (park/reopen), so the
+		// CREATOR is anchored once in `_pos_user_created` and never rewritten —
+		// not by a reassigning update, and not by a forged payload value (it is
+		// a SERVER_META_KEY, stripped from every forwarded body).
+		$creator_id = self::factory()->user->create( array( 'display_name' => 'Ringer' ) );
+		$claimer_id = self::factory()->user->create(
+			array(
+				'display_name' => 'Closer',
+				'role'         => 'administrator',
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) $creator_id );
+		$order->update_meta_data( '_pos_user_created', (string) $creator_id );
+		$order->save();
+		wp_set_current_user( $claimer_id );
+
+		$this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_user',
+						'value' => (string) $claimer_id,
+					),
+					array(
+						'key'   => '_pos_user_created',
+						'value' => (string) $claimer_id,
+					),
+				),
+			)
+		);
+
+		$reread = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) $claimer_id, $reread->get_meta( '_pos_user' ), 'Reassignment moves _pos_user.' );
+		$this->assertSame( (string) $creator_id, $reread->get_meta( '_pos_user_created' ), 'The creator anchor must survive reassignment and forgery.' );
 	}
 
 	public function test_order_update_silently_ignores_different_cashier_user(): void {
