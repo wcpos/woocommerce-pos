@@ -382,9 +382,26 @@ class Test_Rest_Dispatch_Coupon_Create extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Fractional quantity coupon math remains stable at currency precision.
+	 * POS-discounted coupon math retains the v1 currency-rounding boundary.
 	 *
 	 * @see \WCPOS\WooCommercePOS\Tests\Test_Orders_Coupon_Discount::test_quantity_rounding_with_pos_discounted_coupon()
+	 *
+	 * @return void
+	 */
+	public function test_percent_coupon_pos_discounted_line_rounds_discount_consistently(): void {
+		// Arrange.
+		$this->coupon( 'push-quantity-rounding', 'percent', '10' );
+		$line = $this->pos_line( $this->product( 24.99, 'none' ), '19.99', '24.99', 'none', 3 );
+		// Act.
+		$order = $this->created_order( $this->push_order( array( 'line_items' => array( $line ), 'coupon_lines' => array( array( 'code' => 'push-quantity-rounding' ) ) ) ) );
+		// Assert.
+		$item = array_values( $order->get_items( 'line_item' ) )[0];
+		$this->assert_line_amounts( $item, 59.97, 53.97, 0.00 );
+		$this->assertEquals( 53.97, round( (float) $order->get_total(), 2 ) );
+	}
+
+	/**
+	 * Fractional quantity coupon math remains stable at currency precision.
 	 *
 	 * @return void
 	 */
