@@ -14,6 +14,30 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WP_REST_Response;
 
 /**
+ * Record whether order-item lookups allow the item to load from storage.
+ */
+class Tracking_Order extends WC_Order {
+	/**
+	 * Load-from-database arguments passed to get_item().
+	 *
+	 * @var bool[]
+	 */
+	public static $get_item_load_from_db = array();
+
+	/**
+	 * Record the load mode before delegating to WooCommerce.
+	 *
+	 * @param int  $item_id      Order item ID.
+	 * @param bool $load_from_db Whether to load the item from the database.
+	 * @return \WC_Order_Item|false
+	 */
+	public function get_item( $item_id, $load_from_db = true ) {
+		self::$get_item_load_from_db[] = $load_from_db;
+		return parent::get_item( $item_id, $load_from_db );
+	}
+}
+
+/**
  * Re-pushes acknowledged order documents verbatim through the real v2 route.
  *
  * @internal
@@ -280,6 +304,11 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_variable_product_ack_repush_twice_preserves_variation_attribute_meta_count(): void {
 		// Arrange.
+		$order_class_filter = static function (): string {
+			return Tracking_Order::class;
+		};
+		add_filter( 'woocommerce_order_class', $order_class_filter );
+		Tracking_Order::$get_item_load_from_db = array();
 		$parent       = ProductHelper::create_variation_product();
 		$variation_id = $parent->get_children()[0];
 		$variation    = wc_get_product( $variation_id );
@@ -313,5 +342,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, $this->line_item_meta_count( $created->get_data()['document'], 'pa_size' ) );
 		$this->assertSame( 1, $this->line_item_meta_count( $first->get_data()['document'], 'pa_size' ) );
 		$this->assertSame( 1, $this->line_item_meta_count( $second->get_data()['document'], 'pa_size' ) );
+		remove_filter( 'woocommerce_order_class', $order_class_filter );
+		$this->assertNotContains( false, Tracking_Order::$get_item_load_from_db );
 	}
 }

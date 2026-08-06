@@ -1391,7 +1391,7 @@ class Write_Controller extends WP_REST_Controller {
 			if ( ! is_array( $line ) || empty( $line['id'] ) || ! is_numeric( $line['id'] ) ) {
 				continue;
 			}
-			$item = $order->get_item( (int) $line['id'], false );
+			$item = $order->get_item( (int) $line['id'] );
 			if ( ! $item instanceof WC_Order_Item_Product || $item->get_variation_id() <= 0 ) {
 				continue;
 			}
