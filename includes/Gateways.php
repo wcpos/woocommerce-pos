@@ -103,27 +103,32 @@ class Gateways {
 	}
 
 	/**
-	 * Apply the POS gateway availability and ordering policy.
+	 * Apply the POS gateway availability, presentation and ordering policy.
 	 *
-	 * Pure policy function: array in, array out. It performs no WordPress calls
-	 * and reads no globals, so it can be exercised directly in unit tests.
+	 * Selects the gateways enabled in the POS `payment_gateways` settings,
+	 * overrides each one's title, blanks its icon, forces it enabled and marks the
+	 * configured `default_gateway` as chosen, then sorts the result by the
+	 * per-gateway `order` setting.
 	 *
-	 * For each registered gateway that is enabled in the POS `payment_gateways`
-	 * settings it overrides the title, blanks the icon, forces the gateway
-	 * enabled and marks the configured `default_gateway` as chosen. The result is
-	 * then sorted by the per-gateway `order` setting.
+	 * Free of ambient state - it makes no WordPress calls and reads no globals, so
+	 * it can be exercised directly in unit tests. It is NOT side-effect free: the
+	 * gateway objects are mutated in place, which in production means the live
+	 * `WC()->payment_gateways->payment_gateways` singletons. That is the existing
+	 * mechanism (Admin\Orders\Single_Order::add_available_gateways() relies on the
+	 * same singleton mutation) and is preserved deliberately.
 	 *
-	 * NOTE: `$settings` is intentionally untyped. Lots of plugins/themes call the
-	 * `woocommerce_available_payment_gateways` filter and the settings shape is
-	 * not guaranteed; the behaviour for unexpected shapes is preserved exactly as
-	 * it was inline.
+	 * NOTE: neither parameter carries a native typehint. Lots of plugins/themes
+	 * call the `woocommerce_available_payment_gateways` filter and neither the
+	 * gateway list nor the settings shape is guaranteed; a native `array` here
+	 * would turn today's warning into an uncatchable TypeError on the payment
+	 * path. Behaviour for unexpected shapes is preserved exactly as it was inline.
 	 *
 	 * @param array $gateways All registered payment gateway objects.
 	 * @param array $settings The POS `payment_gateways` settings blob.
 	 *
 	 * @return array The enabled gateways, keyed by gateway id, in settings order.
 	 */
-	public static function order_gateways( array $gateways, $settings ): array {
+	public static function order_gateways( $gateways, $settings ): array {
 		$_available_gateways = array();
 
 		foreach ( $gateways as $gateway ) {

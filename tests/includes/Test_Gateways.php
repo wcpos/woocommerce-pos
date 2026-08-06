@@ -65,6 +65,35 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Run a callback with PHP diagnostics captured instead of thrown.
+	 *
+	 * PHPUnit is configured with convertWarningsToExceptions/convertNoticesToExceptions,
+	 * which would abort before the characterisation tests can assert on the result.
+	 * The handler is restored in a `finally` so a throw inside the callback cannot
+	 * leak it into the rest of the suite.
+	 *
+	 * @param callable $callback    The code to run.
+	 * @param array    $diagnostics Collects the captured diagnostic messages.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	private function capture_diagnostics( callable $callback, array &$diagnostics ) {
+		set_error_handler(
+			function ( $errno, $errstr ) use ( &$diagnostics ) {
+				$diagnostics[] = $errstr;
+
+				return true;
+			}
+		);
+
+		try {
+			return $callback();
+		} finally {
+			restore_error_handler();
+		}
+	}
+
+	/**
 	 * Gateways are returned in the order defined by the settings `order` key.
 	 */
 	public function test_order_gateways_sorts_by_order_key_returns_settings_order(): void {
@@ -134,15 +163,12 @@ class Test_Gateways extends WC_Unit_Test_Case {
 		// convertWarningsToExceptions/convertNoticesToExceptions does not abort
 		// the run before we can assert on the resulting order.
 		$diagnostics = array();
-		set_error_handler(
-			function ( $errno, $errstr ) use ( &$diagnostics ) {
-				$diagnostics[] = $errstr;
-
-				return true;
-			}
+		$result      = $this->capture_diagnostics(
+			function () use ( $gateways, $settings ) {
+				return Gateways::order_gateways( $gateways, $settings );
+			},
+			$diagnostics
 		);
-		$result = Gateways::order_gateways( $gateways, $settings );
-		restore_error_handler();
 
 		// Assert.
 		$this->assertNotEmpty( $diagnostics, 'Expected an undefined-index diagnostic from the unguarded order lookup.' );
@@ -318,6 +344,39 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A non-array gateway list warns and yields no available gateways.
+	 *
+	 * Third-party callers of the `woocommerce_available_payment_gateways` filter
+	 * cannot be trusted to supply an array, which is why order_gateways() has no
+	 * native `array` typehint: a TypeError on the payment path would be far worse
+	 * than the foreach warning this locks in.
+	 */
+	public function test_order_gateways_non_array_gateways_warns_and_returns_empty_array(): void {
+		// Arrange.
+		$settings = $this->make_settings(
+			array(
+				'pos_cash' => array(
+					'enabled' => true,
+					'order'   => 0,
+				),
+			)
+		);
+
+		// Act.
+		$diagnostics = array();
+		$result      = $this->capture_diagnostics(
+			function () use ( $settings ) {
+				return Gateways::order_gateways( null, $settings );
+			},
+			$diagnostics
+		);
+
+		// Assert.
+		$this->assertNotEmpty( $diagnostics, 'Expected a foreach warning rather than a fatal TypeError.' );
+		$this->assertEquals( array(), $result );
+	}
+
+	/**
 	 * The registration gate suppresses POS gateways on the WooCommerce settings screen.
 	 */
 	public function test_should_suppress_pos_gateways_admin_wc_settings_returns_true(): void {
@@ -345,6 +404,20 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	public function test_should_suppress_pos_gateways_admin_no_plugin_page_returns_false(): void {
 		// Arrange / Act.
 		$result = Gateways::should_suppress_pos_gateways( true, null );
+
+		// Assert.
+		$this->assertFalse( $result );
+	}
+
+	/**
+	 * A falsy-but-not-null plugin page still registers the POS gateways.
+	 *
+	 * Exercises the loose `==` the gate deliberately keeps: `''` is falsy but is
+	 * not equal to 'wc-settings' on any supported PHP version.
+	 */
+	public function test_should_suppress_pos_gateways_empty_plugin_page_returns_false(): void {
+		// Arrange / Act.
+		$result = Gateways::should_suppress_pos_gateways( true, '' );
 
 		// Assert.
 		$this->assertFalse( $result );
