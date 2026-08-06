@@ -109,38 +109,37 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Orders pull and every change-candidate response expose cheap body metrics
-	 * and a Server-Timing mirror of the body duration.
+	 * Orders pull exposes body metrics while changes expose header telemetry.
 	 */
-	public function test_orders_pull_and_change_candidates_expose_response_metrics(): void {
+	public function test_sync_read_routes_expose_expected_response_telemetry(): void {
 		( new Activator() )->install_sync_schema();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
+		$pull         = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/pull' ) );
+		$pull_metrics = $pull->get_data()['metrics'];
+		$this->assertIsFloat( $pull_metrics['duration_ms'] );
+		$this->assertIsInt( $pull_metrics['memory_peak_bytes'] );
+		$this->assertSame( 'wcpos;dur=' . $pull_metrics['duration_ms'], $pull->get_headers()['Server-Timing'] );
+
 		$paths = array(
-			// The client's pull protocol parses response.metrics at the TOP level.
-			'/wcpos/v2/orders/pull'                    => array( 'metrics' ),
-			'/wcpos/v2/changes/sequence-log'           => array( 'meta' ),
-			'/wcpos/v2/changes/revision-hash'          => array( 'meta' ),
-			'/wcpos/v2/changes/range-checksum'         => array( 'meta' ),
-			'/wcpos/v2/changes/config-fingerprint'     => array( 'meta' ),
+			'/wcpos/v2/changes/sequence-log',
+			'/wcpos/v2/changes/revision-hash',
+			'/wcpos/v2/changes/range-checksum',
+			'/wcpos/v2/changes/config-fingerprint',
+			'/wcpos/v2/changes/tick',
 		);
 
-		foreach ( $paths as $path => $metrics_path ) {
+		foreach ( $paths as $path ) {
 			$response = $this->server->dispatch( $this->wp_rest_get_request( $path ) );
 			$data     = $response->get_data();
 			$headers  = $response->get_headers();
-			$metrics  = $data;
-			foreach ( $metrics_path as $key ) {
-				$this->assertArrayHasKey( $key, $metrics, $path );
-				$metrics = $metrics[ $key ];
-			}
 
 			$this->assertSame( 200, $response->get_status(), $path );
-			$this->assertIsFloat( $metrics['duration_ms'], $path );
-			$this->assertGreaterThanOrEqual( 0, $metrics['duration_ms'], $path );
-			$this->assertIsInt( $metrics['memory_peak_bytes'], $path );
-			$this->assertGreaterThan( 0, $metrics['memory_peak_bytes'], $path );
-			$this->assertSame( 'wcpos;dur=' . $metrics['duration_ms'], $headers['Server-Timing'], $path );
+			$this->assertArrayNotHasKey( 'candidate', $data, $path );
+			$this->assertArrayNotHasKey( 'duration_ms', $data['meta'], $path );
+			$this->assertArrayNotHasKey( 'memory_peak_bytes', $data['meta'], $path );
+			$this->assertStringStartsWith( 'wcpos;dur=', $headers['Server-Timing'], $path );
+			$this->assertGreaterThan( 0, (int) $headers['X-WCPOS-Memory-Peak'], $path );
 			$this->assertCount( 3, json_decode( $headers['X-Server-Load'], true ), $path );
 		}
 	}

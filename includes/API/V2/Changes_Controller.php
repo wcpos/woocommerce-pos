@@ -1,6 +1,6 @@
 <?php
 /**
- * WCPOS sync read surface.
+ * WCPOS v2 graduated change-signal read surface.
  *
  * @package WCPOS\WooCommercePOS\API\V2
  */
@@ -23,11 +23,10 @@ use WP_REST_Server;
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Queries use internal table names and generated SQL fragments.
 
 /**
- * Change-signal candidate endpoints (queue item A1).
+ * Graduated v2 change-signal read surface.
  *
- * Five GET endpoints under /changes/<candidate>, one per change-signal
- * mechanism, sharing a common response envelope so the matrix runner (A2)
- * can score them side by side. See docs/experiments/change-signal-candidates.md.
+ * Five GET endpoints under /changes/ share a common response envelope,
+ * graduated from the change-signal candidate matrix (#1405, #1406).
  */
 final class Changes_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
@@ -153,10 +152,9 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Candidate 3: hook-maintained change log queried by global sequence cursor.
+	 * Hook-maintained change log queried by global sequence cursor.
 	 */
 	public function sequence_log( WP_REST_Request $request ) {
-		$started = microtime( true );
 		// `all` (the unified stream) is recognised ONLY here, from the raw param;
 		// collection_for_request() never returns it, so the other endpoints can't.
 		$is_all     = ( 'all' === (string) $request->get_param( 'collection' ) );
@@ -168,7 +166,7 @@ final class Changes_Controller extends WP_REST_Controller {
 		// param: the products stream serves product AND variation rows, and a client
 		// replacing its standalone all-collections fingerprint poll with this
 		// embedded member must never see a narrowed snapshot (stale variations).
-		$config_fingerprint = $this->config_fingerprint_data( $request, $started, true );
+		$config_fingerprint = $this->config_fingerprint_data( $request, true );
 		$head_sequence      = $this->change_log->head_sequence();
 		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 		$headers            = array(
@@ -259,15 +257,13 @@ final class Changes_Controller extends WP_REST_Controller {
 		$headers['ETag'] = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 
 		$data                       = $this->envelope(
-			'sequence-log',
 			$collection,
 			array(
 				'since' => $checkpoint_since,
 				'head'  => $head_sequence,
 			),
 			$changes,
-			\count( $rows ) < $limit,
-			$started
+			\count( $rows ) < $limit
 		);
 		$data['config_fingerprint'] = $config_fingerprint;
 
@@ -275,16 +271,15 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Candidate 4: recompute each record's served representation and hash it.
+	 * Deepest repair tier: hash each record's full served representation.
 	 * Expensive by design — raw SQL pages ids (discovery only, ADR 0003);
 	 * the hashed value is hydrated through the filtered REST path.
 	 */
 	public function revision_hash( WP_REST_Request $request ) {
-		$started    = microtime( true );
 		$collection = $this->collection_for_request( $request );
 		$limit      = $this->int_param( $request, 'limit', 50, 1, 200 );
 		$since_id   = max( 0, (int) ( $request->get_param( 'since_id' ) ?? 0 ) );
-		$note       = 'full filtered REST serialization per record on every poll; the serialization cost is the point of this candidate.';
+		$note       = 'full filtered REST serialization per record on every poll; the serialization cost is the point of this repair tier.';
 		global $wpdb;
 
 		if ( 'tax_rates' === $collection ) {
@@ -311,12 +306,10 @@ final class Changes_Controller extends WP_REST_Controller {
 
 			return rest_ensure_response(
 				$this->envelope(
-					'revision-hash',
 					$collection,
 					array( 'since_id' => $checkpoint_id ),
 					$changes,
 					\count( $rows ) < $limit,
-					$started,
 					true,
 					$note
 				)
@@ -360,12 +353,10 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		return rest_ensure_response(
 			$this->envelope(
-				'revision-hash',
 				$collection,
 				array( 'since_id' => $checkpoint_id ),
 				$changes,
 				\count( $rows ) < $limit,
-				$started,
 				true,
 				$note
 			)
@@ -373,11 +364,9 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Candidate 5: bucketed integrity checksums over the id space, with
-	 * a per-bucket drill-down mode returning audit-list rows.
+	 * Bucketed integrity checksums with per-bucket audit-list drill-down.
 	 */
 	public function range_checksum( WP_REST_Request $request ) {
-		$started     = microtime( true );
 		$collection  = $this->collection_for_request( $request );
 		$bucket_size = $this->int_param( $request, 'bucket_size', 1000, 1, 10000 );
 		$bucket_raw  = $request->get_param( 'bucket' );
@@ -412,12 +401,10 @@ final class Changes_Controller extends WP_REST_Controller {
 
 				return rest_ensure_response(
 					$this->envelope(
-						'range-checksum',
 						$collection,
 						$checkpoint,
 						$changes,
 						true,
-						$started,
 						true,
 						self::TAX_RATES_NOTE
 					)
@@ -446,7 +433,7 @@ final class Changes_Controller extends WP_REST_Controller {
 				$rows
 			);
 
-			return rest_ensure_response( $this->envelope( 'range-checksum', $collection, $checkpoint, $changes, true, $started ) );
+			return rest_ensure_response( $this->envelope( $collection, $checkpoint, $changes, true ) );
 		}
 
 		// MySQL's default group_concat_max_len (1024) silently truncates the
@@ -486,12 +473,10 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		return rest_ensure_response(
 			$this->envelope(
-				'range-checksum',
 				$collection,
 				array( 'bucket_size' => $bucket_size ),
 				$changes,
 				true,
-				$started,
 				true,
 				$note
 			)
@@ -499,8 +484,8 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Candidate 6: representation-config FINGERPRINT (ADR 0006, Scenario 1 —
-	 * settings-change staleness). Hashes the LIVE representation-affecting
+	 * Representation-config fingerprint per ADR 0006 (Scenario 1 — settings-change
+	 * staleness). Hashes the LIVE representation-affecting
 	 * options per collection on EVERY call, so it is self-healing against
 	 * hook-bypassing settings writes — the property a hook-only counter cannot
 	 * give. The optional `collection` scopes to one valid member of
@@ -509,15 +494,11 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * that a config moved; the trusted re-derivation runs client-side.
 	 */
 	public function config_fingerprint( WP_REST_Request $request ) {
-		$started = microtime( true );
-
-		return rest_ensure_response( $this->config_fingerprint_data( $request, $started ) );
+		return rest_ensure_response( $this->config_fingerprint_data( $request ) );
 	}
 
 	/**
-	 * Combined change-signal tick (#1405): the config-fingerprint envelope and
-	 * the sequence-log payload in ONE response, so an idle register's poll
-	 * costs a single request — and a single empty 304 once nothing has moved.
+	 * Combined change signal: one poll for idle registers.
 	 *
 	 * Delegates wholesale to sequence_log(): that handler already computes the
 	 * un-narrowed all-collections fingerprint for its embedded member and
@@ -526,19 +507,10 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * semantics (RFC 9110 If-None-Match parsing, 304 only when the cursor is
 	 * at head so a matching validator can never hide rows behind a lagging
 	 * `since`), and the ETag reuse the existing serializers verbatim rather
-	 * than forking them. The fingerprint member is lifted to the top level as
-	 * the stable read location for tick clients; the copy embedded inside the
-	 * sequence_log member is kept verbatim ON PURPOSE — that member is the
-	 * source endpoint's response data unmodified, which is what makes payload
-	 * parity a structural property instead of a maintained one (the duplicated
-	 * bytes are a few hashes; idle polls are 304s and never carry them). Both
-	 * copies carry the same payload the standalone /changes/config-fingerprint
-	 * endpoint reports with no `collection` narrowing — the client replacing
-	 * its standalone fingerprint poll must never see a narrowed snapshot (see
-	 * the embed's rationale) — differing only in per-request telemetry meta.
+	 * than forking them. The sequence-log fields and fingerprint member are
+	 * lifted into tick's top-level production shape.
 	 */
 	public function tick( WP_REST_Request $request ) {
-		$started  = microtime( true );
 		$response = $this->sequence_log( $request );
 
 		if ( 304 === $response->get_status() ) {
@@ -549,16 +521,11 @@ final class Changes_Controller extends WP_REST_Controller {
 
 		return new \WP_REST_Response(
 			array(
-				'candidate'          => 'tick',
+				'checkpoint'         => $sequence_data['checkpoint'],
+				'changes'            => $sequence_data['changes'],
+				'complete'           => $sequence_data['complete'],
 				'config_fingerprint' => $sequence_data['config_fingerprint'],
-				'sequence_log'       => $sequence_data,
-				// The sibling envelopes get meta from envelope(); tick owns its
-				// (composition-level) meta so the shape does not depend on the
-				// telemetry decorator being hooked.
-				'meta'               => array(
-					'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-					'supported'   => true,
-				),
+				'meta'               => array( 'supported' => true ),
 			),
 			200,
 			$response->get_headers()
@@ -588,7 +555,6 @@ final class Changes_Controller extends WP_REST_Controller {
 	 */
 	private function config_fingerprint_data(
 		WP_REST_Request $request,
-		float $started,
 		bool $all_collections = false
 	): array {
 		$requested   = (string) ( $request->get_param( 'collection' ) ?? '' );
@@ -600,13 +566,9 @@ final class Changes_Controller extends WP_REST_Controller {
 		$snap = $fp->snapshot( $collections );
 
 		return array(
-			'candidate'      => 'config-fingerprint',
 			'fingerprints'   => $snap['fingerprints'],
 			'barcode_fields' => $snap['barcode_fields'],
-			'meta'           => array(
-				'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-				'supported'   => true,
-			),
+			'meta'           => array( 'supported' => true ),
 		);
 	}
 
@@ -625,17 +587,13 @@ final class Changes_Controller extends WP_REST_Controller {
 		return $payload;
 	}
 
-	private function envelope( string $candidate, string $collection, array $checkpoint, array $changes, bool $complete, float $started, bool $supported = true, ?string $note = null ): array {
-		$meta = array(
-			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-			'supported'   => $supported,
-		);
+	private function envelope( string $collection, array $checkpoint, array $changes, bool $complete, bool $supported = true, ?string $note = null ): array {
+		$meta = array( 'supported' => $supported );
 		if ( null !== $note ) {
 			$meta['note'] = $note;
 		}
 
 		return array(
-			'candidate'  => $candidate,
 			'collection' => $collection,
 			'checkpoint' => $checkpoint,
 			'changes'    => $changes,

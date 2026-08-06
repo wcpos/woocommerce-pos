@@ -47,9 +47,11 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 
 		$product = ProductHelper::create_simple_product();
 		$digest  = new Integrity_Digest();
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- internal table name and SQL constant.
 		$wpdb->query(
 			'DELETE FROM ' . $digest->table_name() . ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
 		return $product->get_id();
 	}
@@ -123,10 +125,12 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 
 		do_action( Integrity_Digest::REBUILD_HOOK );
 
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- internal table name and SQL constant.
 		$stored_total = (int) $wpdb->get_var(
 			'SELECT COUNT(*) FROM ' . ( new Integrity_Digest() )->table_name()
 			. ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 		$this->assertGreaterThan( 0, $stored_total );
 		$this->assertFalse( get_transient( Integrity_Digest::REBUILD_LOCK ) );
 
@@ -156,7 +160,6 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame(
 			array(
-				'candidate'  => 'hash-checksum',
 				'collection' => 'products',
 				'checkpoint' => array(
 					'bucket_size' => 1000,
