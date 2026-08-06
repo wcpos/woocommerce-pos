@@ -29,6 +29,7 @@ use WCPOS\WooCommercePOS\Sync\Sync_Index;
  */
 class Test_Sync_Index_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	use HPOSToggleTrait;
+	use Sync_Observer_Unhook_Trait;
 
 	/**
 	 * Sync index under observation.
@@ -56,14 +57,7 @@ class Test_Sync_Index_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	 * Restore posts storage and unhook the observer.
 	 */
 	public function tearDown(): void {
-		remove_action( 'woocommerce_new_order', array( $this->sync_index, 'record_order_created' ), 10 );
-		remove_action( 'woocommerce_update_order', array( $this->sync_index, 'record_order_updated' ), 10 );
-		remove_action( 'wp_trash_post', array( $this->sync_index, 'record_post_deleted' ), 10 );
-		remove_action( 'before_delete_post', array( $this->sync_index, 'record_post_deleted' ), 10 );
-		remove_action( 'woocommerce_before_trash_order', array( $this->sync_index, 'record_order_deleted' ), 10 );
-		remove_action( 'woocommerce_before_delete_order', array( $this->sync_index, 'record_order_deleted' ), 10 );
-		remove_action( 'untrashed_post', array( $this->sync_index, 'record_post_untrashed' ), 10 );
-		remove_action( 'woocommerce_untrash_order', array( $this->sync_index, 'record_cot_order_untrashed' ), 10 );
+		$this->remove_observer_callbacks( array( $this->sync_index ) );
 
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();

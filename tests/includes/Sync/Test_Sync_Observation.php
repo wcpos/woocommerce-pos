@@ -27,6 +27,7 @@ use WP_REST_Request;
  */
 class Test_Sync_Observation extends Sync_Store_Test_Case {
 	use HPOSToggleTrait;
+	use Sync_Observer_Unhook_Trait;
 
 	/** @var Change_Log */
 	private $change_log;
@@ -65,25 +66,6 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	 */
 	protected function expected_order_post_type(): string {
 		return 'shop_order';
-	}
-
-	/**
-	 * Unhook every registered callback bound to the given observer instances.
-	 *
-	 * @param array $observers Observer objects whose hooks should be removed.
-	 */
-	private function remove_observer_callbacks( array $observers ): void {
-		global $wp_filter;
-
-		foreach ( $wp_filter as $hook_name => $hook ) {
-			foreach ( $hook->callbacks as $priority => $callbacks ) {
-				foreach ( $callbacks as $callback ) {
-					if ( is_array( $callback['function'] ) && in_array( $callback['function'][0], $observers, true ) ) {
-						remove_filter( $hook_name, $callback['function'], $priority );
-					}
-				}
-			}
-		}
 	}
 
 	/**

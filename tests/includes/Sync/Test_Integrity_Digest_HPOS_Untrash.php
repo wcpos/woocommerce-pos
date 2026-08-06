@@ -24,6 +24,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  */
 class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	use HPOSToggleTrait;
+	use Sync_Observer_Unhook_Trait;
 
 	/**
 	 * Digest service under observation.
@@ -51,11 +52,7 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	 * Restore posts storage and unhook the observer.
 	 */
 	public function tearDown(): void {
-		remove_action( 'woocommerce_new_order', array( $this->integrity_digest, 'record_order_saved' ), 10 );
-		remove_action( 'woocommerce_update_order', array( $this->integrity_digest, 'record_order_saved' ), 10 );
-		remove_action( 'woocommerce_before_trash_order', array( $this->integrity_digest, 'record_order_deleted' ), 10 );
-		remove_action( 'woocommerce_before_delete_order', array( $this->integrity_digest, 'record_order_deleted' ), 10 );
-		remove_action( 'woocommerce_untrash_order', array( $this->integrity_digest, 'record_order_saved' ), 10 );
+		$this->remove_observer_callbacks( array( $this->integrity_digest ) );
 
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
