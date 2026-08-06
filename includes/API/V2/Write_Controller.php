@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WC_Order_Item_Product;
 use WC_Product;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
@@ -775,6 +776,9 @@ class Write_Controller extends WP_REST_Controller {
 			$update_payload = $this->remove_omitted_order_items( $id, $update_payload );
 			$update_payload = $this->reconcile_order_coupon_lines( $id, $update_payload );
 			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
+			// Runs last: it reads the FORWARDED line shape, after normalize_line_item_product_identity
+			// has already resolved the posted sku (which outranks the ids in wc/v3's get_product_id).
+			$update_payload = $this->drop_unchanged_variation_line_identity( $id, $update_payload );
 		}
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations/' . $id
@@ -1344,6 +1348,67 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 
+		return $payload;
+	}
+
+	/**
+	 * Drop the redundant product identity from update lines whose variation binding
+	 * is unchanged — the v2 port of V1\Orders_Controller::prepare_line_items' dedupe.
+	 *
+	 * Stock `WC_REST_Orders_V2_Controller::prepare_line_items` compares products by
+	 * OBJECT identity (`$product !== $item->get_product()`), which is always true, so
+	 * every posted line re-runs `WC_Order_Item_Product::set_product()`. For a variation
+	 * that calls `set_variation()` → `add_meta_data( 'pa_size', …, true )`, which NULLs
+	 * the stored attribute row (marking it for deletion) and appends a fresh, id-less
+	 * copy. `maybe_set_item_meta_data()` then runs `update_meta_data( 'pa_size', …, <id> )`
+	 * for the posted meta entry, which finds the nulled row BY ID and restores its value —
+	 * cancelling the delete while the appended copy is still inserted. Net effect: a
+	 * full-document re-push of an acknowledged variation order grows one duplicate
+	 * `pa_*` meta row per push (#1456).
+	 *
+	 * v1 fixed this after the fact by pruning the duplicates. At the v2 forward seam the
+	 * cause is cheaper to remove: when the posted line already resolves to the SAME
+	 * variation the stored item is bound to, the product binding is a no-op, so drop
+	 * `product_id`/`variation_id` from the forwarded line. `get_product_id()` then returns
+	 * 0 on update, `wc_get_product( 0 )` is false and the whole `set_product()` branch is
+	 * skipped — the stored attribute rows are updated in place, ids and all, so the
+	 * acknowledgement is byte-stable across re-pushes. Lines that genuinely re-bind to a
+	 * different variation still forward their identity and take WC's normal path.
+	 *
+	 * @param int   $order_id Resolved order id.
+	 * @param array $payload  Reconciled update payload.
+	 * @return array Payload with no-op variation identity removed from unchanged lines.
+	 */
+	private function drop_unchanged_variation_line_identity( int $order_id, array $payload ): array {
+		if ( ! isset( $payload['line_items'] ) || ! is_array( $payload['line_items'] ) ) {
+			return $payload;
+		}
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return $payload;
+		}
+		foreach ( $payload['line_items'] as $i => $line ) {
+			if ( ! is_array( $line ) || empty( $line['id'] ) || ! is_numeric( $line['id'] ) ) {
+				continue;
+			}
+			$item = $order->get_item( (int) $line['id'], false );
+			if ( ! $item instanceof WC_Order_Item_Product || $item->get_variation_id() <= 0 ) {
+				continue;
+			}
+			// A posted sku wins over the ids in wc/v3's get_product_id(), so a line
+			// carrying one is not an unchanged binding as far as WC is concerned.
+			if ( ! empty( $line['sku'] ) ) {
+				continue;
+			}
+			if ( ! isset( $line['variation_id'] ) || ! is_numeric( $line['variation_id'] )
+				|| (int) $line['variation_id'] !== $item->get_variation_id() ) {
+				continue;
+			}
+			if ( isset( $line['product_id'] ) && ( ! is_numeric( $line['product_id'] ) || (int) $line['product_id'] !== $item->get_product_id() ) ) {
+				continue;
+			}
+			unset( $payload['line_items'][ $i ]['product_id'], $payload['line_items'][ $i ]['variation_id'] );
+		}
 		return $payload;
 	}
 

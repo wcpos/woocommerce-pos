@@ -254,4 +254,64 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$this->assert_persisted_counts( $order, 1 );
 		$this->assertEquals( 14.00, round( (float) $order->get_total(), 2 ) );
 	}
+
+	/**
+	 * Count meta entries carrying one key on the document's first line item.
+	 *
+	 * @param array  $document Serialized order document.
+	 * @param string $meta_key Meta key to count.
+	 *
+	 * @return int
+	 */
+	private function line_item_meta_count( array $document, string $meta_key ): int {
+		$count = 0;
+		foreach ( $document['line_items'][0]['meta_data'] as $meta ) {
+			if ( $meta_key === $meta['key'] ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * A variation acknowledgement does not duplicate its pa_* line-item meta.
+	 *
+	 * @return void
+	 */
+	public function test_variable_product_ack_repush_twice_preserves_variation_attribute_meta_count(): void {
+		// Arrange.
+		$parent       = ProductHelper::create_variation_product();
+		$variation_id = $parent->get_children()[0];
+		$variation    = wc_get_product( $variation_id );
+		$variation->set_regular_price( '10' );
+		$variation->set_price( '10' );
+		$variation->set_tax_status( 'none' );
+		$variation->save();
+		$payload = array(
+			'status'     => 'pending',
+			'line_items' => array(
+				array(
+					'product_id'   => $parent->get_id(),
+					'variation_id' => $variation_id,
+					'quantity'     => 1,
+					'subtotal'     => '10',
+					'total'        => '10',
+				),
+			),
+		);
+
+		$created = $this->push_order( 'create', $payload );
+		$this->assertEquals( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+
+		// Act.
+		$first = $this->push_order( 'update', $created->get_data()['document'], $created->get_data()['currentRevision'] );
+		$this->assertEquals( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		$second = $this->push_order( 'update', $first->get_data()['document'], $first->get_data()['currentRevision'] );
+
+		// Assert.
+		$this->assertEquals( 200, $second->get_status(), wp_json_encode( $second->get_data() ) );
+		$this->assertSame( 1, $this->line_item_meta_count( $created->get_data()['document'], 'pa_size' ) );
+		$this->assertSame( 1, $this->line_item_meta_count( $first->get_data()['document'], 'pa_size' ) );
+		$this->assertSame( 1, $this->line_item_meta_count( $second->get_data()['document'], 'pa_size' ) );
+	}
 }
