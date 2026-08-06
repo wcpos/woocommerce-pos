@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
 use WP_User;
@@ -56,12 +57,22 @@ class Cashier {
 	 *
 	 * @param WP_User $user User object.
 	 *
-	 * @return string UUID for the cashier ('' only if the uuid lock cannot be acquired).
+	 * @return string UUID for the cashier.
 	 */
 	public function get_cashier_uuid( WP_User $user ): string {
 		$this->maybe_add_user_uuid( $user );
 
-		return (string) get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		$uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		if ( \is_string( $uuid ) && Uuid::isValid( $uuid ) ) {
+			return $uuid;
+		}
+
+		// Lock contention in maybe_add_user_uuid() can leave the meta unset; this
+		// uuid is the client's RxDB primary key, so mint rather than serve ''.
+		$uuid = wp_generate_uuid4();
+		update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
+
+		return $uuid;
 	}
 
 	/**

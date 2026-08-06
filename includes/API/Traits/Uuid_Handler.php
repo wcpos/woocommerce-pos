@@ -170,10 +170,12 @@ trait Uuid_Handler {
 	 * the plain key holds no valid uuid yet, adopt the current blog's legacy value
 	 * so existing multisite cashiers keep their identity regardless of which
 	 * endpoint reads them first. An existing valid plain uuid wins, because it is
-	 * what /customers has already served to clients. Legacy rows are left in place
-	 * (harmless, rollback-safe); the duplicate check in maybe_add_user_uuid() still
-	 * runs after adoption, so a copied legacy value owned by another user is
-	 * re-minted rather than served as a duplicate key.
+	 * what /customers has already served to clients — so adoption is best-effort:
+	 * it only rescues users whose plain key was never minted (Templates\Frontend
+	 * and Services\Analytics mint it on POS page loads and WCPOS admin screens).
+	 * Legacy rows are left in place (harmless, rollback-safe). A legacy value
+	 * already owned by another user's network identity is never adopted, so the
+	 * rightful owner cannot be re-minted by the duplicate check on their next read.
 	 *
 	 * @param int $user_id User id.
 	 * @return void
@@ -189,7 +191,7 @@ trait Uuid_Handler {
 		}
 
 		$legacy = get_user_meta( $user_id, '_woocommerce_pos_uuid_' . get_current_blog_id(), true );
-		if ( \is_string( $legacy ) && Uuid::isValid( $legacy ) ) {
+		if ( \is_string( $legacy ) && Uuid::isValid( $legacy ) && ! $this->uuid_usermeta_exists( $legacy, $user_id ) ) {
 			update_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy );
 		}
 	}
