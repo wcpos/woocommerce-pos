@@ -111,7 +111,11 @@ class Test_Order_Write_Contract_HPOS extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $deleted->get_status(), wp_json_encode( $deleted->get_data() ) );
-		$this->assertFalse( wc_get_order( $order_id ) );
-		$this->assert_order_record_existence( $order_id, true, false );
+		// A force-less delete trashes (v1 parity — recoverable), also on HPOS:
+		// the row stays in the orders table with trash status.
+		$trashed = wc_get_order( $order_id );
+		$this->assertNotFalse( $trashed );
+		$this->assertSame( 'trash', $trashed->get_status() );
+		$this->assert_order_record_existence( $order_id, true, true );
 	}
 }

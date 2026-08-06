@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\API\V1\Customers_Controller as V1_Customers_Controller;
+use WCPOS\WooCommercePOS\API\V1\Taxes_Controller as V1_Taxes_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
@@ -27,7 +28,8 @@ use WP_REST_Server;
  * duck-punch for replication WITHOUT editing wc/v3 or the client).
  *
  * Routes forward to their wc/v3 counterparts via `rest_do_request`, preserving
- * query params except where WCPOS adapts them (such as multi-term customer search),
+ * query params except where WCPOS adapts them (such as multi-term customer search
+ * and the WCPOS-extended customer sorts),
  * plus the underlying status + pagination headers
  * (so the client's existing array-shaped parsing and `length < per_page`
  * pagination keep working), then exposes a single `woocommerce_pos_sync_proxy_response`
@@ -44,12 +46,33 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
 
 	/**
+	 * Customer `orderby` values WCPOS implements but wc/v3 does not accept.
+	 *
+	 * `V1_Customers_Controller::get_collection_params()` widens the customer
+	 * orderby enum with exactly these five, and `wcpos_customer_query()` maps
+	 * each onto a `WP_User_Query` column or meta sort. wc/v3's own enum is
+	 * `id | include | name | registered_date`, so forwarding one of these
+	 * verbatim is a `rest_invalid_param` 400 — the proxy strips it off the
+	 * inner request and re-applies it through the V1 handler instead.
+	 *
+	 * Keep in sync with the enum in `V1_Customers_Controller`.
+	 */
+	private const WCPOS_CUSTOMER_ORDERBY = array(
+		'first_name',
+		'last_name',
+		'email',
+		'role',
+		'username',
+	);
+
+	/**
 	 * The `post__not_in` closure while a `/products` forward is in flight (null otherwise).
 	 */
 	private $pos_visibility_filter  = null;
 	private $pos_order_filter       = null;
 	private $pos_order_filter_hook  = null;
 	private $pos_order_where_filter = null;
+	private $pos_orderby_filter     = null;
 
 	public function register_routes(): void {
 		foreach ( self::resources() as $route => $meta ) {
@@ -78,8 +101,11 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	 * client sees the same failure it would have seen hitting wc/v3 directly.
 	 */
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource ) {
-		$query_params           = $request->get_query_params();
-		$customer_search_filter = null;
+		$query_params          = $request->get_query_params();
+		$customer_query_params = array();
+		$customer_query_filter = null;
+		$tax_filter_controller = null;
+		$tax_query_filter      = null;
 		if ( 'customers' === $resource && ! isset( $query_params['role'] ) ) {
 			// The POS customer space is ALL WordPress users under the #1379
 			// ruling (1.9 parity: v1 enumerated all users). wc/v3 defaults to
@@ -96,15 +122,41 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			// across WooCommerce versions).
 			if ( '' !== $search ) {
 				unset( $query_params['search'] );
-
-				// Reuse V1's search filter without importing its handling of other query parameters.
-				$search_request = new WP_REST_Request();
-				$search_request->set_query_params( array( 'search' => $search ) );
-				$search_controller      = new V1_Customers_Controller();
-				$customer_search_filter = static function ( array $prepared_args ) use ( $search_controller, $search_request ): array {
-					return $search_controller->wcpos_customer_query( $prepared_args, $search_request );
-				};
-				add_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+				$customer_query_params['search'] = $search;
+			}
+		}
+		if ( 'customers' === $resource && isset( $query_params['orderby'] ) ) {
+			$orderby = (string) $query_params['orderby'];
+			// V1 parity (monorepo#1028): wc/v3's customer `orderby` enum is
+			// id/include/name/registered_date, so a WCPOS-extended sort is a
+			// rest_invalid_param 400 on the inner request — not a silent
+			// ignore. Strip it and re-apply through the same V1 handler the
+			// multi-term search uses. `order` (asc/desc) is wc/v3-native and
+			// forwards untouched; WP_User_Query honours it for every branch
+			// wcpos_customer_query sets.
+			if ( \in_array( $orderby, self::WCPOS_CUSTOMER_ORDERBY, true ) ) {
+				unset( $query_params['orderby'] );
+				$customer_query_params['orderby'] = $orderby;
+			}
+		}
+		if ( array() !== $customer_query_params ) {
+			// Reuse V1's customer query filter without importing its handling of
+			// other query parameters — the synthetic request carries only the
+			// params we deliberately delegated, so nothing else leaks in.
+			$customer_request = new WP_REST_Request();
+			$customer_request->set_query_params( $customer_query_params );
+			$customer_controller   = new V1_Customers_Controller();
+			$customer_query_filter = static function ( array $prepared_args ) use ( $customer_controller, $customer_request ): array {
+				return $customer_controller->wcpos_customer_query( $prepared_args, $customer_request );
+			};
+			add_filter( 'woocommerce_rest_customer_query', $customer_query_filter );
+		}
+		if ( 'taxes' === $resource ) {
+			foreach ( array( 'include', 'exclude' ) as $param ) {
+				if ( isset( $query_params[ $param ] ) ) {
+					$query_params[ 'wcpos_' . $param ] = wp_parse_id_list( $query_params[ $param ] );
+					unset( $query_params[ $param ] );
+				}
 			}
 		}
 
@@ -127,15 +179,33 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		}
 		try {
+			if ( 'taxes' === $resource && ( isset( $query_params['wcpos_include'] ) || isset( $query_params['wcpos_exclude'] ) ) ) {
+				$tax_filter_controller = new V1_Taxes_Controller();
+				$tax_filter_controller->wcpos_dispatch_request( null, $inner, '', array() );
+				remove_filter( 'woocommerce_rest_prepare_tax', array( $tax_filter_controller, 'wcpos_prepare_tax_response' ), 10 );
+				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
+				$tax_query_filter = static function ( string $query ) use ( $tax_filter_controller ): string {
+					return $tax_filter_controller->wcpos_tax_add_include_exclude_to_sql( $query );
+				};
+				add_filter( 'query', $tax_query_filter, 10, 1 );
+			}
 			$response = rest_do_request( $inner );
 		} finally {
+			if ( null !== $tax_filter_controller ) {
+				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
+				remove_filter( 'query', array( $tax_filter_controller, 'wcpos_tax_add_include_exclude_to_sql' ), 10 );
+				remove_filter( 'woocommerce_rest_prepare_tax', array( $tax_filter_controller, 'wcpos_prepare_tax_response' ), 10 );
+			}
+			if ( null !== $tax_query_filter ) {
+				remove_filter( 'query', $tax_query_filter, 10 );
+			}
 			if ( $relax_wc_permissions ) {
 				remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 			}
 			$this->remove_pos_visibility_filter();
 			$this->remove_pos_order_filter();
-			if ( null !== $customer_search_filter ) {
-				remove_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+			if ( null !== $customer_query_filter ) {
+				remove_filter( 'woocommerce_rest_customer_query', $customer_query_filter );
 			}
 		}
 		if ( $response->is_error() ) {
@@ -143,9 +213,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		}
 		$data = apply_filters( 'woocommerce_pos_sync_proxy_response', $response->get_data(), $resource, $request );
 		if ( 'orders' === $resource ) {
+			$serializer = new Order_Serializer();
 			foreach ( (array) $data as $index => $payload ) {
 				$order          = wc_get_order( (int) ( $payload['id'] ?? 0 ) );
-				$data[ $index ] = $order ? Order_Serializer::add_pos_links( $payload, $order ) : $payload;
+				if ( $order ) {
+					$payload        = $serializer->augment_order_payload( $payload, $order );
+					$data[ $index ] = Order_Serializer::add_pos_links( $payload, $order );
+				}
 			}
 		}
 		$response->set_data( $data );
@@ -228,6 +302,16 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( 'orders' !== $resource ) {
 			return;
 		}
+		// V1's public orderby callbacks depend on its protected request state, so mirror their small clause mappings here.
+		$orderby = $query_params['orderby'] ?? null;
+		if ( ! \in_array( $orderby, array( 'status', 'customer_id', 'payment_method', 'total' ), true ) ) {
+			$orderby = null;
+		} else {
+			unset( $query_params['orderby'] );
+		}
+		$order = isset( $query_params['order'] )
+			&& \is_string( $query_params['order'] )
+			&& 'asc' === strtolower( $query_params['order'] ) ? 'ASC' : 'DESC';
 		$filters = array();
 		foreach ( array( 'pos_cashier', 'pos_store', 'created_via' ) as $key ) {
 			if ( array_key_exists( $key, $query_params ) ) {
@@ -256,12 +340,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				}
 			}
 		}
-		if ( array() === $filters ) {
+		if ( array() === $filters && null === $orderby ) {
 			return;
 		}
 		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 			$this->pos_order_filter_hook = 'woocommerce_orders_table_query_clauses';
-			$this->pos_order_filter      = static function ( array $clauses, $query ) use ( $filters ): array {
+			$this->pos_order_filter      = static function ( array $clauses, $query ) use ( $filters, $orderby, $order ): array {
 				global $wpdb;
 				$orders     = $query->get_table_name( 'orders' );
 				$meta       = $query->get_table_name( 'meta' );
@@ -290,14 +374,32 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 					$clauses['where'] .= " AND {$orders}.id NOT IN (" . implode( ',', array_map( 'intval', $filters['exclude'] ) ) . ')';
 				}
 				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+				if ( null !== $orderby ) {
+					$columns = array(
+						'status'         => 'status',
+						'customer_id'    => 'customer_id',
+						'payment_method' => 'payment_method_title',
+						'total'          => 'total_amount',
+					);
+					$clauses['orderby'] = $orders . '.' . $columns[ $orderby ] . ' ' . $order;
+				}
 
 				return $clauses;
 			};
 			add_filter( $this->pos_order_filter_hook, $this->pos_order_filter, 10, 2 );
 			return;
 		}
+		if ( 'status' === $orderby ) {
+			$this->pos_orderby_filter = static function ( string $sql, $query ) use ( $order ): string {
+				global $wpdb;
+				$is_order_query = isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'];
+
+				return $is_order_query ? "{$wpdb->posts}.post_status {$order}" : $sql;
+			};
+			add_filter( 'posts_orderby', $this->pos_orderby_filter, 10, 2 );
+		}
 		$this->pos_order_filter_hook = 'woocommerce_rest_shop_order_object_query';
-		$this->pos_order_filter      = static function ( array $args ) use ( $filters ): array {
+		$this->pos_order_filter      = static function ( array $args ) use ( $filters, $orderby, $order ): array {
 			$meta_keys = array(
 				'pos_cashier' => '_pos_user',
 				'pos_store'   => '_pos_store',
@@ -310,6 +412,15 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 						'value' => $filters[ $key ],
 					);
 				}
+			}
+			if ( null !== $orderby && 'status' !== $orderby ) {
+				$args['meta_key'] = array(
+					'customer_id'    => '_customer_user',
+					'payment_method' => '_payment_method_title',
+					'total'          => '_order_total',
+				)[ $orderby ];
+				$args['orderby'] = 'customer_id' === $orderby ? 'meta_value_num' : 'meta_value';
+				$args['order']   = $order;
 			}
 
 			return $args;
@@ -343,6 +454,10 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( null !== $this->pos_order_where_filter ) {
 			remove_filter( 'posts_where', $this->pos_order_where_filter, 10 );
 			$this->pos_order_where_filter = null;
+		}
+		if ( null !== $this->pos_orderby_filter ) {
+			remove_filter( 'posts_orderby', $this->pos_orderby_filter, 10 );
+			$this->pos_orderby_filter = null;
 		}
 	}
 }

@@ -206,12 +206,14 @@ class Cloud_Print_Trigger_Service {
 		$provider       = (string) ( $printer['provider'] ?? '' );
 		$drawer_options = self::drawer_options_for_provider( $provider, $drawer_options );
 
-		if ( 'printnode' === $provider ) {
-			$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
-			if ( '' === $fmt['kind'] ) {
-				return 0;
-			}
+		// The resolver owns both halves of the answer for every provider: an
+		// empty kind means the template cannot be rendered on this printer.
+		$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
+		if ( '' === $fmt['kind'] ) {
+			return 0;
+		}
 
+		if ( 'printnode' === $provider ) {
 			$job_id = $jobs->create(
 				array(
 					'printer_id'   => $printer_id,
@@ -230,16 +232,10 @@ class Cloud_Print_Trigger_Service {
 			return $job_id;
 		}
 
-		$engine = (string) ( $template['engine'] ?? '' );
-		$wire   = Provider::wire_format( $provider, $engine );
-		if ( null === $wire ) {
-			return 0;
-		}
-
 		$job_id = $jobs->create(
 			array(
 				'printer_id'   => $printer_id,
-				'content_type' => Provider::content_type( $provider ),
+				'content_type' => $fmt['content_type'],
 				'order_id'     => $order_id,
 				'template_id'  => $template_id,
 				'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),

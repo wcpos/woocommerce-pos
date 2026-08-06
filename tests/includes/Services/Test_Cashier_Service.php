@@ -169,6 +169,18 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test the cashier uuid is stored under the plain network-wide meta key on
+	 * multisite, not a per-blog key.
+	 */
+	public function test_get_cashier_uuid_multisite_stores_network_wide_key(): void {
+		$this->mock_multisite( 2 );
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
 	 * Test a legacy per-blog uuid (minted by the old multisite branch) is adopted
 	 * as the network identity, so existing multisite cashiers keep their uuid.
 	 */
@@ -200,6 +212,25 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test a legacy per-blog uuid already owned by ANOTHER user's network identity
+	 * is not served as a duplicate RxDB key — a fresh uuid is minted instead.
+	 */
+	public function test_get_cashier_uuid_multisite_rejects_legacy_uuid_owned_by_other_user(): void {
+		$owner_id = $this->factory->user->create( array( 'role' => 'shop_manager' ) );
+		$uuid     = wp_generate_uuid4();
+		update_user_meta( $owner_id, '_woocommerce_pos_uuid', $uuid );
+		update_user_meta( $this->user->ID, '_woocommerce_pos_uuid_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$victim_uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertNotEmpty( $victim_uuid );
+		$this->assertNotSame( $uuid, $victim_uuid );
+
+		wp_delete_user( $owner_id );
+	}
+
+	/**
 	 * Test an invalid stored value is replaced with a freshly minted valid uuid
 	 * (the authority validates uuid shape; the old code served any truthy meta).
 	 */
@@ -214,6 +245,38 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 			$uuid
 		);
 		$this->assertSame( $uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
+	 * Test a concurrent first-stamp winner is returned instead of our own mint.
+	 *
+	 * (Ported from main, where wp_cache_add was the lock primitive; on next the
+	 * mocked wp_generate_uuid4 injects the winner row mid-mint, exercising the
+	 * mint-path re-read convergence in Pos_Uuid. GET_LOCK contention itself is
+	 * covered in Test_Pos_Uuid.)
+	 */
+	public function test_get_cashier_uuid_concurrent_first_stamp_returns_winner(): void {
+		$winner_uuid   = wp_generate_uuid4();
+		$fallback_uuid = wp_generate_uuid4();
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'usleep'           => function () {
+				},
+				'wp_cache_add'      => function () {
+					return false;
+				},
+				'wp_generate_uuid4' => function () use ( $winner_uuid, $fallback_uuid ) {
+					\add_user_meta( $this->user->ID, '_woocommerce_pos_uuid', $winner_uuid, true );
+
+					return $fallback_uuid;
+				},
+			)
+		);
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $winner_uuid, $uuid );
+		$this->assertSame( $winner_uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
 	}
 
 	/**

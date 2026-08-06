@@ -89,6 +89,31 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The legacy recipe excludes every read decoration added after cutover.
+	 */
+	public function test_legacy_revision_is_invariant_to_v2_read_augmentations(): void {
+		$without = array(
+			'id'         => 5,
+			'line_items' => array(
+				array(
+					'id'        => 9,
+					'image'     => array( 'id' => '17' ),
+					'meta_data' => array( array( 'key' => 'other', 'value' => 'x' ) ),
+				),
+			),
+		);
+		$with = $without;
+		$with['tax_ids'] = array();
+		$with['line_items'][0]['image']['id'] = 17;
+		$with['line_items'][0]['meta_data'][] = array(
+			'key'   => '_woocommerce_pos_uuid',
+			'value' => '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d',
+		);
+
+		$this->assertSame( Order_Serializer::legacy_revision( $without ), Order_Serializer::legacy_revision( $with ) );
+	}
+
+	/**
 	 * Filter-supplied links entries survive the payment augmentation; only the
 	 * `payment` member is owned by add_payment_link().
 	 */

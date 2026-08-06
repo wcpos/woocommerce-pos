@@ -8,9 +8,12 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 
 /**
@@ -31,6 +34,10 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 * Remove options written outside the per-test transaction.
 	 */
 	public function tearDown(): void {
+		Augmentation_Pipeline::reset();
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		remove_all_filters( Augmentation_Pipeline::PROXY_FILTER );
+		remove_all_filters( Augmentation_Pipeline::SERIALIZED_FILTER );
 		delete_option( 'woocommerce_pos_settings_general' );
 		delete_option( Pos_Visibility::OPTION );
 		parent::tearDown();
@@ -65,6 +72,136 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$request->set_query_params( $params );
 
 		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * Decimal-enabled catalog reads must not integer-coerce variation stock.
+	 */
+	public function test_decimal_stock_quantity_is_preserved_on_variation_read(): void {
+		$this->setup_decimal_quantity_tests();
+		$variation = $this->create_variation( 'DECIMAL-STOCK-1456' );
+		$variation->set_manage_stock( true );
+		$variation->set_stock_quantity( 1.5 );
+		$variation->save();
+
+		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
+		$payload  = $response->get_data()['documents'][0]['payload'];
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEquals( 1.5, $payload['stock_quantity'] );
+	}
+
+	/**
+	 * Variation documents carry one stable UUID in their serialized payload.
+	 */
+	public function test_variation_document_payload_contains_exactly_one_valid_uuid(): void {
+		Augmentation_Pipeline::install();
+		$variation = $this->create_variation( 'UUID-DOCUMENT-1456' );
+
+		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
+		$payload  = $response->get_data()['documents'][0]['payload'];
+		$uuids    = array_values(
+			array_filter(
+				$payload['meta_data'],
+				static fn( array $meta ): bool => '_woocommerce_pos_uuid' === $meta['key']
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $uuids );
+		$this->assertTrue( Uuid::isValid( $uuids[0]['value'] ) );
+		$this->assertSame( $uuids[0]['value'], get_post_meta( $variation->get_id(), '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
+	 * Variation payloads expose the complete product-document field set.
+	 */
+	public function test_variation_document_payload_has_full_v2_field_set(): void {
+		$variation = $this->create_variation( 'FIELD-SET-1456' );
+
+		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
+		$payload  = $response->get_data()['documents'][0]['payload'];
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing(
+			array(
+				'id',
+				'name',
+				'slug',
+				'permalink',
+				'date_created',
+				'date_created_gmt',
+				'date_modified',
+				'date_modified_gmt',
+				'type',
+				'status',
+				'featured',
+				'catalog_visibility',
+				'description',
+				'short_description',
+				'sku',
+				'global_unique_id',
+				'price',
+				'regular_price',
+				'sale_price',
+				'date_on_sale_from',
+				'date_on_sale_from_gmt',
+				'date_on_sale_to',
+				'date_on_sale_to_gmt',
+				'price_html',
+				'on_sale',
+				'purchasable',
+				'total_sales',
+				'virtual',
+				'downloadable',
+				'downloads',
+				'download_limit',
+				'download_expiry',
+				'external_url',
+				'button_text',
+				'tax_status',
+				'tax_class',
+				'manage_stock',
+				'stock_quantity',
+				'stock_status',
+				'backorders',
+				'backorders_allowed',
+				'backordered',
+				'low_stock_amount',
+				'sold_individually',
+				'weight',
+				'dimensions',
+				'shipping_required',
+				'shipping_taxable',
+				'shipping_class',
+				'shipping_class_id',
+				'reviews_allowed',
+				'post_password',
+				'average_rating',
+				'rating_count',
+				'related_ids',
+				'upsell_ids',
+				'cross_sell_ids',
+				'parent_id',
+				'purchase_note',
+				'categories',
+				'brands',
+				'tags',
+				'images',
+				'has_options',
+				'attributes',
+				'default_attributes',
+				'variations',
+				'grouped_products',
+				'menu_order',
+				'meta_data',
+				'_links',
+			),
+			array_keys( $payload )
+		);
+		$this->assertArrayNotHasKey( 'barcode', $payload );
+		$this->assertArrayHasKey( 'sku', $payload );
+		$this->assertArrayHasKey( 'global_unique_id', $payload );
 	}
 
 	/**

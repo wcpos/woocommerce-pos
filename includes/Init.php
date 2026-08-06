@@ -32,6 +32,7 @@ class Init {
 		// global helper functions.
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
 		require_once PLUGIN_PATH . 'includes/wcpos-store-functions.php';
+		wp_cache_add_global_groups( 'wc_pos_user_uuid_locks' );
 
 		// Tracking consent pop-up + callout. Registered here (during
 		// plugins_loaded) so its lifecycle hooks (activated_plugin,

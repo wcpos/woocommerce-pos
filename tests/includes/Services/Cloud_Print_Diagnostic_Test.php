@@ -69,4 +69,41 @@ class Cloud_Print_Diagnostic_Test extends WP_UnitTestCase {
 		$pdf = ( new Cloud_Print_Diagnostic() )->build_pdf( 'Bar' );
 		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
 	}
+
+	/**
+	 * It builds the Star Online diagnostic as Star Document Markup.
+	 */
+	public function test_star_markup_returns_star_document_markup(): void {
+		// Arrange: the payload stamps gmdate('Y-m-d H:i'), so accept either side
+		// of a minute boundary crossed during the call.
+		$before = gmdate( 'Y-m-d H:i' );
+
+		// Act.
+		$markup = ( new Cloud_Print_Diagnostic() )->star_markup( 'Counter' );
+
+		// Assert.
+		$after    = gmdate( 'Y-m-d H:i' );
+		$template = static function ( string $date ): string {
+			$expected  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
+			$expected .= 'Cloud Print Test' . "\n" . '[align: left]';
+			$expected .= 'Printer: Counter' . "\n";
+			$expected .= 'Date: ' . $date . "\n";
+			$expected .= 'If you can read this, printing works!' . "\n";
+			$expected .= '[feed][cut]';
+
+			return $expected;
+		};
+		$this->assertContains( $markup, array( $template( $before ), $template( $after ) ) );
+	}
+
+	/**
+	 * It escapes markup brackets in the printer name.
+	 */
+	public function test_star_markup_escapes_brackets_in_printer_name(): void {
+		// Act.
+		$markup = ( new Cloud_Print_Diagnostic() )->star_markup( 'Till [cut]' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Printer: Till [[cut]]', $markup );
+	}
 }

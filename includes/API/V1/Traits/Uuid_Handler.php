@@ -14,8 +14,6 @@ use WC_Order_Item;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
-use function wp_cache_add;
-use function wp_cache_delete;
 
 /**
  * Trait Uuid_Handler.
@@ -25,35 +23,29 @@ use function wp_cache_delete;
  */
 trait Uuid_Handler {
 	/**
-	 * Acquire the legacy order-item-only lock.
+	 * Acquire the order-item UUID datastore lock.
 	 *
 	 * @param string $lock_key Unique key for the lock.
 	 * @param int    $timeout  Timeout in seconds.
 	 * @return bool True if lock acquired, false otherwise.
 	 */
 	private function acquire_order_item_uuid_lock( string $lock_key, int $timeout = 10 ): bool {
-		$attempts   = 0;
-		$sleep_time = 100000; // 100ms in microseconds.
-		// Try every 100ms until timeout.
-		while ( $attempts < $timeout * 10 ) {
-			// wp_cache_add() returns true if the key did not exist.
-			if ( wp_cache_add( $lock_key, true, 'wc_pos_locks', $timeout ) ) {
-				return true;
-			}
-			usleep( $sleep_time );
-			$attempts++;
-		}
-		return false;
+		global $wpdb;
+
+		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, $timeout ) );
+		return '1' === (string) $acquired;
 	}
 
 	/**
-	 * Release the legacy order-item-only lock.
+	 * Release the order-item UUID datastore lock.
 	 *
 	 * @param string $lock_key Unique key for the lock.
 	 * @return void
 	 */
 	private function release_order_item_uuid_lock( string $lock_key ): void {
-		wp_cache_delete( $lock_key, 'wc_pos_locks' );
+		global $wpdb;
+
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
 	}
 
 	/**
@@ -93,11 +85,19 @@ trait Uuid_Handler {
 			return;
 		}
 		try {
-			$uuid = $item->get_meta( '_woocommerce_pos_uuid' );
-			if ( ! $uuid ) {
+			// Persist any pending meta, then check the STORED uuid directly —
+			// a full read_meta_data(true) reload would clobber sibling in-memory
+			// meta on lanes where the datastore cache lags (HPOS misc `_sku`).
+			$item->save_meta_data();
+			$uuid = wc_get_order_item_meta( $item->get_id(), Pos_Uuid::META_KEY, true );
+			if ( ! Pos_Uuid::is_uuid( $uuid ) ) {
 				$uuid = Uuid::uuid4()->toString();
-				$item->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+				$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
 				$item->save_meta_data();
+			} elseif ( $uuid !== $item->get_meta( Pos_Uuid::META_KEY ) ) {
+				// A concurrent request minted first; converge the stale in-memory
+				// item on the stored winner so the served payload carries it.
+				$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
 			}
 		} finally {
 			$this->release_order_item_uuid_lock( $lock_key );

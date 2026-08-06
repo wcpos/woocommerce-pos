@@ -213,6 +213,39 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A corrupt stored coupon UUID must be regenerated and persisted on read.
+	 */
+	public function test_coupon_response_with_corrupt_stored_uuid_regenerates_uuid(): void {
+		// Arrange.
+		$coupon = CouponHelper::create_coupon( 'corruptuuidcoupon' );
+		$coupon->update_meta_data( '_woocommerce_pos_uuid', array( 'corrupt' ) );
+		$coupon->save();
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons/' . $coupon->get_id() );
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$uuids = array();
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
+				$uuids[] = $meta['value'];
+			}
+		}
+		$this->assertCount( 1, $uuids, 'There should be exactly one UUID after regeneration.' );
+		$this->assertIsString( $uuids[0] );
+		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated UUID should be valid.' );
+
+		clean_post_cache( $coupon->get_id() );
+		$stored_coupon = new \WC_Coupon( $coupon->get_id() );
+		$stored_uuid   = $stored_coupon->get_meta( '_woocommerce_pos_uuid' );
+		$this->assertEquals( $uuids[0], $stored_uuid, 'The replacement UUID should be persisted.' );
+	}
+
+	/**
 	 * Test coupon API returns all IDs.
 	 */
 	public function test_coupon_api_get_all_ids(): void {

@@ -478,6 +478,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
 			return $order;
 		}
+		$this->creating_order = $order;
 
 		$body = $request->get_json_params();
 
