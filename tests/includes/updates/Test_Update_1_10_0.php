@@ -353,4 +353,84 @@ class Test_Update_1_10_0 extends WP_UnitTestCase {
 
 		$this->assertSame( $legacy_uuid, get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
 	}
+
+	/**
+	 * Test a failed ownership prefetch aborts before a duplicate uuid can be
+	 * promoted and before the user's legacy row is deleted.
+	 */
+	public function test_migration_aborts_when_ownership_prefetch_query_fails(): void {
+		global $wpdb;
+
+		$owner_id   = $this->factory()->user->create();
+		$clone_id   = $this->factory()->user->create();
+		$shared_uuid = wp_generate_uuid4();
+		update_user_meta( $owner_id, '_woocommerce_pos_uuid', $shared_uuid );
+		update_user_meta( $clone_id, '_woocommerce_pos_uuid_2', $shared_uuid );
+
+		$break_prefetch = static function ( $query ) use ( $wpdb ) {
+			if ( false !== strpos( $query, 'm.meta_value IN (' ) ) {
+				return "SELECT * FROM {$wpdb->prefix}wcpos_missing_table";
+			}
+
+			return $query;
+		};
+		add_filter( 'query', $break_prefetch );
+		$previous_suppress_errors = $wpdb->suppress_errors();
+
+		$this->run_migration();
+
+		$wpdb->suppress_errors( $previous_suppress_errors );
+		remove_filter( 'query', $break_prefetch );
+		$this->assertSame( '', get_user_meta( $clone_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertEquals( 1, $this->count_meta_rows( $clone_id, '_woocommerce_pos_uuid_2' ) );
+	}
+
+	/**
+	 * Test ownership checks use case-insensitive uuid keys, matching the database
+	 * collation used by the ownership prefetch query.
+	 */
+	public function test_migration_detects_owner_with_different_uuid_casing(): void {
+		$owner_id   = $this->factory()->user->create();
+		$clone_id   = $this->factory()->user->create();
+		$legacy_uuid = wp_generate_uuid4();
+		update_user_meta( $owner_id, '_woocommerce_pos_uuid', strtoupper( $legacy_uuid ) );
+		update_user_meta( $clone_id, '_woocommerce_pos_uuid_2', $legacy_uuid );
+
+		$this->run_migration();
+
+		$this->assertSame( '', get_user_meta( $clone_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertEquals( 0, $this->count_meta_rows( $clone_id, '_woocommerce_pos_uuid_2' ) );
+	}
+
+	/**
+	 * Test a raced unique add records the competing winner as owned, leaving the
+	 * rejected legacy candidate available for the next user to promote.
+	 */
+	public function test_migration_tracks_uuid_found_after_raced_unique_add(): void {
+		$raced_user_id = $this->factory()->user->create();
+		$later_user_id = $this->factory()->user->create();
+		$legacy_uuid   = wp_generate_uuid4();
+		$race_winner   = wp_generate_uuid4();
+		update_user_meta( $raced_user_id, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		update_user_meta( $later_user_id, '_woocommerce_pos_uuid_2', $legacy_uuid );
+
+		$race = null;
+		$race = function ( $check, $object_id, $meta_key ) use ( &$race, $raced_user_id, $race_winner ) {
+			if ( $raced_user_id !== $object_id || '_woocommerce_pos_uuid' !== $meta_key ) {
+				return $check;
+			}
+
+			remove_filter( 'add_user_metadata', $race, 10 );
+			add_user_meta( $raced_user_id, '_woocommerce_pos_uuid', $race_winner, true );
+
+			return false;
+		};
+		add_filter( 'add_user_metadata', $race, 10, 3 );
+
+		$this->run_migration();
+
+		remove_filter( 'add_user_metadata', $race, 10 );
+		$this->assertSame( $race_winner, get_user_meta( $raced_user_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertSame( $legacy_uuid, get_user_meta( $later_user_id, '_woocommerce_pos_uuid', true ) );
+	}
 }

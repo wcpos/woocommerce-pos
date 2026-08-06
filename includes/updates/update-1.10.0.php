@@ -127,8 +127,18 @@ foreach ( array_chunk( array_keys( $wcpos_candidate_values ), 500 ) as $wcpos_ch
 			array_merge( array( Pos_Uuid::META_KEY ), $wcpos_chunk )
 		)
 	);
+	if ( '' !== $wpdb->last_error ) {
+		if ( \function_exists( 'wc_get_logger' ) ) {
+			wc_get_logger()->error(
+				'WCPOS 1.10.0 migration: uuid ownership prefetch query failed, no rows were migrated: ' . $wpdb->last_error,
+				array( 'source' => 'woocommerce-pos' )
+			);
+		}
+
+		return;
+	}
 	foreach ( (array) $wcpos_owner_rows as $wcpos_owner_row ) {
-		$wcpos_owners_by_value[ (string) $wcpos_owner_row->meta_value ][] = (int) $wcpos_owner_row->user_id;
+		$wcpos_owners_by_value[ strtolower( (string) $wcpos_owner_row->meta_value ) ][] = (int) $wcpos_owner_row->user_id;
 	}
 }
 
@@ -165,7 +175,7 @@ foreach ( $wcpos_legacy_by_user as $wcpos_user_id => $wcpos_blog_values ) {
 			// Users iterate in ascending id order and promotions land in this
 			// map as they happen, so shared values converge deterministically.
 			$wcpos_collides = false;
-			foreach ( $wcpos_owners_by_value[ $wcpos_legacy_value ] ?? array() as $wcpos_owner_id ) {
+			foreach ( $wcpos_owners_by_value[ strtolower( $wcpos_legacy_value ) ] ?? array() as $wcpos_owner_id ) {
 				if ( $wcpos_owner_id !== $wcpos_user_id ) {
 					$wcpos_collides = true;
 
@@ -178,6 +188,7 @@ foreach ( $wcpos_legacy_by_user as $wcpos_user_id => $wcpos_blog_values ) {
 				continue;
 			}
 
+			$wcpos_owned_value = $wcpos_legacy_value;
 			if ( array() === (array) $wcpos_plain_values ) {
 				// Unique add: if #1450's lazy adoption raced us and already wrote
 				// a plain uuid, the add fails and THAT value stands.
@@ -193,7 +204,8 @@ foreach ( $wcpos_legacy_by_user as $wcpos_user_id => $wcpos_blog_values ) {
 				wp_cache_delete( $wcpos_user_id, 'user_meta' );
 				foreach ( (array) get_user_meta( $wcpos_user_id, Pos_Uuid::META_KEY ) as $wcpos_recheck_value ) {
 					if ( Pos_Uuid::is_uuid( $wcpos_recheck_value ) ) {
-						$wcpos_written = true;
+						$wcpos_written     = true;
+						$wcpos_owned_value = $wcpos_recheck_value;
 
 						break;
 					}
@@ -202,7 +214,7 @@ foreach ( $wcpos_legacy_by_user as $wcpos_user_id => $wcpos_blog_values ) {
 
 			if ( $wcpos_written ) {
 				++$wcpos_promoted;
-				$wcpos_owners_by_value[ $wcpos_legacy_value ][] = $wcpos_user_id;
+				$wcpos_owners_by_value[ strtolower( $wcpos_owned_value ) ][] = $wcpos_user_id;
 			} else {
 				// Genuine write failure (meta filter veto, DB error). The ladder
 				// is one-shot, so keep this user's legacy rows for the lazy path.
