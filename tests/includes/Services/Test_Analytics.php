@@ -102,8 +102,10 @@ class Test_Analytics extends WP_UnitTestCase {
 
 	/**
 	 * Create a user, assign a POS UUID, and log them in.
+	 *
+	 * @param string $uuid UUID to seed as the user's POS identity.
 	 */
-	private function login_user_with_uuid( string $uuid = 'user-uuid-abc' ): int {
+	private function login_user_with_uuid( string $uuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ): int {
 		$user_id = $this->factory()->user->create();
 		update_user_meta( $user_id, '_woocommerce_pos_uuid', $uuid );
 		wp_set_current_user( $user_id );
@@ -149,7 +151,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	}
 
 	/**
-	 * identify() and group() also no-op when disabled.
+	 * The identify() and group() calls also no-op when disabled.
 	 */
 	public function test_identify_and_group_are_no_op_when_disabled(): void {
 		$this->login_user_with_uuid();
@@ -178,7 +180,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 * to the configured host with the expected payload shape.
 	 */
 	public function test_capture_dispatches_request_when_enabled(): void {
-		$this->login_user_with_uuid( 'user-uuid-123' );
+		$this->login_user_with_uuid( '12345678-1234-4123-8123-123456789abc' );
 		update_option( 'woocommerce_pos_uuid', 'site-uuid-xyz' );
 		$analytics = $this->enable_consent();
 
@@ -197,7 +199,7 @@ class Test_Analytics extends WP_UnitTestCase {
 
 		$payload = json_decode( $request['args']['body'], true );
 		$this->assertSame( 'pro_link_clicked', $payload['event'] );
-		$this->assertSame( 'user-uuid-123', $payload['distinct_id'] );
+		$this->assertSame( '12345678-1234-4123-8123-123456789abc', $payload['distinct_id'] );
 		$this->assertSame( Analytics::DEFAULT_TOKEN, $payload['api_key'] );
 		$this->assertSame( 'settings_header', $payload['properties']['placement'] );
 		$this->assertSame( array( 'site' => 'site-uuid-xyz' ), $payload['properties']['$groups'] );
@@ -205,7 +207,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	}
 
 	/**
-	 * identify() sends a $identify event with $set on the properties.
+	 * The identify() call sends a $identify event with $set on the properties.
 	 */
 	public function test_identify_sends_set_properties(): void {
 		$this->login_user_with_uuid();
@@ -226,7 +228,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	}
 
 	/**
-	 * group() sends a $groupidentify event with the right group metadata.
+	 * The group() call sends a $groupidentify event with the right group metadata.
 	 */
 	public function test_group_sends_groupidentify_event(): void {
 		$this->login_user_with_uuid();
@@ -322,6 +324,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_constant_overrides_token(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- production constant name under test.
 		\define( 'WCPOS_POSTHOG_TOKEN', 'phc_from_constant' );
 
 		$this->assertSame( 'phc_from_constant', Analytics::instance()->get_token() );
@@ -335,6 +338,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_constant_overrides_host_and_strips_trailing_slash(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- production constant name under test.
 		\define( 'WCPOS_POSTHOG_HOST', 'https://ph.example.test/' );
 
 		$this->assertSame( 'https://ph.example.test', Analytics::instance()->get_host() );

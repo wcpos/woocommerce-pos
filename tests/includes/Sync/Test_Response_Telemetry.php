@@ -1,7 +1,7 @@
 <?php
 /**
- * Response telemetry (lab#571): body metrics only where the client parses
- * them; golden write-contract shapes untouched; contextual headers everywhere.
+ * Response telemetry: body metrics only where the client parses them;
+ * deterministic change bodies and golden write-contract shapes stay untouched.
  *
  * @package WCPOS\WooCommercePOS\Tests\Sync
  */
@@ -9,9 +9,13 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WP_REST_Response;
 
 /**
+ * Response telemetry behavior tests.
+ *
  * @group sync
  */
 class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
@@ -31,6 +35,9 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 		delete_option( Api::OPTION_ENABLED );
 	}
 
+	/**
+	 * Orders pull retains the body metrics parsed by the client.
+	 */
 	public function test_orders_pull_carries_top_level_metrics_and_headers(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		$request = $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'orders/pull' );
@@ -49,16 +56,43 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringStartsWith( 'wcpos;dur=', $headers['Server-Timing'] );
 	}
 
-	public function test_change_candidates_gain_memory_alongside_duration(): void {
-		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+	/**
+	 * Changes receive telemetry headers without response body mutation.
+	 */
+	public function test_changes_route_adds_telemetry_headers_without_modifying_body(): void {
 		$request = $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'changes/sequence-log' );
-		$request->set_param( 'collection', 'orders' );
-		$response = $this->server->dispatch( $request );
+		$body    = array(
+			'checkpoint' => array(
+				'since' => 0,
+				'head'  => 0,
+			),
+			'changes'    => array(),
+			'complete'   => true,
+			'meta'       => array( 'supported' => true ),
+		);
+		Response_Telemetry::start_request( null, null, $request );
 
-		$this->assertSame( 200, $response->get_status() );
-		$meta = $response->get_data()['meta'];
-		$this->assertArrayHasKey( 'duration_ms', $meta );
-		$this->assertArrayHasKey( 'memory_peak_bytes', $meta );
+		$response = Response_Telemetry::decorate_callback_response( new WP_REST_Response( $body ), null, $request );
+
+		$this->assertSame( $body, $response->get_data() );
+		$this->assertStringStartsWith( 'wcpos;dur=', $response->get_headers()['Server-Timing'] );
+		$this->assertGreaterThan( 0, (int) $response->get_headers()['X-WCPOS-Memory-Peak'] );
+	}
+
+	/**
+	 * Repeated reads without writes keep strong validators honest.
+	 */
+	public function test_sequence_log_without_store_writes_returns_identical_etag_and_body(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+
+		$first  = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' ) );
+		$second = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' ) );
+
+		$this->assertSame( $first->get_headers()['ETag'], $second->get_headers()['ETag'] );
+		$this->assertSame( wp_json_encode( $first->get_data() ), wp_json_encode( $second->get_data() ) );
+		// Byte-equality alone cannot catch a reintroduced memory field (2MB
+		// granularity makes back-to-back reads identical); pin meta exactly.
+		$this->assertSame( array( 'supported' => true ), $first->get_data()['meta'] );
 	}
 
 	/**

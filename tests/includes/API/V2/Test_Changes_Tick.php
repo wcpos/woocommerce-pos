@@ -53,7 +53,7 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * The tick's fingerprint member is the standalone endpoint's response data.
+	 * Tick exposes the graduated flattened response shape.
 	 */
 	public function test_tick_config_fingerprint_matches_standalone_endpoint(): void {
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
@@ -63,22 +63,20 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 			$this->wp_rest_get_request( '/wcpos/v2/changes/config-fingerprint' )
 		)->get_data();
 
-		// Per-request telemetry (timing, memory) is intentionally volatile and is
-		// stamped onto the tick's own top-level meta instead; the remaining
-		// response data must match.
-		$this->assertArrayHasKey( 'memory_peak_bytes', $tick['meta'] );
-		unset(
-			$tick['config_fingerprint']['meta']['duration_ms'],
-			$standalone['meta']['duration_ms'],
-			$standalone['meta']['memory_peak_bytes']
+		$this->assertSame(
+			array( 'checkpoint', 'changes', 'complete', 'config_fingerprint', 'meta' ),
+			array_keys( $tick )
 		);
+		$this->assertArrayNotHasKey( 'candidate', $tick );
+		$this->assertArrayNotHasKey( 'sequence_log', $tick );
+		$this->assertSame( array( 'supported' => true ), $tick['meta'] );
 		$this->assertSame( $standalone, $tick['config_fingerprint'] );
 	}
 
 	/**
-	 * The tick's sequence-log member is the standalone endpoint's response data.
+	 * Tick lifts the sequence-log fields into its top-level response.
 	 */
-	public function test_tick_sequence_log_matches_standalone_endpoint(): void {
+	public function test_tick_sequence_log_fields_match_standalone_endpoint(): void {
 		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
 		$params = array(
 			'since' => 0,
@@ -90,15 +88,10 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 		$request->set_query_params( $params );
 		$sequence = $this->server->dispatch( $request )->get_data();
 
-		unset(
-			$tick['sequence_log']['meta']['duration_ms'],
-			$tick['sequence_log']['config_fingerprint']['meta']['duration_ms'],
-			$sequence['meta']['duration_ms'],
-			$sequence['meta']['memory_peak_bytes'],
-			$sequence['config_fingerprint']['meta']['duration_ms']
-		);
-		$this->assertSame( 123, $tick['sequence_log']['changes'][0]['id'] );
-		$this->assertSame( $sequence, $tick['sequence_log'] );
+		$this->assertSame( 123, $tick['changes'][0]['id'] );
+		$this->assertSame( $sequence['checkpoint'], $tick['checkpoint'] );
+		$this->assertSame( $sequence['changes'], $tick['changes'] );
+		$this->assertSame( $sequence['complete'], $tick['complete'] );
 	}
 
 	/**
@@ -114,8 +107,8 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 		$tick = $this->server->dispatch( $this->tick_request() )->get_data();
 		delete_option( Change_Log::PRUNE_WATERMARK_OPTION );
 
-		// Assert.
-		$this->assertEquals( 5, $tick['sequence_log']['checkpoint']['horizon'] );
+		// Assert: the graduated tick lifts checkpoint to the top level.
+		$this->assertEquals( 5, $tick['checkpoint']['horizon'] );
 	}
 
 	/**
@@ -124,7 +117,7 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	public function test_tick_matching_etag_at_head_returns_not_modified(): void {
 		$first = $this->server->dispatch( $this->tick_request( array( 'since' => 0 ) ) );
 		$etag  = $first->get_headers()['ETag'];
-		$head  = $first->get_data()['sequence_log']['checkpoint']['head'];
+		$head  = $first->get_data()['checkpoint']['head'];
 
 		$request = $this->tick_request( array( 'since' => $head ) );
 		$request->set_header( 'If-None-Match', $etag );
@@ -191,7 +184,7 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	public function test_tick_matching_etag_with_since_behind_head_returns_page(): void {
 		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
 		$latest  = $this->server->dispatch( $this->tick_request( array( 'since' => 0 ) ) );
-		$head    = $latest->get_data()['sequence_log']['checkpoint']['head'];
+		$head    = $latest->get_data()['checkpoint']['head'];
 		$current = $this->server->dispatch( $this->tick_request( array( 'since' => $head ) ) );
 
 		$request = $this->tick_request( array( 'since' => 0 ) );
@@ -199,7 +192,7 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 123, $response->get_data()['sequence_log']['changes'][0]['id'] );
+		$this->assertSame( 123, $response->get_data()['changes'][0]['id'] );
 	}
 
 	/**

@@ -1254,6 +1254,48 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertCount( 0, array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => 0 === strpos( $note, 'POS cashier changed' ) ) );
 	}
 
+	public function test_order_update_meta_id_targeting_cannot_rename_audit_rows(): void {
+		// WooCommerce resolves a meta_data entry by `id` BEFORE `key` and overwrites both,
+		// so an id-addressed entry under a harmless key would rename the audit row away.
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Original Cashier' ) );
+		$actor_id = self::factory()->user->create(
+			array(
+				'display_name' => 'Actor',
+				'role'         => 'administrator',
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		wp_set_current_user( $actor_id );
+
+		$user_meta_id = 0;
+		foreach ( $order->get_meta_data() as $meta ) {
+			$data = $meta->get_data();
+			if ( '_pos_user' === $data['key'] ) {
+				$user_meta_id = (int) $data['id'];
+			}
+		}
+		$this->assertGreaterThan( 0, $user_meta_id );
+
+		$this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'id'    => $user_meta_id,
+						'key'   => '_x',
+						'value' => '1',
+					),
+				),
+			)
+		);
+
+		$updated = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) $old_id, $updated->get_meta( '_pos_user' ) );
+		$this->assertSame( '', $updated->get_meta( '_x' ) );
+	}
+
 	public function test_order_update_reassigns_store_and_adds_change_note(): void {
 		$old_store = self::factory()->post->create(
 			array(

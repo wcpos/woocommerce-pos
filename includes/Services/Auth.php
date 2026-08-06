@@ -734,11 +734,15 @@ class Auth {
 	/**
 	 * Store refresh token JTI for tracking/revocation.
 	 *
-	 * @param int    $user_id The user ID.
-	 * @param string $jti            The token JTI.
-	 * @param int    $expires The expiration timestamp.
+	 * @param int                  $user_id The user ID.
+	 * @param string               $jti            The token JTI.
+	 * @param int                  $expires The expiration timestamp.
+	 * @param null|Session_Context $context Request state the session is recorded
+	 *                                      against. Defaults to the current request.
 	 */
-	private function store_refresh_token_jti( int $user_id, string $jti, int $expires ): void {
+	private function store_refresh_token_jti( int $user_id, string $jti, int $expires, ?Session_Context $context = null ): void {
+		$context = null === $context ? Session_Context::from_request() : $context;
+
 		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
 		if ( ! \is_array( $refresh_tokens ) ) {
 			$refresh_tokens = array();
@@ -754,14 +758,14 @@ class Auth {
 
 		// Capture session metadata.
 		$current_time = time();
-		$ip_address   = $this->get_client_ip();
-		$user_agent   = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+		$ip_address   = $context->get_ip();
+		$user_agent   = $context->get_user_agent();
 		$device_info  = $this->parse_user_agent( $user_agent );
 
-		// Check for explicit platform declaration from native apps (passed as query param in auth URL).
-		$platform = isset( $_REQUEST['platform'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['platform'] ) ) : '';
-		$version  = isset( $_REQUEST['version'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['version'] ) ) : '';
-		$build    = isset( $_REQUEST['build'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['build'] ) ) : '';
+		// Check for explicit platform declaration from native apps (passed as a param in the auth request).
+		$platform = $context->get_platform();
+		$version  = $context->get_version();
+		$build    = $context->get_build();
 
 		// Override app_type if platform was explicitly provided by the client.
 		if ( \in_array( $platform, array( 'ios', 'android', 'electron', 'web' ), true ) ) {
@@ -925,43 +929,6 @@ class Auth {
 		}
 
 		return isset( $refresh_tokens[ $jti ] ) && $refresh_tokens[ $jti ]['expires'] > time();
-	}
-
-	/**
-	 * Get client IP address.
-	 *
-	 * @return string
-	 */
-	private function get_client_ip(): string {
-		$ip_address = '';
-
-		// Check for various proxy headers.
-		$headers = array(
-			'HTTP_CF_CONNECTING_IP', // Cloudflare.
-			'HTTP_X_FORWARDED_FOR',
-			'HTTP_X_REAL_IP',
-			'REMOTE_ADDR',
-		);
-
-		foreach ( $headers as $header ) {
-			if ( ! empty( $_SERVER[ $header ] ) ) {
-				$ip_address = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
-				// Handle comma-separated IPs (X-Forwarded-For can contain multiple IPs).
-				if ( false !== strpos( $ip_address, ',' ) ) {
-					$ip_parts   = explode( ',', $ip_address );
-					$ip_address = trim( $ip_parts[0] );
-				}
-
-				break;
-			}
-		}
-
-		// Validate and sanitize IP.
-		if ( filter_var( $ip_address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6 ) ) {
-			return $ip_address;
-		}
-
-		return '';
 	}
 
 	/**
