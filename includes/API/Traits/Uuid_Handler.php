@@ -25,7 +25,6 @@ use function delete_user_meta;
 use function delete_term_meta;
 use function update_term_meta;
 use function wp_cache_add;
-use function wp_cache_add_global_groups;
 use function wp_cache_delete;
 
 /**
@@ -136,7 +135,6 @@ trait Uuid_Handler {
 	private function maybe_add_user_uuid( WP_User $user ): void {
 		$lock_key   = 'wc_pos_uuid_user_' . $user->ID;
 		$lock_group = 'wc_pos_user_uuid_locks';
-		wp_cache_add_global_groups( $lock_group );
 		if ( ! $this->acquire_lock( $lock_key, 10, $lock_group ) ) {
 			Logger::log( 'Unable to acquire lock for user UUID update for user id ' . $user->ID );
 			return;
@@ -201,8 +199,14 @@ trait Uuid_Handler {
 			return;
 		}
 
-		$legacy = get_user_meta( $user_id, '_woocommerce_pos_uuid_' . get_current_blog_id(), true );
-		if ( \is_string( $legacy ) && Uuid::isValid( $legacy ) && ! $this->uuid_usermeta_exists( $legacy, $user_id ) ) {
+		$legacy_key = '_woocommerce_pos_uuid_' . get_current_blog_id();
+		$legacy     = get_user_meta( $user_id, $legacy_key, true );
+		if (
+			\is_string( $legacy )
+			&& Uuid::isValid( $legacy )
+			&& ! $this->uuid_usermeta_exists( $legacy, $user_id )
+			&& ! $this->uuid_usermeta_exists( $legacy, $user_id, $legacy_key )
+		) {
 			delete_user_meta( $user_id, '_woocommerce_pos_uuid' );
 			add_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy, true );
 		}
@@ -350,13 +354,15 @@ trait Uuid_Handler {
 	 *
 	 * @param string $uuid       The UUID to check.
 	 * @param int    $exclude_id The user ID to exclude.
+	 * @param string $meta_key   The user-meta key to search.
 	 * @return bool True if unique, false otherwise.
 	 */
-	private function uuid_usermeta_exists( string $uuid, int $exclude_id ): bool {
+	private function uuid_usermeta_exists( string $uuid, int $exclude_id, string $meta_key = '_woocommerce_pos_uuid' ): bool {
 		global $wpdb;
 		$result = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND user_id != %d LIMIT 1",
+				"SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s AND user_id != %d LIMIT 1",
+				$meta_key,
 				$uuid,
 				$exclude_id
 			)
