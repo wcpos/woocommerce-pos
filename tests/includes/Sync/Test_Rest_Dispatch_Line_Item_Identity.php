@@ -61,7 +61,9 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 	}
 
 	private function order_revision( int $order_id ): string {
-		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id ) );
+		$request  = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id );
+		$request->set_param( 'dp', '6' );
+		$response = rest_do_request( $request );
 		$data     = Meta_Normalizer::normalize( $response->get_data() );
 		$data     = Order_Serializer::add_pos_links( $data, wc_get_order( $order_id ) );
 
