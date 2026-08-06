@@ -81,6 +81,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		$query_params           = $request->get_query_params();
 		$customer_search_filter = null;
 		$tax_filter_controller  = null;
+		$tax_query_filter       = null;
 		if ( 'customers' === $resource && ! isset( $query_params['role'] ) ) {
 			// The POS customer space is ALL WordPress users under the #1379
 			// ruling (1.9 parity: v1 enumerated all users). wc/v3 defaults to
@@ -111,7 +112,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( 'taxes' === $resource ) {
 			foreach ( array( 'include', 'exclude' ) as $param ) {
 				if ( isset( $query_params[ $param ] ) ) {
-					$query_params[ 'wcpos_' . $param ] = $query_params[ $param ];
+					$query_params[ 'wcpos_' . $param ] = wp_parse_id_list( $query_params[ $param ] );
 					unset( $query_params[ $param ] );
 				}
 			}
@@ -140,6 +141,11 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				$tax_filter_controller = new V1_Taxes_Controller();
 				$tax_filter_controller->wcpos_dispatch_request( null, $inner, '', array() );
 				remove_filter( 'woocommerce_rest_prepare_tax', array( $tax_filter_controller, 'wcpos_prepare_tax_response' ), 10 );
+				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
+				$tax_query_filter = static function ( string $query ) use ( $tax_filter_controller ): string {
+					return $tax_filter_controller->wcpos_tax_add_include_exclude_to_sql( $query );
+				};
+				add_filter( 'query', $tax_query_filter, 10, 1 );
 			}
 			$response = rest_do_request( $inner );
 		} finally {
@@ -147,6 +153,9 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
 				remove_filter( 'query', array( $tax_filter_controller, 'wcpos_tax_add_include_exclude_to_sql' ), 10 );
 				remove_filter( 'woocommerce_rest_prepare_tax', array( $tax_filter_controller, 'wcpos_prepare_tax_response' ), 10 );
+			}
+			if ( null !== $tax_query_filter ) {
+				remove_filter( 'query', $tax_query_filter, 10 );
 			}
 			if ( $relax_wc_permissions ) {
 				remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );

@@ -122,6 +122,28 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Cashier reads accept comma-separated include IDs from the query string.
+	 */
+	public function test_cashier_include_filter_accepts_comma_separated_tax_rate_ids(): void {
+		$first_included_id  = TaxHelper::create_tax_rate( array( 'rate' => '5.00', 'name' => 'First Included Tax' ) );
+		$second_included_id = TaxHelper::create_tax_rate( array( 'rate' => '10.00', 'name' => 'Second Included Tax' ) );
+		$other_id           = TaxHelper::create_tax_rate( array( 'rate' => '15.00', 'name' => 'Other Tax' ) );
+		$request            = $this->wp_rest_get_request( '/wcpos/v2/taxes' );
+		$request->set_query_params(
+			array(
+				'include' => $first_included_id . ',' . $second_included_id,
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( array( $first_included_id, $second_included_id ), $ids );
+		$this->assertNotContains( $other_id, $ids );
+	}
+
+	/**
 	 * Cashier reads can exclude specific tax rates.
 	 */
 	public function test_cashier_exclude_filter_removes_tax_rate(): void {
@@ -150,6 +172,53 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotContains( $excluded_id, $ids );
 		$this->assertContains( $included_id, $ids );
+	}
+
+	/**
+	 * Cashier reads accept comma-separated exclude IDs from the query string.
+	 */
+	public function test_cashier_exclude_filter_accepts_comma_separated_tax_rate_ids(): void {
+		$first_excluded_id  = TaxHelper::create_tax_rate( array( 'rate' => '5.00', 'name' => 'First Excluded Tax' ) );
+		$second_excluded_id = TaxHelper::create_tax_rate( array( 'rate' => '10.00', 'name' => 'Second Excluded Tax' ) );
+		$included_id        = TaxHelper::create_tax_rate( array( 'rate' => '15.00', 'name' => 'Included Tax' ) );
+		$request            = $this->wp_rest_get_request( '/wcpos/v2/taxes' );
+		$request->set_query_params(
+			array(
+				'exclude' => $first_excluded_id . ',' . $second_excluded_id,
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotContains( $first_excluded_id, $ids );
+		$this->assertNotContains( $second_excluded_id, $ids );
+		$this->assertContains( $included_id, $ids );
+	}
+
+	/**
+	 * Include filters constrain pagination metadata as well as rows.
+	 */
+	public function test_cashier_include_filter_limits_pagination_totals(): void {
+		$included_id = TaxHelper::create_tax_rate( array( 'rate' => '5.00', 'name' => 'Included Tax' ) );
+		TaxHelper::create_tax_rate( array( 'rate' => '10.00', 'name' => 'Other Tax' ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/taxes' );
+		$request->set_query_params(
+			array(
+				'include'  => (string) $included_id,
+				'page'     => 1,
+				'per_page' => 1,
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$headers  = $response->get_headers();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEquals( array( $included_id ), wp_list_pluck( $response->get_data(), 'id' ) );
+		$this->assertEquals( 1, (int) $headers['X-WP-Total'] );
+		$this->assertEquals( 1, (int) $headers['X-WP-TotalPages'] );
 	}
 
 	/**
