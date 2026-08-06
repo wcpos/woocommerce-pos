@@ -19,11 +19,13 @@ use WC_Product_Variation;
 use WC_Abstract_Order;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use function get_user_meta;
+use function add_user_meta;
 use function update_user_meta;
 use function delete_user_meta;
 use function delete_term_meta;
 use function add_term_meta;
 use function wp_cache_add;
+use function wp_cache_add_global_groups;
 use function wp_cache_delete;
 
 /**
@@ -39,15 +41,16 @@ trait Uuid_Handler {
 	 *
 	 * @param string $lock_key Unique key for the lock.
 	 * @param int    $timeout  Timeout in seconds.
+	 * @param string $group    Cache group for the lock.
 	 * @return bool True if lock acquired, false otherwise.
 	 */
-	private function acquire_lock( string $lock_key, int $timeout = 10 ): bool {
+	private function acquire_lock( string $lock_key, int $timeout = 10, string $group = 'wc_pos_locks' ): bool {
 		$attempts   = 0;
 		$sleep_time = 100000; // 100ms in microseconds.
 		// Try every 100ms until timeout.
 		while ( $attempts < $timeout * 10 ) {
 			// wp_cache_add() returns true if the key did not exist.
-			if ( wp_cache_add( $lock_key, true, 'wc_pos_locks', $timeout ) ) {
+			if ( wp_cache_add( $lock_key, true, $group, $timeout ) ) {
 				return true;
 			}
 			usleep( $sleep_time );
@@ -60,10 +63,11 @@ trait Uuid_Handler {
 	 * Release a lock.
 	 *
 	 * @param string $lock_key Unique key for the lock.
+	 * @param string $group    Cache group for the lock.
 	 * @return void
 	 */
-	private function release_lock( string $lock_key ): void {
-		wp_cache_delete( $lock_key, 'wc_pos_locks' );
+	private function release_lock( string $lock_key, string $group = 'wc_pos_locks' ): void {
+		wp_cache_delete( $lock_key, $group );
 	}
 
 	/**
@@ -130,8 +134,10 @@ trait Uuid_Handler {
 	 * @return void
 	 */
 	private function maybe_add_user_uuid( WP_User $user ): void {
-		$lock_key = 'wc_pos_uuid_user_' . $user->ID;
-		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
+		$lock_key   = 'wc_pos_uuid_user_' . $user->ID;
+		$lock_group = 'wc_pos_user_uuid_locks';
+		wp_cache_add_global_groups( $lock_group );
+		if ( ! $this->acquire_lock( $lock_key, 10, $lock_group ) ) {
 			Logger::log( 'Unable to acquire lock for user UUID update for user id ' . $user->ID );
 			return;
 		}
@@ -154,10 +160,15 @@ trait Uuid_Handler {
 				|| ( isset( $uuids[0] ) && $this->uuid_usermeta_exists( $uuids[0], $user->ID ) );
 
 			if ( $should_update_uuid ) {
-				update_user_meta( $user->ID, '_woocommerce_pos_uuid', $this->create_uuid() );
+				$uuid = $this->create_uuid();
+				if ( empty( $uuids ) ) {
+					add_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid, true );
+				} else {
+					update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
+				}
 			}
 		} finally {
-			$this->release_lock( $lock_key );
+			$this->release_lock( $lock_key, $lock_group );
 		}
 	}
 
@@ -192,6 +203,7 @@ trait Uuid_Handler {
 
 		$legacy = get_user_meta( $user_id, '_woocommerce_pos_uuid_' . get_current_blog_id(), true );
 		if ( \is_string( $legacy ) && Uuid::isValid( $legacy ) && ! $this->uuid_usermeta_exists( $legacy, $user_id ) ) {
+			delete_user_meta( $user_id, '_woocommerce_pos_uuid' );
 			update_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy );
 		}
 	}

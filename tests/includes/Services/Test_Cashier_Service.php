@@ -271,6 +271,33 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test the lock-timeout fallback returns a concurrently persisted winner.
+	 */
+	public function test_get_cashier_uuid_lock_timeout_preserves_concurrent_insert(): void {
+		$winner_uuid   = wp_generate_uuid4();
+		$fallback_uuid = wp_generate_uuid4();
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'usleep'           => function () {
+				},
+				'wp_cache_add'      => function () {
+					return false;
+				},
+				'wp_generate_uuid4' => function () use ( $winner_uuid, $fallback_uuid ) {
+					\add_user_meta( $this->user->ID, '_woocommerce_pos_uuid', $winner_uuid, true );
+
+					return $fallback_uuid;
+				},
+			)
+		);
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $winner_uuid, $uuid );
+		$this->assertSame( $winner_uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
 	 * Test get_cashier_data returns expected structure.
 	 */
 	public function test_get_cashier_data_structure(): void {

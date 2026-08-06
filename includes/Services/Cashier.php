@@ -69,10 +69,19 @@ class Cashier {
 
 		// Lock contention in maybe_add_user_uuid() can leave the meta unset; this
 		// uuid is the client's RxDB primary key, so mint rather than serve ''.
-		$uuid = wp_generate_uuid4();
-		update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
+		$fallback_uuid = wp_generate_uuid4();
+		if ( empty( $uuid ) ) {
+			add_user_meta( $user->ID, '_woocommerce_pos_uuid', $fallback_uuid, true );
+		} else {
+			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $fallback_uuid, $uuid );
+		}
 
-		return $uuid;
+		$uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		if ( \is_string( $uuid ) && Uuid::isValid( $uuid ) ) {
+			return $uuid;
+		}
+
+		return $fallback_uuid;
 	}
 
 	/**
