@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\API\V1\Customers_Controller as V1_Customers_Controller;
+use WCPOS\WooCommercePOS\API\V1\Taxes_Controller as V1_Taxes_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
@@ -79,6 +80,8 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource ) {
 		$query_params           = $request->get_query_params();
 		$customer_search_filter = null;
+		$tax_filter_controller  = null;
+		$tax_query_filter       = null;
 		if ( 'customers' === $resource && ! isset( $query_params['role'] ) ) {
 			// The POS customer space is ALL WordPress users under the #1379
 			// ruling (1.9 parity: v1 enumerated all users). wc/v3 defaults to
@@ -106,6 +109,14 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				add_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
 			}
 		}
+		if ( 'taxes' === $resource ) {
+			foreach ( array( 'include', 'exclude' ) as $param ) {
+				if ( isset( $query_params[ $param ] ) ) {
+					$query_params[ 'wcpos_' . $param ] = wp_parse_id_list( $query_params[ $param ] );
+					unset( $query_params[ $param ] );
+				}
+			}
+		}
 
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
 		$this->add_pos_order_filter( $resource, $query_params );
@@ -126,8 +137,26 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		}
 		try {
+			if ( 'taxes' === $resource && ( isset( $query_params['wcpos_include'] ) || isset( $query_params['wcpos_exclude'] ) ) ) {
+				$tax_filter_controller = new V1_Taxes_Controller();
+				$tax_filter_controller->wcpos_dispatch_request( null, $inner, '', array() );
+				remove_filter( 'woocommerce_rest_prepare_tax', array( $tax_filter_controller, 'wcpos_prepare_tax_response' ), 10 );
+				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
+				$tax_query_filter = static function ( string $query ) use ( $tax_filter_controller ): string {
+					return $tax_filter_controller->wcpos_tax_add_include_exclude_to_sql( $query );
+				};
+				add_filter( 'query', $tax_query_filter, 10, 1 );
+			}
 			$response = rest_do_request( $inner );
 		} finally {
+			if ( null !== $tax_filter_controller ) {
+				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
+				remove_filter( 'query', array( $tax_filter_controller, 'wcpos_tax_add_include_exclude_to_sql' ), 10 );
+				remove_filter( 'woocommerce_rest_prepare_tax', array( $tax_filter_controller, 'wcpos_prepare_tax_response' ), 10 );
+			}
+			if ( null !== $tax_query_filter ) {
+				remove_filter( 'query', $tax_query_filter, 10 );
+			}
 			if ( $relax_wc_permissions ) {
 				remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 			}
