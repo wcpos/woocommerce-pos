@@ -694,6 +694,32 @@ class Write_Controller extends WP_REST_Controller {
 		return false;
 	}
 
+	/**
+	 * The pre-CAS post-type capability gate shared by the update and delete paths.
+	 *
+	 * Only the WP-post-backed collections carry a Woo capability check of their own;
+	 * every other collection is gated by the endpoint permission callback alone, so
+	 * this is a no-op for them.
+	 *
+	 * @param array  $meta Resolved collection metadata (carries the post_type, if any).
+	 * @param int    $id   Resolved record id.
+	 * @param string $verb Woo permission context: 'edit' or 'delete'.
+	 *
+	 * @return WP_Error|null The refusal to return, or null when the write may proceed.
+	 */
+	private function post_permission_error( array $meta, int $id, string $verb ): ?WP_Error {
+		$post_type = (string) ( $meta['post_type'] ?? '' );
+		if ( ! \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true )
+			|| wc_rest_check_post_permissions( $post_type, $verb, $id ) ) {
+			return null;
+		}
+		$status = array( 'status' => rest_authorization_required_code() );
+		if ( 'delete' === $verb ) {
+			return new WP_Error( 'woocommerce_rest_cannot_delete', __( 'Sorry, you are not allowed to delete this resource.', 'woocommerce' ), $status );
+		}
+		return new WP_Error( 'woocommerce_rest_cannot_edit', __( 'Sorry, you are not allowed to edit this resource.', 'woocommerce' ), $status );
+	}
+
 	private function apply_update( string $collection, array $meta, array $m ) {
 		$id = $this->store->resolve_id_by_uuid( $meta['id_type'], $m['recordId'], $meta );
 		if ( is_wp_error( $id ) ) {
@@ -702,10 +728,9 @@ class Write_Controller extends WP_REST_Controller {
 		if ( 0 === $id ) {
 			return new WP_Error( 'woo_rxdb_sync_record_not_found', 'No record for recordId.', array( 'status' => 404 ) );
 		}
-		$post_type = (string) ( $meta['post_type'] ?? '' );
-		if ( \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true )
-			&& ! wc_rest_check_post_permissions( $post_type, 'edit', $id ) ) {
-			return new WP_Error( 'woocommerce_rest_cannot_edit', __( 'Sorry, you are not allowed to edit this resource.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
+		$permission_error = $this->post_permission_error( $meta, $id, 'edit' );
+		if ( $permission_error ) {
+			return $permission_error;
 		}
 
 		// Envelope-level payload validation runs BEFORE any wc/v3 read or write —
@@ -890,10 +915,9 @@ class Write_Controller extends WP_REST_Controller {
 			}
 			return new WP_REST_Response( (object) array(), 200 );
 		}
-		$post_type = (string) ( $meta['post_type'] ?? '' );
-		if ( \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true )
-			&& ! wc_rest_check_post_permissions( $post_type, 'delete', $id ) ) {
-			return new WP_Error( 'woocommerce_rest_cannot_delete', __( 'Sorry, you are not allowed to delete this resource.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
+		$permission_error = $this->post_permission_error( $meta, $id, 'delete' );
+		if ( $permission_error ) {
+			return $permission_error;
 		}
 
 		// A delete of an EXISTING record MUST carry a baseRevision precondition: an
