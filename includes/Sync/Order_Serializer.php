@@ -163,6 +163,11 @@ final class Order_Serializer {
 		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ) ) );
 	}
 
+	/** The canonical recipe used before v2 read augmentations were added. */
+	public static function pre_augmentation_canonical_revision( array $payload ): string {
+		return Revision::compute( self::strip_identity_meta( $payload ) );
+	}
+
 	/**
 	 * Canonicalize items in a COPY of the payload before hashing, so revision
 	 * sources hashing the BARE wc/v3 form and lanes serving the augmented form
@@ -217,7 +222,13 @@ final class Order_Serializer {
 		// injected) and compares against a hash the client computed BEFORE this
 		// deployment — hashing links here would reject every unchanged pre-upgrade
 		// order with a false 409.
-		unset( $payload['links'] );
+		unset( $payload['links'], $payload['tax_ids'] );
+		$payload = self::strip_item_identity_meta( $payload );
+		foreach ( $payload['line_items'] ?? array() as $index => $line_item ) {
+			if ( isset( $line_item['image']['id'] ) ) {
+				$payload['line_items'][ $index ]['image']['id'] = (string) $line_item['image']['id'];
+			}
+		}
 		$source = wp_json_encode( self::strip_identity_meta( $payload ) );
 		return 'sha256:' . hash( 'sha256', false === $source ? '' : $source );
 	}
