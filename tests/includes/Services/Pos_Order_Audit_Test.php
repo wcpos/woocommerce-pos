@@ -264,11 +264,20 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Cash amounts must be numeric; the store id is any non-empty scalar.
+	 * Cash amounts must be unsigned plain decimals; the store id is any
+	 * non-empty scalar.
 	 */
 	public function test_is_valid_till_value_rules(): void {
+		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '0.00' ) );
 		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '10.50' ) );
 		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', 10 ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '-10.50' ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '-9999' ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '+10.50' ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '1e3' ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '1e10' ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', ' 10.50' ) );
+		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '10.50 ' ) );
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_amount_tendered', '10,50' ) );
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_change', array( '1' ) ) );
 		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_store', 'uuid-or-slug' ) );

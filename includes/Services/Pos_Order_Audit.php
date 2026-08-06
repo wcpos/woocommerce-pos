@@ -34,7 +34,7 @@ final class Pos_Order_Audit {
 	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
 
 	/**
-	 * The subset of till keys that are monetary AMOUNTS (must be numeric);
+	 * The subset of till keys that are monetary AMOUNTS (unsigned plain decimals);
 	 * `_pos_store` is an identifier, not an amount.
 	 *
 	 * @var string[]
@@ -157,9 +157,9 @@ final class Pos_Order_Audit {
 
 	/**
 	 * Whether a till value may persist: never an empty/non-scalar value, and the
-	 * cash AMOUNTS must be numeric (a malformed amount would break Pro analytics
-	 * aggregations). `_pos_store` is an identifier — the store-scope model allows
-	 * numeric ids, uuids, or slugs — so any non-empty scalar is kept.
+	 * cash AMOUNTS must be unsigned plain decimals (a malformed amount would break
+	 * Pro analytics aggregations). `_pos_store` is an identifier — the store-scope
+	 * model allows numeric ids, uuids, or slugs — so any non-empty scalar is kept.
 	 *
 	 * @param string $key   The till meta key.
 	 * @param mixed  $value The client-supplied value.
@@ -170,7 +170,7 @@ final class Pos_Order_Audit {
 		if ( ! \is_scalar( $value ) || '' === (string) $value ) {
 			return false;
 		}
-		if ( \in_array( $key, self::CASH_META_KEYS, true ) && ! is_numeric( $value ) ) {
+		if ( \in_array( $key, self::CASH_META_KEYS, true ) && 1 !== preg_match( '/^\d+(?:\.\d+)?$/', (string) $value ) ) {
 			return false;
 		}
 
