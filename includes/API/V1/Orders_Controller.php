@@ -428,6 +428,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$this->creating_order = null;
 
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9, 3 );
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
 
 		try {
@@ -435,12 +436,30 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$response = parent::create_item( $request );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9 );
 			$this->creating_order = null;
 		}
 
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
 
 		return $response;
+	}
+
+	/**
+	 * Record the exact order object prepared for this create request.
+	 *
+	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating Whether a new order is being created.
+	 *
+	 * @return WC_Data|WP_Error
+	 */
+	public function wcpos_track_creating_order( $order, WP_REST_Request $request, bool $creating ) {
+		if ( $creating && $order instanceof WC_Abstract_Order ) {
+			$this->creating_order = $order;
+		}
+
+		return $order;
 	}
 
 	/**
@@ -462,7 +481,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
 			return $order;
 		}
-		$this->creating_order = $order;
 
 		$body = $request->get_json_params();
 

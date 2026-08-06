@@ -549,6 +549,8 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Persist the POS audit meta + created_via for an order (both the create and born-twice paths).
+	 *
 	 * The POS audit meta map to persist on an order create (gap §3.3 — Pro analytics joins on
 	 * these). The controller owns the POLICY (which values); the store owns the HPOS-safe write.
 	 *   - `_pos_user` = the authenticated user (the cashier) and `_woocommerce_pos_version` =
@@ -559,8 +561,6 @@ class Write_Controller extends WP_REST_Controller {
 	 * The key lists and till-value validation live in {@see Pos_Order_Audit}, shared
 	 * with the wcpos/v1 orders controller so the two surfaces cannot drift.
 	 */
-
-	/** Persist the POS audit meta + created_via for an order (both the create and born-twice paths). */
 	private function stamp_order_audit( int $id, $payload, bool $stamp_version = false ): void {
 		$this->store->persist_order_audit_meta( $id, $this->order_audit_meta( is_array( $payload ) ? $payload : array(), $stamp_version ), 'woocommerce-pos' );
 	}
@@ -572,7 +572,7 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		$meta_data = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		// Till values persist directly, bypassing wc/v3's own validation — the service
-		// drops empty/non-scalar values and non-numeric cash amounts.
+		// drops empty/non-scalar values and cash amounts that are not unsigned plain decimals.
 		return array_merge( $meta, Pos_Order_Audit::till_meta_from_payload( $meta_data ) );
 	}
 
