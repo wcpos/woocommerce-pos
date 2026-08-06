@@ -1074,7 +1074,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$provider = (string) ( $printer['provider'] ?? '' );
+		// Legacy printer rows saved before the provider field existed must test
+		// as the default provider, not fall through to the no-diagnostic error.
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 
 		if ( 'printnode' === $provider ) {
 			return $this->test_print_printnode( $printer );

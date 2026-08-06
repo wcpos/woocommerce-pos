@@ -198,14 +198,17 @@ class Pos_Uuid {
 		$user_id = (int) $customer->get_id();
 		$legacy = get_user_meta( $user_id, self::META_KEY . '_' . get_current_blog_id(), true );
 		if ( self::is_uuid( $legacy ) && ! self::legacy_uuid_owned_by_other_user( $legacy, $customer ) ) {
-			// A unique add when no row exists yet: a fallback uuid persisted by a
-			// lock-contended request on another blog must win over the adoption,
-			// or its client ends up keyed on an orphan. When (invalid) rows do
-			// exist, replacing them is the point of the adoption.
-			if ( array() === get_user_meta( $user_id, self::META_KEY, false ) ) {
+			// Never clobber a uuid another request persisted concurrently — its
+			// client is already keyed on it. A unique add when no row exists; a
+			// compare-and-swap against the OBSERVED invalid value otherwise, so a
+			// lock-timeout fallback that replaced the corrupt row between our
+			// read and this write survives (the CAS no-ops and ensure_uuid then
+			// serves the concurrent winner).
+			$stored_rows = get_user_meta( $user_id, self::META_KEY, false );
+			if ( array() === $stored_rows ) {
 				add_user_meta( $user_id, self::META_KEY, $legacy, true );
-			} else {
-				update_user_meta( $user_id, self::META_KEY, $legacy );
+			} elseif ( ! self::is_uuid( $stored_rows[0] ) ) {
+				update_user_meta( $user_id, self::META_KEY, $legacy, $stored_rows[0] );
 			}
 		}
 	}

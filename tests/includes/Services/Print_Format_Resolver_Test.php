@@ -205,16 +205,19 @@ class Print_Format_Resolver_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It falls back to octet-stream for a printer with no usable provider.
+	 * A printer with a missing or unusable provider is normalized to the default
+	 * provider before format selection — legacy rows saved before the provider
+	 * field existed must keep printing as Star CloudPRNT, not fall back to
+	 * octet-stream (the 510 Incompatible Media Type failure mode).
 	 */
-	public function test_content_type_for_printer_unknown_provider_returns_octet_stream(): void {
+	public function test_content_type_for_printer_unknown_provider_normalizes_to_default(): void {
 		// Arrange.
 		$resolver = new Print_Format_Resolver();
 
 		// Act / Assert.
-		$this->assertEquals( 'application/octet-stream', $resolver->content_type_for_printer( array() ) );
+		$this->assertEquals( 'application/vnd.star.starprnt', $resolver->content_type_for_printer( array() ) );
 		$this->assertEquals(
-			'application/octet-stream',
+			'application/vnd.star.starprnt',
 			$resolver->content_type_for_printer( array( 'provider' => 'brother-ql' ) )
 		);
 	}
