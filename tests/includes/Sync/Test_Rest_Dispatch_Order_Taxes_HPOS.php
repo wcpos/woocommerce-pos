@@ -29,16 +29,10 @@ class Test_Rest_Dispatch_Order_Taxes_HPOS extends Test_Rest_Dispatch_Order_Taxes
 	/**
 	 * Restore posts storage after each inherited test.
 	 *
-	 * The COT setup runs DDL mid-test (an implicit COMMIT), so the inherited
-	 * tax-rate fixtures escape the test transaction and would leak into every
-	 * later count-based tax suite — wipe the tax tables explicitly.
+	 * No explicit fixture cleanup: `setup_cot()` is DDL-free, so the WP test-case
+	 * transaction is intact and the inherited tax-rate fixtures roll back normally.
 	 */
 	public function tearDown(): void {
-		global $wpdb;
-		$wpdb->query( "DELETE FROM {$wpdb->prefix}woocommerce_tax_rate_locations" );
-		$wpdb->query( "DELETE FROM {$wpdb->prefix}woocommerce_tax_rates" );
-		\WC_Cache_Helper::invalidate_cache_group( 'taxes' );
-
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
