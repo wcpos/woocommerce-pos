@@ -91,11 +91,9 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The desired targeted-pull contract remains pinned while the proxy lacks it.
+	 * Cashier reads can target specific tax rates.
 	 */
 	public function test_cashier_include_filter_returns_only_requested_tax_rate(): void {
-		$this->markTestSkipped( 'Gap: the v2 taxes proxy forwards include= to wc/v3, whose tax-rate collection ignores it; add proxy filtering before enabling this contract.' );
-
 		$included_id = TaxHelper::create_tax_rate(
 			array(
 				'country' => 'US',
@@ -121,6 +119,88 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertEquals( array( $included_id ), $ids );
 		$this->assertNotContains( $excluded_id, $ids );
+	}
+
+	/**
+	 * Cashier reads can exclude specific tax rates.
+	 */
+	public function test_cashier_exclude_filter_removes_tax_rate(): void {
+		$excluded_id = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'CA',
+				'rate'    => '7.25',
+				'name'    => 'Excluded Tax',
+			)
+		);
+		$included_id = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'FL',
+				'rate'    => '6.00',
+				'name'    => 'Included Tax',
+			)
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/taxes' );
+		$request->set_param( 'exclude', array( $excluded_id ) );
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotContains( $excluded_id, $ids );
+		$this->assertContains( $included_id, $ids );
+	}
+
+	/**
+	 * Include and class filters intersect.
+	 */
+	public function test_include_with_class_filter_intersects(): void {
+		$gb_standard_id = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'GB',
+				'rate'    => '20.00',
+				'name'    => 'GB Standard Tax',
+			)
+		);
+		$gb_reduced_id  = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'GB',
+				'rate'    => '5.00',
+				'name'    => 'GB Reduced Tax',
+				'class'   => 'reduced-rate',
+			)
+		);
+		TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'rate'    => '8.00',
+				'name'    => 'US Standard Tax',
+			)
+		);
+		// A reduced-rate row OUTSIDE the include list: class= alone would return
+		// it, so the assertion below only holds when include intersects class.
+		TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'rate'    => '2.50',
+				'name'    => 'US Reduced Tax',
+				'class'   => 'reduced-rate',
+			)
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/taxes' );
+		$request->set_query_params(
+			array(
+				'include' => array( $gb_standard_id, $gb_reduced_id ),
+				'class'   => 'reduced-rate',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEquals( array( $gb_reduced_id ), $ids );
 	}
 
 	/**
