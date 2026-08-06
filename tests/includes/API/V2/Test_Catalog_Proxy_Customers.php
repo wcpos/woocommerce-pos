@@ -143,6 +143,41 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Customer rows expose the complete v2 field set.
+	 */
+	public function test_customer_row_has_full_v2_field_set(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$request->set_query_params( array( 'include' => array( $this->customer->get_id() ) ) );
+
+		$response = $this->server->dispatch( $request );
+		$rows     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $rows );
+		$this->assertEqualsCanonicalizing(
+			array(
+				'id',
+				'date_created',
+				'date_created_gmt',
+				'date_modified',
+				'date_modified_gmt',
+				'email',
+				'first_name',
+				'last_name',
+				'role',
+				'username',
+				'billing',
+				'shipping',
+				'is_paying_customer',
+				'avatar_url',
+				'meta_data',
+				'_links',
+			),
+			array_keys( $rows[0] )
+		);
+	}
+
+	/**
 	 * Multi-word customer search cases.
 	 *
 	 * @return array<string, array{string}>

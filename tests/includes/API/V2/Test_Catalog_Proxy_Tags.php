@@ -95,4 +95,26 @@ class Test_Catalog_Proxy_Tags extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( (int) $match['term_id'], $ids );
 		$this->assertNotContains( (int) $other['term_id'], $ids );
 	}
+
+	/**
+	 * Tag rows expose the complete v2 field set.
+	 */
+	public function test_tag_row_has_full_v2_field_set(): void {
+		$tag = wp_insert_term( 'V2 Tag Field Set', 'product_tag' );
+
+		$rows = $this->read( array( 'include' => array( (int) $tag['term_id'] ) ) );
+
+		$this->assertEqualsCanonicalizing(
+			array(
+				'id',
+				'name',
+				'slug',
+				'description',
+				'count',
+				'meta_data',
+				'_links',
+			),
+			array_keys( $rows[0] )
+		);
+	}
 }
