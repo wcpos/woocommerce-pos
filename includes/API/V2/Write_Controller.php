@@ -146,21 +146,9 @@ class Write_Controller extends WP_REST_Controller {
 		$fingerprint = $this->envelope_fingerprint( $m );
 
 		// Idempotent replay: a mutationId already APPLIED returns its canonical result.
-		$hit = $this->store->lookup( $collection, $m['mutationId'] );
-		if ( is_array( $hit ) ) {
-			$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
-			if ( $mismatch ) {
-				return $mismatch;
-			}
-		}
-		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
-			return $this->retry_identity_stamp( $meta, $m, $hit );
-		}
-		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
-			if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
-				return $this->finalize_error();
-			}
-			return $this->replay( $meta, $hit );
+		$settled = $this->replay_or_conflict( $collection, $meta, $m, $fingerprint );
+		if ( null !== $settled ) {
+			return $settled;
 		}
 
 		// Atomically CLAIM the mutationId before the non-idempotent forward, so two
@@ -168,21 +156,9 @@ class Write_Controller extends WP_REST_Controller {
 		// can't both create. The loser replays if it's done, else reports in-progress;
 		// a crashed winner's stale reservation is reclaimed after the TTL.
 		if ( ! $this->store->reserve( $collection, $m['mutationId'], $m['recordId'], $m['operation'], $fingerprint ) ) {
-			$hit = $this->store->lookup( $collection, $m['mutationId'] );
-			if ( is_array( $hit ) ) {
-				$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
-				if ( $mismatch ) {
-					return $mismatch;
-				}
-			}
-			if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
-				return $this->retry_identity_stamp( $meta, $m, $hit );
-			}
-			if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
-				if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
-					return $this->finalize_error();
-				}
-				return $this->replay( $meta, $hit );
+			$settled = $this->replay_or_conflict( $collection, $meta, $m, $fingerprint );
+			if ( null !== $settled ) {
+				return $settled;
 			}
 			if ( ! $this->reclaim_and_reserve( $collection, $m, $fingerprint ) ) {
 				return new WP_REST_Response(
@@ -221,6 +197,38 @@ class Write_Controller extends WP_REST_Controller {
 			$this->store->release( $m['mutationId'] );
 		}
 		return $result;
+	}
+
+	/**
+	 * Settle a mutationId that the store already knows about.
+	 *
+	 * Rejects an envelope that reuses the id for a different write, re-stamps a poisoned
+	 * retry, and replays the canonical result of an applied/done mutation.
+	 *
+	 * @param string $collection  The collection being written to.
+	 * @param array  $meta        The collection metadata.
+	 * @param array  $m           The mutation envelope.
+	 * @param string $fingerprint The canonical fingerprint of the envelope.
+	 * @return WP_Error|WP_REST_Response|null The settled result, or null to keep applying.
+	 */
+	private function replay_or_conflict( string $collection, array $meta, array $m, string $fingerprint ) {
+		$hit = $this->store->lookup( $collection, $m['mutationId'] );
+		if ( is_array( $hit ) ) {
+			$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
+			if ( $mismatch ) {
+				return $mismatch;
+			}
+		}
+		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
+			return $this->retry_identity_stamp( $meta, $m, $hit );
+		}
+		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
+			if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
+				return $this->finalize_error();
+			}
+			return $this->replay( $meta, $hit );
+		}
+		return null;
 	}
 
 	/**
