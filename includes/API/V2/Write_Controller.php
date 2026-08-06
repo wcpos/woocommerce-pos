@@ -666,6 +666,10 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		if ( 0 === strpos( $base, 'sha256:' ) ) {
 			if ( 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {
+				if ( Order_Serializer::pre_augmentation_canonical_revision( $bare ) === $base
+					|| Order_Serializer::pre_item_uuid_canonical_revision( $bare ) === $base ) {
+					return true;
+				}
 				$payload = ( new Order_Serializer() )->serialize_order( $id, new WP_REST_Request() );
 				return Order_Serializer::legacy_revision( $payload ) === $base;
 			}

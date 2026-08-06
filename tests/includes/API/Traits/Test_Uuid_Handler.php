@@ -62,6 +62,16 @@ class Test_Uuid_Handler_Class {
 	public function test_maybe_add_order_item_uuid( $item ): void {
 		$this->maybe_add_order_item_uuid( $item );
 	}
+
+	/** Expose the order-item lock for a real datastore contention test. */
+	public function test_acquire_order_item_uuid_lock( string $lock_key, int $timeout ): bool {
+		return $this->acquire_order_item_uuid_lock( $lock_key, $timeout );
+	}
+
+	/** Release a lock acquired by the contention test. */
+	public function test_release_order_item_uuid_lock( string $lock_key ): void {
+		$this->release_order_item_uuid_lock( $lock_key );
+	}
 }
 
 /**
@@ -413,11 +423,11 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Order-item UUIDs remain outside the sync identity brain (ADR 0021).
+	 * Malformed order-item UUIDs are replaced with persisted UUIDs.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
 	 */
-	public function test_order_item_uuid_path_remains_legacy(): void {
+	public function test_order_item_uuid_replaces_malformed_value(): void {
 		$order = OrderHelper::create_order();
 		$items = $order->get_items();
 		$item  = reset( $items );
@@ -426,6 +436,71 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 
 		$this->handler->test_maybe_add_order_item_uuid( $item );
 
-		$this->assertSame( 'legacy-order-item-identity', $item->get_meta( Api::UUID_META_KEY ) );
+		$uuid = $item->get_meta( Api::UUID_META_KEY );
+		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
+		$this->assertSame( $uuid, ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( Api::UUID_META_KEY ) );
+	}
+
+	/**
+	 * A stale waiter reloads the UUID stored by the lock winner.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
+	 */
+	public function test_order_item_uuid_stale_objects_converge(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->delete_meta_data( Api::UUID_META_KEY );
+		$item->save_meta_data();
+		$stale_item = new \WC_Order_Item_Product( $item->get_id() );
+		$this->assertSame( '', $stale_item->get_meta( Api::UUID_META_KEY ) );
+
+		$this->handler->test_maybe_add_order_item_uuid( $item );
+		$first_uuid = $item->get_meta( Api::UUID_META_KEY );
+		$this->handler->test_maybe_add_order_item_uuid( $stale_item );
+
+		$this->assertTrue( Pos_Uuid::is_uuid( $first_uuid ) );
+		$this->assertSame( $first_uuid, $stale_item->get_meta( Api::UUID_META_KEY ) );
+		$this->assertSame( $first_uuid, ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( Api::UUID_META_KEY ) );
+	}
+
+	/**
+	 * Pending item metadata survives the locked refresh used for UUID convergence.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
+	 */
+	public function test_order_item_uuid_preserves_pending_meta_data(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->update_meta_data( '_sku', 'SKU-123' );
+
+		$this->handler->test_maybe_add_order_item_uuid( $item );
+
+		$this->assertSame( 'SKU-123', $item->get_meta( '_sku' ) );
+		$this->assertSame( 'SKU-123', ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( '_sku' ) );
+	}
+
+	/**
+	 * The order-item UUID lock is shared across database connections.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::acquire_order_item_uuid_lock
+	 */
+	public function test_order_item_uuid_lock_is_datastore_backed(): void {
+		$lock_key = 'wc_pos_uuid_order_item_test';
+		$locker   = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, 0 ) ) );
+		$acquired = false;
+
+		try {
+			$acquired = $this->handler->test_acquire_order_item_uuid_lock( $lock_key, 1 );
+			$this->assertFalse( $acquired );
+		} finally {
+			if ( $acquired ) {
+				$this->handler->test_release_order_item_uuid_lock( $lock_key );
+			}
+			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
+			$locker->close();
+		}
 	}
 }

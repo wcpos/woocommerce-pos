@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -1805,10 +1806,29 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		list($order_id, $payload) = $this->real_order_payload();
 		$store = new Fake_Mutation_Store();
 		$store->resolve = $order_id;
-		$legacy = Order_Serializer::legacy_revision( $payload );
+		$pre_augmentation_payload = $payload;
+		unset( $pre_augmentation_payload['tax_ids'] );
+		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines' ) as $payload_key ) {
+			if ( ! isset( $pre_augmentation_payload[ $payload_key ] ) ) {
+				continue;
+			}
+			foreach ( $pre_augmentation_payload[ $payload_key ] as &$item ) {
+				$item['meta_data'] = array_values(
+					array_filter(
+						$item['meta_data'] ?? array(),
+						static fn( $entry ): bool => Pos_Uuid::META_KEY !== ( $entry['key'] ?? null )
+					)
+				);
+				if ( 'line_items' === $payload_key && isset( $item['image']['id'] ) ) {
+					$item['image']['id'] = (string) $item['image']['id'];
+				}
+			}
+			unset( $item );
+		}
+		$legacy = Order_Serializer::legacy_revision( $pre_augmentation_payload );
 		$canonical = Order_Serializer::canonical_revision( $payload );
 		$this->assertNotSame( $legacy, $canonical );
-		$this->setRestResponse( $payload, 200 );
+		$this->setRestResponse( $pre_augmentation_payload, 200 );
 
 		$result = $this->push(
 			$store,
@@ -1822,6 +1842,82 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $result->get_status() );
 		$this->assertSame( $canonical, $result->get_data()['currentRevision'] );
+	}
+
+	public function test_orders_update_accepts_pre_augmentation_canonical_revision_under_grace(): void {
+		$store = new Fake_Mutation_Store();
+		$store->resolve = 7001;
+		$payload = array(
+			'id'         => 7001,
+			'status'     => 'processing',
+			'line_items' => array(
+				array(
+					'id'        => 17,
+					'image'     => array( 'id' => '23' ),
+					'meta_data' => array(
+						array(
+							'key'   => Pos_Uuid::META_KEY,
+							'value' => '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d',
+						),
+					),
+				),
+			),
+		);
+		$previous_revision = Revision::compute( $payload );
+		$current_revision  = Order_Serializer::canonical_revision( $payload );
+		$this->assertNotSame( $previous_revision, $current_revision );
+		$this->setRestResponse( $payload, 200 );
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'baseRevision' => $previous_revision,
+				'payload'      => array( 'status' => 'completed' ),
+			)
+		);
+
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( $current_revision, $result->get_data()['currentRevision'] );
+	}
+
+	public function test_orders_update_accepts_pre_item_uuid_canonical_revision_after_uuid_stamping(): void {
+		$store = new Fake_Mutation_Store();
+		$store->resolve = 7001;
+		$before_stamping = array(
+			'id'         => 7001,
+			'status'     => 'processing',
+			'line_items' => array(
+				array(
+					'id'        => 17,
+					'image'     => array( 'id' => '23' ),
+					'meta_data' => array(),
+				),
+			),
+		);
+		$after_stamping = $before_stamping;
+		$after_stamping['line_items'][0]['meta_data'][] = array(
+			'id'            => 91,
+			'key'           => Pos_Uuid::META_KEY,
+			'value'         => '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d',
+			'display_key'   => Pos_Uuid::META_KEY,
+			'display_value' => '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d',
+		);
+		$previous_revision = Revision::compute( $before_stamping );
+		$this->setRestResponse( $after_stamping, 200 );
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'baseRevision' => $previous_revision,
+				'payload'      => array( 'status' => 'completed' ),
+			)
+		);
+
+		$this->assertSame( 200, $result->get_status() );
 	}
 
 
