@@ -309,40 +309,47 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		};
 		add_filter( 'woocommerce_order_class', $order_class_filter );
 		Tracking_Order::$get_item_load_from_db = array();
-		$parent       = ProductHelper::create_variation_product();
-		$variation_id = $parent->get_children()[0];
-		$variation    = wc_get_product( $variation_id );
-		$variation->set_regular_price( '10' );
-		$variation->set_price( '10' );
-		$variation->set_tax_status( 'none' );
-		$variation->save();
-		$payload = array(
-			'status'     => 'pending',
-			'line_items' => array(
-				array(
-					'product_id'   => $parent->get_id(),
-					'variation_id' => $variation_id,
-					'quantity'     => 1,
-					'subtotal'     => '10',
-					'total'        => '10',
+
+		try {
+			$parent       = ProductHelper::create_variation_product();
+			$variation_id = $parent->get_children()[0];
+			$variation    = wc_get_product( $variation_id );
+			$variation->set_regular_price( '10' );
+			$variation->set_price( '10' );
+			$variation->set_tax_status( 'none' );
+			$variation->save();
+			$payload = array(
+				'status'     => 'pending',
+				'line_items' => array(
+					array(
+						'product_id'   => $parent->get_id(),
+						'variation_id' => $variation_id,
+						'quantity'     => 1,
+						'subtotal'     => '10',
+						'total'        => '10',
+					),
 				),
-			),
-		);
+			);
 
-		$created = $this->push_order( 'create', $payload );
-		$this->assertEquals( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+			$created = $this->push_order( 'create', $payload );
+			$this->assertEquals( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 
-		// Act.
-		$first = $this->push_order( 'update', $created->get_data()['document'], $created->get_data()['currentRevision'] );
-		$this->assertEquals( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
-		$second = $this->push_order( 'update', $first->get_data()['document'], $first->get_data()['currentRevision'] );
+			// Act.
+			$first = $this->push_order( 'update', $created->get_data()['document'], $created->get_data()['currentRevision'] );
+			$this->assertEquals( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
+			$second = $this->push_order( 'update', $first->get_data()['document'], $first->get_data()['currentRevision'] );
 
-		// Assert.
-		$this->assertEquals( 200, $second->get_status(), wp_json_encode( $second->get_data() ) );
-		$this->assertSame( 1, $this->line_item_meta_count( $created->get_data()['document'], 'pa_size' ) );
-		$this->assertSame( 1, $this->line_item_meta_count( $first->get_data()['document'], 'pa_size' ) );
-		$this->assertSame( 1, $this->line_item_meta_count( $second->get_data()['document'], 'pa_size' ) );
-		remove_filter( 'woocommerce_order_class', $order_class_filter );
-		$this->assertNotContains( false, Tracking_Order::$get_item_load_from_db );
+			// Assert.
+			$this->assertEquals( 200, $second->get_status(), wp_json_encode( $second->get_data() ) );
+			$this->assertSame( 1, $this->line_item_meta_count( $created->get_data()['document'], 'pa_size' ) );
+			$this->assertSame( 1, $this->line_item_meta_count( $first->get_data()['document'], 'pa_size' ) );
+			$this->assertSame( 1, $this->line_item_meta_count( $second->get_data()['document'], 'pa_size' ) );
+			// The identity-drop guard resolved the stored item on every update —
+			// an empty recording would mean get_item() was never exercised.
+			$this->assertNotEmpty( Tracking_Order::$get_item_load_from_db );
+			$this->assertNotContains( false, Tracking_Order::$get_item_load_from_db );
+		} finally {
+			remove_filter( 'woocommerce_order_class', $order_class_filter );
+		}
 	}
 }
