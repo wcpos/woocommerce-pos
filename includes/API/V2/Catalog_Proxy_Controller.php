@@ -50,6 +50,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	private $pos_visibility_filter = null;
 	private $pos_order_filter      = null;
 	private $pos_order_filter_hook = null;
+	private $pos_orderby_filter    = null;
 
 	public function register_routes(): void {
 		foreach ( self::resources() as $route => $meta ) {
@@ -256,6 +257,16 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( 'orders' !== $resource ) {
 			return;
 		}
+		// V1's public orderby callbacks depend on its protected request state, so mirror their small clause mappings here.
+		$orderby = $query_params['orderby'] ?? null;
+		if ( ! \in_array( $orderby, array( 'status', 'customer_id', 'payment_method', 'total' ), true ) ) {
+			$orderby = null;
+		} else {
+			unset( $query_params['orderby'] );
+		}
+		$order = isset( $query_params['order'] )
+			&& \is_string( $query_params['order'] )
+			&& 'asc' === strtolower( $query_params['order'] ) ? 'ASC' : 'DESC';
 		$filters = array();
 		foreach ( array( 'pos_cashier', 'pos_store', 'created_via' ) as $key ) {
 			if ( array_key_exists( $key, $query_params ) ) {
@@ -269,12 +280,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				unset( $query_params[ $key ] );
 			}
 		}
-		if ( array() === $filters ) {
+		if ( array() === $filters && null === $orderby ) {
 			return;
 		}
 		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 			$this->pos_order_filter_hook = 'woocommerce_orders_table_query_clauses';
-			$this->pos_order_filter      = static function ( array $clauses, $query ) use ( $filters ): array {
+			$this->pos_order_filter      = static function ( array $clauses, $query ) use ( $filters, $orderby, $order ): array {
 				global $wpdb;
 				$orders     = $query->get_table_name( 'orders' );
 				$meta       = $query->get_table_name( 'meta' );
@@ -297,14 +308,32 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 					}
 				}
 				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+				if ( null !== $orderby ) {
+					$columns = array(
+						'status'         => 'status',
+						'customer_id'    => 'customer_id',
+						'payment_method' => 'payment_method_title',
+						'total'          => 'total_amount',
+					);
+					$clauses['orderby'] = $orders . '.' . $columns[ $orderby ] . ' ' . $order;
+				}
 
 				return $clauses;
 			};
 			add_filter( $this->pos_order_filter_hook, $this->pos_order_filter, 10, 2 );
 			return;
 		}
+		if ( 'status' === $orderby ) {
+			$this->pos_orderby_filter = static function ( string $sql, $query ) use ( $order ): string {
+				global $wpdb;
+				$is_order_query = isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'];
+
+				return $is_order_query ? "{$wpdb->posts}.post_status {$order}" : $sql;
+			};
+			add_filter( 'posts_orderby', $this->pos_orderby_filter, 10, 2 );
+		}
 		$this->pos_order_filter_hook = 'woocommerce_rest_shop_order_object_query';
-		$this->pos_order_filter      = static function ( array $args ) use ( $filters ): array {
+		$this->pos_order_filter      = static function ( array $args ) use ( $filters, $orderby, $order ): array {
 			$meta_keys = array(
 				'pos_cashier' => '_pos_user',
 				'pos_store'   => '_pos_store',
@@ -318,6 +347,15 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 					);
 				}
 			}
+			if ( null !== $orderby && 'status' !== $orderby ) {
+				$args['meta_key'] = array(
+					'customer_id'    => '_customer_user',
+					'payment_method' => '_payment_method_title',
+					'total'          => '_order_total',
+				)[ $orderby ];
+				$args['orderby'] = 'customer_id' === $orderby ? 'meta_value_num' : 'meta_value';
+				$args['order']   = $order;
+			}
 
 			return $args;
 		};
@@ -329,6 +367,10 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			remove_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
 			$this->pos_order_filter      = null;
 			$this->pos_order_filter_hook = null;
+		}
+		if ( null !== $this->pos_orderby_filter ) {
+			remove_filter( 'posts_orderby', $this->pos_orderby_filter, 10 );
+			$this->pos_orderby_filter = null;
 		}
 	}
 }
