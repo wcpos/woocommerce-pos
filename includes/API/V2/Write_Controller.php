@@ -778,6 +778,7 @@ class Write_Controller extends WP_REST_Controller {
 				&& is_array( $update_payload['billing'] )
 				&& array_key_exists( 'email', $update_payload['billing'] )
 				&& '' === $update_payload['billing']['email'];
+			$update_payload = $this->reconcile_order_item_ids( $id, $update_payload );
 			$update_payload = $this->reconcile_order_coupon_lines( $id, $update_payload );
 			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
 		}
@@ -1300,6 +1301,57 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 	}
+
+	/**
+	 * Restore missing order item ids from each line type's stable POS UUID.
+	 *
+	 * Ambiguous or absent UUID matches deliberately remain creates in wc/v3.
+	 *
+	 * @param int   $order_id Resolved order id.
+	 * @param array $payload  Update payload about to be forwarded.
+	 * @return array Reconciled payload.
+	 */
+	private function reconcile_order_item_ids( int $order_id, array $payload ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return $payload;
+		}
+
+		$types = array(
+			'line_items'     => 'line_item',
+			'fee_lines'      => 'fee',
+			'shipping_lines' => 'shipping',
+		);
+		foreach ( $types as $payload_key => $item_type ) {
+			if ( ! isset( $payload[ $payload_key ] ) || ! is_array( $payload[ $payload_key ] ) ) {
+				continue;
+			}
+			$matches = array();
+			foreach ( $order->get_items( $item_type ) as $item ) {
+				$uuid = $item->get_meta( Pos_Uuid::META_KEY, true );
+				if ( is_string( $uuid ) && '' !== $uuid ) {
+					$matches[ $uuid ][] = $item->get_id();
+				}
+			}
+			foreach ( $payload[ $payload_key ] as $index => $line ) {
+				if ( ! is_array( $line ) || ! empty( $line['id'] ) || ! is_array( $line['meta_data'] ?? null ) ) {
+					continue;
+				}
+				foreach ( $line['meta_data'] as $meta ) {
+					if ( is_array( $meta ) && Pos_Uuid::META_KEY === ( $meta['key'] ?? '' ) && is_string( $meta['value'] ?? null ) ) {
+						$uuid = $meta['value'];
+						if ( 1 === count( $matches[ $uuid ] ?? array() ) ) {
+							$payload[ $payload_key ][ $index ]['id'] = $matches[ $uuid ][0];
+						}
+						break;
+					}
+				}
+			}
+		}
+
+		return $payload;
+	}
+
 	/**
 	 * Reconcile a full-document order update's coupon_lines with the stored order —
 	 * the v2 port of V1\Orders_Controller::calculate_coupons (issue #1403 row 3).
