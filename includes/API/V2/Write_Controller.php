@@ -1434,6 +1434,9 @@ class Write_Controller extends WP_REST_Controller {
 		}
 
 		$request  = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
+		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$request->set_param( 'dp', '6' );
+		}
 		$response = rest_do_request( $request );
 		$data     = $response->get_data();
 		if ( is_array( $data ) ) {
