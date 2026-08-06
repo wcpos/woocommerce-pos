@@ -17,14 +17,15 @@ namespace WCPOS\WooCommercePOS\API;
  */
 final class Route_Classifier {
 	/**
-	 * WCPOS REST namespaces.
+	 * WCPOS REST namespaces, stored lowercase.
 	 *
 	 * @var string[]
 	 */
 	private $namespaces;
 
 	/**
-	 * Routes grouped by permission-gate classification.
+	 * Routes grouped by permission-gate classification, stored lowercase.
+	 * Incoming routes are lowercased before every comparison.
 	 *
 	 * @var array<string, string[]>
 	 */
@@ -100,11 +101,11 @@ final class Route_Classifier {
 	 * @param string $route REST route.
 	 */
 	public function is_printer_token( string $route ): bool {
+		$route = strtolower( $route );
+
 		if ( $this->is_exact_match( 'printer_token', $route ) ) {
 			return true;
 		}
-
-		$route = strtolower( $route );
 
 		foreach ( $this->classifications['printer_token'] as $base ) {
 			if ( 0 === strpos( $route, $base . '/' ) ) {
