@@ -168,6 +168,11 @@ final class Order_Serializer {
 		return Revision::compute( self::strip_identity_meta( $payload ) );
 	}
 
+	/** The pre-augmentation canonical recipe before read-time item UUID stamping. */
+	public static function pre_item_uuid_canonical_revision( array $payload ): string {
+		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ), false ) );
+	}
+
 	/**
 	 * Canonicalize items in a COPY of the payload before hashing, so revision
 	 * sources hashing the BARE wc/v3 form and lanes serving the augmented form
@@ -180,7 +185,7 @@ final class Order_Serializer {
 	 * - Normalize line_items[].image.id to an int — the augmented read lanes
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
 	 */
-	private static function strip_item_identity_meta( array $payload ): array {
+	private static function strip_item_identity_meta( array $payload, bool $normalize_image_ids = true ): array {
 		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines' ) as $items_key ) {
 			if ( ! isset( $payload[ $items_key ] ) || ! is_array( $payload[ $items_key ] ) ) {
 				continue;
@@ -189,7 +194,7 @@ final class Order_Serializer {
 				if ( ! is_array( $item ) ) {
 					continue;
 				}
-				if ( 'line_items' === $items_key && isset( $item['image']['id'] ) ) {
+				if ( $normalize_image_ids && 'line_items' === $items_key && isset( $item['image']['id'] ) ) {
 					$payload[ $items_key ][ $index ]['image']['id'] = (int) $item['image']['id'];
 				}
 				if ( ! isset( $item['meta_data'] ) || ! is_array( $item['meta_data'] ) ) {

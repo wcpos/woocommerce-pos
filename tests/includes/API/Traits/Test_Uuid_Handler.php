@@ -439,6 +439,23 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Pending item metadata survives the locked refresh used for UUID convergence.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
+	 */
+	public function test_order_item_uuid_preserves_pending_meta_data(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->update_meta_data( '_sku', 'SKU-123' );
+
+		$this->handler->test_maybe_add_order_item_uuid( $item );
+
+		$this->assertSame( 'SKU-123', $item->get_meta( '_sku' ) );
+		$this->assertSame( 'SKU-123', ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( '_sku' ) );
+	}
+
+	/**
 	 * The order-item UUID lock is shared across database connections.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::acquire_order_item_uuid_lock

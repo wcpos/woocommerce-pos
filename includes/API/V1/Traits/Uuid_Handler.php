@@ -85,6 +85,7 @@ trait Uuid_Handler {
 			return;
 		}
 		try {
+			$item->save_meta_data();
 			$item->read_meta_data( true );
 			$uuid = $item->get_meta( Pos_Uuid::META_KEY );
 			if ( ! Pos_Uuid::is_uuid( $uuid ) ) {
