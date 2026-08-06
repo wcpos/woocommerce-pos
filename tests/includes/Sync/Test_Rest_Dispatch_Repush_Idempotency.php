@@ -298,24 +298,6 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Count meta entries carrying one key on the document's first line item.
-	 *
-	 * @param array  $document Serialized order document.
-	 * @param string $meta_key Meta key to count.
-	 *
-	 * @return int
-	 */
-	private function line_item_meta_count( array $document, string $meta_key ): int {
-		$count = 0;
-		foreach ( $document['line_items'][0]['meta_data'] as $meta ) {
-			if ( $meta_key === $meta['key'] ) {
-				++$count;
-			}
-		}
-		return $count;
-	}
-
-	/**
 	 * A variation acknowledgement does not duplicate its pa_* line-item meta.
 	 *
 	 * @return void
