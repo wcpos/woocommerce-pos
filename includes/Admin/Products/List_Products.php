@@ -49,20 +49,10 @@ class List_Products {
 		);
 
 		if ( $this->barcode_field && ! \in_array( $this->barcode_field, Single_Product::get_excluded_barcode_fields(), true ) ) {
-			// product.
+			// product. The variation barcode field is registered by Single_Product,
+			// which owns the only implementation of those callbacks.
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
-			// variations.
-			add_action(
-				'woocommerce_product_after_variable_attributes',
-				array(
-					$this,
-					'after_variable_attributes_barcode_field',
-				),
-				10,
-				3
-			);
-			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
 		if ( Settings::instance()->pos_only_products_enabled() ) {

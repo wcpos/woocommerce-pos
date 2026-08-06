@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V1\Traits;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_REST_Response;
@@ -318,10 +319,11 @@ trait WCPOS_REST_API {
 				$id_col  = 'post_id';
 				$meta_id = 'meta_id';
 
-				// Add barcode field if it's a custom meta key.
-				$barcode_field = Settings::instance()->barcode_field();
-				if ( ! empty( $barcode_field )
-					&& '_sku' !== $barcode_field && '_global_unique_id' !== $barcode_field ) {
+				// Add barcode field if it's a custom meta key. The two native keys
+				// are product properties, not postmeta this allowlist can carry.
+				// No empty check: Barcode_Field::meta_key() never returns ''.
+				$barcode_field = Barcode_Field::meta_key();
+				if ( '_sku' !== $barcode_field && Barcode_Field::DEFAULT_FIELD !== $barcode_field ) {
 					$keys[] = $barcode_field;
 				}
 				$keys[] = '_woocommerce_pos_variable_prices';

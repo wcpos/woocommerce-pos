@@ -404,6 +404,45 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * BLANK SETTING (Barcode_Field coercion). A blank `barcode_field` used to make
+	 * the active-field query a no-op, so every hard-coded key was searched in one
+	 * undifferentiated fallback phase. The blank setting now resolves to the
+	 * default GTIN key, which means active-field-first applies to it too: a GTIN
+	 * match beats a colliding value left on an inactive key, and a code carried
+	 * only by a fallback key still resolves.
+	 */
+	public function test_resolve_barcode_blank_setting_resolves_as_gtin_then_falls_back(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '' ) );
+
+		// The GTIN carrier must win over the stale `_sku` collision.
+		$gtin_product = ProductHelper::create_simple_product();
+		$gtin_product->set_global_unique_id( '4006381333931' );
+		$gtin_product->save();
+		$sku_collision = ProductHelper::create_simple_product();
+		$sku_collision->set_sku( '4006381333931' );
+		$sku_collision->save();
+
+		$data = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => '4006381333931' ) )
+		)->get_data();
+
+		$this->assertTrue( $data['found'] );
+		$this->assertSame( $gtin_product->get_id(), $data['match']['id'] );
+
+		// A code only a fallback key carries still resolves.
+		$sku_only = ProductHelper::create_simple_product();
+		$sku_only->set_sku( 'BLANK-FALLBACK-1' );
+		$sku_only->save();
+
+		$fallback = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => 'BLANK-FALLBACK-1' ) )
+		)->get_data();
+
+		$this->assertTrue( $fallback['found'] );
+		$this->assertSame( $sku_only->get_id(), $fallback['match']['id'] );
+	}
+
+	/**
 	 * Variation hydration attaches the stored existence digest (finding 3): the
 	 * class_exists() guard previously checked a global class name and never fired.
 	 */
