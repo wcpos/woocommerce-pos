@@ -10,8 +10,11 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Catalog_Proxy_Controller;
 use WCPOS\WooCommercePOS\API\V2\Orders_Controller;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -143,6 +146,57 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $payload['links']['payment'][0]['href'] );
 		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $payload['links']['receipt'][0]['href'] );
+	}
+
+	public function test_pull_document_stamps_uuids_on_line_shipping_and_fee_items(): void {
+		$order = $this->order_with_fee();
+		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+
+		$payload = $this->pull_payload();
+
+		$this->assert_item_uuids( $payload, $order->get_id() );
+	}
+
+	public function test_proxy_row_stamps_item_uuids(): void {
+		$order = $this->order_with_fee();
+
+		$payload = $this->proxy_payload( $order->get_id() );
+
+		$this->assert_item_uuids( $payload, $order->get_id() );
+	}
+
+	public function test_pull_and_proxy_documents_carry_tax_ids(): void {
+		$order   = OrderHelper::create_order();
+		$tax_ids = array(
+			array(
+				'type'    => 'eu_vat',
+				'value'   => 'ESB12345678',
+				'country' => 'ES',
+			),
+		);
+		( new Tax_Id_Writer() )->write_for_order( $order, $tax_ids );
+		$expected = ( new Tax_Id_Reader() )->read_for_order( $order );
+		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+
+		$this->assertSame( $expected, $this->pull_payload()['tax_ids'] );
+		$this->assertSame( $expected, $this->proxy_payload( $order->get_id() )['tax_ids'] );
+	}
+
+	public function test_pull_document_line_item_image_id_is_an_integer(): void {
+		$product       = ProductHelper::create_simple_product();
+		$attachment_id = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/test-image.jpg', $product->get_id() );
+		$product->set_image_id( $attachment_id );
+		$product->save();
+		$order = OrderHelper::create_order( array( 'product' => $product ) );
+		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+
+		$pull_image_id  = $this->pull_payload()['line_items'][0]['image']['id'];
+		$proxy_image_id = $this->proxy_payload( $order->get_id() )['line_items'][0]['image']['id'];
+
+		$this->assertIsInt( $pull_image_id );
+		$this->assertSame( $attachment_id, $pull_image_id );
+		$this->assertIsInt( $proxy_image_id );
+		$this->assertSame( $attachment_id, $proxy_image_id );
 	}
 
 	/**
@@ -448,6 +502,70 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertNotNull( $served );
 		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $served['links']['payment'][0]['href'] );
 		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $served['links']['receipt'][0]['href'] );
+	}
+
+	private function order_with_fee(): \WC_Order {
+		$order = OrderHelper::create_order();
+		$fee   = new \WC_Order_Item_Fee();
+		$fee->set_name( 'Admin fee' );
+		$fee->set_total( '2.50' );
+		$order->add_item( $fee );
+		$order->save();
+
+		return $order;
+	}
+
+	private function pull_payload(): array {
+		$response = ( new Orders_Controller() )->pull_orders(
+			$this->request(
+				array(
+					'limit'          => 100,
+					'updated_at_gmt' => '1970-01-01T00:00:00.000Z',
+					'order_id'       => 0,
+					'sequence'       => 0,
+				)
+			)
+		);
+
+		return $response->get_data()['documents'][0]['payload'];
+	}
+
+	private function proxy_payload( int $order_id ): array {
+		$data = ( new Catalog_Proxy_Controller() )->proxy(
+			$this->request( array( 'include' => (string) $order_id ) ),
+			'/wc/v3/orders',
+			'orders'
+		)->get_data();
+
+		foreach ( (array) $data as $row ) {
+			if ( $order_id === (int) ( $row['id'] ?? 0 ) ) {
+				return $row;
+			}
+		}
+
+		$this->fail( 'The requested order was not served.' );
+	}
+
+	private function assert_item_uuids( array $payload, int $order_id ): void {
+		$order = wc_get_order( $order_id );
+		$this->assertInstanceOf( \WC_Order::class, $order );
+
+		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines' ) as $collection ) {
+			$this->assertNotEmpty( $payload[ $collection ] );
+			foreach ( $payload[ $collection ] as $served_item ) {
+				$uuid_meta = array_values(
+					array_filter(
+						$served_item['meta_data'],
+						static function ( array $meta ): bool {
+							return Pos_Uuid::META_KEY === $meta['key'];
+						}
+					)
+				);
+				$this->assertCount( 1, $uuid_meta );
+				$this->assertTrue( Pos_Uuid::is_uuid( $uuid_meta[0]['value'] ) );
+				$this->assertSame( $uuid_meta[0]['value'], $order->get_item( $served_item['id'] )->get_meta( Pos_Uuid::META_KEY, true ) );
+			}
+		}
 	}
 
 	/**

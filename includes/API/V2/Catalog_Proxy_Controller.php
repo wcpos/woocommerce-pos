@@ -142,9 +142,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		}
 		$data = apply_filters( 'woocommerce_pos_sync_proxy_response', $response->get_data(), $resource, $request );
 		if ( 'orders' === $resource ) {
+			$serializer = new Order_Serializer();
 			foreach ( (array) $data as $index => $payload ) {
 				$order          = wc_get_order( (int) ( $payload['id'] ?? 0 ) );
-				$data[ $index ] = $order ? Order_Serializer::add_pos_links( $payload, $order ) : $payload;
+				if ( $order ) {
+					$payload        = $serializer->augment_order_payload( $payload, $order );
+					$data[ $index ] = Order_Serializer::add_pos_links( $payload, $order );
+				}
 			}
 		}
 		$response->set_data( $data );

@@ -9,9 +9,14 @@ namespace WCPOS\WooCommercePOS\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
+use WC_Order;
 use WC_REST_Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WP_REST_Request;
 final class Order_Serializer {
+	use Uuid_Handler;
+
 	public function serialize_order( int $order_id, WP_REST_Request $request ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
@@ -24,6 +29,7 @@ final class Order_Serializer {
 		$response = $controller->prepare_object_for_response( $order, $request );
 		$response = rest_ensure_response( $response );
 		$data = rest_get_server()->response_to_data( $response, false );
+		$data = $this->augment_order_payload( $data, $order );
 		$data = self::add_pos_links( $data, $order );
 
 		/**
@@ -31,6 +37,46 @@ final class Order_Serializer {
 		 * This filter is additive and must not remove WooCommerce REST fields.
 		 */
 		return apply_filters( 'woocommerce_pos_sync_serialized_order', $data, $order, $request );
+	}
+
+	/** Add the v1-owned order fields missing from stock wc/v3 serialization. */
+	public function augment_order_payload( array $payload, WC_Order $order ): array {
+		$payload['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+
+		if ( isset( $payload['line_items'] ) && is_array( $payload['line_items'] ) ) {
+			foreach ( $payload['line_items'] as &$line_item ) {
+				if ( isset( $line_item['image']['id'] ) ) {
+					$line_item['image']['id'] = (int) $line_item['image']['id'];
+				}
+			}
+			unset( $line_item );
+		}
+
+		$item_types = array(
+			'line_items'     => 'line_item',
+			'shipping_lines' => 'shipping',
+			'fee_lines'      => 'fee',
+		);
+		foreach ( $item_types as $payload_key => $item_type ) {
+			if ( ! isset( $payload[ $payload_key ] ) || ! is_array( $payload[ $payload_key ] ) ) {
+				continue;
+			}
+			$order_items = $order->get_items( $item_type );
+			foreach ( $payload[ $payload_key ] as &$served_item ) {
+				$item_id = (int) ( $served_item['id'] ?? 0 );
+				if ( ! isset( $order_items[ $item_id ] ) ) {
+					continue;
+				}
+				$this->maybe_add_order_item_uuid( $order_items[ $item_id ] );
+				$uuid = $order_items[ $item_id ]->get_meta( Pos_Uuid::META_KEY, true );
+				if ( Pos_Uuid::is_uuid( $uuid ) ) {
+					$served_item = Pos_Uuid::ensure_in_payload( $served_item, $uuid );
+				}
+			}
+			unset( $served_item );
+		}
+
+		return $payload;
 	}
 
 	/**
@@ -109,7 +155,54 @@ final class Order_Serializer {
 
 	/** THE canonical order revision: identity-stripped, then Revision::compute. */
 	public static function canonical_revision( array $payload ): string {
-		return Revision::compute( self::strip_identity_meta( $payload ) );
+		// tax_ids is a read-time decoration (Tax_Id_Reader) that wc/v3's own
+		// serialization never carries — exclude it so pull, proxy, and write-ack
+		// revisions agree with a bare wc/v3 read of the same order.
+		unset( $payload['tax_ids'] );
+
+		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ) ) );
+	}
+
+	/**
+	 * Canonicalize items in a COPY of the payload before hashing, so revision
+	 * sources hashing the BARE wc/v3 form and lanes serving the augmented form
+	 * agree on identical state:
+	 * - Drop `_woocommerce_pos_uuid` entries from line/shipping/fee item meta —
+	 *   the item-level twin of strip_identity_meta(). Read-time item stamping
+	 *   serves a bare {key,value} entry while the NEXT wc/v3 read serializes the
+	 *   persisted row with id/display_key/display_value; hashing either form
+	 *   would make the first post-stamp edit a false 409.
+	 * - Normalize line_items[].image.id to an int — the augmented read lanes
+	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
+	 */
+	private static function strip_item_identity_meta( array $payload ): array {
+		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines' ) as $items_key ) {
+			if ( ! isset( $payload[ $items_key ] ) || ! is_array( $payload[ $items_key ] ) ) {
+				continue;
+			}
+			foreach ( $payload[ $items_key ] as $index => $item ) {
+				if ( ! is_array( $item ) ) {
+					continue;
+				}
+				if ( 'line_items' === $items_key && isset( $item['image']['id'] ) ) {
+					$payload[ $items_key ][ $index ]['image']['id'] = (int) $item['image']['id'];
+				}
+				if ( ! isset( $item['meta_data'] ) || ! is_array( $item['meta_data'] ) ) {
+					continue;
+				}
+				$payload[ $items_key ][ $index ]['meta_data'] = array_values(
+					array_filter(
+						$item['meta_data'],
+						static function ( $entry ): bool {
+							$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+							return '_woocommerce_pos_uuid' !== $key;
+						}
+					)
+				);
+			}
+		}
+
+		return $payload;
 	}
 
 	/**
