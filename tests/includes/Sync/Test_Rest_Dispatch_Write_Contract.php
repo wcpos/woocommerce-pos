@@ -106,6 +106,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	private $store;
 	private $previous_manage_stock_option;
 	private $previous_general_settings;
+	private $registered_shop_coupon = false;
 
 	public function setUp(): void {
 		$this->previous_manage_stock_option = get_option( 'woocommerce_manage_stock', 'no' );
@@ -117,6 +118,22 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$admin_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin_id );
 		add_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1, 3 );
+
+		// WC only registers shop_coupon when woocommerce_enable_coupons is 'yes',
+		// and the test bootstrap never sets it — so the coupon update/delete
+		// permission gate (wc_rest_check_post_permissions) would deny everyone.
+		// Register it here to mirror a production store with coupons enabled.
+		if ( ! post_type_exists( 'shop_coupon' ) ) {
+			register_post_type(
+				'shop_coupon',
+				array(
+					'public'          => false,
+					'capability_type' => 'shop_coupon',
+					'map_meta_cap'    => true,
+				)
+			);
+			$this->registered_shop_coupon = true;
+		}
 	}
 
 	public function rest_api_init(): void {
@@ -131,6 +148,10 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function tearDown(): void {
+		if ( $this->registered_shop_coupon ) {
+			unregister_post_type( 'shop_coupon' );
+			$this->registered_shop_coupon = false;
+		}
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
 		remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
 		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock_option );
@@ -424,8 +445,14 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			'id' => 501,
 			'name' => 'Typed product',
 			'meta_data' => array(
-				array( 'key' => 'typed_meta_fixture', 'value' => '{"source":"create"}' ),
-				array( 'key' => 'php_array_fixture', 'value' => array( 'already' => 'typed' ) ),
+				array(
+					'key' => 'typed_meta_fixture',
+					'value' => '{"source":"create"}',
+				),
+				array(
+					'key' => 'php_array_fixture',
+					'value' => array( 'already' => 'typed' ),
+				),
 			),
 		);
 		$this->store->resolve_results             = array( 0, 501 );
@@ -447,27 +474,38 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_update_response_document_emits_typed_meta_and_plain_uuid(): void {
+		// A REAL coupon: the strict-caps change means the inner
+		// wc_rest_check_post_permissions('shop_coupon','edit',$id) runs against
+		// the actual post — a fictional id fails even for admins (the old
+		// blanket grant was silently rescuing it).
+		$coupon_id = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper::create_coupon( 'save10typed' )->get_id();
 		$current = array(
-			'id' => 601,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '10.00',
 			'meta_data' => array(
-				array( 'key' => 'typed_meta_fixture', 'value' => '{"source":"before"}' ),
+				array(
+					'key' => 'typed_meta_fixture',
+					'value' => '{"source":"before"}',
+				),
 			),
 		);
 		$updated = array(
-			'id' => 601,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '12.00',
 			'meta_data' => array(
-				array( 'key' => 'typed_meta_fixture', 'value' => '["after"]' ),
+				array(
+					'key' => 'typed_meta_fixture',
+					'value' => '["after"]',
+				),
 			),
 		);
 		$revision            = Revision::compute( Meta_Normalizer::normalize( $current ) );
-		$this->store->resolve = 601;
+		$this->store->resolve = $coupon_id;
 		$GLOBALS['wcpos_sync_contract_responses'] = array(
 			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => 601 ), 200 ),
+			new WP_REST_Response( array( 'id' => $coupon_id ), 200 ),
 			new WP_REST_Response( $updated, 200 ),
 		);
 		$fixture                             = $this->fixture( 'coupon-update' );
@@ -655,21 +693,23 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_coupon_update_and_delete_use_wc_routes_and_cas(): void {
+		// Real coupon for the same strict-caps reason as the typed-meta test.
+		$coupon_id = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper::create_coupon( 'save10cas' )->get_id();
 		$current  = array(
-			'id' => 301,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '10.00',
 		);
 		$updated  = array(
-			'id' => 301,
+			'id' => $coupon_id,
 			'code' => 'save10',
 			'amount' => '12.00',
 		);
 		$revision = Revision::compute( $current );
-		$this->store->resolve = 301;
+		$this->store->resolve = $coupon_id;
 		$GLOBALS['wcpos_sync_contract_responses'] = array(
 			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => 301 ), 200 ),
+			new WP_REST_Response( array( 'id' => $coupon_id ), 200 ),
 			new WP_REST_Response( $updated, 200 ),
 		);
 		$fixture                             = $this->fixture( 'coupon-update' );
@@ -692,7 +732,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$GLOBALS['wcpos_sync_contract_calls']     = array();
 		$GLOBALS['wcpos_sync_contract_responses'] = array(
 			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => 301 ), 200 ),
+			new WP_REST_Response( array( 'id' => $coupon_id ), 200 ),
 		);
 		$fixture                             = $this->fixture( 'coupon-delete' );
 		$fixture['envelope']['baseRevision'] = $revision;
