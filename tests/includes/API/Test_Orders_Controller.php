@@ -1522,13 +1522,21 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A well-shaped uuid entry whose value is not a scalar must be skipped by
-	 * the pre-scan: get_order_ids_by_uuid() declares a string parameter, so an
-	 * array value would throw a TypeError.
+	 * A present-but-malformed uuid must reject the item with a 400, not be
+	 * dropped: dropping the dedupe key would mint a fresh server uuid on every
+	 * client retry, creating a duplicate order per retry.
 	 */
-	public function test_batch_create_order_with_non_scalar_uuid_value_creates_order(): void {
+	public function test_batch_create_order_with_non_scalar_uuid_value_returns_error(): void {
 		// Arrange.
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$order_count_before = \count(
+			wc_get_orders(
+				array(
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$request            = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
 		$request->set_body_params(
 			array(
 				'create' => array(
@@ -1555,16 +1563,23 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 
-		// Assert.
+		// Assert: per-item 400 error, no 500, and no order created.
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
-		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+		$this->assertArrayHasKey( 'error', $data['create'][0] );
+		$this->assertEquals( 'woocommerce_pos_rest_invalid_uuid', $data['create'][0]['error']['code'] );
+		$order_count_after = \count(
+			wc_get_orders(
+				array(
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$this->assertEquals( $order_count_before, $order_count_after, 'No order should be created for a malformed uuid.' );
 	}
 
 	/**
-	 * Batch update bypasses schema validation the same way as batch create, and
-	 * WC core's prepare_object_for_database() has the same unguarded
-	 * $meta['key'] access on the update path.
+	 * Same bypass on the update path.
 	 */
 	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
 		// Arrange.
@@ -1653,5 +1668,32 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertEquals( $order_count_before, $order_count_after, 'No duplicate order should be created.' );
+	}
+
+	/**
+	 * A corrupt stored uuid (written outside WCPOS, e.g. via wc/v3 or an
+	 * import) must be regenerated on read, not fatal Uuid::isValid().
+	 */
+	public function test_order_response_with_corrupt_stored_uuid_regenerates_uuid(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_woocommerce_pos_uuid', array( 'corrupt' ) );
+		$order->save();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$uuids = array();
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
+				$uuids[] = $meta['value'];
+			}
+		}
+		$this->assertCount( 1, $uuids, 'There should be exactly one uuid after regeneration.' );
+		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated uuid should be valid.' );
 	}
 }

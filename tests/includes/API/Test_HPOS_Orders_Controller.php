@@ -1079,4 +1079,69 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 			'Cashier should be able to update an order with HPOS enabled. Response: ' . wp_json_encode( $response->get_data() )
 		);
 	}
+
+	/**
+	 * HPOS mirror: WC's batch_items() bypasses per-item schema validation, so
+	 * malformed meta_data entries must be dropped before WC core's unguarded
+	 * $meta['key'] access fatals mid-batch on PHP 8.
+	 */
+	public function test_batch_create_order_with_string_meta_data_entry_creates_order(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array( 'not-an-object' ),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+	}
+
+	/**
+	 * HPOS mirror: same bypass on the update path.
+	 */
+	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array(
+						'id'        => $order->get_id(),
+						'status'    => 'completed',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
+		$this->assertEquals( 'completed', wc_get_order( $order->get_id() )->get_status() );
+	}
 }
