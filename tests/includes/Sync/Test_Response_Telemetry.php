@@ -90,6 +90,9 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( $first->get_headers()['ETag'], $second->get_headers()['ETag'] );
 		$this->assertSame( wp_json_encode( $first->get_data() ), wp_json_encode( $second->get_data() ) );
+		// Byte-equality alone cannot catch a reintroduced memory field (2MB
+		// granularity makes back-to-back reads identical); pin meta exactly.
+		$this->assertSame( array( 'supported' => true ), $first->get_data()['meta'] );
 	}
 
 	/**
