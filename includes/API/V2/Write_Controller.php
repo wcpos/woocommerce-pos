@@ -600,7 +600,7 @@ class Write_Controller extends WP_REST_Controller {
 		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
 			$key   = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
 			$value = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( is_object( $entry ) ? ( $entry->value ?? '' ) : '' );
-			if ( is_scalar( $key ) && in_array( (string) $key, self::POS_CASH_META_KEYS, true ) && is_scalar( $value ) && '' !== (string) $value ) {
+			if ( is_scalar( $key ) && in_array( (string) $key, \WCPOS\WooCommercePOS\Services\Pos_Order_Audit::cash_meta_keys(), true ) && is_scalar( $value ) && '' !== (string) $value ) {
 				$meta[ (string) $key ] = (string) $value;
 			}
 		}
