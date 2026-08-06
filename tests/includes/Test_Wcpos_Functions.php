@@ -22,17 +22,128 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 	 */
 	public function setup(): void {
 		parent::setup();
+
+		global $wp;
+
+		unset( $wp->query_vars['wcpos'], $wp->query_vars['rest_route'], $_SERVER['HTTP_X_WCPOS'] );
 	}
 
 	/**
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		global $wp;
+
 		// The test framework only resets permalinks for core tests, so undo
 		// set_permalink_structure() here or it leaks into later test classes.
 		$this->set_permalink_structure( '' );
+		unset( $wp->query_vars['wcpos'], $wp->query_vars['rest_route'], $_SERVER['HTTP_X_WCPOS'] );
 
 		parent::tearDown();
+	}
+
+	/**
+	 * A v1 REST route is detected without either legacy request marker.
+	 */
+	public function test_wcpos_request_v1_rest_route_without_markers_returns_true(): void {
+		global $wp;
+
+		// Arrange.
+		$wp->query_vars['rest_route'] = '/wcpos/v1/orders/1';
+
+		// Act.
+		$is_wcpos_request = wcpos_request();
+		$is_rest_route    = wcpos_request( 'rest_route' );
+
+		// Assert.
+		$this->assertEquals( true, $is_wcpos_request );
+		$this->assertEquals( true, $is_rest_route );
+	}
+
+	/**
+	 * A v2 REST route is detected by its namespace.
+	 */
+	public function test_wcpos_request_v2_rest_route_returns_true(): void {
+		global $wp;
+
+		// Arrange.
+		$wp->query_vars['rest_route'] = '/wcpos/v2/changes/tick';
+
+		// Act.
+		$is_rest_route = wcpos_request( 'rest_route' );
+
+		// Assert.
+		$this->assertEquals( true, $is_rest_route );
+	}
+
+	/**
+	 * A WCPOS REST route without a leading slash is normalized and detected.
+	 */
+	public function test_wcpos_request_rest_route_without_leading_slash_returns_true(): void {
+		global $wp;
+
+		// Arrange.
+		$wp->query_vars['rest_route'] = 'wcpos/v1/orders/1';
+
+		// Act.
+		$is_rest_route = wcpos_request( 'rest_route' );
+
+		// Assert.
+		$this->assertEquals( true, $is_rest_route );
+	}
+
+	/**
+	 * A WooCommerce REST route is not classified as a WCPOS request.
+	 */
+	public function test_wcpos_request_wc_rest_route_returns_false(): void {
+		global $wp;
+
+		// Arrange.
+		$wp->query_vars['rest_route'] = '/wc/v3/orders';
+
+		// Act.
+		$is_wcpos_request = wcpos_request();
+		$is_rest_route    = wcpos_request( 'rest_route' );
+
+		// Assert.
+		$this->assertEquals( false, $is_wcpos_request );
+		$this->assertEquals( false, $is_rest_route );
+	}
+
+	/**
+	 * An unset REST route is handled without classifying the request.
+	 */
+	public function test_wcpos_request_unset_rest_route_returns_false(): void {
+		// Arrange.
+		global $wp;
+
+		unset( $wp->query_vars['rest_route'] );
+
+		// Act.
+		$is_wcpos_request = wcpos_request();
+		$is_rest_route    = wcpos_request( 'rest_route' );
+
+		// Assert.
+		$this->assertEquals( false, $is_wcpos_request );
+		$this->assertEquals( false, $is_rest_route );
+	}
+
+	/**
+	 * Specific legacy marker checks ignore a matching REST route.
+	 */
+	public function test_wcpos_request_matching_rest_route_keeps_legacy_branches_isolated(): void {
+		global $wp;
+
+		// Arrange.
+		$wp->query_vars['rest_route'] = '/wcpos/v1/orders/1';
+
+		// Act.
+		$is_header    = wcpos_request( 'header' );
+		$is_query_var = wcpos_request( 'query_var' );
+
+		// Assert.
+		$this->assertEquals( false, $is_header );
+		$this->assertEquals( false, $is_query_var );
 	}
 
 	/**

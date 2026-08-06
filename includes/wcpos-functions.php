@@ -134,7 +134,10 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
 	/**
 	 * Test for POS requests to the server.
 	 *
-	 * @param string $type Request type: 'query_var', 'header', or 'all'.
+	 * Core's rest_api_loaded() reads this query var, which remains the original
+	 * outer route during internal re-dispatches; this behavior is load-bearing.
+	 *
+	 * @param string $type Request type: 'query_var', 'header', 'rest_route', or 'all'.
 	 *
 	 * @return bool Whether this is a POS request.
 	 */
@@ -153,6 +156,11 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
 			if ( 1 == isset( $headers[ 'x-' . SHORT_NAME ] ) && $headers[ 'x-' . SHORT_NAME ] ) {
 				return true;
 			}
+		}
+
+		if ( ( 'all' == $type || 'rest_route' == $type ) && isset( $GLOBALS['wp']->query_vars['rest_route'] ) ) {
+			$route = '/' . ltrim( (string) $GLOBALS['wp']->query_vars['rest_route'], '/' );
+			return 1 === preg_match( '#^/' . preg_quote( SHORT_NAME, '#' ) . '/v\d+(?:/|$)#', $route );
 		}
 
 		return false;

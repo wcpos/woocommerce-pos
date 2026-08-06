@@ -175,6 +175,11 @@ class Init {
 		$is_wcpos_request = woocommerce_pos_request();
 
 		if ( $is_wcpos_request ) {
+			if ( ! wcpos_request( 'header' ) && ! wcpos_request( 'query_var' ) ) {
+				// Namespace-detected only: routes still register, but surface
+				// that a proxy/WAF is stripping the X-WCPOS marker.
+				$this->log_unmarked_wcpos_rest_request();
+			}
 			new API();
 		} else {
 			// Queue the registration at a later priority of the SAME
@@ -183,7 +188,6 @@ class Init {
 			// When this method is called outside the action (tests), the
 			// add_action is simply inert.
 			add_action( 'rest_api_init', array( $this, 'register_public_relay_routes' ), 30 );
-			$this->log_unmarked_wcpos_rest_request();
 			new WC_API();
 		}
 	}
@@ -209,10 +213,11 @@ class Init {
 	}
 
 	/**
-	 * Log requests for a WCPOS namespace that omitted the required request marker.
+	 * Log requests for a WCPOS namespace that omitted the request marker.
 	 *
-	 * This runs before WCPOS routes are registered, so it captures the otherwise
-	 * silent rest_no_route response. Warnings are limited by API version to avoid
+	 * Namespace detection registers the routes anyway; this surfaces that a
+	 * proxy/WAF is stripping the X-WCPOS marker so misconfigured hosts stay
+	 * visible in the logs. Warnings are limited by API version to avoid
 	 * allowing repeated unauthenticated requests to flood WooCommerce logs.
 	 */
 	private function log_unmarked_wcpos_rest_request(): void {
@@ -238,7 +243,7 @@ class Init {
 		}
 
 		set_transient( $transient, 1, 5 * MINUTE_IN_SECONDS );
-		Logger::warning( $route . ': missing WCPOS request marker.' );
+		Logger::warning( $route . ': request marker missing (routes still registered via namespace detection).' );
 	}
 
 	/**
