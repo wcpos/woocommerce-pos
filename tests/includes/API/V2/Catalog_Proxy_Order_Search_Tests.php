@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 
@@ -100,6 +101,70 @@ trait Catalog_Proxy_Order_Search_Tests {
 		);
 	}
 
+	/** Order status sorting retains V1 semantics in both directions. */
+	public function test_orderby_status_matches_v1(): void {
+		$pending   = $this->create_orderby_order( array( 'status' => 'pending' ) );
+		$completed = $this->create_orderby_order( array( 'status' => 'completed' ) );
+		$on_hold   = $this->create_orderby_order( array( 'status' => 'on-hold' ) );
+
+		$this->assert_orderby_sequences(
+			'status',
+			array( $pending, $completed, $on_hold ),
+			array( $completed->get_id(), $on_hold->get_id(), $pending->get_id() )
+		);
+	}
+
+	/** Customer sorting retains V1 semantics in both directions. */
+	public function test_orderby_customer_matches_v1(): void {
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		$customer3 = CustomerHelper::create_customer();
+		$order1     = $this->create_orderby_order( array( 'customer_id' => $customer1->get_id() ) );
+		$order2     = $this->create_orderby_order( array( 'customer_id' => $customer2->get_id() ) );
+		$order3     = $this->create_orderby_order( array( 'customer_id' => $customer3->get_id() ) );
+
+		$this->assert_orderby_sequences(
+			'customer_id',
+			array( $order1, $order2, $order3 ),
+			array( $order1->get_id(), $order2->get_id(), $order3->get_id() )
+		);
+	}
+
+	/** Payment method sorting retains V1 semantics in both directions. */
+	public function test_orderby_payment_method_matches_v1(): void {
+		$alpha = $this->create_orderby_order();
+		$alpha->set_payment_method( 'alpha' );
+		$alpha->set_payment_method_title( 'alpha' );
+		$alpha->save();
+		$bravo = $this->create_orderby_order();
+		$bravo->set_payment_method( 'bravo' );
+		$bravo->set_payment_method_title( 'bravo' );
+		$bravo->save();
+		$charlie = $this->create_orderby_order();
+		$charlie->set_payment_method( 'charlie' );
+		$charlie->set_payment_method_title( 'charlie' );
+		$charlie->save();
+
+		$this->assert_orderby_sequences(
+			'payment_method',
+			array( $alpha, $bravo, $charlie ),
+			array( $alpha->get_id(), $bravo->get_id(), $charlie->get_id() )
+		);
+	}
+
+	/** Order total sorting retains V1 semantics in both directions. */
+	public function test_orderby_total_matches_v1(): void {
+		$low    = $this->create_orderby_order( array( 'total' => 100 ) );
+		$middle = $this->create_orderby_order( array( 'total' => 200 ) );
+		$high   = $this->create_orderby_order( array( 'total' => 300 ) );
+
+		$this->assert_orderby_sequences(
+			'total',
+			array( $low, $middle, $high ),
+			array( $low->get_id(), $middle->get_id(), $high->get_id() )
+		);
+	}
+
 	/**
 	 * Dispatch a real V2 request and assert that it finds the target order.
 	 *
@@ -117,5 +182,51 @@ trait Catalog_Proxy_Order_Search_Tests {
 			array( $this->target_order->get_id() ),
 			wp_list_pluck( $data, 'id' )
 		);
+	}
+
+	/**
+	 * Create a collision-safe order for an orderby probe.
+	 *
+	 * @param array $args Order fixture arguments.
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_orderby_order( array $args = array() ) {
+		$order = OrderHelper::create_order( $args );
+		$this->scrub_numeric_address_fields( $order );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * Assert exact ascending and descending ID sequences.
+	 *
+	 * @param string      $orderby   Requested orderby value.
+	 * @param \WC_Order[] $orders    Orders to include.
+	 * @param int[]       $ascending Expected ascending IDs.
+	 */
+	private function assert_orderby_sequences( string $orderby, array $orders, array $ascending ): void {
+		$ids = array_map(
+			static function ( $order ): int {
+				return $order->get_id();
+			},
+			$orders
+		);
+		foreach ( array( 'asc' => $ascending, 'desc' => array_reverse( $ascending ) ) as $order => $expected ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+			$request->set_query_params(
+				array(
+					'include' => $ids,
+					'orderby' => $orderby,
+					'order'   => $order,
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+			$this->assertEquals( $expected, wp_list_pluck( $response->get_data(), 'id' ) );
+		}
 	}
 }
