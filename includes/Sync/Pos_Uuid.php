@@ -126,6 +126,17 @@ class Pos_Uuid {
 		$object->update_meta_data( self::META_KEY, $uuid );
 		if ( $persist ) {
 			call_user_func( array( $object, 'save_meta_data' ) );
+			// A concurrent first-stamp may have persisted its own uuid between our
+			// read and save. Re-read and converge on the first-valid row so every
+			// racer returns the SAME winner instead of each serving its own mint.
+			if ( $object instanceof \WC_Data ) {
+				$object->read_meta_data( true );
+				self::prune_duplicate_uuid_meta( $object, true );
+				$stored = self::read_valid_uuid_from_meta( (array) $object->get_meta_data() );
+				if ( self::is_uuid( $stored ) ) {
+					return $stored;
+				}
+			}
 		}
 
 		return $uuid;
@@ -169,9 +180,12 @@ class Pos_Uuid {
 	 * so existing multisite cashiers keep their identity regardless of which
 	 * endpoint reads them first. An existing valid plain uuid wins, because it is
 	 * what /customers has already served to clients. Legacy rows are left in place
-	 * (harmless, rollback-safe); ownership/duplicate checks still run in
-	 * ensure_uuid() after adoption, so a copied legacy value owned by another user
-	 * is re-minted rather than served as a duplicate key.
+	 * (harmless, rollback-safe). A legacy value owned by ANOTHER user — under the
+	 * network key or the current blog's legacy key — is never adopted: the first
+	 * reader must not claim a shared legacy uuid as their network identity
+	 * (#1465). When two users share the same legacy value, neither adopts it and
+	 * both are minted fresh; the 1.10.0 migration resolves the ambiguity for
+	 * users it reaches first.
 	 *
 	 * @param WC_Customer $customer Customer being stamped.
 	 */
@@ -183,8 +197,16 @@ class Pos_Uuid {
 
 		$user_id = (int) $customer->get_id();
 		$legacy = get_user_meta( $user_id, self::META_KEY . '_' . get_current_blog_id(), true );
-		if ( self::is_uuid( $legacy ) ) {
-			update_user_meta( $user_id, self::META_KEY, $legacy );
+		if ( self::is_uuid( $legacy ) && ! self::legacy_uuid_owned_by_other_user( $legacy, $customer ) ) {
+			// A unique add when no row exists yet: a fallback uuid persisted by a
+			// lock-contended request on another blog must win over the adoption,
+			// or its client ends up keyed on an orphan. When (invalid) rows do
+			// exist, replacing them is the point of the adoption.
+			if ( array() === get_user_meta( $user_id, self::META_KEY, false ) ) {
+				add_user_meta( $user_id, self::META_KEY, $legacy, true );
+			} else {
+				update_user_meta( $user_id, self::META_KEY, $legacy );
+			}
 		}
 	}
 
@@ -198,7 +220,37 @@ class Pos_Uuid {
 		$lock_name = 'wcpos_user_uuid_' . $user_id;
 		$acquired  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
 		if ( '1' !== (string) $acquired ) {
-			return '';
+			// The lock holder is (or was) stamping this user. This uuid is the
+			// client's RxDB primary key, so never serve '' — and when a legacy
+			// identity may be mid-adoption, serve it read-only rather than writing
+			// anything that would pre-empt the adoption and fork the user.
+			$customer->read_meta_data( true );
+			$persisted = self::read_valid_uuid_from_meta( (array) $customer->get_meta_data() );
+			if ( self::is_uuid( $persisted ) ) {
+				return $persisted;
+			}
+
+			// An adoptable legacy uuid is what the holder will promote — serve the
+			// same value read-only so this response and the adoption agree.
+			$legacy = get_user_meta( $user_id, self::META_KEY . '_' . get_current_blog_id(), true );
+			if ( self::is_uuid( $legacy ) && ! self::legacy_uuid_owned_by_other_user( $legacy, $customer ) ) {
+				return $legacy;
+			}
+
+			// First stamp under contention: persist a fallback without clobbering a
+			// concurrent winner — a unique add when no row exists, a compare-and-swap
+			// against the (invalid) first row otherwise — then serve whichever row
+			// stuck so every racer converges on one persisted identity.
+			$fallback    = self::generate_uuid();
+			$stored_rows = get_user_meta( $user_id, self::META_KEY, false );
+			if ( array() === $stored_rows ) {
+				add_user_meta( $user_id, self::META_KEY, $fallback, true );
+			} elseif ( ! self::is_uuid( $stored_rows[0] ) ) {
+				update_user_meta( $user_id, self::META_KEY, $fallback, $stored_rows[0] );
+			}
+			$stored = get_user_meta( $user_id, self::META_KEY, true );
+
+			return self::is_uuid( $stored ) ? $stored : $fallback;
 		}
 
 		try {
@@ -444,6 +496,39 @@ class Pos_Uuid {
 			self::META_KEY,
 			$uuid,
 			(int) $object->get_id()
+		);
+
+		return (int) $wpdb->get_var( $sql ) > 0;
+	}
+
+	/**
+	 * Adoption-gate twin of uuid_owned_by_other_user(): also checks the CURRENT
+	 * blog's legacy per-blog key (`_woocommerce_pos_uuid_{blog}`), because a
+	 * value another user still holds under that legacy key is the same RxDB
+	 * primary key, and adopting it would fork that user's identity (#1465).
+	 *
+	 * Deliberately NOT used for the live-identity collision check: a stale
+	 * duplicated legacy row must never discard an already-served network uuid,
+	 * so `collides` stays scoped to the network key.
+	 *
+	 * @param mixed       $uuid     Candidate legacy uuid.
+	 * @param WC_Customer $customer Customer being stamped.
+	 */
+	private static function legacy_uuid_owned_by_other_user( $uuid, WC_Customer $customer ): bool {
+		global $wpdb;
+		if ( self::uuid_owned_by_other_user( $uuid, $customer ) ) {
+			return true;
+		}
+		if ( ! isset( $wpdb ) ) {
+			return false;
+		}
+		$sql = $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->usermeta} m
+             JOIN {$wpdb->users} u ON u.ID = m.user_id
+             WHERE m.meta_key = %s AND m.meta_value = %s AND m.user_id <> %d",
+			self::META_KEY . '_' . get_current_blog_id(),
+			$uuid,
+			(int) $customer->get_id()
 		);
 
 		return (int) $wpdb->get_var( $sql ) > 0;

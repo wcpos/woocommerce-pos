@@ -168,4 +168,80 @@ class Provider_Test extends WP_UnitTestCase {
 		$this->assertSame( 'star-markup', Provider::wire_format( 'star-online', 'thermal' ) );
 		$this->assertNull( Provider::poll_endpoint( 'star-online' ) );
 	}
+
+	/**
+	 * It leaves every known provider key untouched.
+	 */
+	public function test_normalize_known_provider_returns_it_unchanged(): void {
+		foreach ( Provider::valid() as $provider ) {
+			$this->assertSame( $provider, Provider::normalize( $provider ) );
+		}
+	}
+
+	/**
+	 * It maps a missing provider to the default.
+	 */
+	public function test_normalize_null_returns_default_provider(): void {
+		$this->assertSame( 'star-cloudprnt', Provider::normalize( null ) );
+		$this->assertSame( Provider::DEFAULT_PROVIDER, Provider::normalize( null ) );
+	}
+
+	/**
+	 * It maps an empty provider to the default.
+	 */
+	public function test_normalize_empty_string_returns_default_provider(): void {
+		$this->assertSame( 'star-cloudprnt', Provider::normalize( '' ) );
+	}
+
+	/**
+	 * It maps an unknown provider key to the default.
+	 */
+	public function test_normalize_unknown_provider_returns_default_provider(): void {
+		$this->assertSame( 'star-cloudprnt', Provider::normalize( 'brother-ql' ) );
+	}
+
+	/**
+	 * It declares which template engines each provider can render.
+	 */
+	public function test_template_engines_matches_the_provider_table(): void {
+		$this->assertEquals( 'all', Provider::template_engines( 'printnode' ) );
+		$this->assertEquals( 'thermal', Provider::template_engines( 'star-cloudprnt' ) );
+		$this->assertEquals( 'thermal', Provider::template_engines( 'epson-sdp' ) );
+		$this->assertEquals( 'thermal', Provider::template_engines( 'star-online' ) );
+	}
+
+	/**
+	 * It treats an unknown provider as thermal-only.
+	 */
+	public function test_template_engines_unknown_provider_returns_thermal(): void {
+		$this->assertEquals( 'thermal', Provider::template_engines( 'brother-ql' ) );
+	}
+
+	/**
+	 * It projects every provider's public capabilities.
+	 */
+	public function test_public_capabilities_covers_every_provider(): void {
+		// Act.
+		$actual = Provider::public_capabilities();
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'star-cloudprnt' => array( 'template_engines' => 'thermal' ),
+				'epson-sdp'      => array( 'template_engines' => 'thermal' ),
+				'printnode'      => array( 'template_engines' => 'all' ),
+				'star-online'    => array( 'template_engines' => 'thermal' ),
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It always returns a key the capability lookups understand.
+	 */
+	public function test_normalize_output_is_always_a_valid_provider(): void {
+		foreach ( array( null, '', 'brother-ql', 'STAR-CLOUDPRNT', 'printnode' ) as $input ) {
+			$this->assertContains( Provider::normalize( $input ), Provider::valid() );
+		}
+	}
 }

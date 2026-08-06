@@ -9,12 +9,17 @@
 
 return array(
 	// 'current_user_can',
+	'delete_user_meta',
 	'get_current_blog_id',
+	'get_user_meta',
 	'get_woocommerce_currencies',
 	'get_woocommerce_currency_symbol',
 	'is_multisite',
+	'usleep',
 	'wc_get_price_excluding_tax',
 	'wc_get_shipping_method_count',
 	'wc_prices_include_tax',
 	'wc_site_is_https',
+	'wp_cache_add',
+	'wp_generate_uuid4',
 );
