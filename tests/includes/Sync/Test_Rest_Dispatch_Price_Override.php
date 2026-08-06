@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Admin_Settings;
+use WC_Order;
 use WC_Product;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
@@ -217,6 +218,38 @@ class Test_Rest_Dispatch_Price_Override extends Sync_REST_Store_Test_Case {
 		$tax_lines = array_values( $order->get_items( 'tax' ) );
 		$this->assertCount( 1, $tax_lines );
 		$this->assertSame( 'VAT', $tax_lines[0]->get_label() );
+	}
+
+	public function test_pos_create_hook_does_not_stamp_unrelated_order_saved_during_dispatch(): void {
+		$product               = $this->taxable_product();
+		$unrelated_order       = null;
+		$saving_unrelated_order = false;
+		$save_unrelated_order  = static function ( $order ) use ( &$unrelated_order, &$saving_unrelated_order ) {
+			if ( $saving_unrelated_order || ! $order instanceof WC_Order ) {
+				return;
+			}
+
+			$saving_unrelated_order = true;
+			$unrelated_order        = new WC_Order();
+			$unrelated_order->set_created_via( 'extension' );
+			$unrelated_order->save();
+		};
+		add_action( 'woocommerce_before_order_object_save', $save_unrelated_order, 5 );
+		try {
+			$response = $this->push_order(
+				'create',
+				wp_generate_uuid4(),
+				array( 'line_items' => array( $this->price_line( $product, '8' ) ) )
+			);
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $save_unrelated_order, 5 );
+		}
+
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'woocommerce-pos', wc_get_order( (int) $response->get_data()['document']['id'] )->get_created_via() );
+		$this->assertInstanceOf( WC_Order::class, $unrelated_order );
+		$this->assertGreaterThan( 0, $unrelated_order->get_id() );
+		$this->assertSame( 'extension', $unrelated_order->get_created_via() );
 	}
 
 	public function test_pos_create_filter_does_not_leak_into_plain_wc_v3_create(): void {

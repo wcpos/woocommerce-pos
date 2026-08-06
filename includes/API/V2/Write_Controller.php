@@ -432,7 +432,11 @@ class Write_Controller extends WP_REST_Controller {
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
 			: $meta['route'];
-		$date_filter = static function ( $order, $request, $creating ) use ( $client_created_gmt ) {
+		$forwarded_order = null;
+		$date_filter     = static function ( $order, $request, $creating ) use ( $client_created_gmt, &$forwarded_order ) {
+			if ( $creating && $order instanceof \WC_Order ) {
+				$forwarded_order = $order;
+			}
 			if ( $creating && null !== $client_created_gmt && ! is_wp_error( $order ) ) {
 				$order->set_date_created( $client_created_gmt );
 			}
@@ -444,9 +448,10 @@ class Write_Controller extends WP_REST_Controller {
 		// which would run calculate_totals() without the POS tax location and
 		// coupon context. woocommerce_before_order_object_save fires inside
 		// save(), after WC's set and before calculate_totals(), exactly where
-		// v1 stamped it (V1/Orders_Controller). Scoped to this create forward.
-		$created_via_hook = static function ( $order ) {
-			if ( $order instanceof \WC_Order && 'woocommerce-pos' !== $order->get_created_via() ) {
+		// v1 stamped it (V1/Orders_Controller). Scoped to the exact order returned
+		// by the forwarded create's pre-insert filter.
+		$created_via_hook = static function ( $order ) use ( &$forwarded_order ) {
+			if ( $order instanceof \WC_Order && $order === $forwarded_order && 'woocommerce-pos' !== $order->get_created_via() ) {
 				$order->set_created_via( 'woocommerce-pos' );
 			}
 		};
