@@ -8,6 +8,7 @@ set -euo pipefail
 : "${MERGE_GATE_REQUIRED_CHECKS:?MERGE_GATE_REQUIRED_CHECKS is required}"
 
 MAX_ATTEMPTS="${MERGE_GATE_MAX_ATTEMPTS:-80}"
+MERGE_STATE_MAX_ATTEMPTS="${MERGE_GATE_MERGE_STATE_MAX_ATTEMPTS:-5}"
 SLEEP_SECONDS="${MERGE_GATE_SLEEP_SECONDS:-30}"
 TRANSLATION_FILE="${MERGE_GATE_TRANSLATION_FILE:-}"
 POT_FILE="${MERGE_GATE_POT_FILE:-}"
@@ -315,9 +316,20 @@ main() {
   # Conflicts block every PR — including allowlisted bot PRs — so this check
   # runs before the bypass branches. A failed or empty lookup fails closed:
   # an unknown merge state must never be treated as "not conflicted".
-  local merge_state
-  if ! merge_state="$(pr_merge_state)" || [[ -z "$merge_state" ]]; then
-    log "Could not determine the PR merge state; failing closed."
+  local merge_state attempt
+  for (( attempt=1; attempt<=MERGE_STATE_MAX_ATTEMPTS; attempt++ )); do
+    if ! merge_state="$(pr_merge_state)" || [[ -z "$merge_state" ]]; then
+      log "Could not determine the PR merge state; failing closed."
+      return 1
+    fi
+    [[ "$merge_state" == "UNKNOWN" ]] || break
+    if [[ "$attempt" -lt "$MERGE_STATE_MAX_ATTEMPTS" ]]; then
+      log "… merge state still computing (UNKNOWN), retrying"
+      sleep "$SLEEP_SECONDS"
+    fi
+  done
+  if [[ "$merge_state" == "UNKNOWN" ]]; then
+    log "Merge state stayed UNKNOWN after ${MERGE_STATE_MAX_ATTEMPTS} attempts; failing closed."
     return 1
   fi
   if [[ "$merge_state" == "DIRTY" ]]; then
