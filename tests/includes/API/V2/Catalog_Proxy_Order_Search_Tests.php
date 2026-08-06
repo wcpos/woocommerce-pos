@@ -133,7 +133,7 @@ trait Catalog_Proxy_Order_Search_Tests {
 	/** Payment method sorting retains V1 semantics in both directions. */
 	public function test_orderby_payment_method_matches_v1(): void {
 		$alpha = $this->create_orderby_order();
-		$alpha->set_payment_method( 'alpha' );
+		$alpha->set_payment_method( 'charlie' );
 		$alpha->set_payment_method_title( 'alpha' );
 		$alpha->save();
 		$bravo = $this->create_orderby_order();
@@ -141,7 +141,7 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$bravo->set_payment_method_title( 'bravo' );
 		$bravo->save();
 		$charlie = $this->create_orderby_order();
-		$charlie->set_payment_method( 'charlie' );
+		$charlie->set_payment_method( 'alpha' );
 		$charlie->set_payment_method_title( 'charlie' );
 		$charlie->save();
 
@@ -200,7 +200,7 @@ trait Catalog_Proxy_Order_Search_Tests {
 	}
 
 	/**
-	 * Assert exact ascending and descending ID sequences.
+	 * Assert exact ascending, descending, and default-descending ID sequences.
 	 *
 	 * @param string      $orderby   Requested orderby value.
 	 * @param \WC_Order[] $orders    Orders to include.
@@ -228,5 +228,18 @@ trait Catalog_Proxy_Order_Search_Tests {
 			$this->assertEquals( 200, $response->get_status() );
 			$this->assertEquals( $expected, wp_list_pluck( $response->get_data(), 'id' ) );
 		}
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params(
+			array(
+				'include' => $ids,
+				'orderby' => $orderby,
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array_reverse( $ascending ), wp_list_pluck( $response->get_data(), 'id' ) );
 	}
 }

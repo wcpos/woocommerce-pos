@@ -237,7 +237,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		}
 		$order = isset( $query_params['order'] )
 			&& \is_string( $query_params['order'] )
-			&& 'desc' === strtolower( $query_params['order'] ) ? 'DESC' : 'ASC';
+			&& 'asc' === strtolower( $query_params['order'] ) ? 'ASC' : 'DESC';
 		$filters = array();
 		foreach ( array( 'pos_cashier', 'pos_store', 'created_via' ) as $key ) {
 			if ( array_key_exists( $key, $query_params ) ) {
@@ -283,7 +283,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 					$columns = array(
 						'status'         => 'status',
 						'customer_id'    => 'customer_id',
-						'payment_method' => 'payment_method',
+						'payment_method' => 'payment_method_title',
 						'total'          => 'total_amount',
 					);
 					$clauses['orderby'] = $orders . '.' . $columns[ $orderby ] . ' ' . $order;
