@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\Traits;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use Ramsey\Uuid\Uuid;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Error;
@@ -45,7 +46,7 @@ trait WCPOS_REST_API {
 		$sanitized = array();
 		foreach ( $request['meta_data'] as $meta ) {
 			$key = \is_array( $meta ) && isset( $meta['key'] ) && \is_scalar( $meta['key'] ) ? (string) $meta['key'] : null;
-			if ( '_woocommerce_pos_uuid' === $key && ( ! isset( $meta['value'] ) || ! \is_string( $meta['value'] ) || '' === $meta['value'] ) ) {
+			if ( '_woocommerce_pos_uuid' === $key && ( ! isset( $meta['value'] ) || ! \is_string( $meta['value'] ) || '' === $meta['value'] || ! Uuid::isValid( $meta['value'] ) ) ) {
 				return new WP_Error(
 					'woocommerce_pos_rest_invalid_uuid',
 					__( 'Invalid _woocommerce_pos_uuid meta_data value.', 'woocommerce-pos' ),

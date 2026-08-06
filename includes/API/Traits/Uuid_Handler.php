@@ -22,7 +22,7 @@ use function get_user_meta;
 use function update_user_meta;
 use function delete_user_meta;
 use function delete_term_meta;
-use function add_term_meta;
+use function update_term_meta;
 use function wp_cache_add;
 use function wp_cache_delete;
 
@@ -213,7 +213,7 @@ trait Uuid_Handler {
 
 			if ( $should_update_uuid ) {
 				$uuid = $this->create_uuid();
-				add_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuid, true );
+				update_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuid );
 				return $uuid;
 			}
 

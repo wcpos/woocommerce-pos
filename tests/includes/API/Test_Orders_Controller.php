@@ -1525,8 +1525,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * A present-but-malformed uuid must reject the item with a 400, not be
 	 * dropped: dropping the dedupe key would mint a fresh server uuid on every
 	 * client retry, creating a duplicate order per retry.
+	 *
+	 * @dataProvider malformed_pos_uuid_provider
+	 *
+	 * @param mixed $uuid_value Malformed UUID value.
 	 */
-	public function test_batch_create_order_with_non_scalar_uuid_value_returns_error(): void {
+	public function test_batch_create_order_with_malformed_uuid_value_returns_error( $uuid_value ): void {
 		// Arrange.
 		$order_count_before = \count(
 			wc_get_orders(
@@ -1545,7 +1549,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 						'meta_data'      => array(
 							array(
 								'key'   => '_woocommerce_pos_uuid',
-								'value' => array( 'nested' ),
+								'value' => $uuid_value,
 							),
 						),
 						'line_items'     => array(
@@ -1576,6 +1580,18 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertEquals( $order_count_before, $order_count_after, 'No order should be created for a malformed uuid.' );
+	}
+
+	/**
+	 * Malformed POS UUID values.
+	 *
+	 * @return array<string, array{mixed}>
+	 */
+	public function malformed_pos_uuid_provider(): array {
+		return array(
+			'non-string value'           => array( array( 'nested' ) ),
+			'syntactically invalid UUID' => array( 'not-a-uuid' ),
+		);
 	}
 
 	/**
