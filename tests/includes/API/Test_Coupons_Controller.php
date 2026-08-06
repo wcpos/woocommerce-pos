@@ -439,6 +439,67 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Coupon batch create must drop malformed meta_data entries before WC core
+	 * reads them without per-item schema validation.
+	 */
+	public function test_batch_create_coupon_with_string_meta_data_entry_creates_coupon(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/coupons/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'code'      => 'batch-meta-coupon',
+						'amount'    => '10',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+		$this->assertEquals( 'batch-meta-coupon', $data['create'][0]['code'] );
+	}
+
+	/**
+	 * Coupon batch update has the same per-item schema bypass as create.
+	 */
+	public function test_batch_update_coupon_with_string_meta_data_entry_updates_coupon(): void {
+		// Arrange.
+		$coupon  = CouponHelper::create_coupon( 'batch-update-meta-coupon' );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/coupons/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array(
+						'id'        => $coupon->get_id(),
+						'amount'    => '15',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'update', $data );
+		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
+		$this->assertEquals( '15.00', $data['update'][0]['amount'] );
+	}
+
+	/**
 	 * Helper to manually call wcpos_dispatch_request to set up filters.
 	 *
 	 * WC 10.5+ wraps REST callbacks in closures, breaking identity checks.
