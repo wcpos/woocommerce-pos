@@ -219,6 +219,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function create_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
 		$valid_email = $this->wcpos_validate_billing_email( $request );
 		if ( is_wp_error( $valid_email ) ) {
 			return $valid_email;
@@ -264,6 +269,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function update_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
 		$valid_email = $this->wcpos_validate_billing_email( $request );
 		if ( is_wp_error( $valid_email ) ) {
 			return $valid_email;

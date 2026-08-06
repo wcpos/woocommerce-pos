@@ -1922,4 +1922,274 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '10.00', $updated->get_meta( '_pos_cash_amount_tendered' ) );
 		$this->assertSame( '0', $updated->get_meta( '_pos_cash_change' ) );
 	}
+
+	/**
+	 * WC's batch_items() calls create_item() directly, bypassing per-item schema
+	 * validation, so malformed meta_data entries reach the UUID pre-scan raw.
+	 * A string entry must be skipped, not fataled on (PHP 8 throws
+	 * "Cannot access offset of type string on string" -> 500 mid-batch).
+	 */
+	public function test_batch_create_order_with_string_meta_data_entry_creates_order(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array( 'not-an-object' ),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+		$this->assertInstanceOf( WC_Order::class, wc_get_order( $data['create'][0]['id'] ) );
+	}
+
+	/**
+	 * A present-but-malformed uuid must reject the item with a 400, not be
+	 * dropped: dropping the dedupe key would mint a fresh server uuid on every
+	 * client retry, creating a duplicate order per retry.
+	 */
+	public function test_batch_create_order_with_non_scalar_uuid_value_returns_error(): void {
+		// Arrange.
+		$order_count_before = \count(
+			wc_get_orders(
+				array(
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$request            = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array(
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => array( 'nested' ),
+							),
+						),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert: per-item 400 error, no 500, and no order created.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'error', $data['create'][0] );
+		$this->assertEquals( 'woocommerce_pos_rest_invalid_uuid', $data['create'][0]['error']['code'] );
+		$order_count_after = \count(
+			wc_get_orders(
+				array(
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$this->assertEquals( $order_count_before, $order_count_after, 'No order should be created for a malformed uuid.' );
+	}
+
+	/**
+	 * A non-UUID string must also reject the item instead of being replaced with
+	 * a generated UUID, which would create another order on every retry.
+	 */
+	public function test_batch_create_order_with_non_uuid_string_value_returns_error(): void {
+		// Arrange.
+		$order_count_before = \count(
+			wc_get_orders(
+				array(
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$request            = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array(
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => 'not-a-uuid',
+							),
+						),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'error', $data['create'][0] );
+		$this->assertEquals( 'woocommerce_pos_rest_invalid_uuid', $data['create'][0]['error']['code'] );
+		$order_count_after = \count(
+			wc_get_orders(
+				array(
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$this->assertEquals( $order_count_before, $order_count_after, 'No order should be created for a malformed uuid.' );
+	}
+
+	/**
+	 * Same bypass on the update path.
+	 */
+	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array(
+						'id'        => $order->get_id(),
+						'status'    => 'completed',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
+		$this->assertEquals( 'completed', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * Skipping malformed entries must not break the dedupe itself: a valid uuid
+	 * entry after junk entries still returns the existing order instead of
+	 * creating a duplicate.
+	 */
+	public function test_batch_create_order_with_malformed_entries_still_dedupes_uuid(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$uuid  = Uuid::uuid4()->toString();
+		$order->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$order->save();
+		$order_count_before = \count(
+			wc_get_orders(
+				array(
+					'limit' => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array(
+							'not-an-object',
+							array( 'value' => 'entry-without-key' ),
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => $uuid,
+							),
+						),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( $order->get_id(), $data['create'][0]['id'], 'Existing order should be returned for a duplicate UUID.' );
+		$order_count_after = \count(
+			wc_get_orders(
+				array(
+					'limit' => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$this->assertEquals( $order_count_before, $order_count_after, 'No duplicate order should be created.' );
+	}
+
+	/**
+	 * A corrupt stored uuid (written outside WCPOS, e.g. via wc/v3 or an
+	 * import) must be regenerated on read, not fatal uuid validation.
+	 */
+	public function test_order_response_with_corrupt_stored_uuid_regenerates_uuid(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_woocommerce_pos_uuid', array( 'corrupt' ) );
+		$order->save();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$uuids = array();
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
+				$uuids[] = $meta['value'];
+			}
+		}
+		$this->assertCount( 1, $uuids, 'There should be exactly one uuid after regeneration.' );
+		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated uuid should be valid.' );
+	}
 }

@@ -1863,4 +1863,37 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotContains( $product1->get_id(), $ids );
 		$this->assertContains( $product2->get_id(), $ids );
 	}
+
+	/**
+	 * WC's batch_items() calls create_item() directly, bypassing per-item
+	 * schema validation, so malformed meta_data entries must be dropped before
+	 * WC core's unguarded $meta['key'] access fatals mid-batch on PHP 8.
+	 */
+	public function test_batch_create_product_with_string_meta_data_entry_creates_product(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/products/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'name'          => 'Batch Meta Product',
+						'type'          => 'simple',
+						'regular_price' => '10',
+						'meta_data'     => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+		$this->assertEquals( 'Batch Meta Product', $data['create'][0]['name'] );
+	}
 }
