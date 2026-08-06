@@ -80,8 +80,8 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * WordPress matches REST routes case-insensitively, so a mixed-case sync
-	 * route still dispatches — telemetry route detection must match it too.
+	 * WordPress matches REST routes case-insensitively, so mixed-case sync
+	 * routes still dispatch — telemetry route detection must match them too.
 	 */
 	public function test_mixed_case_changes_route_receives_telemetry_headers(): void {
 		$request = $this->wp_rest_get_request( '/WCPOS/V2/changes/sequence-log' );
@@ -91,6 +91,13 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertStringStartsWith( 'wcpos;dur=', $response->get_headers()['Server-Timing'] );
 		$this->assertGreaterThan( 0, (int) $response->get_headers()['X-WCPOS-Memory-Peak'] );
+
+		$pull_request = $this->wp_rest_get_request( '/WCPOS/V2/orders/pull' );
+		Response_Telemetry::start_request( null, null, $pull_request );
+
+		$pull_response = Response_Telemetry::decorate_callback_response( new WP_REST_Response( array() ), null, $pull_request );
+
+		$this->assertArrayHasKey( 'metrics', $pull_response->get_data() );
 	}
 
 	/**
