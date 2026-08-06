@@ -9,6 +9,7 @@
 
 return array(
 	// 'current_user_can',
+	'delete_user_meta',
 	'get_current_blog_id',
 	'get_woocommerce_currencies',
 	'get_woocommerce_currency_symbol',

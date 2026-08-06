@@ -353,6 +353,43 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test adoption preserves a network UUID inserted during legacy cleanup.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_multisite_adoption_preserves_concurrent_network_uuid(): void {
+		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$legacy_uuid = Uuid::uuid4()->toString();
+		$winner_uuid = Uuid::uuid4()->toString();
+		$interleaved = false;
+		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid' );
+		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'delete_user_meta' => function ( $user_id, $key, $value = '' ) use ( $user, $winner_uuid, &$interleaved ) {
+					$deleted = \delete_user_meta( $user_id, $key, $value );
+					if ( $user->ID === $user_id && '_woocommerce_pos_uuid' === $key && '' === $value && ! $interleaved ) {
+						$interleaved = true;
+						\add_user_meta( $user_id, $key, $winner_uuid, true );
+					}
+
+					return $deleted;
+				},
+			)
+		);
+
+		$this->handler->test_maybe_add_user_uuid( $user );
+
+		$this->assertSame(
+			array( $winner_uuid ),
+			get_user_meta( $user->ID, '_woocommerce_pos_uuid', false )
+		);
+
+		wp_delete_user( $user->ID );
+	}
+
+	/**
 	 * Test a stale empty read cannot overwrite a concurrently inserted UUID.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid

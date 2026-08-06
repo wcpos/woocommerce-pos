@@ -204,7 +204,7 @@ trait Uuid_Handler {
 		$legacy = get_user_meta( $user_id, '_woocommerce_pos_uuid_' . get_current_blog_id(), true );
 		if ( \is_string( $legacy ) && Uuid::isValid( $legacy ) && ! $this->uuid_usermeta_exists( $legacy, $user_id ) ) {
 			delete_user_meta( $user_id, '_woocommerce_pos_uuid' );
-			update_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy );
+			add_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy, true );
 		}
 	}
 
