@@ -561,8 +561,17 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					break;
 
 				case 'role':
-					$prepared_args['meta_key'] = 'wp_capabilities';
-					$prepared_args['orderby']  = 'meta_value';
+					/*
+					 * Roles live in the serialized `wp_capabilities` usermeta
+					 * (eg. a:1:{s:8:"customer";b:1;}), so a plain `orderby =>
+					 * meta_value` sorts by that opaque string — dominated by the
+					 * s:N: length prefix, not the role. Defer to a pre_user_query
+					 * callback that ranks by role hierarchy instead. We leave
+					 * `orderby`/`meta_key` untouched (no WP meta join to fight)
+					 * and mark the query so the callback only touches ours.
+					 */
+					$prepared_args['_wcpos_orderby_role'] = true;
+					add_action( 'pre_user_query', array( $this, 'wcpos_orderby_role' ) );
 
 					break;
 
@@ -751,6 +760,109 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID NOT IN ($ids_format) ", $exclude_ids );
 		}
+	}
+
+	/**
+	 * Order the customer query by role hierarchy.
+	 *
+	 * Roles are stored in the serialized `wp_capabilities` usermeta, which SQL
+	 * cannot meaningfully ORDER BY (the value's leading `s:N:` length prefix, not
+	 * the role name, dominates a string sort). Instead of extracting the slug we
+	 * LEFT JOIN that meta row and rank it with a CASE ladder built from the known
+	 * role hierarchy, matching each role by its quoted, serialization-safe slug
+	 * (`"customer"`) so the length prefix is irrelevant.
+	 *
+	 * Design decisions:
+	 * - Hierarchy, not alphabetical/label: the POS customer space is every WP
+	 *   user (#1379) and is overwhelmingly `customer`. A cashier sorting by role
+	 *   wants staff grouped and predictably separated from buyers, not scattered
+	 *   across the alphabet, so we rank by privilege (administrator → subscriber),
+	 *   unknown/custom/no-role users last.
+	 * - Multi-role → highest privilege: a user who is both shop_manager and
+	 *   customer is treated as staff. The ladder tests the most-privileged role
+	 *   first, so the highest role a user holds fixes their position — which is
+	 *   more correct than WP core's "first role in the array" (insertion order).
+	 * - Ties (same rank) fall back to `user_login` for a deterministic order.
+	 *
+	 * @param WP_User_Query $query The WP_User_Query instance (passed by reference).
+	 */
+	public function wcpos_orderby_role( $query ): void {
+		global $wpdb;
+
+		// Remove the hook.
+		remove_action( 'pre_user_query', array( $this, 'wcpos_orderby_role' ) );
+
+		/*
+		 * Only act on the customer query we prepared. WordPress fires
+		 * pre_user_query for every WP_User_Query, and this callback can survive
+		 * onto an unrelated one if our own query is short-circuited (eg. via the
+		 * users_pre_query filter) before it runs. See wcpos_search_user_table.
+		 */
+		if ( empty( $query->query_vars['_wcpos_orderby_role'] ) ) {
+			return;
+		}
+
+		$order = ( isset( $query->query_vars['order'] ) && 'DESC' === strtoupper( (string) $query->query_vars['order'] ) )
+			? 'DESC'
+			: 'ASC';
+
+		// Role privilege hierarchy, highest first. Matched on the quoted slug so
+		// the serialized length prefix (s:N:) never affects the comparison.
+		// `cashier` is WCPOS's own registered POS-staff role (see Activator), so
+		// it groups with staff — above the content roles — rather than falling
+		// into the trailing bucket with customers/subscribers.
+		$hierarchy = array(
+			'administrator',
+			'shop_manager',
+			'cashier',
+			'editor',
+			'author',
+			'contributor',
+			'customer',
+			'subscriber',
+		);
+
+		/*
+		 * Capabilities meta is blog-prefixed (wp_capabilities on the main site,
+		 * wp_<id>_capabilities on subsites), so resolve it via get_blog_prefix()
+		 * rather than hardcoding — the POS customer space is the current site's
+		 * users.
+		 */
+		$cap_key = $wpdb->get_blog_prefix() . 'capabilities';
+
+		// LEFT JOIN so users with no capabilities row still sort (into the
+		// trailing "everyone else" bucket). Each user has at most one such row,
+		// so the join never multiplies rows or corrupts the total count.
+		//
+		// Guard against a duplicate alias: `woocommerce_rest_customer_query` can
+		// carry more than one registered instance of this controller (each adds
+		// its own pre_user_query action), so this callback may run several times
+		// for one query. Appending the join unconditionally would emit two
+		// `wcpos_role_meta` aliases and fail with "Not unique table/alias".
+		if ( false === strpos( $query->query_from, 'wcpos_role_meta' ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; the meta key is passed to prepare() as %s.
+			$query->query_from .= $wpdb->prepare(
+				" LEFT JOIN {$wpdb->usermeta} AS wcpos_role_meta ON ( {$wpdb->users}.ID = wcpos_role_meta.user_id AND wcpos_role_meta.meta_key = %s )",
+				$cap_key
+			);
+		}
+
+		$when_sql      = '';
+		$when_args     = array();
+		$rank          = 1;
+		foreach ( $hierarchy as $role_slug ) {
+			$when_sql   .= ' WHEN wcpos_role_meta.meta_value LIKE %s THEN ' . $rank;
+			$when_args[] = '%' . $wpdb->esc_like( '"' . $role_slug . '"' ) . '%';
+			++$rank;
+		}
+		// $rank is now the "everyone else" bucket (unknown/custom/no role).
+		$case_sql = "CASE{$when_sql} ELSE {$rank} END";
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $case_sql is built from a static role whitelist; the only variables are %s LIKE placeholders passed to prepare().
+		$order_by = $wpdb->prepare( $case_sql, $when_args );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $order_by is prepared above; $order is a validated ASC|DESC literal; the table/column come from $wpdb.
+		$query->query_orderby = "ORDER BY ( {$order_by} ) {$order}, {$wpdb->users}.user_login ASC";
 	}
 
 	/**

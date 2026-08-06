@@ -385,15 +385,66 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Orderby role — skipped: wp_capabilities is a serialized array so string
-	 * comparison does not reflect actual role names.
+	 * Orderby role.
 	 *
-	 * To fix this properly we would need a pre_user_query filter to extract and
-	 * sort by the actual role name, which is complex and may have performance
-	 * implications.
+	 * Roles live in the serialized `wp_capabilities` usermeta, so a naive
+	 * meta_value sort is noise. `wcpos_customer_query` + `wcpos_orderby_role`
+	 * rank users by role hierarchy (administrator → subscriber, unknown last),
+	 * with multi-role users taking their highest-privilege position. This
+	 * asserts the full ladder in both directions and the multi-role rule.
+	 *
+	 * Users are created with distinct hierarchy ranks and the response is
+	 * filtered to just those IDs, so interleaved fixtures (eg. the admin the
+	 * base test class authenticates as) do not affect the assertion.
 	 */
 	public function test_orderby_role(): void {
-		$this->markTestSkipped( 'Role sorting is a known limitation - wp_capabilities is a serialized array' );
+		$admin_id      = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id    = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$editor_id     = $this->factory->user->create( array( 'role' => 'editor' ) );
+		$customer_id   = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$subscriber_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+
+		// Multi-role user: primary customer, but also shop_manager. Must sort by
+		// the highest-privilege role (shop_manager, rank 2), not customer.
+		$multi_id   = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$multi_user = new \WP_User( $multi_id );
+		$multi_user->add_role( 'shop_manager' );
+
+		// Expected order by hierarchy rank (asc): admin(1) <
+		// shop_manager/multi(2) < cashier(3) < editor(4) < customer(7) <
+		// subscriber(8).
+		$expected_asc  = array( $admin_id, $multi_id, $cashier_id, $editor_id, $customer_id, $subscriber_id );
+		$expected_desc = array_reverse( $expected_asc );
+		$my_ids        = $expected_asc;
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'     => 'all',
+				'orderby'  => 'role',
+				'order'    => 'asc',
+				'per_page' => 100,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+		$ids_in_order = wp_list_pluck( $response->get_data(), 'id' );
+		$filtered_asc = array_values( array_intersect( $ids_in_order, $my_ids ) );
+		$this->assertEquals( $expected_asc, $filtered_asc );
+
+		// Reverse order.
+		$request->set_query_params(
+			array(
+				'role'     => 'all',
+				'orderby'  => 'role',
+				'order'    => 'desc',
+				'per_page' => 100,
+			)
+		);
+		$response      = $this->server->dispatch( $request );
+		$ids_in_order  = wp_list_pluck( $response->get_data(), 'id' );
+		$filtered_desc = array_values( array_intersect( $ids_in_order, $my_ids ) );
+		$this->assertEquals( $expected_desc, $filtered_desc );
 	}
 
 	/**
