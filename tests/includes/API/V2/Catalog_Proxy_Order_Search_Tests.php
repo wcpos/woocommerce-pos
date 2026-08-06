@@ -121,6 +121,51 @@ trait Catalog_Proxy_Order_Search_Tests {
 	}
 
 	/**
+	 * Search parses comma-delimited include and exclude values before applying them.
+	 */
+	public function test_order_search_parses_comma_delimited_include_and_exclude(): void {
+		$first_match = OrderHelper::create_order();
+		$first_match->set_billing_first_name( 'DelimitedIdsProbe' );
+		$this->scrub_numeric_address_fields( $first_match );
+		$first_match->save();
+
+		$second_match = OrderHelper::create_order();
+		$second_match->set_billing_first_name( 'DelimitedIdsProbe' );
+		$this->scrub_numeric_address_fields( $second_match );
+		$second_match->save();
+
+		$ids = array( $first_match->get_id(), $second_match->get_id() );
+
+		$this->assertEqualsCanonicalizing(
+			$ids,
+			$this->order_ids_for_query(
+				array(
+					'search'  => 'DelimitedIdsProbe',
+					'include' => implode( ',', $ids ),
+				)
+			)
+		);
+		$this->assertSame(
+			array(),
+			$this->order_ids_for_query(
+				array(
+					'search'  => 'DelimitedIdsProbe',
+					'exclude' => implode( ',', $ids ),
+				)
+			)
+		);
+		$this->assertEqualsCanonicalizing(
+			$ids,
+			$this->order_ids_for_query(
+				array(
+					'search'  => 'DelimitedIdsProbe',
+					'include' => ',',
+				)
+			)
+		);
+	}
+
+	/**
 	 * The cashier query returns only orders carrying that cashier's audit meta.
 	 */
 	public function test_pos_cashier_filter_returns_only_that_cashiers_orders(): void {

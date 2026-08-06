@@ -247,8 +247,11 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		// native include semantics (including its ordering).
 		if ( isset( $query_params['search'] ) && '' !== trim( (string) $query_params['search'] ) ) {
 			foreach ( array( 'include', 'exclude' ) as $key ) {
-				if ( isset( $query_params[ $key ] ) && array() !== (array) $query_params[ $key ] ) {
-					$filters[ $key ] = array_map( 'absint', (array) $query_params[ $key ] );
+				if ( isset( $query_params[ $key ] ) ) {
+					$ids = wp_parse_id_list( $query_params[ $key ] );
+					if ( array() !== $ids ) {
+						$filters[ $key ] = $ids;
+					}
 					unset( $query_params[ $key ] );
 				}
 			}
