@@ -221,7 +221,8 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated UUID should be valid.' );
 
 		clean_post_cache( $coupon->get_id() );
-		$stored_uuid = wc_get_coupon( $coupon->get_id() )->get_meta( '_woocommerce_pos_uuid' );
+		$stored_coupon = new \WC_Coupon( $coupon->get_id() );
+		$stored_uuid   = $stored_coupon->get_meta( '_woocommerce_pos_uuid' );
 		$this->assertEquals( $uuids[0], $stored_uuid, 'The replacement UUID should be persisted.' );
 	}
 
@@ -252,7 +253,8 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
-		$this->assertInstanceOf( \WC_Coupon::class, wc_get_coupon( $data['create'][0]['id'] ) );
+		$created_coupon = new \WC_Coupon( $data['create'][0]['id'] );
+		$this->assertEquals( $data['create'][0]['id'], $created_coupon->get_id() );
 	}
 
 	/**
