@@ -22,7 +22,7 @@ use function get_user_meta;
 use function update_user_meta;
 use function delete_user_meta;
 use function delete_term_meta;
-use function add_term_meta;
+use function update_term_meta;
 use function wp_cache_add;
 use function wp_cache_delete;
 
@@ -111,7 +111,7 @@ trait Uuid_Handler {
 			}
 
 			$should_update_uuid = empty( $uuid_values )
-				|| ( isset( $uuid_values[0] ) && ! Uuid::isValid( $uuid_values[0] ) )
+				|| ( isset( $uuid_values[0] ) && ( ! \is_string( $uuid_values[0] ) || ! Uuid::isValid( $uuid_values[0] ) ) )
 				|| ( isset( $uuid_values[0] ) && $this->uuid_postmeta_exists( $uuid_values[0], $object ) );
 
 			if ( $should_update_uuid ) {
@@ -148,7 +148,7 @@ trait Uuid_Handler {
 			}
 
 			$should_update_uuid = empty( $uuids )
-				|| ( isset( $uuids[0] ) && ! Uuid::isValid( $uuids[0] ) )
+				|| ( isset( $uuids[0] ) && ( ! \is_string( $uuids[0] ) || ! Uuid::isValid( $uuids[0] ) ) )
 				|| ( isset( $uuids[0] ) && $this->uuid_usermeta_exists( $uuids[0], $user->ID ) );
 
 			if ( $should_update_uuid ) {
@@ -194,7 +194,7 @@ trait Uuid_Handler {
 		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
 			Logger::log( 'Unable to acquire lock for term UUID update for term id ' . $term->term_id );
 			$uuids = get_term_meta( $term->term_id, '_woocommerce_pos_uuid', false );
-			return ( ! empty( $uuids ) && Uuid::isValid( $uuids[0] ) ) ? $uuids[0] : $this->create_uuid();
+			return ( ! empty( $uuids ) && \is_string( $uuids[0] ) && Uuid::isValid( $uuids[0] ) ) ? $uuids[0] : $this->create_uuid();
 		}
 		try {
 			$uuids = get_term_meta( $term->term_id, '_woocommerce_pos_uuid', false );
@@ -208,12 +208,12 @@ trait Uuid_Handler {
 			}
 
 			$should_update_uuid = empty( $uuids )
-				|| ( isset( $uuids[0] ) && ! Uuid::isValid( $uuids[0] ) )
+				|| ( isset( $uuids[0] ) && ( ! \is_string( $uuids[0] ) || ! Uuid::isValid( $uuids[0] ) ) )
 				|| ( isset( $uuids[0] ) && $this->uuid_termmeta_exists( $uuids[0], $term->term_id ) );
 
 			if ( $should_update_uuid ) {
 				$uuid = $this->create_uuid();
-				add_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuid, true );
+				update_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuid );
 				return $uuid;
 			}
 

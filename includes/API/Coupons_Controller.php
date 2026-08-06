@@ -78,6 +78,38 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	}
 
 	/**
+	 * Create a single coupon.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function create_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		return parent::create_item( $request );
+	}
+
+	/**
+	 * Update a single coupon.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		return parent::update_item( $request );
+	}
+
+	/**
 	 * Check whether a given request has permission to read coupons.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -282,7 +314,7 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		}
 
 		$should_update_uuid = empty( $uuid_values )
-			|| ( isset( $uuid_values[0] ) && ! Uuid::isValid( $uuid_values[0] ) );
+			|| ( isset( $uuid_values[0] ) && ( ! \is_string( $uuid_values[0] ) || ! Uuid::isValid( $uuid_values[0] ) ) );
 
 		if ( $should_update_uuid ) {
 			$coupon->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );

@@ -8,9 +8,12 @@
 namespace WCPOS\WooCommercePOS\API\Traits;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use Ramsey\Uuid\Uuid;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WP_Error;
+use WP_REST_Request;
 use WP_REST_Response;
 use Exception;
 
@@ -18,6 +21,50 @@ use Exception;
  * Shared helpers for all WCPOS REST API controllers.
  */
 trait WCPOS_REST_API {
+	/**
+	 * Drop malformed meta_data entries from a create/update request.
+	 *
+	 * Batch requests bypass per-item schema validation (WC's batch_items() calls
+	 * create_item()/update_item() directly), and WC core's meta_data writes read
+	 * $meta['key'] / $meta['value'] unguarded (verified through WC 10.4) — a
+	 * malformed entry throws a TypeError on PHP 8, which 500s the batch after
+	 * earlier items already persisted, so a client retry risks duplicate
+	 * records. A present-but-malformed '_woocommerce_pos_uuid' is rejected with
+	 * a 400 instead of dropped: dropping the client's dedupe key would mint a
+	 * fresh server uuid on every retry — the duplicate-record outcome this
+	 * sanitization exists to prevent — while a rejected item creates nothing
+	 * and surfaces a visible per-item error.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|null WP_Error for a malformed POS uuid entry, null otherwise.
+	 */
+	protected function wcpos_sanitize_meta_data_param( WP_REST_Request $request ) {
+		if ( ! isset( $request['meta_data'] ) || ! \is_array( $request['meta_data'] ) ) {
+			return null;
+		}
+
+		$sanitized = array();
+		foreach ( $request['meta_data'] as $meta ) {
+			$key = \is_array( $meta ) && isset( $meta['key'] ) && \is_scalar( $meta['key'] ) ? (string) $meta['key'] : null;
+			if ( '_woocommerce_pos_uuid' === $key && ( ! isset( $meta['value'] ) || ! \is_string( $meta['value'] ) || '' === $meta['value'] || ! Uuid::isValid( $meta['value'] ) ) ) {
+				return new WP_Error(
+					'woocommerce_pos_rest_invalid_uuid',
+					__( 'Invalid _woocommerce_pos_uuid meta_data value.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+			if ( null === $key || ! array_key_exists( 'value', $meta ) ) {
+				continue;
+			}
+			$sanitized[] = $meta;
+		}
+
+		$request['meta_data'] = $sanitized;
+
+		return null;
+	}
+
 	/**
 	 * Formats the response for all fetched posts into associative arrays.
 	 *
