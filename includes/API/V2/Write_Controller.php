@@ -322,7 +322,7 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	private function validate_envelope( array $m, string $path_collection ) {
-		$allowed = array( 'mutationId', 'operation', 'collection', 'recordId', 'baseRevision', 'payload' );
+		$allowed = array( 'mutationId', 'operation', 'collection', 'recordId', 'baseRevision', 'payload', 'force' );
 		if ( array_diff( array_keys( $m ), $allowed ) ) {
 			return new WP_Error( 'woo_rxdb_sync_bad_envelope', 'Envelope contains unknown properties.', array( 'status' => 400 ) );
 		}
@@ -344,10 +344,16 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_bad_base_revision', 'baseRevision must be a string or null.', array( 'status' => 400 ) );
 		}
 		if ( 'delete' === $m['operation'] ) {
+			if ( array_key_exists( 'force', $m ) && ! is_bool( $m['force'] ) ) {
+				return new WP_Error( 'woo_rxdb_sync_bad_payload', 'force must be a boolean.', array( 'status' => 400 ) );
+			}
 			if ( array_key_exists( 'payload', $m ) ) {
 				return new WP_Error( 'woo_rxdb_sync_bad_payload', 'payload is forbidden for delete.', array( 'status' => 400 ) );
 			}
 		} else {
+			if ( array_key_exists( 'force', $m ) ) {
+				return new WP_Error( 'woo_rxdb_sync_bad_payload', 'force is only allowed for delete.', array( 'status' => 400 ) );
+			}
 			if ( ! isset( $m['payload'] ) || ! is_array( $m['payload'] ) || ( ! empty( $m['payload'] ) && array_values( $m['payload'] ) === $m['payload'] ) ) {
 				return new WP_Error( 'woo_rxdb_sync_bad_payload', 'payload must be an object.', array( 'status' => 400 ) );
 			}
@@ -917,7 +923,7 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		$request = new WP_REST_Request( 'DELETE', $route );
 		$request->set_param( 'id', $id );
-		$request->set_param( 'force', true );
+		$request->set_param( 'force', 'orders' === $collection ? ( $m['force'] ?? false ) : true );
 		$restore_stock = false;
 		if ( 'orders' === $collection ) {
 			$setting = SettingsService::instance()->restore_stock_on_delete_enabled();
@@ -934,8 +940,8 @@ class Write_Controller extends WP_REST_Controller {
 
 			// WC core does not restore stock when orders are deleted (v1 carried
 			// this same override; see woocommerce/woocommerce#26716). The v2
-			// contract always force-deletes, so restore BEFORE the permanent
-			// delete and roll back below if the forward fails.
+			// contract restores BEFORE the forwarded delete (trash or permanent)
+			// and rolls back below if the forward fails.
 			if ( $restore_stock ) {
 				wc_maybe_increase_stock_levels( $id );
 			}
