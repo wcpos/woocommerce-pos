@@ -127,15 +127,11 @@ final class Sync_Index {
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		// C5: UNTRASH must re-emit the order as PRESENT so a client that tombstoned it (F6) re-pulls it.
-		// Deliberately NOT hooking woocommerce_untrash_order — it fires BEFORE the restore
-		// (OrdersTableDataStore::untrash_order does_action THEN set_status/save), so the order still
-		// reads as trashed there; recording then would store a trash-state revision → a false 409 on
-		// the client's next edit, and would emit the order as present even if the restore save failed.
-		// HPOS untrash is already covered correctly: the restore's $order->save() runs update(), which
-		// fires woocommerce_update_order AFTER the status is restored (→ record_order_updated). Only
-		// the CPT/legacy path needs an explicit hook — untrashed_post fires AFTER wp_untrash_post
-		// restores the status (the integrity-digest hooks it for the same reason).
+		// The CPT/legacy path rides untrashed_post, which fires AFTER wp_untrash_post has restored the
+		// status (the integrity digest hooks it for the same reason). COT/HPOS orders never fire it —
+		// they are shop_order_placehold posts — so they need the COT twin hook below.
 		add_action( 'untrashed_post', array( $this, 'record_post_untrashed' ), 10, 1 );
+		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
 	}
 
 	public function record_order_created( int $order_id ): void {
@@ -167,6 +163,34 @@ final class Sync_Index {
 			return;
 		}
 		$this->record_order_untrashed( $post_id );
+	}
+
+	/**
+	 * Re-emit a restored COT/HPOS order once its restore has actually landed.
+	 *
+	 * Recording straight from `woocommerce_untrash_order` would be wrong twice over: the hook fires
+	 * BEFORE OrdersTableDataStore::untrash_order sets the status and saves, so the order still reads
+	 * as trashed (→ a trash-state revision, i.e. a false 409 on the client's next edit), and it would
+	 * announce the order as present even if the restore save then failed.
+	 *
+	 * Waiting for `woocommerce_update_order` does not work either: OrdersTableDataStore::update()
+	 * returns BEFORE firing it whenever 'trash' sits on either side of the status change (verified in
+	 * WooCommerce 10.4.3), which is exactly the restore. So arm a one-shot on the order's next object
+	 * save — the restore's own save — and record from there, with the status restored and persisted.
+	 *
+	 * The hook is fired only by the COT data store, so the CPT path cannot double-record.
+	 *
+	 * @param int $order_id Order being restored.
+	 */
+	public function record_cot_order_untrashed( int $order_id ): void {
+		$handler = function ( $order ) use ( $order_id, &$handler ): void {
+			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || (int) $order->get_id() !== $order_id ) {
+				return;
+			}
+			remove_action( 'woocommerce_after_order_object_save', $handler );
+			$this->record_order_untrashed( $order_id );
+		};
+		add_action( 'woocommerce_after_order_object_save', $handler );
 	}
 
 	public function record_order_change( int $order_id, string $origin, bool $deleted ): bool {

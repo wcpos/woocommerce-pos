@@ -63,6 +63,7 @@ class Test_Sync_Index_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		remove_action( 'woocommerce_before_trash_order', array( $this->sync_index, 'record_order_deleted' ), 10 );
 		remove_action( 'woocommerce_before_delete_order', array( $this->sync_index, 'record_order_deleted' ), 10 );
 		remove_action( 'untrashed_post', array( $this->sync_index, 'record_post_untrashed' ), 10 );
+		remove_action( 'woocommerce_untrash_order', array( $this->sync_index, 'record_cot_order_untrashed' ), 10 );
 
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
