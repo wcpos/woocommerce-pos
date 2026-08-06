@@ -8,33 +8,64 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
+use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WP_UnitTestCase;
+use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 
 /**
  * HPOS UUID ownership tests.
  *
  * @covers \WCPOS\WooCommercePOS\Sync\Pos_Uuid
  */
-class Test_Pos_Uuid_HPOS extends WP_UnitTestCase {
+class Test_Pos_Uuid_HPOS extends Sync_REST_Store_Test_Case {
 	use HPOSToggleTrait;
 
 	/**
 	 * Enable HPOS for each test in this class.
 	 */
 	public function setUp(): void {
+		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
+		$this->toggle_cot_feature_and_usage( true );
 	}
 
 	/**
 	 * Restore legacy order storage after each test.
 	 */
 	public function tearDown(): void {
+		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		parent::tearDown();
+		delete_option( Api::OPTION_ENABLED );
+	}
+
+	/**
+	 * The v2 orders proxy mints and serves a stable UUID for an HPOS order.
+	 */
+	public function test_orders_proxy_stamps_valid_uuid_on_hpos_order(): void {
+		$order = wc_create_order();
+		$this->assertSame( '', $order->get_meta( Pos_Uuid::META_KEY ) );
+
+		Proxy_Uuid_Stamper::register_proxy_stampers();
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'include', array( $order->get_id() ) );
+		try {
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+		} finally {
+			Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		}
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertCount( 1, $data );
+		$this->assertSame( $order->get_id(), (int) $data[0]['id'] );
+		$uuid = Pos_Uuid::read_valid_uuid_from_meta( $data[0]['meta_data'] ?? array() );
+		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
+		$this->assertSame( $uuid, wc_get_order( $order->get_id() )->get_meta( Pos_Uuid::META_KEY ) );
+		$this->assert_order_record_existence( $order->get_id(), true, true );
 	}
 
 	/**
