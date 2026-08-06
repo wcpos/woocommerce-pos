@@ -255,12 +255,19 @@ final class Changes_Controller extends WP_REST_Controller {
 		// A newer-head ETag can't hide rows — the 304 branch still requires the NEXT
 		// request's since to equal that request's freshly-read head.
 		$headers['ETag'] = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		// The lossy-pruning boundary, NOT MIN(sequence): compaction keeps each
+		// object's newest row, so the oldest surviving sequence says nothing
+		// about pruned tombstones above it. A cursor at or past the watermark
+		// has missed nothing; below it, the client must reconcile via the
+		// integrity surfaces. Zero = no lossy pruning has ever run.
+		$horizon = $this->change_log->prune_watermark();
 
 		$data                       = $this->envelope(
 			$collection,
 			array(
-				'since' => $checkpoint_since,
-				'head'  => $head_sequence,
+				'since'   => $checkpoint_since,
+				'head'    => $head_sequence,
+				'horizon' => $horizon,
 			),
 			$changes,
 			\count( $rows ) < $limit

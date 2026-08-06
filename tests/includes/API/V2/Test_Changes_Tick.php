@@ -95,6 +95,23 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Tick inherits the sequence-log retention horizon.
+	 */
+	public function test_tick_with_pruned_history_returns_sequence_log_watermark_horizon(): void {
+		// Arrange.
+		$log = new Change_Log();
+		$log->record( 'product', 11, 'update', 'test', false );
+		$log->advance_prune_watermark( 5 );
+
+		// Act.
+		$tick = $this->server->dispatch( $this->tick_request() )->get_data();
+		delete_option( Change_Log::PRUNE_WATERMARK_OPTION );
+
+		// Assert: the graduated tick lifts checkpoint to the top level.
+		$this->assertEquals( 5, $tick['checkpoint']['horizon'] );
+	}
+
+	/**
 	 * A matching ETag at the current head returns an empty 304.
 	 */
 	public function test_tick_matching_etag_at_head_returns_not_modified(): void {
