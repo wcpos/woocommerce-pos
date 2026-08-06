@@ -63,10 +63,16 @@ final class Change_Log {
 
 	public function install(): void {
 		global $wpdb;
+		$table_name    = $this->table_name();
+		$table_existed = Health::table_exists( $table_name );
 		if ( ! function_exists( 'dbDelta' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		}
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
+		dbDelta( $this->schema_sql( $table_name, $wpdb->get_charset_collate() ) );
+
+		if ( ! $table_existed && Health::table_exists( $table_name ) ) {
+			delete_option( self::PRUNE_WATERMARK_OPTION );
+		}
 	}
 
 	/**
@@ -483,8 +489,8 @@ final class Change_Log {
 	 *
 	 * Selects the batch first (sequence AND wall-clock checked per row — sequence
 	 * order is not guaranteed to match timestamp order under concurrent writers),
-	 * deletes by explicit sequence list, and reports the highest pruned sequence
-	 * so callers can advance the prune watermark.
+	 * advances the prune watermark, then deletes by explicit sequence list. The
+	 * destructive write is skipped unless the watermark is verified as persisted.
 	 *
 	 * @param int    $cutoff_sequence Inclusive upper sequence bound.
 	 * @param string $cutoff_gmt      UTC datetime; only rows created before it are pruned.
@@ -518,6 +524,11 @@ final class Change_Log {
 		if ( empty( $sequences ) ) {
 			return $none;
 		}
+		$watermark = max( $sequences );
+		$this->advance_prune_watermark( $watermark );
+		if ( $this->prune_watermark() < $watermark ) {
+			return $none;
+		}
 
 		$deleted = $wpdb->query(
 			'DELETE FROM ' . $this->table_name()
@@ -526,7 +537,7 @@ final class Change_Log {
 
 		return array(
 			'deleted'   => false === $deleted ? 0 : (int) $deleted,
-			'watermark' => max( $sequences ),
+			'watermark' => $watermark,
 		);
 	}
 
@@ -561,7 +572,7 @@ final class Change_Log {
 	/**
 	 * Advance the persisted prune watermark (never moves backwards).
 	 *
-	 * @param int $sequence Highest sequence removed by a completed prune batch.
+	 * @param int $sequence Highest sequence approved for lossy pruning.
 	 */
 	public function advance_prune_watermark( int $sequence ): void {
 		if ( $sequence > $this->prune_watermark() ) {

@@ -93,9 +93,6 @@ final class Change_Log_Purge {
 				}
 				$result = $this->change_log->prune_tombstones( $tombstone_cutoff, $tombstone_gmt, $limit );
 				$count  = $result['deleted'];
-				if ( $result['watermark'] > 0 ) {
-					$this->change_log->advance_prune_watermark( $result['watermark'] );
-				}
 				$deleted += $count;
 			} while ( $count === $limit && $deleted < self::MAX_DELETES_PER_RUN );
 		}

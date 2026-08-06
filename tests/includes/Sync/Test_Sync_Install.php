@@ -67,6 +67,27 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * Recreating a missing change log starts a new sequence generation.
+	 */
+	public function test_install_sync_schema_recreating_change_log_resets_prune_watermark(): void {
+		global $wpdb;
+
+		$activator  = new Activator();
+		$change_log = new Change_Log();
+		$activator->install_sync_schema();
+		$change_log->advance_prune_watermark( 40 );
+
+		$activator->install_sync_schema();
+		$this->assertSame( 40, $change_log->prune_watermark() );
+
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$activator->install_sync_schema();
+
+		$this->assertSame( 0, $change_log->head_sequence() );
+		$this->assertSame( 0, $change_log->prune_watermark() );
+	}
+
+	/**
 	 * A failed repair clears the current latch so a later install retries.
 	 */
 	public function test_failed_repair_clears_current_latch_and_next_install_repairs_schema(): void {

@@ -91,12 +91,20 @@ class Test_Change_Log_Purge extends Sync_Store_Test_Case {
 		$recent_tombstone = $this->log->head_sequence();
 		$this->log->record( 'product', 33, 'update', 'test', false );
 		$this->age_row( $aged_tombstone, 91 );
+		$block_watermark = static function (): int {
+			return 0;
+		};
+		add_filter( 'pre_update_option_' . Change_Log::PRUNE_WATERMARK_OPTION, $block_watermark );
 
 		// Act.
 		( new Change_Log_Purge( $this->log ) )->purge_expired();
+		$after_failed_watermark = array_column( $this->log->page( array(), 0, 20 )['rows'], 'sequence' );
+		remove_filter( 'pre_update_option_' . Change_Log::PRUNE_WATERMARK_OPTION, $block_watermark );
+		( new Change_Log_Purge( $this->log ) )->purge_expired();
 		$sequences = array_column( $this->log->page( array(), 0, 20 )['rows'], 'sequence' );
 
-		// Assert: the pruned interval is advertised through the watermark.
+		// Assert: deletion waits for a persisted horizon, then advertises the pruned interval.
+		$this->assertContains( $aged_tombstone, $after_failed_watermark );
 		$this->assertEquals( array( $recent_tombstone, $this->log->head_sequence() ), $sequences );
 		$this->assertEquals( $aged_tombstone, $this->log->prune_watermark() );
 	}
