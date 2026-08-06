@@ -171,7 +171,11 @@ class Test_Rest_Dispatch_Line_Reconciliation extends Sync_REST_Store_Test_Case {
 	 * @return string
 	 */
 	private function order_revision( int $order_id ): string {
-		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id ) );
+		// The held revision is computed over a WCPOS-lane document, and every
+		// WCPOS order surface serializes money at six decimals (PR #1466).
+		$request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id );
+		$request->set_param( 'dp', '6' );
+		$response = rest_do_request( $request );
 		$data     = Meta_Normalizer::normalize( $response->get_data() );
 		$data     = Order_Serializer::add_pos_links( $data, wc_get_order( $order_id ) );
 
