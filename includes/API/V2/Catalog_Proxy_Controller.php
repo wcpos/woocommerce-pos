@@ -27,7 +27,8 @@ use WP_REST_Server;
  * duck-punch for replication WITHOUT editing wc/v3 or the client).
  *
  * Routes forward to their wc/v3 counterparts via `rest_do_request`, preserving
- * query params except where WCPOS adapts them (such as multi-term customer search),
+ * query params except where WCPOS adapts them (such as multi-term customer search
+ * and the WCPOS-extended customer sorts),
  * plus the underlying status + pagination headers
  * (so the client's existing array-shaped parsing and `length < per_page`
  * pagination keep working), then exposes a single `woocommerce_pos_sync_proxy_response`
@@ -42,6 +43,26 @@ use WP_REST_Server;
  */
 class Catalog_Proxy_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
+
+	/**
+	 * Customer `orderby` values WCPOS implements but wc/v3 does not accept.
+	 *
+	 * `V1_Customers_Controller::get_collection_params()` widens the customer
+	 * orderby enum with exactly these five, and `wcpos_customer_query()` maps
+	 * each onto a `WP_User_Query` column or meta sort. wc/v3's own enum is
+	 * `id | include | name | registered_date`, so forwarding one of these
+	 * verbatim is a `rest_invalid_param` 400 — the proxy strips it off the
+	 * inner request and re-applies it through the V1 handler instead.
+	 *
+	 * Keep in sync with the enum in `V1_Customers_Controller`.
+	 */
+	private const WCPOS_CUSTOMER_ORDERBY = array(
+		'first_name',
+		'last_name',
+		'email',
+		'role',
+		'username',
+	);
 
 	/**
 	 * The `post__not_in` closure while a `/products` forward is in flight (null otherwise).
@@ -77,8 +98,9 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	 * client sees the same failure it would have seen hitting wc/v3 directly.
 	 */
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource ) {
-		$query_params           = $request->get_query_params();
-		$customer_search_filter = null;
+		$query_params          = $request->get_query_params();
+		$customer_query_params = array();
+		$customer_query_filter = null;
 		if ( 'customers' === $resource && ! isset( $query_params['role'] ) ) {
 			// The POS customer space is ALL WordPress users under the #1379
 			// ruling (1.9 parity: v1 enumerated all users). wc/v3 defaults to
@@ -95,16 +117,34 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			// across WooCommerce versions).
 			if ( '' !== $search ) {
 				unset( $query_params['search'] );
-
-				// Reuse V1's search filter without importing its handling of other query parameters.
-				$search_request = new WP_REST_Request();
-				$search_request->set_query_params( array( 'search' => $search ) );
-				$search_controller      = new V1_Customers_Controller();
-				$customer_search_filter = static function ( array $prepared_args ) use ( $search_controller, $search_request ): array {
-					return $search_controller->wcpos_customer_query( $prepared_args, $search_request );
-				};
-				add_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+				$customer_query_params['search'] = $search;
 			}
+		}
+		if ( 'customers' === $resource && isset( $query_params['orderby'] ) ) {
+			$orderby = (string) $query_params['orderby'];
+			// V1 parity (monorepo#1028): wc/v3's customer `orderby` enum is
+			// id/include/name/registered_date, so a WCPOS-extended sort is a
+			// rest_invalid_param 400 on the inner request — not a silent
+			// ignore. Strip it and re-apply through the same V1 handler the
+			// multi-term search uses. `order` (asc/desc) is wc/v3-native and
+			// forwards untouched; WP_User_Query honours it for every branch
+			// wcpos_customer_query sets.
+			if ( \in_array( $orderby, self::WCPOS_CUSTOMER_ORDERBY, true ) ) {
+				unset( $query_params['orderby'] );
+				$customer_query_params['orderby'] = $orderby;
+			}
+		}
+		if ( array() !== $customer_query_params ) {
+			// Reuse V1's customer query filter without importing its handling of
+			// other query parameters — the synthetic request carries only the
+			// params we deliberately delegated, so nothing else leaks in.
+			$customer_request = new WP_REST_Request();
+			$customer_request->set_query_params( $customer_query_params );
+			$customer_controller   = new V1_Customers_Controller();
+			$customer_query_filter = static function ( array $prepared_args ) use ( $customer_controller, $customer_request ): array {
+				return $customer_controller->wcpos_customer_query( $prepared_args, $customer_request );
+			};
+			add_filter( 'woocommerce_rest_customer_query', $customer_query_filter );
 		}
 
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
@@ -133,8 +173,8 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			}
 			$this->remove_pos_visibility_filter();
 			$this->remove_pos_order_filter();
-			if ( null !== $customer_search_filter ) {
-				remove_filter( 'woocommerce_rest_customer_query', $customer_search_filter );
+			if ( null !== $customer_query_filter ) {
+				remove_filter( 'woocommerce_rest_customer_query', $customer_query_filter );
 			}
 		}
 		if ( $response->is_error() ) {

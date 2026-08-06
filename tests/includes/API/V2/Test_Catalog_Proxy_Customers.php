@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WP_REST_Response;
 
 /**
  * V2 catalog proxy customer search tests.
@@ -153,5 +154,250 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			'reversed name'   => array( 'Smith Jane' ),
 			'billing company' => array( 'Acme Consulting' ),
 		);
+	}
+
+	/**
+	 * A WCPOS-extended sort is served, not rejected.
+	 *
+	 * The wc/v3 customer `orderby` enum is id|include|name|registered_date, so
+	 * `last_name` forwarded verbatim is a `rest_invalid_param` 400 — and
+	 * `last_name asc` is the customers grid's DEFAULT sort (monorepo#1028).
+	 * The proxy strips it off the inner request and re-applies it through
+	 * `V1_Customers_Controller::wcpos_customer_query`.
+	 */
+	public function test_extended_orderby_last_name_is_applied(): void {
+		$ids = $this->create_sortable_customers();
+
+		$response = $this->dispatch_customers(
+			array(
+				'include' => implode( ',', $ids ),
+				'orderby' => 'last_name',
+				'order'   => 'asc',
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame(
+			array( $ids['alpha'], $ids['mercer'], $ids['zeta'] ),
+			array_column( $data, 'id' )
+		);
+	}
+
+	/**
+	 * `order` is wc/v3-native and forwards untouched, so desc must invert the
+	 * re-applied sort rather than being silently dropped.
+	 */
+	public function test_extended_orderby_honours_descending_order(): void {
+		$ids = $this->create_sortable_customers();
+
+		$response = $this->dispatch_customers(
+			array(
+				'include' => implode( ',', $ids ),
+				'orderby' => 'last_name',
+				'order'   => 'desc',
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame(
+			array( $ids['zeta'], $ids['mercer'], $ids['alpha'] ),
+			array_column( $data, 'id' )
+		);
+	}
+
+	/**
+	 * Every value V1 widens the enum with is served rather than 400'd.
+	 *
+	 * Acceptance only — `role` sorts on the serialized `wp_capabilities` meta,
+	 * so its ordering is not meaningful (V1's own `test_orderby_role` is
+	 * skipped for the same reason). It is still re-applied rather than
+	 * rejected, so the proxy stays at V1 parity. The fields whose ordering IS
+	 * meaningful are pinned by `test_extended_orderby_orders_results`.
+	 *
+	 * @dataProvider extended_orderby_provider
+	 *
+	 * @param string $orderby WCPOS-extended orderby value.
+	 */
+	public function test_extended_orderby_values_are_accepted( string $orderby ): void {
+		$ids = $this->create_sortable_customers();
+
+		$response = $this->dispatch_customers(
+			array(
+				'include' => implode( ',', $ids ),
+				'orderby' => $orderby,
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+	}
+
+	/**
+	 * WCPOS-extended customer orderby values.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function extended_orderby_provider(): array {
+		return array(
+			'first_name' => array( 'first_name' ),
+			'last_name'  => array( 'last_name' ),
+			'email'      => array( 'email' ),
+			'role'       => array( 'role' ),
+			'username'   => array( 'username' ),
+		);
+	}
+
+	/**
+	 * Each re-applied sort orders on its own field.
+	 *
+	 * The fixture's id order matches none of these, and `first_name` order is
+	 * deliberately the reverse-ish of `last_name` order, so a sort landing on
+	 * the wrong column cannot pass by accident.
+	 *
+	 * @dataProvider extended_orderby_ordering_provider
+	 *
+	 * @param string        $orderby       WCPOS-extended orderby value.
+	 * @param array<string> $expected_keys Fixture keys in expected ascending order.
+	 */
+	public function test_extended_orderby_orders_results( string $orderby, array $expected_keys ): void {
+		$ids = $this->create_sortable_customers();
+
+		$response = $this->dispatch_customers(
+			array(
+				'include' => implode( ',', $ids ),
+				'orderby' => $orderby,
+				'order'   => 'asc',
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame(
+			array_map(
+				static function ( string $key ) use ( $ids ): int {
+					return $ids[ $key ];
+				},
+				$expected_keys
+			),
+			array_column( $data, 'id' )
+		);
+	}
+
+	/**
+	 * Expected ascending order per WCPOS-extended sort field.
+	 *
+	 * @return array<string, array{string, array<string>}>
+	 */
+	public function extended_orderby_ordering_provider(): array {
+		return array(
+			// Wendy < Xavier < Yolanda.
+			'first_name' => array( 'first_name', array( 'mercer', 'alpha', 'zeta' ) ),
+			// Alpha < Mercer < Zeta.
+			'last_name'  => array( 'last_name', array( 'alpha', 'mercer', 'zeta' ) ),
+			// alpha.sortable@ < mercer.sortable@ < zeta.sortable@.
+			'email'      => array( 'email', array( 'alpha', 'mercer', 'zeta' ) ),
+			// user_login: alpha.sortable < mercer.sortable < zeta.sortable.
+			'username'   => array( 'username', array( 'alpha', 'mercer', 'zeta' ) ),
+		);
+	}
+
+	/**
+	 * A wc/v3-native orderby is left alone and served by wc/v3 itself.
+	 */
+	public function test_native_orderby_passes_through(): void {
+		$ids      = $this->create_sortable_customers();
+		$expected = array_values( $ids );
+		rsort( $expected );
+
+		$response = $this->dispatch_customers(
+			array(
+				'include' => implode( ',', $ids ),
+				'orderby' => 'id',
+				'order'   => 'desc',
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame( $expected, array_column( $data, 'id' ) );
+	}
+
+	/**
+	 * The proxy re-applies a known list, it does not open the enum: anything
+	 * outside both wc/v3's enum and V1's additions is still a 400.
+	 */
+	public function test_unknown_orderby_is_still_rejected(): void {
+		$response = $this->dispatch_customers( array( 'orderby' => 'date_modified_gmt' ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Search and an extended sort share one `woocommerce_rest_customer_query`
+	 * pass, so combining them must not drop either.
+	 */
+	public function test_search_and_extended_orderby_compose(): void {
+		$ids = $this->create_sortable_customers();
+
+		$response = $this->dispatch_customers(
+			array(
+				'include' => implode( ',', $ids ),
+				'search'  => 'Sortable',
+				'orderby' => 'last_name',
+				'order'   => 'asc',
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame(
+			array( $ids['alpha'], $ids['mercer'], $ids['zeta'] ),
+			array_column( $data, 'id' )
+		);
+	}
+
+	/**
+	 * Three customers whose id order deliberately differs from every sortable
+	 * field, so an assertion on order cannot pass by accident.
+	 *
+	 * @return array<string, int> Keyed by last name, in creation (id) order.
+	 */
+	private function create_sortable_customers(): array {
+		$fixtures = array(
+			'zeta'   => array( 'Yolanda', 'Zeta', 'zeta.sortable' ),
+			'alpha'  => array( 'Xavier', 'Alpha', 'alpha.sortable' ),
+			'mercer' => array( 'Wendy', 'Mercer', 'mercer.sortable' ),
+		);
+
+		$ids = array();
+		foreach ( $fixtures as $key => $fixture ) {
+			list( $first_name, $last_name, $slug ) = $fixture;
+			$ids[ $key ]                           = $this->factory->user->create(
+				array(
+					'role'         => 'customer',
+					'user_login'   => $slug,
+					'user_email'   => $slug . '@example.com',
+					'display_name' => $first_name . ' ' . $last_name . ' Sortable',
+					'first_name'   => $first_name,
+					'last_name'    => $last_name,
+				)
+			);
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Dispatch a v2 customers list request with the given query params.
+	 *
+	 * @param array<string, string> $query_params Query params.
+	 */
+	private function dispatch_customers( array $query_params ): WP_REST_Response {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$request->set_query_params( $query_params );
+
+		return $this->server->dispatch( $request );
 	}
 }
