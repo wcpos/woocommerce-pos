@@ -620,6 +620,11 @@ class Write_Controller extends WP_REST_Controller {
 		$meta = array( '_pos_user' => (string) ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 ) );
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
+			// Immutable attribution anchor (2026-08-07 ruling): `_pos_user` may be
+			// reassigned by the park/reopen flow, so the CREATOR is recorded once
+			// here and never rewritten — reports distinguish "rang up" from
+			// "completed", and a deleted order note can't erase the original.
+			$meta['_pos_user_created'] = $meta['_pos_user'];
 		}
 		$meta_data = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		// Till values persist directly, bypassing wc/v3's own validation — the service

@@ -1126,6 +1126,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( $is_creating_order || ! $order->get_meta( '_pos_user' ) ) {
 			$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
 		}
+		// Immutable attribution anchor: stamped once with the creator, never
+		// rewritten (v2's reassignment flow only ever touches `_pos_user`).
+		if ( ! $order->get_meta( '_pos_user_created' ) ) {
+			$order->update_meta_data( '_pos_user_created', (string) get_current_user_id() );
+		}
 	}
 
 	/**

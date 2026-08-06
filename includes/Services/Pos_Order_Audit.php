@@ -23,7 +23,7 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const SERVER_META_KEYS = array( '_pos_user', '_woocommerce_pos_version' );
+	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_woocommerce_pos_version' );
 
 	/**
 	 * Audit keys sourced from the till at the sale (client-supplied, validated,
