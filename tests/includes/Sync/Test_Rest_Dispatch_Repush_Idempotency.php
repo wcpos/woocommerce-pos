@@ -197,6 +197,23 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Count one variation attribute key in a serialized order line.
+	 *
+	 * @param array  $document Serialized order document.
+	 * @param string $key      Item meta key.
+	 *
+	 * @return int
+	 */
+	private function line_item_meta_count( array $document, string $key ): int {
+		return count(
+			array_filter(
+				$document['line_items'][0]['meta_data'] ?? array(),
+				static fn( array $meta ): bool => $key === ( $meta['key'] ?? null )
+			)
+		);
+	}
+
+	/**
 	 * The acknowledgement can be re-pushed twice without changing lines or money bytes.
 	 *
 	 * @return void
@@ -217,6 +234,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$this->assertInstanceOf( WC_Order::class, $order );
 		$this->assert_persisted_counts( $order, 0 );
 	}
+
 
 	/**
 	 * A couponed acknowledgement can be re-pushed twice without reapplying or dropping its discount.

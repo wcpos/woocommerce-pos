@@ -73,6 +73,93 @@ trait Catalog_Proxy_Order_Search_Tests {
 	}
 
 	/**
+	 * Search is intersected with include and reduced by exclude, matching V1.
+	 */
+	public function test_order_search_combines_with_include_and_exclude(): void {
+		$first_match = OrderHelper::create_order();
+		$first_match->set_billing_first_name( 'SetTheoryProbe' );
+		$this->scrub_numeric_address_fields( $first_match );
+		$first_match->save();
+
+		$second_match = OrderHelper::create_order();
+		$second_match->set_billing_first_name( 'SetTheoryProbe' );
+		$this->scrub_numeric_address_fields( $second_match );
+		$second_match->save();
+
+		$outside_search = OrderHelper::create_order();
+		$outside_search->set_billing_first_name( 'OutsideSearchProbe' );
+		$this->scrub_numeric_address_fields( $outside_search );
+		$outside_search->save();
+
+		$this->assertEquals(
+			array( $second_match->get_id() ),
+			$this->order_ids_for_query(
+				array(
+					'search'  => 'SetTheoryProbe',
+					'include' => array( $second_match->get_id(), $outside_search->get_id() ),
+				)
+			)
+		);
+		$this->assertSame(
+			array(),
+			$this->order_ids_for_query(
+				array(
+					'search'  => 'SetTheoryProbe',
+					'include' => array( $outside_search->get_id() ),
+				)
+			)
+		);
+		$this->assertEquals(
+			array( $second_match->get_id() ),
+			$this->order_ids_for_query(
+				array(
+					'search'  => 'SetTheoryProbe',
+					'exclude' => array( $first_match->get_id() ),
+				)
+			)
+		);
+	}
+
+	/**
+	 * The cashier query returns only orders carrying that cashier's audit meta.
+	 */
+	public function test_pos_cashier_filter_returns_only_that_cashiers_orders(): void {
+		$cashier_id       = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$other_cashier_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+
+		$matching_order = OrderHelper::create_order();
+		$matching_order->update_meta_data( '_pos_user', (string) $cashier_id );
+		$matching_order->save();
+
+		$other_order = OrderHelper::create_order();
+		$other_order->update_meta_data( '_pos_user', (string) $other_cashier_id );
+		$other_order->save();
+
+		$this->assertEquals(
+			array( $matching_order->get_id() ),
+			$this->order_ids_for_query( array( 'pos_cashier' => $cashier_id ) )
+		);
+	}
+
+	/**
+	 * The store query returns only orders carrying that store's audit meta.
+	 */
+	public function test_pos_store_filter_returns_only_that_stores_orders(): void {
+		$matching_order = OrderHelper::create_order();
+		$matching_order->update_meta_data( '_pos_store', '314159' );
+		$matching_order->save();
+
+		$other_order = OrderHelper::create_order();
+		$other_order->update_meta_data( '_pos_store', '271828' );
+		$other_order->save();
+
+		$this->assertEquals(
+			array( $matching_order->get_id() ),
+			$this->order_ids_for_query( array( 'pos_store' => 314159 ) )
+		);
+	}
+
+	/**
 	 * Array-valued creation channels are preserved by the proxy filter.
 	 */
 	public function test_created_via_array_returns_matching_orders(): void {
@@ -106,16 +193,28 @@ trait Catalog_Proxy_Order_Search_Tests {
 	 * @param string $search Search value.
 	 */
 	private function assert_order_search_finds_target( string $search ): void {
+		$this->assertEquals(
+			array( $this->target_order->get_id() ),
+			$this->order_ids_for_query( array( 'search' => $search ) )
+		);
+	}
+
+	/**
+	 * Dispatch a real V2 order query and return its order IDs.
+	 *
+	 * @param array $query Query parameters.
+	 *
+	 * @return int[]
+	 */
+	private function order_ids_for_query( array $query ): array {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
-		$request->set_query_params( array( 'search' => $search ) );
+		$request->set_query_params( $query );
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals(
-			array( $this->target_order->get_id() ),
-			wp_list_pluck( $data, 'id' )
-		);
+
+		return array_map( 'intval', wp_list_pluck( $data, 'id' ) );
 	}
 }

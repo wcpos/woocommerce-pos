@@ -46,9 +46,10 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	/**
 	 * The `post__not_in` closure while a `/products` forward is in flight (null otherwise).
 	 */
-	private $pos_visibility_filter = null;
-	private $pos_order_filter      = null;
-	private $pos_order_filter_hook = null;
+	private $pos_visibility_filter  = null;
+	private $pos_order_filter       = null;
+	private $pos_order_filter_hook  = null;
+	private $pos_order_where_filter = null;
 
 	public function register_routes(): void {
 		foreach ( self::resources() as $route => $meta ) {
@@ -240,6 +241,18 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				unset( $query_params[ $key ] );
 			}
 		}
+		// wc/v3 resolves `search` to a matched-id set that CLOBBERS include/exclude
+		// (v1 solved this with raw id IN/NOT IN clauses — port the same). Only take
+		// ownership when search is present; plain targeted pulls keep wc/v3's
+		// native include semantics (including its ordering).
+		if ( isset( $query_params['search'] ) && '' !== trim( (string) $query_params['search'] ) ) {
+			foreach ( array( 'include', 'exclude' ) as $key ) {
+				if ( isset( $query_params[ $key ] ) && array() !== (array) $query_params[ $key ] ) {
+					$filters[ $key ] = array_map( 'absint', (array) $query_params[ $key ] );
+					unset( $query_params[ $key ] );
+				}
+			}
+		}
 		if ( array() === $filters ) {
 			return;
 		}
@@ -267,6 +280,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$operations} WHERE created_via IN ({$placeholders}))", ...$created_via );
 					}
 				}
+				if ( isset( $filters['include'] ) ) {
+					$clauses['where'] .= " AND {$orders}.id IN (" . implode( ',', array_map( 'intval', $filters['include'] ) ) . ')';
+				}
+				if ( isset( $filters['exclude'] ) ) {
+					$clauses['where'] .= " AND {$orders}.id NOT IN (" . implode( ',', array_map( 'intval', $filters['exclude'] ) ) . ')';
+				}
 				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
 				return $clauses;
@@ -293,6 +312,23 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			return $args;
 		};
 		add_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
+		if ( isset( $filters['include'] ) || isset( $filters['exclude'] ) ) {
+			$this->pos_order_where_filter = static function ( string $where, $query ) use ( $filters ): string {
+				global $wpdb;
+				if ( ! isset( $query->query_vars['post_type'] ) || 'shop_order' !== $query->query_vars['post_type'] ) {
+					return $where;
+				}
+				if ( isset( $filters['include'] ) ) {
+					$where .= " AND {$wpdb->posts}.ID IN (" . implode( ',', array_map( 'intval', $filters['include'] ) ) . ')';
+				}
+				if ( isset( $filters['exclude'] ) ) {
+					$where .= " AND {$wpdb->posts}.ID NOT IN (" . implode( ',', array_map( 'intval', $filters['exclude'] ) ) . ')';
+				}
+
+				return $where;
+			};
+			add_filter( 'posts_where', $this->pos_order_where_filter, 10, 2 );
+		}
 	}
 
 	private function remove_pos_order_filter(): void {
@@ -300,6 +336,10 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			remove_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
 			$this->pos_order_filter      = null;
 			$this->pos_order_filter_hook = null;
+		}
+		if ( null !== $this->pos_order_where_filter ) {
+			remove_filter( 'posts_where', $this->pos_order_where_filter, 10 );
+			$this->pos_order_where_filter = null;
 		}
 	}
 }
