@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -94,5 +95,60 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertContains( (int) $match['term_id'], $ids );
 		$this->assertNotContains( (int) $other['term_id'], $ids );
+	}
+
+	/**
+	 * A duplicate term UUID is re-keyed before either category reaches the client.
+	 */
+	public function test_category_uuid_collision_rekeys_one_term_and_serves_distinct_uuids(): void {
+		$shared = wp_generate_uuid4();
+		$first  = wp_insert_term( 'V2 UUID Collision Category One', 'product_cat' );
+		$second = wp_insert_term( 'V2 UUID Collision Category Two', 'product_cat' );
+		$ids    = array( (int) $first['term_id'], (int) $second['term_id'] );
+		add_term_meta( $ids[0], Pos_Uuid::META_KEY, $shared, true );
+		add_term_meta( $ids[1], Pos_Uuid::META_KEY, $shared, true );
+
+		$rows   = array_column( $this->read( array( 'include' => $ids ) ), null, 'id' );
+		$served = array();
+		foreach ( $ids as $id ) {
+			$meta          = array_column( $rows[ $id ]['meta_data'], 'value', 'key' );
+			$served[ $id ] = $meta[ Pos_Uuid::META_KEY ];
+			$this->assertTrue( Uuid::isValid( $served[ $id ] ) );
+		}
+		$stored = array(
+			$ids[0] => get_term_meta( $ids[0], Pos_Uuid::META_KEY, true ),
+			$ids[1] => get_term_meta( $ids[1], Pos_Uuid::META_KEY, true ),
+		);
+
+		$this->assertCount( 2, array_unique( $served ) );
+		$this->assertCount( 2, array_unique( $stored ) );
+		$this->assertContains( $shared, $stored );
+		$this->assertSame( $stored, $served );
+	}
+
+	/**
+	 * Category rows expose the complete v2 field set.
+	 */
+	public function test_category_row_has_full_v2_field_set(): void {
+		$category = wp_insert_term( 'V2 Category Field Set', 'product_cat' );
+
+		$rows = $this->read( array( 'include' => array( (int) $category['term_id'] ) ) );
+
+		$this->assertEqualsCanonicalizing(
+			array(
+				'id',
+				'name',
+				'slug',
+				'parent',
+				'description',
+				'display',
+				'image',
+				'menu_order',
+				'count',
+				'meta_data',
+				'_links',
+			),
+			array_keys( $rows[0] )
+		);
 	}
 }
