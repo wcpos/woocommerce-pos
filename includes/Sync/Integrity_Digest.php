@@ -152,6 +152,34 @@ final class Integrity_Digest {
 		add_action( 'woocommerce_update_order', array( $this, 'record_order_saved' ), 10, 1 );
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
+		// Untrash recreation: `untrashed_post` (handled by record_post_untrashed)
+		// never fires for COT orders — without the HPOS twin hook a restored
+		// order's digest is never recreated and integrity scans treat it as
+		// deleted forever.
+		add_action( 'woocommerce_untrash_order', array( $this, 'record_order_untrashed' ), 10, 1 );
+	}
+
+	/**
+	 * Recreate a COT order's digest once its restore completes.
+	 *
+	 * `woocommerce_untrash_order` fires BEFORE the data store restores the
+	 * status, and the restore's internal save fires no observer hook we bind
+	 * (verified: `woocommerce_update_order` does not fire there) — so an
+	 * immediate upsert would read a still-trashed row and write nothing. Arm a
+	 * one-shot on the order's next object save (the restore's own save) and
+	 * upsert then.
+	 *
+	 * @param int $order_id Order being restored.
+	 */
+	public function record_order_untrashed( int $order_id ): void {
+		$handler = function ( $order ) use ( $order_id, &$handler ): void {
+			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || (int) $order->get_id() !== $order_id ) {
+				return;
+			}
+			remove_action( 'woocommerce_after_order_object_save', $handler );
+			$this->record_order_saved( $order_id );
+		};
+		add_action( 'woocommerce_after_order_object_save', $handler );
 	}
 
 	/**
