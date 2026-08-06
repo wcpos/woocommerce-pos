@@ -7,6 +7,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\Traits;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use Ramsey\Uuid\Uuid;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
@@ -113,7 +114,27 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		FunctionsMockerHack::get_hack_instance()->reset();
 		parent::tearDown();
+	}
+
+	/**
+	 * Simulate a multisite install inside plugin code (CodeHacker only rewrites
+	 * calls in includes/, so test code still sees the real single-site functions).
+	 *
+	 * @param int $blog_id Blog id reported to plugin code.
+	 */
+	private function mock_multisite( int $blog_id = 2 ): void {
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'is_multisite'        => function () {
+					return true;
+				},
+				'get_current_blog_id' => function () use ( $blog_id ) {
+					return $blog_id;
+				},
+			)
+		);
 	}
 
 	/**
@@ -252,6 +273,205 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 		$this->assertEquals( $existing_uuid, $uuid, 'Existing UUID should be preserved' );
 
 		wp_delete_user( $user->ID );
+	}
+
+	/**
+	 * Test a legacy per-blog cashier uuid is adopted network-wide by ANY caller of
+	 * maybe_add_user_uuid — not just the cashier service — so the adopted identity
+	 * is the same whichever endpoint reads the user first.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_multisite_adopts_legacy_per_blog_uuid(): void {
+		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$legacy_uuid = Uuid::uuid4()->toString();
+		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$this->handler->test_maybe_add_user_uuid( $user );
+
+		$this->assertEquals( $legacy_uuid, get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ) );
+		$this->assertEquals(
+			$legacy_uuid,
+			get_user_meta( $user->ID, '_woocommerce_pos_uuid_2', true ),
+			'Legacy row should be left in place'
+		);
+
+		wp_delete_user( $user->ID );
+	}
+
+	/**
+	 * Test multisite user UUID coordination uses one network-global cache key.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Init::__construct
+	 */
+	public function test_user_uuid_lock_group_is_network_global(): void {
+		$original_blog_id = get_current_blog_id();
+		$lock_key         = 'test_user_uuid_lock_' . wp_generate_uuid4();
+		$lock_group       = 'wc_pos_user_uuid_locks';
+		$this->mock_multisite( 2 );
+
+		wp_cache_switch_to_blog( 1 );
+		$acquired_on_first_blog = wp_cache_add( $lock_key, true, $lock_group, 10 );
+		wp_cache_switch_to_blog( 2 );
+		$acquired_on_second_blog = wp_cache_add( $lock_key, true, $lock_group, 10 );
+		wp_cache_delete( $lock_key, $lock_group );
+		wp_cache_switch_to_blog( 1 );
+		wp_cache_delete( $lock_key, $lock_group );
+		wp_cache_switch_to_blog( $original_blog_id );
+
+		$this->assertTrue( $acquired_on_first_blog );
+		$this->assertFalse( $acquired_on_second_blog, 'The same user lock must collide across blog cache prefixes' );
+	}
+
+	/**
+	 * Test adoption replaces duplicate invalid rows with exactly one legacy UUID.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_multisite_adoption_collapses_duplicate_invalid_rows(): void {
+		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$legacy_uuid = Uuid::uuid4()->toString();
+		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid-first' );
+		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid-second' );
+		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$this->handler->test_maybe_add_user_uuid( $user );
+
+		$this->assertSame(
+			array( $legacy_uuid ),
+			get_user_meta( $user->ID, '_woocommerce_pos_uuid', false )
+		);
+
+		wp_delete_user( $user->ID );
+	}
+
+	/**
+	 * Test adoption preserves a network UUID inserted during legacy cleanup.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_multisite_adoption_preserves_concurrent_network_uuid(): void {
+		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$legacy_uuid = Uuid::uuid4()->toString();
+		$winner_uuid = Uuid::uuid4()->toString();
+		$interleaved = false;
+		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid' );
+		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'delete_user_meta' => function ( $user_id, $key, $value = '' ) use ( $user, $winner_uuid, &$interleaved ) {
+					$deleted = \delete_user_meta( $user_id, $key, $value );
+					if ( $user->ID === $user_id && '_woocommerce_pos_uuid' === $key && '' === $value && ! $interleaved ) {
+						$interleaved = true;
+						\add_user_meta( $user_id, $key, $winner_uuid, true );
+					}
+
+					return $deleted;
+				},
+			)
+		);
+
+		$this->handler->test_maybe_add_user_uuid( $user );
+
+		$this->assertSame(
+			array( $winner_uuid ),
+			get_user_meta( $user->ID, '_woocommerce_pos_uuid', false )
+		);
+
+		wp_delete_user( $user->ID );
+	}
+
+	/**
+	 * Test a stale empty read cannot overwrite a concurrently inserted UUID.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_does_not_overwrite_concurrent_insert(): void {
+		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$winner_uuid = Uuid::uuid4()->toString();
+		$read_stale  = false;
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'get_user_meta' => function ( $user_id, $key, $single ) use ( $user, $winner_uuid, &$read_stale ) {
+					if ( $user->ID === $user_id && '_woocommerce_pos_uuid' === $key && ! $single && ! $read_stale ) {
+						$read_stale = true;
+						\add_user_meta( $user_id, $key, $winner_uuid, true );
+
+						return array();
+					}
+
+					return \get_user_meta( $user_id, $key, $single );
+				},
+			)
+		);
+
+		$this->handler->test_maybe_add_user_uuid( $user );
+
+		$this->assertSame( $winner_uuid, get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ) );
+
+		wp_delete_user( $user->ID );
+	}
+
+	/**
+	 * Test a legacy per-blog uuid already owned by ANOTHER user's network identity
+	 * is never adopted — the adopting user is minted a fresh uuid and the rightful
+	 * owner's identity is untouched.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_multisite_skips_legacy_uuid_owned_by_other_user(): void {
+		$owner  = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$victim = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$uuid   = Uuid::uuid4()->toString();
+		update_user_meta( $owner->ID, '_woocommerce_pos_uuid', $uuid );
+		update_user_meta( $victim->ID, '_woocommerce_pos_uuid_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$this->handler->test_maybe_add_user_uuid( $victim );
+
+		$victim_uuid = get_user_meta( $victim->ID, '_woocommerce_pos_uuid', true );
+		$this->assertTrue( Uuid::isValid( $victim_uuid ), 'Adopting user should get a fresh valid uuid' );
+		$this->assertNotEquals( $uuid, $victim_uuid, 'Owned uuid must not be duplicated' );
+		$this->assertEquals(
+			$uuid,
+			get_user_meta( $owner->ID, '_woocommerce_pos_uuid', true ),
+			'Rightful owner keeps their identity'
+		);
+
+		wp_delete_user( $owner->ID );
+		wp_delete_user( $victim->ID );
+	}
+
+	/**
+	 * Test a legacy per-blog uuid already owned by another user's legacy key
+	 * is never adopted as a network identity.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 */
+	public function test_maybe_add_user_uuid_multisite_skips_legacy_uuid_owned_by_other_user_legacy_key(): void {
+		$owner  = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$victim = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$uuid   = Uuid::uuid4()->toString();
+		update_user_meta( $owner->ID, '_woocommerce_pos_uuid_2', $uuid );
+		update_user_meta( $victim->ID, '_woocommerce_pos_uuid_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$this->handler->test_maybe_add_user_uuid( $victim );
+
+		$victim_uuid = get_user_meta( $victim->ID, '_woocommerce_pos_uuid', true );
+		$this->assertTrue( Uuid::isValid( $victim_uuid ), 'Adopting user should get a fresh valid uuid' );
+		$this->assertNotEquals( $uuid, $victim_uuid, 'Legacy-owned uuid must not be duplicated' );
+		$this->assertEquals(
+			$uuid,
+			get_user_meta( $owner->ID, '_woocommerce_pos_uuid_2', true ),
+			'Legacy owner keeps their identity'
+		);
+
+		wp_delete_user( $owner->ID );
+		wp_delete_user( $victim->ID );
 	}
 
 	/**

@@ -8,11 +8,15 @@
  * - Cashier data retrieval
  * - Store access management
  * - Permission validation
+ *
+ * @package WCPOS\WooCommercePOS\Tests\Services
  */
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use WC_Unit_Test_Case;
+use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
 use WCPOS\WooCommercePOS\Services\Cashier;
 use WP_User;
 
@@ -45,7 +49,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		parent::setUp();
 		$this->service = Cashier::instance();
 
-		// Create a test user with shop_manager role (has POS permissions)
+		// Create a test user with shop_manager role (has POS permissions).
 		$user_id    = $this->factory->user->create(
 			array(
 				'role' => 'shop_manager',
@@ -58,10 +62,53 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		FunctionsMockerHack::get_hack_instance()->reset();
 		if ( $this->user ) {
 			wp_delete_user( $this->user->ID );
 		}
 		parent::tearDown();
+	}
+
+	/**
+	 * Simulate a multisite install inside plugin code (CodeHacker only rewrites
+	 * calls in includes/, so test code still sees the real single-site functions).
+	 *
+	 * @param int $blog_id Blog id reported to plugin code.
+	 */
+	private function mock_multisite( int $blog_id = 2 ): void {
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'is_multisite'        => function () {
+					return true;
+				},
+				'get_current_blog_id' => function () use ( $blog_id ) {
+					return $blog_id;
+				},
+			)
+		);
+	}
+
+	/**
+	 * Build an object exposing the Uuid_Handler user-uuid path, as used by the
+	 * /customers endpoint (Customers_Controller::wcpos_customer_response).
+	 *
+	 * @return object Object with a public ensure( WP_User $user ): string method.
+	 */
+	private function customers_uuid_handler() {
+		return new class() {
+			use Uuid_Handler;
+
+			/**
+			 * Serve the user uuid exactly as the /customers endpoint does.
+			 *
+			 * @param WP_User $user User object.
+			 */
+			public function ensure( WP_User $user ): string {
+				$this->maybe_add_user_uuid( $user );
+
+				return (string) get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+			}
+		};
 	}
 
 	/**
@@ -103,7 +150,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	public function test_get_cashier_uuid_persists_to_user_meta(): void {
 		$uuid = $this->service->get_cashier_uuid( $this->user );
 
-		// Check it was stored in user meta
+		// Check it was stored in user meta.
 		$stored_uuid = get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true );
 
 		$this->assertEquals( $uuid, $stored_uuid );
@@ -126,6 +173,128 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		$this->assertNotEquals( $uuid1, $uuid2 );
 
 		wp_delete_user( $user2_id );
+	}
+
+	/**
+	 * Test the cashier uuid matches the identity served by the /customers
+	 * endpoint (Uuid_Handler::maybe_add_user_uuid) on multisite.
+	 *
+	 * The POS client keys its RxDB documents on this uuid, so the same WP_User
+	 * must present ONE identity regardless of which endpoint reads them.
+	 */
+	public function test_get_cashier_uuid_multisite_matches_customers_endpoint_uuid(): void {
+		$this->mock_multisite();
+
+		$cashier_uuid  = $this->service->get_cashier_uuid( $this->user );
+		$customer_uuid = $this->customers_uuid_handler()->ensure( $this->user );
+
+		$this->assertSame( $customer_uuid, $cashier_uuid );
+	}
+
+	/**
+	 * Test the cashier uuid is stored under the plain network-wide meta key on
+	 * multisite, not a per-blog key.
+	 */
+	public function test_get_cashier_uuid_multisite_stores_network_wide_key(): void {
+		$this->mock_multisite( 2 );
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
+	 * Test a legacy per-blog uuid (minted by the old multisite branch) is adopted
+	 * as the network identity, so existing multisite cashiers keep their uuid.
+	 */
+	public function test_get_cashier_uuid_multisite_adopts_legacy_per_blog_uuid(): void {
+		$legacy_uuid = wp_generate_uuid4();
+		update_user_meta( $this->user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $legacy_uuid, $uuid );
+		$this->assertSame( $legacy_uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
+	 * Test an existing network-wide uuid wins over a legacy per-blog uuid, because
+	 * the network uuid is what /customers has already served to clients.
+	 */
+	public function test_get_cashier_uuid_multisite_prefers_network_uuid_over_legacy(): void {
+		$network_uuid = wp_generate_uuid4();
+		$legacy_uuid  = wp_generate_uuid4();
+		update_user_meta( $this->user->ID, '_woocommerce_pos_uuid', $network_uuid );
+		update_user_meta( $this->user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
+		$this->mock_multisite( 2 );
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $network_uuid, $uuid );
+	}
+
+	/**
+	 * Test a legacy per-blog uuid already owned by ANOTHER user's network identity
+	 * is not served as a duplicate RxDB key — a fresh uuid is minted instead.
+	 */
+	public function test_get_cashier_uuid_multisite_rejects_legacy_uuid_owned_by_other_user(): void {
+		$owner_id = $this->factory->user->create( array( 'role' => 'shop_manager' ) );
+		$uuid     = wp_generate_uuid4();
+		update_user_meta( $owner_id, '_woocommerce_pos_uuid', $uuid );
+		update_user_meta( $this->user->ID, '_woocommerce_pos_uuid_2', $uuid );
+		$this->mock_multisite( 2 );
+
+		$victim_uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertNotEmpty( $victim_uuid );
+		$this->assertNotSame( $uuid, $victim_uuid );
+
+		wp_delete_user( $owner_id );
+	}
+
+	/**
+	 * Test an invalid stored value is replaced with a freshly minted valid uuid
+	 * (the authority validates uuid shape; the old code served any truthy meta).
+	 */
+	public function test_get_cashier_uuid_replaces_invalid_stored_uuid(): void {
+		update_user_meta( $this->user->ID, '_woocommerce_pos_uuid', 'not-a-valid-uuid' );
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertNotEquals( 'not-a-valid-uuid', $uuid );
+		$this->assertMatchesRegularExpression(
+			'/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
+			$uuid
+		);
+		$this->assertSame( $uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
+	}
+
+	/**
+	 * Test the lock-timeout fallback returns a concurrently persisted winner.
+	 */
+	public function test_get_cashier_uuid_lock_timeout_preserves_concurrent_insert(): void {
+		$winner_uuid   = wp_generate_uuid4();
+		$fallback_uuid = wp_generate_uuid4();
+		FunctionsMockerHack::add_function_mocks(
+			array(
+				'usleep'           => function () {
+				},
+				'wp_cache_add'      => function () {
+					return false;
+				},
+				'wp_generate_uuid4' => function () use ( $winner_uuid, $fallback_uuid ) {
+					\add_user_meta( $this->user->ID, '_woocommerce_pos_uuid', $winner_uuid, true );
+
+					return $fallback_uuid;
+				},
+			)
+		);
+
+		$uuid = $this->service->get_cashier_uuid( $this->user );
+
+		$this->assertSame( $winner_uuid, $uuid );
+		$this->assertSame( $winner_uuid, get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true ) );
 	}
 
 	/**
@@ -345,7 +514,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 * Only users without this capability are denied.
 	 */
 	public function test_validate_cashier_access_denies_non_manager_access_to_other(): void {
-		// Create a user without manage_woocommerce capability
+		// Create a user without manage_woocommerce capability.
 		$editor_id = $this->factory->user->create(
 			array(
 				'role' => 'editor',
@@ -410,7 +579,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		add_filter(
 			'woocommerce_pos_cashier_accessible_stores',
 			function ( $stores, $user ) {
-				// Return empty array to test filter
+				// Return empty array to test filter.
 				return array();
 			},
 			10,

@@ -19,6 +19,7 @@ use WC_Product_Variation;
 use WC_Abstract_Order;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use function get_user_meta;
+use function add_user_meta;
 use function update_user_meta;
 use function delete_user_meta;
 use function delete_term_meta;
@@ -39,15 +40,16 @@ trait Uuid_Handler {
 	 *
 	 * @param string $lock_key Unique key for the lock.
 	 * @param int    $timeout  Timeout in seconds.
+	 * @param string $group    Cache group for the lock.
 	 * @return bool True if lock acquired, false otherwise.
 	 */
-	private function acquire_lock( string $lock_key, int $timeout = 10 ): bool {
+	private function acquire_lock( string $lock_key, int $timeout = 10, string $group = 'wc_pos_locks' ): bool {
 		$attempts   = 0;
 		$sleep_time = 100000; // 100ms in microseconds.
 		// Try every 100ms until timeout.
 		while ( $attempts < $timeout * 10 ) {
 			// wp_cache_add() returns true if the key did not exist.
-			if ( wp_cache_add( $lock_key, true, 'wc_pos_locks', $timeout ) ) {
+			if ( wp_cache_add( $lock_key, true, $group, $timeout ) ) {
 				return true;
 			}
 			usleep( $sleep_time );
@@ -60,10 +62,11 @@ trait Uuid_Handler {
 	 * Release a lock.
 	 *
 	 * @param string $lock_key Unique key for the lock.
+	 * @param string $group    Cache group for the lock.
 	 * @return void
 	 */
-	private function release_lock( string $lock_key ): void {
-		wp_cache_delete( $lock_key, 'wc_pos_locks' );
+	private function release_lock( string $lock_key, string $group = 'wc_pos_locks' ): void {
+		wp_cache_delete( $lock_key, $group );
 	}
 
 	/**
@@ -130,12 +133,15 @@ trait Uuid_Handler {
 	 * @return void
 	 */
 	private function maybe_add_user_uuid( WP_User $user ): void {
-		$lock_key = 'wc_pos_uuid_user_' . $user->ID;
-		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
+		$lock_key   = 'wc_pos_uuid_user_' . $user->ID;
+		$lock_group = 'wc_pos_user_uuid_locks';
+		if ( ! $this->acquire_lock( $lock_key, 10, $lock_group ) ) {
 			Logger::log( 'Unable to acquire lock for user UUID update for user id ' . $user->ID );
 			return;
 		}
 		try {
+			$this->adopt_legacy_multisite_user_uuid( $user->ID );
+
 			$uuids = get_user_meta( $user->ID, '_woocommerce_pos_uuid', false );
 
 			// If more than one UUID exists, keep the first and remove the rest.
@@ -152,10 +158,57 @@ trait Uuid_Handler {
 				|| ( isset( $uuids[0] ) && $this->uuid_usermeta_exists( $uuids[0], $user->ID ) );
 
 			if ( $should_update_uuid ) {
-				update_user_meta( $user->ID, '_woocommerce_pos_uuid', $this->create_uuid() );
+				$uuid = $this->create_uuid();
+				if ( empty( $uuids ) ) {
+					add_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid, true );
+				} else {
+					update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
+				}
 			}
 		} finally {
-			$this->release_lock( $lock_key );
+			$this->release_lock( $lock_key, $lock_group );
+		}
+	}
+
+	/**
+	 * Promote a legacy per-blog cashier uuid to the network-wide key.
+	 *
+	 * Before identity consolidated here, Services\Cashier minted
+	 * `_woocommerce_pos_uuid_{blog_id}` on multisite while every other reader used
+	 * the plain network-wide key — forking one user into two RxDB identities. When
+	 * the plain key holds no valid uuid yet, adopt the current blog's legacy value
+	 * so existing multisite cashiers keep their identity regardless of which
+	 * endpoint reads them first. An existing valid plain uuid wins, because it is
+	 * what /customers has already served to clients — so adoption is best-effort:
+	 * it only rescues users whose plain key was never minted (Templates\Frontend
+	 * and Services\Analytics mint it on POS page loads and WCPOS admin screens).
+	 * Legacy rows are left in place (harmless, rollback-safe). A legacy value
+	 * already owned by another user's network identity is never adopted, so the
+	 * rightful owner cannot be re-minted by the duplicate check on their next read.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	private function adopt_legacy_multisite_user_uuid( int $user_id ): void {
+		if ( ! ( \function_exists( 'is_multisite' ) && is_multisite() ) ) {
+			return;
+		}
+
+		$existing = get_user_meta( $user_id, '_woocommerce_pos_uuid', true );
+		if ( \is_string( $existing ) && Uuid::isValid( $existing ) ) {
+			return;
+		}
+
+		$legacy_key = '_woocommerce_pos_uuid_' . get_current_blog_id();
+		$legacy     = get_user_meta( $user_id, $legacy_key, true );
+		if (
+			\is_string( $legacy )
+			&& Uuid::isValid( $legacy )
+			&& ! $this->uuid_usermeta_exists( $legacy, $user_id )
+			&& ! $this->uuid_usermeta_exists( $legacy, $user_id, $legacy_key )
+		) {
+			delete_user_meta( $user_id, '_woocommerce_pos_uuid' );
+			add_user_meta( $user_id, '_woocommerce_pos_uuid', $legacy, true );
 		}
 	}
 
@@ -301,13 +354,15 @@ trait Uuid_Handler {
 	 *
 	 * @param string $uuid       The UUID to check.
 	 * @param int    $exclude_id The user ID to exclude.
+	 * @param string $meta_key   The user-meta key to search.
 	 * @return bool True if unique, false otherwise.
 	 */
-	private function uuid_usermeta_exists( string $uuid, int $exclude_id ): bool {
+	private function uuid_usermeta_exists( string $uuid, int $exclude_id, string $meta_key = '_woocommerce_pos_uuid' ): bool {
 		global $wpdb;
 		$result = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND user_id != %d LIMIT 1",
+				"SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s AND user_id != %d LIMIT 1",
+				$meta_key,
 				$uuid,
 				$exclude_id
 			)
