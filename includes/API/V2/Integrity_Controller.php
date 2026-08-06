@@ -133,7 +133,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 
 		return rest_ensure_response(
 			array(
-				'candidate'       => 'hash-checksum',
 				'collection'      => 'products',
 				'writes'          => $result['writes'],
 				'orphans_deleted' => $result['orphans_deleted'],
@@ -420,7 +419,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		return array(
-			'candidate'  => 'hash-checksum',
 			'collection' => 'products',
 			'checkpoint' => $checkpoint,
 			'changes'    => $changes,

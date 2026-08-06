@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Product;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -145,21 +146,9 @@ class Write_Controller extends WP_REST_Controller {
 		$fingerprint = $this->envelope_fingerprint( $m );
 
 		// Idempotent replay: a mutationId already APPLIED returns its canonical result.
-		$hit = $this->store->lookup( $collection, $m['mutationId'] );
-		if ( is_array( $hit ) ) {
-			$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
-			if ( $mismatch ) {
-				return $mismatch;
-			}
-		}
-		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
-			return $this->retry_identity_stamp( $meta, $m, $hit );
-		}
-		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
-			if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
-				return $this->finalize_error();
-			}
-			return $this->replay( $meta, $hit );
+		$settled = $this->replay_or_conflict( $collection, $meta, $m, $fingerprint );
+		if ( null !== $settled ) {
+			return $settled;
 		}
 
 		// Atomically CLAIM the mutationId before the non-idempotent forward, so two
@@ -167,21 +156,9 @@ class Write_Controller extends WP_REST_Controller {
 		// can't both create. The loser replays if it's done, else reports in-progress;
 		// a crashed winner's stale reservation is reclaimed after the TTL.
 		if ( ! $this->store->reserve( $collection, $m['mutationId'], $m['recordId'], $m['operation'], $fingerprint ) ) {
-			$hit = $this->store->lookup( $collection, $m['mutationId'] );
-			if ( is_array( $hit ) ) {
-				$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
-				if ( $mismatch ) {
-					return $mismatch;
-				}
-			}
-			if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
-				return $this->retry_identity_stamp( $meta, $m, $hit );
-			}
-			if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
-				if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
-					return $this->finalize_error();
-				}
-				return $this->replay( $meta, $hit );
+			$settled = $this->replay_or_conflict( $collection, $meta, $m, $fingerprint );
+			if ( null !== $settled ) {
+				return $settled;
 			}
 			if ( ! $this->reclaim_and_reserve( $collection, $m, $fingerprint ) ) {
 				return new WP_REST_Response(
@@ -220,6 +197,38 @@ class Write_Controller extends WP_REST_Controller {
 			$this->store->release( $m['mutationId'] );
 		}
 		return $result;
+	}
+
+	/**
+	 * Settle a mutationId that the store already knows about.
+	 *
+	 * Rejects an envelope that reuses the id for a different write, re-stamps a poisoned
+	 * retry, and replays the canonical result of an applied/done mutation.
+	 *
+	 * @param string $collection  The collection being written to.
+	 * @param array  $meta        The collection metadata.
+	 * @param array  $m           The mutation envelope.
+	 * @param string $fingerprint The canonical fingerprint of the envelope.
+	 * @return WP_Error|WP_REST_Response|null The settled result, or null to keep applying.
+	 */
+	private function replay_or_conflict( string $collection, array $meta, array $m, string $fingerprint ) {
+		$hit = $this->store->lookup( $collection, $m['mutationId'] );
+		if ( is_array( $hit ) ) {
+			$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
+			if ( $mismatch ) {
+				return $mismatch;
+			}
+		}
+		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
+			return $this->retry_identity_stamp( $meta, $m, $hit );
+		}
+		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
+			if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
+				return $this->finalize_error();
+			}
+			return $this->replay( $meta, $hit );
+		}
+		return null;
 	}
 
 	/**
@@ -432,17 +441,38 @@ class Write_Controller extends WP_REST_Controller {
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
 			: $meta['route'];
-		$date_filter = static function ( $order, $request, $creating ) use ( $client_created_gmt ) {
+		$forwarded_order = null;
+		$date_filter     = static function ( $order, $request, $creating ) use ( $client_created_gmt, &$forwarded_order ) {
+			if ( $creating && $order instanceof \WC_Order ) {
+				$forwarded_order = $order;
+			}
 			if ( $creating && null !== $client_created_gmt && ! is_wp_error( $order ) ) {
 				$order->set_date_created( $client_created_gmt );
 			}
 			return $order;
 		};
+		// Belt-and-braces alongside the created_via payload param: wc/v3's
+		// save_object() calls set_created_via() AFTER the pre-insert filter and
+		// falls back to 'rest-api' on WC versions where the param is readonly —
+		// which would run calculate_totals() without the POS tax location and
+		// coupon context. woocommerce_before_order_object_save fires inside
+		// save(), after WC's set and before calculate_totals(), exactly where
+		// v1 stamped it (V1/Orders_Controller). Scoped to the exact order returned
+		// by the forwarded create's pre-insert filter.
+		$created_via_hook = static function ( $order ) use ( &$forwarded_order ) {
+			if ( $order instanceof \WC_Order && $order === $forwarded_order && 'woocommerce-pos' !== $order->get_created_via() ) {
+				$order->set_created_via( 'woocommerce-pos' );
+			}
+		};
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $date_filter, 10, 3 );
+		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			add_action( 'woocommerce_before_order_object_save', $created_via_hook );
+		}
 		try {
 			$response = $this->forward( 'POST', $route, $forward_payload );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $date_filter, 10 );
+			remove_action( 'woocommerce_before_order_object_save', $created_via_hook );
 		}
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -548,6 +578,8 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Persist the POS audit meta + created_via for an order (both the create and born-twice paths).
+	 *
 	 * The POS audit meta map to persist on an order create (gap §3.3 — Pro analytics joins on
 	 * these). The controller owns the POLICY (which values); the store owns the HPOS-safe write.
 	 *   - `_pos_user` = the authenticated user (the cashier) and `_woocommerce_pos_version` =
@@ -555,49 +587,37 @@ class Write_Controller extends WP_REST_Controller {
 	 *   - `_pos_store` + cash-tender meta (`_pos_cash_amount_tendered` / `_pos_cash_change` /
 	 *     `_pos_card_cashback`) = PRESERVED from the client payload — those originate at the till.
 	 * (created_via is passed to the store separately — it's an order property, not meta.)
+	 * The key lists and till-value validation live in {@see Pos_Order_Audit}, shared
+	 * with the wcpos/v1 orders controller so the two surfaces cannot drift.
 	 */
-	/** Till-sourced POS audit meta keys — preserved from the client payload as-sent. */
-	private const POS_TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
-	/** The subset that are monetary AMOUNTS (must be numeric); `_pos_store` is an identifier, not an amount. */
-	private const POS_CASH_META_KEYS = array( '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
-
-	/** Persist the POS audit meta + created_via for an order (both the create and born-twice paths). */
 	private function stamp_order_audit( int $id, $payload, bool $stamp_version = false ): void {
 		$this->store->persist_order_audit_meta( $id, $this->order_audit_meta( is_array( $payload ) ? $payload : array(), $stamp_version ), 'woocommerce-pos' );
 	}
 
-	private function order_audit_meta( array $payload, bool $stamp_version ): array {
-		$client = array();
+	/** Persist missing cash-tender meta from the original update payload. */
+	private function stamp_order_till_meta( int $id, array $payload ): void {
+		$meta = array();
 		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
-			$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
-			// A malformed entry whose `key` is an array/object must not be used as an array offset
-			// (PHP fatal "Illegal offset type") — skip it, don't crash the write.
-			if ( is_scalar( $key ) ) {
-				$client[ (string) $key ] = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( $entry->value ?? '' );
+			$key   = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+			$value = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( is_object( $entry ) ? ( $entry->value ?? '' ) : '' );
+			if ( is_scalar( $key ) && in_array( (string) $key, self::POS_CASH_META_KEYS, true ) && is_scalar( $value ) && '' !== (string) $value ) {
+				$meta[ (string) $key ] = (string) $value;
 			}
 		}
+		if ( $meta ) {
+			$this->store->persist_order_audit_meta( $id, $meta );
+		}
+	}
+
+	private function order_audit_meta( array $payload, bool $stamp_version ): array {
 		$meta = array( '_pos_user' => (string) ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 ) );
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
 		}
-		foreach ( self::POS_TILL_META_KEYS as $key ) {
-			// Till values persist directly, bypassing wc/v3's own validation, so guard them: never
-			// store an empty/non-scalar value, and require the CASH AMOUNTS to be numeric (a malformed
-			// amount would break Pro analytics aggregations). `_pos_store` is an identifier — the
-			// store-scope model allows numeric ids, uuids, or slugs — so any non-empty scalar is kept.
-			if ( ! array_key_exists( $key, $client ) ) {
-				continue;
-			}
-			$value = $client[ $key ];
-			if ( ! is_scalar( $value ) || '' === (string) $value ) {
-				continue;
-			}
-			if ( in_array( $key, self::POS_CASH_META_KEYS, true ) && ! is_numeric( $value ) ) {
-				continue;
-			}
-			$meta[ $key ] = (string) $value;
-		}
-		return $meta;
+		$meta_data = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
+		// Till values persist directly, bypassing wc/v3's own validation — the service
+		// drops empty/non-scalar values and cash amounts that are not unsigned plain decimals.
+		return array_merge( $meta, Pos_Order_Audit::till_meta_from_payload( $meta_data ) );
 	}
 
 	/**
@@ -607,18 +627,12 @@ class Write_Controller extends WP_REST_Controller {
 	 * these before forwarding makes the server the sole, authoritative writer of the audit trail
 	 * (the till-sourced values are re-applied by persist_order_audit_meta, not the forward).
 	 */
-	private function without_pos_audit_meta( array $payload ): array {
-		$strip = array_merge( self::POS_TILL_META_KEYS, array( '_pos_user', '_woocommerce_pos_version' ) );
-		$meta  = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
-		return array_values(
-			array_filter(
-				$meta,
-				static function ( $entry ) use ( $strip ) {
-					$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
-					return ! in_array( $key, $strip, true );
-				}
-			)
-		);
+	private function without_pos_audit_meta( array $payload, int $order_id = 0 ): array {
+		$meta      = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
+		$protected = $order_id > 0 && function_exists( 'wc_get_order' )
+			? Pos_Order_Audit::audit_meta_ids( wc_get_order( $order_id ) )
+			: array();
+		return Pos_Order_Audit::strip_audit_meta( $meta, $protected );
 	}
 
 
@@ -751,12 +765,14 @@ class Write_Controller extends WP_REST_Controller {
 			unset( $update_payload['created_via'] );
 			unset( $update_payload['tax_ids'] );
 			if ( isset( $update_payload['meta_data'] ) && is_array( $update_payload['meta_data'] ) ) {
-				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload );
+				$update_payload['meta_data'] = $this->without_pos_audit_meta( $update_payload, (int) $id );
 			}
 			$clear_billing_email = isset( $update_payload['billing'] )
 				&& is_array( $update_payload['billing'] )
 				&& array_key_exists( 'email', $update_payload['billing'] )
 				&& '' === $update_payload['billing']['email'];
+			$update_payload = $this->reconcile_order_item_ids( $id, $update_payload );
+			$update_payload = $this->remove_omitted_order_items( $id, $update_payload );
 			$update_payload = $this->reconcile_order_coupon_lines( $id, $update_payload );
 			$update_payload = $this->sanitize_order_wc_payload( $update_payload );
 		}
@@ -771,6 +787,7 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$this->stamp_order_till_meta( $id, $m['payload'] );
 			$this->persist_order_tax_ids( $id, $m['payload'], false );
 			$order = wc_get_order( $id );
 			$data = $response->get_data();
@@ -1039,6 +1056,9 @@ class Write_Controller extends WP_REST_Controller {
 	 * - billing.email '' / null → dropped (absent means "no email"; '' fails the format check)
 	 * - line_items[n].parent_name null → dropped (schema wants string; the server recomputes it)
 	 * - meta_data display fields → dropped (WC derives them and ignores them on write)
+	 * - line_items[].image → dropped (server-derived display data; acks serialize
+	 *   image.id as '' for imageless products, which wc/v3's integer schema rejects
+	 *   when a client re-pushes its full document)
 	 *
 	 * @param array $payload Order payload about to be forwarded to wc/v3.
 	 *
@@ -1054,6 +1074,12 @@ class Write_Controller extends WP_REST_Controller {
 			foreach ( $payload['line_items'] as $i => $line ) {
 				if ( is_array( $line ) && array_key_exists( 'parent_name', $line ) && null === $line['parent_name'] ) {
 					unset( $payload['line_items'][ $i ]['parent_name'] );
+				}
+				// image is a server-derived display field: acks serialize it with
+				// image.id '' for imageless products, which fails wc/v3's integer
+				// schema when the client re-pushes its full document.
+				if ( is_array( $line ) && array_key_exists( 'image', $line ) ) {
+					unset( $payload['line_items'][ $i ]['image'] );
 				}
 			}
 			$payload['line_items'] = $this->normalize_line_item_product_identity( $payload['line_items'] );
@@ -1270,6 +1296,106 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 	}
+
+	/**
+	 * Restore missing order item ids from each line type's stable POS UUID.
+	 *
+	 * Ambiguous or absent UUID matches deliberately remain creates in wc/v3.
+	 *
+	 * @param int   $order_id Resolved order id.
+	 * @param array $payload  Update payload about to be forwarded.
+	 * @return array Reconciled payload.
+	 */
+	private function reconcile_order_item_ids( int $order_id, array $payload ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return $payload;
+		}
+
+		$types = array(
+			'line_items'     => 'line_item',
+			'fee_lines'      => 'fee',
+			'shipping_lines' => 'shipping',
+		);
+		foreach ( $types as $payload_key => $item_type ) {
+			if ( ! isset( $payload[ $payload_key ] ) || ! is_array( $payload[ $payload_key ] ) ) {
+				continue;
+			}
+			$matches = array();
+			foreach ( $order->get_items( $item_type ) as $item ) {
+				$uuid = $item->get_meta( Pos_Uuid::META_KEY, true );
+				if ( is_string( $uuid ) && '' !== $uuid ) {
+					$matches[ $uuid ][] = $item->get_id();
+				}
+			}
+			foreach ( $payload[ $payload_key ] as $index => $line ) {
+				if ( ! is_array( $line ) || ! empty( $line['id'] ) || ! is_array( $line['meta_data'] ?? null ) ) {
+					continue;
+				}
+				foreach ( $line['meta_data'] as $meta ) {
+					if ( is_array( $meta ) && Pos_Uuid::META_KEY === ( $meta['key'] ?? '' ) && is_string( $meta['value'] ?? null ) ) {
+						$uuid = $meta['value'];
+						if ( 1 === count( $matches[ $uuid ] ?? array() ) ) {
+							$payload[ $payload_key ][ $index ]['id'] = $matches[ $uuid ][0];
+						}
+						break;
+					}
+				}
+			}
+		}
+
+		return $payload;
+	}
+
+	/**
+	 * Add wc/v3 deletion markers for stored items omitted from posted line collections.
+	 *
+	 * @param int   $order_id Resolved order id.
+	 * @param array $payload  Reconciled update payload.
+	 * @return array Payload containing deletion markers for omitted items.
+	 */
+	private function remove_omitted_order_items( int $order_id, array $payload ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return $payload;
+		}
+		$types = array(
+			'line_items'     => array( 'line_item', 'product_id' ),
+			'fee_lines'      => array( 'fee', 'name' ),
+			'shipping_lines' => array( 'shipping', 'method_id' ),
+		);
+		foreach ( $types as $payload_key => $type ) {
+			if ( ! array_key_exists( $payload_key, $payload ) || ! is_array( $payload[ $payload_key ] ) ) {
+				continue;
+			}
+			$stored_items = $order->get_items( $type[0] );
+			$posted_ids   = array();
+			foreach ( $payload[ $payload_key ] as $line ) {
+				if ( is_array( $line ) && ! empty( $line['id'] ) && is_numeric( $line['id'] ) ) {
+					$posted_ids[] = (int) $line['id'];
+					continue;
+				}
+				$uuid = is_array( $line ) && is_array( $line['meta_data'] ?? null )
+					? Pos_Uuid::read_valid_uuid_from_meta( $line['meta_data'] )
+					: '';
+				foreach ( $stored_items as $item ) {
+					if ( '' !== $uuid && $uuid === $item->get_meta( Pos_Uuid::META_KEY, true ) ) {
+						$posted_ids[] = $item->get_id();
+					}
+				}
+			}
+			foreach ( $stored_items as $item ) {
+				if ( ! in_array( $item->get_id(), $posted_ids, true ) ) {
+					$payload[ $payload_key ][] = array(
+						'id'      => $item->get_id(),
+						$type[1]  => null,
+					);
+				}
+			}
+		}
+		return $payload;
+	}
+
 	/**
 	 * Reconcile a full-document order update's coupon_lines with the stored order —
 	 * the v2 port of V1\Orders_Controller::calculate_coupons (issue #1403 row 3).
@@ -1434,6 +1560,9 @@ class Write_Controller extends WP_REST_Controller {
 		}
 
 		$request  = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
+		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			$request->set_param( 'dp', '6' );
+		}
 		$response = rest_do_request( $request );
 		$data     = $response->get_data();
 		if ( is_array( $data ) ) {

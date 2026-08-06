@@ -13,6 +13,10 @@ use WP_REST_Response;
 
 /**
  * Adds cheap contextual telemetry to v2 sync responses.
+ *
+ * Change-response bodies stay deterministic for a given store state so their
+ * strong ETags remain honest validators under RFC 9110 section 8.8.1. Volatile
+ * timing and memory telemetry therefore lives in headers only.
  */
 final class Response_Telemetry {
 	/**
@@ -149,8 +153,9 @@ final class Response_Telemetry {
 		}
 
 		$route = untrailingslashit( $request->get_route() );
-		if ( self::is_change_candidate_route( $route ) ) {
-			$duration = self::extend_change_metrics( $response, $started );
+		if ( self::is_changes_route( $route ) ) {
+			$duration = self::duration_ms( $started );
+			$response->header( 'X-WCPOS-Memory-Peak', (string) memory_get_peak_usage( true ) );
 		} elseif ( self::is_metrics_route( $route ) ) {
 			$duration = self::add_metrics_envelope( $response, $started );
 		} else {
@@ -176,28 +181,6 @@ final class Response_Telemetry {
 		$response->set_data( $data );
 
 		return $metrics['duration_ms'];
-	}
-
-	/**
-	 * Preserve the existing change-candidate meta.duration_ms and add memory.
-	 *
-	 * @param WP_REST_Response $response REST response.
-	 * @param float            $started  Request start time.
-	 */
-	private static function extend_change_metrics( WP_REST_Response $response, float $started ): float {
-		$data = (array) $response->get_data();
-		if ( ! isset( $data['meta'] ) || ! is_array( $data['meta'] ) ) {
-			$data['meta'] = array();
-		}
-
-		$duration = isset( $data['meta']['duration_ms'] )
-			? (float) $data['meta']['duration_ms']
-			: self::duration_ms( $started );
-		$data['meta']['duration_ms']       = $duration;
-		$data['meta']['memory_peak_bytes'] = memory_get_peak_usage( true );
-		$response->set_data( $data );
-
-		return $duration;
 	}
 
 	/**
@@ -238,24 +221,14 @@ final class Response_Telemetry {
 	}
 
 	/**
-	 * Whether the route already owns a meta.duration_ms envelope.
+	 * Whether the route belongs to the graduated changes surface.
 	 *
 	 * @param string $route Request route.
 	 */
-	private static function is_change_candidate_route( string $route ): bool {
-		$base = '/' . Api::ROUTE_NAMESPACE . '/changes/';
+	private static function is_changes_route( string $route ): bool {
+		$base = '/' . Api::ROUTE_NAMESPACE . '/';
 
-		return in_array(
-			$route,
-			array(
-				$base . 'sequence-log',
-				$base . 'revision-hash',
-				$base . 'range-checksum',
-				$base . 'config-fingerprint',
-				$base . 'tick',
-			),
-			true
-		);
+		return 0 === strpos( $route, $base . 'changes/' );
 	}
 
 	/**

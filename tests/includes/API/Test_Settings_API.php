@@ -198,15 +198,36 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The section-adjacent read-only lookups are untouched.
+	 * The section-adjacent read-only lookups are untouched, and the dead
+	 * checkout/order-statuses route is gone: its callback pointed at
+	 * get_order_statuses(), a method that moved to Services\Settings in
+	 * Dec 2022, so every request since answered 500 rest_invalid_handler.
+	 * No client calls it — the POS app uses /data/order_statuses.
 	 */
 	public function test_section_adjacent_routes_are_registered(): void {
 		$routes = $this->server->get_routes();
 
 		foreach ( self::NAMESPACES as $namespace ) {
 			$this->assertArrayHasKey( $namespace . '/settings', $routes );
-			$this->assertArrayHasKey( $namespace . '/settings/checkout/order-statuses', $routes );
 			$this->assertArrayHasKey( $namespace . '/settings/tax_ids/detection', $routes );
+			$this->assertArrayNotHasKey( $namespace . '/settings/checkout/order-statuses', $routes );
+		}
+	}
+
+	/**
+	 * A request to the removed checkout/order-statuses route 404s with
+	 * rest_no_route instead of the old 500 rest_invalid_handler.
+	 */
+	public function test_removed_order_statuses_route_returns_404(): void {
+		wp_set_current_user( $this->user );
+
+		foreach ( self::NAMESPACES as $namespace ) {
+			$response = $this->server->dispatch(
+				$this->wp_rest_get_request( $namespace . '/settings/checkout/order-statuses' )
+			);
+
+			$this->assertEquals( 404, $response->get_status() );
+			$this->assertEquals( 'rest_no_route', $response->get_data()['code'] );
 		}
 	}
 
@@ -491,6 +512,30 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertFalse( get_transient( 'woocommerce_pos_pro_license_status' ) );
 		$this->assertFalse( get_site_transient( 'update_plugins' ) );
+	}
+
+	/**
+	 * The license cache-clear handler is registered exactly once, by Init.
+	 *
+	 * The v1 Settings controller used to add its own copy in its constructor;
+	 * the #1444 merge past #1447's file move resurrected it once already, so
+	 * pin the count after the controller has been constructed via a dispatch.
+	 */
+	public function test_license_cache_clear_handler_registered_exactly_once(): void {
+		// Arrange: dispatch a settings request so the v1 controller (whose
+		// constructor used to register a duplicate) has been constructed.
+		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/general' ) );
+
+		// Act.
+		global $wp_filter;
+		$hook      = $wp_filter['pre_update_option_woocommerce_pos_pro_settings_license'] ?? null;
+		$callbacks = 0;
+		foreach ( null === $hook ? array() : $hook->callbacks as $priority_callbacks ) {
+			$callbacks += \count( $priority_callbacks );
+		}
+
+		// Assert.
+		$this->assertSame( 1, $callbacks );
 	}
 
 	/**

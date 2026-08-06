@@ -18,6 +18,8 @@ final class Order_Serializer {
 			return array();
 		}
 
+		// Matches the POS client's internal precision — v1 forced dp=6 on every order request.
+		$request->set_param( 'dp', '6' );
 		$controller = new WC_REST_Orders_Controller();
 		$response = $controller->prepare_object_for_response( $order, $request );
 		$response = rest_ensure_response( $response );

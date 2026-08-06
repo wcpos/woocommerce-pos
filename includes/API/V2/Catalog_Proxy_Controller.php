@@ -110,6 +110,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
 		$this->add_pos_order_filter( $resource, $query_params );
 		$inner->set_query_params( $query_params );
+		if ( 'orders' === $resource ) {
+			// Server-authoritative, overriding any client-sent dp: every WCPOS
+			// order surface serializes money at six decimals (v1 parity), so
+			// revision hashes agree across the proxy, pull, and write lanes.
+			$inner->set_param( 'dp', '6' );
+		}
 		// Leg-3 (ADR 0014 WP-M5): scope the POS servable filter around THIS forward only — added, then
 		// removed — so `online_only` products drop out of the served set for both greedy list pulls and
 		// targeted `include=` pulls, and no other product query on the request is affected. The client
