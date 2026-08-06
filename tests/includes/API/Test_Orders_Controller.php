@@ -1482,4 +1482,176 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( '/wcpos-checkout/order-pay/' . $order->get_id() . '/?', $links['payment'][0]['href'] );
 		$this->assertStringContainsString( '/wcpos-checkout/wcpos-receipt/' . $order->get_id() . '/?key=', $links['receipt'][0]['href'] );
 	}
+
+	/**
+	 * WC's batch_items() calls create_item() directly, bypassing per-item schema
+	 * validation, so malformed meta_data entries reach the UUID pre-scan raw.
+	 * A string entry must be skipped, not fataled on (PHP 8 throws
+	 * "Cannot access offset of type string on string" -> 500 mid-batch).
+	 */
+	public function test_batch_create_order_with_string_meta_data_entry_creates_order(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array( 'not-an-object' ),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+		$this->assertInstanceOf( WC_Order::class, wc_get_order( $data['create'][0]['id'] ) );
+	}
+
+	/**
+	 * A well-shaped uuid entry whose value is not a scalar must be skipped by
+	 * the pre-scan: get_order_ids_by_uuid() declares a string parameter, so an
+	 * array value would throw a TypeError.
+	 */
+	public function test_batch_create_order_with_non_scalar_uuid_value_creates_order(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array(
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => array( 'nested' ),
+							),
+						),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+	}
+
+	/**
+	 * Batch update bypasses schema validation the same way as batch create, and
+	 * WC core's prepare_object_for_database() has the same unguarded
+	 * $meta['key'] access on the update path.
+	 */
+	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array(
+						'id'        => $order->get_id(),
+						'status'    => 'completed',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
+		$this->assertEquals( 'completed', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * Skipping malformed entries must not break the dedupe itself: a valid uuid
+	 * entry after junk entries still returns the existing order instead of
+	 * creating a duplicate.
+	 */
+	public function test_batch_create_order_with_malformed_entries_still_dedupes_uuid(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$uuid  = Uuid::uuid4()->toString();
+		$order->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$order->save();
+		$order_count_before = \count(
+			wc_get_orders(
+				array(
+					'limit' => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'payment_method' => 'pos_cash',
+						'meta_data'      => array(
+							'not-an-object',
+							array( 'value' => 'entry-without-key' ),
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => $uuid,
+							),
+						),
+						'line_items'     => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( $order->get_id(), $data['create'][0]['id'], 'Existing order should be returned for a duplicate UUID.' );
+		$order_count_after = \count(
+			wc_get_orders(
+				array(
+					'limit' => -1,
+					'return' => 'ids',
+				)
+			)
+		);
+		$this->assertEquals( $order_count_before, $order_count_after, 'No duplicate order should be created.' );
+	}
 }

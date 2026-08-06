@@ -368,6 +368,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function create_item( $request ) {
+		$this->wcpos_sanitize_meta_data_param( $request );
+
 		// check if the UUID is already in use.
 		if ( isset( $request['meta_data'] ) && \is_array( $request['meta_data'] ) ) {
 			foreach ( $request['meta_data'] as $meta ) {
@@ -521,6 +523,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function update_item( $request ) {
+		$this->wcpos_sanitize_meta_data_param( $request );
+
 		$valid_email = $this->wcpos_validate_billing_email( $request );
 		if ( is_wp_error( $valid_email ) ) {
 			return $valid_email;
@@ -531,6 +535,44 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, false );
 
 		return $response;
+	}
+
+	/**
+	 * Drop malformed meta_data entries from the request.
+	 *
+	 * Batch requests bypass per-item schema validation (WC's batch_items() calls
+	 * create_item()/update_item() directly), so meta_data entries can be any
+	 * shape. WC core's prepare_object_for_database() reads $meta['key'] and
+	 * $meta['value'] unguarded — a malformed entry throws a TypeError on PHP 8,
+	 * which 500s the whole batch after earlier items have already persisted, so
+	 * a client retry risks duplicate orders. Keep only entries shaped like meta:
+	 * an array with a scalar key and a value. The POS uuid additionally requires
+	 * a non-empty string value — a stored non-string uuid would fatal
+	 * Uuid::isValid() when the response hook validates it, and a dropped uuid is
+	 * safely regenerated server-side.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 */
+	protected function wcpos_sanitize_meta_data_param( WP_REST_Request $request ): void {
+		if ( ! isset( $request['meta_data'] ) || ! \is_array( $request['meta_data'] ) ) {
+			return;
+		}
+
+		$request['meta_data'] = array_values(
+			array_filter(
+				$request['meta_data'],
+				function ( $meta ) {
+					if ( ! \is_array( $meta ) || ! isset( $meta['key'] ) || ! \is_scalar( $meta['key'] ) || ! array_key_exists( 'value', $meta ) ) {
+						return false;
+					}
+					if ( '_woocommerce_pos_uuid' === (string) $meta['key'] ) {
+						return \is_string( $meta['value'] ) && '' !== $meta['value'];
+					}
+
+					return true;
+				}
+			)
+		);
 	}
 
 	/**
