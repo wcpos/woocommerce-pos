@@ -81,6 +81,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertContains( 'X-WCPOS-Memory-Peak', $this->exposed_headers( $server->sent_headers ) );
 		$this->assertContains( 'Date', $this->exposed_headers( $server->sent_headers ) );
 	}
 
@@ -104,6 +105,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertContains( 'X-WCPOS-Memory-Peak', $this->exposed_headers( $server->sent_headers ) );
 		$this->assertContains( 'Date', $this->exposed_headers( $server->sent_headers ) );
 	}
 
