@@ -518,6 +518,81 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Pro's updater can react to the update_plugins deletion by reading — and,
+	 * when the stored instance is blank, re-saving — the license option, which
+	 * re-enters remove_license_transient and recursed unbounded (OOM on first
+	 * license activation). The guard must break the cycle: the write-back's
+	 * nested update happens without re-clearing, so the reaction fires once.
+	 */
+	public function test_license_option_write_back_during_transient_clear_does_not_recurse(): void {
+		// Arrange: simulate Pro's clear-update reaction writing the option back.
+		$write_backs = 0;
+		$write_back  = function () use ( &$write_backs ): void {
+			++$write_backs;
+			if ( $write_backs > 3 ) {
+				// Circuit breaker: let the assertion below fail instead of OOM.
+				return;
+			}
+			update_option(
+				'woocommerce_pos_pro_settings_license',
+				array(
+					'key' => 'k',
+					'instance' => (string) $write_backs,
+				)
+			);
+		};
+		add_action( 'delete_site_transient_update_plugins', $write_back );
+
+		// Act.
+		update_option(
+			'woocommerce_pos_pro_settings_license',
+			array(
+				'key' => 'k',
+				'instance' => '',
+			)
+		);
+
+		remove_action( 'delete_site_transient_update_plugins', $write_back );
+
+		// Assert.
+		$this->assertSame( 1, $write_backs );
+	}
+
+	/**
+	 * A license write that changes neither the key nor the activation state —
+	 * Pro's read-side instance mint — must clear the license-status transient
+	 * but leave update_plugins alone: Pro reacts to that deletion by clearing
+	 * its update-data cache, which empties an in-flight update check.
+	 */
+	public function test_license_write_without_key_or_activation_change_keeps_update_plugins(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_pro_settings_license',
+			array(
+				'key'       => 'same-key',
+				'activated' => true,
+				'instance'  => '',
+			)
+		);
+		set_transient( 'woocommerce_pos_pro_license_status', array( 'activated' => true ) );
+		set_site_transient( 'update_plugins', (object) array( 'response' => array() ) );
+
+		// Act: the shape of Pro's mint — same key, same activation, new instance.
+		update_option(
+			'woocommerce_pos_pro_settings_license',
+			array(
+				'key'       => 'same-key',
+				'activated' => true,
+				'instance'  => 'minted-instance',
+			)
+		);
+
+		// Assert.
+		$this->assertFalse( get_transient( 'woocommerce_pos_pro_license_status' ) );
+		$this->assertNotFalse( get_site_transient( 'update_plugins' ) );
+	}
+
+	/**
 	 * Test updating general settings.
 	 */
 	public function test_update_general_settings(): void {
