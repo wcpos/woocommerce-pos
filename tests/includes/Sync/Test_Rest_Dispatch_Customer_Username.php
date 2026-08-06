@@ -40,8 +40,9 @@ class Test_Rest_Dispatch_Customer_Username extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		update_option( 'woocommerce_registration_generate_username', $this->previous_username_option );
 		update_option( 'woocommerce_registration_generate_password', $this->previous_password_option );
-		delete_option( Api::OPTION_ENABLED );
 		parent::tearDown();
+		delete_option( Api::OPTION_ENABLED );
+		$this->assertFalse( get_option( Api::OPTION_ENABLED ) );
 	}
 
 	private function push_customer_create( string $email, string $record_id, string $mutation_id, ?string $username = null ) {
