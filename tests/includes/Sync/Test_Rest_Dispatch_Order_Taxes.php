@@ -287,14 +287,11 @@ class Test_Rest_Dispatch_Order_Taxes extends Sync_REST_Store_Test_Case {
 	 *
 	 * PROBED RED on the v2 lane (2026-07-30, evidence on #1402): the handler
 	 * (V1\Orders_Controller::wcpos_order_item_fee_after_calculate_taxes) is
-	 * registered inside wcpos_dispatch_request(), which API::rest_dispatch_request
-	 * only invokes for mapped /wcpos/v1/* routes — the push's inner wc/v3
-	 * dispatch never registers it, so the fee is taxed -1.00 instead of 0.00.
-	 * Escalated per the issue contract instead of pinned; the production fix
-	 * should delete the markTestIncomplete line below and inherit this pin.
+	 * The negative-fee handler moved to the globally registered Orders service
+	 * (#1410), so the probe that once escalated this RED row now runs green and
+	 * inherits the pin alongside Test_Rest_Dispatch_Fee_Tax.
 	 */
 	public function test_v2_push_negative_fee_respects_tax_status_none(): void {
-		$this->markTestIncomplete( 'Negative-fee tax_status does not reach the v2 forward — escalated on #1402, fix pending.' );
 		$product = $this->create_taxable_product( 20 );
 
 		$response = $this->push_order_create(

@@ -438,11 +438,27 @@ class Write_Controller extends WP_REST_Controller {
 			}
 			return $order;
 		};
+		// Belt-and-braces alongside the created_via payload param: wc/v3's
+		// save_object() calls set_created_via() AFTER the pre-insert filter and
+		// falls back to 'rest-api' on WC versions where the param is readonly —
+		// which would run calculate_totals() without the POS tax location and
+		// coupon context. woocommerce_before_order_object_save fires inside
+		// save(), after WC's set and before calculate_totals(), exactly where
+		// v1 stamped it (V1/Orders_Controller). Scoped to this create forward.
+		$created_via_hook = static function ( $order ) {
+			if ( $order instanceof \WC_Order && 'woocommerce-pos' !== $order->get_created_via() ) {
+				$order->set_created_via( 'woocommerce-pos' );
+			}
+		};
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $date_filter, 10, 3 );
+		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+			add_action( 'woocommerce_before_order_object_save', $created_via_hook );
+		}
 		try {
 			$response = $this->forward( 'POST', $route, $forward_payload );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $date_filter, 10 );
+			remove_action( 'woocommerce_before_order_object_save', $created_via_hook );
 		}
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -1039,6 +1055,9 @@ class Write_Controller extends WP_REST_Controller {
 	 * - billing.email '' / null → dropped (absent means "no email"; '' fails the format check)
 	 * - line_items[n].parent_name null → dropped (schema wants string; the server recomputes it)
 	 * - meta_data display fields → dropped (WC derives them and ignores them on write)
+	 * - line_items[].image → dropped (server-derived display data; acks serialize
+	 *   image.id as '' for imageless products, which wc/v3's integer schema rejects
+	 *   when a client re-pushes its full document)
 	 *
 	 * @param array $payload Order payload about to be forwarded to wc/v3.
 	 *
@@ -1054,6 +1073,12 @@ class Write_Controller extends WP_REST_Controller {
 			foreach ( $payload['line_items'] as $i => $line ) {
 				if ( is_array( $line ) && array_key_exists( 'parent_name', $line ) && null === $line['parent_name'] ) {
 					unset( $payload['line_items'][ $i ]['parent_name'] );
+				}
+				// image is a server-derived display field: acks serialize it with
+				// image.id '' for imageless products, which fails wc/v3's integer
+				// schema when the client re-pushes its full document.
+				if ( is_array( $line ) && array_key_exists( 'image', $line ) ) {
+					unset( $payload['line_items'][ $i ]['image'] );
 				}
 			}
 			$payload['line_items'] = $this->normalize_line_item_product_identity( $payload['line_items'] );
