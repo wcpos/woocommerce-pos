@@ -80,10 +80,12 @@ class Test_Activator extends WP_UnitTestCase {
 				'edit_product',
 				'edit_products',
 				'edit_published_products',
+				'edit_private_products',
 				'edit_others_products',
 				'publish_shop_coupons',
 				'edit_shop_coupons',
 				'edit_published_shop_coupons',
+				'edit_private_shop_coupons',
 				'edit_others_shop_coupons',
 			) as $capability
 		) {

@@ -407,6 +407,7 @@ class Activator {
 			'edit_product'              => true,
 			'edit_products'             => true,
 			'edit_published_products'   => true,
+			'edit_private_products'     => true,
 			'edit_others_products'      => true,
 			'read_private_shop_orders'  => true,
 			'publish_shop_orders'       => true,
@@ -419,6 +420,7 @@ class Activator {
 			'publish_shop_coupons'      => true,
 			'edit_shop_coupons'         => true,
 			'edit_published_shop_coupons' => true,
+			'edit_private_shop_coupons' => true,
 			'edit_others_shop_coupons'  => true,
 			'manage_product_terms'      => true,
 		);
