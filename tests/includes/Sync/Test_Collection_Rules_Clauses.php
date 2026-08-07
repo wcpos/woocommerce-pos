@@ -115,6 +115,21 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Non-scalar HPOS sort directions fall back without being cast.
+	 */
+	public function test_hpos_sort_direction_rejects_non_scalar_values(): void {
+		$plan    = $this->plan_for( array( 'orderby' => 'status' ), Collection_Rules::STORAGE_HPOS );
+		$clauses = $plan->filter(
+			Collection_Rules_Plan::HOOK_HPOS_ORDERBY,
+			array( 'orderby' => '' ),
+			new Collection_Rules_Query_Stub(),
+			array( 'order' => array( 'DESC' ) )
+		);
+
+		$this->assertEquals( 'stub_wc_orders.status ASC', $clauses['orderby'] );
+	}
+
+	/**
 	 * The rule defers when WooCommerce already mapped the sort the client asked for.
 	 */
 	public function test_hpos_sort_defers_to_a_woocommerce_clause_for_the_same_sort(): void {
@@ -216,7 +231,7 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 			Collection_Rules::STORAGE_POSTS
 		);
 
-		$this->assertSame(
+		$this->assertEquals(
 			"{$wpdb->posts}.post_status ASC",
 			$plan->filter(
 				Collection_Rules_Plan::HOOK_POSTS_ORDERBY,
@@ -226,6 +241,32 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Non-scalar legacy sort directions fall back without being cast.
+	 */
+	public function test_legacy_sort_direction_rejects_non_scalar_values(): void {
+		global $wpdb;
+
+		$plan = $this->plan_for( array( 'orderby' => 'status' ), Collection_Rules::STORAGE_POSTS );
+
+		$this->assertEquals(
+			"{$wpdb->posts}.post_status ASC",
+			$plan->filter(
+				Collection_Rules_Plan::HOOK_POSTS_ORDERBY,
+				'wp_posts.post_date DESC',
+				new Collection_Rules_Query_Stub(
+					array(
+						'post_type' => 'shop_order',
+						'order'     => array( 'DESC' ),
+					)
+				)
+			)
+		);
+	}
+
+	/**
+	 * The installed legacy WHERE binding accepts string and array order types.
+	 */
 	public function test_legacy_include_where_binding_matches_array_form_post_type(): void {
 		// wc_get_order_types() / explicit `type` args can populate post_type as an
 		// array; the installed posts_where binding must treat array( 'shop_order' )
@@ -238,6 +279,9 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 
 		$captured = array();
 		$plan->around(
+			/**
+			 * Capture the installed binding output for each post type shape.
+			 */
 			function () use ( &$captured ): void {
 				$captured['string'] = apply_filters(
 					'posts_where',
@@ -257,9 +301,52 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 			}
 		);
 
-		$this->assertSame( $captured['string'], $captured['array'] );
-		$this->assertNotSame( ' AND 1=1', $captured['array'] );
-		$this->assertSame( ' AND 1=1', $captured['other'] );
+		$this->assertEquals( $captured['string'], $captured['array'] );
+		$this->assertNotEquals( ' AND 1=1', $captured['array'] );
+		$this->assertEquals( ' AND 1=1', $captured['other'] );
+	}
+
+	/**
+	 * The installed legacy ORDER BY binding accepts string and array order types.
+	 */
+	public function test_legacy_orderby_binding_matches_array_form_post_type(): void {
+		global $wpdb;
+
+		$plan = $this->plan_for(
+			array(
+				'orderby' => 'status',
+				'order'   => 'desc',
+			),
+			Collection_Rules::STORAGE_POSTS
+		);
+
+		$captured = array();
+		$plan->around(
+			/**
+			 * Capture the installed binding output for each post type shape.
+			 */
+			function () use ( &$captured ): void {
+				$captured['string'] = apply_filters(
+					'posts_orderby',
+					'wp_posts.post_date DESC',
+					new Collection_Rules_Query_Stub( array( 'post_type' => 'shop_order' ) )
+				);
+				$captured['array'] = apply_filters(
+					'posts_orderby',
+					'wp_posts.post_date DESC',
+					new Collection_Rules_Query_Stub( array( 'post_type' => array( 'shop_order' ) ) )
+				);
+				$captured['other'] = apply_filters(
+					'posts_orderby',
+					'wp_posts.post_date DESC',
+					new Collection_Rules_Query_Stub( array( 'post_type' => 'product' ) )
+				);
+			}
+		);
+
+		$this->assertEquals( "{$wpdb->posts}.post_status DESC", $captured['string'] );
+		$this->assertEquals( $captured['string'], $captured['array'] );
+		$this->assertEquals( 'wp_posts.post_date DESC', $captured['other'] );
 	}
 
 	public function test_legacy_status_sort_direction_prefers_the_query_vars(): void {

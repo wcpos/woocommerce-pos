@@ -640,7 +640,8 @@ final class Collection_Rules_Plan {
 			return $orderby;
 		}
 
-		if ( ! isset( $query->query_vars['post_type'] ) || 'shop_order' !== $query->query_vars['post_type'] ) {
+		$post_type = $query->query_vars['post_type'] ?? null;
+		if ( 'shop_order' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'shop_order', $post_type, true ) ) ) {
 			return $orderby;
 		}
 
@@ -654,7 +655,8 @@ final class Collection_Rules_Plan {
 		 * DESC. The terminal `ASC` is v1's own fallback, reached only if nothing at all
 		 * supplied a direction.
 		 */
-		$order = strtoupper( (string) ( $query->query_vars['order'] ?? $this->request_order ?? 'ASC' ) );
+		$order = $query->query_vars['order'] ?? $this->request_order ?? 'ASC';
+		$order = \is_scalar( $order ) ? strtoupper( (string) $order ) : 'ASC';
 		// $request_order is the RAW request param — it feeds SQL text below, so it
 		// must never carry anything but the two legal directions.
 		$order = \in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
@@ -757,7 +759,8 @@ final class Collection_Rules_Plan {
 		// request (which carries wc/v3's own `order` default), falling back to ASC.
 		// Whitelisted before interpolation — same defense as the legacy path. Legal
 		// values pass through byte-verbatim (the clause goldens pin the casing).
-		$order              = (string) ( $args['order'] ?? 'ASC' );
+		$order              = $args['order'] ?? 'ASC';
+		$order              = \is_scalar( $order ) ? (string) $order : 'ASC';
 		$order              = \in_array( strtoupper( $order ), array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
 		$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.' . $column . ' ' . $order;
 
