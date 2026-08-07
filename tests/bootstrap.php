@@ -40,6 +40,7 @@ class Bootstrap {
 
 		tests_add_filter( 'muplugins_loaded', array( $this, 'manually_load_plugin' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
@@ -106,6 +107,26 @@ class Bootstrap {
 		// require dirname( dirname( __FILE__ ) ) . '/../woocommerce/uninstall.php';
 		// WC_Install::install();
 		// echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
+	}
+
+	/**
+	 * Seed the WooCommerce options that must already exist when post types register.
+	 *
+	 * WC_Install::check_version() — which creates WooCommerce's options — and
+	 * WC_Post_Types::register_post_types() are BOTH on init:5, and the post types
+	 * win that race on the suite's only boot. So `woocommerce_enable_coupons` is
+	 * still unset when WooCommerce decides whether to register `shop_coupon`
+	 * (class-wc-post-types.php: `if ( 'yes' === get_option( 'woocommerce_enable_coupons' ) )`),
+	 * and the coupon post type is missing for the entire run — something that never
+	 * happens on a real site, where the next page load registers it.
+	 *
+	 * That silently invalidates every coupon capability test: wc_rest_check_post_permissions()
+	 * returns false for an unregistered post type no matter what the user holds, so
+	 * "coupon writes are denied" assertions pass vacuously. Seed the option here, before
+	 * init, so the suite sees the post type a real site has.
+	 */
+	public function seed_woocommerce_options(): void {
+		add_option( 'woocommerce_enable_coupons', 'yes' );
 	}
 
 	/**
