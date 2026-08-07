@@ -260,6 +260,44 @@ final class Order_Serializer {
 		);
 	}
 
+	/*
+	 * ---------------------------------------------------------------------------
+	 * ORDER REVISION RECIPES — a VERSIONED list, newest first.
+	 *
+	 * Every entry below is a complete hashing recipe for an order payload, and each
+	 * one corresponds to a wire shape this plugin has shipped. A deployed client
+	 * stores whatever `currentRevision` it was handed at the time, so the write
+	 * path's grace comparer (Write_Controller::revision_matches_with_grace) must be
+	 * able to recognise ALL of them. NONE of these may be deleted or altered while
+	 * the `woocommerce_pos_sync_legacy_revision_grace` option still exists.
+	 *
+	 *   canonical_revision()
+	 *     CURRENT. Identity-stripped (order meta + item meta), image.id normalized
+	 *     to int, `tax_ids` and `links` excluded. Defined so that the augmented v2
+	 *     document and a BARE wc/v3 re-read of the same order hash identically —
+	 *     which is what lets the pull, proxy and write-ack lanes all serve the
+	 *     augmented shape while the write path keeps hashing the bare one.
+	 *
+	 *   pre_item_uuid_canonical_revision()
+	 *     The shape shipped between the read lanes gaining `tax_ids`/links and the
+	 *     read-time item-uuid stamping + image.id cast: item uuids stripped, but
+	 *     image.id left as wc/v3's string and `tax_ids` left in the hash.
+	 *
+	 *   pre_augmentation_canonical_revision()
+	 *     The shape shipped before ANY v2 read augmentation: order identity meta
+	 *     stripped, nothing else. Item uuids, image.id and `tax_ids` all hashed
+	 *     as they arrive.
+	 *
+	 *   legacy_revision()
+	 *     PRE-CUTOVER (#423 step 2): raw wp_json_encode with no ksort and no
+	 *     excluded-field list. Its comparer branch reserializes the order through
+	 *     serialize_order() rather than hashing a bare re-read.
+	 *
+	 * Retirement (#423 step 4) drops the option and the three non-canonical
+	 * recipes together, not one at a time.
+	 * ---------------------------------------------------------------------------
+	 */
+
 	/** THE canonical order revision: identity-stripped, then Revision::compute. */
 	public static function canonical_revision( array $payload ): string {
 		// tax_ids is a read-time decoration (Tax_Id_Reader) that wc/v3's own

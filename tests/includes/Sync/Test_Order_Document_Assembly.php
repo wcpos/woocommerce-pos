@@ -247,11 +247,24 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	 *
 	 * @return array{document: array, currentRevision: string}
 	 */
-	private function write_ack( WC_Order $order, string $record_uuid ): array {
+	private function write_ack( WC_Order $order, string $record_uuid, ?string $base_revision = null ): array {
+		$response = $this->push_update( $order, $record_uuid, $base_revision );
+		$this->assertSame( 200, $response->get_status(), 'The characterization push must succeed: ' . wp_json_encode( $response->get_data() ) );
+
+		return $response->get_data();
+	}
+
+	/**
+	 * Push a minimal order update. `$base_revision` defaults to the canonical
+	 * revision of the current bare document (what a freshly-anchored client holds).
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function push_update( WC_Order $order, string $record_uuid, ?string $base_revision = null, string $mutation_id = self::MUTATION_ID ) {
 		$store          = new Assembly_Fake_Mutation_Store();
 		$store->resolve = $order->get_id();
 
-		$base_revision = Order_Serializer::canonical_revision( $this->current_bare_document( $order ) );
+		$base_revision = $base_revision ?? Order_Serializer::canonical_revision( $this->current_bare_document( $order ) );
 
 		$request = new WP_REST_Request( 'POST', '' );
 		$request->set_header( 'Content-Type', 'application/json' );
@@ -259,19 +272,16 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 			(string) wp_json_encode(
 				array(
 					'collection'   => 'orders',
-					'mutationId'   => self::MUTATION_ID,
+					'mutationId'   => $mutation_id,
 					'operation'    => 'update',
 					'recordId'     => $record_uuid,
 					'baseRevision' => $base_revision,
-					'payload'      => array( 'customer_note' => 'assembly characterization' ),
+					'payload'      => array( 'customer_note' => 'assembly characterization ' . $mutation_id ),
 				)
 			)
 		);
 
-		$response = ( new Write_Controller( $store ) )->push( $request );
-		$this->assertSame( 200, $response->get_status(), 'The characterization push must succeed: ' . wp_json_encode( $response->get_data() ) );
-
-		return $response->get_data();
+		return ( new Write_Controller( $store ) )->push( $request );
 	}
 
 	/**
@@ -396,23 +406,187 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * KNOWN DIVERGENCE (about to be removed deliberately): the write-ack document
-	 * carries NO line-item uuids, and serves image.id as the bare wc/v3 string.
+	 * DIVERGENCE REMOVED DELIBERATELY — the write-ack now matches the pull shape.
 	 *
-	 * A client that adopts the ack document verbatim therefore loses the item
-	 * identity it had from the last pull until the next read re-supplies it.
+	 * WAS (pinned by the first commit of this suite):
+	 *   assertNull( item uuid )        — the ack carried no line-item uuids;
+	 *   assertIsString( image.id )     — the ack served the bare wc/v3 string.
+	 *
+	 * A client that adopted the ack document verbatim therefore LOST the item
+	 * identity it had from the last pull, and saw image.id flip type between a
+	 * read and a write of the same order. Commit 6fa92554 unified "both v2 read
+	 * lanes" and skipped this one; the fallout one commit later (489c51b4) was an
+	 * extra revision variant plus a third grace branch. Routing the ack through
+	 * Order_Serializer::document() closes the gap at the source.
+	 *
+	 * The ack's `currentRevision` is unaffected — it is still computed over the
+	 * BARE document_for output, before any augmentation. See the revision-safety
+	 * tests below.
 	 */
-	public function test_write_ack_document_lacks_item_uuids_and_image_cast(): void {
+	public function test_write_ack_document_carries_item_uuids_and_image_cast(): void {
 		$order = $this->representative_order();
 		$uuid  = Pos_Uuid::ensure_uuid( $order );
 
 		$document = $this->write_ack( $order, $uuid )['document'];
 
-		// DIVERGENCE 1 — no read-time item uuid stamping on the ack.
-		$this->assertNull( $this->item_uuid_from_meta( $document['line_items'][0] ) );
+		$item_uuid = $this->item_uuid_from_meta( $document['line_items'][0] );
+		$this->assertNotNull( $item_uuid );
+		$this->assertTrue( Pos_Uuid::is_uuid( (string) $item_uuid ) );
+		$this->assertIsInt( $document['line_items'][0]['image']['id'] );
+		$this->assertSame( $this->attachment_id, $document['line_items'][0]['image']['id'] );
 
-		// DIVERGENCE 2 — image.id is the bare wc/v3 string, not the v1-parity int.
-		$this->assertIsString( $document['line_items'][0]['image']['id'] );
+		// Structured line-item meta survives alongside the stamped uuid.
+		$this->assertContains( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ) );
+	}
+
+	/**
+	 * The ack document now carries the same augmentation set as a pull document
+	 * for the same order state — the actual goal of the unification.
+	 */
+	public function test_write_ack_and_pull_documents_agree_on_the_augmented_fields(): void {
+		$order = $this->representative_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order );
+
+		$ack  = $this->write_ack( $order, $uuid )['document'];
+		$pull = $this->pull_document( wc_get_order( $order->get_id() ) );
+
+		$this->assertSame( $pull['tax_ids'], $ack['tax_ids'] );
+		$this->assertSame( $pull['links'], $ack['links'] );
+		$this->assertSame( $pull['line_items'][0]['image']['id'], $ack['line_items'][0]['image']['id'] );
+		$this->assertSame(
+			$this->item_uuid_from_meta( $pull['line_items'][0] ),
+			$this->item_uuid_from_meta( $ack['line_items'][0] )
+		);
+	}
+
+	/**
+	 * REVISION SAFETY — the ack's currentRevision is computed over the BARE
+	 * document_for output, NOT the augmented document that is served. Pinning the
+	 * two against each other is what makes the shape change non-breaking: the
+	 * bytes a client stores as its next baseRevision did not move.
+	 */
+	public function test_write_ack_revision_is_computed_over_the_bare_document(): void {
+		$order = $this->representative_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order );
+
+		$ack = $this->write_ack( $order, $uuid );
+
+		$this->assertSame(
+			Order_Serializer::canonical_revision( $this->current_bare_document( wc_get_order( $order->get_id() ) ) ),
+			$ack['currentRevision']
+		);
+	}
+
+	/**
+	 * REVISION SAFETY, DIRECTION A — a client holding a revision stored from an
+	 * OLD-SHAPE ack still passes the precondition after the ack shape changes.
+	 *
+	 * The old-shape ack returned canonical_revision() over the bare document, and
+	 * so does the new one, so the stored value matches on the FIRST (exact) branch
+	 * of revision_matches_with_grace — no grace required. This reconstructs that
+	 * stored value the way the old code produced it and pushes with it.
+	 */
+	public function test_revision_stored_from_an_old_shape_ack_still_passes_the_precondition(): void {
+		$order = $this->representative_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order );
+
+		// Exactly what the pre-change respond() returned as currentRevision:
+		// revision_for( meta, id, bare ) over document_for's un-augmented output.
+		$old_shape_ack_revision = Order_Serializer::canonical_revision( $this->current_bare_document( $order ) );
+
+		$response = $this->push_update( $order, $uuid, $old_shape_ack_revision );
+
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+	}
+
+	/**
+	 * REVISION SAFETY, DIRECTION B — a client that stores the NEW ack's
+	 * currentRevision matches the next pull's canonical revision, AND can push
+	 * again with it without a false 409.
+	 */
+	public function test_revision_stored_from_the_new_ack_matches_the_next_pull_and_the_next_push(): void {
+		$order = $this->representative_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order );
+
+		$ack = $this->write_ack( $order, $uuid );
+
+		// It equals the canonical revision of the next pull of the same state.
+		$this->assertSame(
+			Order_Serializer::canonical_revision( $this->pull_document( wc_get_order( $order->get_id() ) ) ),
+			$ack['currentRevision']
+		);
+
+		// And it is accepted as the precondition for the next push.
+		$second = $this->push_update(
+			wc_get_order( $order->get_id() ),
+			$uuid,
+			$ack['currentRevision'],
+			'f1e2d3c4-3333-4444-8555-666677778888'
+		);
+		$this->assertSame( 200, $second->get_status(), (string) wp_json_encode( $second->get_data() ) );
+	}
+
+	/**
+	 * REVISION SAFETY — the grace branches still fire. Each historical recipe in
+	 * Order_Serializer's versioned-recipe list is exercised against an order whose
+	 * items have not yet been stamped, which is the state each branch exists for.
+	 *
+	 * @dataProvider grace_recipes
+	 *
+	 * @param string $recipe Static Order_Serializer method producing the historical revision.
+	 */
+	public function test_historical_revision_recipes_still_pass_the_grace_comparer( string $recipe ): void {
+		$order = $this->representative_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order );
+
+		// The grace comparer hashes the CURRENT bare wc/v3 re-read under the old
+		// recipe; an unchanged order must therefore still drain.
+		$historical = Order_Serializer::$recipe( $this->current_bare_document( $order ) );
+		$this->assertNotSame(
+			Order_Serializer::canonical_revision( $this->current_bare_document( $order ) ),
+			$historical,
+			'The fixture must actually differ under the historical recipe, or the test proves nothing.'
+		);
+
+		$response = $this->push_update( $order, $uuid, $historical );
+
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+	}
+
+	/**
+	 * The historical revision recipes the write path's grace comparer accepts.
+	 *
+	 * `legacy_revision` is excluded: its comparer branch reserializes the order
+	 * through serialize_order() rather than hashing the bare re-read, and it is
+	 * already covered by Test_Write_Controller.
+	 */
+	public function grace_recipes(): array {
+		return array(
+			'pre-augmentation recipe' => array( 'pre_augmentation_canonical_revision' ),
+			'pre-item-uuid recipe'    => array( 'pre_item_uuid_canonical_revision' ),
+		);
+	}
+
+	/**
+	 * REVISION SAFETY — the ack's uuid stamping does not move the canonical
+	 * revision. stamp_item_uuids() PERSISTS a uuid on any order item lacking one,
+	 * so the ack now writes item meta the pre-change ack never wrote. Every
+	 * revision recipe that hashes a bare re-read must be blind to it, or the very
+	 * next push would 409 on unchanged content.
+	 */
+	public function test_ack_item_uuid_stamping_does_not_move_the_canonical_revision(): void {
+		$order = $this->representative_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order );
+
+		$before = Order_Serializer::canonical_revision( $this->current_bare_document( $order ) );
+		$ack    = $this->write_ack( $order, $uuid );
+		$after  = Order_Serializer::canonical_revision( $this->current_bare_document( wc_get_order( $order->get_id() ) ) );
+
+		// The push itself changed customer_note, so `before` is expected to differ;
+		// what must hold is that the ack's revision equals a fresh bare re-read
+		// taken AFTER the item uuids were persisted.
+		$this->assertNotSame( $before, $ack['currentRevision'] );
+		$this->assertSame( $after, $ack['currentRevision'] );
 	}
 
 	/**

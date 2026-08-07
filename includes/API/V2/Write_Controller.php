@@ -12,7 +12,6 @@ use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Api;
@@ -1330,12 +1329,18 @@ class Write_Controller extends WP_REST_Controller {
 	 * wc/v3 data (NOT the uuid-injected document) so it matches what the conflict
 	 * check recomputes from a fresh wc/v3 read — the client stores it as the
 	 * baseRevision for its next update.
+	 *
+	 * Order acks are shaped by THE order-document assembly (Order_Serializer::document),
+	 * the same one the pull and proxy lanes use, so a client sees one order shape
+	 * whichever v2 lane delivered it. The augmentation runs AFTER revision_for on
+	 * purpose: `$bare` stays the un-augmented wc/v3 form that every revision
+	 * recipe — canonical and the historical grace variants — is defined over.
 	 */
 	private function respond( array $bare, string $record_id, int $status, array $meta = array(), int $id = 0 ) {
 		$current_revision = $this->revision_for( $meta, $id, $bare );
 		$order            = 'order' === ( $meta['id_type'] ?? '' ) ? wc_get_order( $id ) : false;
 		if ( $order ) {
-			$bare['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+			$bare = ( new Order_Serializer() )->document( $bare, Order_Serializer::V2_AUGMENTATIONS, null, $order );
 		}
 		if ( 'product' === ( $meta['post_type'] ?? '' ) ) {
 			$product = wc_get_product( $id );
