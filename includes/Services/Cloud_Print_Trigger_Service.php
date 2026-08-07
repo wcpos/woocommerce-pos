@@ -114,7 +114,9 @@ class Cloud_Print_Trigger_Service {
 				if ( empty( $printer ) ) {
 					continue;
 				}
-				$provider = (string) ( $printer['provider'] ?? '' );
+				// Legacy printer rows may lack a stored provider; normalize() maps
+				// them to the star-cloudprnt default like every other read path.
+				$provider = Provider::normalize( (string) ( $printer['provider'] ?? '' ) );
 
 				$template = Print_Job_Service::load_template( $template_id );
 				if ( null === $template ) {
@@ -203,7 +205,9 @@ class Cloud_Print_Trigger_Service {
 	 * @return int Created job id, or 0 when the template is not printable on the provider.
 	 */
 	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template, array $drawer_options = array() ): int {
-		$provider       = (string) ( $printer['provider'] ?? '' );
+		// Normalize before EVERY consumer below (drawer options, printability,
+		// requires_submit) — a legacy row without a provider is star-cloudprnt.
+		$provider       = Provider::normalize( (string) ( $printer['provider'] ?? '' ) );
 		$drawer_options = self::drawer_options_for_provider( $provider, $drawer_options );
 
 		// The resolver owns both halves of the answer for every provider: an

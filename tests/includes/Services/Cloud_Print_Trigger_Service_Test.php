@@ -827,6 +827,54 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'kitchen' ) ) ) );
 	}
 	/**
+	 * A legacy printer row without a stored provider behaves exactly like an
+	 * explicit star-cloudprnt row. Before Provider::normalize() was applied
+	 * here this held only by coincidence (every consumer's ''-branch happened
+	 * to match the star default); this pin makes the equivalence load-bearing
+	 * so a future provider-keyed branch cannot silently diverge.
+	 */
+	public function test_enqueue_without_stored_provider_matches_star_cloudprnt(): void {
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt><text>Hi</text></receipt>',
+		);
+		$order = OrderHelper::create_order();
+
+		$legacy_job_id = Cloud_Print_Trigger_Service::enqueue_order_job(
+			$this->jobs,
+			'legacy',
+			array( 'id' => 'legacy' ),
+			$order->get_id(),
+			'virtual-receipt',
+			$template
+		);
+		$explicit_job_id = Cloud_Print_Trigger_Service::enqueue_order_job(
+			$this->jobs,
+			'explicit',
+			array(
+				'id'       => 'explicit',
+				'provider' => 'star-cloudprnt',
+			),
+			$order->get_id(),
+			'virtual-receipt',
+			$template
+		);
+
+		$this->assertGreaterThan( 0, $legacy_job_id );
+		$this->assertGreaterThan( 0, $explicit_job_id );
+
+		$legacy   = $this->jobs->get( $legacy_job_id );
+		$explicit = $this->jobs->get( $explicit_job_id );
+		$this->assertEquals( $explicit['content_type'], $legacy['content_type'] );
+		$this->assertEquals( $explicit['auto_open_drawer'], $legacy['auto_open_drawer'] );
+		$this->assertEquals( $explicit['drawer_connector'], $legacy['drawer_connector'] );
+		// Polling provider: nothing is scheduled for submission.
+		$this->assertFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $legacy_job_id ) )
+		);
+	}
+
+	/**
 	 * It schedules submit for a Star Online push printer.
 	 */
 	public function test_enqueue_schedules_submit_for_star_online(): void {
