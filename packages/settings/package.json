@@ -28,7 +28,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-query-devtools": "^5.100.9",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@types/lodash": "^4.17.24",
     "@types/react": "^18.3.28",
@@ -36,7 +36,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@wordpress/env": "^11.5.0",
     "eslint": "^9.39.5",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.2.4",
