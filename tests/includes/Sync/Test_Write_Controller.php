@@ -514,23 +514,18 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		// permission gate is passed (409, not 403) and hands back the canonical
 		// revision to replay the write with.
 		$conflict = $this->pushCatalog( $collection, $record_id, 'update', 'sha256:stale' );
-		$this->assertInstanceOf( WP_REST_Response::class, $conflict );
-		$this->assertSame( 409, $conflict->get_status() );
-		$revision = $conflict->get_data()['currentRevision'];
+		$revision = $this->assertPushConflicted( $conflict, 'stale update' );
 
 		$updated = $this->pushCatalog( $collection, $record_id, 'update', $revision, array( 'description' => 'Granted through Access settings' ) );
-		$this->assertInstanceOf( WP_REST_Response::class, $updated );
-		$this->assertLessThan( 300, $updated->get_status() );
+		$this->assertPushSucceeded( $updated, 'update' );
 		$this->assertSame( 'Granted through Access settings', $this->catalogDescription( $collection, $record_id ) );
 
 		// Act 3: a real v2 push delete of the same other-authored record.
 		$conflict = $this->pushCatalog( $collection, $record_id, 'delete', 'sha256:stale' );
-		$this->assertInstanceOf( WP_REST_Response::class, $conflict );
-		$this->assertSame( 409, $conflict->get_status() );
+		$revision = $this->assertPushConflicted( $conflict, 'stale delete' );
 
-		$deleted = $this->pushCatalog( $collection, $record_id, 'delete', $conflict->get_data()['currentRevision'] );
-		$this->assertInstanceOf( WP_REST_Response::class, $deleted );
-		$this->assertLessThan( 300, $deleted->get_status() );
+		$deleted = $this->pushCatalog( $collection, $record_id, 'delete', $revision );
+		$this->assertPushSucceeded( $deleted, 'delete' );
 		$this->assertNull( get_post( $record_id ) );
 	}
 
@@ -622,6 +617,21 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'payload'      => 'delete' === $operation ? null : ( $payload ?? array( 'description' => 'Denied update' ) ),
 			)
 		);
+	}
+
+	/** The push reached the CAS stage (so the permission gate passed) — returns the canonical revision. */
+	private function assertPushConflicted( $result, string $context ): string {
+		$this->assertNotWPError( $result, $context );
+		$this->assertInstanceOf( WP_REST_Response::class, $result, $context );
+		$this->assertSame( 409, $result->get_status(), $context . ': ' . wp_json_encode( $result->get_data() ) );
+		return (string) $result->get_data()['currentRevision'];
+	}
+
+	/** The push was applied through wc/v3. */
+	private function assertPushSucceeded( $result, string $context ): void {
+		$this->assertNotWPError( $result, $context );
+		$this->assertInstanceOf( WP_REST_Response::class, $result, $context );
+		$this->assertLessThan( 300, $result->get_status(), $context . ': ' . wp_json_encode( $result->get_data() ) );
 	}
 
 	/** The description the wc/v3 write should have landed on the record. */
