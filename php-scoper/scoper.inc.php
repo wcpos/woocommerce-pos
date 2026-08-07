@@ -7,7 +7,6 @@ return array(
 
 	'finders' => array(
 		Finder::create()->files()->in( 'vendor/firebase/php-jwt' )->name( '*.php' ),
-		Finder::create()->files()->in( 'vendor/phpfastcache/phpfastcache' )->name( '*.php' ),
 
 		// Dompdf (PDF rendering) — prefix the PHP sources and COPY the runtime
 		// resources Dompdf loads by path (fonts, res/, VERSION, lib/Cpdf.php).
