@@ -43,6 +43,16 @@ class Access_Section implements Settings_Section_Interface {
 	 * customer creation via the REST API. We show the correct capability
 	 * on the Access settings page based on the installed WC version.
 	 *
+	 * The `wc` group lists PRIMITIVE capabilities only — the names a role grant
+	 * can actually be read back from. `product` and `shop_coupon` register with
+	 * map_meta_cap = true, so WordPress rewrites their singular meta caps
+	 * (`edit_shop_coupon`, `delete_shop_coupon`, ...) into the `*_others_*` /
+	 * `*_published_*` / `*_private_*` primitives below; exposing the singular
+	 * names would be a dead toggle. `edit_product` / `delete_product` are the
+	 * exception and ARE required: `product_variation` registers with
+	 * capability_type `product` and map_meta_cap = false, so a variation write
+	 * checks those two names literally.
+	 *
 	 * @return array
 	 */
 	private static function get_caps(): array {
