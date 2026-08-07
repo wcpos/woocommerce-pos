@@ -52,7 +52,47 @@ class Test_Activator extends WP_UnitTestCase {
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
 		remove_all_actions( 'woocommerce_init' );
 		remove_all_actions( 'shutdown' );
+		unset( $GLOBALS['wp_user_roles'] );
+		global $wp_roles;
+		$wp_roles = new \WP_Roles(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring role state after capability tests.
 		parent::tearDown();
+	}
+
+	/**
+	 * Cashiers can create and edit catalog records by default, but cannot delete them.
+	 *
+	 * @covers ::create_pos_roles
+	 */
+	public function test_cashier_role_defaults_allow_catalog_create_and_edit_without_delete(): void {
+		remove_role( 'cashier' );
+
+		$activator       = new Activator();
+		$reflection      = new ReflectionClass( $activator );
+		$create_pos_roles = $reflection->getMethod( 'create_pos_roles' );
+		$create_pos_roles->setAccessible( true );
+		$create_pos_roles->invoke( $activator );
+
+		$role = get_role( 'cashier' );
+		$this->assertNotNull( $role );
+		foreach (
+			array(
+				'publish_products',
+				'edit_product',
+				'edit_products',
+				'edit_published_products',
+				'edit_others_products',
+				'publish_shop_coupons',
+				'edit_shop_coupons',
+				'edit_published_shop_coupons',
+				'edit_others_shop_coupons',
+			) as $capability
+		) {
+			$this->assertTrue( $role->has_cap( $capability ), $capability );
+		}
+
+		foreach ( array_keys( $role->capabilities ) as $capability ) {
+			$this->assertFalse( 0 === strpos( $capability, 'delete_' ), $capability );
+		}
 	}
 
 	/**

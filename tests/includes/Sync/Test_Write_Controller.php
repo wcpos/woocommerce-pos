@@ -393,11 +393,9 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertCount( 2, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ); // POST plus coherent GET ack
 	}
 
-	/**
-	 * Cashier forwarding does not widen catalog or coupon mutation authorization.
-	 * Order contexts are re-mapped only through capabilities the cashier holds.
-	 */
+	/** Cashier catalog writes follow the shipped role capabilities without widening deletes. */
 	public function test_cashier_push_requires_real_catalog_capabilities(): void {
+		$admin_id   = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
 		wp_set_current_user( $cashier_id );
 		$this->setRestResponse( array( 'id' => 4242 ), 201 );
@@ -410,15 +408,20 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 
-		// Product decision 2026-08-06: NO POS-tier widening for catalog or
-		// coupon writes — the cashier role is read-only on catalog, so every
-		// mutation context must stay denied at the inner wc/v3 check.
-		foreach ( array( 'product', 'product_variation', 'shop_coupon' ) as $post_type ) {
-			foreach ( array( 'create', 'edit', 'delete' ) as $context ) {
-				$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions'][ $post_type ][ $context ], $post_type . ':' . $context );
-			}
+		// Decision amended 2026-08-07: create/edit are default cashier grants;
+		// delete remains a merchant opt-in through POS Access settings.
+		foreach (
+			array(
+				'products'   => 'product',
+				'variations' => 'product_variation',
+				'coupons'    => 'shop_coupon',
+			) as $collection => $post_type
+		) {
+			$record_id = $this->catalogRecord( $collection, $admin_id );
+			$this->assertTrue( wc_rest_check_post_permissions( $post_type, 'create' ), $post_type . ':create' );
+			$this->assertTrue( wc_rest_check_post_permissions( $post_type, 'edit', $record_id ), $post_type . ':edit' );
+			$this->assertFalse( wc_rest_check_post_permissions( $post_type, 'delete', $record_id ), $post_type . ':delete' );
 		}
-		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] );
 		// Orders re-map through the caps the cashier role actually holds (the HPOS
 		// placehold post type breaks WC's own mapping): cashier has publish/edit/
 		// read_private but NOT delete_shop_orders, so delete stays denied.
@@ -427,6 +430,15 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['read'] );
 		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['delete'] );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
+	}
+
+	public function test_cashier_customer_create_and_edit_permissions_use_existing_user_capabilities(): void {
+		$cashier_id  = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$customer_id = self::factory()->user->create( array( 'role' => 'customer' ) );
+		wp_set_current_user( $cashier_id );
+
+		$this->assertTrue( wc_rest_check_user_permissions( 'create' ) );
+		$this->assertTrue( wc_rest_check_user_permissions( 'edit', $customer_id ) );
 	}
 
 	/** @dataProvider deniedCatalogMutationPreconditions */
@@ -453,7 +465,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 
 		$this->assertWPError( $result );
-		$this->assertSame( 'woocommerce_rest_cannot_' . ( 'update' === $operation ? 'edit' : 'delete' ), $result->get_error_code() );
+		$this->assertSame( 'woocommerce_rest_cannot_delete', $result->get_error_code() );
 		$this->assertSame( 403, $result->get_error_data()['status'] );
 		$this->assertSame( array( self::MID ), $store->released );
 		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
@@ -462,14 +474,75 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	public static function deniedCatalogMutationPreconditions(): array {
 		$cases = array();
 
-		foreach ( array( 'products' => 'product', 'variations' => 'product_variation', 'coupons' => 'shop_coupon' ) as $collection => $post_type ) {
-			foreach ( array( 'update', 'delete' ) as $operation ) {
-				$cases[ "$collection $operation without revision" ] = array( $collection, $post_type, $operation, null );
-				$cases[ "$collection $operation with stale revision" ] = array( $collection, $post_type, $operation, 'sha256:stale' );
-			}
+		foreach (
+			array(
+				'products'   => 'product',
+				'variations' => 'product_variation',
+				'coupons'    => 'shop_coupon',
+			) as $collection => $post_type
+		) {
+			$cases[ "$collection delete without revision" ] = array( $collection, $post_type, 'delete', null );
+			$cases[ "$collection delete with stale revision" ] = array( $collection, $post_type, 'delete', 'sha256:stale' );
 		}
 
 		return $cases;
+	}
+
+	/** @dataProvider grantedCatalogMutations */
+	public function test_stock_cashier_catalog_update_conflicts_then_succeeds( string $collection, string $post_type ): void {
+		$admin_id   = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$record_id  = $this->catalogRecord( $collection, $admin_id );
+		wp_set_current_user( $cashier_id );
+
+		$this->assertTrue( wc_rest_check_post_permissions( $post_type, 'edit', $record_id ) );
+		$revision = $this->assertPushConflicted( $this->pushCatalog( $collection, $record_id, 'update', 'sha256:stale' ), 'stale update' );
+		$updated  = $this->pushCatalog( $collection, $record_id, 'update', $revision, array( 'description' => 'Updated by stock cashier' ) );
+		$this->assertPushSucceeded( $updated, 'update' );
+		$this->assertSame( 'Updated by stock cashier', $this->catalogDescription( $collection, $record_id ) );
+	}
+
+	/** @dataProvider grantedCatalogMutations */
+	public function test_stock_cashier_catalog_delete_push_is_denied( string $collection, string $post_type ): void {
+		$admin_id   = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$record_id  = $this->catalogRecord( $collection, $admin_id );
+		wp_set_current_user( $cashier_id );
+
+		$result = $this->pushCatalog( $collection, $record_id, 'delete', 'sha256:stale' );
+		$this->assertWPError( $result, $post_type );
+		$this->assertSame( 'woocommerce_rest_cannot_delete', $result->get_error_code(), $post_type );
+		$this->assertSame( 403, $result->get_error_data()['status'], $post_type );
+	}
+
+	public function test_access_settings_revoke_denies_stock_cashier_product_update(): void {
+		$edit_capabilities = array( 'publish_products', 'edit_product', 'edit_products', 'edit_published_products', 'edit_others_products' );
+		$admin_id          = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id        = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$record_id         = $this->catalogRecord( 'products', $admin_id );
+
+		try {
+			wp_set_current_user( $admin_id );
+			$result = ( new Access_Section() )->write(
+				array(
+					'cashier' => array(
+						'capabilities' => array( 'wc' => array_fill_keys( $edit_capabilities, false ) ),
+					),
+				)
+			);
+			$this->assertNotWPError( $result );
+
+			wp_set_current_user( $cashier_id );
+			$denied = $this->pushCatalog( 'products', $record_id, 'update', 'sha256:stale' );
+			$this->assertWPError( $denied );
+			$this->assertSame( 'woocommerce_rest_cannot_edit', $denied->get_error_code() );
+			$this->assertSame( 403, $denied->get_error_data()['status'] );
+		} finally {
+			$role = get_role( 'cashier' );
+			foreach ( $edit_capabilities as $capability ) {
+				$role->add_cap( $capability );
+			}
+		}
 	}
 
 	/**
@@ -490,8 +563,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	 * @param string $post_type  The WordPress post type behind it.
 	 */
 	public function test_access_settings_grant_authorizes_catalog_mutations( string $collection, string $post_type ): void {
-		// Arrange: an administrator owns the record; a cashier-tier role holds the
-		// stock POS capabilities and nothing on catalog.
+		// Arrange: an administrator owns the record; a minimal cashier-tier test role
+		// starts without catalog mutation capabilities.
 		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$this->addCatalogTestRole();
 		$cashier_id = self::factory()->user->create( array( 'role' => self::ROLE ) );
@@ -538,8 +611,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A throwaway cashier-tier role, so granting catalog capabilities cannot bleed
-	 * into the tests that assert the shipped `cashier` role is catalog read-only.
+	 * A throwaway cashier-tier role, so granting delete capabilities cannot bleed
+	 * into the tests that assert the shipped `cashier` role keeps deletes denied.
 	 */
 	private function addCatalogTestRole(): void {
 		remove_role( self::ROLE );
