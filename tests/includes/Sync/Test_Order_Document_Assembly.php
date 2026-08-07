@@ -251,7 +251,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	private function write_ack( WC_Order $order, string $record_uuid, ?string $base_revision = null ): array {
 		$response = $this->push_update( $order, $record_uuid, $base_revision );
 		$this->assertNotWPError( $response, 'The characterization push must not return WP_Error.' );
-		$this->assertEquals( 200, $response->get_status(), 'The characterization push must succeed: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 200, $response->get_status(), 'The characterization push must succeed: ' . wp_json_encode( $response->get_data() ) );
 
 		return $response->get_data();
 	}
@@ -328,30 +328,30 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$document = $this->pull_document( $order );
 
 		// Stock wc/v3 fields survive.
-		$this->assertEquals( $order->get_id(), $document['id'] );
-		$this->assertEquals( true, array_key_exists( 'line_items', $document ) );
-		$this->assertEquals( false, empty( $document['line_items'] ) );
+		$this->assertSame( $order->get_id(), $document['id'] );
+		$this->assertArrayHasKey( 'line_items', $document );
+		$this->assertNotEmpty( $document['line_items'] );
 
 		// tax_ids — the v1-owned read decoration wc/v3 never serializes.
-		$this->assertEquals( ( new Tax_Id_Reader() )->read_for_order( $order ), $document['tax_ids'] );
+		$this->assertSame( ( new Tax_Id_Reader() )->read_for_order( $order ), $document['tax_ids'] );
 
 		// POS links.
-		$this->assertEquals( $this->wcpos_expected_payment_link( $order ), $document['links']['payment'][0]['href'] );
-		$this->assertEquals( $this->wcpos_expected_receipt_link( $order ), $document['links']['receipt'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $document['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $document['links']['receipt'][0]['href'] );
 
 		// image.id is int-cast (v1 parity); bare wc/v3 serves it as a string.
-		$this->assertEquals( true, is_int( $document['line_items'][0]['image']['id'] ) );
-		$this->assertEquals( $this->attachment_id, $document['line_items'][0]['image']['id'] );
+		$this->assertIsInt( $document['line_items'][0]['image']['id'] );
+		$this->assertSame( $this->attachment_id, $document['line_items'][0]['image']['id'] );
 
 		// Read-time item uuid stamping.
-		$this->assertEquals( false, is_null( $this->item_uuid_from_meta( $document['line_items'][0] ) ) );
-		$this->assertEquals( true, Pos_Uuid::is_uuid( (string) $this->item_uuid_from_meta( $document['line_items'][0] ) ) );
+		$this->assertNotNull( $this->item_uuid_from_meta( $document['line_items'][0] ) );
+		$this->assertTrue( Pos_Uuid::is_uuid( (string) $this->item_uuid_from_meta( $document['line_items'][0] ) ) );
 
 		// Structured line-item meta is preserved alongside the stamped uuid.
-		$this->assertEquals( true, in_array( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ), true ) );
+		$this->assertContains( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ) );
 
 		// Taxes survive the assembly.
-		$this->assertEquals( true, array_key_exists( 'taxes', $document['line_items'][0] ) );
+		$this->assertArrayHasKey( 'taxes', $document['line_items'][0] );
 	}
 
 	/**
@@ -363,13 +363,13 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$document = $this->proxy_document( $order );
 
-		$this->assertEquals( ( new Tax_Id_Reader() )->read_for_order( $order ), $document['tax_ids'] );
-		$this->assertEquals( $this->wcpos_expected_payment_link( $order ), $document['links']['payment'][0]['href'] );
-		$this->assertEquals( $this->wcpos_expected_receipt_link( $order ), $document['links']['receipt'][0]['href'] );
-		$this->assertEquals( true, is_int( $document['line_items'][0]['image']['id'] ) );
-		$this->assertEquals( $this->attachment_id, $document['line_items'][0]['image']['id'] );
-		$this->assertEquals( false, is_null( $this->item_uuid_from_meta( $document['line_items'][0] ) ) );
-		$this->assertEquals( true, in_array( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ), true ) );
+		$this->assertSame( ( new Tax_Id_Reader() )->read_for_order( $order ), $document['tax_ids'] );
+		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $document['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $document['links']['receipt'][0]['href'] );
+		$this->assertIsInt( $document['line_items'][0]['image']['id'] );
+		$this->assertSame( $this->attachment_id, $document['line_items'][0]['image']['id'] );
+		$this->assertNotNull( $this->item_uuid_from_meta( $document['line_items'][0] ) );
+		$this->assertContains( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ) );
 	}
 
 	/**
@@ -379,7 +379,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	public function test_pull_and_proxy_documents_share_a_canonical_revision(): void {
 		$order = $this->representative_order();
 
-		$this->assertEquals(
+		$this->assertSame(
 			Order_Serializer::canonical_revision( $this->pull_document( $order ) ),
 			Order_Serializer::canonical_revision( $this->proxy_document( $order ) )
 		);
@@ -398,13 +398,13 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$document = $this->write_ack( $order, $uuid )['document'];
 
-		$this->assertEquals( $order->get_id(), $document['id'] );
-		$this->assertEquals( ( new Tax_Id_Reader() )->read_for_order( $order ), $document['tax_ids'] );
-		$this->assertEquals( $this->wcpos_expected_payment_link( $order ), $document['links']['payment'][0]['href'] );
-		$this->assertEquals( $this->wcpos_expected_receipt_link( $order ), $document['links']['receipt'][0]['href'] );
+		$this->assertSame( $order->get_id(), $document['id'] );
+		$this->assertSame( ( new Tax_Id_Reader() )->read_for_order( $order ), $document['tax_ids'] );
+		$this->assertSame( $this->wcpos_expected_payment_link( $order ), $document['links']['payment'][0]['href'] );
+		$this->assertSame( $this->wcpos_expected_receipt_link( $order ), $document['links']['receipt'][0]['href'] );
 
 		// The record uuid is mirrored into the document for client reconciliation.
-		$this->assertEquals( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $document['meta_data'] ?? array() ) );
+		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $document['meta_data'] ?? array() ) );
 	}
 
 	/**
@@ -432,13 +432,13 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$document = $this->write_ack( $order, $uuid )['document'];
 
 		$item_uuid = $this->item_uuid_from_meta( $document['line_items'][0] );
-		$this->assertEquals( false, is_null( $item_uuid ) );
-		$this->assertEquals( true, Pos_Uuid::is_uuid( (string) $item_uuid ) );
-		$this->assertEquals( true, is_int( $document['line_items'][0]['image']['id'] ) );
-		$this->assertEquals( $this->attachment_id, $document['line_items'][0]['image']['id'] );
+		$this->assertNotNull( $item_uuid );
+		$this->assertTrue( Pos_Uuid::is_uuid( (string) $item_uuid ) );
+		$this->assertIsInt( $document['line_items'][0]['image']['id'] );
+		$this->assertSame( $this->attachment_id, $document['line_items'][0]['image']['id'] );
 
 		// Structured line-item meta survives alongside the stamped uuid.
-		$this->assertEquals( true, in_array( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ), true ) );
+		$this->assertContains( self::ITEM_META_KEY, $this->meta_keys( $document['line_items'][0] ) );
 	}
 
 	/**
@@ -452,10 +452,10 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$ack  = $this->write_ack( $order, $uuid )['document'];
 		$pull = $this->pull_document( wc_get_order( $order->get_id() ) );
 
-		$this->assertEquals( $pull['tax_ids'], $ack['tax_ids'] );
-		$this->assertEquals( $pull['links'], $ack['links'] );
-		$this->assertEquals( $pull['line_items'][0]['image']['id'], $ack['line_items'][0]['image']['id'] );
-		$this->assertEquals(
+		$this->assertSame( $pull['tax_ids'], $ack['tax_ids'] );
+		$this->assertSame( $pull['links'], $ack['links'] );
+		$this->assertSame( $pull['line_items'][0]['image']['id'], $ack['line_items'][0]['image']['id'] );
+		$this->assertSame(
 			$this->item_uuid_from_meta( $pull['line_items'][0] ),
 			$this->item_uuid_from_meta( $ack['line_items'][0] )
 		);
@@ -473,7 +473,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$ack = $this->write_ack( $order, $uuid );
 
-		$this->assertEquals(
+		$this->assertSame(
 			Order_Serializer::canonical_revision( $this->current_bare_document( wc_get_order( $order->get_id() ) ) ),
 			$ack['currentRevision']
 		);
@@ -498,8 +498,8 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$response = $this->push_update( $order, $uuid, $old_shape_ack_revision );
 
-		$this->assertNotWPError( $response, 'The old-shape revision push must not return WP_Error.' );
-		$this->assertEquals( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertNotWPError( $response, 'The characterization push must not return WP_Error.' );
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
 	}
 
 	/**
@@ -514,7 +514,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$ack = $this->write_ack( $order, $uuid );
 
 		// It equals the canonical revision of the next pull of the same state.
-		$this->assertEquals(
+		$this->assertSame(
 			Order_Serializer::canonical_revision( $this->pull_document( wc_get_order( $order->get_id() ) ) ),
 			$ack['currentRevision']
 		);
@@ -526,8 +526,8 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 			$ack['currentRevision'],
 			'f1e2d3c4-3333-4444-8555-666677778888'
 		);
-		$this->assertNotWPError( $second, 'The follow-up revision push must not return WP_Error.' );
-		$this->assertEquals( 200, $second->get_status(), (string) wp_json_encode( $second->get_data() ) );
+		$this->assertNotWPError( $second, 'The characterization push must not return WP_Error.' );
+		$this->assertSame( 200, $second->get_status(), (string) wp_json_encode( $second->get_data() ) );
 	}
 
 	/**
@@ -546,16 +546,16 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		// The grace comparer hashes the CURRENT bare wc/v3 re-read under the old
 		// recipe; an unchanged order must therefore still drain.
 		$historical = Order_Serializer::$recipe( $this->current_bare_document( $order ) );
-		$this->assertEquals(
-			false,
-			Order_Serializer::canonical_revision( $this->current_bare_document( $order ) ) === $historical,
+		$this->assertNotSame(
+			Order_Serializer::canonical_revision( $this->current_bare_document( $order ) ),
+			$historical,
 			'The fixture must actually differ under the historical recipe, or the test proves nothing.'
 		);
 
 		$response = $this->push_update( $order, $uuid, $historical );
 
-		$this->assertNotWPError( $response, 'The historical revision push must not return WP_Error.' );
-		$this->assertEquals( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertNotWPError( $response, 'The characterization push must not return WP_Error.' );
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
 	}
 
 	/**
@@ -590,8 +590,8 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		// The push itself changed customer_note, so `before` is expected to differ;
 		// what must hold is that the ack's revision equals a fresh bare re-read
 		// taken AFTER the item uuids were persisted.
-		$this->assertEquals( false, $before === $ack['currentRevision'] );
-		$this->assertEquals( $after, $ack['currentRevision'] );
+		$this->assertNotSame( $before, $ack['currentRevision'] );
+		$this->assertSame( $after, $ack['currentRevision'] );
 	}
 
 	/**
@@ -605,8 +605,8 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$ack = $this->write_ack( $order, $uuid );
 
-		$this->assertEquals( true, 0 === strpos( $ack['currentRevision'], 'sha256:' ) );
-		$this->assertEquals(
+		$this->assertStringStartsWith( 'sha256:', $ack['currentRevision'] );
+		$this->assertSame(
 			Order_Serializer::canonical_revision( $this->pull_document( wc_get_order( $order->get_id() ) ) ),
 			$ack['currentRevision']
 		);
