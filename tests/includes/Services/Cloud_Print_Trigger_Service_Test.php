@@ -701,6 +701,41 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An on-hold order with a persisted payment date prints.
+	 */
+	public function test_on_hold_order_with_persisted_date_paid_creates_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_status( 'on-hold' );
+		$order->set_date_paid( time() );
+		$order->save();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+	}
+
+	/**
 	 * Filter-substituted assignments without a trigger key default to 'paid'.
 	 *
 	 * Pro's per-outlet filter hands the service hand-built assignment arrays
