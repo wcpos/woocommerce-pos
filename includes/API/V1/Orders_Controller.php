@@ -29,6 +29,7 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 use WP_Error;
@@ -1005,14 +1006,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$response->add_link( 'receipt', $pos_receipt_url );
 
 		// WC core's get_image_id() returns a string; cast line item image IDs to int.
-		if ( isset( $data['line_items'] ) && \is_array( $data['line_items'] ) ) {
-			foreach ( $data['line_items'] as &$item ) {
-				if ( isset( $item['image']['id'] ) ) {
-					$item['image']['id'] = (int) $item['image']['id'];
-				}
-			}
-			unset( $item );
-		}
+		// Shared with the v2 order-document assembly — same cast, one implementation.
+		// This is the ONLY thing v1 borrows from it: the surrounding v1 response
+		// shape (HAL links via add_link, parsed meta_data) is frozen.
+		$data = Order_Serializer::cast_line_item_image_ids( $data );
 
 		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );

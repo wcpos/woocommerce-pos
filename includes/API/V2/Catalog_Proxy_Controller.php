@@ -215,11 +215,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( 'orders' === $resource ) {
 			$serializer = new Order_Serializer();
 			foreach ( (array) $data as $index => $payload ) {
-				$order          = wc_get_order( (int) ( $payload['id'] ?? 0 ) );
-				if ( $order ) {
-					$payload        = $serializer->augment_order_payload( $payload, $order );
-					$data[ $index ] = Order_Serializer::add_pos_links( $payload, $order );
+				if ( ! is_array( $payload ) ) {
+					continue;
 				}
+				// Same assembly as the pull lane, minus the pull-only
+				// `woocommerce_pos_sync_serialized_order` filter — this lane already
+				// ran `woocommerce_pos_sync_proxy_response` above.
+				$data[ $index ] = $serializer->document( $payload, Order_Serializer::V2_AUGMENTATIONS );
 			}
 		}
 		$response->set_data( $data );
