@@ -116,6 +116,75 @@ class Test_Access_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The `wc` group must expose every PRIMITIVE capability the v2 catalog write
+	 * gate resolves to, or the documented settings-screen opt-in cannot restore
+	 * catalog and coupon writes at all (#1514).
+	 */
+	public function test_wc_group_exposes_every_primitive_capability_catalog_writes_require(): void {
+		// wc_rest_check_post_permissions() checks edit_post / delete_post / publish_posts /
+		// read_private_posts, which map_meta_cap() rewrites into these primitives.
+		$required = array(
+			'read_private_products',
+			'edit_products',
+			'edit_others_products',
+			'edit_private_products',
+			'edit_published_products',
+			'publish_products',
+			'delete_products',
+			'delete_others_products',
+			'delete_private_products',
+			'delete_published_products',
+			// product_variation registers map_meta_cap = false, so the singular
+			// product meta caps are checked LITERALLY for variation writes.
+			'edit_product',
+			'delete_product',
+			'read_private_shop_coupons',
+			'edit_shop_coupons',
+			'edit_others_shop_coupons',
+			'edit_private_shop_coupons',
+			'edit_published_shop_coupons',
+			'publish_shop_coupons',
+			'delete_shop_coupons',
+			'delete_others_shop_coupons',
+			'delete_private_shop_coupons',
+			'delete_published_shop_coupons',
+		);
+
+		$wc = $this->section->read()['administrator']['capabilities']['wc'];
+
+		foreach ( $required as $capability ) {
+			$this->assertArrayHasKey( $capability, $wc, $capability );
+		}
+	}
+
+	/**
+	 * The singular coupon meta caps are deliberately NOT exposed: shop_coupon
+	 * registers with map_meta_cap = true, so WordPress rewrites edit_shop_coupon /
+	 * delete_shop_coupon into the primitives above and a role grant of the singular
+	 * name is never read — it would be a dead toggle on the settings screen.
+	 * product_variation is the opposite case, which is why edit_product and
+	 * delete_product ARE exposed.
+	 */
+	public function test_wc_group_omits_coupon_meta_capabilities_that_map_meta_cap_rewrites(): void {
+		$wc = $this->section->read()['administrator']['capabilities']['wc'];
+
+		$this->assertArrayNotHasKey( 'edit_shop_coupon', $wc );
+		$this->assertArrayNotHasKey( 'delete_shop_coupon', $wc );
+
+		$coupon = get_post_type_object( 'shop_coupon' );
+		if ( $coupon ) {
+			$this->assertTrue( $coupon->map_meta_cap, 'shop_coupon maps its meta caps' );
+		}
+
+		$variation = get_post_type_object( 'product_variation' );
+		if ( $variation ) {
+			$this->assertFalse( $variation->map_meta_cap, 'product_variation does NOT map its meta caps' );
+			$this->assertArrayHasKey( $variation->cap->edit_post, $wc );
+			$this->assertArrayHasKey( $variation->cap->delete_post, $wc );
+		}
+	}
+
+	/**
 	 * Verify write() grants/revokes a capability on the cashier role and returns the fresh view.
 	 */
 	public function test_write_grants_and_revokes_capability_on_cashier_role(): void {
