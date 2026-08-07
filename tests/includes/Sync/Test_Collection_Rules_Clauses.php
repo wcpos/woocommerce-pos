@@ -203,6 +203,65 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 	 * Both Read Lanes therefore resolve it the same way; the request param is only a
 	 * fallback for a query that carries no direction at all.
 	 */
+	public function test_legacy_sort_direction_rejects_values_outside_asc_desc(): void {
+		global $wpdb;
+
+		// The raw request `order` param reaches SQL text on the legacy fallback path;
+		// anything but the two legal directions must render as v1's ASC fallback.
+		$plan = $this->plan_for(
+			array(
+				'orderby' => 'status',
+				'order'   => 'DESC, (SELECT 1)',
+			),
+			Collection_Rules::STORAGE_POSTS
+		);
+
+		$this->assertSame(
+			"{$wpdb->posts}.post_status ASC",
+			$plan->filter(
+				Collection_Rules_Plan::HOOK_POSTS_ORDERBY,
+				'wp_posts.post_date DESC',
+				new Collection_Rules_Query_Stub( array( 'post_type' => 'shop_order' ) )
+			)
+		);
+	}
+
+	public function test_legacy_include_where_binding_matches_array_form_post_type(): void {
+		// wc_get_order_types() / explicit `type` args can populate post_type as an
+		// array; the installed posts_where binding must treat array( 'shop_order' )
+		// like 'shop_order' or the proxy lane silently drops the id-set clause v1
+		// still applies. The guard lives on the BINDING, so exercise it via around().
+		$plan = $this->plan_for(
+			array( 'wcpos_include' => '11,12' ),
+			Collection_Rules::STORAGE_POSTS
+		);
+
+		$captured = array();
+		$plan->around(
+			function () use ( &$captured ): void {
+				$captured['string'] = apply_filters(
+					'posts_where',
+					' AND 1=1',
+					new Collection_Rules_Query_Stub( array( 'post_type' => 'shop_order' ) )
+				);
+				$captured['array'] = apply_filters(
+					'posts_where',
+					' AND 1=1',
+					new Collection_Rules_Query_Stub( array( 'post_type' => array( 'shop_order' ) ) )
+				);
+				$captured['other'] = apply_filters(
+					'posts_where',
+					' AND 1=1',
+					new Collection_Rules_Query_Stub( array( 'post_type' => 'product' ) )
+				);
+			}
+		);
+
+		$this->assertSame( $captured['string'], $captured['array'] );
+		$this->assertNotSame( ' AND 1=1', $captured['array'] );
+		$this->assertSame( ' AND 1=1', $captured['other'] );
+	}
+
 	public function test_legacy_status_sort_direction_prefers_the_query_vars(): void {
 		global $wpdb;
 

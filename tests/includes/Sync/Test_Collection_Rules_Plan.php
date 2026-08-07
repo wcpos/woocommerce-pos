@@ -279,7 +279,7 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		$signature = array();
 		foreach ( $GLOBALS['wp_filter'] as $hook => $callbacks ) {
 			$count = 0;
-			foreach ( $callbacks->callbacks as $priority => $entries ) {
+			foreach ( $callbacks->callbacks as $entries ) {
 				$count += \count( $entries );
 			}
 			$signature[ $hook ] = $count;

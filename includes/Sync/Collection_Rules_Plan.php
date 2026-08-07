@@ -372,7 +372,11 @@ final class Collection_Rules_Plan {
 			 * forward can pick up an order id set.
 			 */
 			$where_callback = function ( $where, $query = null ) {
-				if ( ! isset( $query->query_vars['post_type'] ) || 'shop_order' !== $query->query_vars['post_type'] ) {
+				$post_type = $query->query_vars['post_type'] ?? null;
+				// Legacy order queries may carry post_type as a string OR an array
+				// (wc_get_order_types() / explicit `type` args); both must match or
+				// the proxy lane drops the id-set clause while v1 still applies it.
+				if ( 'shop_order' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'shop_order', $post_type, true ) ) ) {
 					return $where;
 				}
 
@@ -651,6 +655,9 @@ final class Collection_Rules_Plan {
 		 * supplied a direction.
 		 */
 		$order = strtoupper( (string) ( $query->query_vars['order'] ?? $this->request_order ?? 'ASC' ) );
+		// $request_order is the RAW request param — it feeds SQL text below, so it
+		// must never carry anything but the two legal directions.
+		$order = \in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
 
 		return "{$wpdb->posts}.{$column} {$order}";
 	}
@@ -748,7 +755,10 @@ final class Collection_Rules_Plan {
 
 		// v1 verbatim: the direction comes from the query args WooCommerce built from the
 		// request (which carries wc/v3's own `order` default), falling back to ASC.
-		$order              = $args['order'] ?? 'ASC';
+		// Whitelisted before interpolation — same defense as the legacy path. Legal
+		// values pass through byte-verbatim (the clause goldens pin the casing).
+		$order              = (string) ( $args['order'] ?? 'ASC' );
+		$order              = \in_array( strtoupper( $order ), array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
 		$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.' . $column . ' ' . $order;
 
 		return $clauses;
