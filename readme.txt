@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.16
+Stable tag: 1.9.17
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,14 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.17 - 2026/08/07 =
+- **Smaller plugin package** -- the download is around 2.4 MB smaller (optimized template gallery images, removed unused bundled files). This also shrinks the Pro package and resolves installation failures on hosts with restrictive upload or disk limits.
+- **Fixed Pro update downloads using a stale licence key** -- changing or re-activating a WCPOS Pro licence now clears WordPress's cached update information, so the next update download always uses the current licence key.
+- **Fixed duplicate cashier identity on multisite** -- on multisite networks a cashier could be assigned two different internal IDs depending on which endpoint served them, splitting one user into two identities in the POS. All endpoints now serve a single ID per user.
+- **Hardened the orders API against malformed metadata** -- a malformed metadata entry in a batch create/update could cause a server error partway through the batch, risking duplicate orders on retry. Malformed entries are now safely skipped and invalid IDs rejected up front.
+- **POS audit metadata is now server-authoritative** -- order metadata recording which cashier and store created an order is now stamped by the server and can no longer be altered by the client. Cash amounts are also validated more strictly.
+- **Internal cloud print improvements** -- consolidated printer-provider handling and the server now reports which template engines each print provider supports.
 
 = 1.9.16 - 2026/08/05 =
 - **Fixed stale price ranges on variable products** -- the POS product grid could show an outdated price or price range for a variable product even after variation prices changed, and clearing local data did not help, because the freshly recomputed range was discarded in favour of an old stored value when building the server response. Responses now always serve the current values, so the displayed range matches the live variation prices. The price charged at checkout was always correct -- this fixes what the grid displays. Server-side fix; no app update needed.
