@@ -590,6 +590,164 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A paid-trigger order prints exactly once across successive paid statuses.
+	 */
+	public function test_paid_trigger_prints_once_across_paid_transitions(): void {
+		// Arrange — real hooks: pending → processing (prints) → completed.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		new Cloud_Print_Trigger_Service();
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$order->payment_complete();
+		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+		$order->set_status( 'completed' );
+		$order->save();
+
+		// Assert — the completed transition must not print a second copy.
+		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+	}
+
+	/**
+	 * Payment completing prints even when the configured post-payment status
+	 * is not a WC paid status (e.g. on-hold for account sales).
+	 */
+	public function test_payment_complete_with_non_paid_status_creates_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		new Cloud_Print_Trigger_Service();
+		$to_on_hold = static function () {
+			return 'on-hold';
+		};
+		add_filter( 'woocommerce_payment_complete_order_status', $to_on_hold );
+		$order = OrderHelper::create_order();
+
+		// Act + Assert.
+		try {
+			$order->payment_complete();
+			$this->assertTrue( $order->has_status( 'on-hold' ) );
+			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+		} finally {
+			remove_filter( 'woocommerce_payment_complete_order_status', $to_on_hold );
+		}
+	}
+
+	/**
+	 * An on-hold order that never completed payment does not print.
+	 */
+	public function test_on_hold_order_without_payment_creates_no_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_status( 'on-hold' );
+		$order->save();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+	}
+
+	/**
+	 * Filter-substituted assignments without a trigger key default to 'paid'.
+	 *
+	 * Pro's per-outlet filter hands the service hand-built assignment arrays
+	 * that never pass through sanitize_assignment(), so the order-event path
+	 * must apply the default itself.
+	 */
+	public function test_filter_assignment_without_trigger_defaults_to_paid(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'outlet-1',
+					'name' => 'Outlet 1',
+					'provider' => 'star-cloudprnt',
+				),
+			),
+			array()
+		);
+		$callback = static function () use ( $tid ) {
+			return array(
+				array(
+					'printer_id' => 'outlet-1',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+				),
+			);
+		};
+		add_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+		$service = new Cloud_Print_Trigger_Service();
+		$order   = OrderHelper::create_order();
+
+		// Act + Assert.
+		try {
+			$service->handle_order( $order->get_id() );
+			$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ), 'Unpaid order must not print for a trigger-less filter assignment.' );
+
+			$order->set_status( 'processing' );
+			$order->save();
+			$service->handle_order( $order->get_id() );
+			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+		}
+	}
+
+	/**
 	 * It creates one job for each matching assignment and avoids duplicates.
 	 */
 	public function test_two_assignments_create_kitchen_and_counter_jobs(): void {

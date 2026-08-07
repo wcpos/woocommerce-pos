@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
 use WP_Error;
@@ -93,7 +94,7 @@ class Cloud_Print_Section extends Abstract_Section {
 					return $assignment;
 				}
 				$assignment['copies']  = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
-				$assignment['trigger'] = \in_array( $assignment['trigger'] ?? '', array( 'created', 'paid' ), true ) ? $assignment['trigger'] : 'paid';
+				$assignment['trigger'] = Cloud_Print_Trigger_Service::normalize_trigger( $assignment['trigger'] ?? '' );
 
 				return $assignment;
 			},
@@ -361,7 +362,7 @@ class Cloud_Print_Section extends Abstract_Section {
 			'scope'       => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
 			'template_id' => sanitize_text_field( (string) ( $assignment['template_id'] ?? '' ) ),
 			'copies'      => min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) ),
-			'trigger'     => \in_array( $assignment['trigger'] ?? '', array( 'created', 'paid' ), true ) ? $assignment['trigger'] : 'paid',
+			'trigger'     => Cloud_Print_Trigger_Service::normalize_trigger( $assignment['trigger'] ?? '' ),
 		);
 	}
 }

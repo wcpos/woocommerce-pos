@@ -26,11 +26,28 @@ class Cloud_Print_Trigger_Service {
 	const ASSIGNMENT_LOCK_TTL = 120;
 
 	/**
+	 * Default assignment trigger: never print before the customer has paid.
+	 */
+	const DEFAULT_TRIGGER = 'paid';
+
+	/**
 	 * Job store.
 	 *
 	 * @var Print_Job_Service
 	 */
 	private $jobs;
+
+	/**
+	 * Order ids whose woocommerce_payment_complete fired this request.
+	 *
+	 * The payment event is the authoritative "paid" signal: WCPOS routes
+	 * payment_complete() to a merchant-configured per-gateway status (see
+	 * Orders::payment_complete_order_status), which may not be one of
+	 * wc_get_is_paid_statuses() — e.g. on-hold for account sales.
+	 *
+	 * @var array<int, bool>
+	 */
+	private $payment_completed = array();
 
 	/**
 	 * Printer registry.
@@ -47,6 +64,36 @@ class Cloud_Print_Trigger_Service {
 		$this->registry = new Cloud_Print_Registry();
 		add_action( 'woocommerce_new_order', array( $this, 'handle_order' ), 20, 1 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'handle_order' ), 20, 1 );
+		add_action( 'woocommerce_payment_complete', array( $this, 'handle_paid_order' ), 20, 1 );
+	}
+
+	/**
+	 * Handle payment completing for an order.
+	 *
+	 * Runs after WC_Order::payment_complete() has moved the order to its
+	 * post-payment status, which a status-changed callback may have already
+	 * seen as a non-paid status. Remember the paid signal, then re-evaluate.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function handle_paid_order( $order_id ): void {
+		$this->payment_completed[ (int) $order_id ] = true;
+		$this->handle_order( $order_id );
+	}
+
+	/**
+	 * Normalize an assignment trigger to a supported value.
+	 *
+	 * Shared by the order-event path, sanitize-on-write, and normalize-on-read
+	 * so the three defaulting sites cannot drift: a drifted default here would
+	 * print receipts for unpaid orders.
+	 *
+	 * @param mixed $trigger Raw trigger value.
+	 *
+	 * @return string created|paid.
+	 */
+	public static function normalize_trigger( $trigger ): string {
+		return \in_array( $trigger, array( 'created', 'paid' ), true ) ? $trigger : self::DEFAULT_TRIGGER;
 	}
 
 	/**
@@ -89,8 +136,8 @@ class Cloud_Print_Trigger_Service {
 			if ( ! $this->scope_matches( $scope, $is_pos ) ) {
 				continue;
 			}
-			$trigger = isset( $assignment['trigger'] ) ? (string) $assignment['trigger'] : 'paid';
-			if ( ! $this->trigger_matches( $trigger, $order ) ) {
+			$trigger = self::normalize_trigger( $assignment['trigger'] ?? '' );
+			if ( ! $this->payment_state_matches( $trigger, $order ) ) {
 				continue;
 			}
 			$printer_id  = (string) $assignment['printer_id'];
@@ -290,18 +337,22 @@ class Cloud_Print_Trigger_Service {
 	 * POS carts ARE orders from the moment the cart is saved (status
 	 * pos-open), and online orders exist at checkout as pending — so
 	 * 'created' fires before the customer has paid. 'paid' (the default)
-	 * waits for a paid status per wc_get_is_paid_statuses(), which the
-	 * woocommerce_order_is_paid_statuses filter can extend.
+	 * accepts any of three signals: a paid status per
+	 * wc_get_is_paid_statuses(), the woocommerce_payment_complete event seen
+	 * this request, or a stored date_paid — the latter two cover gateways
+	 * whose configured post-payment status is not a WC paid status.
 	 *
 	 * @param string    $trigger created|paid.
 	 * @param \WC_Order $order   The order being processed.
 	 */
-	private function trigger_matches( string $trigger, \WC_Order $order ): bool {
+	private function payment_state_matches( string $trigger, \WC_Order $order ): bool {
 		if ( 'created' === $trigger ) {
 			return true;
 		}
 
-		return $order->is_paid();
+		return $order->is_paid()
+			|| ! empty( $this->payment_completed[ $order->get_id() ] )
+			|| null !== $order->get_date_paid();
 	}
 
 	/**
