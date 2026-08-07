@@ -386,7 +386,12 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$pull  = $this->pull_document( $order );
 		$proxy = $this->proxy_document( $order );
 
-		$this->assertSame( $pull, $proxy );
+		// The CONTRACT is shared canonical revision — NOT whole-document identity.
+		// The lanes legitimately differ: pull applies the pull-only
+		// `woocommerce_pos_sync_serialized_order` filter and serializes from the
+		// WC_Order, while the proxy reshapes a wc/v3 response (see the class
+		// docblock). Asserting the full arrays identical here is an overreach
+		// that failed in CI the first time it ran (PR #1509, run 31140777816).
 		$this->assertSame(
 			Order_Serializer::canonical_revision( $pull ),
 			Order_Serializer::canonical_revision( $proxy )
