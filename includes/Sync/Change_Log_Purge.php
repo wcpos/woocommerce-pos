@@ -23,6 +23,17 @@ final class Change_Log_Purge {
 	const MAX_DELETES_PER_RUN = 5000;
 
 	/**
+	 * Slice of that ceiling that compaction may never take.
+	 *
+	 * Compaction runs first and a busy store can supply an unbounded backlog of
+	 * superseded rows, so a single shared budget lets compaction starve pruning
+	 * forever — and pruning is the only operation that advances the prune
+	 * watermark. Pruning still gets whatever compaction leaves unused, so this
+	 * is a floor for pruning, not a cap.
+	 */
+	const MIN_PRUNE_DELETES_PER_RUN = 1000;
+
+	/**
 	 * Change log being purged.
 	 *
 	 * @var Change_Log
@@ -76,33 +87,68 @@ final class Change_Log_Purge {
 			? min( $this->change_log->sequence_at_or_before( $tombstone_gmt ), $this->change_log->head_sequence() - 1 )
 			: 0;
 
-		$deleted = 0;
-		do {
-			$limit = min( $batch, self::MAX_DELETES_PER_RUN - $deleted );
-			if ( $limit <= 0 ) {
-				break;
-			}
-			$count    = $this->change_log->compact( $compaction_cutoff, $compaction_gmt, $limit );
-			$deleted += $count;
-		} while ( $count === $limit && $deleted < self::MAX_DELETES_PER_RUN );
+		$change_log     = $this->change_log;
+		$pruning_active = $tombstone_days > 0;
 
-		if ( $tombstone_days > 0 ) {
-			do {
-				$limit = min( $batch, self::MAX_DELETES_PER_RUN - $deleted );
-				if ( $limit <= 0 ) {
-					break;
-				}
-				$result = $this->change_log->prune_tombstones( $tombstone_cutoff, $tombstone_gmt, $limit );
-				$count  = $result['deleted'];
-				$deleted += $count;
-			} while ( $count === $limit && $deleted < self::MAX_DELETES_PER_RUN );
+		$compaction = $this->drain(
+			static function ( int $limit ) use ( $change_log, $compaction_cutoff, $compaction_gmt ): int {
+				return $change_log->compact( $compaction_cutoff, $compaction_gmt, $limit );
+			},
+			$batch,
+			$pruning_active ? self::MAX_DELETES_PER_RUN - self::MIN_PRUNE_DELETES_PER_RUN : self::MAX_DELETES_PER_RUN
+		);
+		$deleted = $compaction['deleted'];
+		$capped  = $compaction['capped'];
+
+		if ( $pruning_active ) {
+			$pruning = $this->drain(
+				static function ( int $limit ) use ( $change_log, $tombstone_cutoff, $tombstone_gmt ): int {
+					$result = $change_log->prune_tombstones( $tombstone_cutoff, $tombstone_gmt, $limit );
+
+					return $result['deleted'];
+				},
+				$batch,
+				self::MAX_DELETES_PER_RUN - $deleted
+			);
+			$deleted += $pruning['deleted'];
+			$capped   = $capped || $pruning['capped'];
 		}
 
 		// A capped run means backlog remains — drain it across bounded runs
 		// rather than waiting a day. WP dedupes identical single events
 		// scheduled within ten minutes, so this cannot stack.
-		if ( $deleted >= self::MAX_DELETES_PER_RUN ) {
+		if ( $capped ) {
 			wp_schedule_single_event( $now + 5 * MINUTE_IN_SECONDS, self::PURGE_HOOK );
 		}
+	}
+
+	/**
+	 * Delete in batches until one operation runs dry or spends its ceiling.
+	 *
+	 * @param callable $delete_batch Receives a row limit, returns rows deleted.
+	 * @param int      $batch        Rows to delete per call.
+	 * @param int      $ceiling      Rows this operation may delete in total.
+	 *
+	 * @return array{deleted: int, capped: bool} Rows deleted, and whether the ceiling stopped it.
+	 */
+	private function drain( callable $delete_batch, int $batch, int $ceiling ): array {
+		$deleted = 0;
+		while ( $deleted < $ceiling ) {
+			$limit = min( $batch, $ceiling - $deleted );
+			$count = (int) $delete_batch( $limit );
+			$deleted += $count;
+
+			if ( $count < $limit ) {
+				return array(
+					'deleted' => $deleted,
+					'capped'  => false,
+				);
+			}
+		}
+
+		return array(
+			'deleted' => $deleted,
+			'capped'  => $ceiling > 0,
+		);
 	}
 }
