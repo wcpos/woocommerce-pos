@@ -43,11 +43,9 @@
     "allow-plugins": {
       "dealerdirect/phpcodesniffer-composer-installer": true
     },
-    "policy": {
-      "advisories": {
-        "ignore-id": [
-          "PKSA-rdkp-vv9z-mjkg"
-        ]
+    "audit": {
+      "ignore": {
+        "PKSA-rdkp-vv9z-mjkg": "phpcs dev-only advisory; accepted until upstream fix ships"
       }
     }
   },
