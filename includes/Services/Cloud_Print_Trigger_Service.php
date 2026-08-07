@@ -89,6 +89,10 @@ class Cloud_Print_Trigger_Service {
 			if ( ! $this->scope_matches( $scope, $is_pos ) ) {
 				continue;
 			}
+			$trigger = isset( $assignment['trigger'] ) ? (string) $assignment['trigger'] : 'paid';
+			if ( ! $this->trigger_matches( $trigger, $order ) ) {
+				continue;
+			}
 			$printer_id  = (string) $assignment['printer_id'];
 			$template_id = (string) $assignment['template_id'];
 			$order_id    = $order->get_id();
@@ -278,6 +282,26 @@ class Cloud_Print_Trigger_Service {
 			'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
 			'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) ( $drawer_options['drawer_connector'] ?? 'pin2' ) ),
 		);
+	}
+
+	/**
+	 * Whether an assignment trigger applies to this order's payment state.
+	 *
+	 * POS carts ARE orders from the moment the cart is saved (status
+	 * pos-open), and online orders exist at checkout as pending — so
+	 * 'created' fires before the customer has paid. 'paid' (the default)
+	 * waits for a paid status per wc_get_is_paid_statuses(), which the
+	 * woocommerce_order_is_paid_statuses filter can extend.
+	 *
+	 * @param string    $trigger created|paid.
+	 * @param \WC_Order $order   The order being processed.
+	 */
+	private function trigger_matches( string $trigger, \WC_Order $order ): bool {
+		if ( 'created' === $trigger ) {
+			return true;
+		}
+
+		return $order->is_paid();
 	}
 
 	/**

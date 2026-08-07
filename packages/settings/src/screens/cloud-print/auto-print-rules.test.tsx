@@ -47,7 +47,7 @@ function renderRules(overrides: Partial<AutoPrintRulesTestProps> = {}) {
 }
 
 describe('AutoPrintRules', () => {
-	it('renders each assignment as a sentence with four selects', () => {
+	it('renders each assignment as a sentence with five selects', () => {
 		renderRules();
 
 		expect(screen.getByTestId('rule-0')).toBeInTheDocument();
@@ -59,12 +59,50 @@ describe('AutoPrintRules', () => {
 		expect(screen.getAllByText(/using the/i).length).toBeGreaterThan(0);
 		expect(screen.getAllByText(/template,/i).length).toBeGreaterThan(0);
 
-		// Four selects per row.
+		// Five selects per row.
 		const row0 = screen.getByTestId('rule-0');
 		expect(within(row0).getByTestId('rule-scope-0')).toBeInTheDocument();
 		expect(within(row0).getByTestId('rule-printer-0')).toBeInTheDocument();
 		expect(within(row0).getByTestId('rule-template-0')).toBeInTheDocument();
 		expect(within(row0).getByTestId('rule-copies-0')).toBeInTheDocument();
+		expect(within(row0).getByTestId('rule-trigger-0')).toBeInTheDocument();
+	});
+
+	it('renders the trigger select defaulting to paid when the assignment has none', () => {
+		renderRules();
+
+		expect(screen.getByTestId('rule-trigger-0')).toHaveValue('paid');
+		const options = within(screen.getByTestId('rule-trigger-0'))
+			.getAllByRole('option')
+			.map((option) => option.textContent);
+		expect(options).toEqual(["once it's paid", "as soon as it's created"]);
+	});
+
+	it('shows the stored trigger value when the assignment has one', () => {
+		renderRules({
+			assignments: [
+				{ printer_id: 'kitchen', store_id: 0, scope: 'pos', template_id: '11', trigger: 'created' },
+			],
+		});
+
+		expect(screen.getByTestId('rule-trigger-0')).toHaveValue('created');
+	});
+
+	it('changing trigger calls onChange with trigger updated on the right rule', () => {
+		const { onChange } = renderRules();
+
+		fireEvent.change(screen.getByTestId('rule-trigger-1'), { target: { value: 'created' } });
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		const next = onChange.mock.calls[0][0] as CloudAssignment[];
+		expect(next[0]).not.toHaveProperty('trigger');
+		expect(next[1]).toEqual({
+			printer_id: 'front',
+			store_id: 0,
+			scope: 'online',
+			template_id: '22',
+			trigger: 'created',
+		});
 	});
 
 	it('renders the copies select with a default value of one', () => {
@@ -163,6 +201,7 @@ describe('AutoPrintRules', () => {
 			scope: 'every',
 			template_id: templateOptions[0].value,
 			copies: 1,
+			trigger: 'paid',
 		});
 	});
 

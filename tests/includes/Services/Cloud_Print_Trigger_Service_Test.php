@@ -84,10 +84,25 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	/**
 	 * Persist printers + assignments to the cloud-print settings option.
 	 *
+	 * Assignments without an explicit `trigger` are pinned to 'created' so the
+	 * mechanics tests (locks, copies, formats) stay independent of order
+	 * status — OrderHelper orders are 'pending', which the default 'paid'
+	 * trigger would skip. Trigger semantics have their own dedicated tests.
+	 *
 	 * @param array $printers    Printer definitions.
 	 * @param array $assignments Assignment definitions.
 	 */
 	private function set_cloud_print( array $printers, array $assignments ): void {
+		$assignments = array_map(
+			function ( $assignment ) {
+				if ( \is_array( $assignment ) && ! isset( $assignment['trigger'] ) ) {
+					$assignment['trigger'] = 'created';
+				}
+
+				return $assignment;
+			},
+			$assignments
+		);
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
 			array(
@@ -400,6 +415,181 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A paid-trigger assignment skips an order that has not been paid yet.
+	 */
+	public function test_unpaid_order_with_paid_trigger_creates_no_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+	}
+
+	/**
+	 * A paid-trigger assignment prints once the order reaches a paid status.
+	 */
+	public function test_paid_order_with_paid_trigger_creates_one_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_status( 'processing' );
+		$order->save();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+	}
+
+	/**
+	 * Legacy assignments stored without a trigger default to 'paid'.
+	 */
+	public function test_assignment_without_trigger_defaults_to_paid(): void {
+		// Arrange — write the option directly: set_cloud_print() pins a
+		// trigger, but this test exercises the stored-before-upgrade shape.
+		$tid = $this->create_thermal_template();
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id' => 'counter',
+						'name' => 'Counter',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id' => 'counter',
+						'scope' => 'every',
+						'template_id' => (string) $tid,
+					),
+				),
+			)
+		);
+		$unpaid = OrderHelper::create_order();
+		$paid   = OrderHelper::create_order();
+		$paid->set_status( 'completed' );
+		$paid->save();
+
+		// Act.
+		$service = new Cloud_Print_Trigger_Service();
+		$service->handle_order( $unpaid->get_id() );
+		$service->handle_order( $paid->get_id() );
+
+		// Assert — only the paid order printed.
+		$jobs = $this->jobs->query( array( 'printer_id' => 'counter' ) );
+		$this->assertEquals( 1, \count( $jobs ) );
+		$job = $this->jobs->get( $jobs[0]['id'] );
+		$this->assertEquals( $paid->get_id(), (int) $job['order_id'] );
+	}
+
+	/**
+	 * A created-trigger assignment prints an unpaid order immediately.
+	 */
+	public function test_unpaid_order_with_created_trigger_creates_one_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'kitchen',
+					'name' => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'kitchen',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'created',
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'kitchen' ) ) ) );
+	}
+
+	/**
+	 * Payment completing fires the paid trigger through the real order hooks.
+	 */
+	public function test_payment_complete_fires_paid_trigger_via_hooks(): void {
+		// Arrange — instantiate the service so its order hooks are registered.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		new Cloud_Print_Trigger_Service();
+		$order = OrderHelper::create_order();
+		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ), 'Order creation must not print a paid-trigger assignment.' );
+
+		// Act — payment lands, moving the order to a paid status.
+		$order->payment_complete();
+
+		// Assert.
+		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
+	}
+
+	/**
 	 * It creates one job for each matching assignment and avoids duplicates.
 	 */
 	public function test_two_assignments_create_kitchen_and_counter_jobs(): void {
@@ -610,6 +800,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 					'printer_id' => 'outlet-1',
 					'scope' => 'every',
 					'template_id' => (string) $tid,
+					'trigger' => 'created',
 				),
 			);
 		};

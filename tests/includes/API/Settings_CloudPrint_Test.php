@@ -913,6 +913,93 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Assignment trigger round-trips through the Cloud Print settings endpoint.
+	 */
+	public function test_cloud_assignment_with_created_trigger_round_trips(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+						'trigger'     => 'created',
+					),
+				),
+			)
+		);
+
+		// Act.
+		rest_do_request( $request );
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( 'created', $data['assignments'][0]['trigger'] );
+	}
+
+	/**
+	 * Assignment trigger defaults to 'paid' when omitted or invalid on save.
+	 */
+	public function test_cloud_assignment_without_trigger_sanitizes_to_paid(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+					),
+					array(
+						'printer_id'  => 'counter',
+						'scope'       => 'every',
+						'template_id' => '11',
+						'trigger'     => 'bogus',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $request )->get_data();
+
+		// Assert.
+		$this->assertEquals( 'paid', $data['assignments'][0]['trigger'] );
+		$this->assertEquals( 'paid', $data['assignments'][1]['trigger'] );
+	}
+
+	/**
+	 * Legacy assignments stored without a trigger read back as 'paid'.
+	 */
+	public function test_get_cloud_print_normalizes_legacy_assignment_trigger_to_paid(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'kitchen',
+						'scope'       => 'every',
+						'template_id' => '11',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( 'paid', $data['assignments'][0]['trigger'] );
+	}
+
+	/**
 	 * Assignment copies default to one when omitted.
 	 */
 	public function test_cloud_assignment_without_copies_sanitizes_to_one(): void {

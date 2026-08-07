@@ -82,15 +82,18 @@ class Cloud_Print_Section extends Abstract_Section {
 			},
 			$settings['printers']
 		);
-		// Assignments saved before the copies field existed have no `copies`
-		// key stored; normalize on read so the REST view always carries it.
+		// Assignments saved before the copies/trigger fields existed have no
+		// such keys stored; normalize on read so the REST view always carries
+		// them. Legacy rows default to trigger=paid — receipts should not
+		// print until the customer has paid unless the merchant opts in.
 		$assignments             = \is_array( $settings['assignments'] ) ? $settings['assignments'] : array();
 		$settings['assignments'] = array_map(
 			function ( $assignment ) {
 				if ( ! \is_array( $assignment ) ) {
 					return $assignment;
 				}
-				$assignment['copies'] = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+				$assignment['copies']  = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+				$assignment['trigger'] = \in_array( $assignment['trigger'] ?? '', array( 'created', 'paid' ), true ) ? $assignment['trigger'] : 'paid';
 
 				return $assignment;
 			},
@@ -358,6 +361,7 @@ class Cloud_Print_Section extends Abstract_Section {
 			'scope'       => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
 			'template_id' => sanitize_text_field( (string) ( $assignment['template_id'] ?? '' ) ),
 			'copies'      => min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) ),
+			'trigger'     => \in_array( $assignment['trigger'] ?? '', array( 'created', 'paid' ), true ) ? $assignment['trigger'] : 'paid',
 		);
 	}
 }
