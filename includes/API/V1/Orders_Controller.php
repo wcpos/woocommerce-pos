@@ -29,6 +29,8 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -54,6 +56,24 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @var string
 	 */
 	protected $namespace = 'wcpos/v1';
+
+	/**
+	 * Canonical Collection Rule name => the request key this lane exposes it under.
+	 *
+	 * The direct lane's narrowing map. `created_via` is DELIBERATELY absent: the rule row
+	 * exists (the proxy lane claims it), but `wcpos/v1` has never supported the filter and
+	 * adding it here would be a wire change, not a refactor. See `Sync\Collection_Rules`.
+	 *
+	 * @var array<string, string>
+	 */
+	private const WCPOS_COLLECTION_PARAM_MAP = array(
+		'orderby'     => 'orderby',
+		'order'       => 'order',
+		'include'     => 'wcpos_include',
+		'exclude'     => 'wcpos_exclude',
+		'pos_cashier' => 'pos_cashier',
+		'pos_store'   => 'pos_store',
+	);
 
 	/**
 	 * Store the request object for use in lifecycle methods.
@@ -832,27 +852,17 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		// Ensure 'orderby' is an array and has an 'enum' key that is also an array.
+		// The extra values are a PROJECTION of the Collection Rule sort rows, so the
+		// schema cannot advertise a sort the clause bodies do not implement.
 		if ( isset( $params['orderby'] ) && \is_array( $params['orderby'] ) && isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			$params['orderby']['enum'] = array_merge(
 				$params['orderby']['enum'],
-				array( 'status', 'customer_id', 'payment_method', 'total' )
+				Collection_Rules::orderby_enum( 'orders' )
 			);
 		}
 
-		// Add 'pos_cashier' parameter.
-		$params['pos_cashier'] = array(
-			'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by POS cashier.', 'woocommerce-pos' ),
-			'type'        => 'integer',
-			'required'    => false,
-		);
-
-		// Add 'pos_store' parameter
-		// @NOTE - this is different to 'store_id' which is the store the request was made from.
-		$params['pos_store'] = array(
-			'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by POS store.', 'woocommerce-pos' ),
-			'type'        => 'integer',
-			'required'    => false,
-		);
+		// Add the 'pos_cashier' and 'pos_store' parameters (projection of the filter rows).
+		$params = array_merge( $params, Collection_Rules::collection_params( 'orders' ) );
 
 		return $params;
 	}
@@ -1146,26 +1156,28 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			}
 		}
 
-		// Add 'pos_cashier' filter.
-		if ( isset( $request['pos_cashier'] ) ) {
-			$args['meta_query'][] = array(
-				'key'   => '_pos_user',
-				'value' => $request['pos_cashier'],
-			);
-		}
+		return $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, $args );
+	}
 
-		// Add 'pos_store' filter.
-		if ( isset( $request['pos_store'] ) ) {
-			$args['meta_query'][] = array(
-				'key'   => '_pos_store',
-				'value' => $request['pos_store'],
-			);
-		}
+	/**
+	 * The Collection Rules plan for the order query in flight.
+	 *
+	 * One declaration table feeds both Read Lanes; this lane keeps its own `add_filter`
+	 * topology (Pro subclasses these callbacks) and delegates only the clause bodies.
+	 *
+	 * @param WP_REST_Request|null $request Request to plan against, defaulting to the dispatched one.
+	 *
+	 * @return Collection_Rules_Plan
+	 */
+	private function wcpos_collection_plan( ?WP_REST_Request $request = null ): Collection_Rules_Plan {
+		$request = $request instanceof WP_REST_Request ? $request : $this->wcpos_request;
 
-		// @TODO - Add 'created_via' filter.
-		// 'created_via' is stored in the operational data table for HPOS and postmeta for legacy.
-
-		return $args;
+		return Collection_Rules::for_request(
+			'orders',
+			$request instanceof WP_REST_Request ? $request : new WP_REST_Request(),
+			self::WCPOS_COLLECTION_PARAM_MAP,
+			$this->hpos_enabled ? Collection_Rules::STORAGE_HPOS : Collection_Rules::STORAGE_POSTS
+		);
 	}
 
 	/**
@@ -1177,23 +1189,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_where_order_include_exclude( string $where, $query ) {
-		global $wpdb;
-
-		// Handle 'wcpos_include'.
-		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
-			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
-			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is generated from array_fill with %d placeholders.
-		}
-
-		// Handle 'wcpos_exclude'.
-		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
-			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
-			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is generated from array_fill with %d placeholders.
-		}
-
-		return $where;
+		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_WHERE, $where, $query );
 	}
 
 	/**
@@ -1205,19 +1201,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param array    $args    Query args.
 	 */
 	public function wcpos_hpos_orders_table_query_clauses( array $clauses, $query, array $args ) {
-		// Handle 'wcpos_include'.
-		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
-			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
-			$clauses['where'] .= ' AND ' . $query->get_table_name( 'orders' ) . '.id IN (' . implode( ',', $include_ids ) . ')';
-		}
-
-		// Handle 'wcpos_exclude'.
-		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
-			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
-			$clauses['where'] .= ' AND ' . $query->get_table_name( 'orders' ) . '.id NOT IN (' . implode( ',', $exclude_ids ) . ')';
-		}
-
-		return $clauses;
+		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, $clauses, $query );
 	}
 
 	/**
@@ -1288,31 +1272,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return string[] $clauses
 	 */
 	public function wcpos_hpos_orderby_query( array $clauses, $query, $args ) {
-		if ( isset( $clauses['orderby'] ) && '' === $clauses['orderby'] ) {
-			$order   = $args['order'] ?? 'ASC';
-			$orderby = $this->wcpos_request->get_param( 'orderby' );
-
-			switch ( $orderby ) {
-				case 'status':
-					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.status ' . $order;
-
-					break;
-				case 'customer_id':
-					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.customer_id ' . $order;
-
-					break;
-				case 'payment_method':
-					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.payment_method ' . $order;
-
-					break;
-				case 'total':
-					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.total_amount ' . $order;
-
-					break;
-			}
-		}
-
-		return $clauses;
+		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_ORDERBY, $clauses, $query, (array) $args );
 	}
 
 	/**
@@ -1324,18 +1284,16 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return string Modified ORDER BY clause.
 	 */
 	public function wcpos_legacy_order_status_orderby( string $orderby, WP_Query $query ): string {
-		global $wpdb;
+		$rewritten = $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_ORDERBY, $orderby, $query );
 
-		// Only modify if this is an order query.
-		if ( isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'] ) {
-			$order   = isset( $this->wcpos_request ) ? strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' ) : 'ASC';
-			$orderby = "{$wpdb->posts}.post_status {$order}";
-
-			// Remove filter after use.
+		// Remove filter after use. The rule rewrites the clause only for a shop_order
+		// query, so a changed value is exactly the "this was our order query" signal the
+		// inline post_type check used to provide.
+		if ( $rewritten !== $orderby ) {
 			remove_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10 );
 		}
 
-		return $orderby;
+		return $rewritten;
 	}
 
 	/**
@@ -1353,28 +1311,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * Legacy order options.
 		 */
 		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
-			switch ( $request['orderby'] ) {
-				case 'status':
-					// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
-					add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
-
-					break;
-				case 'customer_id':
-					$args['meta_key'] = '_customer_user';
-					$args['orderby']  = 'meta_value_num';
-
-					break;
-				case 'payment_method':
-					$args['meta_key'] = '_payment_method_title';
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'total':
-					$args['meta_key'] = '_order_total';
-					$args['orderby']  = 'meta_value_num';
-
-					break;
+			if ( 'status' === $request['orderby'] ) {
+				// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
+				add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
 			}
+
+			$args = $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
 		}
 
 		/*

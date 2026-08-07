@@ -7,10 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\API\V1\Customers_Controller as V1_Customers_Controller;
 use WCPOS\WooCommercePOS\API\V1\Taxes_Controller as V1_Taxes_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -66,13 +66,36 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	);
 
 	/**
+	 * Canonical Collection Rule name => the request key this lane exposes it under.
+	 *
+	 * The proxy lane's narrowing map. `include`/`exclude` are claimed ONLY when the
+	 * request also carries a search term: wc/v3 resolves `search` to a matched-id set
+	 * that clobbers them, so the rule takes ownership exactly then and a plain targeted
+	 * pull keeps wc/v3's native include semantics (including its ordering). Unlike the
+	 * v1 map, this one exposes `created_via` — see `Sync\Collection_Rules`.
+	 */
+	private const ORDERS_PARAM_MAP = array(
+		'orderby'     => 'orderby',
+		'order'       => 'order',
+		'pos_cashier' => 'pos_cashier',
+		'pos_store'   => 'pos_store',
+		'created_via' => 'created_via',
+		'include'     => array(
+			'key'   => 'include',
+			'when'  => 'search',
+			'parse' => 'id_list',
+		),
+		'exclude'     => array(
+			'key'   => 'exclude',
+			'when'  => 'search',
+			'parse' => 'id_list',
+		),
+	);
+
+	/**
 	 * The `post__not_in` closure while a `/products` forward is in flight (null otherwise).
 	 */
-	private $pos_visibility_filter  = null;
-	private $pos_order_filter       = null;
-	private $pos_order_filter_hook  = null;
-	private $pos_order_where_filter = null;
-	private $pos_orderby_filter     = null;
+	private $pos_visibility_filter = null;
 
 	public function register_routes(): void {
 		foreach ( self::resources() as $route => $meta ) {
@@ -160,8 +183,17 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			}
 		}
 
+		$orders_plan = null;
+		if ( 'orders' === $resource ) {
+			// Parity by construction: the same Collection Rules the wcpos/v1 controller
+			// applies on the direct lane, installed around this forward and unwound after
+			// it. Claimed params are stripped so wc/v3 never sees a WCPOS-only `orderby`
+			// and never resolves `search` over an id set the rule now owns.
+			$orders_plan  = Collection_Rules::for_request( 'orders', $request, self::ORDERS_PARAM_MAP );
+			$query_params = $orders_plan->forwarded_params( $query_params );
+		}
+
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
-		$this->add_pos_order_filter( $resource, $query_params );
 		$inner->set_query_params( $query_params );
 		if ( 'orders' === $resource ) {
 			// Server-authoritative, overriding any client-sent dp: every WCPOS
@@ -189,7 +221,10 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				};
 				add_filter( 'query', $tax_query_filter, 10, 1 );
 			}
-			$response = rest_do_request( $inner );
+			$forward  = static function () use ( $inner ) {
+				return rest_do_request( $inner );
+			};
+			$response = null === $orders_plan ? $forward() : $orders_plan->around( $forward );
 		} finally {
 			if ( null !== $tax_filter_controller ) {
 				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
@@ -203,7 +238,6 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 			}
 			$this->remove_pos_visibility_filter();
-			$this->remove_pos_order_filter();
 			if ( null !== $customer_query_filter ) {
 				remove_filter( 'woocommerce_rest_customer_query', $customer_query_filter );
 			}
@@ -297,169 +331,6 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( null !== $this->pos_visibility_filter ) {
 			remove_filter( 'woocommerce_rest_product_object_query', $this->pos_visibility_filter );
 			$this->pos_visibility_filter = null;
-		}
-	}
-
-	private function add_pos_order_filter( string $resource, array &$query_params ): void {
-		if ( 'orders' !== $resource ) {
-			return;
-		}
-		// V1's public orderby callbacks depend on its protected request state, so mirror their small clause mappings here.
-		$orderby = $query_params['orderby'] ?? null;
-		if ( ! \in_array( $orderby, array( 'status', 'customer_id', 'payment_method', 'total' ), true ) ) {
-			$orderby = null;
-		} else {
-			unset( $query_params['orderby'] );
-		}
-		$order = isset( $query_params['order'] )
-			&& \is_string( $query_params['order'] )
-			&& 'asc' === strtolower( $query_params['order'] ) ? 'ASC' : 'DESC';
-		$filters = array();
-		foreach ( array( 'pos_cashier', 'pos_store', 'created_via' ) as $key ) {
-			if ( array_key_exists( $key, $query_params ) ) {
-				$value = $query_params[ $key ];
-				if ( 'created_via' === $key && \is_array( $value ) ) {
-					$filters[ $key ] = \array_map( 'sanitize_key', \array_values( $value ) );
-				} else {
-					$value           = \is_scalar( $value ) ? $value : '';
-					$filters[ $key ] = 'created_via' === $key ? sanitize_key( (string) $value ) : absint( $value );
-				}
-				unset( $query_params[ $key ] );
-			}
-		}
-		// wc/v3 resolves `search` to a matched-id set that CLOBBERS include/exclude
-		// (v1 solved this with raw id IN/NOT IN clauses — port the same). Only take
-		// ownership when search is present; plain targeted pulls keep wc/v3's
-		// native include semantics (including its ordering).
-		if ( isset( $query_params['search'] ) && '' !== trim( (string) $query_params['search'] ) ) {
-			foreach ( array( 'include', 'exclude' ) as $key ) {
-				if ( isset( $query_params[ $key ] ) ) {
-					$ids = wp_parse_id_list( $query_params[ $key ] );
-					if ( array() !== $ids ) {
-						$filters[ $key ] = $ids;
-					}
-					unset( $query_params[ $key ] );
-				}
-			}
-		}
-		if ( array() === $filters && null === $orderby ) {
-			return;
-		}
-		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-			$this->pos_order_filter_hook = 'woocommerce_orders_table_query_clauses';
-			$this->pos_order_filter      = static function ( array $clauses, $query ) use ( $filters, $orderby, $order ): array {
-				global $wpdb;
-				$orders     = $query->get_table_name( 'orders' );
-				$meta       = $query->get_table_name( 'meta' );
-				$operations = $query->get_table_name( 'operational_data' );
-				$meta_keys  = array(
-					'pos_cashier' => '_pos_user',
-					'pos_store'   => '_pos_store',
-				);
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Table names come from WooCommerce; placeholder lists are generated below.
-				foreach ( $meta_keys as $key => $meta_key ) {
-					if ( isset( $filters[ $key ] ) ) {
-						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$meta} WHERE meta_key=%s AND meta_value=%s)", $meta_key, (string) $filters[ $key ] );
-					}
-				}
-				if ( isset( $filters['created_via'] ) ) {
-					$created_via = (array) $filters['created_via'];
-					if ( array() !== $created_via ) {
-						$placeholders      = implode( ', ', array_fill( 0, \count( $created_via ), '%s' ) );
-						$clauses['where'] .= $wpdb->prepare( " AND {$orders}.id IN (SELECT order_id FROM {$operations} WHERE created_via IN ({$placeholders}))", ...$created_via );
-					}
-				}
-				if ( isset( $filters['include'] ) ) {
-					$clauses['where'] .= " AND {$orders}.id IN (" . implode( ',', array_map( 'intval', $filters['include'] ) ) . ')';
-				}
-				if ( isset( $filters['exclude'] ) ) {
-					$clauses['where'] .= " AND {$orders}.id NOT IN (" . implode( ',', array_map( 'intval', $filters['exclude'] ) ) . ')';
-				}
-				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-				if ( null !== $orderby ) {
-					$columns = array(
-						'status'         => 'status',
-						'customer_id'    => 'customer_id',
-						'payment_method' => 'payment_method_title',
-						'total'          => 'total_amount',
-					);
-					$clauses['orderby'] = $orders . '.' . $columns[ $orderby ] . ' ' . $order;
-				}
-
-				return $clauses;
-			};
-			add_filter( $this->pos_order_filter_hook, $this->pos_order_filter, 10, 2 );
-			return;
-		}
-		if ( 'status' === $orderby ) {
-			$this->pos_orderby_filter = static function ( string $sql, $query ) use ( $order ): string {
-				global $wpdb;
-				$is_order_query = isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'];
-
-				return $is_order_query ? "{$wpdb->posts}.post_status {$order}" : $sql;
-			};
-			add_filter( 'posts_orderby', $this->pos_orderby_filter, 10, 2 );
-		}
-		$this->pos_order_filter_hook = 'woocommerce_rest_shop_order_object_query';
-		$this->pos_order_filter      = static function ( array $args ) use ( $filters, $orderby, $order ): array {
-			$meta_keys = array(
-				'pos_cashier' => '_pos_user',
-				'pos_store'   => '_pos_store',
-				'created_via' => '_created_via',
-			);
-			foreach ( $meta_keys as $key => $meta_key ) {
-				if ( isset( $filters[ $key ] ) && array() !== $filters[ $key ] ) {
-					$args['meta_query'][] = array(
-						'key'   => $meta_key,
-						'value' => $filters[ $key ],
-					);
-				}
-			}
-			if ( null !== $orderby && 'status' !== $orderby ) {
-				$args['meta_key'] = array(
-					'customer_id'    => '_customer_user',
-					'payment_method' => '_payment_method_title',
-					'total'          => '_order_total',
-				)[ $orderby ];
-				$args['orderby'] = \in_array( $orderby, array( 'customer_id', 'total' ), true ) ? 'meta_value_num' : 'meta_value';
-				$args['order']   = $order;
-			}
-
-			return $args;
-		};
-		add_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
-		if ( isset( $filters['include'] ) || isset( $filters['exclude'] ) ) {
-			$this->pos_order_where_filter = static function ( string $where, $query ) use ( $filters ): string {
-				global $wpdb;
-				if ( ! isset( $query->query_vars['post_type'] ) || 'shop_order' !== $query->query_vars['post_type'] ) {
-					return $where;
-				}
-				if ( isset( $filters['include'] ) ) {
-					$where .= " AND {$wpdb->posts}.ID IN (" . implode( ',', array_map( 'intval', $filters['include'] ) ) . ')';
-				}
-				if ( isset( $filters['exclude'] ) ) {
-					$where .= " AND {$wpdb->posts}.ID NOT IN (" . implode( ',', array_map( 'intval', $filters['exclude'] ) ) . ')';
-				}
-
-				return $where;
-			};
-			add_filter( 'posts_where', $this->pos_order_where_filter, 10, 2 );
-		}
-	}
-
-	private function remove_pos_order_filter(): void {
-		if ( null !== $this->pos_order_filter ) {
-			remove_filter( $this->pos_order_filter_hook, $this->pos_order_filter );
-			$this->pos_order_filter      = null;
-			$this->pos_order_filter_hook = null;
-		}
-		if ( null !== $this->pos_order_where_filter ) {
-			remove_filter( 'posts_where', $this->pos_order_where_filter, 10 );
-			$this->pos_order_where_filter = null;
-		}
-		if ( null !== $this->pos_orderby_filter ) {
-			remove_filter( 'posts_orderby', $this->pos_orderby_filter, 10 );
-			$this->pos_orderby_filter = null;
 		}
 	}
 }
