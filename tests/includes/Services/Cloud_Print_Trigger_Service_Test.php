@@ -783,6 +783,98 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Created and paid rules on the same printer+template each print once.
+	 *
+	 * Dedupe is per trigger: the created-rule job printed at order time must
+	 * not satisfy the paid rule when payment lands later.
+	 */
+	public function test_created_and_paid_rules_on_same_printer_template_both_print(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'created',
+				),
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+		new Cloud_Print_Trigger_Service();
+
+		// Act + Assert — order creation satisfies only the created rule.
+		$order = OrderHelper::create_order();
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+
+		// Payment satisfies the paid rule despite the existing created job.
+		$order->payment_complete();
+		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+
+		// A later transition reprints neither rule.
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * A trigger-less job (manual print / pre-trigger install) counts toward
+	 * every rule, so auto rules do not reprint after a manual print.
+	 */
+	public function test_manual_job_suppresses_paid_rule(): void {
+		// Arrange — the order is paid and manually printed BEFORE the rule
+		// exists, so no order event can auto-print during the arrangement.
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+		$order->set_status( 'processing' );
+		$order->save();
+		$this->jobs->create(
+			array(
+				'printer_id'   => 'counter',
+				'content_type' => 'application/xml',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+			)
+		);
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+					'trigger' => 'paid',
+				),
+			)
+		);
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert — the manual job satisfies the paid rule.
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
 	 * It creates one job for each matching assignment and avoids duplicates.
 	 */
 	public function test_two_assignments_create_kitchen_and_counter_jobs(): void {

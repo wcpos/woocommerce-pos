@@ -148,12 +148,17 @@ class Cloud_Print_Trigger_Service {
 				continue;
 			}
 			try {
-				$copies   = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+				$copies = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
+				// Dedupe per trigger: a created-rule job must not satisfy a
+				// paid rule for the same printer+template (and vice versa).
+				// Trigger-less jobs (manual prints, pre-trigger installs)
+				// still count toward every rule.
 				$existing = $this->jobs->count(
 					array(
 						'printer_id'  => $printer_id,
 						'order_id'    => $order_id,
 						'template_id' => $template_id,
+						'trigger'     => $trigger,
 					)
 				);
 				$shortfall = max( 0, $copies - $existing );
@@ -181,7 +186,9 @@ class Cloud_Print_Trigger_Service {
 						$printer,
 						$order_id,
 						$template_id,
-						$template
+						$template,
+						array(),
+						$trigger
 					);
 					if ( 0 === $job_id ) {
 						Logger::log(
@@ -252,10 +259,11 @@ class Cloud_Print_Trigger_Service {
 	 * @param string            $template_id Template id (numeric) or virtual slug.
 	 * @param array             $template       Loaded template array.
 	 * @param array             $drawer_options Drawer options.
+	 * @param string            $trigger        Originating rule trigger (created|paid); empty for manual prints.
 	 *
 	 * @return int Created job id, or 0 when the template is not printable on the provider.
 	 */
-	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template, array $drawer_options = array() ): int {
+	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template, array $drawer_options = array(), string $trigger = '' ): int {
 		// Normalize before EVERY consumer below (drawer options, printability,
 		// requires_submit) — a legacy row without a provider is star-cloudprnt.
 		$provider       = Provider::normalize( (string) ( $printer['provider'] ?? '' ) );
@@ -276,6 +284,7 @@ class Cloud_Print_Trigger_Service {
 					'template_id'  => $template_id,
 					'content_type' => $fmt['content_type'],
 					'pn_kind'      => $fmt['kind'],
+					'trigger'      => $trigger,
 					'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
 					'drawer_connector' => $drawer_options['drawer_connector'],
 				)
@@ -293,6 +302,7 @@ class Cloud_Print_Trigger_Service {
 				'content_type' => $fmt['content_type'],
 				'order_id'     => $order_id,
 				'template_id'  => $template_id,
+				'trigger'      => $trigger,
 				'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
 				'drawer_connector' => $drawer_options['drawer_connector'],
 			)
