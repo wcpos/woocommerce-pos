@@ -26,9 +26,14 @@ trait Collection_Rules_Parity_Tests {
 	 * HPOS does (`wc_orders.payment_method`); legacy storage sorts the merchant-visible
 	 * `_payment_method_title` meta. See the parity pin in `Sync\Collection_Rules`.
 	 *
-	 * @var bool
+	 * A method, not a property: PHP rejects a consuming class that redeclares a trait
+	 * property with a different default.
+	 *
+	 * @return bool
 	 */
-	protected $payment_method_sorts_gateway_id = false;
+	protected function payment_method_sorts_gateway_id(): bool {
+		return false;
+	}
 
 	/**
 	 * Both lanes return the same id sequence for every sort, in both directions.
@@ -92,7 +97,7 @@ trait Collection_Rules_Parity_Tests {
 	public function test_payment_method_sort_uses_the_per_storage_column_on_both_lanes(): void {
 		$orders = $this->create_sort_fixtures();
 
-		$expected = $this->payment_method_sorts_gateway_id
+		$expected = $this->payment_method_sorts_gateway_id()
 			// HPOS: gateway ids are alpha < bravo < charlie.
 			? array( $orders['high']->get_id(), $orders['middle']->get_id(), $orders['low']->get_id() )
 			// Legacy: titles are Alpha < Bravo < Charlie.

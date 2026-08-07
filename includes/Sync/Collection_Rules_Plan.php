@@ -36,14 +36,20 @@ use const WCPOS\WooCommercePOS\VERSION;
  * captured as closures — never re-derived tuples — installed, and unwound in reverse
  * inside a `finally`, so a throwing forward leaves `$wp_filter` exactly as it found it.
  *
- * # The retired guard
+ * # The WooCommerce-owned sorts
  *
- * `wcpos/v1`'s HPOS sort used to write `ORDER BY` only when WooCommerce had left
- * `$clauses['orderby']` empty. A rule that claims a sort OWNS the ordering, so the guard
- * is gone and the plan writes unconditionally. `Test_Collection_Rules_Guard_HPOS` pins
- * `'' === $clauses['orderby']` for all four order sorts, so if a future WooCommerce
- * release starts mapping one of them itself, that test fails loudly instead of the two
- * writers silently fighting.
+ * The HPOS sort writes `ORDER BY` only when WooCommerce left `$clauses['orderby']` empty
+ * — `wcpos/v1`'s guard, kept deliberately. The design called for retiring it on the
+ * theory that a rule which claims a sort owns the ordering outright, but that theory is
+ * false today: `OrdersTableQuery::sanitize_order_orderby()` maps `total` itself (to
+ * `wc_orders.total_amount`, with a sanitized direction), so writing unconditionally would
+ * overwrite a correct WooCommerce clause with our own and change v1's SQL. `status`,
+ * `customer_id` and `payment_method` are absent from that table, so they do reach us
+ * empty. The guard additionally checks that the clause WooCommerce wrote is for the sort
+ * we claimed — on the proxy lane the claimed name is stripped before the forward, so a
+ * non-empty clause there belongs to wc/v3's default sort, not ours.
+ * `Test_Collection_Rules_Guard_HPOS` pins which sort falls on which side, so a future
+ * WooCommerce mapping change fails loudly instead of silently flipping ownership.
  */
 final class Collection_Rules_Plan {
 	/**
@@ -698,7 +704,7 @@ final class Collection_Rules_Plan {
 	/**
 	 * Write the claimed sort into the HPOS `ORDER BY` clause.
 	 *
-	 * Unconditional by design — see "the retired guard" in the class docblock.
+	 * Deferential by design — see "the WooCommerce-owned sorts" in the class docblock.
 	 *
 	 * @param array $clauses The HPOS query clauses.
 	 * @param mixed $query   The OrdersTableQuery instance.
@@ -708,6 +714,27 @@ final class Collection_Rules_Plan {
 	 */
 	private function apply_hpos_sort( array $clauses, $query, array $args ): array {
 		if ( Collection_Rules::STORAGE_HPOS !== $this->storage || null === $this->sort ) {
+			return $clauses;
+		}
+
+		/*
+		 * WooCommerce maps SOME of these names itself (`total` is in
+		 * `OrdersTableQuery::sanitize_order_orderby()`'s table today), and when it does it
+		 * has already written a correct clause with a properly sanitized direction — so we
+		 * defer, exactly as v1's guard did.
+		 *
+		 * The `orderby` conjunct is what makes that guard correct on BOTH lanes. v1 leaves
+		 * the claimed name on the request, so a non-empty clause is always WooCommerce
+		 * mapping OUR sort (the conjunct is redundant there, and v1's SQL is unchanged).
+		 * The proxy must STRIP the claimed name — wc/v3's enum would 400 on it — so the
+		 * inner query carries wc/v3's default `date` instead, and its non-empty clause has
+		 * nothing to do with the sort the client asked for. Testing the bare emptiness
+		 * there would silently drop the sort.
+		 *
+		 * `Test_Collection_Rules_Guard_HPOS` pins which sorts fall on which side.
+		 */
+		$woocommerce_mapped_our_sort = ( $args['orderby'] ?? null ) === $this->sort;
+		if ( $woocommerce_mapped_our_sort && isset( $clauses['orderby'] ) && '' !== $clauses['orderby'] ) {
 			return $clauses;
 		}
 		if ( ! \is_object( $query ) || ! method_exists( $query, 'get_table_name' ) ) {

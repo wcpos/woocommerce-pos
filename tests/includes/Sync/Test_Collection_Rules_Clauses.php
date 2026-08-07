@@ -115,6 +115,45 @@ class Test_Collection_Rules_Clauses extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The rule defers when WooCommerce already mapped the sort the client asked for.
+	 */
+	public function test_hpos_sort_defers_to_a_woocommerce_clause_for_the_same_sort(): void {
+		$plan    = $this->plan_for( array( 'orderby' => 'total' ), Collection_Rules::STORAGE_HPOS );
+		$clauses = $plan->filter(
+			Collection_Rules_Plan::HOOK_HPOS_ORDERBY,
+			array( 'orderby' => 'wc_orders.total_amount ASC' ),
+			new Collection_Rules_Query_Stub(),
+			array(
+				'orderby' => 'total',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertSame( 'wc_orders.total_amount ASC', $clauses['orderby'] );
+	}
+
+	/**
+	 * The rule takes over when WooCommerce's clause is for a DIFFERENT sort.
+	 *
+	 * This is the proxy lane: the claimed `orderby` is stripped before the forward, so
+	 * wc/v3 maps its own default and the non-empty clause is not the client's sort.
+	 */
+	public function test_hpos_sort_overrides_a_woocommerce_clause_for_another_sort(): void {
+		$plan    = $this->plan_for( array( 'orderby' => 'total' ), Collection_Rules::STORAGE_HPOS );
+		$clauses = $plan->filter(
+			Collection_Rules_Plan::HOOK_HPOS_ORDERBY,
+			array( 'orderby' => 'wc_orders.date_created_gmt asc' ),
+			new Collection_Rules_Query_Stub(),
+			array(
+				'orderby' => 'date',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertSame( 'stub_wc_orders.total_amount asc', $clauses['orderby'] );
+	}
+
+	/**
 	 * Every legacy sort maps onto the meta key `wcpos/v1` has always used.
 	 *
 	 * `payment_method` is the other half of the parity pin: legacy sorts the

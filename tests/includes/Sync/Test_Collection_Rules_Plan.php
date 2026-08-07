@@ -112,9 +112,11 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 	 * The proxy map exposes `created_via`, so the same row is claimed there.
 	 */
 	public function test_v2_param_map_claims_created_via(): void {
-		$plan = $this->plan_for( array( 'created_via' => array( 'Check Out', 'rest-api' ) ), self::V2_MAP );
+		// Claimed values are run through sanitize_key, which lower-cases and drops
+		// anything outside [a-z0-9_-].
+		$plan = $this->plan_for( array( 'created_via' => array( 'CheckOut!', 'rest-api' ) ), self::V2_MAP );
 
-		$this->assertEquals( array( 'created_via' => array( 'check-out', 'rest-api' ) ), $plan->claims() );
+		$this->assertEquals( array( 'created_via' => array( 'checkout', 'rest-api' ) ), $plan->claims() );
 	}
 
 	/**

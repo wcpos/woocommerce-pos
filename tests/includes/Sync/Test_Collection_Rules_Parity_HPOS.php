@@ -24,9 +24,11 @@ class Test_Collection_Rules_Parity_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 	/**
 	 * HPOS sorts `payment_method` by the gateway id column.
 	 *
-	 * @var bool
+	 * @return bool
 	 */
-	protected $payment_method_sorts_gateway_id = true;
+	protected function payment_method_sorts_gateway_id(): bool {
+		return true;
+	}
 
 	/**
 	 * Enable the sync routes and HPOS.

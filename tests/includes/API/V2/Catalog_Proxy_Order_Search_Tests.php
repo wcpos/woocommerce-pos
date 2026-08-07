@@ -30,9 +30,14 @@ trait Catalog_Proxy_Order_Search_Tests {
 	 * HPOS does; legacy storage sorts the `_payment_method_title` meta. See the parity
 	 * pin in `Sync\Collection_Rules`.
 	 *
-	 * @var bool
+	 * A method, not a property: PHP rejects a consuming class that redeclares a trait
+	 * property with a different default.
+	 *
+	 * @return bool
 	 */
-	protected $payment_method_sorts_gateway_id = false;
+	protected function payment_method_sorts_gateway_id(): bool {
+		return false;
+	}
 
 	/**
 	 * Create orders with distinct billing search fields.
@@ -295,7 +300,7 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$charlie->set_payment_method_title( 'charlie' );
 		$charlie->save();
 
-		$ascending = $this->payment_method_sorts_gateway_id
+		$ascending = $this->payment_method_sorts_gateway_id()
 			? array( $charlie->get_id(), $bravo->get_id(), $alpha->get_id() )
 			: array( $alpha->get_id(), $bravo->get_id(), $charlie->get_id() );
 
