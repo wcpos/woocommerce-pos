@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
 
@@ -82,6 +83,12 @@ class Cashier {
 			'display_name' => $user->display_name,
 			'nice_name'    => $user->user_nicename,
 			'roles'        => array_values( $user->roles ),
+			// Raw grants (role + user), the same vocabulary the POS Access settings
+			// screen reads and writes. user_can() is wrong here: the singular meta
+			// caps (edit_product, delete_product) cannot be checked without a post.
+			'capabilities' => array_values(
+				array_filter( Access_Section::capability_names(), fn( $cap ) => ! empty( $user->allcaps[ $cap ] ) )
+			),
 			'last_access'  => $last_access ? $last_access : '',
 			'avatar_url'   => get_avatar_url( $user->ID ),
 		);

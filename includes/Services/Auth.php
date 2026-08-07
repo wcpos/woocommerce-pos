@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use Exception;
 use WCPOS\Vendor\Firebase\JWT\JWT;
 use WCPOS\Vendor\Firebase\JWT\Key;
+use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WP_Error;
 use WP_User;
 use const DAY_IN_SECONDS;
@@ -397,6 +398,12 @@ class Auth {
 			'nice_name'    => $user->user_nicename,
 			'display_name' => $user->display_name,
 			'roles'        => array_values( $user->roles ),
+			// Raw grants (role + user), the same vocabulary the POS Access settings
+			// screen reads and writes. user_can() is wrong here: the singular meta
+			// caps (edit_product, delete_product) cannot be checked without a post.
+			'capabilities' => array_values(
+				array_filter( Access_Section::capability_names(), fn( $cap ) => ! empty( $user->allcaps[ $cap ] ) )
+			),
 			'avatar_url'   => get_avatar_url( $user->ID ),
 			// Token data.
 			'access_token'  => $tokens['access_token'],

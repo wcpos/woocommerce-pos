@@ -166,6 +166,21 @@ class Test_Auth_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test login user data includes granted capabilities.
+	 */
+	public function test_login_user_data_includes_capabilities_array(): void {
+		$this->regular_user->add_cap( 'edit_products' );
+
+		$data = $this->auth_service->get_user_data( $this->regular_user );
+
+		$this->assertArrayHasKey( 'capabilities', $data );
+		$this->assertIsArray( $data['capabilities'] );
+		$this->assertContains( 'edit_products', $data['capabilities'] );
+
+		$this->regular_user->remove_cap( 'edit_products' );
+	}
+
+	/**
 	 * Test get sessions endpoint for current user.
 	 */
 	public function test_get_sessions_for_current_user(): void {
