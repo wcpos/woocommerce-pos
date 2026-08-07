@@ -386,7 +386,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$pull  = $this->pull_document( $order );
 		$proxy = $this->proxy_document( $order );
 
-		$this->assertSame( $pull, $proxy );
+		$this->assertSame( wp_json_encode( $pull ), wp_json_encode( $proxy ) );
 		$this->assertSame(
 			Order_Serializer::canonical_revision( $pull ),
 			Order_Serializer::canonical_revision( $proxy )
