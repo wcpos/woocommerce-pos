@@ -17,32 +17,123 @@ use WP_REST_Request;
 final class Order_Serializer {
 	use Uuid_Handler;
 
+	/**
+	 * The augmentation set shared by EVERY v2 order lane — pull, proxy, and the
+	 * write-ack. Applied in this order, which is also the order the keys land in
+	 * the served payload (`tax_ids` then `links` after wc/v3's own fields).
+	 */
+	public const V2_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links' );
+
+	/**
+	 * The pull lane's set: the shared v2 augmentations plus the public
+	 * `woocommerce_pos_sync_serialized_order` filter. The filter is pull-only —
+	 * the proxy lane runs `woocommerce_pos_sync_proxy_response` instead, and the
+	 * write path deliberately keeps third-party read filters off its acks.
+	 */
+	public const PULL_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links', 'serialized_filter' );
+
+	/**
+	 * THE order-document assembly for the v2 surface: one recipe, one order of
+	 * operations, with the augmentation set stated explicitly by each caller.
+	 *
+	 * Every v2 lane funnels through here so the wire shape cannot drift between
+	 * them again (it did: the write-ack lane was left without item uuids or the
+	 * image.id cast when the read lanes gained them).
+	 *
+	 * The v1 lane (`API\V1\Orders_Controller::wcpos_order_response`) is FROZEN and
+	 * deliberately NOT routed through this method — it serves a different wire
+	 * shape (HAL `_links` via `add_link()`, not a plain `links` key) that Pro and
+	 * deployed clients depend on.
+	 *
+	 * @param \WC_Order|array  $source        A `WC_Order` to serialize from scratch (pull lane), or an
+	 *                                        already-serialized wc/v3 payload (proxy and write-ack lanes).
+	 * @param array            $augmentations Explicit augmentation list. Recognized values:
+	 *                                        `tax_ids`, `image_cast`, `item_uuids`, `links`, `serialized_filter`.
+	 * @param null|WP_REST_Request $request   Serialization request; required shape for the `WC_Order` source
+	 *                                        and passed on to the `serialized_filter`.
+	 * @param null|\WC_Order   $order         The backing order when `$source` is a payload. Resolved from
+	 *                                        `$source['id']` when omitted.
+	 *
+	 * @return array The assembled order document.
+	 */
+	public function document( $source, array $augmentations = array(), ?WP_REST_Request $request = null, $order = null ): array {
+		$request = $request instanceof WP_REST_Request ? $request : new WP_REST_Request();
+
+		if ( $source instanceof WC_Order ) {
+			$order = $source;
+			// Matches the POS client's internal precision — v1 forced dp=6 on every order request.
+			$request->set_param( 'dp', '6' );
+			$controller = new WC_REST_Orders_Controller();
+			$response   = rest_ensure_response( $controller->prepare_object_for_response( $order, $request ) );
+			$payload    = (array) rest_get_server()->response_to_data( $response, false );
+		} else {
+			$payload = (array) $source;
+			if ( ! $order ) {
+				$order = wc_get_order( (int) ( $payload['id'] ?? 0 ) );
+			}
+		}
+
+		// No backing order (a proxied row whose order vanished mid-request): serve
+		// the payload untouched rather than half-augmenting it.
+		if ( ! $order ) {
+			return $payload;
+		}
+
+		if ( in_array( 'tax_ids', $augmentations, true ) ) {
+			$payload['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+		}
+		if ( in_array( 'image_cast', $augmentations, true ) ) {
+			$payload = self::cast_line_item_image_ids( $payload );
+		}
+		if ( in_array( 'item_uuids', $augmentations, true ) ) {
+			$payload = $this->stamp_item_uuids( $payload, $order );
+		}
+		if ( in_array( 'links', $augmentations, true ) ) {
+			$payload = self::add_pos_links( $payload, $order );
+		}
+		if ( in_array( 'serialized_filter', $augmentations, true ) ) {
+			/**
+			 * Allows explicit lab inspection without bypassing WooCommerce/WP REST response preparation.
+			 * This filter is additive and must not remove WooCommerce REST fields.
+			 */
+			$payload = (array) apply_filters( 'woocommerce_pos_sync_serialized_order', $payload, $order, $request );
+		}
+
+		return $payload;
+	}
+
 	public function serialize_order( int $order_id, WP_REST_Request $request ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			return array();
 		}
 
-		// Matches the POS client's internal precision — v1 forced dp=6 on every order request.
-		$request->set_param( 'dp', '6' );
-		$controller = new WC_REST_Orders_Controller();
-		$response = $controller->prepare_object_for_response( $order, $request );
-		$response = rest_ensure_response( $response );
-		$data = rest_get_server()->response_to_data( $response, false );
-		$data = $this->augment_order_payload( $data, $order );
-		$data = self::add_pos_links( $data, $order );
-
-		/**
-		 * Allows explicit lab inspection without bypassing WooCommerce/WP REST response preparation.
-		 * This filter is additive and must not remove WooCommerce REST fields.
-		 */
-		return apply_filters( 'woocommerce_pos_sync_serialized_order', $data, $order, $request );
+		return $this->document( $order, self::PULL_AUGMENTATIONS, $request );
 	}
 
-	/** Add the v1-owned order fields missing from stock wc/v3 serialization. */
+	/**
+	 * Add the v1-owned order fields missing from stock wc/v3 serialization.
+	 *
+	 * Retained as the named shorthand for the three payload augmentations (links
+	 * excluded); `document()` is the entry point new callers should use.
+	 *
+	 * @param array     $payload Serialized order payload.
+	 * @param \WC_Order $order   The order backing the payload.
+	 */
 	public function augment_order_payload( array $payload, WC_Order $order ): array {
-		$payload['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+		return $this->document( $payload, array( 'tax_ids', 'image_cast', 'item_uuids' ), null, $order );
+	}
 
+	/**
+	 * Cast every line item's `image.id` to an int.
+	 *
+	 * WC core's `get_image_id()` returns a string; both the v1 order response and
+	 * the v2 assembly serve it typed, and the canonical revision normalizes it the
+	 * same way so a bare wc/v3 re-read still hashes equal.
+	 *
+	 * @param array $payload Serialized order payload.
+	 */
+	public static function cast_line_item_image_ids( array $payload ): array {
 		if ( isset( $payload['line_items'] ) && is_array( $payload['line_items'] ) ) {
 			foreach ( $payload['line_items'] as &$line_item ) {
 				if ( isset( $line_item['image']['id'] ) ) {
@@ -52,6 +143,17 @@ final class Order_Serializer {
 			unset( $line_item );
 		}
 
+		return $payload;
+	}
+
+	/**
+	 * Mirror each served line/shipping/fee item's POS uuid into its `meta_data`,
+	 * stamping the order item first when it has none.
+	 *
+	 * @param array     $payload Serialized order payload.
+	 * @param \WC_Order $order   The order backing the payload.
+	 */
+	private function stamp_item_uuids( array $payload, $order ): array {
 		$item_types = array(
 			'line_items'     => 'line_item',
 			'shipping_lines' => 'shipping',
@@ -82,10 +184,15 @@ final class Order_Serializer {
 	/**
 	 * Augment a serialized order payload with the POS checkout payment link.
 	 *
-	 * Uses the WCPOS checkout route (V1 parity — Orders_Controller::add_pos_links),
-	 * NOT get_checkout_payment_url(): the custom route exists to avoid checkout-page
-	 * framing conflicts (X-Frame-Options), establish the POS checkout context, and
-	 * honor the force_ssl policy. Existing links entries (e.g. supplied by the proxy
+	 * Uses the WCPOS checkout route, NOT get_checkout_payment_url(): the custom
+	 * route exists to avoid checkout-page framing conflicts (X-Frame-Options),
+	 * establish the POS checkout context, and honor the force_ssl policy.
+	 *
+	 * The URL matches the one the frozen v1 lane builds inline in
+	 * `API\V1\Orders_Controller::wcpos_order_response()`; v1 attaches it as a HAL
+	 * link (`$response->add_link( 'payment', … )`) while the v2 lanes serve it
+	 * under a plain top-level `links` key, so the two wire shapes differ even
+	 * though the href does not. Existing links entries (e.g. supplied by the proxy
 	 * response filter) are preserved; only `payment` is owned by this helper.
 	 *
 	 * @param array     $payload Serialized order payload.
