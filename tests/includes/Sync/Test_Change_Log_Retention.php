@@ -267,19 +267,27 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 	 * backwards would tell a client it had missed nothing when it had.
 	 */
 	public function test_prune_tombstones_with_concurrent_higher_watermark_keeps_higher_value(): void {
+		global $wpdb;
+
 		// Arrange: two prunable tombstones, plus a retained row above them.
 		$this->log->record( 'product', 11, 'delete', 'test', false );
 		$this->log->record( 'product', 22, 'delete', 'test', false );
 		$second = $this->log->head_sequence();
 		$this->log->record( 'product', 33, 'update', 'test', false );
 		$concurrent = $second + 1000;
+		update_option( Change_Log::PRUNE_WATERMARK_OPTION, 1, true );
 
-		// A second worker persists a higher watermark between our select and our write.
-		$fired     = false;
-		$interleave = function ( string $query ) use ( $concurrent, &$fired ): string {
+		// A second worker persists a higher watermark between our select and our
+		// write; its write lands in the table, not in this process's option cache.
+		$fired      = false;
+		$interleave = static function ( string $query ) use ( $wpdb, $concurrent, &$fired ): string {
 			if ( ! $fired && false !== strpos( $query, "change_type = 'delete'" ) ) {
 				$fired = true;
-				$this->log->advance_prune_watermark( $concurrent );
+				$wpdb->update(
+					$wpdb->options,
+					array( 'option_value' => $concurrent ),
+					array( 'option_name' => Change_Log::PRUNE_WATERMARK_OPTION )
+				);
 			}
 
 			return $query;
@@ -289,10 +297,17 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 		add_filter( 'query', $interleave );
 		$result = $this->log->prune_tombstones( $second, $this->future_gmt(), 500 );
 		remove_filter( 'query', $interleave );
+		$persisted = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
+				Change_Log::PRUNE_WATERMARK_OPTION
+			)
+		);
 
-		// Assert: the batch still prunes, and the horizon never regresses.
+		// Assert: the batch still prunes, and the persisted horizon never regresses.
 		$this->assertEquals( true, $fired );
 		$this->assertEquals( 2, $result['deleted'] );
+		$this->assertEquals( $concurrent, $persisted );
 		$this->assertEquals( $concurrent, $this->log->prune_watermark() );
 	}
 
