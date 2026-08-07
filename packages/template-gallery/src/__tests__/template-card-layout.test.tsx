@@ -143,7 +143,7 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain('<img');
 		expect(markup).toContain('aria-label="common.preview"');
 		expect(markup).toContain('alt=""');
-		expect(markup).toContain('template-gallery/previews/standard-receipt.png');
+		expect(markup).toContain('template-gallery/previews/standard-receipt.webp');
 		expect(markup).toContain('wcpos:object-cover');
 		expect(markup).toContain('wcpos:object-top');
 		expect(markup).toContain('wcpos:group-hover:object-bottom');

@@ -4,6 +4,7 @@ import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import { bwipRuntime } from '../thermal-utils/vite-plugin-bwip-runtime';
 
 /**
  * Vite 8 / Rollup 4 wraps CJS dependencies in a shim that preserves
@@ -19,6 +20,7 @@ const externalGlobals: Record<string, string> = {
 	'react-dom': 'globalThis.ReactDOM',
 	'react-dom/client': 'globalThis.ReactDOM',
 	'@wordpress/api-fetch': 'globalThis.wp.apiFetch',
+	'bwip-js': 'globalThis.WCPOSBwip',
 };
 
 function fixCjsExternals(): Plugin {
@@ -47,7 +49,7 @@ export default defineConfig(({ mode }) => {
 		: path.resolve(__dirname, '../../build');
 
 	return {
-		plugins: [react(), tailwindcss(), fixCjsExternals()],
+		plugins: [react(), tailwindcss(), fixCjsExternals(), bwipRuntime()],
 		build: {
 			outDir,
 			emptyOutDir: false,
