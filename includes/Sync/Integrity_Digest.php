@@ -166,14 +166,14 @@ final class Integrity_Digest {
 	 * status, and the restore's internal save fires no observer hook we bind
 	 * (verified: `woocommerce_update_order` does not fire there) — so an
 	 * immediate upsert would read a still-trashed row and write nothing. Arm a
-	 * one-shot on the order's next object save (the restore's own save) and
+	 * one-shot on the order's first object save after it leaves the trash and
 	 * upsert then.
 	 *
 	 * @param int $order_id Order being restored.
 	 */
 	public function record_order_untrashed( int $order_id ): void {
 		$handler = function ( $order ) use ( $order_id, &$handler ): void {
-			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || (int) $order->get_id() !== $order_id ) {
+			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! method_exists( $order, 'get_status' ) || (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
 				return;
 			}
 			remove_action( 'woocommerce_after_order_object_save', $handler );

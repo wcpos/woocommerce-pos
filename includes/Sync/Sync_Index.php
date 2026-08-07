@@ -175,8 +175,8 @@ final class Sync_Index {
 	 *
 	 * Waiting for `woocommerce_update_order` does not work either: OrdersTableDataStore::update()
 	 * returns BEFORE firing it whenever 'trash' sits on either side of the status change (verified in
-	 * WooCommerce 10.4.3), which is exactly the restore. So arm a one-shot on the order's next object
-	 * save — the restore's own save — and record from there, with the status restored and persisted.
+	 * WooCommerce 10.4.3), which is exactly the restore. So arm a one-shot on the order's first object
+	 * save after it leaves the trash and record from there, with the status restored and persisted.
 	 *
 	 * The hook is fired only by the COT data store, so the CPT path cannot double-record.
 	 *
@@ -184,7 +184,7 @@ final class Sync_Index {
 	 */
 	public function record_cot_order_untrashed( int $order_id ): void {
 		$handler = function ( $order ) use ( $order_id, &$handler ): void {
-			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || (int) $order->get_id() !== $order_id ) {
+			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! method_exists( $order, 'get_status' ) || (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
 				return;
 			}
 			remove_action( 'woocommerce_after_order_object_save', $handler );

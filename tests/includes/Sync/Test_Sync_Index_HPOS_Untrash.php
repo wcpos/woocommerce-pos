@@ -9,7 +9,9 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WP_REST_Request;
 
 /**
  * A restored COT order must be re-emitted to the sync index as PRESENT.
@@ -87,8 +89,22 @@ class Test_Sync_Index_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		$this->assertEquals( 'trash', $trashed->get_status(), 'The reloaded order must be in the trash.' );
 		$head_before_untrash = $this->sync_index->head_sequence();
 
+		// A later untrash callback may save metadata while the order is still
+		// trashed. That save must not consume the observer waiting for the actual
+		// restore save.
+		$intervening_save = static function ( int $untrashed_order_id ) use ( $order_id ): void {
+			if ( $order_id === $untrashed_order_id ) {
+				wc_get_order( $order_id )->save();
+			}
+		};
+		add_action( 'woocommerce_untrash_order', $intervening_save, 20, 1 );
+
 		// Act: restore it exactly the way WooCommerce does.
-		$trashed->untrash();
+		try {
+			$trashed->untrash();
+		} finally {
+			remove_action( 'woocommerce_untrash_order', $intervening_save, 20 );
+		}
 
 		// Assert: the client's pull sees a fresh PRESENT row past its cursor.
 		$this->assertGreaterThan( 0, did_action( 'woocommerce_untrash_order' ), 'The HPOS untrash hook must fire.' );
@@ -99,7 +115,11 @@ class Test_Sync_Index_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		$latest = $appended[ count( $appended ) - 1 ];
 		$this->assertEquals( 0, $latest['deleted'], 'The restored order must be re-emitted as PRESENT.' );
 		$this->assertEquals( 'hook:untrash', $latest['origin'], 'The restore must be recorded with the untrash origin.' );
-		$this->assertStringStartsWith( 'sha256:', $latest['revision'], 'The re-emitted row must carry a live content revision, not the deleted marker.' );
+
+		$serializer       = new Order_Serializer();
+		$payload          = $serializer->serialize_order( $order_id, new WP_REST_Request() );
+		$current_revision = $serializer->sync_metadata( $payload, $order_id, 'custom-pull', false, 0 )['revision'];
+		$this->assertEquals( $current_revision, $latest['revision'], 'The re-emitted row must carry the restored order revision.' );
 	}
 
 	/**
