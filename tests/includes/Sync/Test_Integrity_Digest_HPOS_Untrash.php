@@ -24,6 +24,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  */
 class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	use HPOSToggleTrait;
+	use Sync_Observer_Unhook_Trait;
 
 	/**
 	 * Digest service under observation.
@@ -51,11 +52,7 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	 * Restore posts storage and unhook the observer.
 	 */
 	public function tearDown(): void {
-		remove_action( 'woocommerce_new_order', array( $this->integrity_digest, 'record_order_saved' ), 10 );
-		remove_action( 'woocommerce_update_order', array( $this->integrity_digest, 'record_order_saved' ), 10 );
-		remove_action( 'woocommerce_before_trash_order', array( $this->integrity_digest, 'record_order_deleted' ), 10 );
-		remove_action( 'woocommerce_before_delete_order', array( $this->integrity_digest, 'record_order_deleted' ), 10 );
-		remove_action( 'woocommerce_untrash_order', array( $this->integrity_digest, 'record_order_saved' ), 10 );
+		$this->remove_observer_callbacks( array( $this->integrity_digest ) );
 
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
@@ -82,7 +79,23 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		wp_cache_flush();
 		$trashed = wc_get_order( $order_id );
 		$this->assertSame( 'trash', $trashed->get_status(), 'The reloaded order must be in the trash.' );
-		$trashed->untrash();
+
+		// A later untrash callback may save metadata while the order is still
+		// trashed. That save must not consume the observer waiting for the actual
+		// restore save.
+		$intervening_save = static function ( int $untrashed_order_id ) use ( $order_id ): void {
+			if ( $order_id === $untrashed_order_id ) {
+				wc_get_order( $order_id )->save();
+			}
+		};
+		add_action( 'woocommerce_untrash_order', $intervening_save, 20, 1 );
+
+		try {
+			$trashed->untrash();
+		} finally {
+			remove_action( 'woocommerce_untrash_order', $intervening_save, 20 );
+		}
+
 		$this->assertGreaterThan( 0, did_action( 'woocommerce_untrash_order' ), 'The HPOS untrash hook must fire.' );
 		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ), 'Untrash must recreate the digest (woocommerce_untrash_order).' );
 	}
