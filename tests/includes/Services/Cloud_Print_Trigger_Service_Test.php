@@ -866,7 +866,8 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		$legacy   = $this->jobs->get( $legacy_job_id );
 		$explicit = $this->jobs->get( $explicit_job_id );
 		$this->assertEquals( $explicit['content_type'], $legacy['content_type'] );
-		$this->assertEquals( $explicit['drawer_options'] ?? null, $legacy['drawer_options'] ?? null );
+		$this->assertEquals( $explicit['auto_open_drawer'], $legacy['auto_open_drawer'] );
+		$this->assertEquals( $explicit['drawer_connector'], $legacy['drawer_connector'] );
 		// Polling provider: nothing is scheduled for submission.
 		$this->assertFalse(
 			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $legacy_job_id ) )
