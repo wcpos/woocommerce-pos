@@ -37,6 +37,17 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
+	 * Get the flat list of capability names.
+	 *
+	 * @return array
+	 */
+	public static function capability_names(): array {
+		$caps = self::get_caps();
+
+		return array_merge( $caps['wcpos'], $caps['wc'], $caps['wp'] );
+	}
+
+	/**
 	 * Get capabilities grouped by type.
 	 *
 	 * WooCommerce 9.9 replaced promote_users with create_customers for

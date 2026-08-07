@@ -358,4 +358,32 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'roles', $data );
 		$this->assertSame( $user->roles, $data['roles'] );
 	}
+
+	/**
+	 * Test cashier response includes only granted capabilities.
+	 */
+	public function test_get_cashier_response_includes_only_granted_capabilities(): void {
+		add_role( 'capabilities_test_cashier', 'Capabilities Test Cashier' );
+		$role = get_role( 'capabilities_test_cashier' );
+		$role->add_cap( 'access_woocommerce_pos' );
+		$role->add_cap( 'publish_shop_orders' );
+		$role->add_cap( 'edit_products' );
+		$role->remove_cap( 'manage_woocommerce_pos' );
+
+		$cashier = $this->factory->user->create( array( 'role' => 'capabilities_test_cashier' ) );
+		wp_set_current_user( $cashier );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/cashier/' . $cashier );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'capabilities', $data );
+		$this->assertIsArray( $data['capabilities'] );
+		$this->assertContains( 'edit_products', $data['capabilities'] );
+		$this->assertNotContains( 'manage_woocommerce_pos', $data['capabilities'] );
+
+		wp_delete_user( $cashier );
+		remove_role( 'capabilities_test_cashier' );
+	}
 }
