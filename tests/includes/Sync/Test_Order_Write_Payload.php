@@ -234,6 +234,52 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Pins the load-bearing step order: the variation-identity dedupe must read the
+	 * FORWARDED line shape, i.e. run AFTER the sku has been stripped. Hoisting it
+	 * above the sanitization makes the still-present sku look like a re-binding, the
+	 * no-op identity survives the forward, and the duplicate `pa_*` meta bug returns.
+	 */
+	public function test_for_update_with_an_unchanged_variation_line_drops_identity_after_the_sku_is_stripped(): void {
+		// Arrange.
+		$variable   = ProductHelper::create_variation_product();
+		$variations = $variable->get_children();
+		$variation  = wc_get_product( $variations[0] );
+
+		$order = new WC_Order();
+		$item  = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'           => $item->get_id(),
+					'quantity'     => 1,
+					'product_id'   => $variable->get_id(),
+					'variation_id' => $variation->get_id(),
+					// Present on every acked full-document re-push; wc/v3's get_product_id()
+					// ranks it above the ids, so the dedupe must not see it.
+					'sku'          => 'ACKED-VARIATION-SKU',
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_update( $order->get_id(), $payload );
+
+		// Assert: sku stripped first, so the unchanged binding is recognised and dropped.
+		$expected = array(
+			'line_items' => array(
+				array(
+					'id'       => $item->get_id(),
+					'quantity' => 1,
+				),
+			),
+		);
+		$this->assertEquals( $expected, $forwarded );
+	}
+
+	/**
 	 * When the id no longer resolves to an order, every order-reading step no-ops
 	 * and the forward carries only the create-side schema sanitization.
 	 */
