@@ -9,8 +9,11 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting, Generic.Files.OneObjectStructurePerFile, WordPress.NamingConventions -- Ported lab suite preserves its fake-store vocabulary and compact scenarios.
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -179,9 +182,14 @@ final class Fake_Mutation_Store {
 
 final class Test_Write_Controller extends WP_UnitTestCase {
 	public const REC = '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d';
+	/** The throwaway cashier-tier role the Access-settings grant test mutates. */
+	private const ROLE = 'wcpos_access_test_cashier';
 	private const MID = 'a1b2c3d4-1111-4222-8333-444455556666';
 	private const DEFAULT_FINGERPRINT = 'e3e6ca70cef8d8720aeedb9e7df682b8a4349d76774d86682e0943ed87475585';
 	private const ORDER_FINGERPRINT = '987129ae825778cabd9640deb6b3d92fe5b6e3f89ff58e7fd69340587718c62b';
+
+	/** Whether the throwaway catalog-access role needs removing in tearDown. */
+	private bool $catalogTestRoleAdded = false;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -192,6 +200,12 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	protected function tearDown(): void {
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
+		// $wp_roles is an in-memory global the transaction rollback does not restore,
+		// so the granted role must go before the next test reads role capabilities.
+		if ( $this->catalogTestRoleAdded ) {
+			remove_role( self::ROLE );
+			$this->catalogTestRoleAdded = false;
+		}
 		delete_option( 'woocommerce_pos_sync_legacy_revision_grace' );
 		unset( $GLOBALS['wcpos_sync_test_rest_do_request_response'], $GLOBALS['wcpos_sync_test_rest_do_request_calls'], $GLOBALS['wcpos_sync_test_rest_do_request_queue'], $GLOBALS['wcpos_sync_test_wc_permissions'] );
 		parent::tearDown();
@@ -456,6 +470,167 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		}
 
 		return $cases;
+	}
+
+	/**
+	 * The documented opt-in path (#1514 / PR #1501 review P1): a cashier-tier role
+	 * that a merchant grants catalog write access to THROUGH POS ACCESS SETTINGS
+	 * can update and delete catalog records over v2 push — including records
+	 * another user authored, which is the normal case for a POS cashier.
+	 *
+	 * This pins the settings screen's capability list as SUFFICIENT for the
+	 * `wc_rest_check_post_permissions()` gate the controller applies. It grants
+	 * exactly what the settings screen offers (every `wc` capability the section
+	 * exposes for the role) and nothing else, so a missing primitive capability
+	 * fails here rather than only in production.
+	 *
+	 * @dataProvider grantedCatalogMutations
+	 *
+	 * @param string $collection The push collection.
+	 * @param string $post_type  The WordPress post type behind it.
+	 */
+	public function test_access_settings_grant_authorizes_catalog_mutations( string $collection, string $post_type ): void {
+		// Arrange: an administrator owns the record; a cashier-tier role holds the
+		// stock POS capabilities and nothing on catalog.
+		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$this->addCatalogTestRole();
+		$cashier_id = self::factory()->user->create( array( 'role' => self::ROLE ) );
+		$record_id  = $this->catalogRecord( $collection, $admin_id );
+
+		// The deny side: without the grant, the gate refuses edit AND delete.
+		wp_set_current_user( $cashier_id );
+		$this->assertFalse( wc_rest_check_post_permissions( $post_type, 'edit', $record_id ), 'edit denied before grant' );
+		$this->assertFalse( wc_rest_check_post_permissions( $post_type, 'delete', $record_id ), 'delete denied before grant' );
+
+		// Act 1: the merchant opts the role into catalog writes through Access settings.
+		wp_set_current_user( $admin_id );
+		$this->grantEveryAccessSettingsWcCapability( self::ROLE );
+		wp_set_current_user( $cashier_id );
+
+		$this->assertTrue( wc_rest_check_post_permissions( $post_type, 'edit', $record_id ), 'edit allowed after grant' );
+		$this->assertTrue( wc_rest_check_post_permissions( $post_type, 'delete', $record_id ), 'delete allowed after grant' );
+
+		// Act 2: a real v2 push update. A deliberately stale precondition proves the
+		// permission gate is passed (409, not 403) and hands back the canonical
+		// revision to replay the write with.
+		$conflict = $this->pushCatalog( $collection, $record_id, 'update', 'sha256:stale' );
+		$this->assertInstanceOf( WP_REST_Response::class, $conflict );
+		$this->assertSame( 409, $conflict->get_status() );
+		$revision = $conflict->get_data()['currentRevision'];
+
+		$updated = $this->pushCatalog( $collection, $record_id, 'update', $revision, array( 'description' => 'Granted through Access settings' ) );
+		$this->assertInstanceOf( WP_REST_Response::class, $updated );
+		$this->assertLessThan( 300, $updated->get_status() );
+		$this->assertSame( 'Granted through Access settings', $this->catalogDescription( $collection, $record_id ) );
+
+		// Act 3: a real v2 push delete of the same other-authored record.
+		$conflict = $this->pushCatalog( $collection, $record_id, 'delete', 'sha256:stale' );
+		$this->assertInstanceOf( WP_REST_Response::class, $conflict );
+		$this->assertSame( 409, $conflict->get_status() );
+
+		$deleted = $this->pushCatalog( $collection, $record_id, 'delete', $conflict->get_data()['currentRevision'] );
+		$this->assertInstanceOf( WP_REST_Response::class, $deleted );
+		$this->assertLessThan( 300, $deleted->get_status() );
+		$this->assertNull( get_post( $record_id ) );
+	}
+
+	public static function grantedCatalogMutations(): array {
+		return array(
+			'products'   => array( 'products', 'product' ),
+			'variations' => array( 'variations', 'product_variation' ),
+			'coupons'    => array( 'coupons', 'shop_coupon' ),
+		);
+	}
+
+	/**
+	 * A throwaway cashier-tier role, so granting catalog capabilities cannot bleed
+	 * into the tests that assert the shipped `cashier` role is catalog read-only.
+	 */
+	private function addCatalogTestRole(): void {
+		remove_role( self::ROLE );
+		add_role(
+			self::ROLE,
+			'POS Access Test Cashier',
+			array(
+				'read'                      => true,
+				'access_woocommerce_pos'    => true,
+				'read_private_products'     => true,
+				'read_private_shop_coupons' => true,
+			)
+		);
+		$this->catalogTestRoleAdded = true;
+	}
+
+	/**
+	 * Grant every capability the Access settings screen exposes in its `wc` group —
+	 * the whole of what a merchant can tick — and nothing beyond it.
+	 */
+	private function grantEveryAccessSettingsWcCapability( string $role ): void {
+		$section = new Access_Section();
+		$view    = $section->read();
+		$section->write(
+			array(
+				$role => array(
+					'capabilities' => array(
+						'wc' => array_fill_keys( array_keys( $view[ $role ]['capabilities']['wc'] ), true ),
+					),
+				),
+			)
+		);
+	}
+
+	/** A published catalog record authored by $author_id. */
+	private function catalogRecord( string $collection, int $author_id ): int {
+		switch ( $collection ) {
+			case 'variations':
+				$parent = ProductHelper::create_variation_product();
+				$children = $parent->get_children();
+				$id = (int) $children[0];
+				wp_update_post(
+					array(
+						'ID' => $parent->get_id(),
+						'post_author' => $author_id,
+					)
+				);
+				break;
+			case 'coupons':
+				$id = (int) CouponHelper::create_coupon( 'pos-access-' . wp_generate_password( 6, false ) )->get_id();
+				break;
+			default:
+				$id = (int) ProductHelper::create_simple_product()->get_id();
+				break;
+		}
+		wp_update_post(
+			array(
+				'ID' => $id,
+				'post_author' => $author_id,
+			)
+		);
+		return $id;
+	}
+
+	/** One v2 push against a catalog record, each on its own reservation store. */
+	private function pushCatalog( string $collection, int $record_id, string $operation, ?string $base_revision, ?array $payload = null ) {
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $record_id;
+		return $this->push(
+			$store,
+			array(
+				'collection'   => $collection,
+				'operation'    => $operation,
+				'baseRevision' => $base_revision,
+				'payload'      => 'delete' === $operation ? null : ( $payload ?? array( 'description' => 'Denied update' ) ),
+			)
+		);
+	}
+
+	/** The description the wc/v3 write should have landed on the record. */
+	private function catalogDescription( string $collection, int $record_id ): string {
+		if ( 'coupons' === $collection ) {
+			return ( new \WC_Coupon( $record_id ) )->get_description();
+		}
+		$product = wc_get_product( $record_id );
+		return $product ? (string) $product->get_description() : '';
 	}
 
 	public function test_order_edit_permission_respects_order_ownership(): void {
