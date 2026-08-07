@@ -312,6 +312,10 @@
 	"cloud_print.rule_copies_one": "{count} copy",
 	"cloud_print.rule_copies_other": "{count} copies",
 	"cloud_print.rule_copies_label": "Number of copies",
+	"cloud_print.rule_trigger_join": ",",
+	"cloud_print.rule_trigger_label": "When to print",
+	"cloud_print.trigger_paid": "once it's paid",
+	"cloud_print.trigger_created": "as soon as it's created",
 	"cloud_print.rule_copies_suffix": ".",
 	"cloud_print.add_rule": "+ Add rule"
 }

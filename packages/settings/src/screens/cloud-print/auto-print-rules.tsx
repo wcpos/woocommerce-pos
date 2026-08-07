@@ -103,6 +103,13 @@ export function AutoPrintRules({
 		const count = index + 1;
 		return { value: count, label: t('cloud_print.rule_copies', { count }) };
 	});
+	// 'paid' is the default: receipts shouldn't print until the customer has
+	// paid. 'created' fires the moment the order exists — for POS orders
+	// that's when the cart is first saved (kitchen-docket style).
+	const triggerOptions = [
+		{ value: 'paid', label: t('cloud_print.trigger_paid', "once it's paid") },
+		{ value: 'created', label: t('cloud_print.trigger_created', "as soon as it's created") },
+	];
 
 	// The provider for a printer id (falls back to PrintNode-style "all
 	// templates" when the printer can't be found, e.g. a stale assignment).
@@ -129,6 +136,7 @@ export function AutoPrintRules({
 				scope: 'every',
 				template_id: firstOptions[0]?.value ?? '',
 				copies: 1,
+				trigger: 'paid',
 			},
 		]);
 	};
@@ -215,6 +223,19 @@ export function AutoPrintRules({
 									value={a.copies ?? 1}
 									options={copiesOptions}
 									onChange={({ value }) => update(i, { copies: Number(value) })}
+								/>
+								<span>{t('cloud_print.rule_trigger_join', ',')}</span>
+								<Select
+									inline
+									data-testid={`rule-trigger-${i}`}
+									aria-label={t('cloud_print.rule_trigger_label', 'When to print')}
+									className="wcpos:max-w-full"
+									style={sentenceSelectWidth(triggerOptions, a.trigger ?? 'paid')}
+									value={a.trigger ?? 'paid'}
+									options={triggerOptions}
+									onChange={({ value }) =>
+										update(i, { trigger: value === 'created' ? 'created' : 'paid' })
+									}
 								/>
 								<span>{t('cloud_print.rule_copies_suffix', '.')}</span>
 								<Button
