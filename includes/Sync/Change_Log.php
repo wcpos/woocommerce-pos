@@ -495,6 +495,11 @@ final class Change_Log {
 	 * advances the prune watermark, then deletes by explicit sequence list. The
 	 * destructive write is skipped unless the watermark is verified as persisted.
 	 *
+	 * This batch's watermark is only a CANDIDATE: overlapping purge workers hold
+	 * different candidates at once, so the horizon is persisted monotonically in
+	 * SQL (see advance_prune_watermark) rather than by a read-modify-write here.
+	 * A worker whose candidate is lower leaves the higher horizon standing.
+	 *
 	 * @param int    $cutoff_sequence Inclusive upper sequence bound.
 	 * @param string $cutoff_gmt      UTC datetime; only rows created before it are pruned.
 	 * @param int    $batch           Maximum rows to delete.
