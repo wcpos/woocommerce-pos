@@ -44,6 +44,69 @@ class Test_Change_Log_Purge extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * First object id used by bulk-seeded rows that must not collide with each other.
+	 */
+	const SEEDED_OBJECT_ID_BASE = 100000;
+
+	/**
+	 * Bulk-insert aged rows straight into the log, bypassing the recording hooks.
+	 *
+	 * Seeding a backlog through record() would be thousands of round trips; the
+	 * purge only reads columns, so one prepared multi-row insert is equivalent.
+	 *
+	 * @param string   $change_type      Change type for every inserted row.
+	 * @param int      $count            Number of rows to insert.
+	 * @param int      $days             Age of every inserted row, in days.
+	 * @param int|null $shared_object_id Object id shared by all rows (making all but the
+	 *                                   newest superseded), or null to give each row its own.
+	 */
+	private function seed_aged_rows( string $change_type, int $count, int $days, ?int $shared_object_id = null ): void {
+		global $wpdb;
+
+		$created = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		$values  = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$values[] = $wpdb->prepare(
+				'(%s,%d,%s,%s,%s,%s)',
+				'product',
+				$shared_object_id ?? ( self::SEEDED_OBJECT_ID_BASE + $i ),
+				$change_type,
+				$created,
+				'test',
+				$created
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Every value tuple is prepared above.
+		$wpdb->query(
+			'INSERT INTO ' . $this->log->table_name()
+			. ' (object_type, object_id, change_type, modified_gmt, origin, created_gmt) VALUES '
+			. implode( ',', $values )
+		);
+	}
+
+	/**
+	 * Count the rows currently in the log, optionally of one change type.
+	 *
+	 * @param string $change_type Change type to count, or an empty string for all rows.
+	 */
+	private function count_rows( string $change_type = '' ): int {
+		global $wpdb;
+
+		if ( '' === $change_type ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+			return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . $this->log->table_name() );
+		}
+
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM ' . $this->log->table_name() . ' WHERE change_type = %s',
+				$change_type
+			)
+		);
+	}
+
+	/**
 	 * Rewrite a row's created_gmt so it falls outside a retention window.
 	 *
 	 * @param int $sequence Row to age.
@@ -154,6 +217,32 @@ class Test_Change_Log_Purge extends Sync_Store_Test_Case {
 		// Assert.
 		$this->assertEquals( $aged_tombstone, $this->log->oldest_sequence() );
 		$this->assertEquals( 0, $this->log->prune_watermark() );
+	}
+
+	/**
+	 * A compaction backlog cannot consume the whole per-run budget.
+	 *
+	 * Compaction runs first and, on a busy store, can supply more work than a
+	 * single run may delete. Tombstone pruning is the only operation that
+	 * advances the prune watermark, so starving it stalls the completeness
+	 * boundary forever — while the hard per-run ceiling must still hold.
+	 */
+	public function test_purge_expired_with_compaction_backlog_still_prunes_expired_tombstones(): void {
+		// Arrange: more compactable rows than one run may delete, plus expired tombstones.
+		$this->seed_aged_rows( 'update', Change_Log_Purge::MAX_DELETES_PER_RUN + 2, 2, 11 );
+		$this->seed_aged_rows( 'delete', 3, 91 );
+		$this->log->record( 'product', 22, 'update', 'test', false );
+		$before = $this->count_rows();
+
+		// Act.
+		( new Change_Log_Purge( $this->log ) )->purge_expired();
+		$deleted = $before - $this->count_rows();
+
+		// Assert: pruning got its slice, the ceiling held, and the backlog reschedules.
+		$this->assertEquals( 0, $this->count_rows( 'delete' ) );
+		$this->assertGreaterThan( 0, $this->log->prune_watermark() );
+		$this->assertLessThanOrEqual( Change_Log_Purge::MAX_DELETES_PER_RUN, $deleted );
+		$this->assertNotEquals( false, wp_next_scheduled( Change_Log_Purge::PURGE_HOOK ) );
 	}
 
 	/**

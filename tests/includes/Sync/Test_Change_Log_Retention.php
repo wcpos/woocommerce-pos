@@ -259,6 +259,44 @@ class Test_Change_Log_Retention extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A prune batch cannot lower a watermark another worker raised mid-batch.
+	 *
+	 * The batch's own watermark is computed in PHP from the rows it selected, so
+	 * two overlapping purge workers can hold different candidates at once. The
+	 * persisted horizon is the client-facing completeness boundary: moving it
+	 * backwards would tell a client it had missed nothing when it had.
+	 */
+	public function test_prune_tombstones_with_concurrent_higher_watermark_keeps_higher_value(): void {
+		// Arrange: two prunable tombstones, plus a retained row above them.
+		$this->log->record( 'product', 11, 'delete', 'test', false );
+		$this->log->record( 'product', 22, 'delete', 'test', false );
+		$second = $this->log->head_sequence();
+		$this->log->record( 'product', 33, 'update', 'test', false );
+		$concurrent = $second + 1000;
+
+		// A second worker persists a higher watermark between our select and our write.
+		$fired     = false;
+		$interleave = function ( string $query ) use ( $concurrent, &$fired ): string {
+			if ( ! $fired && false !== strpos( $query, "change_type = 'delete'" ) ) {
+				$fired = true;
+				$this->log->advance_prune_watermark( $concurrent );
+			}
+
+			return $query;
+		};
+
+		// Act.
+		add_filter( 'query', $interleave );
+		$result = $this->log->prune_tombstones( $second, $this->future_gmt(), 500 );
+		remove_filter( 'query', $interleave );
+
+		// Assert: the batch still prunes, and the horizon never regresses.
+		$this->assertEquals( true, $fired );
+		$this->assertEquals( 2, $result['deleted'] );
+		$this->assertEquals( $concurrent, $this->log->prune_watermark() );
+	}
+
+	/**
 	 * A capped prune batch reports the highest sequence it actually removed.
 	 */
 	public function test_prune_tombstones_with_small_batch_reports_partial_watermark(): void {
