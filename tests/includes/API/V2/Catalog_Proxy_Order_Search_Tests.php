@@ -25,6 +25,16 @@ trait Catalog_Proxy_Order_Search_Tests {
 	private $target_order;
 
 	/**
+	 * Whether this storage sorts `payment_method` by the gateway id column.
+	 *
+	 * HPOS does; legacy storage sorts the `_payment_method_title` meta. See the parity
+	 * pin in `Sync\Collection_Rules`.
+	 *
+	 * @var bool
+	 */
+	protected $payment_method_sorts_gateway_id = false;
+
+	/**
 	 * Create orders with distinct billing search fields.
 	 */
 	private function create_order_search_fixtures(): void {
@@ -262,7 +272,15 @@ trait Catalog_Proxy_Order_Search_Tests {
 		);
 	}
 
-	/** Payment method sorting retains V1 semantics in both directions. */
+	/**
+	 * Payment method sorting retains V1 semantics in both directions.
+	 *
+	 * BEHAVIOUR DELTA (v2 lane, Collection Rules slice 1): V1 sorts the HPOS
+	 * `payment_method` COLUMN (the gateway id) and the legacy `_payment_method_title`
+	 * META, and the proxy now adopts both verbatim. It used to mirror
+	 * `payment_method_title` on HPOS, which is why this expectation is per-storage: the
+	 * fixtures give each order a gateway id and a title that sort the opposite way.
+	 */
 	public function test_orderby_payment_method_matches_v1(): void {
 		$alpha = $this->create_orderby_order();
 		$alpha->set_payment_method( 'charlie' );
@@ -277,10 +295,14 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$charlie->set_payment_method_title( 'charlie' );
 		$charlie->save();
 
+		$ascending = $this->payment_method_sorts_gateway_id
+			? array( $charlie->get_id(), $bravo->get_id(), $alpha->get_id() )
+			: array( $alpha->get_id(), $bravo->get_id(), $charlie->get_id() );
+
 		$this->assert_orderby_sequences(
 			'payment_method',
 			array( $alpha, $bravo, $charlie ),
-			array( $alpha->get_id(), $bravo->get_id(), $charlie->get_id() )
+			$ascending
 		);
 	}
 

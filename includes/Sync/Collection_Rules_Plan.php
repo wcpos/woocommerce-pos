@@ -40,7 +40,7 @@ use const WCPOS\WooCommercePOS\VERSION;
  *
  * `wcpos/v1`'s HPOS sort used to write `ORDER BY` only when WooCommerce had left
  * `$clauses['orderby']` empty. A rule that claims a sort OWNS the ordering, so the guard
- * is gone and the plan writes unconditionally. `Test_Collection_Rules_Leak` pins
+ * is gone and the plan writes unconditionally. `Test_Collection_Rules_Guard_HPOS` pins
  * `'' === $clauses['orderby']` for all four order sorts, so if a future WooCommerce
  * release starts mapping one of them itself, that test fails loudly instead of the two
  * writers silently fighting.
@@ -634,7 +634,17 @@ final class Collection_Rules_Plan {
 			return $orderby;
 		}
 
-		$order = strtoupper( $this->request_order ?? 'ASC' );
+		/*
+		 * The direction comes from the query WooCommerce built, exactly as the HPOS sort
+		 * takes it from that query's args — one derivation for both storages and both
+		 * Read Lanes. `WP_Query::get_posts()` normalises `order` (upper-cased, defaulting
+		 * to DESC) before `posts_orderby` fires, and it is populated from the same request
+		 * `order` param v1 used to read directly, so this is byte-identical on the direct
+		 * lane while giving the proxy lane the same answer instead of its own hard-coded
+		 * DESC. The terminal `ASC` is v1's own fallback, reached only if nothing at all
+		 * supplied a direction.
+		 */
+		$order = strtoupper( (string) ( $query->query_vars['order'] ?? $this->request_order ?? 'ASC' ) );
 
 		return "{$wpdb->posts}.{$column} {$order}";
 	}

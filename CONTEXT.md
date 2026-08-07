@@ -21,3 +21,13 @@ _Avoid_: section manager, settings factory
 **Plugin State**:
 Machine bookkeeping stored in options but not user intent: site UUID, JWT secret keys, install timestamp, DB version. Owned by the module that uses it (e.g. Auth owns its secret keys), never by the Settings module.
 _Avoid_: settings (for these), internal options
+
+### Sync
+
+**Collection Rule**:
+One POS query behaviour for one collection — the params it claims, the clauses it contributes, the storage it targets — declared once in the Collection Rules module and applied identically on every read lane, so it cannot be wired into only one.
+_Avoid_: query filter, orderby mapping, proxy mirror
+
+**Read Lane**:
+One of the two paths a collection read reaches the client by — the direct lane (`wcpos/v1` controllers) and the proxy lane (`wcpos/v2` → `wc/v3`). Behaviour that exists on one lane only is a parity bug, not a design.
+_Avoid_: v1/v2 API, endpoint version
