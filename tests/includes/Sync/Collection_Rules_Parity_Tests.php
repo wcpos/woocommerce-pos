@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WC_Order;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 
 /**
  * The headline test the Collection Rules module exists to make writable: the SAME query,
@@ -64,7 +65,7 @@ trait Collection_Rules_Parity_Tests {
 		$orders = $this->create_sort_fixtures();
 		$by_low = array( $orders['low']->get_id(), $orders['middle']->get_id(), $orders['high']->get_id() );
 
-		$this->assertSame(
+		$this->assertEquals(
 			$by_low,
 			$this->assert_lane_parity(
 				array(
@@ -73,7 +74,7 @@ trait Collection_Rules_Parity_Tests {
 				)
 			)
 		);
-		$this->assertSame(
+		$this->assertEquals(
 			array_reverse( $by_low ),
 			$this->assert_lane_parity(
 				array(
@@ -103,7 +104,7 @@ trait Collection_Rules_Parity_Tests {
 			// Legacy: titles are Alpha < Bravo < Charlie.
 			: array( $orders['low']->get_id(), $orders['middle']->get_id(), $orders['high']->get_id() );
 
-		$this->assertSame(
+		$this->assertEquals(
 			$expected,
 			$this->assert_lane_parity(
 				array(
@@ -128,7 +129,7 @@ trait Collection_Rules_Parity_Tests {
 		$orders   = $this->create_sort_fixtures();
 		$by_total = array( $orders['low']->get_id(), $orders['middle']->get_id(), $orders['high']->get_id() );
 
-		$this->assertSame(
+		$this->assertEquals(
 			array_reverse( $by_total ),
 			$this->assert_lane_parity( array( 'orderby' => 'total' ) )
 		);
@@ -151,7 +152,7 @@ trait Collection_Rules_Parity_Tests {
 		$other->update_meta_data( '_pos_user', '999999' );
 		$other->save();
 
-		$this->assertSame(
+		$this->assertEquals(
 			array( $matching->get_id() ),
 			$this->assert_lane_parity( array( 'pos_cashier' => $cashier_id ) )
 		);
@@ -169,9 +170,53 @@ trait Collection_Rules_Parity_Tests {
 		$other->update_meta_data( '_pos_store', '271828' );
 		$other->save();
 
-		$this->assertSame(
+		$this->assertEquals(
 			array( $matching->get_id() ),
 			$this->assert_lane_parity( array( 'pos_store' => 314159 ) )
+		);
+	}
+
+	/**
+	 * The proxy query must not inherit the direct lane's persistent callbacks.
+	 */
+	public function test_proxy_lane_is_not_contaminated_by_direct_lane_hooks(): void {
+		$v1_callback_by_route = array();
+		$capture_callbacks     = static function ( array $args, $request ) use ( &$v1_callback_by_route ): array {
+			$has_v1_callback = false;
+			foreach ( $GLOBALS['wp_filter']['woocommerce_rest_shop_order_object_query']->callbacks as $callbacks ) {
+				foreach ( $callbacks as $callback ) {
+					$function = $callback['function'];
+					if ( \is_array( $function ) && $function[0] instanceof Orders_Controller ) {
+						$has_v1_callback = true;
+						break 2;
+					}
+				}
+			}
+
+			$v1_callback_by_route[ $request->get_route() ] = $has_v1_callback;
+
+			return $args;
+		};
+
+		add_filter( 'woocommerce_rest_shop_order_object_query', $capture_callbacks, 1, 2 );
+		try {
+			$this->create_sort_fixtures();
+			$this->assert_lane_parity(
+				array(
+					'orderby' => 'total',
+					'order'   => 'asc',
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_rest_shop_order_object_query', $capture_callbacks, 1 );
+		}
+
+		$this->assertEquals(
+			array(
+				'/wcpos/v1/orders' => true,
+				'/wc/v3/orders'    => false,
+			),
+			$v1_callback_by_route
 		);
 	}
 
@@ -185,12 +230,33 @@ trait Collection_Rules_Parity_Tests {
 	private function assert_lane_parity( array $query ): array {
 		$query['per_page'] = 100;
 
-		$direct = $this->lane_order_ids( '/wcpos/v1/orders', $query );
-		$proxy  = $this->lane_order_ids( '/wcpos/v2/orders', $query );
+		$direct = $this->isolated_lane_order_ids( '/wcpos/v1/orders', $query );
+		$proxy  = $this->isolated_lane_order_ids( '/wcpos/v2/orders', $query );
 
-		$this->assertSame( $direct, $proxy, 'Read Lane divergence for ' . wp_json_encode( $query ) );
+		$this->assertEquals( $direct, $proxy, 'Read Lane divergence for ' . wp_json_encode( $query ) );
 
 		return $direct;
+	}
+
+	/**
+	 * Dispatch one lane without carrying its persistent hooks into the other lane.
+	 *
+	 * @param string $route Route to dispatch.
+	 * @param array  $query Query params.
+	 *
+	 * @return int[]
+	 */
+	private function isolated_lane_order_ids( string $route, array $query ): array {
+		$filter_snapshot = array();
+		foreach ( $GLOBALS['wp_filter'] as $hook => $callbacks ) {
+			$filter_snapshot[ $hook ] = clone $callbacks;
+		}
+
+		try {
+			return $this->lane_order_ids( $route, $query );
+		} finally {
+			$GLOBALS['wp_filter'] = $filter_snapshot;
+		}
 	}
 
 	/**
