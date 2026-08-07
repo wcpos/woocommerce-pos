@@ -403,6 +403,12 @@ class Activator {
 		$cashier_capabilities = array(
 			'read'                      => true,
 			'read_private_products'     => true,
+			'publish_products'          => true,
+			'edit_product'              => true,
+			'edit_products'             => true,
+			'edit_published_products'   => true,
+			'edit_private_products'     => true,
+			'edit_others_products'      => true,
 			'read_private_shop_orders'  => true,
 			'publish_shop_orders'       => true,
 			'edit_shop_orders'          => true,
@@ -411,6 +417,11 @@ class Activator {
 			$customer_create_cap        => true,
 			'edit_users'                => true,
 			'read_private_shop_coupons' => true,
+			'publish_shop_coupons'      => true,
+			'edit_shop_coupons'         => true,
+			'edit_published_shop_coupons' => true,
+			'edit_private_shop_coupons' => true,
+			'edit_others_shop_coupons'  => true,
 			'manage_product_terms'      => true,
 		);
 

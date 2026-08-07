@@ -340,17 +340,17 @@ class Test_Access_Section extends WP_UnitTestCase {
 	public function test_write_requires_capabilities(): void {
 		wp_set_current_user( 0 );
 
-		// Confirm the cashier role does not have edit_others_products before we attempt the write.
+		// Confirm the cashier role does not have delete_products before we attempt the write.
 		$cashier_role = get_role( 'cashier' );
 		$this->assertNotNull( $cashier_role, 'Expected cashier role to be registered in test fixtures.' );
-		$this->assertFalse( $cashier_role->has_cap( 'edit_others_products' ) );
+		$this->assertFalse( $cashier_role->has_cap( 'delete_products' ) );
 
 		$section = new Access_Section();
 		$result  = $section->write(
 			array(
 				'cashier' => array(
 					'capabilities' => array(
-						'wc' => array( 'edit_others_products' => true ),
+						'wc' => array( 'delete_products' => true ),
 					),
 				),
 			)
@@ -361,6 +361,6 @@ class Test_Access_Section extends WP_UnitTestCase {
 		// Capability must not have been mutated.
 		$cashier_role = get_role( 'cashier' );
 		$this->assertNotNull( $cashier_role, 'Expected cashier role to be registered in test fixtures.' );
-		$this->assertFalse( $cashier_role->has_cap( 'edit_others_products' ) );
+		$this->assertFalse( $cashier_role->has_cap( 'delete_products' ) );
 	}
 }
