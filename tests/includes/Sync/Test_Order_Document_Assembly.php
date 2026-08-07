@@ -250,7 +250,12 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	 */
 	private function write_ack( WC_Order $order, string $record_uuid, ?string $base_revision = null ): array {
 		$response = $this->push_update( $order, $record_uuid, $base_revision );
-		$this->assertNotWPError( $response, 'The characterization push must not return WP_Error.' );
+		$this->assertNotWPError(
+			$response,
+			is_wp_error( $response )
+				? sprintf( 'The characterization push returned WP_Error [%s] with data %s.', $response->get_error_code(), (string) wp_json_encode( $response->get_error_data() ) )
+				: 'The characterization push must not return WP_Error.'
+		);
 		$this->assertSame( 200, $response->get_status(), 'The characterization push must succeed: ' . wp_json_encode( $response->get_data() ) );
 
 		return $response->get_data();
@@ -378,19 +383,21 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_pull_and_proxy_documents_share_a_canonical_revision(): void {
 		$order = $this->representative_order();
+		$pull  = $this->pull_document( $order );
+		$proxy = $this->proxy_document( $order );
 
+		$this->assertSame( $pull, $proxy );
 		$this->assertSame(
-			Order_Serializer::canonical_revision( $this->pull_document( $order ) ),
-			Order_Serializer::canonical_revision( $this->proxy_document( $order ) )
+			Order_Serializer::canonical_revision( $pull ),
+			Order_Serializer::canonical_revision( $proxy )
 		);
 	}
 
 	/**
-	 * WRITE-ACK LANE — the diverging one.
+	 * WRITE-ACK LANE — assembled through the shared V2 augmentation path.
 	 *
-	 * What the ack has today: links, tax_ids, normalized meta, the record uuid.
-	 * What it LACKS today: line-item uuids and the image.id int cast — commit
-	 * 6fa92554 unified "both v2 read lanes" and skipped the ack.
+	 * The acknowledgement carries the normalized V2 metadata asserted below:
+	 * links, tax_ids, the record uuid, line-item uuids, and integer-cast image.id values.
 	 */
 	public function test_write_ack_document_carries_links_and_tax_ids(): void {
 		$order = $this->representative_order();
@@ -405,6 +412,21 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		// The record uuid is mirrored into the document for client reconciliation.
 		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $document['meta_data'] ?? array() ) );
+	}
+
+	public function test_write_ack_wp_error_diagnostic_includes_code_and_data(): void {
+		$order = $this->representative_order();
+
+		try {
+			$this->write_ack( $order, 'not-a-uuid' );
+		} catch ( \PHPUnit\Framework\AssertionFailedError $error ) {
+			$this->assertStringContainsString( 'woo_rxdb_sync_bad_record_id', $error->getMessage() );
+			$this->assertStringContainsString( '"status":400', $error->getMessage() );
+
+			return;
+		}
+
+		$this->fail( 'The invalid write acknowledgement must fail through assertNotWPError().' );
 	}
 
 	/**
@@ -498,7 +520,12 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$response = $this->push_update( $order, $uuid, $old_shape_ack_revision );
 
-		$this->assertNotWPError( $response, 'The characterization push must not return WP_Error.' );
+		$this->assertNotWPError(
+			$response,
+			is_wp_error( $response )
+				? sprintf( 'The characterization push returned WP_Error [%s] with data %s.', $response->get_error_code(), (string) wp_json_encode( $response->get_error_data() ) )
+				: 'The characterization push must not return WP_Error.'
+		);
 		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
 	}
 
@@ -526,7 +553,12 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 			$ack['currentRevision'],
 			'f1e2d3c4-3333-4444-8555-666677778888'
 		);
-		$this->assertNotWPError( $second, 'The characterization push must not return WP_Error.' );
+		$this->assertNotWPError(
+			$second,
+			is_wp_error( $second )
+				? sprintf( 'The characterization push returned WP_Error [%s] with data %s.', $second->get_error_code(), (string) wp_json_encode( $second->get_error_data() ) )
+				: 'The characterization push must not return WP_Error.'
+		);
 		$this->assertSame( 200, $second->get_status(), (string) wp_json_encode( $second->get_data() ) );
 	}
 
@@ -554,7 +586,12 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		$response = $this->push_update( $order, $uuid, $historical );
 
-		$this->assertNotWPError( $response, 'The characterization push must not return WP_Error.' );
+		$this->assertNotWPError(
+			$response,
+			is_wp_error( $response )
+				? sprintf( 'The characterization push returned WP_Error [%s] with data %s.', $response->get_error_code(), (string) wp_json_encode( $response->get_error_data() ) )
+				: 'The characterization push must not return WP_Error.'
+		);
 		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
 	}
 
