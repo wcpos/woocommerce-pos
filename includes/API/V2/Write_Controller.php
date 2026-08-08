@@ -442,6 +442,23 @@ class Write_Controller extends WP_REST_Controller {
 			}
 			$forward_payload = $this->order_payload()->for_create( $forward_payload );
 		}
+		// Validated till meta must be ON the order at calculate_totals() time: Pro's
+		// woocommerce_order_get_tax_location filter reads _pos_store to resolve the POS
+		// store's tax address, and wc/v3 computes taxes during the forwarded create.
+		// It cannot travel in the forwarded payload — Core_Order_Audit_Guard 403s audit
+		// keys on core routes for wcpos-JWT-authenticated requests (by design; that is
+		// the anti-forgery layer). So it is injected in-memory via the pre-insert
+		// filter below and persisted authoritatively by the post-create audit stamp,
+		// which updates the same keys in place (no duplicate rows). Without this, a
+		// multi-store order's taxes are computed from the SITE base address (live bug:
+		// dev-next order 76888 — GB VAT+Surcharge on a US-store sale).
+		$create_till_meta = array();
+		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
+			$payload_meta     = ( isset( $m['payload']['meta_data'] ) && is_array( $m['payload']['meta_data'] ) )
+				? $m['payload']['meta_data']
+				: array();
+			$create_till_meta = Pos_Order_Audit::till_meta_from_payload( $payload_meta );
+		}
 		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $forward_payload ) ) {
 			// tax_ids is a POS-owned field: wc/v3 would silently ignore it, and the
 			// server persists it via Tax_Id_Writer after a successful forward.
@@ -451,9 +468,15 @@ class Write_Controller extends WP_REST_Controller {
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
 			: $meta['route'];
 		$forwarded_order = null;
-		$date_filter     = static function ( $order, $request, $creating ) use ( $client_created_gmt, &$forwarded_order ) {
+		$date_filter     = static function ( $order, $request, $creating ) use ( $client_created_gmt, $create_till_meta, &$forwarded_order ) {
 			if ( $creating && $order instanceof \WC_Order ) {
 				$forwarded_order = $order;
+				// In-memory till stamp (see $create_till_meta above): present for the
+				// tax/coupon calculation inside the forwarded create, made durable by
+				// persist_order_audit_meta afterwards.
+				foreach ( $create_till_meta as $till_key => $till_value ) {
+					$order->update_meta_data( $till_key, $till_value );
+				}
 			}
 			if ( $creating && null !== $client_created_gmt && ! is_wp_error( $order ) ) {
 				$order->set_date_created( $client_created_gmt );
