@@ -174,23 +174,7 @@ final class Changes_Controller extends WP_REST_Controller {
 			'Cache-Control' => 'no-store',
 		);
 
-		// RFC 9110 If-None-Match semantics (parser adapted from wcpos-bot's review
-		// proposal): accept the wildcard, weak validators (W/"…"), and comma-separated
-		// validator lists — intermediaries may weaken or aggregate tags. Malformed
-		// headers never match (full 200 response).
-		$if_none_match              = trim( (string) $request->get_header( 'If-None-Match' ) );
-		$entity_tag_pattern         = '(?:W/)?"[\x21\x23-\x7E\x80-\xFF]*"';
-		$if_none_match_list_pattern = '~\A[ \t]*(?:,[ \t]*)*'
-			. $entity_tag_pattern
-			. '(?:[ \t]*,(?:[ \t]*' . $entity_tag_pattern . ')?)*[ \t]*\z~D';
-		$etag_matches               = '*' === $if_none_match;
-
-		if ( ! $etag_matches && 1 === preg_match( $if_none_match_list_pattern, $if_none_match ) ) {
-			preg_match_all( '~(?:W/)?"([\x21\x23-\x7E\x80-\xFF]*)"~', $if_none_match, $validators );
-			$etag_matches = in_array( substr( $etag, 1, -1 ), $validators[1], true );
-		}
-
-		if ( $since === $head_sequence && $etag_matches ) {
+		if ( $since === $head_sequence && $this->if_none_match_matches( $request, $etag ) ) {
 			return new \WP_REST_Response( null, 304, $headers );
 		}
 
@@ -507,35 +491,40 @@ final class Changes_Controller extends WP_REST_Controller {
 	/**
 	 * Combined change signal: one poll for idle registers.
 	 *
-	 * Delegates wholesale to sequence_log(): that handler already computes the
-	 * un-narrowed all-collections fingerprint for its embedded member and
-	 * derives its ETag from (sequence head, fingerprint) — exactly this
-	 * endpoint's validator — so both payload members, the conditional-request
-	 * semantics (RFC 9110 If-None-Match parsing, 304 only when the cursor is
-	 * at head so a matching validator can never hide rows behind a lagging
-	 * `since`), and the ETag reuse the existing serializers verbatim rather
-	 * than forking them. The sequence-log fields and fingerprint member are
-	 * lifted into tick's top-level production shape.
+	 * Reports the sequence head and representation fingerprint without reading
+	 * a page of change-log rows. Its validator and conditional-request semantics
+	 * stay shared with sequence_log() so cached validators remain compatible.
 	 */
 	public function tick( WP_REST_Request $request ) {
-		$response = $this->sequence_log( $request );
+		$since              = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
+		$config_fingerprint = $this->config_fingerprint_data( $request, true );
+		$head_sequence      = $this->change_log->head_sequence();
+		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		$headers            = array(
+			'ETag'          => $etag,
+			'Cache-Control' => 'no-store',
+		);
 
-		if ( 304 === $response->get_status() ) {
-			return $response;
+		if ( $since === $head_sequence && $this->if_none_match_matches( $request, $etag ) ) {
+			return new \WP_REST_Response( null, 304, $headers );
 		}
-
-		$sequence_data = $response->get_data();
 
 		return new \WP_REST_Response(
 			array(
-				'checkpoint'         => $sequence_data['checkpoint'],
-				'changes'            => $sequence_data['changes'],
-				'complete'           => $sequence_data['complete'],
-				'config_fingerprint' => $sequence_data['config_fingerprint'],
+				'checkpoint'         => array(
+					'since'   => $since,
+					'head'    => $head_sequence,
+					'horizon' => $this->change_log->prune_watermark(),
+				),
+				'changes'            => array(),
+				// Tick ships no page, so within its contract there is nothing incomplete;
+				// the client synthesizes its own envelope and never reads this field.
+				'complete'           => true,
+				'config_fingerprint' => $config_fingerprint,
 				'meta'               => array( 'supported' => true ),
 			),
 			200,
-			$response->get_headers()
+			$headers
 		);
 	}
 
@@ -552,6 +541,30 @@ final class Changes_Controller extends WP_REST_Controller {
 				)
 			)
 		) . '"';
+	}
+
+	/**
+	 * Apply RFC 9110 If-None-Match matching to the current validator.
+	 */
+	private function if_none_match_matches( WP_REST_Request $request, string $etag ): bool {
+		// Accept the wildcard, weak validators (W/"…"), and comma-separated
+		// validator lists. Malformed headers never match (full 200 response).
+		$if_none_match              = trim( (string) $request->get_header( 'If-None-Match' ) );
+		$entity_tag_pattern         = '(?:W/)?"[\x21\x23-\x7E\x80-\xFF]*"';
+		$if_none_match_list_pattern = '~\A[ \t]*(?:,[ \t]*)*'
+			. $entity_tag_pattern
+			. '(?:[ \t]*,(?:[ \t]*' . $entity_tag_pattern . ')?)*[ \t]*\z~D';
+
+		if ( '*' === $if_none_match ) {
+			return true;
+		}
+		if ( 1 !== preg_match( $if_none_match_list_pattern, $if_none_match ) ) {
+			return false;
+		}
+
+		preg_match_all( '~(?:W/)?"([\x21\x23-\x7E\x80-\xFF]*)"~', $if_none_match, $validators );
+
+		return in_array( substr( $etag, 1, -1 ), $validators[1], true );
 	}
 
 	/**

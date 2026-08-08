@@ -14,9 +14,9 @@ use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 use WP_REST_Request;
 
 /**
- * GET /wcpos/v2/changes/tick through real v2 REST dispatch: payload parity
- * with the two source endpoints, conditional-request (ETag/304) semantics,
- * and permission pins.
+ * GET /wcpos/v2/changes/tick through real v2 REST dispatch: slim payload,
+ * validator parity with sequence-log, conditional-request (ETag/304)
+ * semantics, and permission pins.
  *
  * @covers \WCPOS\WooCommercePOS\API\V2\Changes_Controller
  */
@@ -74,24 +74,26 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Tick lifts the sequence-log fields into its top-level response.
+	 * Tick stays slim while sequence-log continues to serve full pages.
 	 */
-	public function test_tick_sequence_log_fields_match_standalone_endpoint(): void {
-		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
-		$params = array(
-			'since' => 0,
-			'limit' => 10,
-		);
+	public function test_tick_returns_slim_body_without_slimming_sequence_log(): void {
+		$log = new Change_Log();
+		for ( $id = 1; $id <= 101; $id++ ) {
+			$log->record( 'product', $id, 'update', 'test', false );
+		}
 
-		$tick     = $this->server->dispatch( $this->tick_request( $params ) )->get_data();
+		$tick     = $this->server->dispatch( $this->tick_request() )->get_data();
 		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' );
-		$request->set_query_params( $params );
 		$sequence = $this->server->dispatch( $request )->get_data();
 
-		$this->assertSame( 123, $tick['changes'][0]['id'] );
-		$this->assertSame( $sequence['checkpoint'], $tick['checkpoint'] );
-		$this->assertSame( $sequence['changes'], $tick['changes'] );
-		$this->assertSame( $sequence['complete'], $tick['complete'] );
+		$this->assertSame( array(), $tick['changes'] );
+		$this->assertTrue( $tick['complete'] );
+		$this->assertSame( 0, $tick['checkpoint']['since'] );
+		$this->assertSame( $log->head_sequence(), $tick['checkpoint']['head'] );
+		$this->assertArrayHasKey( 'config_fingerprint', $tick );
+		$this->assertLessThan( 1024, strlen( (string) wp_json_encode( $tick ) ) );
+		$this->assertCount( 100, $sequence['changes'] );
+		$this->assertFalse( $sequence['complete'] );
 	}
 
 	/**
@@ -133,8 +135,23 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A no-cursor tick preserves today's empty-log 304 behavior.
+	 */
+	public function test_tick_matching_etag_without_since_at_empty_head_returns_not_modified(): void {
+		$first = $this->server->dispatch( $this->tick_request() );
+
+		$request = $this->tick_request();
+		$request->set_header( 'If-None-Match', $first->get_headers()['ETag'] );
+		$not_modified = $this->server->dispatch( $request );
+
+		$this->assertSame( 304, $not_modified->get_status() );
+		$this->assertNull( $not_modified->get_data() );
+		$this->assertSame( $first->get_headers()['ETag'], $not_modified->get_headers()['ETag'] );
+	}
+
+	/**
 	 * Tick emits the sequence-log validator: same server state, same ETag.
-	 * The whole delegation design rests on this property.
+	 * Cached validators rely on this compatibility invariant.
 	 */
 	public function test_tick_etag_matches_sequence_log_etag_for_same_state(): void {
 		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
@@ -179,20 +196,18 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A matching ETag cannot hide rows behind a lagging cursor.
+	 * A matching ETag cannot turn a no-cursor tick into a 304 above head zero.
 	 */
-	public function test_tick_matching_etag_with_since_behind_head_returns_page(): void {
+	public function test_tick_matching_etag_without_since_above_empty_head_returns_response(): void {
 		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
-		$latest  = $this->server->dispatch( $this->tick_request( array( 'since' => 0 ) ) );
-		$head    = $latest->get_data()['checkpoint']['head'];
-		$current = $this->server->dispatch( $this->tick_request( array( 'since' => $head ) ) );
+		$current = $this->server->dispatch( $this->tick_request() );
 
-		$request = $this->tick_request( array( 'since' => 0 ) );
+		$request = $this->tick_request();
 		$request->set_header( 'If-None-Match', $current->get_headers()['ETag'] );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 123, $response->get_data()['changes'][0]['id'] );
+		$this->assertSame( array(), $response->get_data()['changes'] );
 	}
 
 	/**
