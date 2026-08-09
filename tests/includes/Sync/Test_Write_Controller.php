@@ -13,6 +13,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -1054,6 +1055,65 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( $client_date, gmdate( 'Y-m-d\TH:i:s\Z', $order->get_date_created()->getTimestamp() ) );
 	}
 
+	public function test_order_create_exposes_validated_store_meta_during_tax_calculation(): void {
+		// Authenticate with a REAL wcpos JWT, exactly like the app: this ARMS
+		// Core_Order_Audit_Guard on the inner wc/v3 forward. The first version of
+		// this fix put till meta in the forwarded payload — every unit test passed
+		// (cookie auth, guard dormant) while every live request 403'd. The guard
+		// must be active here or this test cannot see that failure mode.
+		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $cashier_id );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$store_at_tax_calculation      = null;
+		$tax_location_filter = static function ( $location, $order ) use ( &$store_at_tax_calculation ) {
+			if ( null === $store_at_tax_calculation ) {
+				$store_at_tax_calculation = $order->get_meta( '_pos_store' );
+			}
+			return $location;
+		};
+		add_filter( 'woocommerce_order_get_tax_location', $tax_location_filter, 10, 2 );
+
+		try {
+			$created = $this->push(
+				new Fake_Mutation_Store(),
+				array(
+					'collection' => 'orders',
+					'payload'    => array(
+						'meta_data' => array(
+							array(
+								'key'   => '_pos_store',
+								'value' => '123',
+							),
+							array(
+								'key'   => '_pos_user',
+								'value' => '999',
+							),
+						),
+					),
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_order_get_tax_location', $tax_location_filter, 10 );
+			unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		}
+
+		// The guard must NOT have rejected the create — till meta travels in-memory,
+		// never through the guarded core-route payload.
+		$this->assertSame( 201, $created->get_status(), 'push response: ' . wp_json_encode( $created->get_data() ) );
+		$this->assertSame( '123', $store_at_tax_calculation );
+		$order      = wc_get_order( (int) $created->get_data()['document']['id'] );
+		$store_meta = array_values(
+			array_filter(
+				$order->get_meta_data(),
+				static fn( $meta ) => '_pos_store' === $meta->get_data()['key']
+			)
+		);
+		$this->assertCount( 1, $store_meta );
+		$this->assertSame( '123', $store_meta[0]->get_data()['value'] );
+		$this->assertSame( (string) $cashier_id, $order->get_meta( '_pos_user' ) );
+		$this->assertNotSame( '999', $order->get_meta( '_pos_user' ) );
+	}
+
 	public function test_order_create_rejects_invalid_client_date_created_gmt(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
@@ -1479,9 +1539,12 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( '3', $call['meta']['_pos_store'] );                 // till store preserved
 		$this->assertSame( '20.00', $call['meta']['_pos_cash_amount_tendered'] ); // cash meta preserved
 
-		// The forwarded create carries created_via (WC honors it) but has the server-managed _pos_*
-		// audit keys STRIPPED — so a client-forged copy can't land at create and defeat the write-once
-		// server stamp. The uuid (a different protected key) is untouched.
+		// The forwarded create carries created_via (WC honors it) but has ALL _pos_* audit keys
+		// STRIPPED from its meta_data — server-derived keys because the server is their sole
+		// writer, and till keys because Core_Order_Audit_Guard 403s audit keys on core routes for
+		// JWT-authenticated requests. Till values reach the order in-memory via the pre-insert
+		// filter instead (asserted by the tax-calculation regression test) and are persisted by
+		// the post-create stamp. The uuid (a different protected key) is untouched.
 		$body     = $GLOBALS['wcpos_sync_test_rest_do_request_calls'][0]->get_body_params();
 		$fwdKeys  = array_map( static fn ( $e ) => $e['key'], $body['meta_data'] );
 		$this->assertSame( 'woocommerce-pos', $body['created_via'] );
