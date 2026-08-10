@@ -82,6 +82,7 @@ final class Order_Write_Payload {
 	 * @return array The payload with WC-rejected POS values dropped.
 	 */
 	private function sanitize_order_wc_payload( array $payload ): array {
+		$payload = $this->recover_any_variation_attributes( $payload );
 		if ( isset( $payload['billing'] ) && is_array( $payload['billing'] )
 			&& array_key_exists( 'email', $payload['billing'] )
 			&& ( '' === $payload['billing']['email'] || null === $payload['billing']['email'] ) ) {
@@ -125,6 +126,58 @@ final class Order_Write_Payload {
 		}
 		return $payload;
 	}
+
+	/**
+	 * Recover choices for variation attributes whose catalog value is "any".
+	 *
+	 * @param array $payload Order payload about to be forwarded to wc/v3.
+	 * @return array Payload with recoverable real attribute meta appended.
+	 */
+	private function recover_any_variation_attributes( array $payload ): array {
+		if ( empty( $payload['line_items'] ) || ! is_array( $payload['line_items'] ) ) {
+			return $payload;
+		}
+		foreach ( $payload['line_items'] as $i => $line ) {
+			if ( empty( $line['variation_id'] ) || empty( $line['meta_data'] ) || ! is_array( $line['meta_data'] ) ) {
+				continue;
+			}
+			$product = wc_get_product( $line['product_id'] ?? 0 );
+			if ( ! $product ) {
+				continue;
+			}
+			$parent_attributes = $product->get_attributes();
+			foreach ( wc_get_product_variation_attributes( $line['variation_id'] ) as $key => $value ) {
+				if ( '' !== $value ) {
+					continue;
+				}
+				$slug = str_replace( 'attribute_', '', $key );
+				if ( ! isset( $parent_attributes[ $slug ] ) ) {
+					continue;
+				}
+				foreach ( $line['meta_data'] as $meta ) {
+					if ( is_array( $meta ) && isset( $meta['key'] ) && $slug === $meta['key'] ) {
+						continue 2;
+					}
+				}
+				$name = $parent_attributes[ $slug ]['name'] ?? $slug;
+				if ( $name === $slug ) {
+					$name = wc_attribute_label( $slug );
+				}
+				foreach ( $line['meta_data'] as $meta ) {
+					if ( is_array( $meta ) && isset( $meta['display_key'], $meta['display_value'] )
+						&& $meta['display_key'] === $name && $meta['display_value'] ) {
+						$payload['line_items'][ $i ]['meta_data'][] = array(
+							'key'   => $slug,
+							'value' => $meta['display_value'],
+						);
+						break;
+					}
+				}
+			}
+		}
+		return $payload;
+	}
+
 	/**
 	 * Prefix for a collision-resistant payload-only sku. Stock wc/v3 requires a
 	 * product_id OR a sku on line-item create, so a misc line (product_id 0) must
