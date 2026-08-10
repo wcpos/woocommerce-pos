@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Store_Scope;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -195,6 +196,11 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
 		$inner->set_query_params( $query_params );
+		// The till's store scope, republished as v1's `store_id` param (pro#425).
+		// This is the greedy catalog list pull, so it is what decides whether the
+		// products grid shows each store's own price or the web store's. Stamped
+		// after set_query_params so a scope is never wiped by the forwarded set.
+		Store_Scope::stamp( $inner );
 		if ( 'orders' === $resource ) {
 			// Server-authoritative, overriding any client-sent dp: every WCPOS
 			// order surface serializes money at six decimals (v1 parity), so

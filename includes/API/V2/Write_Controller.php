@@ -26,6 +26,7 @@ use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Revision;
+use WCPOS\WooCommercePOS\Sync\Store_Scope;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -1369,6 +1370,13 @@ class Write_Controller extends WP_REST_Controller {
 			unset( $payload['id'] );
 			$request->set_body_params( $payload );
 		}
+		// The till's store scope rides the forward as v1's `store_id` param
+		// (pro#425), so a hook running during the inner wc/v3 write knows WHICH
+		// store the cashier is editing for. Without it a store-scoped price edit
+		// is indistinguishable from a global one and lands on the web-store price.
+		// AFTER set_body_params: on a body-bearing method that call replaces the
+		// whole POST bag, which is where set_param() would have put the scope.
+		Store_Scope::stamp( $request );
 		return $this->dispatch_write( $request );
 	}
 
@@ -1466,6 +1474,9 @@ class Write_Controller extends WP_REST_Controller {
 		}
 
 		$request  = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
+		// Scope the read-back too: the document the client stores must show the
+		// store's price, not the global one it would otherwise adopt (pro#425).
+		Store_Scope::stamp( $request );
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			$request->set_param( 'dp', '6' );
 		}
