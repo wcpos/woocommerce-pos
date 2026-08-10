@@ -103,6 +103,28 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 9, Store_Scope::resolve( $request ) );
 	}
 
+	/**
+	 * A header that was SENT but is unusable must not fall through to the v1
+	 * param. Otherwise a v2 caller whose header is malformed silently has its
+	 * scope replaced by one from a different wire form, and the edit lands on a
+	 * store the caller never named.
+	 *
+	 * @dataProvider provide_unusable_scopes
+	 *
+	 * @param string $header The raw header value.
+	 */
+	public function test_an_unusable_header_does_not_fall_back_to_the_param( string $header ): void {
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
+		$request->set_header( Store_Scope::HEADER, $header );
+		$request->set_param( 'store_id', '9' );
+
+		// The blank/whitespace cases are "no scope sent" and legitimately fall
+		// back; every malformed-but-present one must resolve to UNKNOWN.
+		$expected = '' === trim( $header ) ? 9 : null;
+
+		$this->assertSame( $expected, Store_Scope::resolve( $request ) );
+	}
+
 	public function test_resolve_prefers_the_header_over_the_param(): void {
 		$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
 		$request->set_param( 'store_id', '9' );
