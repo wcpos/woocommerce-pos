@@ -27,6 +27,7 @@ The client (`wcpos/monorepo`, `next`) calls three namespaces:
 | `wcpos/v2` | **current** | The POS lane. ~375 client references. |
 | `wc/v3` | **current** | Called directly by the client, and proxied to by v2. ~109 references. |
 | `wcpos/v1` | **frozen** | Legacy. Exactly one route is still live: `wcpos/v1/products/variations`, used by the sync census for its `X-WP-Total` head-count. |
+| — | unresolved | The route is assembled at runtime, so it cannot be resolved from literals. Not claimed to be v1 — just unproven. |
 | — | pure unit | Dispatches no REST route; classification is not applicable. |
 
 `wcpos/v1/products/variations` is allowlisted in the scanner (`CURRENT_V1_ROUTES`). A test
@@ -70,7 +71,9 @@ A case's lanes are the union of the signals in its own body and those in class s
 route dispatches it on behalf of every test in the class.
 
 A case is **v1-only** when it has a `v1` signal, has no `v2` or `wc3` signal, and is not
-provably confined to the allowlisted live v1 route.
+provably confined to the allowlisted live v1 route. It is **unresolved** when its route could
+not be read from literals and nothing else proves it current. `v1-only` is a positive claim
+and stays provable; `unresolved` is an admission of ignorance. The gate treats them alike.
 
 ### Known limitations — read these before trusting a number
 
@@ -78,9 +81,12 @@ provably confined to the allowlisted live v1 route.
   `wcpos/v2`, every case in that class gains the `v2` signal. A class can therefore look
   covered when only one of its cases really is. This is the one place the tool is optimistic,
   and it is the first thing to check when a class looks surprisingly clean.
-- **Routes built at runtime are invisible.** A route assembled from variables is not a
-  literal. Such a case is treated as legacy rather than current — deliberately, since we
-  cannot prove it is current.
+- **Routes built at runtime get their own category, not a guess.** A request whose route
+  cannot be resolved from string literals is reported as `unresolved`, never as `v1`. Calling
+  such a case v1 would put a false statement in the inventory — five of them in the free repo
+  are, by their own names, v2 tests — and an artifact that misstates one row does not get
+  trusted about the rest. `unresolved` cases are still guarded by the CI ratchet, so the
+  conservatism is kept without the lie.
 - **Inheritance is not followed.** Signals in a parent test-case class are not inherited by
   subclasses.
 - **`summary.by_lane` counts cases per lane and overlaps.** A case touching v1 and v2 is
@@ -114,11 +120,13 @@ which is what the previous audit's output could not express.
 1. **The inventory is not stale.** `--check` regenerates and compares byte-for-byte. Any
    change under `tests/` that shifts the classification must land with a regenerated
    inventory, so the checked-in artifact can never drift away from the code.
-2. **The v1-only list must not grow.** `--compare` diffs the set of v1-only case keys
-   against the PR's **merge-base**, not against a checked-in baseline file. A baseline file
-   can be edited in the same PR that grows the list; git history cannot. New v1-only cases
-   fail the build. Removing them — by porting the behaviour to `wcpos/v2` or by retiring the
-   legacy test — is always allowed and is how the number goes down.
+2. **The not-proven-current list must not grow.** `--compare` diffs the set of case keys that
+   are either v1-only or `unresolved` — both together, so a new test cannot slip past the gate
+   merely by building its route out of variables — against the PR's **merge-base**, not against
+   a checked-in baseline file, because a baseline file can be edited in the same PR that grows
+   the list and git history cannot. New entries fail the build. Removing them — by porting the
+   behaviour to `wcpos/v2` or by retiring the legacy test — is always allowed, and is how the
+   number goes down.
 3. **Blind-test warnings are printed and never fail the build** (see below).
 
 ## Blind-test warnings

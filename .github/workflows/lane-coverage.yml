@@ -29,6 +29,7 @@ on:
       - "tests/**"
       - "scripts/lane-coverage.php"
       - ".github/scripts/test-lane-coverage-workflow.sh"
+      - "scripts/tests/test-lane-coverage.php"
       - ".github/workflows/lane-coverage.yml"
   workflow_dispatch:
 
@@ -55,6 +56,9 @@ jobs:
         with:
           php-version: "8.1"
           coverage: none
+
+      - name: Scanner regression tests
+        run: php scripts/tests/test-lane-coverage.php
 
       - name: Inventory is up to date
         run: |

@@ -73,6 +73,25 @@ function next_significant_index( $tokens, $index ) {
 	}
 	return null;
 }
+function literal_text_from_call_argument( $tokens, $open_index, $argument_index, &$literal_indexes ) {
+	$text     = '';
+	$argument = 0;
+	$depth    = 0;
+	$literal_indexes = array();
+	for ( $index = $open_index + 1; $index < count( $tokens ); $index++ ) {
+		$token = $tokens[ $index ];
+		if ( '(' === $token ) { $depth++; }
+		elseif ( ')' === $token && 0 === $depth ) { break; }
+		elseif ( ')' === $token ) { $depth--; }
+		elseif ( ',' === $token && 0 === $depth ) { $argument++; }
+		elseif ( $argument === $argument_index && is_array( $token )
+			&& in_array( $token[0], array( T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE ), true ) ) {
+			$text                      .= trim( $token[1], "'\"" );
+			$literal_indexes[ $index ] = true;
+		}
+	}
+	return $text;
+}
 function name_token_ids() {
 	$ids = array( T_STRING, T_NS_SEPARATOR );
 	foreach ( array( 'T_NAME_QUALIFIED', 'T_NAME_FULLY_QUALIFIED', 'T_NAME_RELATIVE' ) as $name ) {
@@ -115,6 +134,7 @@ function scan_file( $absolute_file, $relative_file ) {
 	$pending_class     = null;
 	$pending_method    = null;
 	$pending_docblock  = null;
+	$route_literal_tokens = array();
 	$brace_depth       = 0;
 	$count             = count( $tokens );
 	for ( $i = 0; $i < $count; $i++ ) {
@@ -207,7 +227,7 @@ function scan_file( $absolute_file, $relative_file ) {
 		$current_method = empty( $method_stack ) ? $pending_method : end( $method_stack );
 		$class_index    = null === $current_class ? null : $current_class['index'];
 		if ( null !== $current_method ) { $class_index = $current_method['class']; }
-		if ( T_CONSTANT_ENCAPSED_STRING === $id || T_ENCAPSED_AND_WHITESPACE === $id ) {
+		if ( ( T_CONSTANT_ENCAPSED_STRING === $id || T_ENCAPSED_AND_WHITESPACE === $id ) && ! isset( $route_literal_tokens[ $i ] ) ) {
 			add_finding( $classes, $class_index, $current_method, lanes_from_text( $token[1] ), $token[1] );
 		}
 		if ( is_array( $token ) && in_array( $id, $name_ids, true ) ) {
@@ -226,6 +246,12 @@ function scan_file( $absolute_file, $relative_file ) {
 			$is_call  = null !== $next && '(' === $tokens[ $next ];
 			$is_method_call = $is_call && is_array( $previous )
 				&& in_array( $previous[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON ), true );
+			if ( $is_call && preg_match( '/^wp_rest_[a-z_]+_request$/', $token[1] ) ) {
+				$literal = literal_text_from_call_argument( $tokens, $next, 0, $literal_indexes );
+				$route_literal_tokens += $literal_indexes;
+				$lanes   = lanes_from_text( $literal );
+				add_finding( $classes, $class_index, $current_method, empty( $lanes ) ? array( 'unresolved' => true ) : $lanes, empty( $lanes ) ? null : $literal );
+			}
 			if ( $is_method_call && in_array( $token[1], array( 'wcpos_dispatch_request', 'register_routes', 'register_hooks', 'init_hooks' ), true ) ) {
 				add_warning( $classes, $class_index, $current_method, 'self-installed-hook', $relative_file, $token[2] );
 			}
@@ -236,15 +262,20 @@ function scan_file( $absolute_file, $relative_file ) {
 				unset( $method );
 			}
 		}
-		if ( T_NEW === $id && null !== $current_method && $current_method['test'] ) {
+		if ( T_NEW === $id && null !== $current_method ) {
 			$name_index = next_significant_index( $tokens, $i );
 			$name       = '';
 			for ( $j = $name_index; null !== $j && $j < $count && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], $name_ids, true ); $j++ ) {
 				$name .= $tokens[ $j ][1];
 			}
 			$constructor = next_significant_index( $tokens, $j - 1 );
-			if ( 'WP_REST_Response' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
+			if ( $current_method['test'] && 'WP_REST_Response' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
 				$classes[ $class_index ]['methods'][ $current_method['index'] ]['stub_sites'][ $token[2] ] = true;
+			} elseif ( 'WP_REST_Request' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
+				$literal = literal_text_from_call_argument( $tokens, $constructor, 1, $literal_indexes );
+				$route_literal_tokens += $literal_indexes;
+				$lanes   = lanes_from_text( $literal );
+				add_finding( $classes, $class_index, $current_method, empty( $lanes ) ? array( 'unresolved' => true ) : $lanes, empty( $lanes ) ? null : $literal );
 			}
 		}
 		if ( T_VARIABLE === $id && '$GLOBALS' === $token[1] && null !== $current_method && $current_method['test'] ) {
@@ -326,8 +357,11 @@ function read_annotations( $root ) {
 	return $data;
 }
 function is_non_current_v1_literal( $literal ) {
+	$path  = ltrim( trim( $literal, " \t\n\r\0\x0B'\"" ), '/' );
+	$query = strpos( $path, '?' );
+	if ( false !== $query ) { $path = substr( $path, 0, $query ); }
 	foreach ( CURRENT_V1_ROUTES as $route ) {
-		if ( false !== strpos( $literal, $route ) ) { return false; }
+		if ( $path === $route ) { return false; }
 	}
 	return true;
 }
@@ -359,8 +393,16 @@ function build_inventory( $classes, $annotations ) {
 			foreach ( array_keys( $v1_literals ) as $literal ) {
 				$has_legacy = $has_legacy || is_non_current_v1_literal( $literal );
 			}
-			$v1_only = in_array( 'v1', $lanes, true ) && ! in_array( 'v2', $lanes, true )
-				&& ! in_array( 'wc3', $lanes, true ) && $has_legacy;
+			// `v1_only` is a positive claim and stays provable: we saw a v1 signal and no
+			// current-lane signal. `unresolved` never grants it — calling a case "v1" when the
+			// route was assembled at runtime would put a false statement in the inventory, and an
+			// artifact that misstates one row does not get trusted about the other 435.
+			$on_current  = in_array( 'v2', $lanes, true ) || in_array( 'wc3', $lanes, true );
+			$v1_only     = in_array( 'v1', $lanes, true ) && ! $on_current && $has_legacy;
+			// Both categories are "not proven to cover current behaviour", and the ratchet guards
+			// their union — otherwise a new test could slip past the gate simply by building its
+			// route out of variables.
+			$unresolved  = in_array( 'unresolved', $lanes, true ) && ! $on_current && ! $v1_only;
 			$warnings = array_merge( $class['warnings'], $method['warnings'] );
 			if ( $method['has_assertion'] && $method['has_response_access'] ) {
 				foreach ( array_keys( $method['stub_sites'] ) as $line ) {
@@ -374,7 +416,7 @@ function build_inventory( $classes, $annotations ) {
 			$cases[] = array(
 				'key' => $key, 'file' => $class['file'], 'class' => $class['name'], 'method' => $method['name'],
 				'behavior' => $behavior, 'own_lanes' => $own_lanes, 'class_lanes' => $class_lanes,
-				'lanes' => $lanes, 'v1_only' => $v1_only, 'verdict' => $verdict,
+				'lanes' => $lanes, 'v1_only' => $v1_only, 'unresolved' => $unresolved, 'verdict' => $verdict,
 				'note' => isset( $annotation['note'] ) ? $annotation['note'] : null, 'warnings' => $warnings,
 			);
 			$case_keys[ $key ] = true;
@@ -392,10 +434,11 @@ function build_inventory( $classes, $annotations ) {
 			if ( ! isset( $case_keys[ $key ] ) ) { fail( 'Stale case annotation (no such test case was scanned): ' . $key . $stale_hint ); }
 	}
 	usort( $cases, function ( $a, $b ) { return strcmp( $a['key'], $b['key'] ); } );
-	$summary = array( 'cases' => count( $cases ), 'v1_only' => 0, 'by_lane' => array( 'v1' => 0, 'v2' => 0, 'wc3' => 0, 'wp2' => 0, 'unit' => 0 ),
+	$summary = array( 'cases' => count( $cases ), 'v1_only' => 0, 'unresolved' => 0, 'by_lane' => array( 'v1' => 0, 'v2' => 0, 'wc3' => 0, 'wp2' => 0, 'unresolved' => 0, 'unit' => 0 ),
 		'warnings' => array( 'self-installed-hook' => 0, 'asserted-stubbed-response' => 0 ) );
 	foreach ( $cases as $case ) {
-		$summary['v1_only'] += $case['v1_only'] ? 1 : 0;
+		$summary['v1_only']    += $case['v1_only'] ? 1 : 0;
+		$summary['unresolved'] += $case['unresolved'] ? 1 : 0;
 		$patterns = array();
 		foreach ( $case['warnings'] as $warning ) { $patterns[ $warning['pattern'] ] = true; }
 		foreach ( array_keys( $patterns ) as $pattern ) { $summary['warnings'][ $pattern ]++; }
@@ -461,15 +504,23 @@ function inventory_markdown( $inventory ) {
 	$output .= "# PHPUnit REST lane coverage\n\n";
 	$output .= "A test counts as coverage for current behaviour only if it exercises the lane the app\n"
 		. "actually calls. v1-route tests are legacy pins and do not count — see README.md here.\n\n";
-	$output .= "- Cases: {$summary['cases']}\n- v1-only cases: {$summary['v1_only']}\n";
+	$output .= "- Cases: {$summary['cases']}\n- v1-only cases: {$summary['v1_only']}\n"
+		. "- Unresolved-route cases (not proven current, not claimed v1): {$summary['unresolved']}\n";
 	$output .= '- By lane (overlapping; a case touching two lanes is counted twice): v1 ' . $summary['by_lane']['v1']
 		. ', v2 ' . $summary['by_lane']['v2'] . ', wc3 ' . $summary['by_lane']['wc3']
-		. ', wp2 ' . $summary['by_lane']['wp2'] . ', pure unit ' . $summary['by_lane']['unit'] . "\n";
+		. ', wp2 ' . $summary['by_lane']['wp2'] . ', unresolved ' . $summary['by_lane']['unresolved']
+		. ', pure unit ' . $summary['by_lane']['unit'] . "\n";
 	$output .= '- Blind-test warnings (advisory): self-installed-hook ' . $summary['warnings']['self-installed-hook']
 		. ', asserted-stubbed-response ' . $summary['warnings']['asserted-stubbed-response'] . "\n\n";
-	$v1_only = array_values( array_filter( $inventory['cases'], function ( $case ) { return $case['v1_only']; } ) );
-	$other   = array_values( array_filter( $inventory['cases'], function ( $case ) { return ! $case['v1_only']; } ) );
+	$v1_only     = array_values( array_filter( $inventory['cases'], function ( $case ) { return $case['v1_only']; } ) );
+	$unresolved  = array_values( array_filter( $inventory['cases'], function ( $case ) { return $case['unresolved']; } ) );
+	$other       = array_values( array_filter( $inventory['cases'], function ( $case ) { return ! $case['v1_only'] && ! $case['unresolved']; } ) );
 	$output .= "## Behaviours whose only coverage is a v1 route\n\n" . markdown_table( $v1_only );
+	$output .= "\n## Cases whose dispatched route could not be resolved\n\n"
+		. "Their route is assembled at runtime, so the scanner cannot show they exercise a current\n"
+		. "lane. They are NOT claimed to be v1 — only unproven — and the CI ratchet guards them\n"
+		. "alongside the v1-only list so a new test cannot slip past by building its route from\n"
+		. "variables.\n\n" . markdown_table( $unresolved );
 	$output .= "\n" . warnings_markdown( $inventory );
 	$output .= "\n## All other behaviours\n\n" . markdown_table( $other );
 	return $output;
@@ -504,33 +555,37 @@ function compare_to_baseline( $inventory, $baseline_path ) {
 	}
 	$base_keys = array();
 	foreach ( $baseline['cases'] as $case ) {
-		if ( ! empty( $case['v1_only'] ) ) { $base_keys[ $case['key'] ] = true; }
+		if ( ! empty( $case['v1_only'] ) || ! empty( $case['unresolved'] ) ) { $base_keys[ $case['key'] ] = true; }
 	}
 	$head_keys = array();
 	foreach ( $inventory['cases'] as $case ) {
-		if ( $case['v1_only'] ) { $head_keys[ $case['key'] ] = true; }
+		if ( $case['v1_only'] || $case['unresolved'] ) { $head_keys[ $case['key'] ] = true; }
 	}
 	$added   = array_keys( array_diff_key( $head_keys, $base_keys ) );
 	$removed = array_keys( array_diff_key( $base_keys, $head_keys ) );
 	sort( $added, SORT_STRING );
 	sort( $removed, SORT_STRING );
 
-	echo 'v1-only cases: ' . count( $base_keys ) . ' (baseline) -> ' . count( $head_keys ) . " (this branch)\n";
+	echo 'Cases not proven to cover current behaviour (v1-only + unresolved route): '
+		. count( $base_keys ) . ' (baseline) -> ' . count( $head_keys ) . " (this branch)\n";
+	echo '  of which provably v1-only on this branch: ' . $inventory['summary']['v1_only']
+		. '; unresolved route: ' . $inventory['summary']['unresolved'] . "\n";
 	foreach ( $removed as $key ) { echo '  ported or retired: ' . $key . "\n"; }
 	if ( empty( $added ) ) {
 		echo "No new v1-only coverage.\n";
 		exit( 0 );
 	}
-	fwrite( STDERR, "\nNew behaviours whose only coverage is a frozen wcpos/v1 route:\n" );
+	fwrite( STDERR, "\nNew cases with no proven coverage of current behaviour:\n" );
 	foreach ( $added as $key ) {
 		fwrite( STDERR, '  ' . $key . "\n" );
-		echo '::error::New v1-only test case: ' . $key . "\n";
+		echo '::error::New case without current-lane coverage: ' . $key . "\n";
 	}
 	fwrite(
 		STDERR,
-		"\nA wcpos/v1 test does not count as coverage for current behaviour — see\n"
-		. "tests/lane-coverage/README.md. Dispatch the new case to wcpos/v2 (or wc/v3),\n"
-		. "or, if it is a deliberate legacy pin, add current-lane coverage alongside it.\n"
+		"\nA wcpos/v1 test does not count as coverage for current behaviour, and a route\n"
+		. "assembled at runtime cannot be shown to — see tests/lane-coverage/README.md.\n"
+		. "Dispatch the new case to wcpos/v2 (or wc/v3) using a literal route, or, if it is a\n"
+		. "deliberate legacy pin, add current-lane coverage alongside it.\n"
 	);
 	exit( 1 );
 }
