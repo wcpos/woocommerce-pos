@@ -81,8 +81,22 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "$BASE_REF"
-          base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+          # Derive the base commit from the checkout itself rather than fetching it. On a
+          # pull_request event actions/checkout gives us the merge commit, whose first parent is
+          # the base branch tip and whose second is the PR head, and fetch-depth: 0 means both
+          # histories are already local. Fetching here would need git credentials, which
+          # persist-credentials: false deliberately removes — that is fine for a public repo,
+          # where an anonymous fetch still works, but the Pro repo is private and the fetch fails
+          # with "could not read Username for 'https://github.com'".
+          if git rev-parse -q --verify "HEAD^2" >/dev/null; then
+            base_sha="$(git merge-base "HEAD^1" "HEAD^2")"
+          else
+            base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+          fi
+          if [ -z "$base_sha" ]; then
+            echo "::error::Could not resolve the base commit to compare against."
+            exit 1
+          fi
           echo "Comparing against merge-base $base_sha ($BASE_REF)"
 
           # Scan the base tree with THIS branch's scanner, so a change to the scanner is
