@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+require_once __DIR__ . '/coupon-modified-date-clock.php';
+
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -18,7 +20,7 @@ use WP_REST_Response;
  * WC's coupon data store only calls wp_update_post() when a POST field changes.
  * An amount-only edit is meta-backed, so `post_modified_gmt` is left stale.
  *
- * v1 papered over this by installing `woocommerce_update_coupon =>
+ * V1 papered over this by installing `woocommerce_update_coupon =>
  * wcpos_touch_coupon_modified_date` for the duration of a v1 REST dispatch
  * (API/V1/Coupons_Controller.php). The app now writes through
  * `POST /wcpos/v2/push/coupons`, which forwards to stock wc/v3 and never
@@ -70,20 +72,22 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 	 * Restore request state.
 	 */
 	public function tearDown(): void {
+		unset( $GLOBALS['woocommerce_pos_coupon_modified_date_now_gmt'] );
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**
-	 * Create a coupon carrying a POS uuid and an aged modified date.
+	 * Create a coupon carrying a POS uuid and a chosen modified date.
 	 *
-	 * @param string $code Coupon code.
-	 * @param string $uuid Record uuid the push will address it by.
+	 * @param string $code         Coupon code.
+	 * @param string $uuid         Record uuid the push will address it by.
+	 * @param string $modified_gmt Modified date in GMT.
 	 *
 	 * @return int Coupon post id.
 	 */
-	private function aged_coupon( string $code, string $uuid ): int {
+	private function coupon_with_modified_date( string $code, string $uuid, string $modified_gmt = self::AGED_GMT ): int {
 		global $wpdb;
 
 		$id = CouponHelper::create_coupon( $code )->get_id();
@@ -91,8 +95,8 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 		$wpdb->update(
 			$wpdb->posts,
 			array(
-				'post_modified'     => self::AGED_GMT,
-				'post_modified_gmt' => self::AGED_GMT,
+				'post_modified'     => get_date_from_gmt( $modified_gmt ),
+				'post_modified_gmt' => $modified_gmt,
 			),
 			array( 'ID' => $id ),
 			array( '%s', '%s' ),
@@ -137,13 +141,15 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 	/**
 	 * Ids a second till's incremental catalogue poll would return.
 	 *
+	 * @param string $modified_after Incremental cursor.
+	 *
 	 * @return int[]
 	 */
-	private function poll_modified_after(): array {
+	private function poll_modified_after( string $modified_after = self::POLL_AFTER ): array {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/coupons' );
 		$request->set_query_params(
 			array(
-				'modified_after' => self::POLL_AFTER,
+				'modified_after' => $modified_after,
 				'fields'         => array( 'id', 'date_modified_gmt' ),
 				'posts_per_page' => -1,
 			)
@@ -159,12 +165,15 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 	 * An amount-only push must leave the coupon discoverable by the incremental poll.
 	 */
 	public function test_amount_only_push_advances_date_modified_for_the_incremental_poll(): void {
-		// Arrange: an untouched aged coupon is the negative control. Without it,
+		// Arrange: freeze the writer in the exact second held by the second till's
+		// cursor. An untouched coupon is the negative control. Without it,
 		// assertContains() below would still pass if `modified_after` were ignored
 		// and the proxy simply returned every coupon.
-		$uuid = '62000000-0000-4000-8000-000000000001';
-		$id   = $this->aged_coupon( 'v2-amount-only', $uuid );
-		$untouched_id = $this->aged_coupon( 'v2-untouched-control', '62000000-0000-4000-8000-000000000003' );
+		$cursor_gmt = \current_time( 'mysql', true );
+		$GLOBALS['woocommerce_pos_coupon_modified_date_now_gmt'] = $cursor_gmt;
+		$uuid         = '62000000-0000-4000-8000-000000000001';
+		$id           = $this->coupon_with_modified_date( 'v2-amount-only', $uuid, $cursor_gmt );
+		$untouched_id = $this->coupon_with_modified_date( 'v2-untouched-control', '62000000-0000-4000-8000-000000000003', $cursor_gmt );
 
 		// Act.
 		$response = $this->push_coupon( $id, $uuid, array( 'amount' => '12.00' ), 1 );
@@ -175,12 +184,13 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 
 		// ...and the second till's incremental poll can still see it.
 		clean_post_cache( $id );
-		$this->assertNotSame(
-			self::AGED_GMT,
-			get_post_field( 'post_modified_gmt', $id ),
-			'An amount-only v2 push left post_modified_gmt stale; the incremental catalogue poll will never re-fetch this coupon.'
+		$modified_gmt = get_post_field( 'post_modified_gmt', $id );
+		$this->assertGreaterThan(
+			strtotime( $cursor_gmt . ' UTC' ),
+			strtotime( $modified_gmt . ' UTC' ),
+			'An amount-only v2 push did not advance post_modified_gmt beyond the second till cursor.'
 		);
-		$polled = $this->poll_modified_after();
+		$polled = $this->poll_modified_after( str_replace( ' ', 'T', $cursor_gmt ) );
 		$this->assertContains(
 			$id,
 			$polled,
@@ -199,7 +209,7 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 	public function test_code_change_push_remains_visible_to_the_incremental_poll(): void {
 		// Arrange.
 		$uuid = '62000000-0000-4000-8000-000000000002';
-		$id   = $this->aged_coupon( 'v2-code-before', $uuid );
+		$id   = $this->coupon_with_modified_date( 'v2-code-before', $uuid );
 
 		// Act.
 		$response = $this->push_coupon( $id, $uuid, array( 'code' => 'v2-code-after' ), 2 );

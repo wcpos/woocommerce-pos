@@ -31,22 +31,30 @@ namespace WCPOS\WooCommercePOS\Sync;
  */
 class Coupon_Modified_Date {
 	/**
-	 * Advance a coupon's post_modified(_gmt) to now.
+	 * Advance a coupon's post_modified(_gmt) beyond its previous value.
 	 *
 	 * Unconditional by design, exactly like the v1 listener: the caller only
-	 * reaches this after a write it already knows succeeded, so "now" is the
-	 * truthful modification time whether or not WC moved the date itself.
+	 * reaches this after a write it already knows succeeded. The stored value
+	 * must advance by at least one second because incremental queries use a
+	 * strict `modified_after` comparison and WordPress timestamps have
+	 * one-second precision.
 	 *
 	 * @param int $coupon_id The coupon post ID.
 	 */
 	public static function touch( int $coupon_id ): void {
 		global $wpdb;
 
+		$previous_gmt = (string) get_post_field( 'post_modified_gmt', $coupon_id );
+		$modified_gmt = gmdate(
+			'Y-m-d H:i:s',
+			max( time(), strtotime( $previous_gmt . ' UTC' ) + 1 )
+		);
+
 		$wpdb->update(
 			$wpdb->posts,
 			array(
-				'post_modified'     => current_time( 'mysql' ),
-				'post_modified_gmt' => current_time( 'mysql', true ),
+				'post_modified'     => get_date_from_gmt( $modified_gmt ),
+				'post_modified_gmt' => $modified_gmt,
 			),
 			array( 'ID' => $coupon_id ),
 			array( '%s', '%s' ),
