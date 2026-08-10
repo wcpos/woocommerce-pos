@@ -1101,6 +1101,11 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * WC's batch_items() calls create_item() directly, bypassing per-item
 	 * schema validation, so malformed meta_data entries must be dropped before
 	 * WC core's unguarded $meta['key'] access fatals mid-batch on PHP 8.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_variation_with_string_meta_data_entry_creates_variation(): void {
 		// Arrange.

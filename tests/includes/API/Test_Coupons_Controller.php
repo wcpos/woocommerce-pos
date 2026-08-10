@@ -325,6 +325,10 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Test orderby=code ascending.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): `orderby=code` has no client caller —
+	 * the coupons list disables sorting on the code column — so it is deliberately
+	 * NOT ported to the v2 read lane. See Coupons_Controller::get_collection_params().
 	 */
 	public function test_coupon_orderby_code_asc(): void {
 		$coupon_b = CouponHelper::create_coupon( 'bravo' );
@@ -352,6 +356,10 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Test orderby=code descending.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): `orderby=code` has no client caller —
+	 * the coupons list disables sorting on the code column — so it is deliberately
+	 * NOT ported to the v2 read lane. See Coupons_Controller::get_collection_params().
 	 */
 	public function test_coupon_orderby_code_desc(): void {
 		$coupon_b = CouponHelper::create_coupon( 'bravo' );
@@ -474,6 +482,11 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Coupon batch create must drop malformed meta_data entries before WC core
 	 * reads them without per-item schema validation.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_coupon_with_string_meta_data_entry_creates_coupon(): void {
 		// Arrange.
@@ -504,6 +517,11 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Coupon batch update has the same per-item schema bypass as create.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_update_coupon_with_string_meta_data_entry_updates_coupon(): void {
 		// Arrange.

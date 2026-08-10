@@ -1139,6 +1139,11 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	 * HPOS mirror: WC's batch_items() bypasses per-item schema validation, so
 	 * malformed meta_data entries must be dropped before WC core's unguarded
 	 * $meta['key'] access fatals mid-batch on PHP 8.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_order_with_string_meta_data_entry_creates_order(): void {
 		// Arrange.
@@ -1173,6 +1178,11 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	/**
 	 * HPOS mirror: same bypass on the update path.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
 		// Arrange.

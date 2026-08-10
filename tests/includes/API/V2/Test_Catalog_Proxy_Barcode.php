@@ -359,4 +359,48 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $variation->get_id(), $resolved->get_data()['match']['id'] );
 		$this->assertSame( 'variation', $resolved->get_data()['match']['type'] );
 	}
+
+	/**
+	 * A GTIN barcode push persists on a VARIATION through global_unique_id.
+	 *
+	 * The product-level twin of this case is covered by
+	 * {@see self::test_product_push_updates_gtin_barcode_and_resolution()}, and the
+	 * variation-level CUSTOM-META case by
+	 * {@see self::test_variation_push_updates_custom_barcode_read_and_resolution()},
+	 * but the variation + native GTIN combination had no coverage on either lane:
+	 * v1 only ever exercised its own `barcode` request alias
+	 * (API/V1/Product_Variations_Controller::wcpos_insert_product_object), which
+	 * the v2 push lane does not have — it forwards the native field to wc/v3's
+	 * NESTED variations resource. `_global_unique_id` is the DEFAULT barcode field
+	 * (Barcode_Field::DEFAULT_FIELD), so this is the stock configuration.
+	 */
+	public function test_variation_push_updates_gtin_barcode_and_resolution(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+		$record_id = wp_generate_uuid4();
+		$variation = $this->create_variation();
+		$variation->update_meta_data( Pos_Uuid::META_KEY, $record_id );
+		$variation->set_global_unique_id( '4006381333931' );
+		$variation->save();
+		$before = $this->read_variation( $variation->get_id() );
+
+		$response = $this->push_barcode_update(
+			'variations',
+			$record_id,
+			$before['payload']['date_modified_gmt'],
+			'9780201379624',
+			'global_unique_id'
+		);
+		$after    = $this->read_variation( $variation->get_id() );
+		$resolved = $this->resolve_barcode( '9780201379624' );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( '9780201379624', $after['payload']['global_unique_id'] );
+		$this->assertSame(
+			'9780201379624',
+			( new WC_Product_Variation( $variation->get_id() ) )->get_global_unique_id()
+		);
+		$this->assertTrue( $resolved->get_data()['found'] );
+		$this->assertSame( $variation->get_id(), $resolved->get_data()['match']['id'] );
+		$this->assertSame( 'variation', $resolved->get_data()['match']['type'] );
+	}
 }

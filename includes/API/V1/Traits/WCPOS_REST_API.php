@@ -37,6 +37,18 @@ trait WCPOS_REST_API {
 	 * sanitization exists to prevent — while a rejected item creates nothing
 	 * and surfaces a visible per-item error.
 	 *
+	 * LANE SCOPE — v1 ONLY, deliberately NOT ported to v2 (lane audit 2026-08-10).
+	 * This tolerance exists because a v1 BATCH is many records in one request, so
+	 * one malformed entry could 500 the batch after earlier items had already
+	 * persisted. The v2 push lane is one mutation per request: there is no
+	 * half-applied batch to protect, so it forwards the payload and lets wc/v3's
+	 * schema validation reject it, which surfaces a precise per-mutation error
+	 * instead of silently discarding metadata. That divergence is a TRANSPORT
+	 * difference, not lost parity, and is pinned from the v2 side by
+	 * Test_Write_Controller::test_malformed_order_meta_data_passes_through_to_woo_validation().
+	 * The v1 tests naming `not-an-object` are legacy pins for THIS lane; do not
+	 * "restore" this behaviour on v2.
+	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return WP_Error|null WP_Error for a malformed POS uuid entry, null otherwise.

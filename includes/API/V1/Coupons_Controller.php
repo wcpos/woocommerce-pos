@@ -91,7 +91,9 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 
 		add_filter( 'woocommerce_rest_prepare_shop_coupon_object', array( $this, 'wcpos_coupon_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
-		add_action( 'woocommerce_update_coupon', array( $this, 'wcpos_touch_coupon_modified_date' ), 10, 1 );
+		// The post-date touch that used to be installed here is now registered
+		// unconditionally at plugins_loaded (Sync\Coupon_Modified_Date), so it also
+		// covers wp-admin/WP-CLI/third-party coupon saves this dispatch never saw.
 
 		/**
 		 * Check if the request is for all coupons and if the 'posts_per_page' is set to -1.
@@ -156,38 +158,6 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	}
 
 	/**
-	 * Touch post_modified_gmt after a coupon update.
-	 *
-	 * WC's coupon data store only calls wp_update_post() when certain post
-	 * fields (code, description, status, dates) change. When only meta-based
-	 * fields like amount change, post_modified_gmt is left stale. This breaks
-	 * client-side sync that relies on date_modified_gmt to detect changes.
-	 *
-	 * @see https://github.com/wcpos/woocommerce-pos-pro/issues/86
-	 *
-	 * @param int $coupon_id The coupon post ID.
-	 */
-	public function wcpos_touch_coupon_modified_date( int $coupon_id ): void {
-		global $wpdb;
-
-		$now_gmt   = current_time( 'mysql', true );
-		$now_local = current_time( 'mysql' );
-
-		$wpdb->update(
-			$wpdb->posts,
-			array(
-				'post_modified'     => $now_local,
-				'post_modified_gmt' => $now_gmt,
-			),
-			array( 'ID' => $coupon_id ),
-			array( '%s', '%s' ),
-			array( '%d' )
-		);
-
-		clean_post_cache( $coupon_id );
-	}
-
-	/**
 	 * Get the query params for collections.
 	 *
 	 * @return array $params The collection parameters.
@@ -195,6 +165,15 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
+		// LANE SCOPE — v1 ONLY, deliberately NOT ported to v2 (lane audit 2026-08-10).
+		// `orderby=code` has NO caller: the client's coupon list marks its `code`
+		// column "disableSort": true and defaults to sorting on date_created_gmt
+		// (monorepo packages/core/.../ui-settings/initial-settings.json), and the
+		// coupon query hook only ever rewrites date_created/date_modified
+		// (packages/query/src/hooks/coupons.ts). The v2 Catalog_Proxy_Controller
+		// therefore leaves the wc/v3 enum unchanged on purpose. If a future
+		// cashier-facing "sort by code" lands, port it deliberately — do not add
+		// it back just to make the lanes look symmetrical.
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], array( 'code' ) ) );
