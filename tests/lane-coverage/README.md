@@ -47,6 +47,10 @@ Regenerate after any change under `tests/`:
 php scripts/lane-coverage.php --write
 ```
 
+The scanner supports the repository's PHP range (PHP 7.4 and newer); CI runs it on PHP 8.1.
+If `--check` produces an unexpected difference, verify the interpreter with `php --version`
+before regenerating the inventory.
+
 ## How the classification works
 
 Deliberately simple, because the failure mode being prevented is false confidence. The

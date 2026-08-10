@@ -28,6 +28,7 @@ on:
     paths:
       - "tests/**"
       - "scripts/lane-coverage.php"
+      - ".github/scripts/test-lane-coverage-workflow.sh"
       - ".github/workflows/lane-coverage.yml"
   workflow_dispatch:
 
@@ -45,6 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # The ratchet resolves the merge-base, so shallow history will not do.
           fetch-depth: 0
 
@@ -57,10 +59,17 @@ jobs:
       - name: Inventory is up to date
         run: |
           set -euo pipefail
-          if ! php scripts/lane-coverage.php --check; then
+          status=0
+          php scripts/lane-coverage.php --check || status=$?
+          if [ "$status" -eq 1 ]; then
             echo "::error file=tests/lane-coverage/inventory.md::Lane-coverage inventory is stale. Regenerate with: php scripts/lane-coverage.php --write"
-            exit 1
+          elif [ "$status" -ne 0 ]; then
+            echo "::error file=tests/lane-coverage/annotations.json::Lane-coverage scan failed. See the scanner details above and correct the reported validation error."
           fi
+          exit "$status"
+
+      - name: Workflow behavior is pinned
+        run: bash .github/scripts/test-lane-coverage-workflow.sh
 
       - name: v1-only coverage must not grow
         if: github.event_name == 'pull_request'
