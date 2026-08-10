@@ -7,6 +7,7 @@ describe('barcode SVG generation', () => {
 		const html = generateBarcodeSvg('https://example.test/pay', { type: ' QRCODE ' });
 
 		expect(html).toContain('data-barcode-kind="qrcode"');
+		expect(html).toMatch(/viewBox="0 0 ([\d.]+) \1"/);
 	});
 });
 
