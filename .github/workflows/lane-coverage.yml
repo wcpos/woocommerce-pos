@@ -1,0 +1,94 @@
+name: Lane Coverage
+
+# Enforces the REST lane-coverage inventory. Full rationale and the definition of "ported"
+# live in tests/lane-coverage/README.md.
+#
+# Two enforced checks, both deliberately dumb — false confidence is the thing being killed,
+# so a check that is obviously correct beats a clever one:
+#
+#   1. The checked-in inventory matches what the scanner regenerates, so the committed
+#      artifact can never drift away from the tests it describes.
+#   2. The set of test cases whose ONLY dispatched lane is the frozen wcpos/v1 namespace may
+#      shrink, but never grow. It is compared against the PR's merge-base rather than a
+#      checked-in baseline file, because a baseline file can be edited in the same PR that
+#      grows it. Git history cannot.
+#
+# Blind-test warnings are annotated but NEVER fail the job: plenty of stubbing is legitimate,
+# and a gate that cries wolf gets ignored, which is how we got here.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - next
+  push:
+    branches:
+      - main
+      - next
+    paths:
+      - "tests/**"
+      - "scripts/lane-coverage.php"
+      - ".github/workflows/lane-coverage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lane-coverage:
+    name: REST lane coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The ratchet resolves the merge-base, so shallow history will not do.
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.1"
+          coverage: none
+
+      - name: Inventory is up to date
+        run: |
+          set -euo pipefail
+          if ! php scripts/lane-coverage.php --check; then
+            echo "::error file=tests/lane-coverage/inventory.md::Lane-coverage inventory is stale. Regenerate with: php scripts/lane-coverage.php --write"
+            exit 1
+          fi
+
+      - name: v1-only coverage must not grow
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+          echo "Comparing against merge-base $base_sha ($BASE_REF)"
+
+          # Scan the base tree with THIS branch's scanner, so a change to the scanner is
+          # applied to both sides and the comparison stays apples-to-apples.
+          git worktree add --detach "$RUNNER_TEMP/base" "$base_sha"
+          php scripts/lane-coverage.php --json --root="$RUNNER_TEMP/base" > "$RUNNER_TEMP/base.json"
+
+          php scripts/lane-coverage.php --compare="$RUNNER_TEMP/base.json"
+
+      - name: Blind-test warnings (advisory, never fails)
+        if: always()
+        run: |
+          set -uo pipefail
+          php scripts/lane-coverage.php --warnings | while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            file="${line%%:*}"
+            rest="${line#*:}"
+            lineno="${rest%%:*}"
+            message="${rest#*:}"
+            echo "::warning file=${file},line=${lineno}::${message# }"
+          done
+          exit 0
