@@ -26,6 +26,7 @@ use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Revision;
+use WCPOS\WooCommercePOS\Sync\Store_Scope;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -1365,8 +1366,9 @@ class Write_Controller extends WP_REST_Controller {
 		$request = new WP_REST_Request( $method, $route );
 		if ( is_array( $payload ) ) {
 			// The route id (resolved server-side from the uuid) is authoritative — never
-			// let a client-supplied body `id` override it or pin a create's id.
-			unset( $payload['id'] );
+			// let a client-supplied body `id` override it or pin a create's id. The
+			// v2 header is likewise the only authority for the legacy store param.
+			unset( $payload['id'], $payload[ Store_Scope::PARAM ] );
 			$request->set_body_params( $payload );
 		}
 		return $this->dispatch_write( $request );
@@ -1378,9 +1380,18 @@ class Write_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	private function dispatch_write( WP_REST_Request $request ) {
+		// Stamp here so direct callers (notably deletes) carry the scope too.
+		Store_Scope::stamp( $request );
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		try {
-			return rest_do_request( $request );
+			// Marked as OUR traffic for the duration of the forward, so a consumer
+			// keyed on store scope can act on a till write without also claiming
+			// every stock wc/v3 product write on the site (pro#425 review).
+			return Store_Scope::in_v2_lane(
+				static function () use ( $request ) {
+					return rest_do_request( $request );
+				}
+			);
 		} finally {
 			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 		}
@@ -1466,10 +1477,18 @@ class Write_Controller extends WP_REST_Controller {
 		}
 
 		$request  = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
+		// Scope the read-back too: the document the client stores must show the
+		// store's price, not the global one it would otherwise adopt (pro#425).
+		Store_Scope::stamp( $request );
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			$request->set_param( 'dp', '6' );
 		}
-		$response = rest_do_request( $request );
+		// Ours for the duration of the read-back, same as the write forward.
+		$response = Store_Scope::in_v2_lane(
+			static function () use ( $request ) {
+				return rest_do_request( $request );
+			}
+		);
 		$data     = $response->get_data();
 		if ( is_array( $data ) ) {
 			$data = Meta_Normalizer::normalize( $data );

@@ -69,7 +69,21 @@ final class Product_Serializer {
 		}
 
 		$request  = $request instanceof WP_REST_Request ? $request : $this->default_request();
-		$response = rest_ensure_response( $this->controller()->prepare_object_for_response( $object, $request ) );
+		// Every lane that hydrates a product — changes, resolve, targeted
+		// variations, the write ack — builds a bare `GET /` and hands it here, so
+		// this is the ONE place that has to carry the till's store scope into
+		// `woocommerce_rest_prepare_product_object`. Without it the assembly line
+		// serializes the global price and the till redisplays it moments after the
+		// cashier changed the store's (pro#425). Stamping is idempotent and never
+		// overrides a scope the caller set deliberately.
+		Store_Scope::stamp( $request );
+		// Ours for the duration of the serialization — this runs outside any
+		// dispatch, so the lane marker is the only signal a response filter has.
+		$response = Store_Scope::in_v2_lane(
+			function () use ( $object, $request ) {
+				return rest_ensure_response( $this->controller()->prepare_object_for_response( $object, $request ) );
+			}
+		);
 		/**
 		 * WordPress response data is not guaranteed to be an array at runtime.
 		 *
@@ -92,6 +106,10 @@ final class Product_Serializer {
 	 * @param null|WP_REST_Request $request Serialization context.
 	 */
 	public static function augment( array $payload, $object = null, ?WP_REST_Request $request = null ): array {
+		if ( $request instanceof WP_REST_Request ) {
+			Store_Scope::stamp( $request );
+		}
+
 		/**
 		 * Filters a serialized WCPOS product record.
 		 *

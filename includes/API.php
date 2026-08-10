@@ -290,6 +290,10 @@ class API {
 		$allow_headers[] = 'X-WCPOS';
 		$allow_headers[] = 'X-HTTP-Method-Override';
 		$allow_headers[] = 'X-WCPOS-Idempotency-Key';
+		// The till's store scope (pro#425). A custom header makes every cross-origin
+		// sync request preflight, so omitting it here would take the whole v2 lane
+		// down on the web client, not merely lose the scope.
+		$allow_headers[] = \WCPOS\WooCommercePOS\Sync\Store_Scope::HEADER;
 		$allow_headers   = \WCPOS\WooCommercePOS\Sync\Header_Mirror::allow_cors_headers( $allow_headers );
 
 		return $allow_headers;
@@ -499,6 +503,15 @@ class API {
 		if ( ! $this->route_classifier->in_wcpos_namespace( $request->get_route() ) ) {
 			return $result;
 		}
+
+		// Latch the till's store scope for the whole request (pro#425). Set
+		// unconditionally — including to null — so a scope never leaks from one
+		// dispatch into the next. Inner `wc/v3` forwards do not reach this line
+		// (they are outside the WCPOS namespace), which is exactly right: the
+		// OUTER request owns the scope and stamps it onto the inner ones.
+		\WCPOS\WooCommercePOS\Sync\Store_Scope::set_current(
+			\WCPOS\WooCommercePOS\Sync\Store_Scope::resolve( $request )
+		);
 
 		// CORS preflights carry no credentials (browsers strip Authorization from OPTIONS),
 		// so the permission gate must never answer them with 401 — a non-2xx preflight blocks
