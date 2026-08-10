@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for the shared template barcode runtime.
+ * Tests for the template barcode runtime wiring.
  *
  * @package WCPOS\WooCommercePOS\Tests\Admin
  */
@@ -12,7 +12,12 @@ use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
 use WP_UnitTestCase;
 
 /**
- * Shared barcode runtime enqueue tests.
+ * Barcode runtime enqueue tests.
+ *
+ * The barcode renderer (bwip-js) is tree-shaken and bundled into each template
+ * app, so no standalone ~1MB `wcpos-bwip` script should be registered and the
+ * apps must not depend on one. These tests guard against reintroducing the
+ * separate shared-runtime handle.
  */
 class Test_Template_Barcode_Runtime extends WP_UnitTestCase {
 	/**
@@ -31,21 +36,22 @@ class Test_Template_Barcode_Runtime extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The gallery bundle must load after the locally shipped shared runtime.
+	 * The gallery bundles its own barcode runtime — no separate bwip script.
 	 */
-	public function test_gallery_script_depends_on_shared_barcode_runtime(): void {
+	public function test_gallery_bundles_barcode_runtime_without_separate_script(): void {
 		$menu = new Menu();
 
 		$menu->enqueue_gallery_assets();
 
-		$this->assertStringEndsWith( '/assets/js/bwip.js', wp_scripts()->registered['wcpos-bwip']->src );
-		$this->assertContains( 'wcpos-bwip', wp_scripts()->registered['wcpos-template-gallery']->deps );
+		$this->assertArrayHasKey( 'wcpos-template-gallery', wp_scripts()->registered );
+		$this->assertArrayNotHasKey( 'wcpos-bwip', wp_scripts()->registered );
+		$this->assertNotContains( 'wcpos-bwip', wp_scripts()->registered['wcpos-template-gallery']->deps );
 	}
 
 	/**
-	 * The template editor bundle must load after the same shared runtime.
+	 * The template editor bundles its own barcode runtime — no separate bwip script.
 	 */
-	public function test_editor_script_depends_on_shared_barcode_runtime(): void {
+	public function test_editor_bundles_barcode_runtime_without_separate_script(): void {
 		$post_id = self::factory()->post->create( array( 'post_type' => 'wcpos_template' ) );
 		set_current_screen( 'post' );
 		get_current_screen()->post_type = 'wcpos_template';
@@ -54,7 +60,8 @@ class Test_Template_Barcode_Runtime extends WP_UnitTestCase {
 		$single_template = new Single_Template();
 		$single_template->enqueue_scripts( 'post.php' );
 
-		$this->assertStringEndsWith( '/assets/js/bwip.js', wp_scripts()->registered['wcpos-bwip']->src );
-		$this->assertContains( 'wcpos-bwip', wp_scripts()->registered['wcpos-template-editor']->deps );
+		$this->assertArrayHasKey( 'wcpos-template-editor', wp_scripts()->registered );
+		$this->assertArrayNotHasKey( 'wcpos-bwip', wp_scripts()->registered );
+		$this->assertNotContains( 'wcpos-bwip', wp_scripts()->registered['wcpos-template-editor']->deps );
 	}
 }
