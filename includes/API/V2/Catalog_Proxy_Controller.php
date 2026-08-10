@@ -228,7 +228,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 				add_filter( 'query', $tax_query_filter, 10, 1 );
 			}
 			$forward  = static function () use ( $inner ) {
-				return rest_do_request( $inner );
+				// Ours for the duration of the forward (pro#425 review): a consumer
+				// may shape this response, but must leave stock wc/v3 alone.
+				return Store_Scope::in_v2_lane(
+					static function () use ( $inner ) {
+						return rest_do_request( $inner );
+					}
+				);
 			};
 			$response = null === $orders_plan ? $forward() : $orders_plan->around( $forward );
 		} finally {

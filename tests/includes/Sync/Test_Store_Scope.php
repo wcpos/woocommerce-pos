@@ -297,6 +297,143 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( null ), $this->captured );
 	}
 
+	/*
+	 * ---------------------------------------------------------------------
+	 * is_v2_lane(): telling "our till" from "not our request"
+	 * ---------------------------------------------------------------------
+	 */
+
+	/**
+	 * A null scope is ambiguous — it means both "a v2 till that named no store"
+	 * and "not a WCPOS request at all". Consumers that own store-scoped data
+	 * must be able to separate the two, or refusing the first also breaks the
+	 * second (stock wc/v3 for third parties). See pro#425 review.
+	 */
+	public function test_a_v2_request_marks_the_lane(): void {
+		$lane = null;
+		add_filter(
+			'woocommerce_rest_prepare_product_object',
+			function ( $response ) use ( &$lane ) {
+				$lane = Store_Scope::is_v2_lane();
+
+				return $response;
+			}
+		);
+
+		ProductHelper::create_simple_product();
+		$this->read_catalog( 7 );
+
+		$this->assertTrue( $lane, 'the inner wc/v3 forward lost the v2 lane marker' );
+	}
+
+	public function test_an_unscoped_v2_request_still_marks_the_lane(): void {
+		$lane = null;
+		add_filter(
+			'woocommerce_rest_prepare_product_object',
+			function ( $response ) use ( &$lane ) {
+				$lane = Store_Scope::is_v2_lane();
+
+				return $response;
+			}
+		);
+
+		ProductHelper::create_simple_product();
+		$this->read_catalog( null );
+
+		// Scope UNKNOWN, lane still ours — exactly the pair a consumer needs to
+		// refuse an ambiguous till write without touching anyone else's.
+		$this->assertNull( Store_Scope::current() );
+		$this->assertTrue( $lane );
+	}
+
+	public function test_a_stock_wc_v3_request_is_not_the_v2_lane(): void {
+		$lane = null;
+		add_filter(
+			'woocommerce_rest_prepare_product_object',
+			function ( $response ) use ( &$lane ) {
+				$lane = Store_Scope::is_v2_lane();
+
+				return $response;
+			}
+		);
+
+		$product = ProductHelper::create_simple_product();
+		rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/products/' . $product->get_id() ) );
+
+		$this->assertFalse( $lane, 'a stock wc/v3 request was mistaken for the v2 lane' );
+	}
+
+	public function test_the_product_serializer_marks_the_lane(): void {
+		$lane = null;
+		add_filter(
+			'woocommerce_rest_prepare_product_object',
+			function ( $response ) use ( &$lane ) {
+				$lane = Store_Scope::is_v2_lane();
+
+				return $response;
+			}
+		);
+
+		( new Product_Serializer() )->serialize( ProductHelper::create_simple_product() );
+
+		$this->assertTrue( $lane, 'the serializer lane is invisible to response filters' );
+	}
+
+	public function test_the_lane_marker_unwinds_after_the_operation(): void {
+		$this->assertFalse( Store_Scope::is_v2_lane() );
+
+		Store_Scope::in_v2_lane(
+			function () {
+				$this->assertTrue( Store_Scope::is_v2_lane() );
+			}
+		);
+
+		$this->assertFalse( Store_Scope::is_v2_lane(), 'the lane marker leaked past its operation' );
+	}
+
+	/**
+	 * A throwing operation must not strand the marker raised — otherwise one
+	 * failed forward silently claims every later request in the process.
+	 */
+	public function test_the_lane_marker_unwinds_when_the_operation_throws(): void {
+		try {
+			Store_Scope::in_v2_lane(
+				static function (): void {
+					throw new \RuntimeException( 'forward exploded' );
+				}
+			);
+			$this->fail( 'the exception should propagate' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'forward exploded', $e->getMessage() );
+		}
+
+		$this->assertFalse( Store_Scope::is_v2_lane() );
+	}
+
+	public function test_the_lane_marker_nests(): void {
+		Store_Scope::in_v2_lane(
+			function () {
+				Store_Scope::in_v2_lane(
+					static function (): void {}
+				);
+
+				$this->assertTrue( Store_Scope::is_v2_lane(), 'an inner operation ending closed the outer lane' );
+			}
+		);
+
+		$this->assertFalse( Store_Scope::is_v2_lane() );
+	}
+
+	public function test_reset_clears_the_lane_marker(): void {
+		Store_Scope::in_v2_lane(
+			static function (): void {
+				Store_Scope::reset();
+			}
+		);
+
+		$this->assertFalse( Store_Scope::is_v2_lane() );
+	}
+
 	public function test_the_store_scope_header_survives_cors_preflight(): void {
 		$this->assertContains( Store_Scope::HEADER, apply_filters( 'rest_allowed_cors_headers', array() ) );
 	}

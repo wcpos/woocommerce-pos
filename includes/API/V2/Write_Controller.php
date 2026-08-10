@@ -1388,7 +1388,14 @@ class Write_Controller extends WP_REST_Controller {
 	private function dispatch_write( WP_REST_Request $request ) {
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		try {
-			return rest_do_request( $request );
+			// Marked as OUR traffic for the duration of the forward, so a consumer
+			// keyed on store scope can act on a till write without also claiming
+			// every stock wc/v3 product write on the site (pro#425 review).
+			return Store_Scope::in_v2_lane(
+				static function () use ( $request ) {
+					return rest_do_request( $request );
+				}
+			);
 		} finally {
 			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 		}
@@ -1480,7 +1487,12 @@ class Write_Controller extends WP_REST_Controller {
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			$request->set_param( 'dp', '6' );
 		}
-		$response = rest_do_request( $request );
+		// Ours for the duration of the read-back, same as the write forward.
+		$response = Store_Scope::in_v2_lane(
+			static function () use ( $request ) {
+				return rest_do_request( $request );
+			}
+		);
 		$data     = $response->get_data();
 		if ( is_array( $data ) ) {
 			$data = Meta_Normalizer::normalize( $data );

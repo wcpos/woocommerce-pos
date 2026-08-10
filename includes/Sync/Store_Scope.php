@@ -72,6 +72,13 @@ final class Store_Scope {
 	private static $current = null;
 
 	/**
+	 * Nesting depth of in-flight v2 lane operations.
+	 *
+	 * @var int
+	 */
+	private static $lane_depth = 0;
+
+	/**
 	 * Resolve the store scope of an incoming WCPOS request.
 	 *
 	 * The header is authoritative for the v2 lane; the `store_id` param is only
@@ -117,10 +124,54 @@ final class Store_Scope {
 	}
 
 	/**
+	 * Run a v2 lane operation with the lane marker raised.
+	 *
+	 * Wrap every inner request the v2 lane dispatches, and every product it
+	 * serializes, so a consumer can tell OUR traffic from everyone else's.
+	 *
+	 * The scope alone cannot answer that: {@see self::current()} is null both
+	 * for an unscoped v2 push and for a stock `wc/v3` request from wp-admin or
+	 * a third-party integration. A consumer keying only on the scope cannot
+	 * distinguish a till that failed to name its store from a caller that was
+	 * never a till — and treating the second like the first breaks
+	 * WooCommerce's own API for any store-priced product (pro#425 review).
+	 *
+	 * Scoped around the operation rather than latched for the whole request on
+	 * purpose. A latch needs a teardown hook, and there isn't a safe one:
+	 * `rest_post_dispatch` fires for embedded-link sub-requests too, so it
+	 * would clear the marker in the middle of the very request that owns it.
+	 * A depth counter unwound in `finally` cannot leak, nests correctly, and
+	 * is true exactly while a v2 operation is on the stack.
+	 *
+	 * @template T
+	 *
+	 * @param callable():T $operation The lane operation.
+	 *
+	 * @return T
+	 */
+	public static function in_v2_lane( callable $operation ) {
+		++self::$lane_depth;
+
+		try {
+			return $operation();
+		} finally {
+			--self::$lane_depth;
+		}
+	}
+
+	/**
+	 * Whether a v2 lane operation is currently in flight.
+	 */
+	public static function is_v2_lane(): bool {
+		return self::$lane_depth > 0;
+	}
+
+	/**
 	 * Forget the current scope (request teardown, and test isolation).
 	 */
 	public static function reset(): void {
-		self::$current = null;
+		self::$current    = null;
+		self::$lane_depth = 0;
 	}
 
 	/**

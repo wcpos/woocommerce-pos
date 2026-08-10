@@ -77,7 +77,13 @@ final class Product_Serializer {
 		// cashier changed the store's (pro#425). Stamping is idempotent and never
 		// overrides a scope the caller set deliberately.
 		Store_Scope::stamp( $request );
-		$response = rest_ensure_response( $this->controller()->prepare_object_for_response( $object, $request ) );
+		// Ours for the duration of the serialization — this runs outside any
+		// dispatch, so the lane marker is the only signal a response filter has.
+		$response = Store_Scope::in_v2_lane(
+			function () use ( $object, $request ) {
+				return rest_ensure_response( $this->controller()->prepare_object_for_response( $object, $request ) );
+			}
+		);
 		/**
 		 * WordPress response data is not guaranteed to be an array at runtime.
 		 *
