@@ -7,7 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WP_REST_Request;
 use WP_UnitTestCase;
 
 /**
@@ -136,5 +139,31 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'pay_for_order=', $augmented['links']['payment'][0]['href'] );
 		$this->assertStringContainsString( 'key=' . $order->get_order_key(), $augmented['links']['payment'][0]['href'] );
 		$this->assertStringNotContainsString( '/checkout/order-pay/', $augmented['links']['payment'][0]['href'] );
+	}
+
+	/**
+	 * Served coupon lines must carry a POS uuid, like every other line type
+	 * (v1 parity — V1/Orders_Controller stamped ALL item types). The client
+	 * pairs pushed vs acked lines strictly by uuid with no positional
+	 * fallback: an unstamped coupon line can never pair, so a server-side
+	 * change to its discount would silently evade the money-divergence alarm.
+	 */
+	public function test_served_coupon_lines_carry_pos_uuid(): void {
+		$order  = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$coupon = CouponHelper::create_coupon( 'serializer-uuid-' . wp_generate_password( 6, false ) );
+		$order->apply_coupon( $coupon->get_code() );
+		$order->save();
+
+		$payload = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+
+		$this->assertNotEmpty( $payload['coupon_lines'] ?? array(), 'fixture must serve a coupon line' );
+		$uuid = null;
+		foreach ( $payload['coupon_lines'][0]['meta_data'] ?? array() as $entry ) {
+			$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? $entry->key : null );
+			if ( Pos_Uuid::META_KEY === $key ) {
+				$uuid = is_array( $entry ) ? $entry['value'] : $entry->value;
+			}
+		}
+		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ), 'served coupon line must carry a valid POS uuid, got: ' . wp_json_encode( $uuid ) );
 	}
 }

@@ -147,8 +147,15 @@ final class Order_Serializer {
 	}
 
 	/**
-	 * Mirror each served line/shipping/fee item's POS uuid into its `meta_data`,
-	 * stamping the order item first when it has none.
+	 * Mirror each served line/shipping/fee/coupon item's POS uuid into its
+	 * `meta_data`, stamping the order item first when it has none.
+	 *
+	 * Coupon lines are load-bearing here (v1 stamped ALL item types —
+	 * V1/Orders_Controller::wcpos_order_get_items): the client pairs pushed
+	 * vs acked lines strictly by uuid with no positional fallback, so a
+	 * served coupon line WITHOUT a uuid can never be paired — a server-side
+	 * change to a coupon's discount/discount_tax would silently evade the
+	 * order-money divergence alarm.
 	 *
 	 * @param array     $payload Serialized order payload.
 	 * @param \WC_Order $order   The order backing the payload.
@@ -158,6 +165,7 @@ final class Order_Serializer {
 			'line_items'     => 'line_item',
 			'shipping_lines' => 'shipping',
 			'fee_lines'      => 'fee',
+			'coupon_lines'   => 'coupon',
 		);
 		foreach ( $item_types as $payload_key => $item_type ) {
 			if ( ! isset( $payload[ $payload_key ] ) || ! is_array( $payload[ $payload_key ] ) ) {
@@ -331,7 +339,12 @@ final class Order_Serializer {
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
 	 */
 	private static function strip_item_identity_meta( array $payload, bool $normalize_image_ids = true ): array {
-		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines' ) as $items_key ) {
+		// coupon_lines joined the uuid-stamped set with the rest (the client pairs
+		// coupons by uuid too); their identity meta must be hash-invisible for the
+		// same reason as every other line type — the augmented document and a bare
+		// wc/v3 re-read of the same order must hash identically. For payloads from
+		// before coupon stamping existed the extra strip is a no-op.
+		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines' ) as $items_key ) {
 			if ( ! isset( $payload[ $items_key ] ) || ! is_array( $payload[ $items_key ] ) ) {
 				continue;
 			}

@@ -458,19 +458,38 @@ class Write_Controller extends WP_REST_Controller {
 				? $m['payload']['meta_data']
 				: array();
 			$create_till_meta = Pos_Order_Audit::till_meta_from_payload( $payload_meta );
+			// The server-derived cashier attribution must ALSO be visible inside the
+			// forwarded create, not only in the post-create stamp: an offline-completed
+			// sale arrives as ONE create carrying its final status / set_paid, so
+			// woocommerce_payment_complete and the status/email hooks fire DURING the
+			// forward — Receipt_Snapshot_Store persists its immutable fiscal snapshot
+			// there (and refuses to overwrite), and Emails resolves the cashier
+			// recipient there. v1 stamped _pos_user in woocommerce_before_order_object_save
+			// (before those hooks); without this, such orders permanently snapshot
+			// cashier 0. Values mirror order_audit_meta(): the AUTHENTICATED user,
+			// never the payload (which was stripped above).
+			$create_till_meta['_pos_user']         = (string) get_current_user_id();
+			$create_till_meta['_pos_user_created'] = (string) get_current_user_id();
 		}
 		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $forward_payload ) ) {
 			// tax_ids is a POS-owned field: wc/v3 would silently ignore it, and the
 			// server persists it via Tax_Id_Writer after a successful forward.
 			unset( $forward_payload['tax_ids'] );
+			// v1 parity: walk-in customers legitimately have no billing email; the
+			// v1 customers controller relaxed the schema so '' passed. Stock wc/v3
+			// rejects '' on the email format check — absent means "no email", so
+			// drop the empty value (same tolerance the ORDER payload shaping has).
+			$forward_payload = $this->without_empty_billing_email( $forward_payload );
 		}
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
 			: $meta['route'];
 		$forwarded_order = null;
 		$date_filter     = static function ( $order, $request, $creating ) use ( $client_created_gmt, $create_till_meta, &$forwarded_order ) {
-			if ( $creating && $order instanceof \WC_Order ) {
+			if ( $creating && $order instanceof \WC_Order && null === $forwarded_order ) {
 				$forwarded_order = $order;
+			}
+			if ( $creating && $order === $forwarded_order ) {
 				// In-memory till stamp (see $create_till_meta above): present for the
 				// tax/coupon calculation inside the forwarded create, made durable by
 				// persist_order_audit_meta afterwards.
@@ -664,6 +683,25 @@ class Write_Controller extends WP_REST_Controller {
 	 * these before forwarding makes the server the sole, authoritative writer of the audit trail
 	 * (the till-sourced values are re-applied by persist_order_audit_meta, not the forward).
 	 */
+	/**
+	 * Drop an empty `billing.email` from a customer payload — absent means
+	 * "no email"; '' fails wc/v3's format check although it is the natural
+	 * spelling for a walk-in customer (v1 relaxed the schema for exactly this).
+	 *
+	 * @param array $payload Customer payload about to be forwarded.
+	 *
+	 * @return array
+	 */
+	private function without_empty_billing_email( array $payload ): array {
+		if ( isset( $payload['billing'] ) && is_array( $payload['billing'] )
+			&& array_key_exists( 'email', $payload['billing'] )
+			&& ( '' === $payload['billing']['email'] || null === $payload['billing']['email'] ) ) {
+			unset( $payload['billing']['email'] );
+		}
+
+		return $payload;
+	}
+
 	private function without_pos_audit_meta( array $payload, int $order_id = 0 ): array {
 		$meta      = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		$protected = $order_id > 0 && function_exists( 'wc_get_order' )
@@ -831,6 +869,9 @@ class Write_Controller extends WP_REST_Controller {
 		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			// POS-owned field: persisted via Tax_Id_Writer after the forward, never sent to wc/v3.
 			unset( $update_payload['tax_ids'] );
+			// v1 parity: '' billing email means "no email" on a walk-in customer;
+			// see the create-side comment.
+			$update_payload = $this->without_empty_billing_email( $update_payload );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			unset( $update_payload['created_via'] );
@@ -847,7 +888,56 @@ class Write_Controller extends WP_REST_Controller {
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations/' . $id
 			: $meta['route'] . '/' . $id;
-		$response = $this->forward( 'PUT', $route, $update_payload );
+		// Fill-if-absent audit meta must be on the order DURING the forward, not only
+		// in the post-forward stamps: an update that completes payment (set_paid /
+		// final status) fires woocommerce_payment_complete inside wc/v3 — where
+		// Receipt_Snapshot_Store persists its immutable fiscal snapshot (cashier,
+		// cash tendered/change) and refuses to overwrite it later. v1 filled missing
+		// _pos_user in woocommerce_before_order_object_save, ahead of those hooks.
+		// Semantics mirror the post-forward stamps exactly: cashier attribution only
+		// when MISSING (reassignment stays post-forward with its own checks), cash
+		// till values only when MISSING (write-once at the sale). In-memory only —
+		// the durable write remains the post-forward stamp.
+		$update_fill_meta = array();
+		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
+			$existing_order = wc_get_order( (int) $id );
+			if ( $existing_order ) {
+				if ( '' === (string) $existing_order->get_meta( '_pos_user' ) ) {
+					$update_fill_meta['_pos_user'] = (string) get_current_user_id();
+				}
+				if ( '' === (string) $existing_order->get_meta( '_pos_user_created' ) ) {
+					$update_fill_meta['_pos_user_created'] = (string) get_current_user_id();
+				}
+				$payload_meta = ( isset( $m['payload']['meta_data'] ) && is_array( $m['payload']['meta_data'] ) )
+					? $m['payload']['meta_data']
+					: array();
+				$payload_till = Pos_Order_Audit::till_meta_from_payload( $payload_meta );
+				foreach ( Pos_Order_Audit::cash_meta_keys() as $cash_key ) {
+					if ( isset( $payload_till[ $cash_key ] )
+						&& '' === (string) $existing_order->get_meta( $cash_key ) ) {
+						$update_fill_meta[ $cash_key ] = $payload_till[ $cash_key ];
+					}
+				}
+			}
+		}
+		$update_fill_filter = static function ( $order ) use ( $id, $update_fill_meta ) {
+			if ( $order instanceof \WC_Order && (int) $id === $order->get_id() ) {
+				foreach ( $update_fill_meta as $fill_key => $fill_value ) {
+					$order->update_meta_data( $fill_key, $fill_value );
+				}
+			}
+			return $order;
+		};
+		if ( array() !== $update_fill_meta ) {
+			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $update_fill_filter, 10, 1 );
+		}
+		try {
+			$response = $this->forward( 'PUT', $route, $update_payload );
+		} finally {
+			if ( array() !== $update_fill_meta ) {
+				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $update_fill_filter, 10 );
+			}
+		}
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
