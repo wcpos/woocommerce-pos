@@ -1245,6 +1245,90 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary update filter must not stamp tender on an unrelated order' );
 	}
 
+	public function test_store_reassignment_respects_the_authorization_filter(): void {
+		// #1550: v1 applied a store change only after Pro authorization; the v2
+		// default stays permissive (free single-store) but the filter must be
+		// respected — an unauthorized reassignment is IGNORED (v1 semantics),
+		// leaving the stored value and adding no store-change note.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos_store', '5' );
+		$order->save();
+
+		add_filter( 'woocommerce_pos_order_store_reassignment_allowed', '__return_false' );
+		try {
+			$updated = $this->updateOrder(
+				$order,
+				array(
+					'meta_data' => array(
+						array(
+							'key'   => '_pos_store',
+							'value' => '999',
+						),
+					),
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_pos_order_store_reassignment_allowed', '__return_false' );
+		}
+
+		$this->assertSame( 200, $updated->get_status(), 'push response: ' . wp_json_encode( $updated->get_data() ) );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '5', $order->get_meta( '_pos_store' ), 'unauthorized reassignment must be ignored' );
+		foreach ( $this->noteContents( $order->get_id() ) as $note ) {
+			$this->assertStringNotContainsString( '999', $note, 'no store-change note for a rejected reassignment' );
+		}
+	}
+
+	public function test_authorized_store_reassignment_is_visible_during_the_forward(): void {
+		// #1550 timing: an update that reassigns AND recalculates must run the
+		// inner wc/v3 mutation against the NEW store — tax location, cloud-print
+		// selection, and attribution all read _pos_store inside the forward.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos_store', '5' );
+		$order->save();
+
+		$store_during_forward = null;
+		$recorder = static function ( $forwarded ) use ( &$store_during_forward ) {
+			if ( $forwarded instanceof \WC_Order && null === $store_during_forward ) {
+				$store_during_forward = (string) $forwarded->get_meta( '_pos_store' );
+			}
+			return $forwarded;
+		};
+		// Priority 20: AFTER the write controller's fill filter stamps the order.
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $recorder, 20, 1 );
+		try {
+			$updated = $this->updateOrder(
+				$order,
+				array(
+					'meta_data' => array(
+						array(
+							'key'   => '_pos_store',
+							'value' => '7',
+						),
+					),
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $recorder, 20 );
+		}
+
+		$this->assertSame( 200, $updated->get_status(), 'push response: ' . wp_json_encode( $updated->get_data() ) );
+		$this->assertSame( '7', $store_during_forward, 'the NEW store must be on the order INSIDE the forward' );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '7', $order->get_meta( '_pos_store' ), 'reassignment must persist' );
+		$found_note = false;
+		foreach ( $this->noteContents( $order->get_id() ) as $note ) {
+			if ( false !== strpos( $note, '7' ) && false !== strpos( $note, '5' ) ) {
+				$found_note = true;
+			}
+		}
+		$this->assertTrue( $found_note, 'the store-change note must record old and new store' );
+	}
+
 	public function test_customer_create_tolerates_empty_billing_email(): void {
 		// v1 parity: a walk-in customer has no billing email and the client spells
 		// that as ''. The v1 customers controller relaxed the wc/v3 schema for it;

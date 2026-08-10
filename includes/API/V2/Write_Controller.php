@@ -860,6 +860,32 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 
+		// Store reassignment must be AUTHORIZED before it does anything (issue #1550):
+		// v1 accepted a store change only after Pro's Stores::current_user_is_authorized;
+		// v2 was applying any non-empty scalar. The free plugin has no store registry,
+		// so the default is permissive (single-store semantics, reopen flow) and Pro
+		// hooks this filter to enforce store existence + per-user authorization.
+		$store_reassignment_authorized = false;
+		if ( isset( $pos_reassignment['_pos_store'] )
+			&& is_scalar( $pos_reassignment['_pos_store'] )
+			&& '' !== (string) $pos_reassignment['_pos_store'] ) {
+			/**
+			 * Whether the current user may reassign this order to the given store.
+			 *
+			 * @since 1.10.0
+			 *
+			 * @param bool   $allowed  Default true (free single-store semantics).
+			 * @param string $store_id The requested store identifier (till-scoped scalar).
+			 * @param int    $order_id The order being updated.
+			 */
+			$store_reassignment_authorized = (bool) apply_filters(
+				'woocommerce_pos_order_store_reassignment_allowed',
+				true,
+				(string) $pos_reassignment['_pos_store'],
+				(int) $id
+			);
+		}
+
 		// The POS audit trail is write-once, set at create — an UPDATE must not overwrite it. Strip
 		// the server-managed _pos_* keys AND created_via (the channel marker) from the forwarded update
 		// body, so a later client write can't clobber the server-owned audit trail. (Same is_array
@@ -899,9 +925,14 @@ class Write_Controller extends WP_REST_Controller {
 		// till values only when MISSING (write-once at the sale). In-memory only —
 		// the durable write remains the post-forward stamp.
 		$update_fill_meta = array();
+		$pre_update_store = null;
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
 			$existing_order = wc_get_order( (int) $id );
 			if ( $existing_order ) {
+				// Captured BEFORE the forward: the in-memory reassignment stamp below
+				// means a post-forward re-read already carries the NEW store, so the
+				// old value for the change note must come from here.
+				$pre_update_store = (string) $existing_order->get_meta( '_pos_store' );
 				if ( '' === (string) $existing_order->get_meta( '_pos_user' ) ) {
 					$update_fill_meta['_pos_user'] = (string) get_current_user_id();
 				}
@@ -917,6 +948,16 @@ class Write_Controller extends WP_REST_Controller {
 						&& '' === (string) $existing_order->get_meta( $cash_key ) ) {
 						$update_fill_meta[ $cash_key ] = $payload_till[ $cash_key ];
 					}
+				}
+				// AUTHORIZED store reassignment lands IN-MEMORY before the forward
+				// (issue #1550): an update that reassigns AND recalculates (taxable
+				// line change, status/payment transition) must compute taxes, select
+				// the cloud printer, and attribute receipts against the NEW store —
+				// v1 stamped it in woocommerce_before_order_object_save for exactly
+				// this reason. The durable write + order note remain post-forward.
+				if ( $store_reassignment_authorized
+					&& (string) $existing_order->get_meta( '_pos_store' ) !== (string) $pos_reassignment['_pos_store'] ) {
+					$update_fill_meta['_pos_store'] = (string) $pos_reassignment['_pos_store'];
 				}
 			}
 		}
@@ -952,14 +993,16 @@ class Write_Controller extends WP_REST_Controller {
 			if ( $order && is_array( $data ) ) {
 				$current_user_id = get_current_user_id();
 				$old_user_id = $order->get_meta( '_pos_user' );
-				$old_store_id = $order->get_meta( '_pos_store' );
+				$old_store_id = null !== $pre_update_store ? $pre_update_store : $order->get_meta( '_pos_store' );
 				$cashier_changed = isset( $pos_reassignment['_pos_user'] )
 					&& is_numeric( $pos_reassignment['_pos_user'] )
 					&& (int) $pos_reassignment['_pos_user'] === $current_user_id
 					&& (string) $old_user_id !== (string) $current_user_id;
-				$store_changed = isset( $pos_reassignment['_pos_store'] )
-					&& is_scalar( $pos_reassignment['_pos_store'] )
-					&& '' !== (string) $pos_reassignment['_pos_store']
+				// The pre-forward fill already stamped the new store in-memory, so the
+				// re-read order may ALREADY carry it — compare against the pre-update
+				// value captured for the note instead of the live meta, and gate on
+				// the SAME authorization decision made before the forward (#1550).
+				$store_changed = $store_reassignment_authorized
 					&& (string) $old_store_id !== (string) $pos_reassignment['_pos_store'];
 				if ( $cashier_changed ) {
 					$order->update_meta_data( '_pos_user', (string) $current_user_id );
