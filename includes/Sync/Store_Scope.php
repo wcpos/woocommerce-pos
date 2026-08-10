@@ -74,16 +74,8 @@ final class Store_Scope {
 	/**
 	 * Resolve the store scope of an incoming WCPOS request.
 	 *
-	 * The header is the v2 lane's wire form; the `store_id` param is v1's, and
-	 * is honoured when NO header was sent so both lanes resolve their scope
-	 * through one function.
-	 *
-	 * A header that was sent but is unusable (blank, `0`, non-numeric) resolves
-	 * to UNKNOWN and stops there — it never falls through to the param. Sending
-	 * a scope and having it silently replaced by a different one from another
-	 * wire form is worse than sending none: the caller believes it named a
-	 * store, and the write lands somewhere it did not name. Absent and
-	 * malformed are different signals and only the first invites a fallback.
+	 * The header is authoritative for the v2 lane; the `store_id` param is only
+	 * honoured on the v1 lane, where it is the wire form of the scope.
 	 *
 	 * @param WP_REST_Request $request The incoming request.
 	 *
@@ -91,9 +83,14 @@ final class Store_Scope {
 	 */
 	public static function resolve( WP_REST_Request $request ): ?int {
 		$header = $request->get_header( self::HEADER );
+		$scope  = self::normalize( $header );
 
-		if ( null !== $header && '' !== trim( (string) $header ) ) {
-			return self::normalize( $header );
+		if ( null !== $scope ) {
+			return $scope;
+		}
+
+		if ( 0 !== strpos( $request->get_route(), '/wcpos/v1/' ) ) {
+			return null;
 		}
 
 		return self::normalize( $request->get_param( self::PARAM ) );
