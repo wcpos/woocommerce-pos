@@ -313,6 +313,20 @@ final class Order_Serializer {
 		// revisions agree with a bare wc/v3 read of the same order.
 		unset( $payload['tax_ids'] );
 
+		// HPOS removes these internal fields only after the restored order's save
+		// hooks run. Exclude them so that save and the completed restore hash alike.
+		if ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) {
+			$payload['meta_data'] = array_values(
+				array_filter(
+					$payload['meta_data'],
+					static function ( $entry ): bool {
+						$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true );
+					}
+				)
+			);
+		}
+
 		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ) ) );
 	}
 

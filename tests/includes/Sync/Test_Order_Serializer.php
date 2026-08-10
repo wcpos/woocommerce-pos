@@ -53,6 +53,27 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Internal trash metadata removed after HPOS restore does not affect a revision.
+	 */
+	public function test_revision_is_invariant_to_transient_trash_meta(): void {
+		$without = array(
+			'id'        => 5,
+			'total'     => '9.99',
+			'meta_data' => array(),
+		);
+
+		foreach ( array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ) as $key ) {
+			$with = $without;
+			$with['meta_data'][] = array(
+				'key'   => $key,
+				'value' => 'transient',
+			);
+
+			$this->assertSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ), $key . ' must not move the restored order revision.' );
+		}
+	}
+
+	/**
 	 * Request-derived payment links do not affect a content revision.
 	 */
 	public function test_revision_is_invariant_to_payment_links(): void {
