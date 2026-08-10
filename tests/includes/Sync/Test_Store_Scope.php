@@ -221,11 +221,12 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * @dataProvider provide_unusable_catalog_headers_with_legacy_scope
+	 * @dataProvider provide_catalog_headers_with_legacy_scope
 	 *
 	 * @param null|string $header The raw v2 scope header, or null when absent.
+	 * @param null|int    $expected The authoritative scope expected downstream.
 	 */
-	public function test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query( ?string $header ): void {
+	public function test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query( ?string $header, ?int $expected ): void {
 		$this->capture_product_scope();
 		ProductHelper::create_simple_product();
 
@@ -238,16 +239,17 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
-		$this->assertSame( array( null ), array_unique( $this->captured ) );
+		$this->assertSame( array( $expected ), array_unique( $this->captured ) );
 	}
 
 	/**
-	 * @return array<string, array{null|string}>
+	 * @return array<string, array{null|string, null|int}>
 	 */
-	public function provide_unusable_catalog_headers_with_legacy_scope(): array {
+	public function provide_catalog_headers_with_legacy_scope(): array {
 		return array(
-			'absent header'    => array( null ),
-			'malformed header' => array( 'store-9' ),
+			'absent header'    => array( null, null ),
+			'malformed header' => array( 'store-9', null ),
+			'valid header'     => array( '7', 7 ),
 		);
 	}
 
@@ -291,7 +293,13 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( null ), $scopes );
 	}
 
-	public function test_a_product_push_does_not_accept_scope_from_the_payload(): void {
+	/**
+	 * @dataProvider provide_authoritative_write_scopes
+	 *
+	 * @param null|string $header The raw v2 scope header, or null when absent.
+	 * @param null|int    $expected The authoritative scope expected downstream.
+	 */
+	public function test_a_product_push_does_not_accept_scope_from_the_payload( ?string $header, ?int $expected ): void {
 		$scopes = array();
 		add_filter(
 			'woocommerce_rest_pre_insert_product_object',
@@ -309,6 +317,9 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$revision = $this->current_revision( $product->get_id() );
 		$request  = $this->wp_rest_post_request( '/wcpos/v2/push/products' );
 		$request->set_header( 'Content-Type', 'application/json' );
+		if ( null !== $header ) {
+			$request->set_header( Store_Scope::HEADER, $header );
+		}
 		$request->set_body(
 			(string) wp_json_encode(
 				array(
@@ -328,7 +339,17 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
-		$this->assertSame( array( null ), $scopes );
+		$this->assertSame( array( $expected ), $scopes );
+	}
+
+	/**
+	 * @return array<string, array{null|string, null|int}>
+	 */
+	public function provide_authoritative_write_scopes(): array {
+		return array(
+			'absent header' => array( null, null ),
+			'valid header'  => array( '7', 7 ),
+		);
 	}
 
 	public function test_a_product_delete_forwards_the_scope_to_the_inner_wc_v3_write(): void {
