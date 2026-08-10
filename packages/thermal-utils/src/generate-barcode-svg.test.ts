@@ -36,12 +36,16 @@ describe('generateBarcodeSvg', () => {
 		expect(html).toContain('<svg');
 		expect(html).toContain('data-barcode-kind="qrcode"');
 		expect(html).not.toContain('data-barcode-error');
+		expect(html).not.toContain('<text');
 	});
 
 	it('falls back to Code 128 for an unknown type instead of throwing', () => {
 		const html = generateBarcodeSvg('HELLO', { type: 'not-a-real-type', kind: 'barcode' });
 		expect(html).toContain('<svg');
 		expect(html).not.toContain('data-barcode-error');
+		expect(html).toBe(
+			generateBarcodeSvg('HELLO', { type: 'code128', kind: 'barcode' })
+		);
 	});
 
 	it('labels errors with the merchant-facing type, not the internal encoder name', () => {
