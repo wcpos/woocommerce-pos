@@ -31,6 +31,26 @@ namespace WCPOS\WooCommercePOS\Sync;
  */
 class Coupon_Modified_Date {
 	/**
+	 * Listen for every coupon save, whatever wrote it.
+	 *
+	 * Registered UNCONDITIONALLY from Init — deliberately NOT behind the
+	 * `Sync\Api::is_enabled()` gate, and not behind the schema latch, because
+	 * this touches `wp_posts` only and the client's catalogue replication is
+	 * date-based on BOTH lanes. A cashier does not care which surface a discount
+	 * was edited from: a merchant changing a coupon amount in wp-admin, over
+	 * WP-CLI, or from another plugin has changed the coupon, and every till must
+	 * see it on its next incremental poll. v1 only ever installed this for the
+	 * duration of its own REST dispatch, so an admin-side edit was invisible to
+	 * the POS — that was a gap, not a design.
+	 *
+	 * `touch()` writes with $wpdb->update() rather than wp_update_post(), so it
+	 * cannot re-enter `woocommerce_update_coupon` — no recursion guard needed.
+	 */
+	public static function register_hooks(): void {
+		add_action( 'woocommerce_update_coupon', array( __CLASS__, 'touch' ), 10, 1 );
+	}
+
+	/**
 	 * Advance a coupon's post_modified(_gmt) beyond its previous value.
 	 *
 	 * Unconditional by design, exactly like the v1 listener: the caller only

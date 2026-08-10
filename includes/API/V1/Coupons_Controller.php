@@ -17,7 +17,6 @@ use Exception;
 use WC_Coupon;
 use WC_REST_Coupons_Controller;
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -92,7 +91,9 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 
 		add_filter( 'woocommerce_rest_prepare_shop_coupon_object', array( $this, 'wcpos_coupon_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
-		add_action( 'woocommerce_update_coupon', array( $this, 'wcpos_touch_coupon_modified_date' ), 10, 1 );
+		// The post-date touch that used to be installed here is now registered
+		// unconditionally at plugins_loaded (Sync\Coupon_Modified_Date), so it also
+		// covers wp-admin/WP-CLI/third-party coupon saves this dispatch never saw.
 
 		/**
 		 * Check if the request is for all coupons and if the 'posts_per_page' is set to -1.
@@ -154,22 +155,6 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		}
 
 		return $permission;
-	}
-
-	/**
-	 * Touch post_modified_gmt after a coupon update.
-	 *
-	 * WC's coupon data store only calls wp_update_post() when certain post
-	 * fields (code, description, status, dates) change. When only meta-based
-	 * fields like amount change, post_modified_gmt is left stale. This breaks
-	 * client-side sync that relies on date_modified_gmt to detect changes.
-	 *
-	 * @see https://github.com/wcpos/woocommerce-pos-pro/issues/86
-	 *
-	 * @param int $coupon_id The coupon post ID.
-	 */
-	public function wcpos_touch_coupon_modified_date( int $coupon_id ): void {
-		Coupon_Modified_Date::touch( $coupon_id );
 	}
 
 	/**

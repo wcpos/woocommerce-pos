@@ -105,6 +105,16 @@ class Init {
 		 */
 		( new Services\Core_Order_Audit_Guard() )->register_hooks();
 
+		// Coupon post-date touch. Unconditional and lane-agnostic on purpose: a
+		// meta-only coupon edit (amount, discount_type, usage limits) never moves
+		// post_modified, and the client's catalogue replication is date-based
+		// (?modified_after, filtered by WooCommerce on post_modified_gmt), so an
+		// untouched coupon is invisible to every other till. That is true whether
+		// the edit came from the POS, wp-admin, WP-CLI or another plugin — so this
+		// sits outside the Sync\Api::is_enabled() gate above, which only guards the
+		// v2 sync TABLES this does not use.
+		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
+
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
 	}
 

@@ -11,6 +11,7 @@ require_once __DIR__ . '/coupon-modified-date-clock.php';
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
@@ -24,7 +25,10 @@ use WP_REST_Response;
  * wcpos_touch_coupon_modified_date` for the duration of a v1 REST dispatch
  * (API/V1/Coupons_Controller.php). The app now writes through
  * `POST /wcpos/v2/push/coupons`, which forwards to stock wc/v3 and never
- * installed that listener — so the guarantee was silently dropped.
+ * installed that listener — so the guarantee was silently dropped. Being
+ * request-scoped, v1's version never covered a wp-admin/WP-CLI/third-party save
+ * either; the listener is now registered unconditionally at plugins_loaded, so
+ * ANY coupon save moves the date.
  *
  * It still matters, because the client's catalogue replication is INCREMENTAL
  * and date-based: `CollectionReplicationState` polls
@@ -200,6 +204,61 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 			$untouched_id,
 			$polled,
 			'The poll returned an unmodified coupon, so modified_after is not actually filtering — the assertion above proves nothing.'
+		);
+	}
+
+	/**
+	 * A merchant editing a coupon amount OUTSIDE the POS must still reach the tills.
+	 *
+	 * The cashier-expectation ruling: a cashier does not care which screen a
+	 * discount was changed on. wp-admin, WP-CLI and third-party plugin saves all
+	 * go through WC_Coupon::save() and none of them run a POS REST dispatch, so
+	 * v1's request-scoped listener never covered them — an admin-side amount edit
+	 * was invisible to every till. The listener is now registered unconditionally
+	 * at plugins_loaded, so this test installs NOTHING: it saves a coupon the way
+	 * wp-admin does and asserts the same incremental poll picks it up. If that
+	 * registration is ever dropped from Init, this fails.
+	 */
+	public function test_admin_side_amount_edit_reaches_the_incremental_poll(): void {
+		// Arrange: same worst case the push test pins — the writer runs inside the
+		// exact second the second till already holds as its cursor, so only a
+		// strictly-advancing touch keeps the coupon visible.
+		$cursor_gmt = \current_time( 'mysql', true );
+		$GLOBALS['woocommerce_pos_coupon_modified_date_now_gmt'] = $cursor_gmt;
+		$id           = $this->coupon_with_modified_date( 'v2-admin-edit', '62000000-0000-4000-8000-000000000004', $cursor_gmt );
+		$untouched_id = $this->coupon_with_modified_date( 'v2-admin-control', '62000000-0000-4000-8000-000000000005', $cursor_gmt );
+
+		// Act: exactly what wp-admin does — no REST request, no POS marker at all.
+		$coupon = new \WC_Coupon( $id );
+		$coupon->set_amount( '7.50' );
+		$coupon->save();
+
+		// Assert.
+		clean_post_cache( $id );
+		$this->assertSame( '7.50', ( new \WC_Coupon( $id ) )->get_amount( 'edit' ) );
+		$this->assertGreaterThan(
+			strtotime( $cursor_gmt . ' UTC' ),
+			strtotime( (string) get_post_field( 'post_modified_gmt', $id ) . ' UTC' ),
+			'An admin-side coupon amount edit did not advance post_modified_gmt beyond the second till cursor; no till will ever re-fetch it.'
+		);
+		$polled = $this->poll_modified_after( $cursor_gmt );
+		$this->assertContains( $id, $polled );
+		$this->assertNotContains( $untouched_id, $polled );
+	}
+
+	/**
+	 * The touch listener is wired up by production init, not by any test.
+	 *
+	 * Guards the wiring the behaviour tests above cannot: they would still pass if
+	 * something else moved the date. This fails if the Init registration is
+	 * removed or moved back behind the Sync\Api::is_enabled() gate — note the
+	 * sync feature is NOT enabled at plugins_loaded in this suite, which is
+	 * exactly the condition that must not switch the listener off.
+	 */
+	public function test_the_touch_listener_is_registered_unconditionally_by_init(): void {
+		$this->assertNotFalse(
+			has_action( 'woocommerce_update_coupon', array( Coupon_Modified_Date::class, 'touch' ) ),
+			'Sync\Coupon_Modified_Date::touch is not hooked to woocommerce_update_coupon; Init no longer registers it unconditionally.'
 		);
 	}
 

@@ -16,7 +16,6 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
-use WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -1047,13 +1046,6 @@ class Write_Controller extends WP_REST_Controller {
 				// forward above, so pull cursors still see this update.
 				$order->get_data_store()->update( $order );
 			}
-		}
-		if ( 'coupons' === $collection ) {
-			// A meta-only coupon edit (amount, discount_type, usage limits) never
-			// moves post_modified, which would hide the change from every other
-			// till's ?modified_after catalogue poll. Touch BEFORE the re-read below
-			// so the returned document carries the fresh date too.
-			Coupon_Modified_Date::touch( $id );
 		}
 		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] ); // keep the uuid stable across updates
 		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
