@@ -381,7 +381,8 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 					'collection'   => 'products',
 					'recordId'     => $uuid,
 					'baseRevision' => $revision,
-					'payload'      => null,
+					// No `payload` KEY at all: validate_envelope() rejects a delete
+					// with array_key_exists(), so `'payload' => null` is still a 400.
 				)
 			)
 		);
