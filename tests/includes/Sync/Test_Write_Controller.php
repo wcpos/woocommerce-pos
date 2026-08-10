@@ -1245,6 +1245,32 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary update filter must not stamp tender on an unrelated order' );
 	}
 
+	public function test_customer_create_tolerates_empty_billing_email(): void {
+		// v1 parity: a walk-in customer has no billing email and the client spells
+		// that as ''. The v1 customers controller relaxed the wc/v3 schema for it;
+		// the v2 forward must drop the empty value or the whole create 400s.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$created = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'customers',
+				'payload'    => array(
+					'email'      => 'walk-in-' . wp_generate_password( 6, false ) . '@example.test',
+					'first_name' => 'Walk',
+					'billing'    => array(
+						'first_name' => 'Walk',
+						'email'      => '',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $created->get_status(), 'push response: ' . wp_json_encode( $created->get_data() ) );
+		$document = $created->get_data()['document'] ?? array();
+		$this->assertSame( 'Walk', $document['billing']['first_name'] ?? null, 'billing fields other than the empty email must persist' );
+	}
+
 	public function test_order_create_rejects_invalid_client_date_created_gmt(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

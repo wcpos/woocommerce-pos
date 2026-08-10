@@ -475,6 +475,11 @@ class Write_Controller extends WP_REST_Controller {
 			// tax_ids is a POS-owned field: wc/v3 would silently ignore it, and the
 			// server persists it via Tax_Id_Writer after a successful forward.
 			unset( $forward_payload['tax_ids'] );
+			// v1 parity: walk-in customers legitimately have no billing email; the
+			// v1 customers controller relaxed the schema so '' passed. Stock wc/v3
+			// rejects '' on the email format check — absent means "no email", so
+			// drop the empty value (same tolerance the ORDER payload shaping has).
+			$forward_payload = $this->without_empty_billing_email( $forward_payload );
 		}
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations'
@@ -678,6 +683,25 @@ class Write_Controller extends WP_REST_Controller {
 	 * these before forwarding makes the server the sole, authoritative writer of the audit trail
 	 * (the till-sourced values are re-applied by persist_order_audit_meta, not the forward).
 	 */
+	/**
+	 * Drop an empty `billing.email` from a customer payload — absent means
+	 * "no email"; '' fails wc/v3's format check although it is the natural
+	 * spelling for a walk-in customer (v1 relaxed the schema for exactly this).
+	 *
+	 * @param array $payload Customer payload about to be forwarded.
+	 *
+	 * @return array
+	 */
+	private function without_empty_billing_email( array $payload ): array {
+		if ( isset( $payload['billing'] ) && is_array( $payload['billing'] )
+			&& array_key_exists( 'email', $payload['billing'] )
+			&& ( '' === $payload['billing']['email'] || null === $payload['billing']['email'] ) ) {
+			unset( $payload['billing']['email'] );
+		}
+
+		return $payload;
+	}
+
 	private function without_pos_audit_meta( array $payload, int $order_id = 0 ): array {
 		$meta      = ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		$protected = $order_id > 0 && function_exists( 'wc_get_order' )
@@ -845,6 +869,9 @@ class Write_Controller extends WP_REST_Controller {
 		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			// POS-owned field: persisted via Tax_Id_Writer after the forward, never sent to wc/v3.
 			unset( $update_payload['tax_ids'] );
+			// v1 parity: '' billing email means "no email" on a walk-in customer;
+			// see the create-side comment.
+			$update_payload = $this->without_empty_billing_email( $update_payload );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $update_payload ) ) {
 			unset( $update_payload['created_via'] );
