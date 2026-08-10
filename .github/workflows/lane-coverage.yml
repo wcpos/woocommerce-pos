@@ -1,0 +1,121 @@
+name: Lane Coverage
+
+# Enforces the REST lane-coverage inventory. Full rationale and the definition of "ported"
+# live in tests/lane-coverage/README.md.
+#
+# Two enforced checks, both deliberately dumb — false confidence is the thing being killed,
+# so a check that is obviously correct beats a clever one:
+#
+#   1. The checked-in inventory matches what the scanner regenerates, so the committed
+#      artifact can never drift away from the tests it describes.
+#   2. The set of test cases whose ONLY dispatched lane is the frozen wcpos/v1 namespace may
+#      shrink, but never grow. It is compared against the PR's merge-base rather than a
+#      checked-in baseline file, because a baseline file can be edited in the same PR that
+#      grows it. Git history cannot.
+#
+# Blind-test warnings are annotated but NEVER fail the job: plenty of stubbing is legitimate,
+# and a gate that cries wolf gets ignored, which is how we got here.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - next
+  push:
+    branches:
+      - main
+      - next
+    paths:
+      - "tests/**"
+      - "scripts/lane-coverage.php"
+      - ".github/scripts/test-lane-coverage-workflow.sh"
+      - "scripts/tests/test-lane-coverage.php"
+      - ".github/workflows/lane-coverage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lane-coverage:
+    name: REST lane coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The ratchet resolves the merge-base, so shallow history will not do.
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.1"
+          coverage: none
+
+      - name: Scanner regression tests
+        run: php scripts/tests/test-lane-coverage.php
+
+      - name: Inventory is up to date
+        run: |
+          set -euo pipefail
+          status=0
+          php scripts/lane-coverage.php --check || status=$?
+          if [ "$status" -eq 1 ]; then
+            echo "::error file=tests/lane-coverage/inventory.md::Lane-coverage inventory is stale. Regenerate with: php scripts/lane-coverage.php --write"
+          elif [ "$status" -ne 0 ]; then
+            echo "::error file=tests/lane-coverage/annotations.json::Lane-coverage scan failed. See the scanner details above and correct the reported validation error."
+          fi
+          exit "$status"
+
+      - name: Workflow behavior is pinned
+        run: bash .github/scripts/test-lane-coverage-workflow.sh
+
+      - name: v1-only coverage must not grow
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # Derive the base commit from the checkout itself rather than fetching it. On a
+          # pull_request event actions/checkout gives us the merge commit, whose first parent is
+          # the base branch tip and whose second is the PR head, and fetch-depth: 0 means both
+          # histories are already local. Fetching here would need git credentials, which
+          # persist-credentials: false deliberately removes — that is fine for a public repo,
+          # where an anonymous fetch still works, but the Pro repo is private and the fetch fails
+          # with "could not read Username for 'https://github.com'".
+          if git rev-parse -q --verify "HEAD^2" >/dev/null; then
+            base_sha="$(git merge-base "HEAD^1" "HEAD^2")"
+          else
+            base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+          fi
+          if [ -z "$base_sha" ]; then
+            echo "::error::Could not resolve the base commit to compare against."
+            exit 1
+          fi
+          echo "Comparing against merge-base $base_sha ($BASE_REF)"
+
+          # Scan the base tree with THIS branch's scanner, so a change to the scanner is
+          # applied to both sides and the comparison stays apples-to-apples.
+          git worktree add --detach "$RUNNER_TEMP/base" "$base_sha"
+          php scripts/lane-coverage.php --json --root="$RUNNER_TEMP/base" > "$RUNNER_TEMP/base.json"
+
+          php scripts/lane-coverage.php --compare="$RUNNER_TEMP/base.json"
+
+      - name: Blind-test warnings (advisory, never fails)
+        if: always()
+        run: |
+          set -uo pipefail
+          php scripts/lane-coverage.php --warnings | while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            file="${line%%:*}"
+            rest="${line#*:}"
+            lineno="${rest%%:*}"
+            message="${rest#*:}"
+            echo "::warning file=${file},line=${lineno}::${message# }"
+          done
+          exit 0
