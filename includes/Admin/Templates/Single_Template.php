@@ -505,17 +505,9 @@ class Single_Template {
 		);
 
 		wp_enqueue_script(
-			'wcpos-bwip',
-			PLUGIN_URL . $dir . '/js/bwip.js',
-			array(),
-			PLUGIN_VERSION,
-			true
-		);
-
-		wp_enqueue_script(
 			'wcpos-template-editor',
 			PLUGIN_URL . $dir . '/js/template-editor.js',
-			array( 'react', 'react-dom', 'wp-api-fetch', 'wcpos-bwip' ),
+			array( 'react', 'react-dom', 'wp-api-fetch' ),
 			PLUGIN_VERSION,
 			true
 		);

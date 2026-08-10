@@ -556,17 +556,9 @@ JS;
 		);
 
 		wp_enqueue_script(
-			'wcpos-bwip',
-			PLUGIN_URL . $dir . '/js/bwip.js',
-			array(),
-			PLUGIN_VERSION,
-			true
-		);
-
-		wp_enqueue_script(
 			'wcpos-template-gallery',
 			PLUGIN_URL . $dir . '/js/template-gallery.js',
-			array( 'react', 'react-dom', 'wp-api-fetch', 'wp-url', 'wcpos-bwip' ),
+			array( 'react', 'react-dom', 'wp-api-fetch', 'wp-url' ),
 			PLUGIN_VERSION,
 			true
 		);
