@@ -1929,6 +1929,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * validation, so malformed meta_data entries reach the UUID pre-scan raw.
 	 * A string entry must be skipped, not fataled on (PHP 8 throws
 	 * "Cannot access offset of type string on string" -> 500 mid-batch).
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_order_with_string_meta_data_entry_creates_order(): void {
 		// Arrange.
@@ -2077,6 +2082,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Same bypass on the update path.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
 		// Arrange.
@@ -2108,6 +2118,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Skipping malformed entries must not break the dedupe itself: a valid uuid
 	 * entry after junk entries still returns the existing order instead of
 	 * creating a duplicate.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_order_with_malformed_entries_still_dedupes_uuid(): void {
 		// Arrange.

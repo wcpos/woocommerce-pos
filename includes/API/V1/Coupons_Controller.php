@@ -17,6 +17,7 @@ use Exception;
 use WC_Coupon;
 use WC_REST_Coupons_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -168,23 +169,7 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	 * @param int $coupon_id The coupon post ID.
 	 */
 	public function wcpos_touch_coupon_modified_date( int $coupon_id ): void {
-		global $wpdb;
-
-		$now_gmt   = current_time( 'mysql', true );
-		$now_local = current_time( 'mysql' );
-
-		$wpdb->update(
-			$wpdb->posts,
-			array(
-				'post_modified'     => $now_local,
-				'post_modified_gmt' => $now_gmt,
-			),
-			array( 'ID' => $coupon_id ),
-			array( '%s', '%s' ),
-			array( '%d' )
-		);
-
-		clean_post_cache( $coupon_id );
+		Coupon_Modified_Date::touch( $coupon_id );
 	}
 
 	/**
@@ -195,6 +180,15 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
+		// LANE SCOPE — v1 ONLY, deliberately NOT ported to v2 (lane audit 2026-08-10).
+		// `orderby=code` has NO caller: the client's coupon list marks its `code`
+		// column "disableSort": true and defaults to sorting on date_created_gmt
+		// (monorepo packages/core/.../ui-settings/initial-settings.json), and the
+		// coupon query hook only ever rewrites date_created/date_modified
+		// (packages/query/src/hooks/coupons.ts). The v2 Catalog_Proxy_Controller
+		// therefore leaves the wc/v3 enum unchanged on purpose. If a future
+		// cashier-facing "sort by code" lands, port it deliberately — do not add
+		// it back just to make the lanes look symmetrical.
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], array( 'code' ) ) );
