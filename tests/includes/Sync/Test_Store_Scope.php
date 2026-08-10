@@ -221,6 +221,37 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * @dataProvider provide_unusable_catalog_headers_with_legacy_scope
+	 *
+	 * @param null|string $header The raw v2 scope header, or null when absent.
+	 */
+	public function test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query( ?string $header ): void {
+		$this->capture_product_scope();
+		ProductHelper::create_simple_product();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_query_params( array( Store_Scope::PARAM => '9' ) );
+		if ( null !== $header ) {
+			$request->set_header( Store_Scope::HEADER, $header );
+		}
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( null ), array_unique( $this->captured ) );
+	}
+
+	/**
+	 * @return array<string, array{null|string}>
+	 */
+	public function provide_unusable_catalog_headers_with_legacy_scope(): array {
+		return array(
+			'absent header'    => array( null ),
+			'malformed header' => array( 'store-9' ),
+		);
+	}
+
+	/**
 	 * The write forward — the half that decides WHICH store's price a cashier's
 	 * edit lands on.
 	 */
@@ -258,6 +289,86 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$this->push_price( $this->uuid_product(), null );
 
 		$this->assertSame( array( null ), $scopes );
+	}
+
+	public function test_a_product_push_does_not_accept_scope_from_the_payload(): void {
+		$scopes = array();
+		add_filter(
+			'woocommerce_rest_pre_insert_product_object',
+			function ( $product, $request ) use ( &$scopes ) {
+				$scopes[] = $request->get_param( Store_Scope::PARAM );
+
+				return $product;
+			},
+			10,
+			2
+		);
+
+		$product  = $this->uuid_product();
+		$uuid     = (string) get_post_meta( $product->get_id(), Pos_Uuid::META_KEY, true );
+		$revision = $this->current_revision( $product->get_id() );
+		$request  = $this->wp_rest_post_request( '/wcpos/v2/push/products' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			(string) wp_json_encode(
+				array(
+					'mutationId'   => wp_generate_uuid4(),
+					'operation'    => 'update',
+					'collection'   => 'products',
+					'recordId'     => $uuid,
+					'baseRevision' => $revision,
+					'payload'      => array(
+						'regular_price'     => '25.00',
+						Store_Scope::PARAM => 9,
+					),
+				)
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( null ), $scopes );
+	}
+
+	public function test_a_product_delete_forwards_the_scope_to_the_inner_wc_v3_write(): void {
+		$scopes = array();
+		add_filter(
+			'rest_request_before_callbacks',
+			function ( $response, $handler, $request ) use ( &$scopes ) {
+				if ( 'DELETE' === $request->get_method() && 0 === strpos( $request->get_route(), '/wc/v3/products/' ) ) {
+					$scopes[] = $request->get_param( Store_Scope::PARAM );
+				}
+
+				return $response;
+			},
+			10,
+			3
+		);
+
+		$product  = $this->uuid_product();
+		$uuid     = (string) get_post_meta( $product->get_id(), Pos_Uuid::META_KEY, true );
+		$revision = $this->current_revision( $product->get_id() );
+		$request  = $this->wp_rest_post_request( '/wcpos/v2/push/products' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_header( Store_Scope::HEADER, '7' );
+		$request->set_body(
+			(string) wp_json_encode(
+				array(
+					'mutationId'   => wp_generate_uuid4(),
+					'operation'    => 'delete',
+					'collection'   => 'products',
+					'recordId'     => $uuid,
+					'baseRevision' => $revision,
+					'payload'      => null,
+				)
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( 7 ), $scopes );
 	}
 
 	/**
@@ -428,6 +539,22 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		Store_Scope::in_v2_lane(
 			static function (): void {
 				Store_Scope::reset();
+			}
+		);
+
+		$this->assertFalse( Store_Scope::is_v2_lane() );
+	}
+
+	public function test_a_new_lane_is_visible_after_reset_inside_a_lane(): void {
+		Store_Scope::in_v2_lane(
+			static function (): void {
+				Store_Scope::reset();
+			}
+		);
+
+		Store_Scope::in_v2_lane(
+			function (): void {
+				$this->assertTrue( Store_Scope::is_v2_lane() );
 			}
 		);
 

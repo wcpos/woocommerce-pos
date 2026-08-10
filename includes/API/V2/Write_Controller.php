@@ -1366,17 +1366,11 @@ class Write_Controller extends WP_REST_Controller {
 		$request = new WP_REST_Request( $method, $route );
 		if ( is_array( $payload ) ) {
 			// The route id (resolved server-side from the uuid) is authoritative — never
-			// let a client-supplied body `id` override it or pin a create's id.
-			unset( $payload['id'] );
+			// let a client-supplied body `id` override it or pin a create's id. The
+			// v2 header is likewise the only authority for the legacy store param.
+			unset( $payload['id'], $payload[ Store_Scope::PARAM ] );
 			$request->set_body_params( $payload );
 		}
-		// The till's store scope rides the forward as v1's `store_id` param
-		// (pro#425), so a hook running during the inner wc/v3 write knows WHICH
-		// store the cashier is editing for. Without it a store-scoped price edit
-		// is indistinguishable from a global one and lands on the web-store price.
-		// AFTER set_body_params: on a body-bearing method that call replaces the
-		// whole POST bag, which is where set_param() would have put the scope.
-		Store_Scope::stamp( $request );
 		return $this->dispatch_write( $request );
 	}
 
@@ -1386,6 +1380,8 @@ class Write_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	private function dispatch_write( WP_REST_Request $request ) {
+		// Stamp here so direct callers (notably deletes) carry the scope too.
+		Store_Scope::stamp( $request );
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		try {
 			// Marked as OUR traffic for the duration of the forward, so a consumer

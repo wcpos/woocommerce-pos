@@ -195,6 +195,7 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		}
 
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
+		unset( $query_params[ Store_Scope::PARAM ] );
 		$inner->set_query_params( $query_params );
 		// The till's store scope, republished as v1's `store_id` param (pro#425).
 		// This is the greedy catalog list pull, so it is what decides whether the

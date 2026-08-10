@@ -155,7 +155,9 @@ final class Store_Scope {
 		try {
 			return $operation();
 		} finally {
-			--self::$lane_depth;
+			if ( self::$lane_depth > 0 ) {
+				--self::$lane_depth;
+			}
 		}
 	}
 
