@@ -1128,10 +1128,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$recorder = static function ( $order_id ) use ( &$seen ) {
 			$order = wc_get_order( $order_id );
 			if ( $order && null === $seen ) {
+				$unrelated = apply_filters( 'woocommerce_rest_pre_insert_shop_order_object', new \WC_Order(), new WP_REST_Request( 'POST', '/wc/v3/orders' ), true );
 				$seen = array(
-					'user'     => (string) $order->get_meta( '_pos_user' ),
-					'creator'  => (string) $order->get_meta( '_pos_user_created' ),
-					'tendered' => (string) $order->get_meta( '_pos_cash_amount_tendered' ),
+					'user'               => (string) $order->get_meta( '_pos_user' ),
+					'creator'            => (string) $order->get_meta( '_pos_user_created' ),
+					'tendered'           => (string) $order->get_meta( '_pos_cash_amount_tendered' ),
+					'unrelated_user'      => (string) $unrelated->get_meta( '_pos_user' ),
+					'unrelated_tendered'  => (string) $unrelated->get_meta( '_pos_cash_amount_tendered' ),
 				);
 			}
 		};
@@ -1169,6 +1172,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( (string) $cashier_id, $seen['user'], 'cashier must be attributed AT payment_complete time' );
 		$this->assertSame( (string) $cashier_id, $seen['creator'] );
 		$this->assertSame( '20.00', $seen['tendered'], 'cash tender must be visible AT payment_complete time' );
+		$this->assertSame( '', $seen['unrelated_user'], 'temporary create filter must not attribute an unrelated order' );
+		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary create filter must not stamp tender on an unrelated order' );
 	}
 
 	public function test_update_completing_payment_fills_missing_audit_meta_before_payment_complete(): void {
@@ -1196,9 +1201,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$recorder = static function ( $order_id ) use ( &$seen ) {
 			$updated = wc_get_order( $order_id );
 			if ( $updated && null === $seen ) {
+				$unrelated = apply_filters( 'woocommerce_rest_pre_insert_shop_order_object', new \WC_Order(), new WP_REST_Request( 'PUT', '/wc/v3/orders/999999' ), false );
 				$seen = array(
-					'user'     => (string) $updated->get_meta( '_pos_user' ),
-					'tendered' => (string) $updated->get_meta( '_pos_cash_amount_tendered' ),
+					'user'               => (string) $updated->get_meta( '_pos_user' ),
+					'creator'            => (string) $updated->get_meta( '_pos_user_created' ),
+					'tendered'           => (string) $updated->get_meta( '_pos_cash_amount_tendered' ),
+					'unrelated_user'      => (string) $unrelated->get_meta( '_pos_user' ),
+					'unrelated_tendered'  => (string) $unrelated->get_meta( '_pos_cash_amount_tendered' ),
 				);
 			}
 		};
@@ -1230,7 +1239,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			. ' needs_payment-was: ' . wp_json_encode( $order->needs_payment() )
 		);
 		$this->assertSame( (string) $cashier_id, $seen['user'], 'missing cashier must be filled AT payment_complete time' );
+		$this->assertSame( (string) $cashier_id, $seen['creator'], 'missing creator must be filled AT payment_complete time' );
 		$this->assertSame( '55.00', $seen['tendered'], 'cash tender must be visible AT payment_complete time' );
+		$this->assertSame( '', $seen['unrelated_user'], 'temporary update filter must not attribute an unrelated order' );
+		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary update filter must not stamp tender on an unrelated order' );
 	}
 
 	public function test_order_create_rejects_invalid_client_date_created_gmt(): void {

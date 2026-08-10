@@ -481,8 +481,10 @@ class Write_Controller extends WP_REST_Controller {
 			: $meta['route'];
 		$forwarded_order = null;
 		$date_filter     = static function ( $order, $request, $creating ) use ( $client_created_gmt, $create_till_meta, &$forwarded_order ) {
-			if ( $creating && $order instanceof \WC_Order ) {
+			if ( $creating && $order instanceof \WC_Order && null === $forwarded_order ) {
 				$forwarded_order = $order;
+			}
+			if ( $creating && $order === $forwarded_order ) {
 				// In-memory till stamp (see $create_till_meta above): present for the
 				// tax/coupon calculation inside the forwarded create, made durable by
 				// persist_order_audit_meta afterwards.
@@ -891,8 +893,8 @@ class Write_Controller extends WP_REST_Controller {
 				}
 			}
 		}
-		$update_fill_filter = static function ( $order ) use ( $update_fill_meta ) {
-			if ( $order instanceof \WC_Order && ! is_wp_error( $order ) ) {
+		$update_fill_filter = static function ( $order ) use ( $id, $update_fill_meta ) {
+			if ( $order instanceof \WC_Order && (int) $id === $order->get_id() ) {
 				foreach ( $update_fill_meta as $fill_key => $fill_value ) {
 					$order->update_meta_data( $fill_key, $fill_value );
 				}
