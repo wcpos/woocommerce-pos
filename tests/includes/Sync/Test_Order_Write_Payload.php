@@ -96,6 +96,166 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A create recovers taxonomy and custom "any" variation choices from their
+	 * display fields before forwarding to wc/v3.
+	 */
+	public function test_for_create_recovers_any_variation_attributes_from_display_fields(): void {
+		// Arrange.
+		list( $parent, $variation ) = $this->any_variation_product();
+		$payload                    = array(
+			'line_items' => array(
+				array(
+					'product_id'   => $parent->get_id(),
+					'variation_id' => $variation->get_id(),
+					'meta_data'    => array(
+						array( 'key' => 'wrong-case', 'value' => '', 'display_key' => 'Size', 'display_value' => 'small' ),
+						array( 'key' => 'empty-choice', 'value' => '', 'display_key' => 'Fabric', 'display_value' => '' ),
+						array(
+							'key'           => 'size',
+							'value'         => '',
+							'display_key'   => 'size',
+							'display_value' => 'large',
+						),
+						array(
+							'key'           => 'Fabric',
+							'value'         => '',
+							'display_key'   => 'Fabric',
+							'display_value' => 'Cotton',
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_create( $payload );
+
+		// Assert. The recovered entries are appended in the variation-attribute
+		// iteration order, which WordPress does not guarantee — compare as a
+		// key-sorted set, not positionally.
+		$actual   = $forwarded['line_items'][0]['meta_data'];
+		$expected = array(
+			array( 'key' => 'wrong-case', 'value' => '' ),
+			array( 'key' => 'empty-choice', 'value' => '' ),
+			array( 'key' => 'size', 'value' => '' ),
+			array( 'key' => 'Fabric', 'value' => '' ),
+			array( 'key' => 'pa_size', 'value' => 'large' ),
+			array( 'key' => 'fabric', 'value' => 'Cotton' ),
+		);
+		$by_key = static function ( array $a, array $b ): int {
+			return strcmp( (string) ( $a['key'] ?? '' ), (string) ( $b['key'] ?? '' ) );
+		};
+		usort( $actual, $by_key );
+		usort( $expected, $by_key );
+		$this->assertEquals( $expected, $actual );
+	}
+
+	/**
+	 * Recovered attributes do not prevent display-only fields from being stripped.
+	 */
+	public function test_for_create_with_recovered_attribute_still_strips_display_fields(): void {
+		// Arrange.
+		list( $parent, $variation ) = $this->any_variation_product();
+		$payload                    = array(
+			'line_items' => array(
+				array(
+					'product_id'   => $parent->get_id(),
+					'variation_id' => $variation->get_id(),
+					'meta_data'    => array(
+						array(
+							'key'           => 'size',
+							'value'         => '',
+							'display_key'   => 'size',
+							'display_value' => 'large',
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_create( $payload );
+
+		// Assert.
+		foreach ( $forwarded['line_items'][0]['meta_data'] as $meta ) {
+			$this->assertArrayNotHasKey( 'display_key', $meta );
+			$this->assertArrayNotHasKey( 'display_value', $meta );
+		}
+	}
+
+	/**
+	 * A real attribute key already present in posted meta remains authoritative.
+	 */
+	public function test_for_create_with_real_any_variation_key_does_not_add_a_duplicate(): void {
+		// Arrange.
+		list( $parent, $variation ) = $this->any_variation_product();
+		$payload                    = array(
+			'line_items' => array(
+				array(
+					'product_id'   => $parent->get_id(),
+					'variation_id' => $variation->get_id(),
+					'meta_data'    => array(
+						array( 'key' => 'pa_size', 'value' => 'small' ),
+						array(
+							'key'           => 'size',
+							'value'         => '',
+							'display_key'   => 'size',
+							'display_value' => 'large',
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_create( $payload );
+
+		// Assert.
+		$this->assertCount(
+			1,
+			array_filter(
+				$forwarded['line_items'][0]['meta_data'],
+				static function ( array $meta ): bool {
+					return 'pa_size' === ( $meta['key'] ?? null );
+				}
+			)
+		);
+		$this->assertEquals( 'small', $forwarded['line_items'][0]['meta_data'][0]['value'] );
+	}
+
+	/**
+	 * Display fields on a non-variation line are stripped without recovering meta.
+	 */
+	public function test_for_create_with_non_variation_line_does_not_recover_attributes(): void {
+		// Arrange.
+		$product = ProductHelper::create_simple_product();
+		$payload = array(
+			'line_items' => array(
+				array(
+					'product_id' => $product->get_id(),
+					'meta_data'  => array(
+						array(
+							'key'           => 'size',
+							'value'         => '',
+							'display_key'   => 'size',
+							'display_value' => 'large',
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_create( $payload );
+
+		// Assert.
+		$this->assertEquals(
+			array( array( 'key' => 'size', 'value' => '' ) ),
+			$forwarded['line_items'][0]['meta_data']
+		);
+	}
+
+	/**
 	 * A misc line forwards the non-colliding sentinel sku and carries its typed
 	 * sku as `_sku` item meta.
 	 */
@@ -340,5 +500,36 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 		$item->add_meta_data( '_woocommerce_pos_uuid', $uuid, true );
 
 		return $item;
+	}
+
+	/**
+	 * Build a variation whose taxonomy and custom attributes both accept any value.
+	 *
+	 * @return array{0: \WC_Product_Variable, 1: \WC_Product_Variation}
+	 */
+	private function any_variation_product(): array {
+		$parent = ProductHelper::create_variation_product();
+
+		$fabric = new \WC_Product_Attribute();
+		$fabric->set_name( 'Fabric' );
+		$fabric->set_options( array( 'Cotton', 'Wool' ) );
+		$fabric->set_visible( true );
+		$fabric->set_variation( true );
+
+		$attributes   = array_values( $parent->get_attributes() );
+		$attributes[] = $fabric;
+		$parent->set_attributes( $attributes );
+		$parent->save();
+
+		$variation = wc_get_product( $parent->get_children()[0] );
+		$variation->set_attributes(
+			array(
+				'pa_size' => '',
+				'fabric'  => '',
+			)
+		);
+		$variation->save();
+
+		return array( $parent, $variation );
 	}
 }
