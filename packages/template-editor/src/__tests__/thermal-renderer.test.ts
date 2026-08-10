@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { renderThermalPreview } from '@wcpos/thermal-utils';
+import { generateBarcodeSvg, renderThermalPreview } from '@wcpos/thermal-utils';
+
+describe('barcode SVG generation', () => {
+	it('uses QR defaults for normalized QR types', () => {
+		const html = generateBarcodeSvg('https://example.test/pay', { type: ' QRCODE ' });
+
+		expect(html).toContain('data-barcode-kind="qrcode"');
+	});
+});
 
 describe('thermal renderer star columns', () => {
 	it('allocates width="*" columns from remaining receipt columns', () => {

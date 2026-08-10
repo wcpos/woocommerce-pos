@@ -43,7 +43,10 @@ const BARCODE_SPECS: Record<string, BarcodeSpec> = {
 	ean8: { bcid: 'ean8', encode: (opts) => ean8(opts, drawingSVG()) },
 	upca: { bcid: 'upca', encode: (opts) => upca(opts, drawingSVG()) },
 	upce: { bcid: 'upce', encode: (opts) => upce(opts, drawingSVG()) },
-	codabar: { bcid: 'rationalizedCodabar', encode: (opts) => rationalizedCodabar(opts, drawingSVG()) },
+	codabar: {
+		bcid: 'rationalizedCodabar',
+		encode: (opts) => rationalizedCodabar(opts, drawingSVG()),
+	},
 	itf: { bcid: 'interleaved2of5', encode: (opts) => interleaved2of5(opts, drawingSVG()) },
 	qr: { bcid: 'qrcode', encode: (opts) => qrcode(opts, drawingSVG()) },
 	qrcode: { bcid: 'qrcode', encode: (opts) => qrcode(opts, drawingSVG()) },
@@ -107,11 +110,15 @@ function renderBarcodeError(kind: 'barcode' | 'qrcode', barcodeType: string, tex
 }
 
 export function generateBarcodeSvg(value: string, options: BarcodeOptions = {}): string {
-	const { type = 'qr', scale = 3, height = 10, kind = type === 'qr' || type === 'qrcode' ? 'qrcode' : 'barcode', paperWidthChars } = options;
+	const { type = 'qr', scale = 3, height = 10, kind: requestedKind, paperWidthChars } = options;
+	const normalizedType = type.trim().toLowerCase();
+	const kind =
+		requestedKind ??
+		(normalizedType === 'qr' || normalizedType === 'qrcode' ? 'qrcode' : 'barcode');
 	const text = value.trim();
 	if (!text) return '';
 
-	const spec = BARCODE_SPECS[type.trim().toLowerCase()] ?? BARCODE_SPECS.code128;
+	const spec = BARCODE_SPECS[normalizedType] ?? BARCODE_SPECS.code128;
 	const isQr = spec.bcid === 'qrcode';
 
 	try {
