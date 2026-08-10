@@ -458,6 +458,18 @@ class Write_Controller extends WP_REST_Controller {
 				? $m['payload']['meta_data']
 				: array();
 			$create_till_meta = Pos_Order_Audit::till_meta_from_payload( $payload_meta );
+			// The server-derived cashier attribution must ALSO be visible inside the
+			// forwarded create, not only in the post-create stamp: an offline-completed
+			// sale arrives as ONE create carrying its final status / set_paid, so
+			// woocommerce_payment_complete and the status/email hooks fire DURING the
+			// forward — Receipt_Snapshot_Store persists its immutable fiscal snapshot
+			// there (and refuses to overwrite), and Emails resolves the cashier
+			// recipient there. v1 stamped _pos_user in woocommerce_before_order_object_save
+			// (before those hooks); without this, such orders permanently snapshot
+			// cashier 0. Values mirror order_audit_meta(): the AUTHENTICATED user,
+			// never the payload (which was stripped above).
+			$create_till_meta['_pos_user']         = (string) get_current_user_id();
+			$create_till_meta['_pos_user_created'] = (string) get_current_user_id();
 		}
 		if ( 'user' === ( $meta['id_type'] ?? '' ) && is_array( $forward_payload ) ) {
 			// tax_ids is a POS-owned field: wc/v3 would silently ignore it, and the
@@ -847,7 +859,56 @@ class Write_Controller extends WP_REST_Controller {
 		$route = 'variations' === $collection
 			? $meta['route'] . '/' . $variation_parent_id . '/variations/' . $id
 			: $meta['route'] . '/' . $id;
-		$response = $this->forward( 'PUT', $route, $update_payload );
+		// Fill-if-absent audit meta must be on the order DURING the forward, not only
+		// in the post-forward stamps: an update that completes payment (set_paid /
+		// final status) fires woocommerce_payment_complete inside wc/v3 — where
+		// Receipt_Snapshot_Store persists its immutable fiscal snapshot (cashier,
+		// cash tendered/change) and refuses to overwrite it later. v1 filled missing
+		// _pos_user in woocommerce_before_order_object_save, ahead of those hooks.
+		// Semantics mirror the post-forward stamps exactly: cashier attribution only
+		// when MISSING (reassignment stays post-forward with its own checks), cash
+		// till values only when MISSING (write-once at the sale). In-memory only —
+		// the durable write remains the post-forward stamp.
+		$update_fill_meta = array();
+		if ( 'order' === ( $meta['id_type'] ?? '' ) && is_array( $m['payload'] ) ) {
+			$existing_order = wc_get_order( (int) $id );
+			if ( $existing_order ) {
+				if ( '' === (string) $existing_order->get_meta( '_pos_user' ) ) {
+					$update_fill_meta['_pos_user'] = (string) get_current_user_id();
+				}
+				if ( '' === (string) $existing_order->get_meta( '_pos_user_created' ) ) {
+					$update_fill_meta['_pos_user_created'] = (string) get_current_user_id();
+				}
+				$payload_meta = ( isset( $m['payload']['meta_data'] ) && is_array( $m['payload']['meta_data'] ) )
+					? $m['payload']['meta_data']
+					: array();
+				$payload_till = Pos_Order_Audit::till_meta_from_payload( $payload_meta );
+				foreach ( Pos_Order_Audit::cash_meta_keys() as $cash_key ) {
+					if ( isset( $payload_till[ $cash_key ] )
+						&& '' === (string) $existing_order->get_meta( $cash_key ) ) {
+						$update_fill_meta[ $cash_key ] = $payload_till[ $cash_key ];
+					}
+				}
+			}
+		}
+		$update_fill_filter = static function ( $order ) use ( $update_fill_meta ) {
+			if ( $order instanceof \WC_Order && ! is_wp_error( $order ) ) {
+				foreach ( $update_fill_meta as $fill_key => $fill_value ) {
+					$order->update_meta_data( $fill_key, $fill_value );
+				}
+			}
+			return $order;
+		};
+		if ( array() !== $update_fill_meta ) {
+			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $update_fill_filter, 10, 1 );
+		}
+		try {
+			$response = $this->forward( 'PUT', $route, $update_payload );
+		} finally {
+			if ( array() !== $update_fill_meta ) {
+				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $update_fill_filter, 10 );
+			}
+		}
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
