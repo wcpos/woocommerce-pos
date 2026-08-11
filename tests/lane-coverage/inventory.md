@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 2992
+- Cases: 3039
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 804, v2 455, wc3 240, wp2 1, unresolved 402, pure unit 1647
+- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 501, wc3 276, wp2 1, unresolved 402, pure unit 1648
 - Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -883,26 +883,26 @@ These tests may be structurally incapable of failing because they install or stu
 | asserted-stubbed-response | tests/includes/Sync/Test_Write_Controller.php:2450 | Test Write Controller | tests/includes/Sync/Test_Write_Controller.php:test_term_id_grace_applies_to_update_but_not_delete |
 | asserted-stubbed-response | tests/includes/Sync/Test_Write_Controller.php:2807 | Test Write Controller | tests/includes/Sync/Test_Write_Controller.php:test_create_identity_persistence_failure_poison_retries_stamp_original_without_reforwarding |
 | asserted-stubbed-response | tests/includes/Sync/Test_Write_Controller.php:2919 | Test Write Controller | tests/includes/Sync/Test_Write_Controller.php:test_finalize_failure_returns_500_keeps_reservation_and_replay_finalizes_without_reapplying |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_batch_create_coupon_with_string_meta_data_entry_creates_coupon |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_batch_update_coupon_with_string_meta_data_entry_updates_coupon |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_fields |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_ids |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_ids_with_exclude_filter |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_ids_with_include_filter |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_coupons |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_for_cashier |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_single_coupon |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_with_excludes |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_with_includes |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_orderby_code_asc |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_orderby_code_desc |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_patch_updates_date_modified_gmt |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_response_contains_uuid_meta_data |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_response_uses_shared_uuid_duplicate_resolution |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_response_with_corrupt_stored_uuid_regenerates_uuid |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_namespace_property |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_register_routes |
-| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:543 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_rest_base |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_batch_create_coupon_with_string_meta_data_entry_creates_coupon |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_batch_update_coupon_with_string_meta_data_entry_updates_coupon |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_fields |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_ids |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_ids_with_exclude_filter |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_all_ids_with_include_filter |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_coupons |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_for_cashier |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_single_coupon |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_with_excludes |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_api_get_with_includes |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_orderby_code_asc |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_orderby_code_desc |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_patch_updates_date_modified_gmt |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_response_contains_uuid_meta_data |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_response_uses_shared_uuid_duplicate_resolution |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_coupon_response_with_corrupt_stored_uuid_regenerates_uuid |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_namespace_property |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_register_routes |
+| self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_rest_base |
 | self-installed-hook | tests/includes/Admin/Templates/Test_Single_Template_Save.php:645 | Template save from wp-admin | tests/includes/Admin/Templates/Test_Single_Template_Save.php:test_copy_template_preserves_content |
 | self-installed-hook | tests/includes/Sync/Test_Change_Log_Purge.php:257 | Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event |
 | self-installed-hook | tests/includes/Sync/Test_Change_Log_Purge.php:259 | Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event |
@@ -1568,6 +1568,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Catalog Proxy Barcode | tests/includes/API/V2/Test_Catalog_Proxy_Barcode.php:test_product_push_updates_custom_barcode_read_and_resolution | v2 | unreviewed | — |
 | Test Catalog Proxy Barcode | tests/includes/API/V2/Test_Catalog_Proxy_Barcode.php:test_product_push_updates_gtin_barcode_and_resolution | v2 | unreviewed | — |
 | Test Catalog Proxy Barcode | tests/includes/API/V2/Test_Catalog_Proxy_Barcode.php:test_variation_push_updates_custom_barcode_read_and_resolution | v2 | unreviewed | — |
+| Test Catalog Proxy Barcode | tests/includes/API/V2/Test_Catalog_Proxy_Barcode.php:test_variation_push_updates_gtin_barcode_and_resolution | v2 | unreviewed | — |
 | Test Catalog Proxy Brands | tests/includes/API/V2/Test_Catalog_Proxy_Brands.php:test_include_and_exclude_filter_brands | v2 | unreviewed | — |
 | Test Catalog Proxy Brands | tests/includes/API/V2/Test_Catalog_Proxy_Brands.php:test_list_contains_fixtures_with_stable_uuid_meta_data | v2 | unreviewed | — |
 | Test Catalog Proxy Brands | tests/includes/API/V2/Test_Catalog_Proxy_Brands.php:test_search_matches_brand_name | v2 | unreviewed | — |
@@ -1884,6 +1885,14 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Install Gallery I18n | tests/includes/Templates/Test_Install_Gallery_I18n.php:test_translate_interpolated_phrases_preserves_mustache_variables | unit | unreviewed | — |
 | Test Install Gallery I18n | tests/includes/Templates/Test_Install_Gallery_I18n.php:test_translate_interpolated_phrases_replaces_known_phrases | unit | unreviewed | — |
 | Test Integrity Digest HPOS Untrash | tests/includes/Sync/Test_Integrity_Digest_HPOS_Untrash.php:test_cot_order_untrash_recreates_the_order_digest | unit | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_customer_scan_echoes_collection_and_returns_both_aggregate_sides | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_customer_scan_skips_the_product_empty_digest_rebuild | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_order_scan_detects_a_direct_hpos_sql_delete | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_order_scan_reflects_orders_and_detects_a_direct_sql_delete | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_product_publish_scan_completion_includes_orphaned_digest_id | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_product_publish_scan_matches_bucket_listing_membership | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_rejects_an_unsupported_collection | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_rejects_order_collection_drill_down | v2 | unreviewed | — |
 | Test Integrity Self Heal | tests/includes/Sync/Test_Integrity_Self_Heal.php:test_empty_stored_table_returns_no_aggregate_mismatches_and_schedules_rebuild | v2 | unreviewed | — |
 | Test Integrity Self Heal | tests/includes/Sync/Test_Integrity_Self_Heal.php:test_empty_stored_table_returns_no_drill_down_mismatches_while_rebuilding | v2 | unreviewed | — |
 | Test Integrity Self Heal | tests/includes/Sync/Test_Integrity_Self_Heal.php:test_healthy_stored_table_preserves_aggregate_response | v2 | unreviewed | — |
@@ -2033,6 +2042,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_legacy_revision_is_invariant_to_payment_links | unit | unreviewed | — |
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_legacy_revision_is_invariant_to_v2_read_augmentations | unit | unreviewed | — |
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_revision_is_invariant_to_payment_links | unit | unreviewed | — |
+| Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_revision_is_invariant_to_transient_trash_meta | unit | unreviewed | — |
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_revision_is_invariant_to_uuid_identity_meta | unit | unreviewed | — |
 | Test Order Write Contract HPOS | tests/includes/Sync/Test_Order_Write_Contract_HPOS.php:test_hpos_order_create_update_delete_round_trip_through_write_contract | v2 | unreviewed | — |
 | Test Order Write Payload | tests/includes/Sync/Test_Order_Write_Payload.php:test_for_create_recovers_any_variation_attributes_from_display_fields | unit | unreviewed | — |
@@ -2120,6 +2130,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_emits_typed_meta_and_revision_of_the_normalized_payload | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_update_then_delete_in_one_page_coalesces_to_a_tombstone | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller HPOS | tests/includes/Sync/Test_Orders_Controller_HPOS.php:test_hpos_pull_serializes_order_from_orders_table | v2 | unreviewed | — |
+| Test Orders Controller HPOS | tests/includes/Sync/Test_Orders_Controller_HPOS.php:test_hpos_pull_stamps_the_stored_digest_through_init_wiring | v2 | unreviewed | — |
 | Test Orders Coupon Discount | tests/includes/Test_Orders_Coupon_Discount.php:test_coupon_excluded_product_categories_rejects_misc_product | unit | unreviewed | — |
 | Test Orders Coupon Discount | tests/includes/Test_Orders_Coupon_Discount.php:test_coupon_excluded_product_categories_rejects_misc_product_via_parent_category | unit | unreviewed | — |
 | Test Orders Coupon Discount | tests/includes/Test_Orders_Coupon_Discount.php:test_coupon_product_categories_applies_to_misc_product | unit | unreviewed | — |
@@ -2463,6 +2474,10 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Rest Dispatch Coupon Lines | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Lines.php:test_update_with_a_codeless_coupon_line_surfaces_wc_validation | unresolved, wc3 | unreviewed | — |
 | Test Rest Dispatch Coupon Lines | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Lines.php:test_update_with_acked_coupon_line_ids_succeeds_and_preserves_the_line | unresolved, wc3 | unreviewed | — |
 | Test Rest Dispatch Coupon Lines | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Lines.php:test_update_with_same_codes_and_no_ids_keeps_stable_line_ids | unresolved, wc3 | unreviewed | — |
+| Test Rest Dispatch Coupon Modified Date | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php:test_admin_side_amount_edit_reaches_the_incremental_poll | v2, wc3 | unreviewed | — |
+| Test Rest Dispatch Coupon Modified Date | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php:test_amount_only_push_advances_date_modified_for_the_incremental_poll | v2, wc3 | unreviewed | — |
+| Test Rest Dispatch Coupon Modified Date | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php:test_code_change_push_remains_visible_to_the_incremental_poll | v2, wc3 | unreviewed | — |
+| Test Rest Dispatch Coupon Modified Date | tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php:test_the_touch_listener_is_registered_unconditionally_by_init | v2, wc3 | unreviewed | — |
 | Test Rest Dispatch Customer Tax Ids | tests/includes/Sync/Test_Rest_Dispatch_Customer_Tax_Ids.php:test_customer_create_announces_tax_ids_after_persistence | unresolved, wc3 | unreviewed | — |
 | Test Rest Dispatch Customer Tax Ids | tests/includes/Sync/Test_Rest_Dispatch_Customer_Tax_Ids.php:test_customer_create_persists_tax_ids_and_acks_them | unresolved, wc3 | unreviewed | — |
 | Test Rest Dispatch Customer Tax Ids | tests/includes/Sync/Test_Rest_Dispatch_Customer_Tax_Ids.php:test_customer_create_rejects_malformed_tax_ids_before_the_forward | unresolved, wc3 | unreviewed | — |
@@ -2721,6 +2736,38 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Store Logo Resolver | tests/includes/Services/Test_Store_Logo_Resolver.php:test_resolve_returns_null_when_no_logos | unit | unreviewed | — |
 | Test Store Logo Resolver | tests/includes/Services/Test_Store_Logo_Resolver.php:test_resolve_returns_null_when_store_opts_out | unit | unreviewed | — |
 | Test Store Logo Resolver | tests/includes/Services/Test_Store_Logo_Resolver.php:test_resolve_returns_site_logo_when_not_opted_out | unit | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_new_lane_is_visible_after_reset_inside_a_lane | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_product_delete_forwards_the_scope_to_the_inner_wc_v3_write | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_product_push_does_not_accept_scope_from_the_payload | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_product_push_forwards_no_scope_when_the_till_sends_none | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_product_push_forwards_the_scope_to_the_inner_wc_v3_write | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_scoped_v2_request_latches_the_scope_for_the_dispatch | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_stock_wc_v3_request_is_not_the_v2_lane | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_a_v2_request_marks_the_lane | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_an_unscoped_v2_request_still_marks_the_lane | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_reset_clears_the_lane_marker | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_does_not_fall_back_to_the_store_id_param_for_v2 | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_does_not_fall_back_to_the_store_id_param_when_v2_header_is_absent | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_falls_back_to_the_v1_store_id_param | v1, v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_ignores_an_absent_header_and_param | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_prefers_the_header_over_the_param | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_reads_a_positive_store_from_the_header | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_resolve_rejects_an_unusable_scope | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_set_current_normalizes_the_single_store_sentinel_to_unknown | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_stamp_leaves_an_unscoped_request_untouched | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_stamp_never_overrides_a_scope_the_caller_set | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_stamp_republishes_the_scope_as_the_v1_param | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_catalog_proxy_forwards_no_scope_when_the_till_sends_none | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_catalog_proxy_forwards_the_scope_to_the_inner_wc_v3_read | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_lane_marker_nests | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_lane_marker_unwinds_after_the_operation | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_lane_marker_unwinds_when_the_operation_throws | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_product_serializer_carries_no_scope_when_unscoped | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_product_serializer_carries_the_scope_into_serialization | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_product_serializer_marks_the_lane | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_store_scope_header_survives_cors_preflight | v2, wc3 | unreviewed | — |
+| Test Store Scope | tests/includes/Sync/Test_Store_Scope.php:test_the_write_acknowledgement_is_read_back_under_the_scope | v2, wc3 | unreviewed | — |
 | Test Storefront Receipts | tests/includes/Test_Storefront_Receipts.php:test_my_account_actions_default_statuses_add_completed_and_omit_pending | unit | unreviewed | — |
 | Test Storefront Receipts | tests/includes/Test_Storefront_Receipts.php:test_my_account_button_disabled_by_default_setting_omits_action | unit | unreviewed | — |
 | Test Storefront Receipts | tests/includes/Test_Storefront_Receipts.php:test_my_account_button_disabled_by_filter_omits_action | unit | unreviewed | — |

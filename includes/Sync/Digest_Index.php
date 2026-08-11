@@ -282,14 +282,36 @@ final class Digest_Index {
 	 * the last live post still get scanned before the walk is called complete.
 	 *
 	 * @param array $range { Bucket window. @type int $bucket_size, @type int $start, @type int $end }
-	 *
 	 * @return array{buckets: array<int, array<string, mixed>>, max_id: int}
 	 */
-	public function bucket_aggregates( array $range ): array {
+	public function bucket_aggregates( array $range, string $collection = 'products', array $filters = array() ): array {
 		global $wpdb;
 		$bucket_size  = max( 1, (int) ( $range['bucket_size'] ?? 1 ) );
 		$window_start = max( 0, (int) ( $range['start'] ?? 0 ) );
 		$window_end   = max( 0, (int) ( $range['end'] ?? 0 ) );
+		$publish      = 'products' === $collection && 'publish' === ( $filters['status'] ?? '' );
+		$object_types = self::OBJECT_TYPES_SQL;
+		$current_sql  = $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
+		$max_sql      = $this->row_digest_select_sql();
+		if ( 'customers' === $collection ) {
+			$object_types = "('customer')";
+			$current_sql  = $this->customer_digest_select_sql( 'u.ID >= %d AND u.ID < %d' );
+			$max_sql      = $this->customer_digest_select_sql();
+		} elseif ( 'orders' === $collection ) {
+			$object_types = "('order')";
+			$current_sql  = $this->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
+			$max_sql      = $this->order_digest_select_sql();
+		}
+		$current_scope = $publish ? $this->product_servable_predicate_sql( 't.id', true ) : array(
+			'sql' => '',
+			'args' => array(),
+		);
+		$stored_scope  = $publish ? $this->product_servable_predicate_sql( 'd.object_id', true ) : array(
+			'sql' => '',
+			'args' => array(),
+		);
+		$current_join  = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = t.id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
+		$stored_join   = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = d.object_id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
 
 		// Current side: one SQL pass — per-row canonical digests aggregated
 		// per bucket inside the DB engine. Raw rows are digested for
@@ -300,11 +322,12 @@ final class Digest_Index {
 		$current_rows = $wpdb->get_results(
 			$wpdb->prepare(
 				'SELECT FLOOR(t.id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(t.crc) AS digest'
-				. ' FROM (' . $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' ) . ') t'
+				. ' FROM (' . $current_sql . ') t' . $current_join . ( '' === $current_scope['sql'] ? '' : ' WHERE ' . $current_scope['sql'] )
 				. ' GROUP BY bucket ORDER BY bucket',
 				$bucket_size,
 				$window_start,
-				$window_end
+				$window_end,
+				...$current_scope['args']
 			),
 			ARRAY_A
 		);
@@ -312,14 +335,15 @@ final class Digest_Index {
 		// Stored side: one SQL pass over the hook-maintained digest table.
 		$stored_rows = $wpdb->get_results(
 			$wpdb->prepare(
-				'SELECT FLOOR(object_id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(digest) AS digest'
-				. ' FROM ' . $this->table_name()
-				. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL
-				. ' AND object_id >= %d AND object_id < %d'
+				'SELECT FLOOR(d.object_id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(d.digest) AS digest'
+				. ' FROM ' . $this->table_name() . ' d' . $stored_join
+				. ' WHERE d.object_type IN ' . $object_types
+				. ' AND d.object_id >= %d AND d.object_id < %d' . ( '' === $stored_scope['sql'] ? '' : ' AND ' . $stored_scope['sql'] )
 				. ' GROUP BY bucket ORDER BY bucket',
 				$bucket_size,
 				$window_start,
-				$window_end
+				$window_end,
+				...$stored_scope['args']
 			),
 			ARRAY_A
 		);
@@ -353,13 +377,25 @@ final class Digest_Index {
 			);
 		}
 
-		$max_id = (int) $wpdb->get_var(
+		$max_query =
 			'SELECT GREATEST('
 			. "COALESCE((SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_type IN " . self::PRODUCT_POST_TYPES_SQL
 			. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . '), 0),'
 			. ' COALESCE((SELECT MAX(object_id) FROM ' . $this->table_name()
-			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL . '), 0))'
-		);
+			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL . '), 0))';
+		$max_args = array();
+		if ( 'products' !== $collection || $publish ) {
+			$live_scope = $publish ? $this->product_servable_predicate_sql( 'live.id', true ) : array(
+				'sql' => '',
+				'args' => array(),
+			);
+			$live_join  = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = live.id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
+			$max_query  = 'SELECT GREATEST(COALESCE((SELECT MAX(live.id) FROM (' . $max_sql . ') live' . $live_join . ( '' === $live_scope['sql'] ? '' : ' WHERE ' . $live_scope['sql'] ) . '), 0),'
+				. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d'
+				. ' WHERE d.object_type IN ' . $object_types . '), 0))';
+			$max_args   = $live_scope['args'];
+		}
+		$max_id = (int) $wpdb->get_var( empty( $max_args ) ? $max_query : $wpdb->prepare( $max_query, ...$max_args ) );
 
 		return array(
 			'buckets' => $buckets,
@@ -465,14 +501,10 @@ final class Digest_Index {
 				$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id"
 					. " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent"
 					. " AND catalog_post.post_type = 'product_variation'";
-				$servable_filter = ' WHERE ' . $this->published_product_predicate_sql( 'catalog_post', 'parent_product' );
 			}
-			$hidden = $this->pos_hidden_product_ids();
-			if ( array() !== $hidden ) {
-				$servable_filter .= ( '' === $servable_filter ? ' WHERE ' : ' AND ' )
-					. 'cur.id NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
-				$servable_args    = $hidden;
-			}
+			$servable        = $this->product_servable_predicate_sql( 'cur.id', 'publish' === ( $filters['status'] ?? '' ) );
+			$servable_filter = '' === $servable['sql'] ? '' : ' WHERE ' . $servable['sql'];
+			$servable_args   = $servable['args'];
 		}
 
 		// Same-formula invariant + GROUP_CONCAT stability, exactly as the scan's current side.
@@ -556,6 +588,18 @@ final class Digest_Index {
 		return "(({$post_alias}.post_type = 'product' AND {$post_alias}.post_status = 'publish')"
 			. " OR ({$post_alias}.post_type = 'product_variation' AND {$parent_alias}.post_type = 'product'"
 			. " AND {$parent_alias}.post_status = 'publish'))";
+	}
+
+	private function product_servable_predicate_sql( string $id_expr, bool $publish ): array {
+		$predicates = $publish ? array( $this->published_product_predicate_sql( 'catalog_post', 'parent_product' ) ) : array();
+		$hidden     = $this->pos_hidden_product_ids();
+		if ( array() !== $hidden ) {
+			$predicates[] = $id_expr . ' NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
+		}
+		return array(
+			'sql' => implode( ' AND ', $predicates ),
+			'args' => $hidden,
+		);
 	}
 
 	/**

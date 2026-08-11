@@ -311,7 +311,7 @@ final class Order_Serializer {
 		// tax_ids is a read-time decoration (Tax_Id_Reader) that wc/v3's own
 		// serialization never carries — exclude it so pull, proxy, and write-ack
 		// revisions agree with a bare wc/v3 read of the same order.
-		unset( $payload['tax_ids'] );
+		unset( $payload['tax_ids'], $payload['_rxdb_digest'] );
 
 		// HPOS removes these internal fields only after the restored order's save
 		// hooks run. Exclude them so that save and the completed restore hash alike.
@@ -399,7 +399,7 @@ final class Order_Serializer {
 		// injected) and compares against a hash the client computed BEFORE this
 		// deployment — hashing links here would reject every unchanged pre-upgrade
 		// order with a false 409.
-		unset( $payload['links'], $payload['tax_ids'] );
+		unset( $payload['links'], $payload['tax_ids'], $payload['_rxdb_digest'] );
 		$payload = self::strip_item_identity_meta( $payload );
 		foreach ( $payload['line_items'] ?? array() as $index => $line_item ) {
 			if ( isset( $line_item['image']['id'] ) ) {
