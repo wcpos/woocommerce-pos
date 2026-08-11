@@ -162,6 +162,11 @@ final class Orders_Controller extends WP_REST_Controller {
 			);
 		}
 
+		$payloads = (array) apply_filters( 'woocommerce_pos_sync_order_pull_payloads', array_column( $documents, 'payload' ), 'orders', $request );
+		foreach ( $payloads as $index => $payload ) {
+			$documents[ $index ]['payload'] = $payload;
+		}
+
 		// Journal epoch + head (F8): the client resyncs from zero when the epoch it stored differs
 		// (a new sequence generation) or when its checkpoint sequence exceeds the head (the
 		// AUTO_INCREMENT space reset beneath it). Cheap: an autoloaded option + a MAX(sequence).

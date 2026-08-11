@@ -368,14 +368,11 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * `woocommerce_pos_sync_proxy_response` filter (orders) — the order analogue of {@see stamp_proxy_customer_digests}
+	 * `woocommerce_pos_sync_order_pull_payloads` filter — the order analogue of {@see stamp_proxy_customer_digests}
 	 * (ADR 0015, Leg-3 phase 7). Attach each served order's stored 64-bit digest as `_rxdb_digest` so the
 	 * client seeds its existence manifest for the order id-space from the normal /orders pull.
 	 */
 	public static function stamp_proxy_order_digests( $data, $resource = '', $request = null ) {
-		if ( $resource instanceof \WC_Order ) {
-			return self::stamp_proxy_order_digests( array( $data ), 'orders', $request )[0];
-		}
 		if ( 'orders' !== $resource || ! is_array( $data ) ) {
 			return $data;
 		}

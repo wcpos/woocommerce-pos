@@ -54,7 +54,7 @@ class Init {
 				// of the augmentation pipeline because it also serves the order lane.
 				\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
 				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10, 3 );
+				add_filter( 'woocommerce_pos_sync_order_pull_payloads', array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10, 3 );
 				// ONE seam for both product read lanes: the batch catalog proxy and the
 				// per-object serializer. Every stamper is declared once inside; both
 				// public filter names stay live as projections of it.

@@ -38,7 +38,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 	 * Restore posts storage and the sync feature flag.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_sync_serialized_order', array( Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10 );
+		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10 );
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -55,11 +55,25 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 		update_option( Api::SCHEMA_OPTION, Api::SCHEMA_VERSION, false );
 		new Init();
 
-		$order  = OrderHelper::create_order();
-		$digest = new Integrity_Digest();
-		$digest->upsert_order_digest( $order->get_id() );
-		$stored = $digest->read_order_digests( array( $order->get_id() ) )[ $order->get_id() ];
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'test:digest-pull', false );
+		$orders    = array( OrderHelper::create_order(), OrderHelper::create_order() );
+		$order_ids = array();
+		$digest    = new Integrity_Digest();
+		$index     = new Sync_Index();
+		foreach ( $orders as $order ) {
+			$order_ids[] = $order->get_id();
+			$digest->upsert_order_digest( $order->get_id() );
+			$index->record_order_change( $order->get_id(), 'test:digest-pull', false );
+		}
+		$stored         = $digest->read_order_digests( $order_ids );
+		$digest_queries = 0;
+		$digest_table   = $digest->table_name();
+		$count_digests  = static function ( string $query ) use ( &$digest_queries, $digest_table ): string {
+			if ( false !== strpos( $query, "SELECT object_id, digest FROM {$digest_table}" ) && false !== strpos( $query, "object_type = 'order'" ) ) {
+				++$digest_queries;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count_digests );
 
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders/pull' );
 		$request->set_query_params(
@@ -70,19 +84,28 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 				'sequence'       => 0,
 			)
 		);
-		$response = $this->server->dispatch( $request );
-		$document = $response->get_data()['documents'][0];
-		$payload  = $document['payload'];
-		$bare     = $payload;
-		unset( $bare['_rxdb_digest'] );
+		try {
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_filter( 'query', $count_digests );
+		}
+		$documents = $response->get_data()['documents'];
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertIsString( $payload['_rxdb_digest'] );
-		$this->assertMatchesRegularExpression( '/^\d+$/', $payload['_rxdb_digest'] );
-		$this->assertSame( $stored, $payload['_rxdb_digest'] );
-		$this->assertSame( Order_Serializer::canonical_revision( $bare ), $document['sync']['revision'] );
-		$this->assertSame( Order_Serializer::canonical_revision( $bare ), Order_Serializer::canonical_revision( $payload ) );
-		$this->assertSame( Order_Serializer::legacy_revision( $bare ), Order_Serializer::legacy_revision( $payload ) );
+		$this->assertCount( 2, $documents );
+		$this->assertSame( 1, $digest_queries, 'The pull page should preload all stored order digests in one query.' );
+		foreach ( $documents as $document ) {
+			$payload = $document['payload'];
+			$bare    = $payload;
+			unset( $bare['_rxdb_digest'] );
+
+			$this->assertIsString( $payload['_rxdb_digest'] );
+			$this->assertMatchesRegularExpression( '/^\d+$/', $payload['_rxdb_digest'] );
+			$this->assertSame( $stored[ $payload['id'] ], $payload['_rxdb_digest'] );
+			$this->assertSame( Order_Serializer::canonical_revision( $bare ), $document['sync']['revision'] );
+			$this->assertSame( Order_Serializer::canonical_revision( $bare ), Order_Serializer::canonical_revision( $payload ) );
+			$this->assertSame( Order_Serializer::legacy_revision( $bare ), Order_Serializer::legacy_revision( $payload ) );
+		}
 	}
 
 	/**
