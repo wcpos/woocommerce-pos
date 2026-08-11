@@ -373,10 +373,8 @@ final class Integrity_Digest {
 	 * client seeds its existence manifest for the order id-space from the normal /orders pull.
 	 */
 	public static function stamp_proxy_order_digests( $data, $resource = '', $request = null ) {
-		$single = $resource instanceof \WC_Order;
-		if ( $single ) {
-			$data     = array( $data );
-			$resource = 'orders';
+		if ( $resource instanceof \WC_Order ) {
+			return self::stamp_proxy_order_digests( array( $data ), 'orders', $request )[0];
 		}
 		if ( 'orders' !== $resource || ! is_array( $data ) ) {
 			return $data;
@@ -396,7 +394,7 @@ final class Integrity_Digest {
 				$data[ $index ]['_rxdb_digest'] = $digests[ (int) $order['id'] ];
 			}
 		}
-		return $single ? $data[0] : $data;
+		return $data;
 	}
 
 	/**

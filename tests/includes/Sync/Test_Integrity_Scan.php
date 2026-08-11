@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
@@ -22,6 +23,8 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
  * @covers \WCPOS\WooCommercePOS\Sync\Digest_Index
  */
 class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
+	use HPOSToggleTrait;
+
 	/**
 	 * Enable sync routes and isolate visibility/cron state.
 	 */
@@ -133,6 +136,40 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, $row['stored_count'] );
 		$this->assertSame( 0, $row['current_count'] );
 		$this->assertFalse( $row['match'] );
+	}
+
+	/**
+	 * HPOS order scans expose a digest whose authoritative row was deleted directly.
+	 */
+	public function test_order_scan_detects_a_direct_hpos_sql_delete(): void {
+		global $wpdb;
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->setup_cot();
+		$this->toggle_cot_feature_and_usage( true );
+
+		try {
+			$order    = OrderHelper::create_order();
+			$order_id = $order->get_id();
+			( new Integrity_Digest() )->upsert_order_digest( $order_id );
+
+			$before = $this->scan_id( 'orders', $order_id );
+			$row    = $before['changes'][0];
+			$this->assertSame( 1, $row['stored_count'] );
+			$this->assertSame( 1, $row['current_count'] );
+			$this->assertSame( $row['stored_digest'], $row['current_digest'] );
+
+			$wpdb->delete( $wpdb->prefix . 'wc_orders', array( 'id' => $order_id ), array( '%d' ) );
+
+			$after = $this->scan_id( 'orders', $order_id );
+			$row   = $after['changes'][0];
+			$this->assertSame( 1, $row['stored_count'] );
+			$this->assertSame( 0, $row['current_count'] );
+			$this->assertFalse( $row['match'] );
+		} finally {
+			$this->toggle_cot_feature_and_usage( false );
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
 	}
 
 	/**
@@ -270,5 +307,23 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		$legacy = $this->scan( 'products', $bucket_size, $after_id, $limit )->get_data()['changes'];
 		$this->assertGreaterThan( array_sum( array_column( $published_rows, 'current_count' ) ), array_sum( array_column( $legacy, 'current_count' ) ) );
 		$this->assertNotSame( array_column( $published_rows, 'current_digest', 'bucket' ), array_column( $legacy, 'current_digest', 'bucket' ) );
+	}
+
+	/**
+	 * A publish scan must reach an orphaned digest past the last servable product.
+	 */
+	public function test_product_publish_scan_completion_includes_orphaned_digest_id(): void {
+		global $wpdb;
+		$published = ProductHelper::create_simple_product();
+		$orphan    = ProductHelper::create_simple_product();
+		$digest    = new Integrity_Digest();
+		$digest->upsert_digest( $published->get_id() );
+		$digest->upsert_digest( $orphan->get_id() );
+		$wpdb->delete( $wpdb->posts, array( 'ID' => $orphan->get_id() ), array( '%d' ) );
+
+		$response = $this->scan( 'products', 1, $published->get_id() - 1, 1, 'publish' );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertFalse( $response->get_data()['complete'] );
 	}
 }

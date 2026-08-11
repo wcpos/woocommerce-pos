@@ -1,16 +1,16 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 2992,
+        "cases": 3039,
         "v1_only": 740,
         "unresolved": 70,
         "by_lane": {
-            "v1": 804,
-            "v2": 455,
-            "wc3": 240,
+            "v1": 805,
+            "v2": 501,
+            "wc3": 276,
             "wp2": 1,
             "unresolved": 402,
-            "unit": 1647
+            "unit": 1648
         },
         "warnings": {
             "self-installed-hook": 65,
@@ -3355,7 +3355,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3382,7 +3382,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3409,7 +3409,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3436,7 +3436,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3463,7 +3463,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3490,7 +3490,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3517,7 +3517,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3544,7 +3544,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3571,7 +3571,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3598,7 +3598,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3625,7 +3625,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3652,7 +3652,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3679,7 +3679,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3706,7 +3706,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3733,7 +3733,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3760,7 +3760,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3787,7 +3787,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3814,7 +3814,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3841,7 +3841,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -3866,7 +3866,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/API/Test_Coupons_Controller.php",
-                    "line": 543
+                    "line": 561
                 }
             ]
         },
@@ -17232,6 +17232,25 @@
             "file": "tests/includes/API/V2/Test_Catalog_Proxy_Barcode.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Barcode",
             "method": "test_variation_push_updates_custom_barcode_read_and_resolution",
+            "behavior": "Test Catalog Proxy Barcode",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Barcode::test_variation_push_updates_gtin_barcode_and_resolution",
+            "file": "tests/includes/API/V2/Test_Catalog_Proxy_Barcode.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Barcode",
+            "method": "test_variation_push_updates_gtin_barcode_and_resolution",
             "behavior": "Test Catalog Proxy Barcode",
             "own_lanes": [],
             "class_lanes": [
@@ -35136,6 +35155,164 @@
             ]
         },
         {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_customer_scan_echoes_collection_and_returns_both_aggregate_sides",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_customer_scan_echoes_collection_and_returns_both_aggregate_sides",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_customer_scan_skips_the_product_empty_digest_rebuild",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_customer_scan_skips_the_product_empty_digest_rebuild",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_order_scan_detects_a_direct_hpos_sql_delete",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_order_scan_detects_a_direct_hpos_sql_delete",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_order_scan_reflects_orders_and_detects_a_direct_sql_delete",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_order_scan_reflects_orders_and_detects_a_direct_sql_delete",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_product_publish_scan_completion_includes_orphaned_digest_id",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_product_publish_scan_completion_includes_orphaned_digest_id",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_product_publish_scan_matches_bucket_listing_membership",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_product_publish_scan_matches_bucket_listing_membership",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_scan_rejects_an_unsupported_collection",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_scan_rejects_an_unsupported_collection",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_scan_rejects_order_collection_drill_down",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_scan_rejects_order_collection_drill_down",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
             "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Self_Heal::test_empty_stored_table_returns_no_aggregate_mismatches_and_schedules_rebuild",
             "file": "tests/includes/Sync/Test_Integrity_Self_Heal.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Self_Heal",
@@ -36459,6 +36636,21 @@
             "warnings": []
         },
         {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Serializer::test_revision_is_invariant_to_transient_trash_meta",
+            "file": "tests/includes/Sync/Test_Order_Serializer.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Serializer",
+            "method": "test_revision_is_invariant_to_transient_trash_meta",
+            "behavior": "Test Order Serializer",
+            "own_lanes": [],
+            "class_lanes": [],
+            "lanes": [],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
             "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Serializer::test_revision_is_invariant_to_uuid_identity_meta",
             "file": "tests/includes/Sync/Test_Order_Serializer.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Serializer",
@@ -37021,6 +37213,25 @@
             "file": "tests/includes/Sync/Test_Orders_Controller_HPOS.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Orders_Controller_HPOS",
             "method": "test_hpos_pull_serializes_order_from_orders_table",
+            "behavior": "Test Orders Controller HPOS",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Orders_Controller_HPOS::test_hpos_pull_stamps_the_stored_digest_through_init_wiring",
+            "file": "tests/includes/Sync/Test_Orders_Controller_HPOS.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Orders_Controller_HPOS",
+            "method": "test_hpos_pull_stamps_the_stored_digest_through_init_wiring",
             "behavior": "Test Orders Controller HPOS",
             "own_lanes": [
                 "v2"
@@ -37974,6 +38185,90 @@
             ],
             "lanes": [
                 "unresolved",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date::test_admin_side_amount_edit_reaches_the_incremental_poll",
+            "file": "tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date",
+            "method": "test_admin_side_amount_edit_reaches_the_incremental_poll",
+            "behavior": "Test Rest Dispatch Coupon Modified Date",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date::test_amount_only_push_advances_date_modified_for_the_incremental_poll",
+            "file": "tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date",
+            "method": "test_amount_only_push_advances_date_modified_for_the_incremental_poll",
+            "behavior": "Test Rest Dispatch Coupon Modified Date",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date::test_code_change_push_remains_visible_to_the_incremental_poll",
+            "file": "tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date",
+            "method": "test_code_change_push_remains_visible_to_the_incremental_poll",
+            "behavior": "Test Rest Dispatch Coupon Modified Date",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date::test_the_touch_listener_is_registered_unconditionally_by_init",
+            "file": "tests/includes/Sync/Test_Rest_Dispatch_Coupon_Modified_Date.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Coupon_Modified_Date",
+            "method": "test_the_touch_listener_is_registered_unconditionally_by_init",
+            "behavior": "Test Rest Dispatch Coupon Modified Date",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
                 "wc3"
             ],
             "v1_only": false,
@@ -40056,6 +40351,710 @@
             ],
             "lanes": [
                 "unresolved",
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_new_lane_is_visible_after_reset_inside_a_lane",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_new_lane_is_visible_after_reset_inside_a_lane",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_product_delete_forwards_the_scope_to_the_inner_wc_v3_write",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_product_delete_forwards_the_scope_to_the_inner_wc_v3_write",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_product_push_does_not_accept_scope_from_the_payload",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_product_push_does_not_accept_scope_from_the_payload",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_product_push_forwards_no_scope_when_the_till_sends_none",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_product_push_forwards_no_scope_when_the_till_sends_none",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_product_push_forwards_the_scope_to_the_inner_wc_v3_write",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_product_push_forwards_the_scope_to_the_inner_wc_v3_write",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_scoped_v2_request_latches_the_scope_for_the_dispatch",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_scoped_v2_request_latches_the_scope_for_the_dispatch",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_stock_wc_v3_request_is_not_the_v2_lane",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_stock_wc_v3_request_is_not_the_v2_lane",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "wc3"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_a_v2_request_marks_the_lane",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_a_v2_request_marks_the_lane",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "wc3"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_an_unscoped_v2_request_still_marks_the_lane",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_an_unscoped_v2_request_still_marks_the_lane",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_reset_clears_the_lane_marker",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_reset_clears_the_lane_marker",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_does_not_fall_back_to_the_store_id_param_for_v2",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_does_not_fall_back_to_the_store_id_param_for_v2",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_does_not_fall_back_to_the_store_id_param_when_v2_header_is_absent",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_does_not_fall_back_to_the_store_id_param_when_v2_header_is_absent",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_falls_back_to_the_v1_store_id_param",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_falls_back_to_the_v1_store_id_param",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v1"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v1",
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_ignores_an_absent_header_and_param",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_ignores_an_absent_header_and_param",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_prefers_the_header_over_the_param",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_prefers_the_header_over_the_param",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_reads_a_positive_store_from_the_header",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_reads_a_positive_store_from_the_header",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_resolve_rejects_an_unusable_scope",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_resolve_rejects_an_unusable_scope",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_set_current_normalizes_the_single_store_sentinel_to_unknown",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_set_current_normalizes_the_single_store_sentinel_to_unknown",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_stamp_leaves_an_unscoped_request_untouched",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_stamp_leaves_an_unscoped_request_untouched",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "wc3"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_stamp_never_overrides_a_scope_the_caller_set",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_stamp_never_overrides_a_scope_the_caller_set",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "wc3"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_stamp_republishes_the_scope_as_the_v1_param",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_stamp_republishes_the_scope_as_the_v1_param",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "wc3"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query",
+            "behavior": "Test Store Scope",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_catalog_proxy_forwards_no_scope_when_the_till_sends_none",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_catalog_proxy_forwards_no_scope_when_the_till_sends_none",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_catalog_proxy_forwards_the_scope_to_the_inner_wc_v3_read",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_catalog_proxy_forwards_the_scope_to_the_inner_wc_v3_read",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_lane_marker_nests",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_lane_marker_nests",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_lane_marker_unwinds_after_the_operation",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_lane_marker_unwinds_after_the_operation",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_lane_marker_unwinds_when_the_operation_throws",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_lane_marker_unwinds_when_the_operation_throws",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_product_serializer_carries_no_scope_when_unscoped",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_product_serializer_carries_no_scope_when_unscoped",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_product_serializer_carries_the_scope_into_serialization",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_product_serializer_carries_the_scope_into_serialization",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_product_serializer_marks_the_lane",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_product_serializer_marks_the_lane",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_store_scope_header_survives_cors_preflight",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_store_scope_header_survives_cors_preflight",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope::test_the_write_acknowledgement_is_read_back_under_the_scope",
+            "file": "tests/includes/Sync/Test_Store_Scope.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Store_Scope",
+            "method": "test_the_write_acknowledgement_is_read_back_under_the_scope",
+            "behavior": "Test Store Scope",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
                 "v2",
                 "wc3"
             ],

@@ -391,9 +391,9 @@ final class Digest_Index {
 			);
 			$live_join  = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = live.id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
 			$max_query  = 'SELECT GREATEST(COALESCE((SELECT MAX(live.id) FROM (' . $max_sql . ') live' . $live_join . ( '' === $live_scope['sql'] ? '' : ' WHERE ' . $live_scope['sql'] ) . '), 0),'
-				. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d' . $stored_join
-				. ' WHERE d.object_type IN ' . $object_types . ( '' === $stored_scope['sql'] ? '' : ' AND ' . $stored_scope['sql'] ) . '), 0))';
-			$max_args   = array_merge( $live_scope['args'], $stored_scope['args'] );
+				. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d'
+				. ' WHERE d.object_type IN ' . $object_types . '), 0))';
+			$max_args   = $live_scope['args'];
 		}
 		$max_id = (int) $wpdb->get_var( empty( $max_args ) ? $max_query : $wpdb->prepare( $max_query, ...$max_args ) );
 
