@@ -75,6 +75,13 @@ final class Integrity_Controller extends WP_REST_Controller {
 						'sanitize_callback' => 'absint',
 					),
 					'bucket'        => array( 'sanitize_callback' => 'absint' ),
+					'collection'    => array(
+						'default' => 'products',
+						'sanitize_callback' => 'sanitize_key',
+					),
+					'status'        => array(
+						'sanitize_callback' => static fn ( $status ) => 'publish' === $status ? 'publish' : '',
+					),
 				),
 			)
 		);
@@ -226,8 +233,25 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$started     = microtime( true );
 		$bucket_size = $this->int_param( $request, 'bucket_size', self::DEFAULT_BUCKET_SIZE, 1, 10000 );
 		$bucket_raw  = $request->get_param( 'bucket' );
+		$collection  = $request->get_param( 'collection' );
+		$collection  = \is_string( $collection ) ? $collection : 'products';
+
+		if ( ! \in_array( $collection, array_keys( Collections::with( 'digest' ) ), true ) ) {
+			return new WP_Error(
+				'woocommerce_pos_sync_unsupported_scan_collection',
+				\sprintf( 'integrity/scan does not support the "%s" collection', $collection ),
+				array( 'status' => 400 )
+			);
+		}
 
 		if ( null !== $bucket_raw && '' !== $bucket_raw ) {
+			if ( 'products' !== $collection ) {
+				return new WP_Error(
+					'woocommerce_pos_sync_unsupported_scan_drill_down_collection',
+					\sprintf( 'integrity/scan drill-down does not support the "%s" collection', $collection ),
+					array( 'status' => 400 )
+				);
+			}
 			$bucket = max( 0, (int) $bucket_raw );
 			if ( $this->maybe_schedule_empty_digest_rebuild() ) {
 				return rest_ensure_response(
@@ -259,7 +283,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$window_start = $first_bucket * $bucket_size;
 		$window_end   = ( $first_bucket + $limit_buckets ) * $bucket_size;
 
-		if ( $this->maybe_schedule_empty_digest_rebuild() ) {
+		if ( 'products' === $collection && $this->maybe_schedule_empty_digest_rebuild() ) {
 			return rest_ensure_response(
 				$this->envelope(
 					array(
@@ -284,7 +308,9 @@ final class Integrity_Controller extends WP_REST_Controller {
 				'bucket_size' => $bucket_size,
 				'start' => $window_start,
 				'end' => $window_end,
-			)
+			),
+			$collection,
+			array( 'status' => (string) $request->get_param( 'status' ) )
 		);
 
 		return rest_ensure_response(
@@ -296,7 +322,9 @@ final class Integrity_Controller extends WP_REST_Controller {
 				$aggregates['buckets'],
 				$window_end > $aggregates['max_id'],
 				$started,
-				'stored hook-time digests vs current raw-row digests, BIT_XOR(64-bit MD5-derived) per bucket; mismatch = content changed without hooks (or stored side not yet backfilled).'
+				'stored hook-time digests vs current raw-row digests, BIT_XOR(64-bit MD5-derived) per bucket; mismatch = content changed without hooks (or stored side not yet backfilled).',
+				false,
+				$collection
 			)
 		);
 	}
@@ -406,7 +434,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	/**
 	 * Same envelope shape as class-changes-controller.php so the matrix client plumbing stays uniform.
 	 */
-	private function envelope( array $checkpoint, array $changes, bool $complete, float $started, ?string $note = null, bool $rebuilding = false ): array {
+	private function envelope( array $checkpoint, array $changes, bool $complete, float $started, ?string $note = null, bool $rebuilding = false, string $collection = 'products' ): array {
 		$meta = array(
 			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
 			'supported'   => true,
@@ -419,7 +447,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		return array(
-			'collection' => 'products',
+			'collection' => $collection,
 			'checkpoint' => $checkpoint,
 			'changes'    => $changes,
 			'complete'   => $complete,
