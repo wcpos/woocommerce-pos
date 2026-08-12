@@ -1,12 +1,12 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3041,
+        "cases": 3042,
         "v1_only": 740,
         "unresolved": 70,
         "by_lane": {
             "v1": 805,
-            "v2": 503,
+            "v2": 504,
             "wc3": 276,
             "wp2": 1,
             "unresolved": 402,
@@ -36311,6 +36311,25 @@
                     "line": 140
                 }
             ]
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Item_Uuid_Fast_Path::test_v2_orders_proxy_valid_item_uuid_uses_fast_path",
+            "file": "tests/includes/Sync/Test_Order_Item_Uuid_Fast_Path.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Item_Uuid_Fast_Path",
+            "method": "test_v2_orders_proxy_valid_item_uuid_uses_fast_path",
+            "behavior": "Test Order Item Uuid Fast Path",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
         },
         {
             "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Pull_Planner::test_delete_then_restore_coalesces_to_one_document",
