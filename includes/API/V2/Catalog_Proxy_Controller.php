@@ -217,6 +217,21 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( $relax_wc_permissions ) {
 			add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		}
+		$prime_product_caches = null;
+		if ( 'products' === $resource ) {
+			$prime_product_caches = static function ( $found_posts, $query ) use ( &$prime_product_caches ) {
+				if ( ! \in_array( 'product', (array) $query->get( 'post_type' ), true ) ) {
+					return $found_posts;
+				}
+				remove_filter( 'found_posts', $prime_product_caches, 10 );
+				if ( 'ids' === $query->get( 'fields' ) && ! empty( $query->posts ) ) {
+					_prime_post_caches( array_map( 'intval', (array) $query->posts ), true, true );
+				}
+
+				return $found_posts;
+			};
+			add_filter( 'found_posts', $prime_product_caches, 10, 2 );
+		}
 		try {
 			if ( 'taxes' === $resource && ( isset( $query_params['wcpos_include'] ) || isset( $query_params['wcpos_exclude'] ) ) ) {
 				$tax_filter_controller = new V1_Taxes_Controller();
@@ -239,6 +254,9 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 			};
 			$response = null === $orders_plan ? $forward() : $orders_plan->around( $forward );
 		} finally {
+			if ( null !== $prime_product_caches ) {
+				remove_filter( 'found_posts', $prime_product_caches, 10 );
+			}
 			if ( null !== $tax_filter_controller ) {
 				remove_filter( 'woocommerce_rest_tax_query', array( $tax_filter_controller, 'wcpos_tax_query' ), 10 );
 				remove_filter( 'query', array( $tax_filter_controller, 'wcpos_tax_add_include_exclude_to_sql' ), 10 );
