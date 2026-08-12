@@ -44,6 +44,13 @@ class Test_Order_Item_Uuid_Fast_Path extends Sync_REST_Store_Test_Case {
 		$uuid    = wp_generate_uuid4();
 		$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
 		$item->save_meta_data();
+		// Stamp the non-line items too — OrderHelper orders carry a shipping item,
+		// and any unstamped item takes the legitimate mint path (lock included),
+		// which this fully-stamped-order test must not count as a failure.
+		foreach ( $order->get_items( array( 'shipping', 'fee' ) ) as $other_item ) {
+			$other_item->update_meta_data( Pos_Uuid::META_KEY, wp_generate_uuid4() );
+			$other_item->save_meta_data();
+		}
 
 		$stage_pending_meta = static function ( array $served_items ) use ( $item_id ): array {
 			foreach ( $served_items as $served_item ) {
