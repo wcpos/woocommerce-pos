@@ -27,6 +27,9 @@ namespace WCPOS\WooCommercePOS;
 if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
 	\define( __NAMESPACE__ . '\VERSION', '1.10.0' );
 }
+require_once __DIR__ . '/includes/API/V2/Ping.php';
+API\V2\Ping::maybe_serve();
+
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
 	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.7.8' );
 }
