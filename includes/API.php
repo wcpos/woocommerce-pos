@@ -199,6 +199,7 @@ class API {
 		$v2_classes = apply_filters(
 			'woocommerce_pos_rest_api_v2_controllers',
 			array(
+				'ping'              => API\V2\Ping::class,
 				'auth'              => API\V2\Auth::class,
 				'settings'          => API\V2\Settings::class,
 				'cashier'           => API\V2\Cashier::class,
