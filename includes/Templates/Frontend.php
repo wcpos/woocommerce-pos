@@ -288,7 +288,11 @@ class Frontend {
     </script>" . "\n";
 
 		echo "<script>
-		var request = new Request(initialProps.manifest);
+		// no-cache: revalidate the manifest with the CDN (ETag/304) on every boot.
+		// jsDelivr serves it with max-age=604800 and the ?v= buster only changes on
+		// plugin deploys, so a default fetch pins users to a stale bundle for up to
+		// 7 days after a web-bundle publish.
+		var request = new Request(initialProps.manifest, { cache: 'no-cache' });
 
 		window.fetch(request)
 				.then(function(response) { return response.json(); })
