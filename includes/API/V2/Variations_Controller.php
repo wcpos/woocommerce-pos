@@ -94,6 +94,7 @@ class Variations_Controller extends WP_REST_Controller {
 			// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
 			$ids = ( new Pos_Visibility() )->filter_visible_children( $ids );
 		}
+		_prime_post_caches( $ids, true, true );
 
 		// Hydrate through THE product assembly line (Product_Serializer), the same
 		// seam resolve/changes use (ADR 0003 — values come from the REST

@@ -1,12 +1,12 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3039,
+        "cases": 3041,
         "v1_only": 740,
         "unresolved": 70,
         "by_lane": {
             "v1": 805,
-            "v2": 501,
+            "v2": 503,
             "wc3": 276,
             "wp2": 1,
             "unresolved": 402,
@@ -17313,6 +17313,44 @@
             "class_lanes": [
                 "v2"
             ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming::test_products_list_bulk_primes_postmeta_cache",
+            "file": "tests/includes/API/V2/Test_Catalog_Proxy_Cache_Priming.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming",
+            "method": "test_products_list_bulk_primes_postmeta_cache",
+            "behavior": "Test Catalog Proxy Cache Priming",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming::test_variations_list_bulk_primes_postmeta_cache",
+            "file": "tests/includes/API/V2/Test_Catalog_Proxy_Cache_Priming.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming",
+            "method": "test_variations_list_bulk_primes_postmeta_cache",
+            "behavior": "Test Catalog Proxy Cache Priming",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [],
             "lanes": [
                 "v2"
             ],
