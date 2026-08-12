@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3041
+- Cases: 3042
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 503, wc3 276, wp2 1, unresolved 402, pure unit 1648
+- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 504, wc3 276, wp2 1, unresolved 402, pure unit 1648
 - Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -2017,6 +2017,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_write_ack_revision_equals_the_next_pull_canonical_revision | unresolved, v2, wc3 | unreviewed | — |
 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_write_ack_revision_is_computed_over_the_bare_document | unresolved, v2, wc3 | unreviewed | — |
 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_write_ack_wp_error_diagnostic_includes_code_and_data | unresolved, v2, wc3 | unreviewed | — |
+| Test Order Item Uuid Fast Path | tests/includes/Sync/Test_Order_Item_Uuid_Fast_Path.php:test_v2_orders_proxy_valid_item_uuid_uses_fast_path | v2 | unreviewed | — |
 | Test Order Notes | tests/includes/Services/Test_Order_Notes.php:test_cash_note_formats_amounts_in_the_order_currency | unit | unreviewed | — |
 | Test Order Notes | tests/includes/Services/Test_Order_Notes.php:test_cashier_and_customer_names_use_users_and_fallbacks | unit | unreviewed | — |
 | Test Order Notes | tests/includes/Services/Test_Order_Notes.php:test_notes_are_internal_and_attributed_to_the_acting_user | unit | unreviewed | — |
