@@ -79,6 +79,10 @@ trait Uuid_Handler {
 	 * @return void
 	 */
 	private function maybe_add_order_item_uuid( WC_Order_Item $item ): void {
+		if ( Pos_Uuid::is_uuid( $item->get_meta( Pos_Uuid::META_KEY ) ) ) {
+			return;
+		}
+
 		$lock_key = 'wc_pos_uuid_order_item_' . $item->get_id();
 		if ( ! $this->acquire_order_item_uuid_lock( $lock_key, 10 ) ) {
 			Logger::log( 'Unable to acquire lock for order item UUID update for order item id ' . $item->get_id() );

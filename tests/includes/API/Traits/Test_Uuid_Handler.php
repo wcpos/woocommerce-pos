@@ -423,6 +423,39 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Valid in-memory order-item UUIDs bypass locking and metadata writes.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
+	 */
+	public function test_order_item_valid_in_memory_uuid_uses_fast_path(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$uuid  = wp_generate_uuid4();
+		$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$item->save_meta_data();
+		$item->update_meta_data( '_wcpos_fast_path_probe', 'pending' );
+		$lock_queries = array();
+		$capture_lock_queries = static function ( string $query ) use ( &$lock_queries ): string {
+			if ( false !== strpos( $query, 'GET_LOCK' ) || false !== strpos( $query, 'RELEASE_LOCK' ) ) {
+				$lock_queries[] = $query;
+			}
+			return $query;
+		};
+		add_filter( 'query', $capture_lock_queries );
+
+		try {
+			$this->handler->test_maybe_add_order_item_uuid( $item );
+		} finally {
+			remove_filter( 'query', $capture_lock_queries );
+		}
+
+		$this->assertSame( array(), $lock_queries );
+		$this->assertSame( '', wc_get_order_item_meta( $item->get_id(), '_wcpos_fast_path_probe', true ) );
+		$this->assertSame( $uuid, $item->get_meta( Pos_Uuid::META_KEY ) );
+	}
+
+	/**
 	 * Malformed order-item UUIDs are replaced with persisted UUIDs.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
