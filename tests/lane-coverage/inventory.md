@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3039
+- Cases: 3041
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 501, wc3 276, wp2 1, unresolved 402, pure unit 1648
+- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 503, wc3 276, wp2 1, unresolved 402, pure unit 1648
 - Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -1572,6 +1572,8 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Catalog Proxy Brands | tests/includes/API/V2/Test_Catalog_Proxy_Brands.php:test_include_and_exclude_filter_brands | v2 | unreviewed | — |
 | Test Catalog Proxy Brands | tests/includes/API/V2/Test_Catalog_Proxy_Brands.php:test_list_contains_fixtures_with_stable_uuid_meta_data | v2 | unreviewed | — |
 | Test Catalog Proxy Brands | tests/includes/API/V2/Test_Catalog_Proxy_Brands.php:test_search_matches_brand_name | v2 | unreviewed | — |
+| Test Catalog Proxy Cache Priming | tests/includes/API/V2/Test_Catalog_Proxy_Cache_Priming.php:test_products_list_bulk_primes_postmeta_cache | v2 | unreviewed | — |
+| Test Catalog Proxy Cache Priming | tests/includes/API/V2/Test_Catalog_Proxy_Cache_Priming.php:test_variations_list_bulk_primes_postmeta_cache | v2 | unreviewed | — |
 | Test Catalog Proxy Categories | tests/includes/API/V2/Test_Catalog_Proxy_Categories.php:test_category_row_has_full_v2_field_set | v2 | unreviewed | — |
 | Test Catalog Proxy Categories | tests/includes/API/V2/Test_Catalog_Proxy_Categories.php:test_category_uuid_collision_rekeys_one_term_and_serves_distinct_uuids | v2 | unreviewed | — |
 | Test Catalog Proxy Categories | tests/includes/API/V2/Test_Catalog_Proxy_Categories.php:test_include_and_exclude_filter_categories | v2 | unreviewed | — |
