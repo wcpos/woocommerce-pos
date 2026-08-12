@@ -26,10 +26,18 @@ class API {
 	 */
 	public const ROUTE_NAMESPACES = array( 'wcpos/v1', 'wcpos/v2' );
 
-	/** @var string|null Request-scoped server pressure bucket. */
+	/**
+	 * Request-scoped server pressure bucket.
+	 *
+	 * @var string|null
+	 */
 	private static $pressure_bucket = null;
 
-	/** @var bool Whether server pressure has been checked this request. */
+	/**
+	 * Whether server pressure has been checked this request.
+	 *
+	 * @var bool
+	 */
 	private static $pressure_bucket_checked = false;
 
 	/**

@@ -8,7 +8,7 @@ actually calls. v1-route tests are legacy pins and do not count — see README.m
 - Cases: 3049
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 511, wc3 276, wp2 2, unresolved 402, pure unit 1648
+- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 510, wc3 276, wp2 2, unresolved 402, pure unit 1648
 - Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -2172,13 +2172,10 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Payment Gateways Section | tests/includes/Services/Settings/Test_Payment_Gateways_Section.php:test_installed_gateways_enriched_with_defaults | unit | unreviewed | — |
 | Test Payment Gateways Section | tests/includes/Services/Settings/Test_Payment_Gateways_Section.php:test_legacy_global_order_status_applies_in_memory_only | unit | unreviewed | — |
 | Test Payment Gateways Section | tests/includes/Services/Settings/Test_Payment_Gateways_Section.php:test_legacy_seed_converges_via_saves | unit | unreviewed | — |
-| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_core_response_does_not_include_pressure_header | v2, wp2 | unreviewed | — |
 | Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_ping_payload_shape | v2 | unreviewed | — |
 | Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_ping_route_is_registered_for_get_and_head | v2 | unreviewed | — |
 | Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_pressure_bucket_boundaries | v2 | unreviewed | — |
 | Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_raw_request_detection | v2 | unreviewed | — |
-| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_wcpos_v2_response_includes_pressure_header | v2 | unreviewed | — |
-| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_wcpos_v2_response_omits_pressure_header_when_bucket_is_null | v2 | unreviewed | — |
 | Test Pos Uuid | tests/includes/Sync/Test_Pos_Uuid.php:test_ensure_in_payload_keeps_one_canonical_uuid | unit | unreviewed | — |
 | Test Pos Uuid | tests/includes/Sync/Test_Pos_Uuid.php:test_ensure_user_uuid_multisite_adopts_legacy_per_blog_uuid | unit | unreviewed | — |
 | Test Pos Uuid | tests/includes/Sync/Test_Pos_Uuid.php:test_ensure_user_uuid_multisite_contention_replaces_corrupt_row_with_persisted_fallback | unit | unreviewed | — |
@@ -2216,6 +2213,9 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Pos Visibility | tests/includes/Sync/Test_Pos_Visibility.php:test_hidden_ids_returns_unique_positive_ids_per_type | unit | unreviewed | — |
 | Test Pos Visibility | tests/includes/Sync/Test_Pos_Visibility.php:test_hidden_ids_with_feature_disabled_returns_empty_set | unit | unreviewed | — |
 | Test Pos Visibility | tests/includes/Sync/Test_Pos_Visibility.php:test_legacy_accessors_delegate_to_hidden_ids | unit | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_core_response_does_not_include_pressure_header | wp2 | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_wcpos_v2_response_includes_pressure_header | v2 | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_wcpos_v2_response_omits_pressure_header_when_bucket_is_null | v2 | unreviewed | — |
 | Test Preview Receipt Builder | tests/includes/Services/Test_Preview_Receipt_Builder.php:test_all_sections_populated | unit | unreviewed | — |
 | Test Preview Receipt Builder | tests/includes/Services/Test_Preview_Receipt_Builder.php:test_build_exposes_semantic_order_dates | unit | unreviewed | — |
 | Test Preview Receipt Builder | tests/includes/Services/Test_Preview_Receipt_Builder.php:test_build_handles_translated_discount_label_with_literal_percent | unit | unreviewed | — |
