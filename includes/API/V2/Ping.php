@@ -43,6 +43,8 @@ final class Ping {
 		$data = self::payload();
 		http_response_code( 200 );
 		header( 'Content-Type: application/json; charset=UTF-8' );
+		header( 'Access-Control-Allow-Origin: *' );
+		header( 'Access-Control-Expose-Headers: X-WCPOS-Pressure' );
 		if ( isset( $data['pressure'] ) ) {
 			header( 'X-WCPOS-Pressure: ' . $data['pressure'] );
 		}

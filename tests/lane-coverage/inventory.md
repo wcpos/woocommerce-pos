@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3042
+- Cases: 3046
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 504, wc3 276, wp2 1, unresolved 402, pure unit 1648
+- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 508, wc3 276, wp2 1, unresolved 402, pure unit 1648
 - Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -2172,6 +2172,10 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Payment Gateways Section | tests/includes/Services/Settings/Test_Payment_Gateways_Section.php:test_installed_gateways_enriched_with_defaults | unit | unreviewed | — |
 | Test Payment Gateways Section | tests/includes/Services/Settings/Test_Payment_Gateways_Section.php:test_legacy_global_order_status_applies_in_memory_only | unit | unreviewed | — |
 | Test Payment Gateways Section | tests/includes/Services/Settings/Test_Payment_Gateways_Section.php:test_legacy_seed_converges_via_saves | unit | unreviewed | — |
+| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_ping_payload_shape | v2 | unreviewed | — |
+| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_ping_route_is_registered_for_get_and_head | v2 | unreviewed | — |
+| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_pressure_bucket_boundaries | v2 | unreviewed | — |
+| Test Ping Controller | tests/includes/API/Test_Ping_Controller.php:test_raw_request_detection | v2 | unreviewed | — |
 | Test Pos Uuid | tests/includes/Sync/Test_Pos_Uuid.php:test_ensure_in_payload_keeps_one_canonical_uuid | unit | unreviewed | — |
 | Test Pos Uuid | tests/includes/Sync/Test_Pos_Uuid.php:test_ensure_user_uuid_multisite_adopts_legacy_per_blog_uuid | unit | unreviewed | — |
 | Test Pos Uuid | tests/includes/Sync/Test_Pos_Uuid.php:test_ensure_user_uuid_multisite_contention_replaces_corrupt_row_with_persisted_fallback | unit | unreviewed | — |

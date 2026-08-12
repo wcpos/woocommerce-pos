@@ -1,12 +1,12 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3042,
+        "cases": 3046,
         "v1_only": 740,
         "unresolved": 70,
         "by_lane": {
             "v1": 805,
-            "v2": 504,
+            "v2": 508,
             "wc3": 276,
             "wp2": 1,
             "unresolved": 402,
@@ -9576,6 +9576,86 @@
                 "v1"
             ],
             "v1_only": true,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller::test_ping_payload_shape",
+            "file": "tests/includes/API/Test_Ping_Controller.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller",
+            "method": "test_ping_payload_shape",
+            "behavior": "Test Ping Controller",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller::test_ping_route_is_registered_for_get_and_head",
+            "file": "tests/includes/API/Test_Ping_Controller.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller",
+            "method": "test_ping_route_is_registered_for_get_and_head",
+            "behavior": "Test Ping Controller",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller::test_pressure_bucket_boundaries",
+            "file": "tests/includes/API/Test_Ping_Controller.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller",
+            "method": "test_pressure_bucket_boundaries",
+            "behavior": "Test Ping Controller",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller::test_raw_request_detection",
+            "file": "tests/includes/API/Test_Ping_Controller.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller",
+            "method": "test_raw_request_detection",
+            "behavior": "Test Ping Controller",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
             "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
