@@ -1,12 +1,12 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3051,
+        "cases": 3052,
         "v1_only": 740,
         "unresolved": 70,
         "by_lane": {
             "v1": 806,
-            "v2": 513,
+            "v2": 514,
             "wc3": 276,
             "wp2": 2,
             "unresolved": 402,
@@ -17518,6 +17518,25 @@
             "file": "tests/includes/API/V2/Test_Catalog_Proxy_Cache_Priming.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming",
             "method": "test_products_list_bulk_primes_postmeta_cache",
+            "behavior": "Test Catalog Proxy Cache Priming",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming::test_variable_products_list_bulk_primes_variation_caches",
+            "file": "tests/includes/API/V2/Test_Catalog_Proxy_Cache_Priming.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\V2\\Test_Catalog_Proxy_Cache_Priming",
+            "method": "test_variable_products_list_bulk_primes_variation_caches",
             "behavior": "Test Catalog Proxy Cache Priming",
             "own_lanes": [
                 "v2"
