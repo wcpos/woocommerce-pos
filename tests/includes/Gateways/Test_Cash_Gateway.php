@@ -185,6 +185,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	 */
 	public function test_calculate_change_hpos_order_meta_renders_order_currency_symbol(): void {
 		// Arrange
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
 
 		try {
@@ -204,6 +205,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 			$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
 		} finally {
 			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		}
 	}
 
