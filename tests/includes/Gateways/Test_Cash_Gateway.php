@@ -11,6 +11,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Gateways;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Gateways\Cash;
@@ -23,6 +24,8 @@ use WCPOS\WooCommercePOS\Gateways\Cash;
  * @coversNothing
  */
 class Test_Cash_Gateway extends WC_Unit_Test_Case {
+	use HPOSToggleTrait;
+
 	/**
 	 * The Cash gateway instance.
 	 *
@@ -154,6 +157,54 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 
 		$this->assertStringContainsString( 'Amount Tendered', $output );
 		$this->assertStringContainsString( 'Change', $output );
+	}
+
+	/**
+	 * Test calculate_change uses the order currency with legacy post meta.
+	 */
+	public function test_calculate_change_order_currency_differs_from_store_renders_order_currency_symbol(): void {
+		// Arrange
+		$order_currency = 'EUR' === get_woocommerce_currency() ? 'USD' : 'EUR';
+		$order          = OrderHelper::create_order();
+		$order->set_currency( $order_currency );
+		$order->save();
+		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '50.00' );
+		update_post_meta( $order->get_id(), '_pos_cash_change', '10.00' );
+
+		// Act
+		ob_start();
+		$this->gateway->calculate_change( $order->get_id() );
+		$output = ob_get_clean();
+
+		// Assert
+		$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+	}
+
+	/**
+	 * Test calculate_change reads HPOS order meta and uses the order currency.
+	 */
+	public function test_calculate_change_hpos_order_meta_renders_order_currency_symbol(): void {
+		// Arrange
+		$this->setup_cot();
+
+		try {
+			$order_currency = 'EUR' === get_woocommerce_currency() ? 'USD' : 'EUR';
+			$order          = OrderHelper::create_order();
+			$order->set_currency( $order_currency );
+			$order->update_meta_data( '_pos_cash_amount_tendered', '50.00' );
+			$order->update_meta_data( '_pos_cash_change', '10.00' );
+			$order->save();
+
+			// Act
+			ob_start();
+			$this->gateway->calculate_change( $order->get_id() );
+			$output = ob_get_clean();
+
+			// Assert
+			$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+		} finally {
+			$this->clean_up_cot_setup();
+		}
 	}
 
 	/**

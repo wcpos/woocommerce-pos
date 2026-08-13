@@ -106,6 +106,26 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test calculate_cashback uses the order currency.
+	 */
+	public function test_calculate_cashback_order_currency_differs_from_store_renders_order_currency_symbol(): void {
+		// Arrange
+		$order_currency = 'EUR' === get_woocommerce_currency() ? 'USD' : 'EUR';
+		$order          = OrderHelper::create_order();
+		$order->set_currency( $order_currency );
+		$order->update_meta_data( '_pos_card_cashback', '20.00' );
+		$order->save();
+
+		// Act
+		ob_start();
+		$this->gateway->calculate_cashback( $order->get_id() );
+		$output = ob_get_clean();
+
+		// Assert
+		$this->assertEquals( 1, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+	}
+
+	/**
 	 * Test calculate_cashback outputs nothing when cashback not set.
 	 */
 	public function test_calculate_cashback_outputs_nothing_when_not_set(): void {
