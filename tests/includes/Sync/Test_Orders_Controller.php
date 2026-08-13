@@ -19,7 +19,7 @@ use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_REST_Request;
 
 /**
@@ -53,7 +53,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		remove_filter( 'woocommerce_pos_sync_proxy_response', array( Meta_Normalizer::class, 'normalize' ), 5 );
 		remove_filter( 'woocommerce_pos_sync_serialized_product', array( Meta_Normalizer::class, 'normalize' ), 5 );
 		remove_filter( 'woocommerce_pos_sync_serialized_order', array( Meta_Normalizer::class, 'normalize' ), 5 );
-		delete_option( Sync_Index::BACKFILL_OPTION );
+		delete_option( Sync_Journal::BACKFILL_OPTION );
 		parent::tearDown();
 	}
 
@@ -90,12 +90,12 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * A pull document is keyed by the order's uuid (the ADR 0021 re-key), never
-	 * the numeric order id, and carries the wooOrderId + journal epoch/head.
+	 * the numeric order id, and carries the wooOrderId + journal metadata.
 	 */
-	public function test_pull_document_is_keyed_by_uuid_and_carries_epoch_and_head(): void {
+	public function test_pull_document_is_keyed_by_uuid_and_carries_journal_metadata(): void {
 		$order = OrderHelper::create_order();
 
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:update', false );
 
 		$response = ( new Orders_Controller() )->pull_orders(
 			$this->request(
@@ -122,7 +122,48 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertIsString( $data['epoch'] );
 		$this->assertNotSame( '', $data['epoch'] );
 		$this->assertGreaterThanOrEqual( 1, $data['head'] );
+		$this->assertSame( 0, $data['horizon'] );
+		$this->assertSame(
+			array( 'documents', 'deletes', 'checkpoint', 'hasMore', 'epoch', 'head', 'horizon' ),
+			array_keys( $data )
+		);
 		$this->assertSame( $order->get_id(), $data['checkpoint']['orderId'] );
+	}
+
+	/**
+	 * Order tombstone loss is surfaced through the shared journal horizon.
+	 */
+	public function test_pull_horizon_matches_watermark_after_order_tombstone_prune(): void {
+		$journal = new Sync_Journal();
+		$journal->record( 'order', 999999, true, 'deleted', 'test', false );
+		$tombstone_sequence = $journal->head_sequence();
+		$journal->record( 'product', 123, false, '', 'test', false );
+
+		$result = $journal->prune_tombstones( $tombstone_sequence, '2999-01-01 00:00:00', 10 );
+		$this->assertSame( 1, $result['deleted'] );
+
+		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
+
+		$this->assertSame( $journal->prune_watermark(), $data['horizon'] );
+		$this->assertSame( $tombstone_sequence, $data['horizon'] );
+	}
+
+	/**
+	 * The pull head is the ORDER lane's head: a later catalogue write shares the
+	 * sequence space but must not move it, mirroring the pre-unification
+	 * sync-index semantic (and keeping the client's cursor-past-head guard exact).
+	 */
+	public function test_pull_head_is_order_lane_scoped(): void {
+		$journal = new Sync_Journal();
+		$order   = OrderHelper::create_order();
+		$journal->record_order_change( $order->get_id(), 'hook:update', false );
+		$order_head = $journal->head_sequence( array( 'order' ) );
+		$journal->record( 'product', 123, false, '', 'test', false );
+
+		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
+
+		$this->assertSame( $order_head, $data['head'] );
+		$this->assertGreaterThan( $data['head'], $journal->head_sequence() );
 	}
 
 	/**
@@ -130,7 +171,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_pull_document_carries_payment_link(): void {
 		$order = OrderHelper::create_order();
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:update', false );
 
 		$response = ( new Orders_Controller() )->pull_orders(
 			$this->request(
@@ -150,7 +191,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 	public function test_pull_document_stamps_uuids_on_line_shipping_and_fee_items(): void {
 		$order = $this->order_with_fee();
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:update', false );
 
 		$payload = $this->pull_payload();
 
@@ -176,7 +217,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		);
 		( new Tax_Id_Writer() )->write_for_order( $order, $tax_ids );
 		$expected = ( new Tax_Id_Reader() )->read_for_order( $order );
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:update', false );
 
 		$this->assertSame( $expected, $this->pull_payload()['tax_ids'] );
 		$this->assertSame( $expected, $this->proxy_payload( $order->get_id() )['tax_ids'] );
@@ -188,7 +229,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$product->set_image_id( $attachment_id );
 		$product->save();
 		$order = OrderHelper::create_order( array( 'product' => $product ) );
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:update', false );
 
 		$pull_image_id  = $this->pull_payload()['line_items'][0]['image']['id'];
 		$proxy_image_id = $this->proxy_payload( $order->get_id() )['line_items'][0]['image']['id'];
@@ -214,7 +255,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$order->update_meta_data( 'php_array_fixture', array( 'already' => 'typed' ) );
 		$order->save_meta_data();
 
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:update', false );
 
 		$response = ( new Orders_Controller() )->pull_orders(
 			$this->request(
@@ -260,7 +301,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_deleted_row_advances_checkpoint_without_a_tombstone_when_not_opted_in(): void {
 		$order = OrderHelper::create_order();
-		$index = new Sync_Index();
+		$index = new Sync_Journal();
 		$index->record_order_change( $order->get_id(), 'hook:delete', true );
 		$head = $index->head_sequence();
 
@@ -288,7 +329,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_deleted_row_emits_a_tombstone_when_include_deletes_is_set(): void {
 		$order = OrderHelper::create_order();
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:delete', true );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'hook:delete', true );
 
 		$response = ( new Orders_Controller() )->pull_orders(
 			$this->request(
@@ -313,7 +354,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_update_then_delete_in_one_page_coalesces_to_a_tombstone(): void {
 		$order = OrderHelper::create_order();
-		$index = new Sync_Index();
+		$index = new Sync_Journal();
 		$index->record_order_change( $order->get_id(), 'hook:update', false );
 		$index->record_order_change( $order->get_id(), 'hook:delete', true );
 		$head = $index->head_sequence();
@@ -341,7 +382,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_probe_delete_coalesces_page_end_update_without_emitting_a_stale_document(): void {
 		$order = OrderHelper::create_order();
-		$index = new Sync_Index();
+		$index = new Sync_Journal();
 		$index->record_order_change( $order->get_id(), 'hook:update', false );
 		$page_sequence = $index->head_sequence();
 		$index->record_order_change( $order->get_id(), 'hook:delete', true );
@@ -393,7 +434,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 			clean_post_cache( $order->get_id() );
 		}
 
-		$index = new Sync_Index();
+		$index = new Sync_Journal();
 		$wpdb->query( 'DELETE FROM ' . $index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 
 		$received_order_ids = array();
@@ -435,6 +476,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 * The index backfill runs one bounded chunk.
 	 */
 	public function test_index_backfill_runs_one_bounded_chunk(): void {
+		global $wpdb;
+
 		OrderHelper::create_order();
 		OrderHelper::create_order();
 		OrderHelper::create_order();
@@ -446,6 +489,13 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, $data['processedThisRun'] );
 		$this->assertSame( 1, $data['processed'] );
 		$this->assertSame( 2, $data['nextPage'] );
+		$this->assertSame(
+			array( 'order', 'backfill' ),
+			$wpdb->get_row(
+				"SELECT object_type, origin FROM {$wpdb->prefix}wcpos_sync_journal WHERE origin = 'backfill' ORDER BY sequence ASC LIMIT 1",
+				ARRAY_N
+			)
+		);
 	}
 
 	/**

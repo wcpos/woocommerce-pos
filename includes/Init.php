@@ -67,10 +67,9 @@ class Init {
 			\WCPOS\WooCommercePOS\Sync\Pos_Uuid::register_hooks();
 
 			if ( $sync_schema_latched ) {
-				( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
-				( new \WCPOS\WooCommercePOS\Sync\Change_Log_Purge() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Sync_Journal() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
 				( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
-				( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();
 			}
 
 			( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();

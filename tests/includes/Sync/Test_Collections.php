@@ -46,6 +46,16 @@ class Test_Collections extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Every collection declares how it participates in the unified journal.
+	 */
+	public function test_journal_projection_covers_all_collections(): void {
+		$journal = Collections::with( 'journal' );
+
+		$this->assertSame( Collections::names(), array_keys( $journal ) );
+		$this->assertSame( array( 'object_type' => 'order' ), $journal['orders']['journal'] );
+	}
+
+	/**
 	 * The canonical write surface exposes exactly the seven client-push collections.
 	 */
 	public function test_write_projection_has_the_contract_collections(): void {

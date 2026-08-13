@@ -159,8 +159,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'healthy'        => false,
 				'missing_tables' => array(
-					$wpdb->prefix . 'wcpos_sync_order_index',
-					$wpdb->prefix . 'wcpos_sync_change_log',
+					$wpdb->prefix . 'wcpos_sync_journal',
 					$wpdb->prefix . 'wcpos_sync_stored_digest',
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
@@ -211,7 +210,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	public function test_table_exists_with_underscores_escapes_like_pattern(): void {
 		global $wpdb;
 
-		$table = $wpdb->prefix . Health::ORDER_INDEX_TABLE;
+		$table = $wpdb->prefix . Health::SYNC_JOURNAL_TABLE;
 
 		Health::table_exists( $table );
 

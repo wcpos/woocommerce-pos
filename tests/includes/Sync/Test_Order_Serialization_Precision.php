@@ -12,7 +12,7 @@ use WC_Order;
 use WC_Order_Item_Product;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_REST_Request;
 
 /**
@@ -150,7 +150,7 @@ class Test_Order_Serialization_Precision extends Sync_REST_Store_Test_Case {
 	public function test_v2_orders_pull_with_sub_cent_line_returns_six_decimal_money(): void {
 		// Arrange.
 		$order = $this->create_sub_cent_order();
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'test:precision-pull', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'test:precision-pull', false );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders/pull' );
 		$request->set_query_params(
 			array(

@@ -12,7 +12,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 
 /**
@@ -138,7 +138,7 @@ class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
 		$this->assertGreaterThanOrEqual( 200, \count( $proxy_rows[0]['meta_data'] ) );
 		$this->assertSame( 'value_199', $this->meta_data( $proxy_rows[0] )['_wcpos_scale_order_199'] );
 
-		$this->assertTrue( ( new Sync_Index() )->record_order_change( $order->get_id(), 'test:meta-scaling', false ) );
+		$this->assertTrue( ( new Sync_Journal() )->record_order_change( $order->get_id(), 'test:meta-scaling', false ) );
 
 		$pull_request = $this->wp_rest_get_request( '/wcpos/v2/orders/pull' );
 		$pull_request->set_query_params(

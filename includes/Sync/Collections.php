@@ -24,7 +24,7 @@ namespace WCPOS\WooCommercePOS\Sync;
  * something (no empty-string taxonomy on a post collection, no id_type on
  * tax_rates). Groups:
  *
- *  - object_type  — the singular change-log vocabulary (always present).
+ *  - object_type  — the singular journal vocabulary (always present).
  *  - identity     — the uuid id-space: id_type (post|user|term|order), the
  *                   collection's OWN scalar resolver scope (post_type or
  *                   taxonomy — what resolve_id_by_uuid gets on a push; NOT
@@ -36,8 +36,8 @@ namespace WCPOS\WooCommercePOS\Sync;
  *  - proxy        — the namespaced read route + wc/v3 route + resource slug
  *                   (the slug vocabulary trap: tax_rates' slug is `taxes`).
  *  - write        — push support (the write map's route/id_type projection).
- *  - change_log   — the singular object_type the change-log emits. Absent
- *                   for orders (the custom-pull lane, deliberately).
+ *  - journal      — the singular object_type the journal emits; orders consume
+ *                   it through their payload-windowed pull lane.
  *  - digest       — leg-3 existence digests, present ONLY on the id-space
  *                   OWNER row (products carries product+variation
  *                   object_types; a copy on variations would double-project).
@@ -71,7 +71,7 @@ final class Collections {
 				'slug' => 'products',
 			),
 			'write'       => array( 'route' => '/wc/v3/products' ),
-			'change_log'  => array( 'object_type' => 'product' ),
+			'journal'     => array( 'object_type' => 'product' ),
 			'digest'      => array(
 				'id_space' => 'products',
 				'object_types' => array( 'product', 'variation' ),
@@ -97,7 +97,7 @@ final class Collections {
 			// Variations use WooCommerce's nested REST resource. The write controller
 			// takes the parent from create payloads and the stored object thereafter.
 			'write'       => array( 'route' => '/wc/v3/products' ),
-			'change_log'  => array( 'object_type' => 'variation' ),
+			'journal'     => array( 'object_type' => 'variation' ),
 			'digest'      => null, // folded into the products id-space (owner row carries it)
 			'fingerprint' => array( 'barcode' => true ),
 			'backfill'    => array(
@@ -119,7 +119,7 @@ final class Collections {
 				'slug' => 'orders',
 			),
 			'write'       => array( 'route' => '/wc/v3/orders' ),
-			'change_log'  => null, // orders ride the custom-pull cursor lane, not the change-log
+			'journal'     => array( 'object_type' => 'order' ), // orders consume the journal via the payload-windowed pull lane, catalogue via the pointer stream
 			'digest'      => array(
 				'id_space' => 'orders',
 				'object_types' => array( 'order' ),
@@ -141,7 +141,7 @@ final class Collections {
 				'slug' => 'customers',
 			),
 			'write'       => array( 'route' => '/wc/v3/customers' ),
-			'change_log'  => array( 'object_type' => 'customer' ),
+			'journal'     => array( 'object_type' => 'customer' ),
 			'digest'      => array(
 				'id_space' => 'customers',
 				'object_types' => array( 'customer' ),
@@ -164,7 +164,7 @@ final class Collections {
 				'slug' => 'categories',
 			),
 			'write'       => array( 'route' => '/wc/v3/products/categories' ),
-			'change_log'  => array( 'object_type' => 'category' ),
+			'journal'     => array( 'object_type' => 'category' ),
 			'digest'      => null,
 			'fingerprint' => null,
 			'backfill'    => array(
@@ -187,7 +187,7 @@ final class Collections {
 				'slug' => 'brands',
 			),
 			'write'       => array( 'route' => '/wc/v3/products/brands' ),
-			'change_log'  => array( 'object_type' => 'brand' ),
+			'journal'     => array( 'object_type' => 'brand' ),
 			'digest'      => null,
 			'fingerprint' => null,
 			'backfill'    => array(
@@ -210,7 +210,7 @@ final class Collections {
 				'slug' => 'tags',
 			),
 			'write'       => null, // read-only: no client push path exists
-			'change_log'  => array( 'object_type' => 'tag' ),
+			'journal'     => array( 'object_type' => 'tag' ),
 			'digest'      => null,
 			'fingerprint' => null,
 			'backfill'    => array(
@@ -233,7 +233,7 @@ final class Collections {
 				'slug' => 'coupons',
 			),
 			'write'       => array( 'route' => '/wc/v3/coupons' ),
-			'change_log'  => array( 'object_type' => 'coupon' ),
+			'journal'     => array( 'object_type' => 'coupon' ),
 			'digest'      => null,
 			'fingerprint' => null,
 			'backfill'    => array(
@@ -250,7 +250,7 @@ final class Collections {
 				'slug' => 'taxes',
 			),
 			'write'       => null, // principled read-only
-			'change_log'  => array( 'object_type' => 'tax_rate' ),
+			'journal'     => array( 'object_type' => 'tax_rate' ),
 			'digest'      => null,
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => null, // no meta store to stamp

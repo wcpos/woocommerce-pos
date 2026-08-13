@@ -26,7 +26,7 @@ final class Api {
 	public const ADMIN_OP_PATHS  = array( 'uuid/backfill', 'orders/index/backfill', 'integrity/rebuild' );
 	public const OPTION_ENABLED  = 'woocommerce_pos_sync_api_enabled';
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
-	public const SCHEMA_VERSION  = '3';
+	public const SCHEMA_VERSION  = '4';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

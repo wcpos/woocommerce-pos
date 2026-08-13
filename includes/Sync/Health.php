@@ -11,8 +11,7 @@ namespace WCPOS\WooCommercePOS\Sync;
  * Checks whether the sync store tables are installed.
  */
 final class Health {
-	public const ORDER_INDEX_TABLE   = 'wcpos_sync_order_index';
-	public const CHANGE_LOG_TABLE    = 'wcpos_sync_change_log';
+	public const SYNC_JOURNAL_TABLE  = 'wcpos_sync_journal';
 	public const STORED_DIGEST_TABLE = 'wcpos_sync_stored_digest';
 	public const MUTATIONS_TABLE     = 'wcpos_sync_mutations';
 
@@ -37,8 +36,7 @@ final class Health {
 		global $wpdb;
 
 		return array(
-			$wpdb->prefix . self::ORDER_INDEX_TABLE,
-			$wpdb->prefix . self::CHANGE_LOG_TABLE,
+			$wpdb->prefix . self::SYNC_JOURNAL_TABLE,
 			$wpdb->prefix . self::STORED_DIGEST_TABLE,
 			$wpdb->prefix . self::MUTATIONS_TABLE,
 		);

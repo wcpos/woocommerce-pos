@@ -13,24 +13,24 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 
 /**
  * Order change candidates after a checkpoint. Prefers the authoritative
- * append-only sync-index (rows_after_sequence); falls back to a verified
- * WooCommerce modified-date scan (sequence 0 rows) when the index has no rows
+ * append-only journal (rows_after_sequence); falls back to a verified
+ * WooCommerce modified-date scan (sequence 0 rows) when the journal has no rows
  * for the cursor yet (fresh install / mid-backfill).
  */
 final class Order_Query {
-	/** @var object|null Injected index (tests); defaults to a real Sync_Index. */
-	private $index;
+	/** @var object|null Injected journal (tests); defaults to a real Sync_Journal. */
+	private $journal;
 
-	public function __construct( ?object $index = null ) {
-		$this->index = $index;
+	public function __construct( ?object $journal = null ) {
+		$this->journal = $journal;
 	}
 
 	public function changes_after_checkpoint( string $updated_at_gmt, int $order_id, int $sequence, int $limit ): array {
-		$index = $this->index ?? new Sync_Index();
-		if ( method_exists( $index, 'rows_after_sequence' ) ) {
-			$indexed_rows = $index->rows_after_sequence( $sequence, $limit );
-			if ( ! empty( $indexed_rows ) ) {
-				return $indexed_rows;
+		$journal = $this->journal ?? new Sync_Journal();
+		if ( method_exists( $journal, 'rows_after_sequence' ) ) {
+			$journal_rows = $journal->rows_after_sequence( $sequence, $limit );
+			if ( ! empty( $journal_rows ) ) {
+				return $journal_rows;
 			}
 			if ( 0 < $sequence ) {
 				return array();

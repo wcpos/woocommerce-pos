@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
@@ -342,7 +343,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->journal->reset_backfill_state();
 		$writes = 0;
 		$fail_second = static function ( string $query ) use ( $wpdb, &$writes ): string {
-			$table = $wpdb->prefix . Sync_Journal::TABLE;
+			$table = $wpdb->prefix . Health::SYNC_JOURNAL_TABLE;
 			if ( false !== strpos( $query, $table ) && false !== strpos( $query, "'backfill'" ) && 2 === ++$writes ) {
 				return str_replace( $table, $table . '_missing', $query );
 			}

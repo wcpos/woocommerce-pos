@@ -5,11 +5,11 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3052
+- Cases: 3025
 - v1-only cases: 740
-- Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 514, wc3 276, wp2 2, unresolved 402, pure unit 1648
-- Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
+- Unresolved-route cases (not proven current, not claimed v1): 69
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 514, wc3 276, wp2 2, unresolved 401, pure unit 1622
+- Blind-test warnings (advisory): self-installed-hook 63, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
 
@@ -833,7 +833,6 @@ variables.
 | Test Rest Dispatch Omitted Line Removal | tests/includes/Sync/Test_Rest_Dispatch_Omitted_Line_Removal.php:test_omitted_lines_stale_base_revision_returns_conflict_and_removes_nothing | unresolved | unreviewed | — |
 | Test Rest Dispatch Omitted Line Removal | tests/includes/Sync/Test_Rest_Dispatch_Omitted_Line_Removal.php:test_omitted_lines_with_new_uuid_line_removes_old_line_and_appends_new_line | unresolved | unreviewed | — |
 | Test Route Classifier Sync Disabled | tests/includes/API/Test_Route_Classifier_Sync_Disabled.php:test_manage_operator_reaches_dispatch_404_for_unregistered_sync_admin_op | unresolved | unreviewed | — |
-| Test Sync Index HPOS Untrash | tests/includes/Sync/Test_Sync_Index_HPOS_Untrash.php:test_cot_order_untrash_reemits_the_order_as_present | unresolved | unreviewed | — |
 | Test WC API | tests/includes/Test_WC_API.php:test_pos_only_products_excluded_on_mixed_case_route | unresolved | unreviewed | — |
 
 ## Blind-test warnings (advisory — never fails CI)
@@ -904,8 +903,6 @@ These tests may be structurally incapable of failing because they install or stu
 | self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_register_routes |
 | self-installed-hook | tests/includes/API/Test_Coupons_Controller.php:561 | Coupon reads and writes over the POS lane | tests/includes/API/Test_Coupons_Controller.php:test_rest_base |
 | self-installed-hook | tests/includes/Admin/Templates/Test_Single_Template_Save.php:645 | Template save from wp-admin | tests/includes/Admin/Templates/Test_Single_Template_Save.php:test_copy_template_preserves_content |
-| self-installed-hook | tests/includes/Sync/Test_Change_Log_Purge.php:257 | Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event |
-| self-installed-hook | tests/includes/Sync/Test_Change_Log_Purge.php:259 | Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event |
 | self-installed-hook | tests/includes/Sync/Test_Integrity_Digest_HPOS_Untrash.php:48 | Test Integrity Digest HPOS Untrash | tests/includes/Sync/Test_Integrity_Digest_HPOS_Untrash.php:test_cot_order_untrash_recreates_the_order_digest |
 | self-installed-hook | tests/includes/Sync/Test_Order_Document_Assembly.php:140 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_ack_item_uuid_stamping_does_not_move_the_canonical_revision |
 | self-installed-hook | tests/includes/Sync/Test_Order_Document_Assembly.php:140 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_historical_revision_recipes_still_pass_the_grace_comparer |
@@ -928,7 +925,6 @@ These tests may be structurally incapable of failing because they install or stu
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_proxy_stamp_priority_keeps_revision_first |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_sync_product_proxy_stamps_uuid_and_revision |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_sync_product_proxy_uses_current_variation_price_after_conversion |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Index_HPOS_Untrash.php:55 | Test Sync Index HPOS Untrash | tests/includes/Sync/Test_Sync_Index_HPOS_Untrash.php:test_cot_order_untrash_reemits_the_order_as_present |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_records_customer_update_and_digest |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_writes_append_product_customer_and_term_journal_rows |
@@ -1631,32 +1627,6 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Catalog Proxy Visibility | tests/includes/API/V2/Test_Catalog_Proxy_Visibility.php:test_plain_browse_still_includes_visible_products | v2 | unreviewed | — |
 | Test Catalog Proxy Visibility | tests/includes/API/V2/Test_Catalog_Proxy_Visibility.php:test_sku_query_excludes_online_only_variation | v2 | unreviewed | — |
 | Test Catalog Proxy Visibility | tests/includes/API/V2/Test_Catalog_Proxy_Visibility.php:test_sku_query_includes_visible_variation | v2 | unreviewed | — |
-| Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_purge_expired_with_aged_superseded_row_compacts_it_and_keeps_recent_rows | unit | unreviewed | — |
-| Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_purge_expired_with_aged_tombstone_at_head_keeps_head_row | unit | unreviewed | — |
-| Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_purge_expired_with_aged_tombstone_prunes_it_and_advances_watermark | unit | unreviewed | — |
-| Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_purge_expired_with_compaction_backlog_still_prunes_expired_tombstones | unit | unreviewed | — |
-| Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_purge_expired_with_zero_retention_filter_keeps_aged_tombstones | unit | unreviewed | — |
-| Test Change Log Purge | tests/includes/Sync/Test_Change_Log_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_changes_since_keeps_its_legacy_row_shape_and_scoped_max | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_head_sequence_after_records_returns_last_sequence | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_head_sequence_empty_log_returns_zero | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_page_head_reports_the_global_head_not_the_narrowed_max | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_page_returns_typed_rows | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_page_since_cursor_and_limit_bound_the_window | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_page_with_object_types_returns_only_those_types | unit | unreviewed | — |
-| Test Change Log Query | tests/includes/Sync/Test_Change_Log_Query.php:test_page_without_object_types_returns_every_collection_in_sequence_order | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_advance_prune_watermark_with_lower_value_keeps_highest | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_advance_prune_watermark_with_stale_cache_keeps_concurrent_higher_value | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_compact_with_cutoff_deletes_only_superseded_rows_at_or_below_cutoff | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_compact_with_recent_lower_sequence_keeps_it_when_higher_sequence_is_old | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_compact_with_small_batch_deletes_at_most_batch_and_repeated_calls_finish | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_oldest_sequence_on_empty_fresh_and_pruned_logs_returns_first_surviving_sequence | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_page_with_cursor_before_compacted_row_returns_surviving_later_object_change | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_prune_tombstones_with_concurrent_higher_watermark_keeps_higher_value | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_prune_tombstones_with_row_inside_wall_clock_window_keeps_it | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_prune_tombstones_with_small_batch_reports_partial_watermark | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_retention_with_retained_head_keeps_head_sequence_unchanged | unit | unreviewed | — |
-| Test Change Log Retention | tests/includes/Sync/Test_Change_Log_Retention.php:test_tombstone_retention_with_cutoffs_preserves_compaction_tombstones_and_prunes_only_deletes | unit | unreviewed | — |
 | Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_config_fingerprint_matches_standalone_endpoint | v2 | unreviewed | — |
 | Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_etag_changes_when_config_changes | v2 | unreviewed | — |
 | Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_etag_changes_when_sequence_head_moves | v2 | unreviewed | — |

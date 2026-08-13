@@ -8,11 +8,10 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_UnitTestCase;
 
 /**
@@ -29,9 +28,8 @@ abstract class Sync_Store_Test_Case extends WP_UnitTestCase {
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
 
-		( new Change_Log() )->install();
+		( new Sync_Journal() )->install();
 		( new Integrity_Digest() )->install();
-		( new Sync_Index() )->install();
 		( new Mutation_Store() )->install();
 	}
 
@@ -43,8 +41,9 @@ abstract class Sync_Store_Test_Case extends WP_UnitTestCase {
 		parent::setUp();
 		$this->empty_sync_tables();
 		delete_option( Api::SCHEMA_OPTION );
-		delete_option( Sync_Index::EPOCH_OPTION );
-		delete_option( Sync_Index::BACKFILL_OPTION );
+		delete_option( Sync_Journal::EPOCH_OPTION );
+		delete_option( Sync_Journal::BACKFILL_OPTION );
+		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
 	}
 
 	/**
@@ -73,9 +72,8 @@ abstract class Sync_Store_Test_Case extends WP_UnitTestCase {
 	 * Install each table through its public schema method.
 	 */
 	protected function install_sync_tables_directly(): void {
-		( new Change_Log() )->install();
+		( new Sync_Journal() )->install();
 		( new Integrity_Digest() )->install();
-		( new Sync_Index() )->install();
 		( new Mutation_Store() )->install();
 	}
 }

@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Change_Log;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Health;
 
 /**
@@ -67,24 +67,46 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * Recreating a missing change log starts a new sequence generation.
+	 * Pre-release upgrades discard both superseded stores after installing the journal.
 	 */
-	public function test_install_sync_schema_recreating_change_log_resets_prune_watermark(): void {
+	public function test_schema_upgrade_drops_legacy_change_and_order_tables(): void {
+		global $wpdb;
+
+		$legacy_tables = array(
+			$wpdb->prefix . 'wcpos_sync_change_log',
+			$wpdb->prefix . 'wcpos_sync_order_index',
+		);
+		foreach ( $legacy_tables as $table ) {
+			$wpdb->query( "CREATE TABLE {$table} (id BIGINT UNSIGNED NOT NULL)" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table names.
+		}
+		update_option( Api::SCHEMA_OPTION, '3', false );
+
+		( new Activator() )->install_sync_schema();
+
+		foreach ( $legacy_tables as $table ) {
+			$this->assertFalse( Health::table_exists( $table ) );
+		}
+	}
+
+	/**
+	 * Recreating a missing journal starts a new sequence generation.
+	 */
+	public function test_install_sync_schema_recreating_journal_resets_prune_watermark(): void {
 		global $wpdb;
 
 		$activator  = new Activator();
-		$change_log = new Change_Log();
+		$journal = new Sync_Journal();
 		$activator->install_sync_schema();
-		$change_log->advance_prune_watermark( 40 );
+		$journal->advance_prune_watermark( 40 );
 
 		$activator->install_sync_schema();
-		$this->assertSame( 40, $change_log->prune_watermark() );
+		$this->assertSame( 40, $journal->prune_watermark() );
 
-		$wpdb->query( 'DROP TABLE IF EXISTS ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$activator->install_sync_schema();
 
-		$this->assertSame( 0, $change_log->head_sequence() );
-		$this->assertSame( 0, $change_log->prune_watermark() );
+		$this->assertSame( 0, $journal->head_sequence() );
+		$this->assertSame( 0, $journal->prune_watermark() );
 	}
 
 	/**
@@ -125,9 +147,9 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		$this->install_sync_tables_directly();
 		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$this->committed_user_id = $user_id;
-		$change_log = new Change_Log();
-		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
-		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$journal = new Sync_Journal();
+		$journal->record( 'customer', $user_id, true, '', 'legacy-role-removal', false );
+		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		update_option( Api::SCHEMA_OPTION, '2', false );
 
 		$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . Health::MUTATIONS_TABLE ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
@@ -152,7 +174,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$compensating_updates = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				'SELECT COUNT(*) FROM ' . $change_log->table_name() . " WHERE sequence > %d AND object_type = 'customer' AND object_id = %d AND change_type = 'update' AND origin = 'schema-upgrade'", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared values.
+				'SELECT COUNT(*) FROM ' . $journal->table_name() . " WHERE sequence > %d AND object_type = 'customer' AND object_id = %d AND deleted = 0 AND origin = 'schema-upgrade'", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared values.
 				$old_head,
 				$user_id
 			)
@@ -166,7 +188,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	/**
 	 * Upgrading from a pre-3 sync schema appends a compensating customer 'update' for
 	 * every live user (past the old stream head), superseding role-departure tombstones
-	 * from the customer-role-only era — and a fresh latch at 3 appends nothing more.
+	 * from the customer-role-only era — and a current-schema latch appends nothing more.
 	 */
 	public function test_customer_scope_upgrade_appends_updates_for_all_live_users(): void {
 		global $wpdb;
@@ -174,9 +196,9 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		$this->install_sync_tables_directly();
 		$user_id    = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$this->committed_user_id = $user_id;
-		$change_log = new Change_Log();
-		$change_log->record( 'customer', $user_id, 'delete', 'legacy-role-removal' );
-		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$journal = new Sync_Journal();
+		$journal->record( 'customer', $user_id, true, '', 'legacy-role-removal', false );
+		$old_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$live_ids = array_map( 'intval', get_users( array( 'fields' => 'ids' ) ) );
 		sort( $live_ids );
 		update_option( Api::SCHEMA_OPTION, '2', false );
@@ -185,22 +207,22 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$appended = $wpdb->get_results(
 			$wpdb->prepare(
-				'SELECT object_id, change_type FROM ' . $change_log->table_name() . ' WHERE sequence > %d ORDER BY object_id ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared sequence.
+				'SELECT object_id, deleted FROM ' . $journal->table_name() . ' WHERE sequence > %d ORDER BY object_id ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name with prepared sequence.
 				$old_head
 			),
 			ARRAY_A
 		);
 
 		$this->assertSame( $live_ids, array_map( 'intval', array_column( $appended, 'object_id' ) ) );
-		$this->assertSame( array_fill( 0, count( $live_ids ), 'update' ), array_column( $appended, 'change_type' ) );
+		$this->assertSame( array_fill( 0, count( $live_ids ), '0' ), array_column( $appended, 'deleted' ) );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
 
 		// Re-latching at the current schema is not an upgrade — no second compensation pass.
-		$new_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$new_head = (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		( new Activator() )->install_sync_schema();
 		$this->assertSame(
 			$new_head,
-			(int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $change_log->table_name() ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+			(int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $journal->table_name() ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 			'a same-version re-latch must not append compensating rows'
 		);
 	}

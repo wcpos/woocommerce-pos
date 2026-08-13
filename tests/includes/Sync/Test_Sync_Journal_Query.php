@@ -49,16 +49,19 @@ class Test_Sync_Journal_Query extends Sync_Store_Test_Case {
 		$this->assertSame( $page['rows'][2]['sequence'], $page['head'] );
 	}
 
-	public function test_page_types_narrow_stream_and_head_remains_global(): void {
+	public function test_page_types_narrow_stream_and_head_is_stream_scoped(): void {
 		$this->journal->record( 'product', 11, false, '', 'test', false );
 		$this->journal->record( 'variation', 12, false, '', 'test', false );
 		$this->journal->record( 'order', 22, false, 'sha256:order', 'test', false );
 
 		$page = $this->journal->page( array( 'product', 'variation' ), 0, 10 );
 
+		// The head is the STREAM's head: the foreign order row above it must not
+		// move it, or a drained catalogue cursor could never reach head (304 idle).
 		$this->assertSame( array( 11, 12 ), array_column( $page['rows'], 'object_id' ) );
-		$this->assertSame( $this->journal->head_sequence(), $page['head'] );
-		$this->assertNotSame( $page['rows'][1]['sequence'], $page['head'] );
+		$this->assertSame( $page['rows'][1]['sequence'], $page['head'] );
+		$this->assertGreaterThan( $page['head'], $this->journal->head_sequence() );
+		$this->assertSame( $this->journal->head_sequence( array( 'order' ) ), $this->journal->head_sequence() );
 	}
 
 	public function test_page_since_and_limit_bound_the_window(): void {

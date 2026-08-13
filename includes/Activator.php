@@ -12,11 +12,10 @@ namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Consent;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
-use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use const DOING_AJAX;
 
 /**
@@ -156,11 +155,16 @@ class Activator {
 	public function install_sync_schema(): void {
 		$previous_schema = get_option( Sync_Api::SCHEMA_OPTION, null );
 
-		$change_log = new Change_Log();
-		$change_log->install();
+		$journal = new Sync_Journal();
+		$journal->install();
 		( new Integrity_Digest() )->install();
-		( new Sync_Index() )->install();
 		( new Mutation_Store() )->install();
+
+		if ( null !== $previous_schema && version_compare( (string) $previous_schema, Sync_Api::SCHEMA_VERSION, '<' ) ) {
+			global $wpdb;
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_change_log" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_order_index" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+		}
 
 		if ( ! Sync_Health::is_healthy() ) {
 			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
@@ -172,13 +176,13 @@ class Activator {
 		// Schema 3 (#1379): the customer space widened from role=customer to ALL users.
 		// Upgrading installs carry role-departure tombstones in the persisted stream that
 		// would replay against now-live users; compensating updates supersede them (see
-		// Change_Log::append_customer_updates_for_all_users). The old latch stays until
+		// Sync_Journal::append_customer_updates_for_all_users). The old latch stays until
 		// migration succeeds, so retries may append duplicate but harmless superseding
 		// updates. Fresh installs (no previous latch) have no stream to repair.
 		if (
 			null !== $previous_schema
 			&& version_compare( (string) $previous_schema, '3', '<' )
-			&& ! $change_log->append_customer_updates_for_all_users()
+			&& ! $journal->append_customer_updates_for_all_users()
 		) {
 			return;
 		}

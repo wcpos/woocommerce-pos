@@ -15,9 +15,6 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use WP_REST_Request;
 
 final class Sync_Journal {
-	/** Journal table suffix. */
-	public const TABLE = 'wcpos_sync_journal';
-
 	/** Persisted order backfill cursor. */
 	public const BACKFILL_OPTION = 'woocommerce_pos_sync_index_backfill';
 
@@ -35,7 +32,7 @@ final class Sync_Journal {
 
 	public function table_name(): string {
 		global $wpdb;
-		return $wpdb->prefix . self::TABLE;
+		return $wpdb->prefix . Health::SYNC_JOURNAL_TABLE;
 	}
 
 	public function schema_sql( string $table_name, string $charset_collate = '' ): string {
@@ -524,14 +521,37 @@ final class Sync_Journal {
 		return array_merge( $next_status, array( 'processedThisRun' => $processed_this_run ) );
 	}
 
-	/** Head of the global sequence space — the change stream's current end. */
-	public function head_sequence(): int {
+	/**
+	 * Head of the sequence space — the change stream's current end.
+	 *
+	 * With `$object_types`, the head is STREAM-SCOPED: the highest sequence any
+	 * row of those types holds. Every reader must serve the head of the stream
+	 * it serves — orders and catalogue share one AUTO_INCREMENT space, so the
+	 * global head moves on foreign writes. A stream-scoped head is what lets a
+	 * cursor actually reach `head` (the 304 idle condition) while the other
+	 * lane keeps writing, and is the pre-unification semantic of both lanes.
+	 *
+	 * @param string[] $object_types Empty = global head (retention clamps only).
+	 */
+	public function head_sequence( array $object_types = array() ): int {
 		global $wpdb;
 		if ( ! $this->table_available() ) {
 			return 0;
 		}
 
-		return (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->table_name() );
+		$types = array_values( array_filter( array_map( 'strval', $object_types ), static fn( string $t ): bool => '' !== $t ) );
+		if ( array() === $types ) {
+			return (int) $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->table_name() );
+		}
+
+		$placeholders = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT MAX(sequence) FROM ' . $this->table_name() . " WHERE object_type IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- %s placeholder list generated from count().
+				...$types
+			)
+		);
 	}
 
 	public function table_available(): bool {
@@ -725,7 +745,7 @@ final class Sync_Journal {
 				},
 				is_array( $rows ) ? $rows : array()
 			),
-			'head' => $this->head_sequence(),
+			'head' => $this->head_sequence( $types ),
 		);
 	}
 

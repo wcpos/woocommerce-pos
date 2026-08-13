@@ -8,7 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Change_Log;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 use WP_REST_Request;
@@ -77,9 +77,9 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	 * Tick stays slim while sequence-log continues to serve full pages.
 	 */
 	public function test_tick_returns_slim_body_without_slimming_sequence_log(): void {
-		$log = new Change_Log();
+		$log = new Sync_Journal();
 		for ( $id = 1; $id <= 101; $id++ ) {
-			$log->record( 'product', $id, 'update', 'test', false );
+			$log->record( 'product', $id, false, '', 'test', false );
 		}
 
 		$tick     = $this->server->dispatch( $this->tick_request() )->get_data();
@@ -101,13 +101,13 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_tick_with_pruned_history_returns_sequence_log_watermark_horizon(): void {
 		// Arrange.
-		$log = new Change_Log();
-		$log->record( 'product', 11, 'update', 'test', false );
+		$log = new Sync_Journal();
+		$log->record( 'product', 11, false, '', 'test', false );
 		$log->advance_prune_watermark( 5 );
 
 		// Act.
 		$tick = $this->server->dispatch( $this->tick_request() )->get_data();
-		delete_option( Change_Log::PRUNE_WATERMARK_OPTION );
+		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
 
 		// Assert: the graduated tick lifts checkpoint to the top level.
 		$this->assertEquals( 5, $tick['checkpoint']['horizon'] );
@@ -154,7 +154,7 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	 * Cached validators rely on this compatibility invariant.
 	 */
 	public function test_tick_etag_matches_sequence_log_etag_for_same_state(): void {
-		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
+		( new Sync_Journal() )->record( 'product', 123, false, '', 'test', false );
 
 		$tick    = $this->server->dispatch( $this->tick_request( array( 'since' => 0 ) ) );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' );
@@ -165,11 +165,34 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Both polling routes expose the same journal generation marker.
+	 */
+	public function test_tick_and_sequence_log_share_epoch_and_install_changes_it(): void {
+		$journal = new Sync_Journal();
+		$tick    = $this->server->dispatch( $this->tick_request() )->get_data();
+		$sequence = $this->server->dispatch(
+			$this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' )
+		)->get_data();
+
+		$this->assertSame( $sequence['checkpoint']['epoch'], $tick['checkpoint']['epoch'] );
+		$first_epoch = $tick['checkpoint']['epoch'];
+
+		$journal->install();
+		$next_tick = $this->server->dispatch( $this->tick_request() )->get_data();
+		$next_sequence = $this->server->dispatch(
+			$this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' )
+		)->get_data();
+
+		$this->assertSame( $next_sequence['checkpoint']['epoch'], $next_tick['checkpoint']['epoch'] );
+		$this->assertNotSame( $first_epoch, $next_tick['checkpoint']['epoch'] );
+	}
+
+	/**
 	 * A new change-log row invalidates a tick ETag.
 	 */
 	public function test_tick_etag_changes_when_sequence_head_moves(): void {
 		$before = $this->server->dispatch( $this->tick_request( array( 'since' => 0 ) ) );
-		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
+		( new Sync_Journal() )->record( 'product', 123, false, '', 'test', false );
 
 		$request = $this->tick_request( array( 'since' => 0 ) );
 		$request->set_header( 'If-None-Match', $before->get_headers()['ETag'] );
@@ -199,7 +222,7 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	 * A matching ETag cannot turn a no-cursor tick into a 304 above head zero.
 	 */
 	public function test_tick_matching_etag_without_since_above_empty_head_returns_response(): void {
-		( new Change_Log() )->record( 'product', 123, 'update', 'test', false );
+		( new Sync_Journal() )->record( 'product', 123, false, '', 'test', false );
 		$current = $this->server->dispatch( $this->tick_request() );
 
 		$request = $this->tick_request();
