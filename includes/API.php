@@ -27,20 +27,6 @@ class API {
 	public const ROUTE_NAMESPACES = array( 'wcpos/v1', 'wcpos/v2' );
 
 	/**
-	 * Request-scoped server pressure bucket.
-	 *
-	 * @var string|null
-	 */
-	private static $pressure_bucket = null;
-
-	/**
-	 * Whether server pressure has been checked this request.
-	 *
-	 * @var bool
-	 */
-	private static $pressure_bucket_checked = false;
-
-	/**
 	 * WCPOS REST API namespaces and endpoints.
 	 *
 	 * @var array
@@ -612,12 +598,9 @@ class API {
 			if ( ! $response instanceof WP_HTTP_Response || ! $this->route_classifier->in_wcpos_namespace( $request->get_route() ) ) {
 				return $response;
 			}
-			if ( ! self::$pressure_bucket_checked ) {
-				self::$pressure_bucket_checked = true;
-				self::$pressure_bucket         = API\V2\Ping::pressure_bucket();
-			}
-			if ( null !== self::$pressure_bucket ) {
-				$response->header( 'X-WCPOS-Pressure', self::$pressure_bucket );
+			$pressure_bucket = API\V2\Ping::pressure_bucket();
+			if ( null !== $pressure_bucket ) {
+				$response->header( 'X-WCPOS-Pressure', $pressure_bucket );
 			}
 		} catch ( \Throwable $e ) {
 			return $response;
