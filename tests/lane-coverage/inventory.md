@@ -5,11 +5,11 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3025
+- Cases: 3071
 - v1-only cases: 740
-- Unresolved-route cases (not proven current, not claimed v1): 69
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 514, wc3 276, wp2 2, unresolved 401, pure unit 1622
-- Blind-test warnings (advisory): self-installed-hook 63, asserted-stubbed-response 19
+- Unresolved-route cases (not proven current, not claimed v1): 80
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 500, wc3 278, wp2 2, unresolved 416, pure unit 1671
+- Blind-test warnings (advisory): self-installed-hook 66, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
 
@@ -833,6 +833,17 @@ variables.
 | Test Rest Dispatch Omitted Line Removal | tests/includes/Sync/Test_Rest_Dispatch_Omitted_Line_Removal.php:test_omitted_lines_stale_base_revision_returns_conflict_and_removes_nothing | unresolved | unreviewed | — |
 | Test Rest Dispatch Omitted Line Removal | tests/includes/Sync/Test_Rest_Dispatch_Omitted_Line_Removal.php:test_omitted_lines_with_new_uuid_line_removes_old_line_and_appends_new_line | unresolved | unreviewed | — |
 | Test Route Classifier Sync Disabled | tests/includes/API/Test_Route_Classifier_Sync_Disabled.php:test_manage_operator_reaches_dispatch_404_for_unregistered_sync_admin_op | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_coupon_create_update_trash_and_untrash_use_empty_revisions | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_customer_create_persisted_dedup_profile_role_and_delete_rows | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_hpos_order_trash_and_untrash_append_delete_then_present_row | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_appends_order_rows_and_advances_the_id_cursor | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_does_not_advance_past_a_failed_journal_write | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_product_create_update_trash_and_untrash_rows_follow_revision_rules | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_tax_rate_create_update_and_delete_use_empty_revisions | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_term_create_update_meta_and_delete_rows_follow_taxonomy_map | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_unknown_taxonomy_writes_no_row | unresolved | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_variation_lifecycle_also_touches_parent_product | unresolved | unreviewed | — |
 | Test WC API | tests/includes/Test_WC_API.php:test_pos_only_products_excluded_on_mixed_case_route | unresolved | unreviewed | — |
 
 ## Blind-test warnings (advisory — never fails CI)
@@ -917,7 +928,7 @@ These tests may be structurally incapable of failing because they install or stu
 | self-installed-hook | tests/includes/Sync/Test_Order_Document_Assembly.php:140 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_write_ack_revision_equals_the_next_pull_canonical_revision |
 | self-installed-hook | tests/includes/Sync/Test_Order_Document_Assembly.php:140 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_write_ack_revision_is_computed_over_the_bare_document |
 | self-installed-hook | tests/includes/Sync/Test_Order_Document_Assembly.php:140 | Test Order Document Assembly | tests/includes/Sync/Test_Order_Document_Assembly.php:test_write_ack_wp_error_diagnostic_includes_code_and_data |
-| self-installed-hook | tests/includes/Sync/Test_Orders_Controller.php:206 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_emits_typed_meta_and_revision_of_the_normalized_payload |
+| self-installed-hook | tests/includes/Sync/Test_Orders_Controller.php:247 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_emits_typed_meta_and_revision_of_the_normalized_payload |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_enabled_sync_surface_does_not_modify_wc_v3_orders_or_routes |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_enabled_sync_surface_does_not_modify_wc_v3_products_or_routes |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_enabled_sync_surface_does_not_modify_wc_v3_terms_or_taxes |
@@ -925,65 +936,52 @@ These tests may be structurally incapable of failing because they install or stu
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_proxy_stamp_priority_keeps_revision_first |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_sync_product_proxy_stamps_uuid_and_revision |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Hook_Isolation.php:46 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_sync_product_proxy_uses_current_variation_price_after_conversion |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_records_customer_update_and_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_writes_append_product_customer_and_term_journal_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_catalog_untrash_appends_update_change_log_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_change_log_customer_create_persisted_hooks_write_single_row |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_coupon_amount_edit_appends_update_change_log_row |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_cpt_order_untrash_recreates_the_order_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_digest_includes_site_capabilities_meta |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_records_update_and_keeps_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_delete_user_records_customer_delete_and_removes_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_delete_failures_are_logged |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_does_not_advance_cursor_past_a_failed_write |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_after_deletion |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_with_hpos |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_create_update_trash_untrash_and_delete_append_index_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_index_modified_timestamp_is_stored_in_gmt |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:51 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_records_customer_update_and_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_writes_append_product_customer_and_term_journal_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_catalog_untrash_appends_update_change_log_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_change_log_customer_create_persisted_hooks_write_single_row |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_coupon_amount_edit_appends_update_change_log_row |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_cpt_order_untrash_recreates_the_order_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_digest_includes_site_capabilities_meta |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_records_update_and_keeps_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_delete_user_records_customer_delete_and_removes_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_delete_failures_are_logged |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_does_not_advance_cursor_past_a_failed_write |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_after_deletion |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_with_hpos |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_create_update_trash_untrash_and_delete_append_index_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_index_modified_timestamp_is_stored_in_gmt |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:52 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_records_customer_update_and_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_writes_append_product_customer_and_term_journal_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_catalog_untrash_appends_update_change_log_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_change_log_customer_create_persisted_hooks_write_single_row |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_coupon_amount_edit_appends_update_change_log_row |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_cpt_order_untrash_recreates_the_order_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_digest_includes_site_capabilities_meta |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_records_update_and_keeps_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_delete_user_records_customer_delete_and_removes_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_delete_failures_are_logged |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_does_not_advance_cursor_past_a_failed_write |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_after_deletion |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_with_hpos |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_create_update_trash_untrash_and_delete_append_index_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_index_modified_timestamp_is_stored_in_gmt |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:53 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:298 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_records_update_and_keeps_digest |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Read_Controllers.php:528 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_coupon_create_update_trash_and_untrash_use_empty_revisions |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_customer_create_persisted_dedup_profile_role_and_delete_rows |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_hpos_order_trash_and_untrash_append_delete_then_present_row |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_appends_order_rows_and_advances_the_id_cursor |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_does_not_advance_past_a_failed_journal_write |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_product_create_update_trash_and_untrash_rows_follow_revision_rules |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_tax_rate_create_update_and_delete_use_empty_revisions |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_term_create_update_meta_and_delete_rows_follow_taxonomy_map |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_unknown_taxonomy_writes_no_row |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:38 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_variation_lifecycle_also_touches_parent_product |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_coupon_create_update_trash_and_untrash_use_empty_revisions |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_customer_create_persisted_dedup_profile_role_and_delete_rows |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_hpos_order_trash_and_untrash_append_delete_then_present_row |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_appends_order_rows_and_advances_the_id_cursor |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_does_not_advance_past_a_failed_journal_write |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_product_create_update_trash_and_untrash_rows_follow_revision_rules |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_tax_rate_create_update_and_delete_use_empty_revisions |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_term_create_update_meta_and_delete_rows_follow_taxonomy_map |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_unknown_taxonomy_writes_no_row |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:429 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_variation_lifecycle_also_touches_parent_product |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_coupon_create_update_trash_and_untrash_use_empty_revisions |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_customer_create_persisted_dedup_profile_role_and_delete_rows |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_hpos_order_trash_and_untrash_append_delete_then_present_row |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_appends_order_rows_and_advances_the_id_cursor |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_does_not_advance_past_a_failed_journal_write |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_product_create_update_trash_and_untrash_rows_follow_revision_rules |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_tax_rate_create_update_and_delete_use_empty_revisions |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_term_create_update_meta_and_delete_rows_follow_taxonomy_map |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_unknown_taxonomy_writes_no_row |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Observation.php:435 | Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_variation_lifecycle_also_touches_parent_product |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Purge.php:313 | Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Journal_Purge.php:315 | Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_refreshes_customer_digest |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_cpt_order_untrash_recreates_the_order_digest |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_digest_includes_site_capabilities_meta |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_keeps_digest |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_delete_user_removes_digest |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_delete_failures_are_logged |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Read_Controllers.php:569 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record |
 
 ## All other behaviours
 
@@ -1627,6 +1625,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Catalog Proxy Visibility | tests/includes/API/V2/Test_Catalog_Proxy_Visibility.php:test_plain_browse_still_includes_visible_products | v2 | unreviewed | — |
 | Test Catalog Proxy Visibility | tests/includes/API/V2/Test_Catalog_Proxy_Visibility.php:test_sku_query_excludes_online_only_variation | v2 | unreviewed | — |
 | Test Catalog Proxy Visibility | tests/includes/API/V2/Test_Catalog_Proxy_Visibility.php:test_sku_query_includes_visible_variation | v2 | unreviewed | — |
+| Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_and_sequence_log_share_epoch_and_install_changes_it | v2 | unreviewed | — |
 | Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_config_fingerprint_matches_standalone_endpoint | v2 | unreviewed | — |
 | Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_etag_changes_when_config_changes | v2 | unreviewed | — |
 | Test Changes Tick | tests/includes/API/V2/Test_Changes_Tick.php:test_tick_etag_changes_when_sequence_head_moves | v2 | unreviewed | — |
@@ -1649,6 +1648,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Cloud Print Section | tests/includes/Services/Settings/Test_Cloud_Print_Section.php:test_write_preserves_omitted_printnode_key | unit | unreviewed | — |
 | Test Cloud Print Section | tests/includes/Services/Settings/Test_Cloud_Print_Section.php:test_write_rejects_duplicate_ids | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_digest_projection_has_three_id_space_owners | unit | unreviewed | — |
+| Test Collections | tests/includes/Sync/Test_Collections.php:test_journal_projection_covers_all_collections | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_names_covers_the_nine_collections | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_unknown_lookups_return_null | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_write_projection_has_the_contract_collections | unit | unreviewed | — |
@@ -2005,9 +2005,10 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Order Pull Planner | tests/includes/Sync/Test_Order_Pull_Planner.php:test_unserializable_order_is_permanently_skipped_and_advanced_past | unit | unreviewed | — |
 | Test Order Pull Planner | tests/includes/Sync/Test_Order_Pull_Planner.php:test_update_then_delete_coalesces_to_one_tombstone | unit | unreviewed | — |
 | Test Order Pull Planner | tests/includes/Sync/Test_Order_Pull_Planner.php:test_uuid_stop_holds_the_checkpoint_and_forces_a_retry | unit | unreviewed | — |
-| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_changes_after_checkpoint_prefers_sync_index_rows_when_available | unit | unreviewed | — |
-| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_falls_back_to_a_verified_woo_modified_scan_when_the_index_is_empty | unit | unreviewed | — |
-| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_nonzero_sequence_returns_an_empty_page_when_the_index_is_exhausted | unit | unreviewed | — |
+| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_changes_after_checkpoint_prefers_journal_rows_when_available | unit | unreviewed | — |
+| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_falls_back_to_a_verified_woo_modified_scan_when_the_journal_is_empty | unit | unreviewed | — |
+| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_nonzero_sequence_returns_an_empty_page_when_the_journal_is_exhausted | unit | unreviewed | — |
+| Test Order Query | tests/includes/Sync/Test_Order_Query.php:test_sequence_zero_stays_on_the_baseline_scan_until_backfill_completes | unit | unreviewed | — |
 | Test Order Serialization Precision | tests/includes/Sync/Test_Order_Serialization_Precision.php:test_plain_wc_v3_order_read_without_pos_marker_returns_store_decimal_money | wc3 | unreviewed | — |
 | Test Order Serialization Precision | tests/includes/Sync/Test_Order_Serialization_Precision.php:test_v2_orders_proxy_with_sub_cent_line_returns_six_decimal_money | v2 | unreviewed | — |
 | Test Order Serialization Precision | tests/includes/Sync/Test_Order_Serialization_Precision.php:test_v2_orders_pull_with_sub_cent_line_returns_six_decimal_money | v2 | unreviewed | — |
@@ -2098,10 +2099,12 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_proxy_row_stamps_item_uuids | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_and_proxy_documents_carry_tax_ids | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_document_carries_payment_link | unresolved, v2, wc3 | unreviewed | — |
-| Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_document_is_keyed_by_uuid_and_carries_epoch_and_head | unresolved, v2, wc3 | unreviewed | — |
+| Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_document_is_keyed_by_uuid_and_carries_journal_metadata | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_document_line_item_image_id_is_an_integer | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_document_stamps_uuids_on_line_shipping_and_fee_items | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_emits_typed_meta_and_revision_of_the_normalized_payload | unresolved, v2, wc3 | unreviewed | — |
+| Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_head_is_order_lane_scoped | unresolved, v2, wc3 | unreviewed | — |
+| Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_pull_horizon_matches_watermark_after_order_tombstone_prune | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller | tests/includes/Sync/Test_Orders_Controller.php:test_update_then_delete_in_one_page_coalesces_to_a_tombstone | unresolved, v2, wc3 | unreviewed | — |
 | Test Orders Controller HPOS | tests/includes/Sync/Test_Orders_Controller_HPOS.php:test_hpos_pull_serializes_order_from_orders_table | v2 | unreviewed | — |
 | Test Orders Controller HPOS | tests/includes/Sync/Test_Orders_Controller_HPOS.php:test_hpos_pull_stamps_the_stored_digest_through_init_wiring | v2 | unreviewed | — |
@@ -2782,28 +2785,56 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_customer_scope_upgrade_appends_updates_for_all_live_users | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_failed_repair_clears_current_latch_and_next_install_repairs_schema | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_install_sync_schema_creates_all_tables_and_latches_version | unit | unreviewed | — |
-| Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_install_sync_schema_recreating_change_log_resets_prune_watermark | unit | unreviewed | — |
+| Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_install_sync_schema_recreating_journal_resets_prune_watermark | unit | unreviewed | — |
+| Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_schema_upgrade_clears_legacy_purge_cron | unit | unreviewed | — |
+| Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_schema_upgrade_drops_legacy_change_and_order_tables | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_unhealthy_schema_upgrade_preserves_compensation_for_retry | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_version_check_queues_upgrade_when_only_sync_schema_is_unlatched | unit | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_records_customer_update_and_digest | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_writes_append_product_customer_and_term_journal_rows | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_catalog_untrash_appends_update_change_log_rows | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_change_log_customer_create_persisted_hooks_write_single_row | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_coupon_amount_edit_appends_update_change_log_row | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_cpt_order_untrash_recreates_the_order_digest | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_digest_includes_site_capabilities_meta | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_records_update_and_keeps_digest | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_delete_user_records_customer_delete_and_removes_digest | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_delete_failures_are_logged | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_does_not_advance_cursor_past_a_failed_write | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_after_deletion | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_backfill_uses_last_order_id_cursor_with_hpos | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_create_update_trash_untrash_and_delete_append_index_rows | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_order_index_modified_timestamp_is_stored_in_gmt | v2 | unreviewed | — |
-| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows | v2 | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_keeps_an_aged_catalogue_tombstone_that_is_the_catalogue_head | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_keeps_an_aged_order_tombstone_that_is_the_order_lane_head | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_prunes_an_aged_order_tombstone_below_a_newer_order_row | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_with_aged_superseded_row_compacts_it_and_keeps_recent_rows | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_with_aged_tombstone_at_head_keeps_head_row | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_with_aged_tombstone_prunes_it_and_advances_watermark | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_with_compaction_backlog_still_prunes_expired_tombstones | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_with_zero_retention_filter_keeps_aged_tombstones | unit | unreviewed | — |
+| Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_register_hooks_without_existing_schedule_registers_daily_purge_event | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_catalogue_object_types_project_from_the_registry_without_orders | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_customer_schema_upgrade_append_uses_schema_upgrade_origin_and_empty_revision | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_epoch_survives_install_on_a_surviving_table_and_regenerates_on_recreate | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_head_sequence_empty_journal_returns_zero | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_page_coerces_deleted_and_revision_with_the_other_row_fields | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_page_returns_global_stream_and_head | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_page_since_and_limit_bound_the_window | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_page_types_narrow_stream_and_head_is_stream_scoped | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_rows_after_sequence_clamps_limit_to_one_and_251 | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_rows_after_sequence_returns_empty_when_table_is_missing | unit | unreviewed | — |
+| Test Sync Journal Query | tests/includes/Sync/Test_Sync_Journal_Query.php:test_rows_after_sequence_returns_only_the_requested_order_lane | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_advance_prune_watermark_with_lower_value_keeps_highest | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_advance_prune_watermark_with_stale_cache_keeps_concurrent_higher_value | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_compact_with_cutoff_deletes_only_superseded_rows_at_or_below_cutoff | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_compact_with_recent_lower_sequence_keeps_it_when_higher_sequence_is_old | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_compact_with_small_batch_deletes_at_most_batch_and_repeated_calls_finish | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_compaction_keeps_the_newest_order_row | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_oldest_sequence_on_empty_fresh_and_pruned_logs_returns_first_surviving_sequence | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_order_cursor_between_compacted_sequences_sees_surviving_row | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_order_tombstone_pruning_advances_the_shared_watermark | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_page_with_cursor_before_compacted_row_returns_surviving_later_object_change | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_prune_tombstones_with_concurrent_higher_watermark_keeps_higher_value | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_prune_tombstones_with_row_inside_wall_clock_window_keeps_it | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_prune_tombstones_with_small_batch_reports_partial_watermark | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_retention_with_retained_head_keeps_head_sequence_unchanged | unit | unreviewed | — |
+| Test Sync Journal Retention | tests/includes/Sync/Test_Sync_Journal_Retention.php:test_tombstone_retention_with_cutoffs_preserves_compaction_tombstones_and_prunes_only_deletes | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_add_and_remove_customer_role_keep_the_customer_digest | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_admin_profile_update_refreshes_customer_digest | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_cpt_order_untrash_recreates_the_order_digest | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_digest_includes_site_capabilities_meta | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_customer_role_departure_keeps_digest | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_delete_user_removes_digest | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_delete_failures_are_logged | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest | unit | unreviewed | — |
+| Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows | unit | unreviewed | — |
 | Test Sync Ops Endpoints | tests/includes/Sync/Test_Sync_Ops_Endpoints.php:test_customer_uuid_backfill_stamps_all_users | v2 | unreviewed | — |
 | Test Sync Ops Endpoints | tests/includes/Sync/Test_Sync_Ops_Endpoints.php:test_customer_uuid_collision_backfill_includes_all_user_roles | v2 | unreviewed | — |
 | Test Sync Ops Endpoints | tests/includes/Sync/Test_Sync_Ops_Endpoints.php:test_integrity_rebuild_reconstructs_digests_to_match_from_scratch_scan | unresolved, v2 | unreviewed | — |
@@ -2818,6 +2849,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_integrity_bucket_lists_current_product_digest | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_integrity_bucket_rejects_unsupported_collection | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_integrity_scan_bucket_matches_fresh_stored_digest | unresolved, v2 | unreviewed | — |
+| Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_interleaved_order_write_does_not_move_catalogue_head_and_tick_304s | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_resolve_barcode_active_field_beats_inactive_key_collision | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_resolve_barcode_blank_setting_resolves_as_gtin_then_falls_back | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_resolve_barcode_excludes_online_only_product | unresolved, v2 | unreviewed | — |
@@ -2831,6 +2863,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_config_change_invalidates_etag | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_contains_standalone_config_fingerprint_data | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_embedded_fingerprint_ignores_collection_narrowing | unresolved, v2 | unreviewed | — |
+| Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_etag_varies_with_epoch_and_horizon | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_malformed_if_none_match_returns_full_response | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_matching_etag_at_head_returns_not_modified | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_sequence_log_matching_etag_with_since_behind_head_returns_page | unresolved, v2 | unreviewed | — |
