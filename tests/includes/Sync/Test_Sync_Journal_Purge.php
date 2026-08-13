@@ -184,7 +184,11 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 		$this->assertEquals( $aged_tombstone, $this->journal->prune_watermark() );
 	}
 
-	public function test_purge_expired_prunes_an_aged_order_tombstone_and_advances_shared_watermark(): void {
+	public function test_purge_expired_keeps_an_aged_order_tombstone_that_is_the_order_lane_head(): void {
+		// The newest ORDER row is an expired tombstone while a newer catalogue
+		// row holds the global head above it. Pruning it would regress the
+		// order-lane head below live client checkpoints (whose cursor-past-head
+		// guard then forces a full resync) — the per-stream clamp keeps it.
 		$this->journal->record( 'order', 101, true, 'deleted', 'hook:delete', false );
 		$aged_tombstone = $this->journal->head_sequence();
 		$this->journal->record( 'product', 102, false, '', 'test', false );
@@ -192,8 +196,44 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 
 		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
 
-		$this->assertSame( array(), $this->journal->rows_after_sequence( 0, 10 ) );
+		$this->assertCount( 1, $this->journal->rows_after_sequence( 0, 10 ) );
+		$this->assertSame( $aged_tombstone, $this->journal->head_sequence( array( 'order' ) ) );
+		$this->assertSame( 0, $this->journal->prune_watermark() );
+	}
+
+	/**
+	 * An aged order tombstone BELOW a newer order row prunes normally and
+	 * advances the shared watermark — the clamp protects heads, not history.
+	 */
+	public function test_purge_expired_prunes_an_aged_order_tombstone_below_a_newer_order_row(): void {
+		$this->journal->record( 'order', 101, true, 'deleted', 'hook:delete', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'order', 102, false, 'rev', 'hook:update', false );
+		$this->journal->record( 'product', 103, false, '', 'test', false );
+		$this->age_row( $aged_tombstone, 91 );
+
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		$order_rows = $this->journal->rows_after_sequence( 0, 10 );
+		$this->assertCount( 1, $order_rows );
+		$this->assertSame( 102, $order_rows[0]['order_id'] );
 		$this->assertSame( $aged_tombstone, $this->journal->prune_watermark() );
+	}
+
+	/**
+	 * The mirror case: an aged catalogue tombstone that is the catalogue
+	 * stream's head survives even when a newer ORDER row raises the global head.
+	 */
+	public function test_purge_expired_keeps_an_aged_catalogue_tombstone_that_is_the_catalogue_head(): void {
+		$this->journal->record( 'product', 11, true, '', 'test', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'order', 12, false, 'rev', 'hook:update', false );
+		$this->age_row( $aged_tombstone, 91 );
+
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		$this->assertSame( $aged_tombstone, $this->journal->head_sequence( Sync_Journal::catalogue_object_types() ) );
+		$this->assertSame( 0, $this->journal->prune_watermark() );
 	}
 
 	/**

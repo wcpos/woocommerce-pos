@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Sync\Order_Query;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
@@ -92,5 +93,31 @@ class Test_Order_Query extends Sync_REST_Store_Test_Case {
 		$rows  = $query->changes_after_checkpoint( '1970-01-01T00:00:00.000Z', 0, 41, 10 );
 
 		$this->assertSame( array(), $rows );
+	}
+
+	/**
+	 * A sequence-zero pull is the client's BASELINE claim: the journal may only
+	 * serve it once backfill reports complete. A journal holding only
+	 * post-install writes must not suppress the verified modified-date scan —
+	 * one order write after the upgrade's legacy-table drop would otherwise
+	 * hide every historical order from a first-pull client.
+	 */
+	public function test_sequence_zero_stays_on_the_baseline_scan_until_backfill_completes(): void {
+		$historic = OrderHelper::create_order();
+		$journal  = new Sync_Journal();
+		$recent   = OrderHelper::create_order();
+		$journal->record_order_change( $recent->get_id(), 'hook:update', false );
+		delete_option( Sync_Journal::BACKFILL_OPTION );
+
+		$rows = ( new Order_Query() )->changes_after_checkpoint( '1970-01-01T00:00:00.000Z', 0, 0, 10 );
+		$ids  = array_column( $rows, 'order_id' );
+		$this->assertContains( $historic->get_id(), $ids );
+		$this->assertContains( $recent->get_id(), $ids );
+		$this->assertSame( array( 0 ), array_values( array_unique( array_column( $rows, 'sequence' ) ) ) );
+
+		update_option( Sync_Journal::BACKFILL_OPTION, array( 'status' => 'complete' ), false );
+		$rows = ( new Order_Query() )->changes_after_checkpoint( '1970-01-01T00:00:00.000Z', 0, 0, 10 );
+		$this->assertSame( array( $recent->get_id() ), array_column( $rows, 'order_id' ) );
+		delete_option( Sync_Journal::BACKFILL_OPTION );
 	}
 }

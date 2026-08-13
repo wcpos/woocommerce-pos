@@ -478,6 +478,10 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	public function test_index_backfill_runs_one_bounded_chunk(): void {
 		global $wpdb;
 
+		// This test exercises the backfill machinery itself — clear the base
+		// case's journal-authoritative 'complete' default or the chunk
+		// short-circuits before doing any work.
+		delete_option( Sync_Journal::BACKFILL_OPTION );
 		OrderHelper::create_order();
 		OrderHelper::create_order();
 		OrderHelper::create_order();
@@ -492,7 +496,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertSame(
 			array( 'order', 'backfill' ),
 			$wpdb->get_row(
-				"SELECT object_type, origin FROM {$wpdb->prefix}wcpos_sync_journal WHERE origin = 'backfill' ORDER BY sequence ASC LIMIT 1",
+				'SELECT object_type, origin FROM ' . ( new Sync_Journal() )->table_name() . " WHERE origin = 'backfill' ORDER BY sequence ASC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 				ARRAY_N
 			)
 		);

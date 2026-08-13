@@ -80,12 +80,25 @@ final class Sync_Journal_Purge {
 
 		$tombstone_days = (int) apply_filters( 'woocommerce_pos_change_log_tombstone_retention_days', 90 );
 		$tombstone_gmt  = gmdate( 'Y-m-d H:i:s', $now - $tombstone_days * DAY_IN_SECONDS );
-		// Never prune the newest row: head_sequence() is MAX(sequence), so an
-		// idle store whose last event is an old tombstone would otherwise see
-		// its head regress (and MySQL 5.7 reuses AUTO_INCREMENT after restart).
-		$tombstone_cutoff = $tombstone_days > 0
-			? min( $this->sync_journal->sequence_at_or_before( $tombstone_gmt ), $this->sync_journal->head_sequence() - 1 )
-			: 0;
+		// Never let ANY served stream's head regress: clamp below the newest row
+		// of each non-empty stream, not merely the global head. Heads are
+		// stream-scoped — the newest ORDER row can be an expired tombstone while
+		// newer catalogue rows hold the global head above it; pruning it would
+		// drop the order-lane head below live client checkpoints (whose
+		// cursor-past-head guard then forces a full resync), and vice versa.
+		// This also preserves the original rationale: an idle store whose last
+		// event is an old tombstone must not see a head regress, and MySQL 5.7
+		// reuses AUTO_INCREMENT after restart.
+		$tombstone_cutoff = 0;
+		if ( $tombstone_days > 0 ) {
+			$tombstone_cutoff = $this->sync_journal->sequence_at_or_before( $tombstone_gmt );
+			foreach ( array( array( 'order' ), Sync_Journal::catalogue_object_types() ) as $stream_types ) {
+				$stream_head = $this->sync_journal->head_sequence( $stream_types );
+				if ( $stream_head > 0 ) {
+					$tombstone_cutoff = min( $tombstone_cutoff, $stream_head - 1 );
+				}
+			}
+		}
 
 		$sync_journal   = $this->sync_journal;
 		$pruning_active = $tombstone_days > 0;

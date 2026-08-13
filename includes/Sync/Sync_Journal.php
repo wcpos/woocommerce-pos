@@ -67,11 +67,48 @@ final class Sync_Journal {
 			return;
 		}
 
-		$this->regenerate_epoch();
+		// The epoch marks a SEQUENCE GENERATION. Regenerate it only when the
+		// table was actually (re)created — dbDelta on a surviving table is a
+		// no-op and every row survives, so activation/upgrade re-runs must not
+		// force every client (both lanes, since the epoch is journal-global)
+		// into a needless resync-from-zero.
+		if ( ! $table_existed ) {
+			$this->regenerate_epoch();
+		}
 		$backfill = $this->backfill_status();
 		$backfill_has_progress = 'idle' !== $backfill['status'] || $backfill['nextPage'] > 1 || $backfill['processed'] > 0;
 		if ( 0 === $this->head_sequence() && $backfill_has_progress ) {
 			delete_option( self::BACKFILL_OPTION );
+		}
+
+		// A store with no orders has nothing to backfill: mark it complete on a
+		// fresh table so sequence-zero pulls are journal-authoritative from the
+		// first write (Order_Query holds the baseline on the modified-date scan
+		// until the backfill is complete). Stores WITH history stay incomplete
+		// until the admin backfill runs. Runs after the stale-cursor cleanup
+		// above so a carried-over cursor cannot masquerade as completion.
+		if ( ! $table_existed && function_exists( 'wc_get_orders' ) ) {
+			$existing = wc_get_orders(
+				array(
+					'type'   => 'shop_order',
+					'limit'  => 1,
+					'return' => 'ids',
+				)
+			);
+			if ( is_array( $existing ) && array() === $existing ) {
+				update_option(
+					self::BACKFILL_OPTION,
+					array(
+						'status'      => 'complete',
+						'nextPage'    => 1,
+						'pageSize'    => null,
+						'processed'   => 0,
+						'lastOrderId' => 0,
+						'lastRunGmt'  => gmdate( 'c' ),
+					),
+					false
+				);
+			}
 		}
 	}
 
@@ -486,13 +523,14 @@ final class Sync_Journal {
 			}
 		}
 		try {
+			/** @var array<int|numeric-string>|mixed $queried_ids The 'return' => 'ids' arg yields ids; the stub over-narrows to WC_Order[]. */
 			$queried_ids = wc_get_orders( $query_args );
 		} finally {
 			if ( null !== $posts_where ) {
 				remove_filter( 'posts_where', $posts_where );
 			}
 		}
-		$ids = is_array( $queried_ids ) ? array_map( 'intval', $queried_ids ) : array();
+		$ids = is_array( $queried_ids ) ? array_map( 'absint', $queried_ids ) : array();
 		$processed_this_run = 0;
 		$failed_this_run    = 0;
 		foreach ( $ids as $id ) {
@@ -519,6 +557,26 @@ final class Sync_Journal {
 		update_option( self::BACKFILL_OPTION, $next_status, false );
 
 		return array_merge( $next_status, array( 'processedThisRun' => $processed_this_run ) );
+	}
+
+	/**
+	 * The catalogue pointer-stream's object types, projected from the registry —
+	 * every journal-covered collection except orders (which consume the journal
+	 * via the payload-windowed pull lane). Single source for the sequence-log
+	 * `all` stream and the purge's per-stream head protection.
+	 *
+	 * @return string[]
+	 */
+	public static function catalogue_object_types(): array {
+		$types = array();
+		foreach ( Collections::with( 'journal' ) as $row ) {
+			$object_type = (string) ( $row['journal']['object_type'] ?? '' );
+			if ( '' !== $object_type && 'order' !== $object_type ) {
+				$types[] = $object_type;
+			}
+		}
+
+		return $types;
 	}
 
 	/**

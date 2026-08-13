@@ -777,4 +777,26 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array(), $response->get_data()['documents'] );
 		$this->assertNotInstanceOf( WC_Product_Variation::class, wc_get_product( $product->get_id() ) );
 	}
+
+	/**
+	 * The conditional validator covers every client-visible reset boundary: an
+	 * epoch regeneration or a horizon advance invalidates an at-head ETag even
+	 * when the stream head and config fingerprint are unchanged.
+	 */
+	public function test_sequence_log_etag_varies_with_epoch_and_horizon(): void {
+		$journal = new Sync_Journal();
+		$journal->record( 'product', 11, false, '', 'test', false );
+		$controller = new Changes_Controller( $journal );
+
+		$etag = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
+
+		$journal->advance_prune_watermark( 1 );
+		$after_horizon = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
+		$this->assertNotSame( $etag, $after_horizon );
+		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+
+		$journal->regenerate_epoch();
+		$after_epoch = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
+		$this->assertNotSame( $etag, $after_epoch );
+	}
 }

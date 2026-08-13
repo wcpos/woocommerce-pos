@@ -28,13 +28,30 @@ class Test_Sync_Journal_Query extends Sync_Store_Test_Case {
 		$this->assertSame( 0, $this->journal->head_sequence() );
 	}
 
-	public function test_epoch_is_stable_until_install_regenerates_it(): void {
+	public function test_epoch_survives_install_on_a_surviving_table_and_regenerates_on_recreate(): void {
+		global $wpdb;
 		$first = $this->journal->ensure_epoch();
 		$this->assertSame( $first, $this->journal->ensure_epoch() );
 
+		// dbDelta no-op on a surviving table: every row survives, so activation
+		// re-runs must NOT change the generation (needless all-client resync).
 		$this->journal->install();
+		$this->assertSame( $first, $this->journal->ensure_epoch() );
 
-		$this->assertNotSame( $first, $this->journal->ensure_epoch() );
+		// A recreated table IS a new sequence generation. The WP test suite
+		// rewrites DROP/CREATE TABLE to TEMPORARY variants, which never touch
+		// the real table install() probes with SHOW TABLES — lift the filters
+		// so the recreate is real, then restore everything.
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		try {
+			$wpdb->query( 'DROP TABLE ' . $this->journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+			$this->journal->install();
+			$this->assertNotSame( $first, $this->journal->ensure_epoch() );
+		} finally {
+			add_filter( 'query', array( $this, '_create_temporary_tables' ) );
+			add_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		}
 	}
 
 	public function test_page_returns_global_stream_and_head(): void {
@@ -140,5 +157,16 @@ class Test_Sync_Journal_Query extends Sync_Store_Test_Case {
 		} finally {
 			$this->journal->install();
 		}
+	}
+
+	/**
+	 * The catalogue stream's types are a registry projection (journal group
+	 * minus orders) — a newly journalled collection cannot be invisible to it.
+	 */
+	public function test_catalogue_object_types_project_from_the_registry_without_orders(): void {
+		$types = Sync_Journal::catalogue_object_types();
+
+		$this->assertNotContains( 'order', $types );
+		$this->assertSame( array( 'product', 'variation', 'customer', 'category', 'brand', 'tag', 'coupon', 'tax_rate' ), $types );
 	}
 }

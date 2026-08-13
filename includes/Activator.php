@@ -164,6 +164,10 @@ class Activator {
 			global $wpdb;
 			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_change_log" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
 			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_order_index" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+			// The legacy Change_Log_Purge class is gone; its recurring cron event
+			// would otherwise survive the upgrade and fire a hook with no handler
+			// forever. Literal hook name — the constant was removed with the class.
+			wp_clear_scheduled_hook( 'wcpos_change_log_purge' );
 		}
 
 		if ( ! Sync_Health::is_healthy() ) {

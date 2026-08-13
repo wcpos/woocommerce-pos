@@ -28,12 +28,24 @@ final class Order_Query {
 	public function changes_after_checkpoint( string $updated_at_gmt, int $order_id, int $sequence, int $limit ): array {
 		$journal = $this->journal ?? new Sync_Journal();
 		if ( method_exists( $journal, 'rows_after_sequence' ) ) {
-			$journal_rows = $journal->rows_after_sequence( $sequence, $limit );
-			if ( ! empty( $journal_rows ) ) {
-				return $journal_rows;
-			}
-			if ( 0 < $sequence ) {
-				return array();
+			// A SEQUENCE-ZERO pull is the client's baseline claim, and the journal
+			// can only honor it once it covers every historical order — i.e. after
+			// the backfill reports complete (fresh no-order stores mark it complete
+			// at install). Before that, a journal holding only post-install writes
+			// would silently suppress the modified-date baseline scan: one order
+			// write after the upgrade's legacy-table drop and a first-pull client
+			// would never see its history. Non-zero cursors are always
+			// journal-authoritative (the client is past its baseline).
+			$journal_owns_baseline = ! method_exists( $journal, 'backfill_status' )
+				|| 'complete' === (string) ( $journal->backfill_status()['status'] ?? '' );
+			if ( 0 < $sequence || $journal_owns_baseline ) {
+				$journal_rows = $journal->rows_after_sequence( $sequence, $limit );
+				if ( ! empty( $journal_rows ) ) {
+					return $journal_rows;
+				}
+				if ( 0 < $sequence ) {
+					return array();
+				}
 			}
 		}
 

@@ -252,4 +252,18 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		$this->assertTrue( Health::is_healthy() );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
 	}
+
+	/**
+	 * The schema upgrade clears the retired legacy purge cron — its class is
+	 * gone, so a surviving recurring event would fire an unhandled hook forever.
+	 */
+	public function test_schema_upgrade_clears_legacy_purge_cron(): void {
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'wcpos_change_log_purge' );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_change_log_purge' ) );
+		update_option( Api::SCHEMA_OPTION, '3', false );
+
+		( new Activator() )->install_sync_schema();
+
+		$this->assertFalse( wp_next_scheduled( 'wcpos_change_log_purge' ) );
+	}
 }

@@ -546,11 +546,18 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * representation-affecting fingerprint data.
 	 */
 	private function sequence_log_etag( int $head_sequence, array $config_fingerprint ): string {
+		// The validator must cover EVERY client-visible reset boundary, not just
+		// head+config: an install can regenerate the epoch, and retention can
+		// advance the horizon, while this stream's head is unchanged — an at-head
+		// client presenting the old validator would then 304 forever and never
+		// observe the very fields that trigger its rebaseline.
 		return '"' . $head_sequence . ':' . md5(
 			(string) wp_json_encode(
 				array(
 					'fingerprints'   => $config_fingerprint['fingerprints'],
 					'barcode_fields' => $config_fingerprint['barcode_fields'],
+					'epoch'          => $this->journal->ensure_epoch(),
+					'horizon'        => $this->journal->prune_watermark(),
 				)
 			)
 		) . '"';
@@ -655,7 +662,9 @@ final class Changes_Controller extends WP_REST_Controller {
 	 */
 	private function object_types_for_collection( string $collection ): array {
 		if ( 'all' === $collection ) {
-			return array( 'product', 'variation', 'customer', 'coupon', 'tax_rate', 'category', 'brand', 'tag' );
+			// Projected from the Collections registry (journal group minus orders)
+			// so a new collection cannot be journalled yet invisible to this stream.
+			return Sync_Journal::catalogue_object_types();
 		}
 		if ( 'tax_rates' === $collection ) {
 			return array( 'tax_rate' );

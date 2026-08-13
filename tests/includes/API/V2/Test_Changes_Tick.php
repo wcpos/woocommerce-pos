@@ -177,7 +177,22 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $sequence['checkpoint']['epoch'], $tick['checkpoint']['epoch'] );
 		$first_epoch = $tick['checkpoint']['epoch'];
 
+		// Only a RECREATED table starts a new generation — install() on a
+		// surviving table must keep the epoch (no needless all-client resync).
+		global $wpdb;
 		$journal->install();
+		$this->assertSame( $first_epoch, $this->server->dispatch( $this->tick_request() )->get_data()['checkpoint']['epoch'] );
+		// Real recreate: lift the WP suite's TEMPORARY-table query rewrites,
+		// which otherwise leave the SHOW TABLES-probed real table in place.
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		try {
+			$wpdb->query( 'DROP TABLE ' . $journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+			$journal->install();
+		} finally {
+			add_filter( 'query', array( $this, '_create_temporary_tables' ) );
+			add_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		}
 		$next_tick = $this->server->dispatch( $this->tick_request() )->get_data();
 		$next_sequence = $this->server->dispatch(
 			$this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' )
