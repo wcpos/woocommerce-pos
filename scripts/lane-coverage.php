@@ -272,10 +272,19 @@ function scan_file( $absolute_file, $relative_file ) {
 			if ( $current_method['test'] && 'WP_REST_Response' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
 				$classes[ $class_index ]['methods'][ $current_method['index'] ]['stub_sites'][ $token[2] ] = true;
 			} elseif ( 'WP_REST_Request' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
-				$literal = literal_text_from_call_argument( $tokens, $constructor, 1, $literal_indexes );
-				$route_literal_tokens += $literal_indexes;
-				$lanes   = lanes_from_text( $literal );
-				add_finding( $classes, $class_index, $current_method, empty( $lanes ) ? array( 'unresolved' => true ) : $lanes, empty( $lanes ) ? null : $literal );
+				$after_open = next_significant_index( $tokens, $constructor );
+				if ( null !== $after_open && ')' === $tokens[ $after_open ] ) {
+					// A bare `new WP_REST_Request()` carries no route at all: it is a
+					// payload/stub object handed to serializers, not a dispatch. It
+					// contributes NO lane signal — `unresolved` is reserved for routes
+					// that exist but cannot be read from literals, and counting bare
+					// constructors there misclassifies pure-unit observers.
+				} else {
+					$literal = literal_text_from_call_argument( $tokens, $constructor, 1, $literal_indexes );
+					$route_literal_tokens += $literal_indexes;
+					$lanes   = lanes_from_text( $literal );
+					add_finding( $classes, $class_index, $current_method, empty( $lanes ) ? array( 'unresolved' => true ) : $lanes, empty( $lanes ) ? null : $literal );
+				}
 			}
 		}
 		if ( T_VARIABLE === $id && '$GLOBALS' === $token[1] && null !== $current_method && $current_method['test'] ) {

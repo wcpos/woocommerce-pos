@@ -7,8 +7,8 @@ actually calls. v1-route tests are legacy pins and do not count — see README.m
 
 - Cases: 3071
 - v1-only cases: 740
-- Unresolved-route cases (not proven current, not claimed v1): 80
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 500, wc3 278, wp2 2, unresolved 416, pure unit 1671
+- Unresolved-route cases (not proven current, not claimed v1): 31
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 500, wc3 278, wp2 2, unresolved 334, pure unit 1720
 - Blind-test warnings (advisory): self-installed-hook 66, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -310,28 +310,28 @@ actually calls. v1-route tests are legacy pins and do not count — see README.m
 | Order status vocabulary | tests/includes/API/Test_Data_Order_Statuses_Controller.php:test_status_structure | v1 | unreviewed | — |
 | Order status vocabulary | tests/includes/API/Test_Data_Order_Statuses_Controller.php:test_subscriber_cannot_view | v1 | unreviewed | — |
 | Order status vocabulary | tests/includes/API/Test_Data_Order_Statuses_Controller.php:test_wc_prefix_removed | v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_authorization_endpoint_with_header | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_authorization_endpoint_with_no_auth | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_authorization_endpoint_with_param | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_admin_permissions_for_admin | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_admin_permissions_for_regular_user | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_admin_permissions_for_shop_manager | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_admin | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_own_sessions | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_regular_user | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_shop_manager | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_when_not_logged_in | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_all_sessions | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_all_sessions_except_current | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_session | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_session_with_missing_params | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_get_all_users_sessions | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_get_sessions_for_current_user | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_get_sessions_for_specific_user | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_login_user_data_includes_capabilities_array | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_refresh_token_with_invalid_token | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_refresh_token_with_missing_token | unresolved, v1 | unreviewed | — |
-| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_refresh_token_with_valid_token | unresolved, v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_authorization_endpoint_with_header | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_authorization_endpoint_with_no_auth | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_authorization_endpoint_with_param | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_admin_permissions_for_admin | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_admin_permissions_for_regular_user | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_admin_permissions_for_shop_manager | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_admin | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_own_sessions | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_regular_user | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_for_shop_manager | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_check_session_permissions_when_not_logged_in | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_all_sessions | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_all_sessions_except_current | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_session | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_delete_session_with_missing_params | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_get_all_users_sessions | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_get_sessions_for_current_user | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_get_sessions_for_specific_user | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_login_user_data_includes_capabilities_array | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_refresh_token_with_invalid_token | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_refresh_token_with_missing_token | v1 | unreviewed | — |
+| POS authentication and JWT issuance | tests/includes/API/Test_Auth_API.php:test_refresh_token_with_valid_token | v1 | unreviewed | — |
 | POS endpoint permission checks | tests/includes/API/Test_Permissions.php:test_admin_can_create_order | v1 | unreviewed | — |
 | POS endpoint permission checks | tests/includes/API/Test_Permissions.php:test_admin_can_read_customers | v1 | unreviewed | — |
 | POS endpoint permission checks | tests/includes/API/Test_Permissions.php:test_admin_can_read_products | v1 | unreviewed | — |
@@ -771,43 +771,6 @@ variables.
 | Fee and tax handling on sync dispatch | tests/includes/Sync/Test_Rest_Dispatch_Fee_Tax.php:test_positive_taxable_fee_keeps_stock_wc_taxes_through_v2_push | unresolved | unreviewed | — |
 | REST route classification into POS lanes | tests/includes/API/Test_Route_Classifier.php:test_mixed_case_registered_route_receives_anonymous_gate_401 | unresolved | unreviewed | — |
 | REST route classification into POS lanes | tests/includes/API/Test_Route_Classifier.php:test_mixed_case_unknown_v2_route_receives_anonymous_gate_401 | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_clause_bodies_are_gated_on_the_resolved_storage | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_created_via_uses_a_different_encoding_per_storage | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_empty_id_set_contributes_no_clause | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_id_sets_append_in_and_not_in_predicates | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_columns_are_declared_per_sort | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_defers_to_a_woocommerce_clause_for_the_same_sort | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_direction_comes_from_the_query_args | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_direction_rejects_non_scalar_values | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_overrides_a_woocommerce_clause_for_another_sort | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_id_sets_append_prepared_predicates | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_include_where_binding_matches_array_form_post_type | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_orderby_binding_matches_array_form_post_type | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_sort_args_are_declared_per_sort | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_sort_direction_rejects_non_scalar_values | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_sort_direction_rejects_values_outside_asc_desc | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_status_sort_direction_prefers_the_query_vars | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_status_sort_ignores_other_post_types | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_status_sort_rewrites_the_orderby_clause | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_pos_filters_become_meta_query_rows | unresolved | unreviewed | — |
-| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_search_clobber_rule_only_owns_id_sets_alongside_search | unresolved | unreviewed | — |
-| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_around_installs_its_bindings_for_the_duration_of_the_forward | unresolved | unreviewed | — |
-| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_around_leaves_the_filter_table_unchanged | unresolved | unreviewed | — |
-| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_around_unwinds_when_the_forward_throws | unresolved | unreviewed | — |
-| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_nested_around_calls_unwind_completely | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_collection_params_match_the_literal_they_replaced | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_empty_plan_around_is_a_passthrough | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_forwarded_params_strips_claims_and_keeps_order | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_include_is_claimed_when_search_would_clobber_it | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_include_is_forwarded_when_no_search_is_present | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_native_orderby_is_not_claimed | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_orderby_enum_projects_the_sort_rows | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_plans_are_memoized_per_request | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_unknown_collection_yields_an_empty_plan | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_unknown_hook_passes_the_value_through | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_v1_param_map_claims_its_own_params | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_v1_param_map_never_claims_created_via | unresolved | unreviewed | — |
-| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_v2_param_map_claims_created_via | unresolved | unreviewed | — |
 | Test Core Order Audit Guard | tests/includes/API/Test_Core_Order_Audit_Guard.php:test_audit_guard_jwt_mixed_case_route_with_audit_meta_id_returns_forbidden | unresolved | unreviewed | — |
 | Test Core Order Audit Guard | tests/includes/API/Test_Core_Order_Audit_Guard.php:test_audit_guard_jwt_wc_analytics_order_update_with_audit_key_returns_forbidden | unresolved | unreviewed | — |
 | Test Header Mirror | tests/includes/Sync/Test_Header_Mirror.php:test_allow_cors_headers_appends_the_mirror_headers_without_duplicates | unresolved | unreviewed | — |
@@ -818,7 +781,6 @@ variables.
 | Test Header Mirror | tests/includes/Sync/Test_Header_Mirror.php:test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header | unresolved | unreviewed | — |
 | Test Header Mirror | tests/includes/Sync/Test_Header_Mirror.php:test_production_api_cors_allow_list_includes_mirror_headers | unresolved | unreviewed | — |
 | Test Header Mirror | tests/includes/Sync/Test_Header_Mirror.php:test_production_api_exposes_response_telemetry_headers | unresolved | unreviewed | — |
-| Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_served_coupon_lines_carry_pos_uuid | unresolved | unreviewed | — |
 | Test Response Telemetry | tests/includes/Sync/Test_Response_Telemetry.php:test_changes_route_adds_telemetry_headers_without_modifying_body | unresolved | unreviewed | — |
 | Test Response Telemetry | tests/includes/Sync/Test_Response_Telemetry.php:test_empty_pre_dispatch_values_continue_to_route_callback | unresolved | unreviewed | — |
 | Test Response Telemetry | tests/includes/Sync/Test_Response_Telemetry.php:test_mixed_case_changes_route_receives_telemetry_headers | unresolved | unreviewed | — |
@@ -833,17 +795,6 @@ variables.
 | Test Rest Dispatch Omitted Line Removal | tests/includes/Sync/Test_Rest_Dispatch_Omitted_Line_Removal.php:test_omitted_lines_stale_base_revision_returns_conflict_and_removes_nothing | unresolved | unreviewed | — |
 | Test Rest Dispatch Omitted Line Removal | tests/includes/Sync/Test_Rest_Dispatch_Omitted_Line_Removal.php:test_omitted_lines_with_new_uuid_line_removes_old_line_and_appends_new_line | unresolved | unreviewed | — |
 | Test Route Classifier Sync Disabled | tests/includes/API/Test_Route_Classifier_Sync_Disabled.php:test_manage_operator_reaches_dispatch_404_for_unregistered_sync_admin_op | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_coupon_create_update_trash_and_untrash_use_empty_revisions | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_customer_create_persisted_dedup_profile_role_and_delete_rows | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_hpos_order_trash_and_untrash_append_delete_then_present_row | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_appends_order_rows_and_advances_the_id_cursor | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_does_not_advance_past_a_failed_journal_write | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_product_create_update_trash_and_untrash_rows_follow_revision_rules | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_tax_rate_create_update_and_delete_use_empty_revisions | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_term_create_update_meta_and_delete_rows_follow_taxonomy_map | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_unknown_taxonomy_writes_no_row | unresolved | unreviewed | — |
-| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_variation_lifecycle_also_touches_parent_product | unresolved | unreviewed | — |
 | Test WC API | tests/includes/Test_WC_API.php:test_pos_only_products_excluded_on_mixed_case_route | unresolved | unreviewed | — |
 
 ## Blind-test warnings (advisory — never fails CI)
@@ -1647,6 +1598,43 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Cloud Print Section | tests/includes/Services/Settings/Test_Cloud_Print_Section.php:test_read_redacts_secrets | unit | unreviewed | — |
 | Test Cloud Print Section | tests/includes/Services/Settings/Test_Cloud_Print_Section.php:test_write_preserves_omitted_printnode_key | unit | unreviewed | — |
 | Test Cloud Print Section | tests/includes/Services/Settings/Test_Cloud_Print_Section.php:test_write_rejects_duplicate_ids | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_clause_bodies_are_gated_on_the_resolved_storage | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_created_via_uses_a_different_encoding_per_storage | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_empty_id_set_contributes_no_clause | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_id_sets_append_in_and_not_in_predicates | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_columns_are_declared_per_sort | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_defers_to_a_woocommerce_clause_for_the_same_sort | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_direction_comes_from_the_query_args | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_direction_rejects_non_scalar_values | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_hpos_sort_overrides_a_woocommerce_clause_for_another_sort | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_id_sets_append_prepared_predicates | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_include_where_binding_matches_array_form_post_type | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_orderby_binding_matches_array_form_post_type | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_sort_args_are_declared_per_sort | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_sort_direction_rejects_non_scalar_values | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_sort_direction_rejects_values_outside_asc_desc | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_status_sort_direction_prefers_the_query_vars | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_status_sort_ignores_other_post_types | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_legacy_status_sort_rewrites_the_orderby_clause | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_pos_filters_become_meta_query_rows | unit | unreviewed | — |
+| Test Collection Rules Clauses | tests/includes/Sync/Test_Collection_Rules_Clauses.php:test_search_clobber_rule_only_owns_id_sets_alongside_search | unit | unreviewed | — |
+| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_around_installs_its_bindings_for_the_duration_of_the_forward | unit | unreviewed | — |
+| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_around_leaves_the_filter_table_unchanged | unit | unreviewed | — |
+| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_around_unwinds_when_the_forward_throws | unit | unreviewed | — |
+| Test Collection Rules Leak | tests/includes/Sync/Test_Collection_Rules_Leak.php:test_nested_around_calls_unwind_completely | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_collection_params_match_the_literal_they_replaced | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_empty_plan_around_is_a_passthrough | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_forwarded_params_strips_claims_and_keeps_order | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_include_is_claimed_when_search_would_clobber_it | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_include_is_forwarded_when_no_search_is_present | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_native_orderby_is_not_claimed | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_orderby_enum_projects_the_sort_rows | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_plans_are_memoized_per_request | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_unknown_collection_yields_an_empty_plan | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_unknown_hook_passes_the_value_through | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_v1_param_map_claims_its_own_params | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_v1_param_map_never_claims_created_via | unit | unreviewed | — |
+| Test Collection Rules Plan | tests/includes/Sync/Test_Collection_Rules_Plan.php:test_v2_param_map_claims_created_via | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_digest_projection_has_three_id_space_owners | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_journal_projection_covers_all_collections | unit | unreviewed | — |
 | Test Collections | tests/includes/Sync/Test_Collections.php:test_names_covers_the_nine_collections | unit | unreviewed | — |
@@ -1796,17 +1784,17 @@ These tests may be structurally incapable of failing because they install or stu
 | Test General Section | tests/includes/Services/Settings/Test_General_Section.php:test_read_composes_store_defaults_and_sanitizes_tax_ids | unit | unreviewed | — |
 | Test General Section | tests/includes/Services/Settings/Test_General_Section.php:test_sanitize_strips_store_defaults_on_write | unit | unreviewed | — |
 | Test General Section | tests/includes/Services/Settings/Test_General_Section.php:test_tracking_consent_migrates_from_tools_without_db_write | unit | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_dispatch_returns_early_for_wc_v3_routes | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_pre_dispatch_returns_early_for_wc_v3_routes | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_route_map_only_contains_wcpos_routes | unresolved, v1, v2 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_customer_is_unmodified | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_order_does_not_have_pos_links | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_category_is_unmodified | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_does_not_have_barcode | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_list_does_not_have_barcode | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_tag_is_unmodified | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_tax_is_unmodified | unresolved, wc3 | unreviewed | — |
-| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_variation_does_not_have_barcode | unresolved, wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_dispatch_returns_early_for_wc_v3_routes | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_pre_dispatch_returns_early_for_wc_v3_routes | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_route_map_only_contains_wcpos_routes | v1, v2 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_customer_is_unmodified | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_order_does_not_have_pos_links | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_category_is_unmodified | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_does_not_have_barcode | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_list_does_not_have_barcode | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_product_tag_is_unmodified | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_tax_is_unmodified | wc3 | unreviewed | — |
+| Test Hook Isolation | tests/includes/API/Test_Hook_Isolation.php:test_wc_v3_variation_does_not_have_barcode | wc3 | unreviewed | — |
 | Test I18n | tests/includes/Test_i18n.php:test_cached_version_skips_download | unit | unreviewed | — |
 | Test I18n | tests/includes/Test_i18n.php:test_cached_write_failure_skips_download | unit | unreviewed | — |
 | Test I18n | tests/includes/Test_i18n.php:test_cached_write_failure_still_loads_stale_file | unit | unreviewed | — |
@@ -2019,6 +2007,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_revision_is_invariant_to_payment_links | unit | unreviewed | — |
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_revision_is_invariant_to_transient_trash_meta | unit | unreviewed | — |
 | Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_revision_is_invariant_to_uuid_identity_meta | unit | unreviewed | — |
+| Test Order Serializer | tests/includes/Sync/Test_Order_Serializer.php:test_served_coupon_lines_carry_pos_uuid | unit | unreviewed | — |
 | Test Order Write Contract HPOS | tests/includes/Sync/Test_Order_Write_Contract_HPOS.php:test_hpos_order_create_update_delete_round_trip_through_write_contract | v2 | unreviewed | — |
 | Test Order Write Payload | tests/includes/Sync/Test_Order_Write_Payload.php:test_for_create_recovers_any_variation_attributes_from_display_fields | unit | unreviewed | — |
 | Test Order Write Payload | tests/includes/Sync/Test_Order_Write_Payload.php:test_for_create_with_a_misc_line_forwards_the_sentinel_sku_and_stamps_sku_meta | unit | unreviewed | — |
@@ -2790,6 +2779,17 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_schema_upgrade_drops_legacy_change_and_order_tables | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_unhealthy_schema_upgrade_preserves_compensation_for_retry | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_version_check_queues_upgrade_when_only_sync_schema_is_unlatched | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_coupon_create_update_trash_and_untrash_use_empty_revisions | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_customer_create_persisted_dedup_profile_role_and_delete_rows | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_hpos_order_trash_and_untrash_append_delete_then_present_row | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_appends_order_rows_and_advances_the_id_cursor | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_backfill_does_not_advance_past_a_failed_journal_write | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_product_create_update_trash_and_untrash_rows_follow_revision_rules | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_tax_rate_create_update_and_delete_use_empty_revisions | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_term_create_update_meta_and_delete_rows_follow_taxonomy_map | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_unknown_taxonomy_writes_no_row | unit | unreviewed | — |
+| Test Sync Journal Observation | tests/includes/Sync/Test_Sync_Journal_Observation.php:test_variation_lifecycle_also_touches_parent_product | unit | unreviewed | — |
 | Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_keeps_an_aged_catalogue_tombstone_that_is_the_catalogue_head | unit | unreviewed | — |
 | Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_keeps_an_aged_order_tombstone_that_is_the_order_lane_head | unit | unreviewed | — |
 | Test Sync Journal Purge | tests/includes/Sync/Test_Sync_Journal_Purge.php:test_purge_expired_prunes_an_aged_order_tombstone_below_a_newer_order_row | unit | unreviewed | — |

@@ -3,14 +3,14 @@
     "summary": {
         "cases": 3071,
         "v1_only": 740,
-        "unresolved": 80,
+        "unresolved": 31,
         "by_lane": {
             "v1": 806,
             "v2": 500,
             "wc3": 278,
             "wp2": 2,
-            "unresolved": 416,
-            "unit": 1671
+            "unresolved": 334,
+            "unit": 1720
         },
         "warnings": {
             "self-installed-hook": 66,
@@ -1985,11 +1985,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2006,11 +2004,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2027,11 +2023,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2048,11 +2042,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2069,11 +2061,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2090,11 +2080,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2111,11 +2099,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2132,11 +2118,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2153,11 +2137,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2174,11 +2156,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2195,11 +2175,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2216,11 +2194,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2237,11 +2213,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2258,11 +2232,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2279,11 +2251,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2300,11 +2270,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2321,11 +2289,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2342,11 +2308,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2363,11 +2327,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2384,11 +2346,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2405,11 +2365,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -2426,11 +2384,9 @@
             "behavior": "POS authentication and JWT issuance",
             "own_lanes": [],
             "class_lanes": [
-                "unresolved",
                 "v1"
             ],
             "lanes": [
-                "unresolved",
                 "v1"
             ],
             "v1_only": true,
@@ -6121,11 +6077,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6143,11 +6096,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6166,11 +6116,8 @@
                 "v1",
                 "v2"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "v1",
                 "v2"
             ],
@@ -6189,11 +6136,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6211,11 +6155,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6233,11 +6174,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6255,11 +6193,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6277,11 +6212,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6299,11 +6231,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6321,11 +6250,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -6343,11 +6269,8 @@
             "own_lanes": [
                 "wc3"
             ],
-            "class_lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
             "lanes": [
-                "unresolved",
                 "wc3"
             ],
             "v1_only": false,
@@ -33542,14 +33465,10 @@
             "method": "test_clause_bodies_are_gated_on_the_resolved_storage",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33561,14 +33480,10 @@
             "method": "test_created_via_uses_a_different_encoding_per_storage",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33580,14 +33495,10 @@
             "method": "test_empty_id_set_contributes_no_clause",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33599,14 +33510,10 @@
             "method": "test_hpos_id_sets_append_in_and_not_in_predicates",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33618,14 +33525,10 @@
             "method": "test_hpos_sort_columns_are_declared_per_sort",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33637,14 +33540,10 @@
             "method": "test_hpos_sort_defers_to_a_woocommerce_clause_for_the_same_sort",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33656,14 +33555,10 @@
             "method": "test_hpos_sort_direction_comes_from_the_query_args",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33675,14 +33570,10 @@
             "method": "test_hpos_sort_direction_rejects_non_scalar_values",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33694,14 +33585,10 @@
             "method": "test_hpos_sort_overrides_a_woocommerce_clause_for_another_sort",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33713,14 +33600,10 @@
             "method": "test_legacy_id_sets_append_prepared_predicates",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33732,14 +33615,10 @@
             "method": "test_legacy_include_where_binding_matches_array_form_post_type",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33751,14 +33630,10 @@
             "method": "test_legacy_orderby_binding_matches_array_form_post_type",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33770,14 +33645,10 @@
             "method": "test_legacy_sort_args_are_declared_per_sort",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33789,14 +33660,10 @@
             "method": "test_legacy_sort_direction_rejects_non_scalar_values",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33808,14 +33675,10 @@
             "method": "test_legacy_sort_direction_rejects_values_outside_asc_desc",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33827,14 +33690,10 @@
             "method": "test_legacy_status_sort_direction_prefers_the_query_vars",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33846,14 +33705,10 @@
             "method": "test_legacy_status_sort_ignores_other_post_types",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33865,14 +33720,10 @@
             "method": "test_legacy_status_sort_rewrites_the_orderby_clause",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33884,14 +33735,10 @@
             "method": "test_pos_filters_become_meta_query_rows",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33903,14 +33750,10 @@
             "method": "test_search_clobber_rule_only_owns_id_sets_alongside_search",
             "behavior": "Test Collection Rules Clauses",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33960,14 +33803,10 @@
             "method": "test_around_installs_its_bindings_for_the_duration_of_the_forward",
             "behavior": "Test Collection Rules Leak",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33979,14 +33818,10 @@
             "method": "test_around_leaves_the_filter_table_unchanged",
             "behavior": "Test Collection Rules Leak",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -33998,14 +33833,10 @@
             "method": "test_around_unwinds_when_the_forward_throws",
             "behavior": "Test Collection Rules Leak",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34017,14 +33848,10 @@
             "method": "test_nested_around_calls_unwind_completely",
             "behavior": "Test Collection Rules Leak",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34036,14 +33863,10 @@
             "method": "test_collection_params_match_the_literal_they_replaced",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34055,14 +33878,10 @@
             "method": "test_empty_plan_around_is_a_passthrough",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34074,14 +33893,10 @@
             "method": "test_forwarded_params_strips_claims_and_keeps_order",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34093,14 +33908,10 @@
             "method": "test_include_is_claimed_when_search_would_clobber_it",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34112,14 +33923,10 @@
             "method": "test_include_is_forwarded_when_no_search_is_present",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34131,14 +33938,10 @@
             "method": "test_native_orderby_is_not_claimed",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34150,14 +33953,10 @@
             "method": "test_orderby_enum_projects_the_sort_rows",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34168,17 +33967,11 @@
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Collection_Rules_Plan",
             "method": "test_plans_are_memoized_per_request",
             "behavior": "Test Collection Rules Plan",
-            "own_lanes": [
-                "unresolved"
-            ],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "own_lanes": [],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34189,17 +33982,11 @@
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Collection_Rules_Plan",
             "method": "test_unknown_collection_yields_an_empty_plan",
             "behavior": "Test Collection Rules Plan",
-            "own_lanes": [
-                "unresolved"
-            ],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "own_lanes": [],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34211,14 +33998,10 @@
             "method": "test_unknown_hook_passes_the_value_through",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34230,14 +34013,10 @@
             "method": "test_v1_param_map_claims_its_own_params",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34249,14 +34028,10 @@
             "method": "test_v1_param_map_never_claims_created_via",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -34268,14 +34043,10 @@
             "method": "test_v2_param_map_claims_created_via",
             "behavior": "Test Collection Rules Plan",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -36588,15 +36359,11 @@
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Order_Serializer",
             "method": "test_served_coupon_lines_carry_pos_uuid",
             "behavior": "Test Order Serializer",
-            "own_lanes": [
-                "unresolved"
-            ],
+            "own_lanes": [],
             "class_lanes": [],
-            "lanes": [
-                "unresolved"
-            ],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": []
@@ -41535,14 +41302,10 @@
             "method": "test_coupon_create_update_trash_and_untrash_use_empty_revisions",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41570,14 +41333,10 @@
             "method": "test_customer_create_persisted_dedup_profile_role_and_delete_rows",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41605,14 +41364,10 @@
             "method": "test_hpos_order_trash_and_untrash_append_delete_then_present_row",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41640,14 +41395,10 @@
             "method": "test_order_backfill_appends_order_rows_and_advances_the_id_cursor",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41675,14 +41426,10 @@
             "method": "test_order_backfill_does_not_advance_past_a_failed_journal_write",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41710,14 +41457,10 @@
             "method": "test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41745,14 +41488,10 @@
             "method": "test_product_create_update_trash_and_untrash_rows_follow_revision_rules",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41780,14 +41519,10 @@
             "method": "test_tax_rate_create_update_and_delete_use_empty_revisions",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41815,14 +41550,10 @@
             "method": "test_term_create_update_meta_and_delete_rows_follow_taxonomy_map",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41850,14 +41581,10 @@
             "method": "test_unknown_taxonomy_writes_no_row",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -41885,14 +41612,10 @@
             "method": "test_variation_lifecycle_also_touches_parent_product",
             "behavior": "Test Sync Journal Observation",
             "own_lanes": [],
-            "class_lanes": [
-                "unresolved"
-            ],
-            "lanes": [
-                "unresolved"
-            ],
+            "class_lanes": [],
+            "lanes": [],
             "v1_only": false,
-            "unresolved": true,
+            "unresolved": false,
             "verdict": "unreviewed",
             "note": null,
             "warnings": [
@@ -45622,9 +45345,7 @@
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Write_Controller",
             "method": "test_order_update_forward_drops_empty_email_but_keeps_real_values",
             "behavior": "Test Write Controller",
-            "own_lanes": [
-                "unresolved"
-            ],
+            "own_lanes": [],
             "class_lanes": [
                 "unresolved",
                 "v2",
