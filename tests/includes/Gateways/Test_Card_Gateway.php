@@ -2,6 +2,8 @@
 /**
  * Tests for the WCPOS Card Payment Gateway.
  *
+ * @package WCPOS\WooCommercePOS\Tests
+ *
  * Tests the card payment gateway functionality including:
  * - Gateway registration and properties
  * - Payment processing with and without cashback
@@ -109,19 +111,19 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 	 * Test calculate_cashback uses the order currency.
 	 */
 	public function test_calculate_cashback_order_currency_differs_from_store_renders_order_currency_symbol(): void {
-		// Arrange
+		// Arrange.
 		$order_currency = 'EUR' === get_woocommerce_currency() ? 'USD' : 'EUR';
 		$order          = OrderHelper::create_order();
 		$order->set_currency( $order_currency );
 		$order->update_meta_data( '_pos_card_cashback', '20.00' );
 		$order->save();
 
-		// Act
+		// Act.
 		ob_start();
 		$this->gateway->calculate_cashback( $order->get_id() );
 		$output = ob_get_clean();
 
-		// Assert
+		// Assert.
 		$this->assertEquals( 1, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
 	}
 
@@ -148,11 +150,11 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 
 		$cashback = '20.00';
 
-		// Simulate storing cashback meta
+		// Simulate storing cashback meta.
 		$order->update_meta_data( '_pos_card_cashback', $cashback );
 		$order->save();
 
-		// Verify meta was stored
+		// Verify meta was stored.
 		$stored_cashback = $order->get_meta( '_pos_card_cashback' );
 		$this->assertEquals( $cashback, $stored_cashback );
 	}
@@ -175,10 +177,10 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$order_total = 50.00;
 		$cashback    = 0;
 
-		// When cashback is 0, total should not change
+		// When cashback is 0, total should not change.
 		$this->assertEquals( 0, $cashback );
 
-		// The logic: if (0 !== $cashback) won't execute
+		// The logic: if (0 !== $cashback) won't execute.
 		$expected_total = $order_total;
 		$this->assertEquals( 50.00, $expected_total );
 	}
@@ -225,7 +227,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 
 		$cashback = '20.00';
 
-		// Add cashback as fee using WooCommerce method (simulating what process_payment does)
+		// Add cashback as fee using WooCommerce method (simulating what process_payment does).
 		$item_id = wc_add_order_item(
 			$order->get_id(),
 			array(
@@ -237,11 +239,11 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$this->assertNotFalse( $item_id );
 		$this->assertGreaterThan( 0, $item_id );
 
-		// Add item meta
+		// Add item meta.
 		wc_add_order_item_meta( $item_id, '_line_total', $cashback );
 		wc_add_order_item_meta( $item_id, '_line_tax', 0 );
 
-		// Verify fee was added
+		// Verify fee was added.
 		$this->assertEquals( $cashback, wc_get_order_item_meta( $item_id, '_line_total', true ) );
 		$this->assertEquals( '0', wc_get_order_item_meta( $item_id, '_line_tax', true ) );
 	}
@@ -251,10 +253,26 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 	 */
 	public function test_various_cashback_amounts(): void {
 		$test_cases = array(
-			array( 'order_total' => 100.00, 'cashback' => 10.00, 'expected' => 110.00 ),
-			array( 'order_total' => 50.00, 'cashback' => 25.00, 'expected' => 75.00 ),
-			array( 'order_total' => 75.50, 'cashback' => 0, 'expected' => 75.50 ),
-			array( 'order_total' => 200.00, 'cashback' => 100.00, 'expected' => 300.00 ),
+			array(
+				'order_total' => 100.00,
+				'cashback' => 10.00,
+				'expected' => 110.00,
+			),
+			array(
+				'order_total' => 50.00,
+				'cashback' => 25.00,
+				'expected' => 75.00,
+			),
+			array(
+				'order_total' => 75.50,
+				'cashback' => 0,
+				'expected' => 75.50,
+			),
+			array(
+				'order_total' => 200.00,
+				'cashback' => 100.00,
+				'expected' => 300.00,
+			),
 		);
 
 		foreach ( $test_cases as $case ) {
@@ -277,7 +295,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 	}
 
 	// ==========================================================================
-	// DIRECT METHOD TESTS (for line coverage)
+	// DIRECT METHOD TESTS (for line coverage).
 	// ==========================================================================
 
 	/**
@@ -317,7 +335,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 	public function test_direct_calculate_cashback_various_values(): void {
 		$order = OrderHelper::create_order();
 
-		// Test with $50 cashback
+		// Test with $50 cashback.
 		$order->update_meta_data( '_pos_card_cashback', '50.00' );
 		$order->save();
 
@@ -348,7 +366,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$order_total = 100.00;
 		$cashback    = 0;
 
-		// When cashback is 0, the condition (0 !== $cashback) is false
+		// When cashback is 0, the condition (0 !== $cashback) is false.
 		$new_total = $order_total;
 		if ( 0 !== $cashback ) {
 			$new_total = wc_format_decimal( \floatval( $order_total ) + \floatval( $cashback ) );
@@ -394,11 +412,11 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$order->update_meta_data( '_pos_card_cashback', $cashback );
 		$order->save();
 
-		// Retrieve using WC_Order method
+		// Retrieve using WC_Order method.
 		$stored = $order->get_meta( '_pos_card_cashback' );
 		$this->assertEquals( $cashback, $stored );
 
-		// Also verify it can be retrieved via post_meta for compatibility
+		// Also verify it can be retrieved via post_meta for compatibility.
 		$stored_post_meta = get_post_meta( $order->get_id(), '_pos_card_cashback', true );
 		$this->assertEquals( $cashback, $stored_post_meta );
 	}
@@ -424,7 +442,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 			);
 		}
 
-		// Verify each order has correct cashback stored
+		// Verify each order has correct cashback stored.
 		foreach ( $orders as $data ) {
 			$stored_cashback = get_post_meta( $data['order_id'], '_pos_card_cashback', true );
 			$this->assertEquals(
@@ -447,7 +465,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$order->update_meta_data( '_pos_card_cashback', wc_format_decimal( $cashback ) );
 		$order->save();
 
-		// Calculate expected charged amount (total + cashback)
+		// Calculate expected charged amount (total + cashback).
 		$charged_amount = wc_format_decimal( \floatval( $original_total ) + \floatval( $cashback ) );
 
 		$this->assertEquals( '110', $charged_amount );
