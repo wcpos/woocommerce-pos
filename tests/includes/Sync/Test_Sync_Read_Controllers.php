@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\API\V2\Catalog_Proxy_Controller;
@@ -60,21 +61,138 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Digests preserve request order and omit IDs without stored rows.
+	 * Remove one stored digest so a test controls the prime-pass state.
+	 *
+	 * @param string $object_type Stored digest object type.
+	 * @param int    $object_id   Stored digest object id.
 	 */
-	public function test_digests_returns_stored_pairs_in_request_order(): void {
-		$first  = ProductHelper::create_simple_product();
-		$second = ProductHelper::create_simple_product();
-		$digest = new Integrity_Digest();
+	private function delete_stored_digest( string $object_type, int $object_id ): void {
+		global $wpdb;
+
+		$wpdb->delete(
+			( new Integrity_Digest() )->table_name(),
+			array(
+				'object_type' => $object_type,
+				'object_id'   => $object_id,
+			),
+			array( '%s', '%d' )
+		);
+	}
+
+	/**
+	 * Digests preserve request order across stored and deleted rows.
+	 */
+	public function test_digests_returns_stored_and_deleted_rows_in_request_order(): void {
+		$first   = ProductHelper::create_simple_product();
+		$second  = ProductHelper::create_simple_product();
+		$deleted = ProductHelper::create_simple_product();
+		$digest  = new Integrity_Digest();
 		$digest->upsert_digest( $first->get_id() );
 		$digest->upsert_digest( $second->get_id() );
+		wp_delete_post( $deleted->get_id(), true );
 
 		$response = ( new Digests_Controller() )->get_digests(
-			$this->request( array( 'include' => $second->get_id() . ',' . $first->get_id() . ',999999' ) )
+			$this->request( array( 'include' => $second->get_id() . ',' . $deleted->get_id() . ',' . $first->get_id() ) )
 		);
-		$ids = array_column( $response->get_data()['digests'], 'id' );
+		$rows = $response->get_data()['digests'];
 
-		$this->assertSame( array( $second->get_id(), $first->get_id() ), $ids );
+		$this->assertSame( array( $second->get_id(), $deleted->get_id(), $first->get_id() ), array_column( $rows, 'id' ) );
+		$this->assertArrayHasKey( 'digest', $rows[0] );
+		$this->assertSame(
+			array(
+				'id'      => $deleted->get_id(),
+				'deleted' => true,
+			),
+			$rows[1]
+		);
+		$this->assertArrayHasKey( 'digest', $rows[2] );
+	}
+
+	/**
+	 * A deleted product with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_deleted_product_as_deleted(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		wp_delete_post( $product_id, true );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request( array( 'include' => (string) $product_id ) )
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A trashed product with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_trashed_product_as_deleted(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		wp_trash_post( $product_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request( array( 'include' => (string) $product_id ) )
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A servable product without a stored digest remains absent.
+	 */
+	public function test_digests_omits_servable_product_without_stored_digest(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$this->delete_stored_digest( 'product', $product_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request( array( 'include' => (string) $product_id ) )
+		);
+
+		$this->assertSame( array(), $response->get_data()['digests'] );
+	}
+
+	/**
+	 * A deleted order with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_deleted_order_as_deleted(): void {
+		$order    = OrderHelper::create_order();
+		$order_id = $order->get_id();
+		$order->delete( true );
+		$this->delete_stored_digest( 'order', $order_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include'    => (string) $order_id,
+					'collection' => 'orders',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $order_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
 	}
 
 	/**

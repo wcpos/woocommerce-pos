@@ -26,7 +26,8 @@ use WP_REST_Server;
  * `{id, digest}` the client needs to backfill its existence-reconcile manifest for records that were
  * already resident BEFORE Leg 3 shipped, so the first reconcile audit doesn't re-pull the whole catalog
  * just to seed manifest rows. Digest-on-pull (#331/#332) covers records pulled AFTER Leg 3; this covers
- * the pre-existing resident set. Ids with no stored digest are simply absent from the response (not null).
+ * the pre-existing resident set. Servable ids with no stored digest remain absent; unservable ids are
+ * returned as `{id, deleted: true}` so the caller can prune authoritative absence.
  */
 final class Digests_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
@@ -92,29 +93,47 @@ final class Digests_Controller extends WP_REST_Controller {
 				200
 			);
 		}
+		$read_ids = $ids;
 		if ( 'products' === $collection && 'publish' === $request->get_param( 'status' ) ) {
-			$ids = $this->index->published_product_ids( $ids );
+			$read_ids = $this->index->published_product_ids( $ids );
 		}
 		$reader = new Integrity_Digest();
 		if ( 'customers' === $collection ) {
-			$digests = $reader->read_customer_digests( $ids );
+			$digests = $reader->read_customer_digests( $read_ids );
 		} elseif ( 'orders' === $collection ) {
-			$digests = $reader->read_order_digests( $ids );
+			$digests = $reader->read_order_digests( $read_ids );
 		} else {
-			$digests = $reader->read_digests( $ids );
+			$digests = $reader->read_digests( $read_ids );
 		}
 		$out = array();
-		// Preserve request order; skip ids with no stored digest (absent, not null).
+		// Preserve request order; servable ids with no stored digest remain absent.
 		foreach ( $ids as $id ) {
 			if ( isset( $digests[ $id ] ) ) {
 				$out[] = array(
 					'id' => $id,
 					'digest' => $digests[ $id ],
 				);
+			} elseif ( ! $this->is_servable( $collection, $id ) ) {
+				$out[] = array(
+					'id' => $id,
+					'deleted' => true,
+				);
 			}
 		}
 
 		return new WP_REST_Response( array( 'digests' => $out ), 200 );
+	}
+
+	private function is_servable( string $collection, int $id ): bool {
+		global $wpdb;
+		if ( 'products' === $collection ) {
+			return array() !== $this->index->published_product_ids( array( $id ) );
+		}
+		$predicate = 'customers' === $collection
+			? $this->index->customer_live_row_exists_sql( '%d' )
+			: $this->index->order_live_row_exists_sql( '%d' );
+
+		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT ' . $predicate, $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Predicate comes from Digest_Index; id is prepared.
 	}
 
 	/**
