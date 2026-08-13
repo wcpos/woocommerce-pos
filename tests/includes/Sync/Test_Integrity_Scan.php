@@ -30,6 +30,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 */
 	public function setUp(): void {
 		update_option( Api::OPTION_ENABLED, true );
+		add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
 		parent::setUp();
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
@@ -39,6 +40,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 * Remove non-transactional state.
 	 */
 	public function tearDown(): void {
+		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
 		delete_option( Api::OPTION_ENABLED );
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
@@ -87,6 +89,102 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 
 		return $response->get_data();
+	}
+
+	/**
+	 * Count current-side aggregate digest queries.
+	 *
+	 * @param int $digest_queries Counter updated by the query filter.
+	 * @return callable Query filter callback.
+	 */
+	private function digest_query_counter( int &$digest_queries ): callable {
+		return static function ( string $query ) use ( &$digest_queries ): string {
+			if ( false !== strpos( $query, 'SELECT FLOOR(t.id /' ) && false !== strpos( $query, 'BIT_XOR(t.crc)' ) ) {
+				++$digest_queries;
+			}
+			return $query;
+		};
+	}
+
+	/**
+	 * Delete the aggregate cache entry for the one-id scan window.
+	 */
+	private function delete_scan_cache_for_id( string $collection, int $id ): void {
+		$key_parts = array( $collection, 1, array( 'status' => '' ), $id, $id + 1 );
+
+		delete_transient( 'wcpos_integrity_scan_' . md5( wp_json_encode( $key_parts ) ) );
+	}
+
+	/**
+	 * Two identical aggregate scans reuse the live digest computation.
+	 */
+	public function test_scan_aggregates_are_cached_within_the_ttl(): void {
+		$product = ProductHelper::create_simple_product();
+		$id      = $product->get_id();
+		( new Integrity_Digest() )->upsert_digest( $id );
+		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+
+		$digest_queries = 0;
+		$count_digests  = $this->digest_query_counter( $digest_queries );
+		add_filter( 'query', $count_digests );
+
+		try {
+			$this->scan_id( 'products', $id );
+			$this->scan_id( 'products', $id );
+		} finally {
+			remove_filter( 'query', $count_digests );
+			add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+			$this->delete_scan_cache_for_id( 'products', $id );
+		}
+
+		$this->assertSame( 1, $digest_queries );
+	}
+
+	/**
+	 * Expiring a cached aggregate exposes a subsequent hookless write.
+	 */
+	public function test_scan_detects_digest_drift_after_cache_expiry(): void {
+		global $wpdb;
+		$product = ProductHelper::create_simple_product();
+		$id      = $product->get_id();
+		( new Integrity_Digest() )->upsert_digest( $id );
+		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+
+		try {
+			$before = $this->scan_id( 'products', $id );
+			$this->assertTrue( $before['changes'][0]['match'] );
+
+			$wpdb->update( $wpdb->posts, array( 'post_title' => 'Hookless title edit' ), array( 'ID' => $id ) );
+			$this->delete_scan_cache_for_id( 'products', $id );
+			$after = $this->scan_id( 'products', $id );
+		} finally {
+			add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+			$this->delete_scan_cache_for_id( 'products', $id );
+		}
+
+		$this->assertFalse( $after['changes'][0]['match'] );
+	}
+
+	/**
+	 * A non-positive TTL bypasses cache reads and writes.
+	 */
+	public function test_scan_cache_can_be_disabled_by_ttl_filter(): void {
+		$product = ProductHelper::create_simple_product();
+		$id      = $product->get_id();
+		( new Integrity_Digest() )->upsert_digest( $id );
+
+		$digest_queries = 0;
+		$count_digests  = $this->digest_query_counter( $digest_queries );
+		add_filter( 'query', $count_digests );
+
+		try {
+			$this->scan_id( 'products', $id );
+			$this->scan_id( 'products', $id );
+		} finally {
+			remove_filter( 'query', $count_digests );
+		}
+
+		$this->assertSame( 2, $digest_queries );
 	}
 
 	/**

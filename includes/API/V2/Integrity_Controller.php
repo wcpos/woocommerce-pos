@@ -299,19 +299,28 @@ final class Integrity_Controller extends WP_REST_Controller {
 			);
 		}
 
+		$filters   = array( 'status' => (string) $request->get_param( 'status' ) );
+		$ttl       = (int) apply_filters( 'woocommerce_pos_integrity_scan_cache_ttl', 120 );
+		$key_parts = array( $collection, $bucket_size, $filters, $window_start, $window_end );
+		$cache_key = 'wcpos_integrity_scan_' . md5( (string) wp_json_encode( $key_parts ) );
+		$cached    = 0 < $ttl ? get_transient( $cache_key ) : false;
+
 		// Both sides in one call: the stored hook-time aggregate and the current
 		// raw-row aggregate over the SAME id window, plus the max id completion is
 		// judged against (the larger of both sides, so orphaned stored digests past
 		// the last live post still get scanned).
-		$aggregates = $this->index->bucket_aggregates(
+		$aggregates = false !== $cached ? $cached : $this->index->bucket_aggregates(
 			array(
 				'bucket_size' => $bucket_size,
 				'start' => $window_start,
 				'end' => $window_end,
 			),
 			$collection,
-			array( 'status' => (string) $request->get_param( 'status' ) )
+			$filters
 		);
+		if ( 0 < $ttl && false === $cached ) {
+			set_transient( $cache_key, $aggregates, $ttl );
+		}
 
 		return rest_ensure_response(
 			$this->envelope(
