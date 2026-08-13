@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3071
+- Cases: 3072
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 31
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 500, wc3 278, wp2 2, unresolved 334, pure unit 1720
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 500, wc3 278, wp2 2, unresolved 334, pure unit 1721
 - Blind-test warnings (advisory): self-installed-hook 66, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -2773,6 +2773,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Sync Hook Isolation | tests/includes/Sync/Test_Sync_Hook_Isolation.php:test_sync_product_proxy_uses_current_variation_price_after_conversion | v2 | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_customer_scope_upgrade_appends_updates_for_all_live_users | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_failed_repair_clears_current_latch_and_next_install_repairs_schema | unit | unreviewed | — |
+| Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_failed_schema_upgrade_preserves_legacy_store_and_purge_cron | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_install_sync_schema_creates_all_tables_and_latches_version | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_install_sync_schema_recreating_journal_resets_prune_watermark | unit | unreviewed | — |
 | Test Sync Install | tests/includes/Sync/Test_Sync_Install.php:test_schema_upgrade_clears_legacy_purge_cron | unit | unreviewed | — |

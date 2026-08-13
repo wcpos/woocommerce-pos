@@ -160,16 +160,6 @@ class Activator {
 		( new Integrity_Digest() )->install();
 		( new Mutation_Store() )->install();
 
-		if ( null !== $previous_schema && version_compare( (string) $previous_schema, Sync_Api::SCHEMA_VERSION, '<' ) ) {
-			global $wpdb;
-			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_change_log" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
-			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_order_index" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
-			// The legacy Change_Log_Purge class is gone; its recurring cron event
-			// would otherwise survive the upgrade and fire a hook with no handler
-			// forever. Literal hook name — the constant was removed with the class.
-			wp_clear_scheduled_hook( 'wcpos_change_log_purge' );
-		}
-
 		if ( ! Sync_Health::is_healthy() ) {
 			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
 				delete_option( Sync_Api::SCHEMA_OPTION );
@@ -192,6 +182,16 @@ class Activator {
 		}
 
 		update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, false );
+
+		if ( null !== $previous_schema && version_compare( (string) $previous_schema, Sync_Api::SCHEMA_VERSION, '<' ) ) {
+			global $wpdb;
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_change_log" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_order_index" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+			// The legacy Change_Log_Purge class is gone; its recurring cron event
+			// would otherwise survive the upgrade and fire a hook with no handler
+			// forever. Literal hook name — the constant was removed with the class.
+			wp_clear_scheduled_hook( 'wcpos_change_log_purge' );
+		}
 	}
 
 	/**

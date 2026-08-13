@@ -1,7 +1,7 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3071,
+        "cases": 3072,
         "v1_only": 740,
         "unresolved": 31,
         "by_lane": {
@@ -10,7 +10,7 @@
             "wc3": 278,
             "wp2": 2,
             "unresolved": 334,
-            "unit": 1720
+            "unit": 1721
         },
         "warnings": {
             "self-installed-hook": 66,
@@ -41195,6 +41195,21 @@
             "file": "tests/includes/Sync/Test_Sync_Install.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Install",
             "method": "test_failed_repair_clears_current_latch_and_next_install_repairs_schema",
+            "behavior": "Test Sync Install",
+            "own_lanes": [],
+            "class_lanes": [],
+            "lanes": [],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Install::test_failed_schema_upgrade_preserves_legacy_store_and_purge_cron",
+            "file": "tests/includes/Sync/Test_Sync_Install.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Install",
+            "method": "test_failed_schema_upgrade_preserves_legacy_store_and_purge_cron",
             "behavior": "Test Sync Install",
             "own_lanes": [],
             "class_lanes": [],

@@ -89,6 +89,43 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A failed replacement install preserves the legacy stores and purge job.
+	 */
+	public function test_failed_schema_upgrade_preserves_legacy_store_and_purge_cron(): void {
+		global $wpdb;
+
+		$legacy_tables = array(
+			$wpdb->prefix . 'wcpos_sync_change_log',
+			$wpdb->prefix . 'wcpos_sync_order_index',
+		);
+		foreach ( $legacy_tables as $table ) {
+			$wpdb->query( "CREATE TABLE {$table} (id BIGINT UNSIGNED NOT NULL)" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table names.
+		}
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'wcpos_change_log_purge' );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_change_log_purge' ) );
+		update_option( Api::SCHEMA_OPTION, '3', false );
+
+		$skip_mutation_table = static function ( array $queries ): array {
+			return array_filter(
+				$queries,
+				static function ( string $query ): bool {
+					return false === strpos( $query, Health::MUTATIONS_TABLE );
+				}
+			);
+		};
+		add_filter( 'dbdelta_create_queries', $skip_mutation_table );
+		( new Activator() )->install_sync_schema();
+		remove_filter( 'dbdelta_create_queries', $skip_mutation_table );
+
+		$this->assertFalse( Health::is_healthy() );
+		$this->assertSame( '3', get_option( Api::SCHEMA_OPTION, null ) );
+		foreach ( $legacy_tables as $table ) {
+			$this->assertTrue( Health::table_exists( $table ) );
+		}
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_change_log_purge' ) );
+	}
+
+	/**
 	 * Recreating a missing journal starts a new sequence generation.
 	 */
 	public function test_install_sync_schema_recreating_journal_resets_prune_watermark(): void {
