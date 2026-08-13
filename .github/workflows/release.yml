@@ -98,31 +98,3 @@ jobs:
           rm -rf temp_dir
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 📝 Request Release Notes from CodeRabbit
-        if: steps.check_version.outputs.release == 'true'
-        run: |
-          EXISTING_ISSUE=$(gh issue list \
-            --state open \
-            --search "\"Generate release notes for v${{ env.VERSION }}\" in:title" \
-            --json number \
-            --jq '.[0].number // ""')
-
-          if [[ -n "$EXISTING_ISSUE" ]]; then
-            echo "Release notes issue already exists: #$EXISTING_ISSUE"
-            exit 0
-          fi
-
-          # Prepend version context to the template
-          {
-            echo "**Release:** v${{ env.VERSION }}"
-            echo "**Previous Tag:** ${{ env.LAST_TAG }}"
-            echo ""
-          } > /tmp/release_request.md
-          cat .github/RELEASE_NOTES_REQUEST.md >> /tmp/release_request.md
-          
-          gh issue create \
-            --title "📝 Generate release notes for v${{ env.VERSION }}" \
-            --body-file /tmp/release_request.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
