@@ -179,6 +179,31 @@ class Test_Catalog_Proxy_Cache_Priming extends WCPOS_REST_Unit_Test_Case {
 			$this->assertNotContains( (int) $matches[1], $variation_ids, $read );
 		}
 		$this->assertGreaterThanOrEqual( 1, \count( $this->bulk_meta_cache_reads( $queries ) ), implode( "\n", $queries ) );
+		foreach ( $this->single_id_post_cache_reads( $queries ) as $read ) {
+			preg_match( '/ID IN \(\s*(\d+)\s*\)/i', $read, $matches );
+			$this->assertNotContains( (int) $matches[1], $variation_ids, $read );
+		}
+		$this->assertGreaterThanOrEqual( 1, \count( $this->bulk_post_cache_reads( $queries ) ), implode( "\n", $queries ) );
+	}
+
+	/**
+	 * Single-post _prime_post_caches() reads.
+	 *
+	 * @param string[] $queries Captured SQL.
+	 * @return string[] Matching queries.
+	 */
+	private function single_id_post_cache_reads( array $queries ): array {
+		return array_values( preg_grep( '/SELECT \w*posts\.\* FROM \w*posts WHERE ID IN \(\s*\d+\s*\)/i', $queries ) );
+	}
+
+	/**
+	 * Multi-post _prime_post_caches() reads.
+	 *
+	 * @param string[] $queries Captured SQL.
+	 * @return string[] Matching queries.
+	 */
+	private function bulk_post_cache_reads( array $queries ): array {
+		return array_values( preg_grep( '/SELECT \w*posts\.\* FROM \w*posts WHERE ID IN \(\s*\d+\s*,/i', $queries ) );
 	}
 
 	/**
