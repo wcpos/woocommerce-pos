@@ -42,6 +42,7 @@ export interface QueueJob {
 	template_id: string;
 	content_type: string;
 	created_gmt: string;
+	retried_to?: number;
 }
 
 export interface QueueSummaryPrinter {
@@ -423,7 +424,11 @@ export function PrintQueue() {
 															{t('cloud_print.queue_cancel', 'Cancel')}
 														</Button>
 													)}
-													{job.status === 'failed' && (
+													{job.status === 'failed' && job.retried_to ? (
+														t('cloud_print.queue_retried_as', 'Retried as #{id}', {
+															id: String(job.retried_to),
+														})
+													) : job.status === 'failed' ? (
 														<Button
 															variant="text"
 															onClick={() => retryJob.mutate(job.id)}
@@ -432,7 +437,7 @@ export function PrintQueue() {
 														>
 															{t('cloud_print.queue_retry', 'Retry')}
 														</Button>
-													)}
+													) : null}
 												</TableCell>
 											</TableRow>
 										);

@@ -188,6 +188,19 @@ describe('PrintQueue', () => {
 		);
 	});
 
+	it('shows the replacement job instead of retrying a resolved failure', async () => {
+		routeQueue(() => {
+			const queue = makeQueue();
+			queue.jobs[2].retried_to = 99;
+			return queue;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-row-13')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Retried as #99');
+		expect(screen.queryByTestId('queue-retry-13')).toBeNull();
+	});
+
 	it('surfaces an error snackbar when a cancel request fails', async () => {
 		apiFetchMock.mockImplementation((opts: ApiOpts) => {
 			if (opts.path.includes('print-jobs/queue/cancel')) {

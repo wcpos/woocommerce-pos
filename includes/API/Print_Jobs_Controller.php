@@ -449,7 +449,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$per_page = (int) $request->get_param( 'per_page' );
 		$per_page = min( 100, max( 1, 0 === $per_page ? 20 : $per_page ) );
 		$page     = max( 1, (int) $request->get_param( 'page' ) );
-		$status   = $request->get_param( 'status' );
+		$status          = $request->get_param( 'status' );
+		$exclude_retried = 'active' === $status;
 		if ( 'active' === $status ) {
 			// The default queue view: everything not yet terminal-successful.
 			$status = array(
@@ -459,8 +460,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 		$filters = array(
-			'printer_id' => $request->get_param( 'printer_id' ),
-			'status'     => $status,
+			'printer_id'     => $request->get_param( 'printer_id' ),
+			'status'         => $status,
+			'exclude_retried' => $exclude_retried,
 		);
 
 		$jobs = array_map(
@@ -592,6 +594,16 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 404 )
 			);
 		}
+		if ( $source['retried_to'] > 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_already_retried',
+				__( 'This print job has already been retried.', 'woocommerce-pos' ),
+				array(
+					'status'     => 409,
+					'retried_to' => $source['retried_to'],
+				)
+			);
+		}
 		if ( '' === $source['payload'] && '' === $source['template_id'] ) {
 			// A stripped raw job has nothing left to print — refuse loudly
 			// rather than queue a blank receipt.
@@ -631,6 +643,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 500 )
 			);
 		}
+		$this->jobs->mark_retried( (int) $source['id'], $new_id );
 
 		// Push providers (PrintNode, Star Online) never poll the queue — their
 		// jobs only move when CRON_SUBMIT fires. Without this the replacement

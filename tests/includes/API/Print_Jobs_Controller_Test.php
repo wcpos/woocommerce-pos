@@ -657,6 +657,61 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Retrying a failed job records its replacement and strips the source payload.
+	 */
+	public function test_reprint_failed_job_records_replacement_and_strips_source_payload(): void {
+		// Arrange.
+		$jobs   = new Print_Job_Service();
+		$source = $jobs->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'receipt' ),
+			)
+		);
+		$jobs->set_status( $source, Print_Job_Service::STATUS_FAILED );
+
+		// Act.
+		$response       = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $source . '/reprint' ) );
+		$replacement_id = (int) $response->get_data()['id'];
+		$retried_source = $jobs->get( $source );
+
+		// Assert.
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( $replacement_id, $retried_source['retried_to'] );
+		$this->assertEquals( '', $retried_source['payload'] );
+	}
+
+	/**
+	 * Retrying an already-retried source returns its replacement without another copy.
+	 */
+	public function test_reprint_already_retried_source_returns_409_without_creating_duplicate(): void {
+		// Arrange.
+		$jobs   = new Print_Job_Service();
+		$source = $jobs->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'receipt' ),
+			)
+		);
+		$jobs->set_status( $source, Print_Job_Service::STATUS_FAILED );
+		$first          = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $source . '/reprint' ) );
+		$replacement_id = (int) $first->get_data()['id'];
+		$job_count      = $jobs->count();
+
+		// Act.
+		$second = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $source . '/reprint' ) );
+		$error  = $second->as_error();
+
+		// Assert.
+		$this->assertEquals( 409, $second->get_status() );
+		$this->assertEquals( 'wcpos_print_job_already_retried', $error->get_error_code() );
+		$this->assertEquals( $replacement_id, $error->get_error_data()['retried_to'] );
+		$this->assertEquals( $job_count, $jobs->count() );
+	}
+
+	/**
 	 * It enqueues a pending diagnostic job for a Star printer.
 	 */
 	public function test_test_print_enqueues_pending_job_for_star_printer(): void {

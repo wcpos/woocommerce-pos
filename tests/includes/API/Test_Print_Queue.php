@@ -233,6 +233,25 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It hides retried failures from the active queue but keeps them in failed history.
+	 */
+	public function test_queue_retried_failure_is_excluded_from_active_but_included_in_failed_history(): void {
+		// Arrange.
+		$retried = $this->make_job( 'kitchen', Print_Job_Service::STATUS_FAILED );
+		$failed  = $this->make_job( 'kitchen', Print_Job_Service::STATUS_FAILED );
+		update_post_meta( $retried, Print_Job_Service::META_RETRIED_TO, 999 );
+
+		// Act.
+		$active  = $this->queue( array( 'status' => 'active' ) )->get_data();
+		$history = $this->queue( array( 'status' => 'failed' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals( array( $failed ), array_column( $active['jobs'], 'id' ) );
+		$this->assertEquals( array( $retried, $failed ), array_column( $history['jobs'], 'id' ) );
+		$this->assertEquals( 999, $history['jobs'][0]['retried_to'] );
+	}
+
+	/**
 	 * It bulk-cancels waiting jobs by id and by printer, never printed ones.
 	 */
 	public function test_queue_bulk_cancel(): void {
