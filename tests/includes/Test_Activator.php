@@ -30,12 +30,18 @@ class Test_Activator extends WP_UnitTestCase {
 	private const DB_UPGRADE_LOCK_OPTION = 'woocommerce_pos_db_upgrade_lock.lock';
 
 	/**
+	 * Role capabilities fingerprint option key.
+	 */
+	private const ROLE_CAPS_FINGERPRINT_OPTION = 'woocommerce_pos_role_caps_fingerprint';
+
+	/**
 	 * Reset options and hooks before each test.
 	 */
 	public function setUp(): void {
 		parent::setUp();
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint(), false );
 		// These tests pin the PLUGIN-version upgrade mechanics. Latch the sync
 		// schema so an unlatched sync store does not co-trigger version_check —
 		// the sync-triggered path has its own coverage in Sync\Test_Sync_Install.
@@ -50,6 +56,8 @@ class Test_Activator extends WP_UnitTestCase {
 	public function tearDown(): void {
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		delete_option( self::ROLE_CAPS_FINGERPRINT_OPTION );
+		remove_all_actions( 'init' );
 		remove_all_actions( 'woocommerce_init' );
 		remove_all_actions( 'shutdown' );
 		unset( $GLOBALS['wp_user_roles'] );
@@ -95,6 +103,101 @@ class Test_Activator extends WP_UnitTestCase {
 		foreach ( array_keys( $role->capabilities ) as $capability ) {
 			$this->assertFalse( 0 === strpos( $capability, 'delete_' ), $capability );
 		}
+	}
+
+	/**
+	 * A stale role-capabilities fingerprint re-syncs roles without a version bump.
+	 *
+	 * @covers ::role_caps_fingerprint
+	 * @covers ::version_check
+	 */
+	public function test_role_caps_fingerprint_mismatch_with_current_version_resyncs_caps_and_updates_fingerprint(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
+		$cashier->remove_cap( 'manage_product_terms' );
+		update_option( self::DB_VERSION_OPTION, \WCPOS\WooCommercePOS\VERSION );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, 'stale' );
+
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert.
+		$definition = $reflection->getMethod( 'role_capability_definition' );
+		$definition->setAccessible( true );
+		foreach ( array_keys( $definition->invoke( null )['cashier'] ) as $capability ) {
+			$this->assertTrue( $cashier->has_cap( $capability ), $capability );
+		}
+		$this->assertEquals(
+			$this->role_caps_fingerprint(),
+			get_option( self::ROLE_CAPS_FINGERPRINT_OPTION )
+		);
+	}
+
+	/**
+	 * Current versions and role-capabilities fingerprint do not schedule a re-sync.
+	 *
+	 * @covers ::role_caps_fingerprint
+	 * @covers ::version_check
+	 */
+	public function test_role_caps_fingerprint_match_with_current_version_does_not_schedule_resync(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, 'stale' );
+		$activator->single_activate( false );
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
+		$cashier->remove_cap( 'manage_product_terms' );
+		update_option( self::DB_VERSION_OPTION, \WCPOS\WooCommercePOS\VERSION );
+
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+
+		// Assert.
+		$this->assertFalse( has_action( 'init' ) );
+		$this->assertFalse( $cashier->has_cap( 'manage_product_terms' ) );
+	}
+
+	/**
+	 * The role-capabilities fingerprint is stable and sensitive to definition changes.
+	 *
+	 * @covers ::role_capability_definition
+	 * @covers ::role_caps_fingerprint
+	 */
+	public function test_role_caps_fingerprint_when_definition_changes_returns_different_value(): void {
+		// Arrange.
+		$activator         = ( new ReflectionClass( Activator::class ) )->newInstanceWithoutConstructor();
+		$reflection        = new ReflectionClass( $activator );
+		$definition        = $reflection->getMethod( 'role_capability_definition' );
+		$definition->setAccessible( true );
+		$role_capabilities = $definition->invoke( null );
+
+		// Act.
+		$changed_role_capabilities = $role_capabilities;
+		$changed_role_capabilities['cashier']['fingerprint_test_cap'] = true;
+
+		// Assert.
+		$this->assertEquals(
+			md5( wp_json_encode( $role_capabilities ) ),
+			$this->role_caps_fingerprint()
+		);
+		$this->assertNotEquals(
+			$this->role_caps_fingerprint(),
+			md5( wp_json_encode( $changed_role_capabilities ) )
+		);
 	}
 
 	/**
@@ -313,5 +416,16 @@ class Test_Activator extends WP_UnitTestCase {
 			get_option( self::DB_UPGRADE_LOCK_OPTION, false ),
 			'Shutdown fallback should release the upgrade lock if migration never runs'
 		);
+	}
+
+	/**
+	 * Get the current role-capabilities fingerprint without registering hooks.
+	 */
+	private function role_caps_fingerprint(): string {
+		$reflection = new ReflectionClass( Activator::class );
+		$method     = $reflection->getMethod( 'role_caps_fingerprint' );
+		$method->setAccessible( true );
+
+		return $method->invoke( $reflection->newInstanceWithoutConstructor() );
 	}
 }

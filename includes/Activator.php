@@ -100,32 +100,19 @@ class Activator {
 	 * @param bool $install_sync_schema Whether to install the sync schema.
 	 */
 	public function single_activate( bool $install_sync_schema = true ): void {
+		$role_capabilities = self::role_capability_definition();
+
 		// create POS specific roles.
 		$this->create_pos_roles();
 
 		// add pos capabilities to non POS roles.
 		$this->add_pos_capability(
 			array(
-				'administrator' => array(
-					'manage_woocommerce_pos',
-					'access_woocommerce_pos',
-					'edit_wcpos_store',
-					'read_wcpos_store',
-					'delete_wcpos_store',
-					'edit_wcpos_stores',
-					'edit_others_wcpos_stores',
-					'publish_wcpos_stores',
-					'read_private_wcpos_stores',
-					'delete_wcpos_stores',
-					'delete_private_wcpos_stores',
-					'delete_published_wcpos_stores',
-					'delete_others_wcpos_stores',
-					'edit_private_wcpos_stores',
-					'edit_published_wcpos_stores',
-				),
-				'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+				'administrator' => $role_capabilities['administrator'],
+				'shop_manager'  => $role_capabilities['shop_manager'],
 			)
 		);
+		update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
 
 		// Flag the consent pop-up for the next admin page load. Done here
 		// because the `activated_plugin` action in Admin\Consent fires
@@ -283,7 +270,10 @@ class Activator {
 		$old                  = (string) Services\Settings::get_db_version();
 		$plugin_needs_upgrade = version_compare( $old, VERSION, '<' );
 		$sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
-		if ( ! $plugin_needs_upgrade && ! $sync_needs_upgrade ) {
+
+		$role_caps_fingerprint = $this->role_caps_fingerprint();
+		$role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $role_caps_fingerprint;
+		if ( ! $plugin_needs_upgrade && ! $sync_needs_upgrade && ! $role_caps_need_sync ) {
 			return;
 		}
 
@@ -294,7 +284,10 @@ class Activator {
 		$locked_old                  = (string) Services\Settings::get_db_version();
 		$locked_plugin_needs_upgrade = version_compare( $locked_old, VERSION, '<' );
 		$locked_sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
-		if ( ! $locked_plugin_needs_upgrade && ! $locked_sync_needs_upgrade ) {
+
+		$locked_role_caps_fingerprint = $this->role_caps_fingerprint();
+		$locked_role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $locked_role_caps_fingerprint;
+		if ( ! $locked_plugin_needs_upgrade && ! $locked_sync_needs_upgrade && ! $locked_role_caps_need_sync ) {
 			$this->release_db_upgrade_lock();
 			return;
 		}
@@ -303,7 +296,7 @@ class Activator {
 			Services\Settings::bump_versions();
 		}
 
-		if ( $locked_plugin_needs_upgrade ) {
+		if ( $locked_plugin_needs_upgrade || $locked_role_caps_need_sync ) {
 			// Re-run activation to sync role capabilities. add_role() and add_cap()
 			// are both idempotent, so this is safe. Without this, capabilities added
 			// in newer versions would never reach existing installs because add_role()
@@ -312,8 +305,9 @@ class Activator {
 			// requires translations to be loaded (WordPress 6.7+).
 			add_action(
 				'init',
-				function () {
+				function () use ( $locked_role_caps_fingerprint ) {
 					$this->single_activate( false );
+					update_option( 'woocommerce_pos_role_caps_fingerprint', $locked_role_caps_fingerprint, true );
 				}
 			);
 		}
@@ -399,9 +393,11 @@ class Activator {
 	}
 
 	/**
-	 * Add POS specific roles.
+	 * Get the role capability definition.
+	 *
+	 * @return array<string, array<string, bool>|array<int, string>> Role capabilities keyed by role.
 	 */
-	private function create_pos_roles(): void {
+	private static function role_capability_definition(): array {
 		// WC 9.9 replaced promote_users with create_customers for customer creation.
 		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
 			? 'create_customers'
@@ -432,6 +428,43 @@ class Activator {
 			'edit_others_shop_coupons'  => true,
 			'manage_product_terms'      => true,
 		);
+
+		return array(
+			'cashier'       => $cashier_capabilities,
+			'administrator' => array(
+				'manage_woocommerce_pos',
+				'access_woocommerce_pos',
+				'edit_wcpos_store',
+				'read_wcpos_store',
+				'delete_wcpos_store',
+				'edit_wcpos_stores',
+				'edit_others_wcpos_stores',
+				'publish_wcpos_stores',
+				'read_private_wcpos_stores',
+				'delete_wcpos_stores',
+				'delete_private_wcpos_stores',
+				'delete_published_wcpos_stores',
+				'delete_others_wcpos_stores',
+				'edit_private_wcpos_stores',
+				'edit_published_wcpos_stores',
+			),
+			'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+		);
+	}
+
+	/**
+	 * Get the role-capabilities definition fingerprint.
+	 */
+	private function role_caps_fingerprint(): string {
+		return md5( wp_json_encode( self::role_capability_definition() ) );
+	}
+
+	/**
+	 * Add POS specific roles.
+	 */
+	private function create_pos_roles(): void {
+		$role_capabilities    = self::role_capability_definition();
+		$cashier_capabilities = $role_capabilities['cashier'];
 
 		add_role(
 			'cashier',
