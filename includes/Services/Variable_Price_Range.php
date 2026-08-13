@@ -94,7 +94,17 @@ final class Variable_Price_Range {
 		$decimals   = \function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
 		$collected  = array_fill_keys( self::FIELDS, array() );
 
-		foreach ( self::visible_child_ids( $product ) as $variation_id ) {
+		$child_ids = self::visible_child_ids( $product );
+		// One bulk posts+postmeta prime for the whole family: without it every
+		// wc_get_product() below pays its own single-id posts + postmeta pair —
+		// ~13 queries per variable product on a catalog page (wcpos#1569, the
+		// dominant shape in the dev-next slow log). Prices live in postmeta;
+		// term caches are not read here.
+		if ( \count( $child_ids ) > 1 ) {
+			_prime_post_caches( $child_ids, false, true );
+		}
+
+		foreach ( $child_ids as $variation_id ) {
 			$variation = wc_get_product( $variation_id );
 			if ( ! $variation ) {
 				continue;

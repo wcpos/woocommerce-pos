@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -109,6 +110,100 @@ class Test_Catalog_Proxy_Cache_Priming extends WCPOS_REST_Unit_Test_Case {
 			$this->assertNotContains( (int) $matches[1], array_map( 'intval', $variation_ids ), $read );
 		}
 		$this->assertGreaterThanOrEqual( 1, \count( $this->bulk_meta_cache_reads( $queries ) ), implode( "\n", $queries ) );
+	}
+
+	/**
+	 * Variable products on the list lane bulk-prime their children: the
+	 * price-range augmentation (Variable_Price_Range) reads every visible
+	 * child variation, and without a bulk prime each wc_get_product() pays
+	 * its own single-id posts + postmeta pair.
+	 */
+	public function test_variable_products_list_bulk_primes_variation_caches(): void {
+		// The augmentation pipeline (which carries Variable_Prices) installs
+		// only when Init sees a healthy sync schema — never in the test
+		// bootstrap. Install it here; WP_UnitTestCase restores hooks per test.
+		Augmentation_Pipeline::install();
+
+		$parent_ids    = array();
+		$variation_ids = array();
+		for ( $i = 0; $i < 3; $i++ ) {
+			$product         = ProductHelper::create_variation_product();
+			$parent_ids[]    = $product->get_id();
+			$variation_ids   = array_merge( $variation_ids, array_map( 'intval', $product->get_children() ) );
+			// Warm the transients a live store holds in steady state: the
+			// visible-children half of wc_product_children (so no priming
+			// children query runs), and wc_var_prices (so WC core's
+			// read_price_data skips its own _prime_post_caches of the
+			// family). With both warm, the ONLY thing standing between the
+			// price-range augmentation and a per-variation N+1 is the bulk
+			// prime under test — the exact state behind the dev-next
+			// 653-singles slow-log signature.
+			$product->get_visible_children();
+			$product->get_variation_prices();
+		}
+		// Reproduce a host WITHOUT a persistent object cache but WITH warm
+		// wc_product_children transients (the dev-next reality that produced
+		// the 653-singles slow-log signature): a full wp_cache_flush() would
+		// also drop that transient — it lives in the object cache under the
+		// test suite — making WooCommerce re-query children via WP_Query,
+		// whose cached-ids path bulk-primes them and hides the N+1. So keep
+		// the transient warm and evict only the variation rows themselves.
+		foreach ( $variation_ids as $vid ) {
+			wp_cache_delete( $vid, 'posts' );
+			wp_cache_delete( $vid, 'post_meta' );
+		}
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_query_params(
+			array(
+				'include'  => $parent_ids,
+				'per_page' => 3,
+			)
+		);
+		$queries       = array();
+		$capture_query = static function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+
+		add_filter( 'query', $capture_query );
+		$response = $this->server->dispatch( $request );
+		remove_filter( 'query', $capture_query );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertCount( 3, $response->get_data() );
+		// Parents are primed by the list query itself; only per-VARIATION
+		// single-id reads are the N+1 signature this guards against.
+		foreach ( $this->single_id_meta_cache_reads( $queries ) as $read ) {
+			preg_match( '/post_id IN \(\s*(\d+)\s*\)/i', $read, $matches );
+			$this->assertNotContains( (int) $matches[1], $variation_ids, $read );
+		}
+		$this->assertGreaterThanOrEqual( 1, \count( $this->bulk_meta_cache_reads( $queries ) ), implode( "\n", $queries ) );
+		foreach ( $this->single_id_post_cache_reads( $queries ) as $read ) {
+			preg_match( '/ID IN \(\s*(\d+)\s*\)/i', $read, $matches );
+			$this->assertNotContains( (int) $matches[1], $variation_ids, $read );
+		}
+		$this->assertGreaterThanOrEqual( 1, \count( $this->bulk_post_cache_reads( $queries ) ), implode( "\n", $queries ) );
+	}
+
+	/**
+	 * Single-post _prime_post_caches() reads.
+	 *
+	 * @param string[] $queries Captured SQL.
+	 * @return string[] Matching queries.
+	 */
+	private function single_id_post_cache_reads( array $queries ): array {
+		return array_values( preg_grep( '/SELECT \w*posts\.\* FROM \w*posts WHERE ID IN \(\s*\d+\s*\)/i', $queries ) );
+	}
+
+	/**
+	 * Multi-post _prime_post_caches() reads.
+	 *
+	 * @param string[] $queries Captured SQL.
+	 * @return string[] Matching queries.
+	 */
+	private function bulk_post_cache_reads( array $queries ): array {
+		return array_values( preg_grep( '/SELECT \w*posts\.\* FROM \w*posts WHERE ID IN \(\s*\d+\s*,/i', $queries ) );
 	}
 
 	/**
