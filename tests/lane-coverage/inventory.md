@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3046
+- Cases: 3051
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 70
-- By lane (overlapping; a case touching two lanes is counted twice): v1 805, v2 508, wc3 276, wp2 1, unresolved 402, pure unit 1648
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 513, wc3 276, wp2 2, unresolved 402, pure unit 1648
 - Blind-test warnings (advisory): self-installed-hook 65, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -2213,6 +2213,11 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Pos Visibility | tests/includes/Sync/Test_Pos_Visibility.php:test_hidden_ids_returns_unique_positive_ids_per_type | unit | unreviewed | — |
 | Test Pos Visibility | tests/includes/Sync/Test_Pos_Visibility.php:test_hidden_ids_with_feature_disabled_returns_empty_set | unit | unreviewed | — |
 | Test Pos Visibility | tests/includes/Sync/Test_Pos_Visibility.php:test_legacy_accessors_delegate_to_hidden_ids | unit | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_core_response_does_not_include_pressure_header | v2, wp2 | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_wcpos_error_response_includes_pressure_header | v2 | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_wcpos_v1_response_includes_pressure_header | v1, v2 | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_wcpos_v2_response_includes_pressure_header | v2 | unreviewed | — |
+| Test Pressure Header | tests/includes/API/Test_Pressure_Header.php:test_wcpos_v2_response_omits_pressure_header_when_bucket_is_null | v2 | unreviewed | — |
 | Test Preview Receipt Builder | tests/includes/Services/Test_Preview_Receipt_Builder.php:test_all_sections_populated | unit | unreviewed | — |
 | Test Preview Receipt Builder | tests/includes/Services/Test_Preview_Receipt_Builder.php:test_build_exposes_semantic_order_dates | unit | unreviewed | — |
 | Test Preview Receipt Builder | tests/includes/Services/Test_Preview_Receipt_Builder.php:test_build_handles_translated_discount_label_with_literal_percent | unit | unreviewed | — |

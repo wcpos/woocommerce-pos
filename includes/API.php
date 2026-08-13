@@ -88,6 +88,7 @@ class API {
 		// These filters allow changes to the WC REST API response.
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+		add_filter( 'rest_post_dispatch', array( $this, 'rest_post_dispatch' ), 10, 3 );
 	}
 
 	/**
@@ -577,6 +578,35 @@ class API {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Add the server pressure bucket to WCPOS REST responses.
+	 *
+	 * @param mixed           $response REST response.
+	 * @param WP_REST_Server  $server   REST server.
+	 * @param WP_REST_Request $request  REST request.
+	 *
+	 * @return mixed
+	 */
+	public function rest_post_dispatch( $response, $server, $request ) {
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		try {
+			if ( ! $response instanceof WP_HTTP_Response || ! $this->route_classifier->in_wcpos_namespace( $request->get_route() ) ) {
+				return $response;
+			}
+			$pressure_bucket = API\V2\Ping::pressure_bucket();
+			if ( null !== $pressure_bucket ) {
+				$response->header( 'X-WCPOS-Pressure', $pressure_bucket );
+			}
+		} catch ( \Throwable $e ) {
+			return $response;
+		}
+
+		return $response;
 	}
 
 	/**

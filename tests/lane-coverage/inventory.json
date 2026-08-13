@@ -1,14 +1,14 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3046,
+        "cases": 3051,
         "v1_only": 740,
         "unresolved": 70,
         "by_lane": {
-            "v1": 805,
-            "v2": 508,
+            "v1": 806,
+            "v2": 513,
             "wc3": 276,
-            "wp2": 1,
+            "wp2": 2,
             "unresolved": 402,
             "unit": 1648
         },
@@ -9629,7 +9629,9 @@
             "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller",
             "method": "test_pressure_bucket_boundaries",
             "behavior": "Test Ping Controller",
-            "own_lanes": [],
+            "own_lanes": [
+                "v2"
+            ],
             "class_lanes": [
                 "v2"
             ],
@@ -9648,7 +9650,116 @@
             "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Ping_Controller",
             "method": "test_raw_request_detection",
             "behavior": "Test Ping Controller",
-            "own_lanes": [],
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header::test_core_response_does_not_include_pressure_header",
+            "file": "tests/includes/API/Test_Pressure_Header.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header",
+            "method": "test_core_response_does_not_include_pressure_header",
+            "behavior": "Test Pressure Header",
+            "own_lanes": [
+                "wp2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2",
+                "wp2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header::test_wcpos_error_response_includes_pressure_header",
+            "file": "tests/includes/API/Test_Pressure_Header.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header",
+            "method": "test_wcpos_error_response_includes_pressure_header",
+            "behavior": "Test Pressure Header",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header::test_wcpos_v1_response_includes_pressure_header",
+            "file": "tests/includes/API/Test_Pressure_Header.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header",
+            "method": "test_wcpos_v1_response_includes_pressure_header",
+            "behavior": "Test Pressure Header",
+            "own_lanes": [
+                "v1"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v1",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header::test_wcpos_v2_response_includes_pressure_header",
+            "file": "tests/includes/API/Test_Pressure_Header.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header",
+            "method": "test_wcpos_v2_response_includes_pressure_header",
+            "behavior": "Test Pressure Header",
+            "own_lanes": [
+                "v2"
+            ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header::test_wcpos_v2_response_omits_pressure_header_when_bucket_is_null",
+            "file": "tests/includes/API/Test_Pressure_Header.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Pressure_Header",
+            "method": "test_wcpos_v2_response_omits_pressure_header_when_bucket_is_null",
+            "behavior": "Test Pressure Header",
+            "own_lanes": [
+                "v2"
+            ],
             "class_lanes": [
                 "v2"
             ],

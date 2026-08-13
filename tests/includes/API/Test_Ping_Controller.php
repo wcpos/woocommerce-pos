@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\V2\Ping;
 use WP_REST_Request;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -63,7 +62,7 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * @param string $expected Expected bucket.
 	 */
 	public function test_pressure_bucket_boundaries( float $load, string $expected ): void {
-		$this->assertSame( $expected, Ping::pressure_bucket( $load ) );
+		$this->assertSame( $expected, \WCPOS\WooCommercePOS\API\V2\Ping::pressure_bucket( $load ) );
 	}
 
 	/**
@@ -96,7 +95,7 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 		?string $rest_route,
 		bool $expected
 	): void {
-		$this->assertSame( $expected, Ping::matches_request( $method, $request_uri, $rest_route ) );
+		$this->assertSame( $expected, \WCPOS\WooCommercePOS\API\V2\Ping::matches_request( $method, $request_uri, $rest_route ) );
 	}
 
 	/**
@@ -117,4 +116,5 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 			'marker in unrelated' => array( 'GET', '/products?next=/wcpos/v2/ping', null, false ),
 		);
 	}
+
 }

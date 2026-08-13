@@ -15,6 +15,20 @@ use const WCPOS\WooCommercePOS\VERSION;
 final class Ping {
 	private const ROUTE        = '/wcpos/v2/ping';
 	private const PRETTY_ROUTE = '/wp-json/wcpos/v2/ping';
+
+	/**
+	 * Request-scoped host pressure bucket.
+	 *
+	 * @var string|null
+	 */
+	private static $host_pressure_bucket = null;
+
+	/**
+	 * Whether host pressure has been read this request.
+	 *
+	 * @var bool
+	 */
+	private static $host_pressure_checked = false;
 	// phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag, Squiz.Commenting.FunctionComment.Missing -- Typed signatures keep this bootstrap path within its strict size budget.
 	/** Detect an exact raw ping request. */
 	public static function matches_request( string $method, string $request_uri, ?string $rest_route ): bool {
@@ -83,26 +97,37 @@ final class Ping {
 		return $response;
 	}
 
-	/** Convert normalized load to a pressure bucket, or read host load when omitted. */
+	/** Convert normalized load to a pressure bucket, or read host load when omitted (memoized per request so body and header always agree). */
 	public static function pressure_bucket( ?float $load = null ): ?string {
 		if ( null === $load ) {
-			if ( ! \function_exists( 'sys_getloadavg' ) || ! \is_array( $average = @sys_getloadavg() ) || ! isset( $average[0] ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.FoundInControlStructure -- call only after availability check.
-				return null;
+			if ( ! self::$host_pressure_checked ) {
+				self::$host_pressure_checked = true;
+				self::$host_pressure_bucket  = self::read_host_pressure_bucket();
 			}
-			/** @var int|null $cpus */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- local static type.
-			static $cpus = null;
-			if ( null === $cpus ) {
-				$cpuinfo = @file_get_contents( '/proc/cpuinfo' );
-				$found   = \is_string( $cpuinfo ) ? preg_match_all( '/^processor\s*:/m', $cpuinfo ) : false;
-				$cpus    = \is_int( $found ) && $found > 0 ? $found : 1;
-			}
-			$load = (float) $average[0] / $cpus;
+
+			return self::$host_pressure_bucket;
 		}
 		if ( $load < 0.9 ) {
 			return 'low';
 		}
 
 		return $load <= 1.8 ? 'elevated' : 'high';
+	}
+
+	/** Read the host load average and convert it to a bucket, or null when unavailable. */
+	private static function read_host_pressure_bucket(): ?string {
+		if ( ! \function_exists( 'sys_getloadavg' ) || ! \is_array( $average = @sys_getloadavg() ) || ! isset( $average[0] ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.FoundInControlStructure -- call only after availability check.
+			return null;
+		}
+		/** @var int|null $cpus */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- local static type.
+		static $cpus = null;
+		if ( null === $cpus ) {
+			$cpuinfo = @file_get_contents( '/proc/cpuinfo' );
+			$found   = \is_string( $cpuinfo ) ? preg_match_all( '/^processor\s*:/m', $cpuinfo ) : false;
+			$cpus    = \is_int( $found ) && $found > 0 ? $found : 1;
+		}
+
+		return self::pressure_bucket( (float) $average[0] / $cpus );
 	}
 
 	/** @return array<string, bool|int|string> */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- compact typed payload.
