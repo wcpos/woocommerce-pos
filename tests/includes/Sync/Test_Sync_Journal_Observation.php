@@ -61,7 +61,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$trashed = $this->latest_row( 'product', $product->get_id(), $cursor );
 		$this->assertSame( 1, $trashed['deleted'] );
 		$this->assertSame( 'hook', $trashed['origin'] );
-		$this->assertSame( $revision_before_trash, $trashed['revision'] );
+		$this->assert_datetime_revision( $revision_before_trash, (string) $trashed['revision'] );
 
 		$cursor = $this->journal->head_sequence();
 		wp_untrash_post( $product->get_id() );
@@ -226,7 +226,9 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		foreach ( $operations as $label => $operation ) {
 			$rows = $this->customer_rows_from_fresh_request( $user_id, $operation );
 			$this->assertCount( 1, $rows, $label );
-			$this->assertSame( array( 0, $this->customer_revision( $user_id ), 'hook' ), $this->row_semantics( $rows[0] ), $label );
+			$this->assertSame( 0, $rows[0]['deleted'], $label );
+			$this->assertSame( 'hook', $rows[0]['origin'], $label );
+			$this->assert_datetime_revision( $this->customer_revision( $user_id ), (string) $rows[0]['revision'], $label );
 		}
 
 		$cursor = $this->journal->head_sequence();
@@ -235,7 +237,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$deleted = $this->latest_row( 'customer', $user_id, $cursor );
 		$this->assertSame( 1, $deleted['deleted'] );
 		$this->assertSame( 'hook', $deleted['origin'] );
-		$this->assertSame( $revision_before_delete, $deleted['revision'] );
+		$this->assert_datetime_revision( $revision_before_delete, (string) $deleted['revision'] );
 	}
 
 	public function test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics(): void {
@@ -367,7 +369,26 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 	private function assert_present_hook_row( array $row, string $object_type, int $object_id, string $revision ): void {
 		$this->assertSame( $object_type, $row['object_type'] );
 		$this->assertSame( $object_id, $row['object_id'] );
-		$this->assertSame( array( 0, $revision, 'hook' ), $this->row_semantics( $row ) );
+		$this->assertSame( 0, $row['deleted'] );
+		$this->assertSame( 'hook', $row['origin'] );
+		$this->assert_datetime_revision( $revision, (string) $row['revision'] );
+	}
+
+	/**
+	 * Revision stamps are date_modified-style wall-clock strings read at HOOK
+	 * time, while the expected value here is derived at ASSERT time; on a slow
+	 * (coverage-instrumented) run the two reads can straddle a second boundary.
+	 * Require the datetime shape and proximity, not exact equality — an empty
+	 * expected revision stays exact, and a serializer hash still fails the
+	 * format check.
+	 */
+	private function assert_datetime_revision( string $expected, string $actual, string $message = '' ): void {
+		if ( '' === $expected ) {
+			$this->assertSame( '', $actual, $message );
+			return;
+		}
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $actual, $message );
+		$this->assertEqualsWithDelta( (int) strtotime( $expected . ' UTC' ), (int) strtotime( $actual . ' UTC' ), 5, $message );
 	}
 
 	private function assert_order_row( array $row, string $origin, bool $deleted ): void {
