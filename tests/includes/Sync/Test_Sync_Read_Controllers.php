@@ -15,7 +15,7 @@ use WCPOS\WooCommercePOS\API\V2\Digests_Controller;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
 use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
-use WCPOS\WooCommercePOS\Sync\Change_Log;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -82,8 +82,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_sequence_log_all_maps_object_type_to_collection(): void {
 		$product = ProductHelper::create_simple_product();
-		$log     = new Change_Log();
-		$log->record( 'product', $product->get_id(), 'update', 'test', false );
+		$log     = new Sync_Journal();
+		$log->record( 'product', $product->get_id(), false, 'revision:product', 'test', false );
 
 		$response = ( new Changes_Controller( $log ) )->sequence_log(
 			$this->request(
@@ -98,6 +98,47 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 'products', $data['changes'][0]['collection'] );
 		$this->assertSame( $product->get_id(), $data['changes'][0]['id'] );
+		$this->assertSame( 0, $data['changes'][0]['deleted'] );
+		$this->assertSame( 'revision:product', $data['changes'][0]['revision'] );
+		$this->assertArrayNotHasKey( 'type', $data['changes'][0] );
+	}
+
+	/**
+	 * A complete filtered page skips foreign rows in the shared sequence space.
+	 */
+	public function test_interleaved_order_write_does_not_move_catalogue_head_and_tick_304s(): void {
+		$journal = new Sync_Journal();
+		$journal->record( 'product', 123, false, 'revision:product', 'test', false );
+		$journal->record( 'order', 456, false, 'sha256:order', 'test', false );
+		$controller = new Changes_Controller( $journal );
+
+		$page = $controller->sequence_log(
+			$this->request(
+				array(
+					'collection' => 'all',
+					'since' => 0,
+					'limit' => 10,
+				)
+			)
+		);
+		$data = $page->get_data();
+
+		// The order row shares the sequence space but is FOREIGN to this stream:
+		// the served head is the catalogue stream's head (the product row), so a
+		// drained cursor reaches it naturally and the idle 304 path stays alive.
+		$this->assertTrue( $data['complete'] );
+		$this->assertCount( 1, $data['changes'] );
+		$this->assertSame( 123, $data['changes'][0]['id'] );
+		$this->assertSame( $data['changes'][0]['sequence'], $data['checkpoint']['head'] );
+		$this->assertSame( $data['checkpoint']['head'], $data['checkpoint']['since'] );
+		$this->assertGreaterThan( $data['checkpoint']['head'], $journal->head_sequence() );
+
+		$tick_request = $this->request( array( 'since' => $data['checkpoint']['since'] ) );
+		$tick_request->set_header( 'If-None-Match', $page->get_headers()['ETag'] );
+		$tick = $controller->tick( $tick_request );
+
+		$this->assertSame( 304, $tick->get_status() );
+		$this->assertNull( $tick->get_data() );
 	}
 
 	/**
@@ -105,16 +146,16 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_sequence_log_with_pruned_history_returns_watermark_horizon(): void {
 		// Arrange.
-		$log = new Change_Log();
-		$log->record( 'product', 11, 'update', 'test', false );
-		$log->record( 'product', 22, 'update', 'test', false );
+		$log = new Sync_Journal();
+		$log->record( 'product', 11, false, '', 'test', false );
+		$log->record( 'product', 22, false, '', 'test', false );
 		$controller = new Changes_Controller( $log );
 
 		// Act.
 		$before_pruning = $controller->sequence_log( $this->request() )->get_data();
 		$log->advance_prune_watermark( 7 );
 		$after_pruning = $controller->sequence_log( $this->request() )->get_data();
-		delete_option( Change_Log::PRUNE_WATERMARK_OPTION );
+		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
 
 		// Assert: zero until lossy pruning happens, then the pruned boundary.
 		$this->assertEquals( 0, $before_pruning['checkpoint']['horizon'] );
@@ -218,8 +259,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 * A matching ETag cannot hide rows after a behind cursor.
 	 */
 	public function test_sequence_log_matching_etag_with_since_behind_head_returns_page(): void {
-		$log = new Change_Log();
-		$log->record( 'product', 123, 'update', 'test', false );
+		$log = new Sync_Journal();
+		$log->record( 'product', 123, false, '', 'test', false );
 		$controller = new Changes_Controller( $log );
 		$latest     = $controller->sequence_log( $this->request( array( 'since' => 0 ) ) );
 		$head       = $latest->get_data()['checkpoint']['head'];
@@ -735,5 +776,27 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( array(), $response->get_data()['documents'] );
 		$this->assertNotInstanceOf( WC_Product_Variation::class, wc_get_product( $product->get_id() ) );
+	}
+
+	/**
+	 * The conditional validator covers every client-visible reset boundary: an
+	 * epoch regeneration or a horizon advance invalidates an at-head ETag even
+	 * when the stream head and config fingerprint are unchanged.
+	 */
+	public function test_sequence_log_etag_varies_with_epoch_and_horizon(): void {
+		$journal = new Sync_Journal();
+		$journal->record( 'product', 11, false, '', 'test', false );
+		$controller = new Changes_Controller( $journal );
+
+		$etag = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
+
+		$journal->advance_prune_watermark( 1 );
+		$after_horizon = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
+		$this->assertNotSame( $etag, $after_horizon );
+		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+
+		$journal->regenerate_epoch();
+		$after_epoch = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
+		$this->assertNotSame( $etag, $after_epoch );
 	}
 }

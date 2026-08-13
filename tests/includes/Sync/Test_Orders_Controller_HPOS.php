@@ -14,7 +14,7 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 
 /**
  * Storage-sensitive order pull probes using HPOS.
@@ -58,7 +58,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 		$orders    = array( OrderHelper::create_order(), OrderHelper::create_order() );
 		$order_ids = array();
 		$digest    = new Integrity_Digest();
-		$index     = new Sync_Index();
+		$index     = new Sync_Journal();
 		foreach ( $orders as $order ) {
 			$order_ids[] = $order->get_id();
 			$digest->upsert_order_digest( $order->get_id() );
@@ -118,7 +118,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 		$order->save();
 		$uuid = Pos_Uuid::ensure_uuid( $order );
 
-		( new Sync_Index() )->record_order_change( $order->get_id(), 'test:hpos-pull', false );
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'test:hpos-pull', false );
 
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders/pull' );
 		$request->set_query_params(
@@ -134,6 +134,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $data['documents'] );
+		$this->assertSame( 0, $data['horizon'] );
 
 		$document = $data['documents'][0];
 		$this->assertSame( $uuid, $document['id'] );

@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Change_Log;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
@@ -36,10 +36,10 @@ final class Changes_Controller extends WP_REST_Controller {
 	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 	private const TAX_RATES_NOTE             = 'tax rates table has no timestamps; rows carry ids only.';
 
-	private Change_Log $change_log;
+	private Sync_Journal $journal;
 
-	public function __construct( ?Change_Log $change_log = null ) {
-		$this->change_log = $change_log ?? new Change_Log();
+	public function __construct( ?Sync_Journal $journal = null ) {
+		$this->journal = $journal ?? new Sync_Journal();
 	}
 
 	public function register_routes(): void {
@@ -152,10 +152,10 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Hook-maintained change log queried by global sequence cursor.
+	 * Hook-maintained journal queried by global sequence cursor.
 	 */
 	public function sequence_log( WP_REST_Request $request ) {
-		// `all` (the unified stream) is recognised ONLY here, from the raw param;
+		// `all` (the unified catalogue stream) is recognised ONLY here, from the raw param;
 		// collection_for_request() never returns it, so the other endpoints can't.
 		$is_all     = ( 'all' === (string) $request->get_param( 'collection' ) );
 		$collection = $is_all ? 'all' : $this->collection_for_request( $request );
@@ -167,9 +167,13 @@ final class Changes_Controller extends WP_REST_Controller {
 		// replacing its standalone all-collections fingerprint poll with this
 		// embedded member must never see a narrowed snapshot (stale variations).
 		$config_fingerprint = $this->config_fingerprint_data( $request, true );
-		$head_sequence      = $this->change_log->head_sequence();
-		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
-		$headers            = array(
+		$stream_types       = $this->object_types_for_collection( $collection );
+		// STREAM-SCOPED head: orders share this AUTO_INCREMENT space, and a head
+		// that moves on foreign writes would leave this stream's cursor forever
+		// "behind" — killing the 304 idle path and forcing an empty 200 per poll.
+		$head_sequence = $this->journal->head_sequence( $stream_types );
+		$etag          = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		$headers       = array(
 			'ETag'          => $etag,
 			'Cache-Control' => 'no-store',
 		);
@@ -178,11 +182,11 @@ final class Changes_Controller extends WP_REST_Controller {
 			return new \WP_REST_Response( null, 304, $headers );
 		}
 
-		// The UNIFIED `all` stream asks for every object_type (empty list); the
-		// narrowed streams name theirs — products span TWO of them in the one
+		// The catalogue-only `all` stream and the narrowed streams explicitly name
+		// their object types — products span TWO of them in the one
 		// global sequence. The page's `head` is read after the rows, which is the
 		// head this envelope must carry (see its use below).
-		$page = $this->change_log->page( $this->object_types_for_collection( $collection ), $since, $limit );
+		$page = $this->journal->page( $stream_types, $since, $limit );
 		$rows = $page['rows'];
 
 		$changes          = array();
@@ -194,7 +198,8 @@ final class Changes_Controller extends WP_REST_Controller {
 			$change           = array(
 				'sequence'     => $sequence,
 				'id'           => (int) ( $row['object_id'] ?? 0 ),
-				'type'         => (string) ( $row['change_type'] ?? '' ),
+				'deleted'      => ! empty( $row['deleted'] ) ? 1 : 0,
+				'revision'     => (string) ( $row['revision'] ?? '' ),
 				'modified_gmt' => (string) ( $row['modified_gmt'] ?? '' ),
 			);
 			// Tag per-row collection ONLY for the unified `all` stream — that is
@@ -210,7 +215,7 @@ final class Changes_Controller extends WP_REST_Controller {
 						// WRONG record type with this row's numeric id. Drop the
 						// row (the cursor still advances past it via the echoed
 						// checkpoint) and say so once per request.
-						Logger::log( \sprintf( 'WCPOS sync: dropped change-log row with unknown object_type "%s" (sequence %s)', $object_type, $change['sequence'] ) );
+						Logger::log( \sprintf( 'WCPOS sync: dropped journal row with unknown object_type "%s" (sequence %s)', $object_type, $change['sequence'] ) );
 
 						continue;
 					}
@@ -222,16 +227,20 @@ final class Changes_Controller extends WP_REST_Controller {
 			$changes[] = $change;
 		}
 
-		// Head of the global sequence space. A FRESH client (no resident history)
+		// Head of THIS STREAM's sequence space. A FRESH client (no resident history)
 		// jumps its cursor straight to `head` in ONE request — the on-demand
-		// baseline — instead of draining the entire historical change-log
+		// baseline — instead of draining the entire historical journal
 		// 100/page. The existing catalog is the baseline (built by greedy/on-demand
 		// pulls); only changes AFTER head need replaying. See finding F1 in
 		// docs/pos-replication-model.md. The page reads it AFTER its rows, so the
 		// envelope's head stays >= every served row (a row can land between the
 		// early ETag head-read and the page query). The early read above serves
-		// only the 304 short-circuit.
+		// only the 304 short-circuit. Because the head is stream-scoped, a drained
+		// cursor reaches it naturally — no served-checkpoint jump is needed, and
+		// none may be added: jumping `since` to a head read after the rows would
+		// skip any in-stream row that committed between the two reads.
 		$head_sequence = $page['head'];
+		$complete      = \count( $rows ) < $limit;
 
 		// Rebuild the served ETag from the refreshed head (CodeRabbit review): if a
 		// row landed between the reads, an ETag stamped with the stale head could
@@ -244,7 +253,7 @@ final class Changes_Controller extends WP_REST_Controller {
 		// about pruned tombstones above it. A cursor at or past the watermark
 		// has missed nothing; below it, the client must reconcile via the
 		// integrity surfaces. Zero = no lossy pruning has ever run.
-		$horizon = $this->change_log->prune_watermark();
+		$horizon = $this->journal->prune_watermark();
 
 		$data                       = $this->envelope(
 			$collection,
@@ -252,9 +261,10 @@ final class Changes_Controller extends WP_REST_Controller {
 				'since'   => $checkpoint_since,
 				'head'    => $head_sequence,
 				'horizon' => $horizon,
+				'epoch'   => $this->journal->ensure_epoch(),
 			),
 			$changes,
-			\count( $rows ) < $limit
+			$complete
 		);
 		$data['config_fingerprint'] = $config_fingerprint;
 
@@ -492,14 +502,16 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * Combined change signal: one poll for idle registers.
 	 *
 	 * Reports the sequence head and representation fingerprint without reading
-	 * a page of change-log rows. Its validator and conditional-request semantics
+	 * a page of journal rows. Its validator and conditional-request semantics
 	 * stay shared with sequence_log() so cached validators remain compatible.
 	 */
 	public function tick( WP_REST_Request $request ) {
 		$since              = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
 		$config_fingerprint = $this->config_fingerprint_data( $request, true );
-		$head_sequence      = $this->change_log->head_sequence();
-		$etag               = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		// Tick is the catalogue lane's probe — serve the catalogue stream's head,
+		// not the global one, or steady order writes would kill the 304 idle path.
+		$head_sequence = $this->journal->head_sequence( $this->object_types_for_collection( 'all' ) );
+		$etag          = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 		$headers            = array(
 			'ETag'          => $etag,
 			'Cache-Control' => 'no-store',
@@ -514,7 +526,8 @@ final class Changes_Controller extends WP_REST_Controller {
 				'checkpoint'         => array(
 					'since'   => $since,
 					'head'    => $head_sequence,
-					'horizon' => $this->change_log->prune_watermark(),
+					'horizon' => $this->journal->prune_watermark(),
+					'epoch'   => $this->journal->ensure_epoch(),
 				),
 				'changes'            => array(),
 				// Tick ships no page, so within its contract there is nothing incomplete;
@@ -533,11 +546,18 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * representation-affecting fingerprint data.
 	 */
 	private function sequence_log_etag( int $head_sequence, array $config_fingerprint ): string {
+		// The validator must cover EVERY client-visible reset boundary, not just
+		// head+config: an install can regenerate the epoch, and retention can
+		// advance the horizon, while this stream's head is unchanged — an at-head
+		// client presenting the old validator would then 304 forever and never
+		// observe the very fields that trigger its rebaseline.
 		return '"' . $head_sequence . ':' . md5(
 			(string) wp_json_encode(
 				array(
 					'fingerprints'   => $config_fingerprint['fingerprints'],
 					'barcode_fields' => $config_fingerprint['barcode_fields'],
+					'epoch'          => $this->journal->ensure_epoch(),
+					'horizon'        => $this->journal->prune_watermark(),
 				)
 			)
 		) . '"';
@@ -632,17 +652,19 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * The change-log object_types one stream serves. `all` is the unified stream
-	 * (every type — an empty list), `tax_rates` is a single type, and `products`
+	 * The journal object_types one stream serves. `all` is the catalogue stream,
+	 * `tax_rates` is a single type, and `products`
 	 * spans product AND variation because a variation change is a products-stream
-	 * event. This is the only place the endpoint names object types; the log
+	 * event. This is the only place the endpoint names object types; the journal
 	 * itself owns the query.
 	 *
 	 * @return string[]
 	 */
 	private function object_types_for_collection( string $collection ): array {
 		if ( 'all' === $collection ) {
-			return array();
+			// Projected from the Collections registry (journal group minus orders)
+			// so a new collection cannot be journalled yet invisible to this stream.
+			return Sync_Journal::catalogue_object_types();
 		}
 		if ( 'tax_rates' === $collection ) {
 			return array( 'tax_rate' );
@@ -652,7 +674,7 @@ final class Changes_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Map a change-log object_type to the client-facing collection name via
+	 * Map a journal object_type to the client-facing collection name via
 	 * THE registry (#421 increment 5). Returns null for an unknown
 	 * object_type — the caller DROPS the row and logs once. The old switch
 	 * fell through to 'products', which made a missing case pull a PRODUCT

@@ -13,7 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Order_Document;
 use WCPOS\WooCommercePOS\Sync\Order_Pull_Planner;
 use WCPOS\WooCommercePOS\Sync\Order_Query;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
-use WCPOS\WooCommercePOS\Sync\Sync_Index;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -22,7 +22,7 @@ use WP_REST_Server;
 
 /**
  * The orders custom-pull lane. Orders ride a checkpointed cursor over the
- * append-only sync-index rather than the change-log — the client greedily
+ * order rows in the unified journal — the client greedily
  * drains /orders/pull, coalescing each order to its net state per page (F6
  * tombstones on the separate delete channel, F8 journal epoch/head for reset
  * detection). Window/targeted order reads use the plain /orders wc/v3 proxy
@@ -69,7 +69,7 @@ final class Orders_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// Out-of-band admin lane (ADR 0021): populates the gated sync-index that
+		// Out-of-band admin lane (ADR 0021): populates the gated journal that
 		// feeds /orders/pull. Zero client callers by design — an operator repair
 		// job — and it stays health-gated because its work lives in the gated
 		// table (it cannot cure a broken install, only fail against it).
@@ -170,7 +170,7 @@ final class Orders_Controller extends WP_REST_Controller {
 		// Journal epoch + head (F8): the client resyncs from zero when the epoch it stored differs
 		// (a new sequence generation) or when its checkpoint sequence exceeds the head (the
 		// AUTO_INCREMENT space reset beneath it). Cheap: an autoloaded option + a MAX(sequence).
-		$journal = new Sync_Index();
+		$journal = new Sync_Journal();
 
 		return rest_ensure_response(
 			array(
@@ -179,23 +179,24 @@ final class Orders_Controller extends WP_REST_Controller {
 				'checkpoint' => $response_checkpoint,
 				'hasMore'    => $has_more,
 				'epoch'      => $journal->ensure_epoch(), // F8 journal epoch — client resyncs on mismatch
-				'head'       => $journal->head_sequence(), // F8 journal head (MAX sequence) — client resyncs if its cursor exceeds it
+				'head'       => $journal->head_sequence( array( 'order' ) ), // F8 order-lane head — client resyncs if its cursor exceeds it; stream-scoped so catalogue writes don't move it
+				'horizon'    => $journal->prune_watermark(),
 			)
 		);
 	}
 
 	/**
-	 * Run one bounded chunk of the append-only sync-index backfill. `reset=1`
+	 * Run one bounded chunk of the append-only journal backfill. `reset=1`
 	 * clears the persisted backfill cursor so a COMPLETED store can re-run the
 	 * append-only backfill; the F8 epoch is untouched.
 	 */
 	public function index_backfill( WP_REST_Request $request ) {
 		$raw_limit = $request->get_param( 'limit' );
 		$limit     = max( 1, min( 250, (int) ( null === $raw_limit ? 50 : $raw_limit ) ) );
-		$index     = new Sync_Index();
+		$journal   = new Sync_Journal();
 		if ( in_array( (string) $request->get_param( 'reset' ), array( '1', 'true' ), true ) ) {
-			$index->reset_backfill_state();
+			$journal->reset_backfill_state();
 		}
-		return rest_ensure_response( $index->run_backfill_chunk( $limit ) );
+		return rest_ensure_response( $journal->run_backfill_chunk( $limit ) );
 	}
 }
