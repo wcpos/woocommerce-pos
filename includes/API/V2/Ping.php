@@ -65,6 +65,17 @@ final class Ping {
 		if ( 'HEAD' !== $method ) {
 			echo wp_json_encode( $data ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON HTTP response.
 		}
+		// Ship the response before exit's shutdown handlers run: the OTel
+		// wordpress instrumentation reads conditional tags (is_404) at shutdown,
+		// and with no query having run, WP_DEBUG_DISPLAY sites would append a
+		// _doing_it_wrong notice after the JSON body (#1582). Under FPM, closing
+		// the request first makes late output unreachable; elsewhere, mute
+		// display so shutdown notices cannot corrupt the payload.
+		if ( \function_exists( 'fastcgi_finish_request' ) ) {
+			fastcgi_finish_request();
+		} else {
+			@ini_set( 'display_errors', '0' ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Disallowed, WordPress.PHP.NoSilencedErrors.Discouraged -- last-resort mute on non-FPM SAPIs; the response is already emitted.
+		}
 		exit;
 	}
 
