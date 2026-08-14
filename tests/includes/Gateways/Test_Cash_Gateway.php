@@ -149,7 +149,9 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	public function test_calculate_change_outputs_message(): void {
 		$order = OrderHelper::create_order();
 
-		// Use update_post_meta since calculate_change uses get_post_meta.
+		// Write via update_post_meta: calculate_change reads through
+		// WC_Order::get_meta(), so this verifies legacy post-meta rows stay
+		// readable through the order API.
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '50.00' );
 		update_post_meta( $order->get_id(), '_pos_cash_change', '10.00' );
 
