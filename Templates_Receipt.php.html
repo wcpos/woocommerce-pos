@@ -49,6 +49,8 @@ use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
 
 /**
  * Receipt class.
@@ -277,13 +279,22 @@ class Receipt {
 	 * print-safe (dark accent ink, near-white fills). Legacy PHP templates emit a
 	 * full HTML document and own their print styling, so they render untouched.
 	 *
-	 * @param array                   $custom_template Template metadata/content.
-	 * @param \WC_Abstract_Order|null $order           Order object.
-	 * @param array                   $receipt_data    Canonical receipt payload.
+	 * @param array              $custom_template Template metadata/content.
+	 * @param \WC_Abstract_Order $order           Order object.
+	 * @param array              $receipt_data    Canonical receipt payload.
 	 */
-	private function render_custom_template( array $custom_template, ?\WC_Abstract_Order $order, array $receipt_data ): void {
+	private function render_custom_template( array $custom_template, \WC_Abstract_Order $order, array $receipt_data ): void {
 		$template_engine = $this->get_template_engine( $custom_template );
-		$renderer        = ( new Receipt_Renderer_Factory() )->create( $template_engine );
+		if ( 'thermal' === $template_engine ) {
+			$ast          = ( new Thermal_Renderer() )->build_ast( $custom_template, $order, $receipt_data );
+			$thermal_html = ( new Html_Thermal_Emitter() )->emit( $ast );
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- The emitter escapes every dynamic value.
+			echo $thermal_html;
+
+			return;
+		}
+
+		$renderer = ( new Receipt_Renderer_Factory() )->create( $template_engine );
 
 		if ( 'logicless' !== $template_engine ) {
 			$renderer->render( $custom_template, $order, $receipt_data );
@@ -591,7 +602,7 @@ class Receipt {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li><li><a href="woocommerce_pos_web_bundle_ref.html">woocommerce_pos_web_bundle_ref</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li><li><a href="woocommerce_pos_wp_overnight_pdf_templates_enabled.html">woocommerce_pos_wp_overnight_pdf_templates_enabled</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_license_settings.html">woocommerce_pos_license_settings</a></li><li><a href="woocommerce_pos_payment_gateways_settings.html">woocommerce_pos_payment_gateways_settings</a></li><li><a href="woocommerce_pos_pre_save_%257B$id%257D_settings.html">woocommerce_pos_pre_save_{$id}_settings</a></li><li><a href="woocommerce_pos_register_settings_sections.html">woocommerce_pos_register_settings_sections</a></li><li><a href="woocommerce_pos_saved_%257B$id%257D_settings.html">woocommerce_pos_saved_{$id}_settings</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li><li><a href="woocommerce_pos_web_bundle_ref.html">woocommerce_pos_web_bundle_ref</a></li><li><a href="woocommerce_pos_%257B$id%257D_settings.html">woocommerce_pos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li><li><a href="woocommerce_pos_wp_overnight_pdf_templates_enabled.html">woocommerce_pos_wp_overnight_pdf_templates_enabled</a></li></ul>
 </nav>
 
 <br class="clear">

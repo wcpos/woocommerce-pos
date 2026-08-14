@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Source: Services/Settings/Payment_Gateways_Section.php - 10up Distributor Hook Docs</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+
+	<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Mono|IBM+Plex+Sans:300,400|Playfair+Display:900&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="styles-10up.css">
+</head>
+
+<body>
+
+<div id="main">
+
+	
+    <h1 class="page-title">Source: Services/Settings/Payment_Gateways_Section.php</h1>
+	
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;?php
+/**
+ * Payment Gateways Settings Section.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS\Services\Settings;
+
+use WC_Payment_Gateways;
+
+/**
+ * The Payment Gateways Settings Section.
+ *
+ * Read is fully overridden: the stored option is merged over defaults, the
+ * legacy global checkout order_status is applied in memory (never persisted
+ * from a read path), and the view is rebuilt from the currently installed
+ * WooCommerce gateways because gateways can be installed/uninstalled at any
+ * time.
+ */
+class Payment_Gateways_Section extends Abstract_Section {
+	/**
+	 * Section id.
+	 */
+	public function id(): string {
+		return 'payment_gateways';
+	}
+
+	/**
+	 * Section defaults.
+	 */
+	public function defaults(): array {
+		return array(
+			'default_gateway' => 'pos_cash',
+			'gateways'        => array(
+				'pos_cash' => array(
+					'order'        => 0,
+					'enabled'      => true,
+					'order_status' => 'wc-completed',
+				),
+				'pos_card' => array(
+					'order'        => 1,
+					'enabled'      => true,
+					'order_status' => 'wc-completed',
+				),
+			),
+		);
+	}
+
+	/**
+	 * REST endpoint args for payment-gateway updates.
+	 */
+	public function endpoint_args(): array {
+		return array(
+			'auto_print_receipt' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
+			'default_gateway' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
+			'gateways' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_array( $param );
+				},
+			),
+		);
+	}
+
+	/**
+	 * Read the gateway settings view. Pure — no DB writes.
+	 */
+	public function read(): array {
+		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
+		WC_Payment_Gateways::instance()->init();
+		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
+		$raw_gw_option      = $this->read_raw();
+		$gateways_settings  = array_replace_recursive( $this->defaults(), $raw_gw_option );
+
+		// Migrate: if the old global checkout order_status exists, apply it to all
+		// gateways that have no explicit per-gateway status. In memory only —
+		// the legacy key stays in the checkout option until the user saves.
+		$checkout_settings = get_option( self::DB_PREFIX . 'checkout', array() );
+		if ( \is_array( $checkout_settings ) &amp;&amp; isset( $checkout_settings['order_status'] ) ) {
+			$global_status = $checkout_settings['order_status'];
+			if ( \is_string( $global_status ) &amp;&amp; '' !== $global_status ) {
+				foreach ( $gateways_settings['gateways'] as $gw_id => &amp;$gw_data ) {
+					// Check the raw DB value, not the merged value (which includes defaults).
+					if ( ! isset( $raw_gw_option['gateways'][ $gw_id ]['order_status'] ) ) {
+						$gw_data['order_status'] = $global_status;
+					}
+				}
+				unset( $gw_data );
+			}
+		}
+
+		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale.
+		$response = array(
+			'default_gateway' => $gateways_settings['default_gateway'],
+			'gateways'        => array(),
+		);
+
+		// Gateways that represent deferred/unverified payment default to on-hold.
+		$on_hold_gateways = array( 'bacs', 'cheque' );
+
+		// loop through installed gateways and merge with saved settings.
+		foreach ( $installed_gateways as $id => $gateway ) {
+			// sanity check for gateway class.
+			if ( ! is_a( $gateway, 'WC_Payment_Gateway' ) || 'pre_install_woocommerce_payments_promotion' === $id ) {
+				continue;
+			}
+
+			$default_status = \in_array( $id, $on_hold_gateways, true ) ? 'wc-on-hold' : 'wc-completed';
+
+			$response['gateways'][ $id ] = array_replace_recursive(
+				array(
+					'id'           => $gateway->id,
+					'title'        => $gateway->title,
+					'description'  => $gateway->description,
+					'enabled'      => false,
+					'order'        => 999,
+					'order_status' => $default_status,
+				),
+				$gateways_settings['gateways'][ $id ] ?? array()
+			);
+		}
+
+		/**
+		 * Filters the payment gateways settings.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $settings The payment gateways settings.
+		 *
+		 * @hook woocommerce_pos_payment_gateways_settings
+		 */
+		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+
+    <footer>
+		<a href="https://wcpos.com/">WCPOS</a> &bull;
+		<a href="https://github.com/wcpos/woocommerce-pos/">GitHub</a> &bull;
+		<a href="https://github.com/wcpos/discord">Discord Chat</a>
+	</footer>
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_license_settings.html">woocommerce_pos_license_settings</a></li><li><a href="woocommerce_pos_payment_gateways_settings.html">woocommerce_pos_payment_gateways_settings</a></li><li><a href="woocommerce_pos_pre_save_%257B$id%257D_settings.html">woocommerce_pos_pre_save_{$id}_settings</a></li><li><a href="woocommerce_pos_register_settings_sections.html">woocommerce_pos_register_settings_sections</a></li><li><a href="woocommerce_pos_saved_%257B$id%257D_settings.html">woocommerce_pos_saved_{$id}_settings</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li><li><a href="woocommerce_pos_web_bundle_ref.html">woocommerce_pos_web_bundle_ref</a></li><li><a href="woocommerce_pos_%257B$id%257D_settings.html">woocommerce_pos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li><li><a href="woocommerce_pos_wp_overnight_pdf_templates_enabled.html">woocommerce_pos_wp_overnight_pdf_templates_enabled</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
