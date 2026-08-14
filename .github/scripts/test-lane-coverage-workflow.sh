@@ -11,7 +11,7 @@ fail() {
 
 INVENTORY_STEP="$({
   awk '
-    /^      - name: Inventory is up to date$/ { in_step=1; next }
+    /^      - name: Scan is healthy and annotations are valid$/ { in_step=1; next }
     in_step && /^        run: \|$/ { in_run=1; next }
     in_run && /^      - name:/ { exit }
     in_run { sub(/^          /, ""); print }
@@ -19,7 +19,7 @@ INVENTORY_STEP="$({
 })"
 
 if [[ -z "$INVENTORY_STEP" ]]; then
-  fail 'could not read the inventory workflow step'
+  fail 'could not read the scan-health workflow step'
 fi
 
 run_inventory_step() {
@@ -55,7 +55,6 @@ run_inventory_step() {
 }
 
 run_inventory_step 0 0 ''
-run_inventory_step 1 1 'Lane-coverage inventory is stale'
 run_inventory_step 2 2 'Lane-coverage scan failed'
 
 if ! awk '
@@ -71,4 +70,4 @@ if [[ "$FAILURES" -ne 0 ]]; then
   exit 1
 fi
 
-echo 'Lane coverage workflow regression checks passed (3 status scenarios, credentials disabled)'
+echo 'Lane coverage workflow regression checks passed (2 status scenarios, credentials disabled)'
