@@ -718,6 +718,8 @@ class Write_Controller extends WP_REST_Controller {
 	 * that matches the CURRENT document under a PRE-CUTOVER form —
 	 *  - the legacy order sha256 (no ksort, volatiles included): same content,
 	 *    old algorithm ⇒ the precondition is genuinely current;
+	 *  - a pre-taxonomy-sort sha256 for non-orders: same content, previous
+	 *    canonicalizer ⇒ queued writes survive the revision transition;
 	 *  - a pre-1b lane synthesis (non-sha256 values the client fetchers stored
 	 *    as sync.revision before the proxy revision stamp): date_modified_gmt
 	 *    for order/post/user collections, String(id) for term collections
@@ -742,7 +744,7 @@ class Write_Controller extends WP_REST_Controller {
 				$payload = ( new Order_Serializer() )->serialize_order( $id, new WP_REST_Request() );
 				return Order_Serializer::legacy_revision( $payload ) === $base;
 			}
-			return false;
+			return Revision::pre_taxonomy_sort_revision( $bare ) === $base;
 		}
 		$id_type = $meta['id_type'] ?? '';
 		if ( in_array( $id_type, array( 'order', 'post', 'user' ), true ) ) {
