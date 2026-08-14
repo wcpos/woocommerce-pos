@@ -119,7 +119,7 @@ function woocommerce_pos_uninstall_user_meta(): void {
  * @param string $dir Absolute directory path.
  */
 function woocommerce_pos_uninstall_rmdir( string $dir ): void {
-	if ( ! is_dir( $dir ) || 0 !== strpos( basename( $dir ), 'wcpos-' ) ) {
+	if ( is_link( $dir ) || ! is_dir( $dir ) || 0 !== strpos( basename( $dir ), 'wcpos-' ) ) {
 		return;
 	}
 
@@ -277,6 +277,13 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$wpdb->esc_like( 'wcpos_stores_migrated' ),
 		$wpdb->esc_like( '_transient_woocommerce_pos_pro_' ) . '%',
 		$wpdb->esc_like( '_transient_timeout_woocommerce_pos_pro_' ) . '%',
+		$wpdb->esc_like( '_transient_wcpos_i18n_woocommerce-pos-pro_' ) . '%',
+		$wpdb->esc_like( '_transient_timeout_wcpos_i18n_woocommerce-pos-pro_' ) . '%',
+		// WooCommerce core POS settings — owned by WooCommerce 10.5+.
+		$wpdb->esc_like( 'woocommerce_pos_store_name' ),
+		$wpdb->esc_like( 'woocommerce_pos_store_phone' ),
+		$wpdb->esc_like( 'woocommerce_pos_store_email' ),
+		$wpdb->esc_like( 'woocommerce_pos_refund_returns_policy' ),
 	);
 	if ( ! $remove_all ) {
 		$preserved = array_merge(
@@ -298,16 +305,46 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE {$where}", array_merge( $patterns, $preserved ) ) );
 
 	// 6. Plugin-owned files: downloaded translations, template render cache,
-	// dompdf scratch, and this plugin's WooCommerce log files.
+	// dompdf scratch, and this plugin's unshared WooCommerce logs.
+	$pro_plugin     = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
+	$active_plugins = (array) get_option( 'active_plugins', array() );
+	$pro_installed  = file_exists( trailingslashit( WP_PLUGIN_DIR ) . $pro_plugin ) || in_array( $pro_plugin, $active_plugins, true );
+	if ( ! $pro_installed && function_exists( 'is_multisite' ) && is_multisite() ) {
+		$network_plugins = (array) get_site_option( 'active_sitewide_plugins', array() );
+		$pro_installed   = isset( $network_plugins[ $pro_plugin ] );
+	}
+
+	$log_table = $wpdb->prefix . 'woocommerce_log';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WooCommerce's known per-site log table; uninstall context.
+	$log_table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $log_table ) ) );
+	if ( ! $pro_installed && $log_table === $log_table_exists ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Removing exact-source operational logs at uninstall.
+		$wpdb->delete( $log_table, array( 'source' => 'woocommerce-pos' ), array( '%s' ) );
+	}
+
+	$language_files = glob( trailingslashit( WP_LANG_DIR ) . 'plugins/woocommerce-pos-*.l10n.php' );
+	foreach ( is_array( $language_files ) ? $language_files : array() as $language_file ) {
+		if ( 1 !== preg_match( '/^woocommerce-pos-[a-z]{2,3}(?:_[A-Za-z0-9]+)*(?:@[A-Za-z0-9]+)?\.l10n\.php$/', basename( $language_file ) ) ) {
+			continue;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions -- WP_Filesystem is not initialised during uninstall.
+		unlink( $language_file );
+	}
+
 	$uploads = wp_upload_dir( null, false );
 	if ( empty( $uploads['error'] ) && ! empty( $uploads['basedir'] ) ) {
 		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-languages' );
 		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-templates' );
 
-		$log_files = glob( trailingslashit( $uploads['basedir'] ) . 'wc-logs/woocommerce-pos-*.log' );
-		foreach ( \is_array( $log_files ) ? $log_files : array() as $log_file ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions -- WP_Filesystem is not initialised during uninstall.
-			unlink( $log_file );
+		if ( ! $pro_installed ) {
+			$log_files = glob( trailingslashit( $uploads['basedir'] ) . 'wc-logs/woocommerce-pos-*.log' );
+			foreach ( \is_array( $log_files ) ? $log_files : array() as $log_file ) {
+				if ( 1 !== preg_match( '/^woocommerce-pos-\d{4}-\d{2}-\d{2}-/', basename( $log_file ) ) ) {
+					continue;
+				}
+				// phpcs:ignore WordPress.WP.AlternativeFunctions -- WP_Filesystem is not initialised during uninstall.
+				unlink( $log_file );
+			}
 		}
 	}
 	woocommerce_pos_uninstall_rmdir( rtrim( get_temp_dir(), '/\\' ) . '/wcpos-dompdf' );

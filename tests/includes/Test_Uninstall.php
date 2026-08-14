@@ -138,6 +138,34 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Ensure the WooCommerce database log table exists for uninstall fixtures.
+	 */
+	private function ensure_log_table_exists(): string {
+		global $wpdb;
+
+		$table           = $wpdb->prefix . 'woocommerce_log';
+		$charset_collate = $wpdb->get_charset_collate();
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+			return $table;
+		}
+
+		$wpdb->query(
+			"CREATE TABLE {$table} (
+				log_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+				timestamp datetime NOT NULL,
+				level smallint(4) NOT NULL,
+				message longtext NOT NULL,
+				source varchar(200) NOT NULL,
+				context longtext NULL,
+				PRIMARY KEY (log_id),
+				KEY source (source(191))
+			) {$charset_collate}" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test DDL with a safe table prefix.
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Test fixture DDL.
+
+		return $table;
+	}
+
+	/**
 	 * Restore POS roles and capabilities via the activator (the full-wipe
 	 * path removes them, and later test classes rely on activation state).
 	 */
@@ -161,6 +189,41 @@ class Test_Uninstall extends WP_UnitTestCase {
 			Health::is_healthy(),
 			'Requiring uninstall.php must not drop the sync tables'
 		);
+	}
+
+	/**
+	 * A plugin-named symlink must never be traversed into external storage.
+	 */
+	public function test_uninstall_rmdir_refuses_top_level_symlink(): void {
+		$root    = sys_get_temp_dir() . '/wcpos-uninstall-' . uniqid();
+		$target  = $root . '/shared';
+		$link    = $root . '/wcpos-templates';
+		$payload = $target . '/payload.txt';
+		wp_mkdir_p( $target );
+		file_put_contents( $payload, 'outside' );
+
+		if ( ! symlink( $target, $link ) ) {
+			unlink( $payload );
+			rmdir( $target );
+			rmdir( $root );
+			$this->markTestSkipped( 'Symlinks are not available in this test environment.' );
+		}
+
+		try {
+			woocommerce_pos_uninstall_rmdir( $link );
+
+			$this->assertFileExists( $payload, 'Top-level symlink targets must not be traversed' );
+			$this->assertTrue( is_link( $link ), 'A refused symlink should remain untouched' );
+		} finally {
+			if ( is_link( $link ) ) {
+				unlink( $link );
+			}
+			if ( file_exists( $payload ) ) {
+				unlink( $payload );
+			}
+			rmdir( $target );
+			rmdir( $root );
+		}
 	}
 
 	/**
@@ -283,6 +346,27 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
+	 * WooCommerce core's POS settings are not owned by WCPOS, even on full wipe.
+	 */
+	public function test_uninstall_never_deletes_woocommerce_core_pos_options(): void {
+		$options = array(
+			'woocommerce_pos_store_name',
+			'woocommerce_pos_store_phone',
+			'woocommerce_pos_store_email',
+			'woocommerce_pos_refund_returns_policy',
+		);
+		foreach ( $options as $option ) {
+			update_option( $option, 'WooCommerce-owned value' );
+		}
+
+		$this->run_uninstall( true );
+
+		foreach ( $options as $option ) {
+			$this->assertSame( 'WooCommerce-owned value', get_option( $option ), "{$option} must never be deleted by WCPOS" );
+		}
+	}
+
+	/**
 	 * WCPOS Pro's options and transients survive BOTH default and full-wipe
 	 * uninstalls of the free plugin — they belong to a different plugin.
 	 */
@@ -292,6 +376,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 		update_option( 'woocommerce_pos_pro_db_version', '1.8.11' );
 		update_option( 'wcpos_stores_migrated', 'yes' );
 		set_transient( 'woocommerce_pos_pro_license_status', 'active', HOUR_IN_SECONDS );
+		set_transient( 'wcpos_i18n_woocommerce-pos-pro_de_DE', '1.8.7', HOUR_IN_SECONDS );
 
 		// Act: the stronger of the two paths.
 		$this->run_uninstall( true );
@@ -301,6 +386,118 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->assertNotFalse( get_option( 'woocommerce_pos_pro_db_version' ), 'Pro db_version must never be deleted' );
 		$this->assertNotFalse( get_option( 'wcpos_stores_migrated' ), 'Pro migration latch must never be deleted' );
 		$this->assertNotFalse( get_transient( 'woocommerce_pos_pro_license_status' ), 'Pro transients must never be deleted' );
+		$this->assertNotFalse( get_transient( 'wcpos_i18n_woocommerce-pos-pro_de_DE' ), 'Pro i18n transients must never be deleted' );
+		$this->assertNotFalse( get_option( '_transient_timeout_wcpos_i18n_woocommerce-pos-pro_de_DE' ), 'Pro i18n transient timeouts must never be deleted' );
+	}
+
+	/**
+	 * Free database logs are operational data, while extension and active-Pro
+	 * rows sharing the logging surface belong to other plugins.
+	 */
+	public function test_uninstall_database_logs_respects_source_ownership(): void {
+		global $wpdb;
+
+		$table          = $this->ensure_log_table_exists();
+		$active_plugins = get_option( 'active_plugins', array() );
+		$pro_plugin     = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
+		$insert_log     = function ( string $source ) use ( $wpdb, $table ): void {
+			$wpdb->insert(
+				$table,
+				array(
+					'timestamp' => current_time( 'mysql', true ),
+					'level'     => 200,
+					'message'   => 'fixture',
+					'source'    => $source,
+					'context'   => '{}',
+				)
+			);
+		};
+
+		try {
+			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" );
+			update_option( 'active_plugins', array_values( array_diff( $active_plugins, array( $pro_plugin ) ) ) );
+			$insert_log( 'woocommerce-pos' );
+			$insert_log( 'woocommerce-pos-extension' );
+
+			$this->run_uninstall( false );
+
+			$this->assertSame( '0', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ) );
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos-extension'" ) );
+
+			$insert_log( 'woocommerce-pos' );
+			update_option( 'active_plugins', array_values( array_unique( array_merge( $active_plugins, array( $pro_plugin ) ) ) ) );
+			$this->run_uninstall( false );
+
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ), 'Active Pro shares the core log source' );
+		} finally {
+			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" );
+			update_option( 'active_plugins', $active_plugins );
+		}
+	}
+
+	/**
+	 * File cleanup deletes only an unshared, date-anchored free log source.
+	 */
+	public function test_uninstall_file_logs_respects_source_ownership(): void {
+		$log_dir        = trailingslashit( wp_upload_dir()['basedir'] ) . 'wc-logs/';
+		$free_log       = $log_dir . 'woocommerce-pos-2026-08-14-fixture.log';
+		$extension_log  = $log_dir . 'woocommerce-pos-extension-2026-08-14-fixture.log';
+		$active_plugins = get_option( 'active_plugins', array() );
+		$pro_plugin     = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
+		wp_mkdir_p( $log_dir );
+
+		try {
+			update_option( 'active_plugins', array_values( array_diff( $active_plugins, array( $pro_plugin ) ) ) );
+			file_put_contents( $free_log, 'free' );
+			file_put_contents( $extension_log, 'extension' );
+
+			$this->run_uninstall( false );
+
+			$this->assertFileDoesNotExist( $free_log );
+			$this->assertFileExists( $extension_log );
+
+			file_put_contents( $free_log, 'shared with Pro' );
+			update_option( 'active_plugins', array_values( array_unique( array_merge( $active_plugins, array( $pro_plugin ) ) ) ) );
+			$this->run_uninstall( false );
+
+			$this->assertFileExists( $free_log, 'Active Pro shares the core file-log source' );
+		} finally {
+			foreach ( array( $free_log, $extension_log ) as $file ) {
+				if ( file_exists( $file ) ) {
+					unlink( $file );
+				}
+			}
+			update_option( 'active_plugins', $active_plugins );
+		}
+	}
+
+	/**
+	 * Primary-language cleanup deletes only free-plugin locale files.
+	 */
+	public function test_uninstall_primary_translations_preserve_other_plugins(): void {
+		$language_dir   = trailingslashit( WP_LANG_DIR ) . 'plugins/';
+		$free_file      = $language_dir . 'woocommerce-pos-zz_ZZ.l10n.php';
+		$pro_file       = $language_dir . 'woocommerce-pos-pro-zz_ZZ.l10n.php';
+		$extension_file = $language_dir . 'woocommerce-pos-extension-zz_ZZ.l10n.php';
+		wp_mkdir_p( $language_dir );
+
+		try {
+			file_put_contents( $free_file, '<?php return array();' );
+			file_put_contents( $pro_file, '<?php return array();' );
+			file_put_contents( $extension_file, '<?php return array();' );
+
+			$this->run_uninstall( false );
+
+			$this->assertFileDoesNotExist( $free_file );
+			$this->assertFileExists( $pro_file );
+			$this->assertFileExists( $extension_file );
+		} finally {
+			foreach ( array( $free_file, $pro_file, $extension_file ) as $file ) {
+				if ( file_exists( $file ) ) {
+					unlink( $file );
+				}
+			}
+		}
 	}
 
 	/**
