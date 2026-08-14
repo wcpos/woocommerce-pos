@@ -181,6 +181,26 @@ describe('Access screen task groups', () => {
 		expect(screen.queryByTestId('access-task-manage_categories')).not.toBeInTheDocument();
 		expect(screen.getByTestId('access-task-edit_products')).toBeInTheDocument();
 	});
+
+	it('omits a task group when any required capability is absent from the response', () => {
+		const capabilities = makeCapabilities();
+		delete capabilities.wc.edit_product;
+		seed(capabilities);
+
+		render(<Access />);
+
+		expect(screen.queryByTestId('access-task-edit_products')).not.toBeInTheDocument();
+	});
+
+	it('omits a task group when no alternative capability is present in the response', () => {
+		const capabilities = makeCapabilities();
+		delete capabilities.wc.create_customers;
+		seed(capabilities);
+
+		render(<Access />);
+
+		expect(screen.queryByTestId('access-task-manage_customers')).not.toBeInTheDocument();
+	});
 });
 
 describe('Access screen advanced disclosure', () => {

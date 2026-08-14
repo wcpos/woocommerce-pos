@@ -149,7 +149,13 @@ export function buildCapabilityIndex(capabilities: CapabilityGroups): Record<str
 export function resolveTaskGroups(capabilities: CapabilityGroups): ResolvedTaskGroup[] {
 	const index = buildCapabilityIndex(capabilities);
 
-	return TASK_GROUPS.map((task) => {
+	return TASK_GROUPS.filter(
+		(task) =>
+			task.capabilities.every((name) => name in index) &&
+			(task.alternatives || []).every((alternatives) =>
+				alternatives.some((name) => name in index)
+			)
+	).map((task) => {
 		const names = [...task.capabilities];
 
 		(task.alternatives || []).forEach((alternatives) => {
