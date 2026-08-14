@@ -243,7 +243,9 @@ describe('PrintQueue', () => {
 		).length;
 		fireEvent.click(screen.getByTestId('queue-retry-13'));
 
-		await waitFor(() => expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Retried as #99'));
+		await waitFor(() =>
+			expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Retried as #99')
+		);
 		expect(screen.queryByTestId('queue-retry-13')).toBeNull();
 		expect(screen.queryByText(/the queue is unchanged/i)).toBeNull();
 
