@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3080
+- Cases: 3081
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 31
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 508, wc3 278, wp2 2, unresolved 342, pure unit 1721
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 508, wc3 278, wp2 2, unresolved 342, pure unit 1722
 - Blind-test warnings (advisory): self-installed-hook 66, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -1143,6 +1143,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Print Job Service Render Test | tests/includes/Services/Print_Job_Service_Render_Test.php:test_render_payload_renders_thermal_starprnt_for_star_printer | unit | unreviewed | — |
 | Print Job Service Render Test | tests/includes/Services/Print_Job_Service_Render_Test.php:test_render_payload_returns_empty_when_template_missing | unit | unreviewed | — |
 | Print Job Service Render Test | tests/includes/Services/Print_Job_Service_Render_Test.php:test_render_payload_returns_empty_when_thermal_render_fails | unit | unreviewed | — |
+| Print Job Service Render Test | tests/includes/Services/Print_Job_Service_Render_Test.php:test_render_payload_unsupported_stored_format_returns_empty | unit | unreviewed | — |
 | Print Job Service Test | tests/includes/Services/Print_Job_Service_Test.php:test_cancel_if_waiting_refuses_non_print_post | unit | unreviewed | — |
 | Print Job Service Test | tests/includes/Services/Print_Job_Service_Test.php:test_create_returns_zero_when_insert_fails | unit | unreviewed | — |
 | Print Job Service Test | tests/includes/Services/Print_Job_Service_Test.php:test_create_then_get_returns_pending_job_with_payload | unit | unreviewed | — |
@@ -2377,7 +2378,7 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_html_output_adapter_transforms_payload | unit | unreviewed | — |
 | Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_output_adapter_factory_rejects_unknown_adapter_type | unit | unreviewed | — |
 | Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_output_adapter_factory_resolves_adapters | unit | unreviewed | — |
-| Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_starprnt_output_adapter_transforms_payload | unit | unreviewed | — |
+| Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_output_adapter_factory_starprnt_removed_throws | unit | unreviewed | — |
 | Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_tspl_output_adapter_sanitizes_order_number_in_text | unit | unreviewed | — |
 | Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_tspl_output_adapter_transforms_payload | unit | unreviewed | — |
 | Test Receipt Output Adapters | tests/includes/Templates/Test_Receipt_Output_Adapters.php:test_zpl_output_adapter_transforms_payload | unit | unreviewed | — |
