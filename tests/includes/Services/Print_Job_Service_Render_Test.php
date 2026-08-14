@@ -65,6 +65,29 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It fails closed when a stored job carries a format the factory no longer
+	 * supports (e.g. the removed fixed-layout starprnt placeholder), instead of
+	 * letting the exception escape and 500 the poll.
+	 */
+	public function test_render_payload_unsupported_stored_format_returns_empty(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id' => 'p1',
+				'order_id'   => $order->get_id(),
+				'format'     => 'starprnt',
+			)
+		);
+
+		// Act.
+		$out = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+		// Assert.
+		$this->assertEquals( '', $out );
+	}
+
+	/**
 	 * Create a thermal template post with raw markup, bypassing wp_kses.
 	 *
 	 * The wp_insert_post() call runs content through wp_kses for users without

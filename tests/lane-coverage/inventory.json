@@ -1,7 +1,7 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3072,
+        "cases": 3073,
         "v1_only": 740,
         "unresolved": 31,
         "by_lane": {
@@ -10,7 +10,7 @@
             "wc3": 278,
             "wp2": 2,
             "unresolved": 334,
-            "unit": 1721
+            "unit": 1722
         },
         "warnings": {
             "self-installed-hook": 66,
@@ -23924,6 +23924,21 @@
             "warnings": []
         },
         {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Render_Test::test_render_payload_unsupported_stored_format_returns_empty",
+            "file": "tests/includes/Services/Print_Job_Service_Render_Test.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Render_Test",
+            "method": "test_render_payload_unsupported_stored_format_returns_empty",
+            "behavior": "Print Job Service Render Test",
+            "own_lanes": [],
+            "class_lanes": [],
+            "lanes": [],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
             "key": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Test::test_cancel_if_waiting_refuses_non_print_post",
             "file": "tests/includes/Services/Print_Job_Service_Test.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Test",
@@ -47103,10 +47118,10 @@
             "warnings": []
         },
         {
-            "key": "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Receipt_Output_Adapters::test_starprnt_output_adapter_transforms_payload",
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Receipt_Output_Adapters::test_output_adapter_factory_starprnt_removed_throws",
             "file": "tests/includes/Templates/Test_Receipt_Output_Adapters.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Receipt_Output_Adapters",
-            "method": "test_starprnt_output_adapter_transforms_payload",
+            "method": "test_output_adapter_factory_starprnt_removed_throws",
             "behavior": "Test Receipt Output Adapters",
             "own_lanes": [],
             "class_lanes": [],

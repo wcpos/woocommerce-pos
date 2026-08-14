@@ -13,7 +13,6 @@ use WCPOS\WooCommercePOS\Services\Receipt_Output_Adapter_Factory;
 use WCPOS\WooCommercePOS\Templates\Adapters\Cpcl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Html_Output_Adapter;
-use WCPOS\WooCommercePOS\Templates\Adapters\Starprnt_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Tspl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Zpl_Output_Adapter;
 use WC_REST_Unit_Test_Case;
@@ -131,29 +130,6 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test StarPRNT adapter output scaffold.
-	 */
-	public function test_starprnt_output_adapter_transforms_payload(): void {
-		$receipt_data = $this->get_fixture_payload();
-		$adapter      = new Starprnt_Output_Adapter();
-
-		$output = $adapter->transform(
-			$receipt_data,
-			array(
-				'print_qr'    => true,
-				'open_drawer' => true,
-				'partial_cut' => true,
-			)
-		);
-		$this->assertStringContainsString( Starprnt_Output_Adapter::CMD_INIT, $output );
-		$this->assertStringContainsString( Starprnt_Output_Adapter::CMD_ALIGN_CENTER, $output );
-		$this->assertStringContainsString( 'Order #1001', $output );
-		$this->assertStringContainsString( '[STARPRNT:QR] FISCAL-QR-1001', $output );
-		$this->assertStringContainsString( Starprnt_Output_Adapter::CMD_DRAWER, $output );
-		$this->assertStringContainsString( Starprnt_Output_Adapter::CMD_CUT_PARTIAL, $output );
-	}
-
-	/**
 	 * Test ZPL adapter output scaffold.
 	 */
 	public function test_zpl_output_adapter_transforms_payload(): void {
@@ -246,7 +222,6 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 
 		$this->assertInstanceOf( Html_Output_Adapter::class, $factory->create( 'html' ) );
 		$this->assertInstanceOf( Escpos_Output_Adapter::class, $factory->create( 'escpos' ) );
-		$this->assertInstanceOf( Starprnt_Output_Adapter::class, $factory->create( 'starprnt' ) );
 		$this->assertInstanceOf( Zpl_Output_Adapter::class, $factory->create( 'zpl' ) );
 		$this->assertInstanceOf( Cpcl_Output_Adapter::class, $factory->create( 'cpcl' ) );
 		$this->assertInstanceOf( Tspl_Output_Adapter::class, $factory->create( 'tspl' ) );
@@ -261,5 +236,19 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 
 		$factory = new Receipt_Output_Adapter_Factory();
 		$factory->create( 'unknown-printer' );
+	}
+
+	/**
+	 * Test output adapter factory rejects the removed starprnt placeholder type.
+	 *
+	 * The fixed-layout StarPRNT placeholder was deleted in favour of the real
+	 * Starprnt_Thermal_Emitter (template lane); 'starprnt' as a fixed-layout
+	 * format must now fail like any unknown type.
+	 */
+	public function test_output_adapter_factory_starprnt_removed_throws(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		$factory = new Receipt_Output_Adapter_Factory();
+		$factory->create( 'starprnt' );
 	}
 }
