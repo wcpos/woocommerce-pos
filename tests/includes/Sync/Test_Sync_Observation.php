@@ -106,6 +106,9 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			$wpdb->suppress_errors( $previous_suppress_errors );
 		}
 
+		$this->assertSame( $previous_suppress_errors, $wpdb->suppress_errors( $previous_suppress_errors ), 'The fixture must restore wpdb error reporting.' );
+		$this->assertFalse( has_filter( 'query', $break_digest_delete ), 'The fixture must remove its broken-query filter.' );
+		$this->assertFalse( has_filter( 'woocommerce_pos_logging', $capture_log ), 'The fixture must remove its log-capture filter.' );
 		$this->assertStringContainsString( 'delete stored customer digest failed', implode( "\n", $messages ) );
 		$this->assertStringContainsString( 'delete stored order digest failed', implode( "\n", $messages ) );
 	}

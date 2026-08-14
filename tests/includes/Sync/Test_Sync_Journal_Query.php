@@ -150,16 +150,29 @@ class Test_Sync_Journal_Query extends Sync_Store_Test_Case {
 	public function test_rows_after_sequence_returns_empty_when_table_is_missing(): void {
 		global $wpdb;
 		$table = $this->journal->table_name();
-		$drop_result = $wpdb->query( 'DROP TABLE ' . $table ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Deliberate missing-table test.
-		$this->assertNotFalse( $drop_result, 'The fixture must remove the journal table.' );
 		$previous_suppress_errors = $wpdb->suppress_errors();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
 
 		try {
-			$this->assertSame( array(), $this->journal->rows_after_sequence( 0, 10 ) );
+			$drop_result = $wpdb->query( 'DROP TABLE ' . $table ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Deliberate missing-table test.
+			$this->assertNotFalse( $drop_result, 'The fixture must remove the journal table.' );
+			$wpdb->suppress_errors();
+
+			try {
+				$this->assertSame( array(), $this->journal->rows_after_sequence( 0, 10 ) );
+			} finally {
+				$wpdb->suppress_errors( $previous_suppress_errors );
+			}
+			$this->assertSame( $previous_suppress_errors, $wpdb->suppress_errors( $previous_suppress_errors ), 'Cleanup must restore wpdb error reporting before reinstalling the table.' );
 		} finally {
 			$wpdb->suppress_errors( $previous_suppress_errors );
-			$this->assertSame( $previous_suppress_errors, $wpdb->suppress_errors( $previous_suppress_errors ), 'Cleanup must restore wpdb error reporting before reinstalling the table.' );
-			$this->journal->install();
+			try {
+				$this->journal->install();
+			} finally {
+				add_filter( 'query', array( $this, '_create_temporary_tables' ) );
+				add_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+			}
 		}
 	}
 
