@@ -75,6 +75,14 @@ class Revision {
 		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::canonicalize( $data ) ) );
 	}
 
+	public static function pre_taxonomy_sort_revision( array $data ): string {
+		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		foreach ( (array) $excluded as $field ) {
+			unset( $data[ $field ] );
+		}
+		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::sort_keys_recursive( $data, false ) ) );
+	}
+
 	public static function canonicalize( array $data ): array {
 		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
 		foreach ( (array) $excluded as $field ) {
@@ -83,11 +91,29 @@ class Revision {
 		return self::sort_keys_recursive( $data );
 	}
 
-	private static function sort_keys_recursive( array $data ): array {
+	private static function sort_keys_recursive( array $data, bool $sort_taxonomy_terms = true ): array {
 		ksort( $data );
 		foreach ( $data as $key => $value ) {
 			if ( is_array( $value ) ) {
-				$data[ $key ] = self::sort_keys_recursive( $value );
+				$data[ $key ] = self::sort_keys_recursive( $value, $sort_taxonomy_terms );
+				// Taxonomy collections are sets; other lists retain semantic order.
+				if ( ! $sort_taxonomy_terms || ! in_array( $key, array( 'categories', 'tags', 'brands' ), true ) || count( $value ) < 2 || array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
+					continue;
+				}
+				foreach ( $value as $term ) {
+					$id = is_array( $term ) ? ( $term['id'] ?? null ) : ( is_object( $term ) ? ( $term->id ?? null ) : null );
+					if ( ! is_int( $id ) ) {
+						continue 2;
+					}
+				}
+				usort(
+					$data[ $key ],
+					static function ( $left, $right ): int {
+						$left_id  = is_array( $left ) ? $left['id'] : $left->id;
+						$right_id = is_array( $right ) ? $right['id'] : $right->id;
+						return $left_id <=> $right_id;
+					}
+				);
 			}
 		}
 		return $data;

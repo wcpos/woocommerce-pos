@@ -2483,6 +2483,51 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'woo_rxdb_sync_conflict', $deleted->get_data()['code'] );
 	}
 
+	/** @dataProvider productMutationOperations */
+	public function test_product_mutation_accepts_pre_taxonomy_sort_revision_under_grace( string $operation ): void {
+		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$product  = ProductHelper::create_simple_product();
+		$current  = array(
+			'categories' => array(
+				array(
+					'id'   => 68,
+					'name' => 'Pants',
+				),
+				array(
+					'id'   => 66,
+					'name' => 'Pants',
+				),
+			),
+			'id'         => $product->get_id(),
+		);
+		$pre_deployment_revision = 'sha256:' . hash( 'sha256', (string) wp_json_encode( $current ) );
+		$store                       = new Fake_Mutation_Store();
+		$store->resolve              = $product->get_id();
+
+		wp_set_current_user( $admin_id );
+		$this->assertNotSame( $pre_deployment_revision, Revision::compute( $current ) );
+		$this->setRestResponse( $current, 200 );
+
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'products',
+				'operation'    => $operation,
+				'baseRevision' => $pre_deployment_revision,
+				'payload'      => 'delete' === $operation ? null : array( 'description' => 'Updated' ),
+			)
+		);
+
+		$this->assertSame( 200, $result->get_status() );
+	}
+
+	public static function productMutationOperations(): array {
+		return array(
+			'update' => array( 'update' ),
+			'delete' => array( 'delete' ),
+		);
+	}
+
 	public function test_orders_update_accepts_LEGACY_revision_over_unchanged_content_under_grace(): void {
 		list($order_id, $payload) = $this->real_order_payload();
 		$store = new Fake_Mutation_Store();
