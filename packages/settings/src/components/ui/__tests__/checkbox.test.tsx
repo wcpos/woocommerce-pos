@@ -37,6 +37,11 @@ describe('Checkbox', () => {
 		expect(screen.getByRole('checkbox')).not.toBeChecked();
 	});
 
+	it('ignores indeterminate while checked', () => {
+		render(<Checkbox checked indeterminate onChange={() => {}} />);
+		expect(screen.getByRole('checkbox')).not.toBePartiallyChecked();
+	});
+
 	it('disables the checkbox when disabled prop is true', () => {
 		render(<Checkbox disabled />);
 		expect(screen.getByRole('checkbox')).toBeDisabled();
