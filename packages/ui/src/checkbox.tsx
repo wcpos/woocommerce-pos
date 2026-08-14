@@ -29,7 +29,7 @@ export function Checkbox({
 	 */
 	React.useEffect(() => {
 		if (inputRef.current) {
-			inputRef.current.indeterminate = Boolean(indeterminate);
+			inputRef.current.indeterminate = Boolean(indeterminate) && !props.checked;
 		}
 	}, [indeterminate, props.checked]);
 

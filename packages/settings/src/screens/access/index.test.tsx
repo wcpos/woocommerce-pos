@@ -23,7 +23,8 @@ const PRODUCT_EDIT_CAPS = [
 	'read_private_products',
 ];
 
-const CUSTOMER_CAPS = ['create_customers', 'edit_users', 'list_users'];
+const WC_CUSTOMER_CAPS = ['create_customers'];
+const WP_CUSTOMER_CAPS = ['edit_users', 'list_users'];
 
 /**
  * Capability shape mirroring the settings API response, with every capability
@@ -32,7 +33,7 @@ const CUSTOMER_CAPS = ['create_customers', 'edit_users', 'list_users'];
 function makeCapabilities(granted: string[] = []): CapabilityGroups {
 	const wcNames = [
 		...PRODUCT_EDIT_CAPS,
-		...CUSTOMER_CAPS,
+		...WC_CUSTOMER_CAPS,
 		'delete_product',
 		'delete_products',
 		'delete_others_products',
@@ -54,7 +55,7 @@ function makeCapabilities(granted: string[] = []): CapabilityGroups {
 	return {
 		wcpos: toMap(['access_woocommerce_pos', 'manage_woocommerce_pos']),
 		wc: toMap(wcNames),
-		wp: toMap(['read']),
+		wp: toMap(['read', ...WP_CUSTOMER_CAPS]),
 	};
 }
 
@@ -140,8 +141,9 @@ describe('Access screen task groups', () => {
 		fireEvent.click(screen.getByTestId('access-task-manage_customers'));
 
 		expect(mutateMock).toHaveBeenCalledTimes(1);
-		const payload = mutateMock.mock.calls[0][0].administrator.capabilities.wc;
-		expect(Object.keys(payload).sort()).toEqual([...CUSTOMER_CAPS].sort());
+		const payload = mutateMock.mock.calls[0][0].administrator.capabilities;
+		expect(Object.keys(payload.wc).sort()).toEqual(WC_CUSTOMER_CAPS);
+		expect(Object.keys(payload.wp).sort()).toEqual([...WP_CUSTOMER_CAPS].sort());
 	});
 
 	it('uses the customer-create capability the API returns and never both spellings', () => {
