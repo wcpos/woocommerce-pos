@@ -144,6 +144,44 @@ class Test_Receipt_Date_Formatter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test 24-hour patterns adjust day-period spacing before punctuation.
+	 *
+	 * @dataProvider day_period_before_punctuation_provider
+	 *
+	 * @param string $pattern  ICU date/time pattern.
+	 * @param string $expected Expected adjusted pattern.
+	 */
+	public function test_24_hour_pattern_with_day_period_before_punctuation_adjusts_spacing( string $pattern, string $expected ): void {
+		// Arrange.
+		$method = new \ReflectionMethod( Receipt_Date_Formatter::class, 'apply_clock_convention' );
+		if ( 80100 > PHP_VERSION_ID ) {
+			$method->setAccessible( true );
+		}
+
+		// Act.
+		$actual = $method->invoke( null, $pattern, 'HH' );
+
+		// Assert.
+		$this->assertEquals( $expected, $actual );
+	}
+
+	/**
+	 * Provide patterns with day-period markers before punctuation.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public function day_period_before_punctuation_provider(): array {
+		return array(
+			'time-first glue pattern'                => array( 'h:mm a, d MMM', 'HH:mm, d MMM' ),
+			'before closing parenthesis'             => array( '(h:mm a)', '(HH:mm)' ),
+			'NBSP and NNBSP before comma'            => array( "h:mm\u{00A0}a\u{202F}, d MMM", 'HH:mm, d MMM' ),
+			'before quoted ICU literal keeps space'  => array( "h:mm\u{202F}a 'baje'", "HH:mm 'baje'" ),
+			'before opening punctuation keeps space' => array( 'h:mm a (z)', 'HH:mm (z)' ),
+			'marker at end remains supported'        => array( 'd MMM, h:mm a', 'd MMM, HH:mm' ),
+		);
+	}
+
+	/**
 	 * Test a configured 12-hour time_format still produces AM/PM output.
 	 */
 	public function test_time_fields_respect_12_hour_time_format(): void {

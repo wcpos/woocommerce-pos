@@ -2,7 +2,16 @@
 <?php
 const SCAN_DIR          = 'tests';
 const OUTPUT_DIR        = 'tests/lane-coverage';
-const CURRENT_V1_ROUTES = array( 'wcpos/v1/products/variations' );
+// A bare path matches exactly. A path ending in '/*' marks a whole live route
+// subtree — needed for surfaces whose routes are parameterised (print-jobs
+// dispatches wcpos/v1/print-jobs/{id}/reprint, so its test literals are
+// fragments no exact entry can name). Subtree entries are for surfaces where
+// v1 IS the current lane: the settings frontend calls wcpos/v1/print-jobs/*
+// directly and no v2 print namespace exists.
+const CURRENT_V1_ROUTES = array(
+	'wcpos/v1/products/variations',
+	'wcpos/v1/print-jobs/*',
+);
 function usage() { echo "Usage: php scripts/lane-coverage.php [--write|--check|--json|--warnings|--compare=<base.json>] [--root=<path>]\n"; }
 function fail( $message, $code = 2 ) { fwrite( STDERR, $message . "\n" ); exit( $code ); }
 function parse_cli( $arguments ) {
@@ -370,7 +379,12 @@ function is_non_current_v1_literal( $literal ) {
 	$query = strpos( $path, '?' );
 	if ( false !== $query ) { $path = substr( $path, 0, $query ); }
 	foreach ( CURRENT_V1_ROUTES as $route ) {
-		if ( $path === $route ) { return false; }
+		if ( '/*' === substr( $route, -2 ) ) {
+			$base = substr( $route, 0, -2 );
+			if ( $path === $base || 0 === strpos( $path, $base . '/' ) ) { return false; }
+		} elseif ( $path === $route ) {
+			return false;
+		}
 	}
 	return true;
 }

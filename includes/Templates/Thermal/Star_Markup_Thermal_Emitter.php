@@ -291,6 +291,13 @@ class Star_Markup_Thermal_Emitter {
 	 * @return string
 	 */
 	private function barcode_type( string $type ): string {
+		// Star markup names Codabar "nw7"; the parser, client preview, and PDF
+		// path all use "codabar", so translate it here instead of silently
+		// falling back to Code 128.
+		if ( 'codabar' === $type ) {
+			return 'nw7';
+		}
+
 		$allowed = array( 'code128', 'code39', 'code93', 'ean13', 'ean8', 'upca', 'upce', 'itf', 'nw7' );
 
 		return \in_array( $type, $allowed, true ) ? $type : 'code128';

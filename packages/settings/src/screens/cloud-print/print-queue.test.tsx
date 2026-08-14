@@ -188,6 +188,79 @@ describe('PrintQueue', () => {
 		);
 	});
 
+	it('shows the replacement job instead of retrying a resolved failure', async () => {
+		routeQueue(() => {
+			const queue = makeQueue();
+			queue.jobs[2].retried_to = 99;
+			return queue;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-row-13')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Retried as #99');
+		expect(screen.queryByTestId('queue-retry-13')).toBeNull();
+	});
+
+	it('uses unresolved failures for the needs-attention count', async () => {
+		routeQueue(() => {
+			const queue = makeQueue();
+			queue.summary.counts.failed = 2;
+			queue.summary.counts.failed_unresolved = 1;
+			return queue;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByText('Needs attention (3)')).toBeInTheDocument());
+		expect(screen.getByText('Failed (2)')).toBeInTheDocument();
+	});
+
+	it('treats an already-retried response as success and updates the cached row', async () => {
+		let retryReported = false;
+		apiFetchMock.mockImplementation((opts: ApiOpts) => {
+			if (opts.path.includes('/reprint')) {
+				retryReported = true;
+				return Promise.reject({
+					code: 'wcpos_print_job_already_retried',
+					data: { status: 409, retried_to: 99 },
+				});
+			}
+			if (opts.path.includes('print-jobs/queue')) {
+				// After the 409 the server knows the job was retried — the
+				// reconciling refetch must not resurrect the Retry button.
+				const queue = makeQueue();
+				if (retryReported) {
+					queue.jobs[2].retried_to = 99;
+				}
+				return Promise.resolve(queue);
+			}
+			return Promise.resolve({});
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-retry-13')).toBeInTheDocument());
+		const queueFetchesBeforeRetry = apiFetchMock.mock.calls.filter((call) =>
+			(call[0] as ApiOpts).path.includes('print-jobs/queue')
+		).length;
+		fireEvent.click(screen.getByTestId('queue-retry-13'));
+
+		await waitFor(() =>
+			expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Retried as #99')
+		);
+		expect(screen.queryByTestId('queue-retry-13')).toBeNull();
+		expect(screen.queryByText(/the queue is unchanged/i)).toBeNull();
+
+		// The 409 path must also refetch — the optimistic patch is instant
+		// feedback only, and filtered views (e.g. the active list dropping the
+		// now-resolved job) reconcile from the server.
+		await waitFor(() =>
+			expect(
+				apiFetchMock.mock.calls.filter((call) =>
+					(call[0] as ApiOpts).path.includes('print-jobs/queue')
+				).length
+			).toBeGreaterThan(queueFetchesBeforeRetry)
+		);
+	});
+
 	it('surfaces an error snackbar when a cancel request fails', async () => {
 		apiFetchMock.mockImplementation((opts: ApiOpts) => {
 			if (opts.path.includes('print-jobs/queue/cancel')) {

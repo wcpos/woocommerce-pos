@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +8,16 @@ import { chromium } from '@playwright/test';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
+
+// Fail fast with an actionable message rather than mid-run after the
+// browser capture loop has already started.
+try {
+	execFileSync('cwebp', ['-version'], { stdio: 'ignore' });
+} catch {
+	throw new Error(
+		'cwebp not found on PATH — install the webp tools first (macOS: `brew install webp`, Debian/Ubuntu: `apt install webp`).'
+	);
+}
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 794;
@@ -83,9 +94,9 @@ const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
 const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
 const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
-// Capture high-resolution source PNGs and let the gallery cards downscale them.
+// Capture high-resolution source images and let the gallery cards downscale them.
 // A4 templates use their real CSS paper width; Playwright's device scale factor
-// doubles the stored pixels so text and logos stay sharp in the browser.
+// doubles the stored pixels; the screenshots are converted to lossless WebP below.
 const initialCaptureWidth = payload.engine === 'thermal' ? nativeWidth : ${a4PreviewWidth};
 const scale = payload.engine === 'thermal' ? 1 : initialCaptureWidth / nativeWidth;
 capture.style.width = initialCaptureWidth + 'px';
@@ -133,8 +144,11 @@ try {
 		await page.goto(`${baseUrl}?key=${encodeURIComponent(payload.key)}`, { waitUntil: 'networkidle' });
 		await page.waitForFunction(() => window.__WCPOS_PREVIEW_READY__ === true);
 		const capture = page.locator('#capture');
-		await capture.screenshot({ path: path.join(outputDir, `${payload.key}.png`) });
-		console.log(`generated ${payload.key}.png`);
+		const pngPath = path.join(tempDir, `${payload.key}.png`);
+		const webpPath = path.join(outputDir, `${payload.key}.webp`);
+		await capture.screenshot({ path: pngPath });
+		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
+		console.log(`generated ${payload.key}.webp`);
 	}
 } finally {
 	await browser.close();
