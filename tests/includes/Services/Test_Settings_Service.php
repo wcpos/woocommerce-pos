@@ -121,6 +121,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertNull( $scheme );
 	}
 
+	/**
+	 * Store detail strings are trimmed and stripped of markup on save.
+	 */
 	public function test_save_general_settings_sanitizes_store_details_strings(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -139,6 +142,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertSame( "Line 1\nLine 2", $result['policies_and_conditions'] );
 	}
 
+	/**
+	 * An invalid store email is dropped rather than persisted.
+	 */
 	public function test_save_general_settings_drops_invalid_email(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -148,6 +154,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertSame( '', $result['store_email'] );
 	}
 
+	/**
+	 * The read-only store_defaults key is stripped from the save payload.
+	 */
 	public function test_save_general_settings_strips_store_defaults_from_payload(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -163,6 +172,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'store_defaults', $persisted );
 	}
 
+	/**
+	 * Store tax IDs are sanitized on save.
+	 */
 	public function test_save_general_settings_sanitizes_store_tax_ids(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -430,14 +442,33 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	/**
 	 * Direct test: get_barcodes.
 	 *
+	 * `_sku` and `_global_unique_id` are product properties, not guaranteed to
+	 * exist as postmeta rows, so they must be offered even on a store with no
+	 * products.
+	 *
 	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_barcodes
 	 */
 	public function test_direct_get_barcodes(): void {
 		$result = $this->settings->get_barcodes();
 
 		$this->assertIsArray( $result );
-		// Result contains meta keys as strings.
-		// Should contain at least the default barcode field.
+		$this->assertContains( '_sku', $result );
+		$this->assertContains( '_global_unique_id', $result );
+	}
+
+	/**
+	 * A saved custom barcode field must not push `_sku` or `_global_unique_id`
+	 * out of the selectable list — otherwise the merchant cannot switch back.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_barcodes
+	 */
+	public function test_get_barcodes_with_custom_field_keeps_core_fields_selectable(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_custom_barcode' ) );
+
+		$result = $this->settings->get_barcodes();
+
+		$this->assertContains( '_custom_barcode', $result );
+		$this->assertContains( '_sku', $result );
 		$this->assertContains( '_global_unique_id', $result );
 	}
 
@@ -705,7 +736,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * delete_all_settings() is a core factory reset: it deletes explicit core
+	 * The delete_all_settings() method is a core factory reset: it deletes explicit core
 	 * section options without deleting extension-registered section options.
 	 */
 	public function test_delete_all_settings_deletes_core_options_only(): void {

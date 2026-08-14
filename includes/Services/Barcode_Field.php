@@ -55,6 +55,15 @@ final class Barcode_Field {
 	public const DEFAULT_FIELD = '_global_unique_id';
 
 	/**
+	 * Fields the settings picker must always offer. Both are WooCommerce product
+	 * PROPERTIES with their own accessors, not guaranteed postmeta rows, so
+	 * meta-key discovery cannot be relied on to surface them.
+	 *
+	 * @var string[]
+	 */
+	public const CORE_FIELDS = array( '_sku', self::DEFAULT_FIELD );
+
+	/**
 	 * The active barcode meta key.
 	 *
 	 * Read from production settings and coerced to a non-empty string: a blank
