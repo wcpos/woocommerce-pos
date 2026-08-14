@@ -78,7 +78,9 @@ class Mutation_Store {
 '
 			. '  PRIMARY KEY  (mutation_id),
 '
-			. '  KEY collection_uuid (collection, record_uuid)
+			. '  KEY collection_uuid (collection, record_uuid),
+'
+			. '  KEY status_created (status, created_at)
 '
 			. ") {$charset_collate};";
 	}
@@ -251,6 +253,114 @@ class Mutation_Store {
 				'status' => 'pending',
 			)
 		);
+	}
+
+	/**
+	 * Delete one batch of SETTLED rows (done/applied) past their retention.
+	 *
+	 * Settled rows exist to answer idempotent replays, and a client's retry
+	 * horizon is hours — far inside any sane retention window. Pruning is safe
+	 * because this store is a fast-path, not the only guard: a replayed create
+	 * is caught by uuid identity resolution (the born-twice guard), a replayed
+	 * update by the baseRevision compare (it answers 409 instead of replaying
+	 * the stored ack — a different response, not a double-apply), and a
+	 * replayed delete of an already-gone record is an idempotent success. An
+	 * `applied` row past the window is a checkpoint whose finalize never ran
+	 * (crash before the ack was sent); its create stamped the uuid before the
+	 * checkpoint, so the same guards cover it.
+	 *
+	 * CREATE rows get their own (longer) cutoff: if a settled create's record
+	 * is later deleted server-side, the uuid guard resolves nothing and a
+	 * sufficiently late replay would resurrect the record as a new insert.
+	 * The mutation row is the only guard for that corner, so creates are kept
+	 * well past any plausible client queue age.
+	 *
+	 * `pending` rows are NEVER retention-pruned: they are the reservation lane
+	 * and have their own TTL reclaim (see reclaim_stale()).
+	 *
+	 * Select-then-delete-by-key (the journal purge's pattern) rather than
+	 * DELETE..ORDER BY..LIMIT: no filesort, deterministic under replication,
+	 * and correct with or without the (status, created_at) index.
+	 *
+	 * @param string $cutoff_gmt        UTC datetime; non-create rows created before it are pruned.
+	 * @param string $create_cutoff_gmt UTC datetime; create rows created before it are pruned.
+	 * @param int    $limit             Maximum rows to delete.
+	 *
+	 * @return int Rows deleted.
+	 */
+	public function prune_settled( string $cutoff_gmt, string $create_cutoff_gmt, int $limit ): int {
+		global $wpdb;
+		if ( $limit < 1 ) {
+			return 0;
+		}
+
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT mutation_id FROM {$this->table_name()} WHERE status IN ('done','applied')"
+				. " AND ( ( operation <> 'create' AND created_at < %s ) OR ( operation = 'create' AND created_at < %s ) ) LIMIT %d",
+				$cutoff_gmt,
+				$create_cutoff_gmt,
+				$limit
+			)
+		);
+
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%s' ) );
+		$affected     = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$this->table_name()} WHERE mutation_id IN ({$placeholders}) AND status IN ('done','applied')"
+				. " AND ( ( operation <> 'create' AND created_at < %s ) OR ( operation = 'create' AND created_at < %s ) )",
+				array_merge( $ids, array( $cutoff_gmt, $create_cutoff_gmt ) )
+			)
+		);
+
+		return false === $affected ? 0 : (int) $affected;
+	}
+
+	/**
+	 * Delete one batch of FAILURE rows (poison/blocked) older than the cutoff.
+	 *
+	 * Poison/blocked rows are manual-recovery records — a create side effect
+	 * whose client identity was never stamped, so the uuid guard cannot catch a
+	 * replay. They are rare (bounded by failures, not traffic) and are kept
+	 * forever unless a site opts into a window via
+	 * `woocommerce_pos_sync_mutation_failure_retention_days`.
+	 *
+	 * @param string $cutoff_gmt UTC datetime; only rows created before it are pruned.
+	 * @param int    $limit      Maximum rows to delete.
+	 *
+	 * @return int Rows deleted.
+	 */
+	public function prune_failed( string $cutoff_gmt, int $limit ): int {
+		global $wpdb;
+		if ( $limit < 1 ) {
+			return 0;
+		}
+
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT mutation_id FROM {$this->table_name()} WHERE status IN ('poison','blocked') AND created_at < %s LIMIT %d",
+				$cutoff_gmt,
+				$limit
+			)
+		);
+
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%s' ) );
+		$affected     = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$this->table_name()} WHERE mutation_id IN ({$placeholders}) AND status IN ('poison','blocked') AND created_at < %s",
+				array_merge( $ids, array( $cutoff_gmt ) )
+			)
+		);
+
+		return false === $affected ? 0 : (int) $affected;
 	}
 
 	/**

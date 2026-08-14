@@ -11,9 +11,11 @@ namespace WCPOS\WooCommercePOS\Sync;
  * Compacts superseded changes and expires old tombstones in bounded batches.
  *
  * Pure policy: windows, batching, caps, and scheduling. All table SQL lives
- * on Sync_Journal. Compaction is lossless (only superseded rows die); tombstone
- * pruning is the one lossy operation and advances the log's prune watermark
- * so clients can detect a pruned interval.
+ * on Sync_Journal and Mutation_Store. Compaction is lossless (only superseded
+ * rows die); tombstone pruning is the one lossy operation and advances the
+ * log's prune watermark so clients can detect a pruned interval. The same
+ * daily run also expires settled mutation rows past their replay window (see
+ * Mutation_Store::prune_settled()).
  */
 final class Sync_Journal_Purge {
 	/** Daily cron hook that purges retained sync-journal rows. */
@@ -34,6 +36,29 @@ final class Sync_Journal_Purge {
 	const MIN_PRUNE_DELETES_PER_RUN = 1000;
 
 	/**
+	 * Slice of the ceiling reserved for mutation-store expiry, for the same
+	 * reason pruning has a floor: journal work runs first and a saturated
+	 * journal (≥ the full ceiling every 5-minute reschedule) would otherwise
+	 * starve mutation expiry indefinitely — regrowing the exact table this
+	 * expiry exists to bound.
+	 */
+	const MIN_MUTATION_DELETES_PER_RUN = 500;
+
+	/** Default retention for settled (done/applied) non-create mutation rows. */
+	const DEFAULT_SETTLED_RETENTION_DAYS = 7;
+
+	/**
+	 * Default retention for settled CREATE mutation rows. Longer than the
+	 * general settled window because the mutation row is the only replay
+	 * guard for a create whose record was later deleted server-side (see
+	 * Mutation_Store::prune_settled()).
+	 */
+	const DEFAULT_CREATE_RETENTION_DAYS = 90;
+
+	/** Default retention for failure (poison/blocked) rows: 0 = keep forever. */
+	const DEFAULT_FAILURE_RETENTION_DAYS = 0;
+
+	/**
 	 * Change log being purged.
 	 *
 	 * @var Sync_Journal
@@ -41,12 +66,21 @@ final class Sync_Journal_Purge {
 	private $sync_journal;
 
 	/**
+	 * Mutation store whose settled rows are expired by the same run.
+	 *
+	 * @var Mutation_Store
+	 */
+	private $mutation_store;
+
+	/**
 	 * Side-effect-free constructor.
 	 *
-	 * @param Sync_Journal|null $sync_journal Change log to purge.
+	 * @param Sync_Journal|null   $sync_journal   Change log to purge.
+	 * @param Mutation_Store|null $mutation_store Mutation store to expire.
 	 */
-	public function __construct( ?Sync_Journal $sync_journal = null ) {
-		$this->sync_journal = $sync_journal ?? new Sync_Journal();
+	public function __construct( ?Sync_Journal $sync_journal = null, ?Mutation_Store $mutation_store = null ) {
+		$this->sync_journal   = $sync_journal ?? new Sync_Journal();
+		$this->mutation_store = $mutation_store ?? new Mutation_Store();
 	}
 
 	/**
@@ -100,31 +134,62 @@ final class Sync_Journal_Purge {
 			}
 		}
 
-		$sync_journal   = $this->sync_journal;
 		$pruning_active = $tombstone_days > 0;
 
+		// Mutation retention windows. The create window never drops below the
+		// general settled window — creates are the riskier class to prune.
+		$settled_days = max( 0, (int) apply_filters( 'woocommerce_pos_sync_mutation_settled_retention_days', self::DEFAULT_SETTLED_RETENTION_DAYS ) );
+		$create_days  = max( $settled_days, (int) apply_filters( 'woocommerce_pos_sync_mutation_create_retention_days', self::DEFAULT_CREATE_RETENTION_DAYS ) );
+		$failure_days = max( 0, (int) apply_filters( 'woocommerce_pos_sync_mutation_failure_retention_days', self::DEFAULT_FAILURE_RETENTION_DAYS ) );
+
+		// Journal work runs first, so each active mutation-expiry phase needs a
+		// reserved floor or an earlier saturated phase would starve it every run.
+		$settled_floor = $settled_days > 0 ? self::MIN_MUTATION_DELETES_PER_RUN : 0;
+		$failure_floor = $failure_days > 0 ? self::MIN_MUTATION_DELETES_PER_RUN : 0;
+		$mutation_floor = $settled_floor + $failure_floor;
+
 		$compaction = $this->drain(
-			static function ( int $limit ) use ( $sync_journal, $compaction_cutoff, $compaction_gmt ): int {
-				return $sync_journal->compact( $compaction_cutoff, $compaction_gmt, $limit );
-			},
+			fn ( int $limit ): int => $this->sync_journal->compact( $compaction_cutoff, $compaction_gmt, $limit ),
 			$batch,
-			$pruning_active ? self::MAX_DELETES_PER_RUN - self::MIN_PRUNE_DELETES_PER_RUN : self::MAX_DELETES_PER_RUN
+			self::MAX_DELETES_PER_RUN - ( $pruning_active ? self::MIN_PRUNE_DELETES_PER_RUN : 0 ) - $mutation_floor
 		);
 		$deleted = $compaction['deleted'];
 		$capped  = $compaction['capped'];
 
 		if ( $pruning_active ) {
 			$pruning = $this->drain(
-				static function ( int $limit ) use ( $sync_journal, $tombstone_cutoff, $tombstone_gmt ): int {
-					$result = $sync_journal->prune_tombstones( $tombstone_cutoff, $tombstone_gmt, $limit );
-
-					return $result['deleted'];
-				},
+				fn ( int $limit ): int => $this->sync_journal->prune_tombstones( $tombstone_cutoff, $tombstone_gmt, $limit )['deleted'],
 				$batch,
-				self::MAX_DELETES_PER_RUN - $deleted
+				self::MAX_DELETES_PER_RUN - $deleted - $mutation_floor
 			);
 			$deleted += $pruning['deleted'];
 			$capped   = $capped || $pruning['capped'];
+		}
+
+		// Expire settled mutation rows (done/applied) past their replay window.
+		if ( $settled_days > 0 && $deleted < self::MAX_DELETES_PER_RUN ) {
+			$settled_gmt = gmdate( 'Y-m-d H:i:s', $now - $settled_days * DAY_IN_SECONDS );
+			$create_gmt  = gmdate( 'Y-m-d H:i:s', $now - $create_days * DAY_IN_SECONDS );
+			$settled     = $this->drain(
+				fn ( int $limit ): int => $this->mutation_store->prune_settled( $settled_gmt, $create_gmt, $limit ),
+				$batch,
+				self::MAX_DELETES_PER_RUN - $deleted - $failure_floor
+			);
+			$deleted += $settled['deleted'];
+			$capped   = $capped || $settled['capped'];
+		}
+
+		// Failure rows (poison/blocked) are manual-recovery records: pruned
+		// only when a site opts into a window via this filter (0 = keep forever).
+		if ( $failure_days > 0 && $deleted < self::MAX_DELETES_PER_RUN ) {
+			$failure_gmt = gmdate( 'Y-m-d H:i:s', $now - $failure_days * DAY_IN_SECONDS );
+			$failures    = $this->drain(
+				fn ( int $limit ): int => $this->mutation_store->prune_failed( $failure_gmt, $limit ),
+				$batch,
+				self::MAX_DELETES_PER_RUN - $deleted
+			);
+			$deleted += $failures['deleted'];
+			$capped   = $capped || $failures['capped'];
 		}
 
 		// A capped run means backlog remains — drain it across bounded runs
