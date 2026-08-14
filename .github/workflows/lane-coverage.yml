@@ -6,10 +6,13 @@ name: Lane Coverage
 # Two enforced checks, both deliberately dumb — false confidence is the thing being killed,
 # so a check that is obviously correct beats a clever one:
 #
-#   1. The checked-in inventory matches what the scanner regenerates, so the committed
-#      artifact can never drift away from the tests it describes.
+#   1. The scan is healthy: the scanner runs clean and every annotation still points at a
+#      real test case. Nothing generated is checked in — the inventory files are produced
+#      on demand (locally via --write, or here from source), so there is no artifact to go
+#      stale and no cross-branch merge conflicts on generated output.
 #   2. The set of test cases whose ONLY dispatched lane is the frozen wcpos/v1 namespace may
-#      shrink, but never grow. It is compared against the PR's merge-base rather than a
+#      shrink, but never grow. Both sides of that comparison are regenerated from source —
+#      the PR's merge-base tree scanned with this branch's scanner — rather than read from a
 #      checked-in baseline file, because a baseline file can be edited in the same PR that
 #      grows it. Git history cannot.
 #
@@ -60,14 +63,16 @@ jobs:
       - name: Scanner regression tests
         run: php scripts/tests/test-lane-coverage.php
 
-      - name: Inventory is up to date
+      - name: Scan is healthy and annotations are valid
         run: |
           set -euo pipefail
+          if [ ! -f tests/lane-coverage/annotations.json ]; then
+            echo "::error file=tests/lane-coverage/annotations.json::Lane-coverage annotations file is missing."
+            exit 1
+          fi
           status=0
-          php scripts/lane-coverage.php --check || status=$?
-          if [ "$status" -eq 1 ]; then
-            echo "::error file=tests/lane-coverage/inventory.md::Lane-coverage inventory is stale. Regenerate with: php scripts/lane-coverage.php --write"
-          elif [ "$status" -ne 0 ]; then
+          php scripts/lane-coverage.php --json > /dev/null || status=$?
+          if [ "$status" -ne 0 ]; then
             echo "::error file=tests/lane-coverage/annotations.json::Lane-coverage scan failed. See the scanner details above and correct the reported validation error."
           fi
           exit "$status"

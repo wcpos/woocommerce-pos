@@ -38,19 +38,21 @@ a legacy pin.
 
 | File | Written by | Purpose |
 | --- | --- | --- |
-| `inventory.json` | generator | Machine-readable classification. Diffed in CI. |
-| `inventory.md` | generator | The human inventory: behaviour → file:case → lane → verdict, with the v1-only list first. |
-| `annotations.json` | **humans** | Behaviour names and verdicts. The only file here you edit by hand. |
+| `inventory.json` | generator | Machine-readable classification. **Gitignored** — generated on demand. |
+| `inventory.md` | generator | The human inventory: behaviour → file:case → lane → verdict, with the v1-only list first. **Gitignored** — generated on demand. |
+| `annotations.json` | **humans** | Behaviour names and verdicts. The only tracked file here besides this README. |
 
-Regenerate after any change under `tests/`:
+The inventory files are deliberately **not** checked in. They regenerate deterministically
+from source, CI regenerates everything it compares (including the merge-base baseline), and
+tracking them meant every pair of in-flight branches that touched `tests/` conflicted on
+thousands of generated lines. To browse the inventory locally:
 
 ```bash
 php scripts/lane-coverage.php --write
 ```
 
 The scanner supports the repository's PHP range (PHP 7.4 and newer); CI runs it on PHP 8.1.
-If `--check` produces an unexpected difference, verify the interpreter with `php --version`
-before regenerating the inventory.
+If a local scan disagrees with CI, verify the interpreter with `php --version` first.
 
 ## How the classification works
 
@@ -117,16 +119,17 @@ which is what the previous audit's output could not express.
 
 `.github/workflows/lane-coverage.yml` runs two checks and one advisory.
 
-1. **The inventory is not stale.** `--check` regenerates and compares byte-for-byte. Any
-   change under `tests/` that shifts the classification must land with a regenerated
-   inventory, so the checked-in artifact can never drift away from the code.
+1. **The scan is healthy.** The scanner runs clean and every annotation in
+   `annotations.json` still points at a real test case (renamed/removed cases fail here, so
+   annotations cannot silently rot). There is no staleness check because there is no tracked
+   artifact to go stale.
 2. **The not-proven-current list must not grow.** `--compare` diffs the set of case keys that
    are either v1-only or `unresolved` — both together, so a new test cannot slip past the gate
    merely by building its route out of variables — against the PR's **merge-base**, not against
    a checked-in baseline file, because a baseline file can be edited in the same PR that grows
-   the list and git history cannot. New entries fail the build. Removing them — by porting the
-   behaviour to `wcpos/v2` or by retiring the legacy test — is always allowed, and is how the
-   number goes down.
+   the list and git history cannot. Both sides are regenerated from source with the PR's own
+   scanner. New entries fail the build. Removing them — by porting the behaviour to `wcpos/v2`
+   or by retiring the legacy test — is always allowed, and is how the number goes down.
 3. **Blind-test warnings are printed and never fail the build** (see below).
 
 ## Blind-test warnings

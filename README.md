@@ -166,11 +166,11 @@ with a single still-live route (`wcpos/v1/products/variations`). Tests that disp
 `wcpos/v1` are **legacy pins** — they document what the old namespace did, they do not prove
 current behaviour works, and a green v1 test is not evidence that a behaviour was ported.
 
-The mapping of behaviour → test case → dispatched lane → verdict is checked in at
-[`tests/lane-coverage/`](./tests/lane-coverage/), regenerated with
-`php scripts/lane-coverage.php --write`, and enforced by
-[`lane-coverage.yml`](./.github/workflows/lane-coverage.yml): the list of behaviours whose only
-coverage is a v1 route may shrink, never grow. Read
+The mapping of behaviour → test case → dispatched lane → verdict is generated on demand
+under [`tests/lane-coverage/`](./tests/lane-coverage/) with
+`php scripts/lane-coverage.php --write`. The generated inventories are gitignored; lane coverage is
+enforced by [`lane-coverage.yml`](./.github/workflows/lane-coverage.yml): the list of behaviours
+whose only coverage is a v1 route may shrink, never grow. Read
 [`tests/lane-coverage/README.md`](./tests/lane-coverage/README.md) before adding tests to any
 API controller.
 
