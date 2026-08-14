@@ -435,7 +435,7 @@ class Receipt_Date_Formatter {
 		if ( $use_24_hour ) {
 			// Strip removed day-period markers with their surrounding spacing
 			// (including NBSP/NNBSP used by newer CLDR data).
-			$result = (string) preg_replace( '/[\s\x{00A0}\x{202F}]*\x01+[\s\x{00A0}\x{202F}]*(?=\p{P})/u', '', $result );
+			$result = (string) preg_replace( "/[\s\x{00A0}\x{202F}]*\x01+[\s\x{00A0}\x{202F}]*(?!')(?=[\p{Pe}\p{Pf}\p{Po}])/u", '', $result );
 			$result = (string) preg_replace( '/[\s\x{00A0}\x{202F}]*\x01+[\s\x{00A0}\x{202F}]*/u', ' ', $result );
 			$result = (string) preg_replace( '/[\s\x{00A0}\x{202F}]{2,}/u', ' ', $result );
 
