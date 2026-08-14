@@ -133,13 +133,18 @@ final class Digests_Controller extends WP_REST_Controller {
 	private function is_servable( string $collection, int $id ): bool {
 		global $wpdb;
 		if ( 'products' === $collection ) {
-			return array() !== $this->index->published_product_ids( array( $id ) );
+			$wpdb->last_error = '';
+			$servable_ids     = $this->index->servable_product_ids( array( $id ), true );
+
+			return '' !== $wpdb->last_error || array() !== $servable_ids;
 		}
 		$predicate = 'customers' === $collection
 			? $this->index->customer_live_row_exists_sql( '%d' )
 			: $this->index->order_live_row_exists_sql( '%d' );
+		$wpdb->last_error = '';
+		$exists           = $wpdb->get_var( $wpdb->prepare( 'SELECT ' . $predicate, $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Predicate comes from Digest_Index; id is prepared.
 
-		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT ' . $predicate, $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Predicate comes from Digest_Index; id is prepared.
+		return '' !== $wpdb->last_error || (bool) $exists;
 	}
 
 	/**

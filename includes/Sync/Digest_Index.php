@@ -497,9 +497,9 @@ final class Digest_Index {
 			$inner_sql = $this->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
 		} else {
 			$inner_sql = $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
+			$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id";
 			if ( 'publish' === ( $filters['status'] ?? '' ) ) {
-				$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id"
-					. " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent"
+				$servable_join .= " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent"
 					. " AND catalog_post.post_type = 'product_variation'";
 			}
 			$servable        = $this->product_servable_predicate_sql( 'cur.id', 'publish' === ( $filters['status'] ?? '' ) );
@@ -563,6 +563,28 @@ final class Digest_Index {
 		return array_values( array_intersect( $ids, array_map( 'intval', (array) $published_ids ) ) );
 	}
 
+	/** Narrow product-space ids to the integrity scan's canonical servable membership. */
+	public function servable_product_ids( array $ids, bool $publish = false ): array {
+		global $wpdb;
+		$ids = array_values( array_map( 'intval', $ids ) );
+		if ( array() === $ids ) {
+			return array();
+		}
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		$servable     = $this->product_servable_predicate_sql( 'catalog_post.ID', $publish );
+		$query_args   = array_merge( $ids, $servable['args'] );
+		$servable_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT catalog_post.ID FROM {$wpdb->posts} catalog_post"
+				. ( $publish ? " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '' )
+				. ' WHERE catalog_post.ID IN (' . $placeholders . ') AND ' . $servable['sql'],
+				...$query_args
+			)
+		);
+
+		return array_values( array_intersect( $ids, array_map( 'intval', (array) $servable_ids ) ) );
+	}
+
 	/**
 	 * True when the product space holds live rows but carries NO stored digests at all — the
 	 * "stored side was never backfilled (or was wiped)" signal the scan answers with a guarded rebuild
@@ -591,8 +613,14 @@ final class Digest_Index {
 	}
 
 	private function product_servable_predicate_sql( string $id_expr, bool $publish ): array {
-		$predicates = $publish ? array( $this->published_product_predicate_sql( 'catalog_post', 'parent_product' ) ) : array();
-		$hidden     = $this->pos_hidden_product_ids();
+		$predicates = array(
+			'catalog_post.post_type IN ' . self::PRODUCT_POST_TYPES_SQL,
+			'catalog_post.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL,
+		);
+		if ( $publish ) {
+			$predicates[] = $this->published_product_predicate_sql( 'catalog_post', 'parent_product' );
+		}
+		$hidden = $this->pos_hidden_product_ids();
 		if ( array() !== $hidden ) {
 			$predicates[] = $id_expr . ' NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
 		}

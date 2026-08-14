@@ -182,6 +182,93 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A trashed variation is absent from the integrity scan even while its parent remains published.
+	 */
+	public function test_digests_marks_trashed_variation_as_deleted(): void {
+		$parent       = ProductHelper::create_variation_product();
+		$variation_id = (int) $parent->get_children()[0];
+		wp_trash_post( $variation_id );
+		$this->delete_stored_digest( 'variation', $variation_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $variation_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $variation_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A live variation under a published parent remains servable without a stored digest.
+	 */
+	public function test_digests_omits_live_variation_without_stored_digest(): void {
+		$parent       = ProductHelper::create_variation_product();
+		$variation_id = (int) $parent->get_children()[0];
+		$this->delete_stored_digest( 'variation', $variation_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $variation_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame( array(), $response->get_data()['digests'] );
+	}
+
+	/**
+	 * A published product hidden from the POS is absent from the integrity scan.
+	 */
+	public function test_digests_marks_online_only_product_as_deleted(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$this->delete_stored_digest( 'product', $product_id );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $product_id ) ),
+					),
+				),
+			)
+		);
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
 	 * A servable product without a stored digest remains absent.
 	 */
 	public function test_digests_omits_servable_product_without_stored_digest(): void {
