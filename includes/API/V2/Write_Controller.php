@@ -1146,7 +1146,7 @@ class Write_Controller extends WP_REST_Controller {
 			// A REFUSED delete must leave the order EXACTLY as it found it (mono#1204).
 			// The forwarded wc/v3 delete runs its own capability check, so a cashier
 			// without delete caps gets a 403 from INSIDE `dispatch_write` — after
-			// anything this method did first. Two rules keep that path inert:
+			// anything this method did first. Three rules keep that path inert:
 			//
 			//  1. Pre-restore only when the order is about to be PERMANENTLY removed;
 			//     once it is gone there is no order left to read the reduced quantities
