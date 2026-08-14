@@ -196,7 +196,8 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		return $request;
 	}
 
-	private function order_delete_request( \WC_Order $order, string $mutation_id, string $record_id, $force = null ): WP_REST_Request {
+	/** The revision the CLIENT holds for an order — the same recipe the push side recomputes. */
+	private function order_revision( \WC_Order $order ): string {
 		// The client's held revision is computed over a WCPOS-lane document,
 		// and every WCPOS order surface serializes money at six decimals.
 		$current_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
@@ -204,7 +205,12 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$current = rest_do_request( $current_request )->get_data();
 		$current = Meta_Normalizer::normalize( $current );
 		$current = Order_Serializer::add_payment_link( $current, $order );
-		$revision = Order_Serializer::canonical_revision( $current );
+
+		return Order_Serializer::canonical_revision( $current );
+	}
+
+	private function order_delete_request( \WC_Order $order, string $mutation_id, string $record_id, $force = null ): WP_REST_Request {
+		$revision = $this->order_revision( $order );
 		$envelope = array(
 			'mutationId'   => $mutation_id,
 			'operation'    => 'delete',
@@ -293,6 +299,112 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $force_response->get_status() );
 		$this->assertFalse( wc_get_order( $order_id ) );
 		$this->assertEquals( 10, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	/** Deny the forwarded wc/v3 order delete exactly as a cashier without delete caps does. */
+	private function with_delete_denied( callable $run ) {
+		$deny = static function ( $permission, $context, $object_id, $post_type ) {
+			return 'delete' === $context && 'shop_order' === $post_type ? false : $permission;
+		};
+		add_filter( 'woocommerce_rest_check_permissions', $deny, 99, 4 );
+		try {
+			return $run();
+		} finally {
+			remove_filter( 'woocommerce_rest_check_permissions', $deny, 99 );
+		}
+	}
+
+	/**
+	 * mono#1204: a refused delete must leave the order EXACTLY as it found it.
+	 *
+	 * The cashier's void is refused with 403 `woocommerce_rest_cannot_delete`, and the
+	 * client's held baseRevision has to survive it — otherwise the NEXT push of that
+	 * order 409s `woo_rxdb_sync_conflict` and the order is wedged: it can neither be
+	 * voided nor saved.
+	 *
+	 * A `pos-open` order has never had its stock reduced, so the pre-restore is a no-op
+	 * while its rollback is not: the unguarded pair REDUCED stock that was never
+	 * reduced, rewriting `_reduced_stock` line-item meta and moving the revision.
+	 *
+	 * @dataProvider provide_delete_force
+	 */
+	public function test_refused_delete_of_a_never_reduced_order_changes_nothing( ?bool $force, string $suffix ): void {
+		update_option( 'woocommerce_manage_stock', 'yes' );
+		update_option( 'woocommerce_pos_settings_general', array( 'restore_stock_on_delete' => true ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 10,
+				'regular_price'  => 10,
+			)
+		);
+		$order = OrderHelper::create_order( array( 'product' => $product ) );
+		// Deliberately NOT stock-reduced — the state every open POS cart is in.
+		$this->assertEquals( 10, wc_get_product( $product->get_id() )->get_stock_quantity() );
+		$revision_before = $this->order_revision( $order );
+
+		$request  = $this->order_delete_request(
+			$order,
+			'10000000-0000-4000-8000-0000000000' . $suffix,
+			'20000000-0000-4000-8000-0000000000' . $suffix,
+			$force
+		);
+		$response = $this->with_delete_denied(
+			function () use ( $request ) {
+				return $this->server->dispatch( $request );
+			}
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_rest_cannot_delete', $response->get_data()['code'] );
+		$this->assertEquals( 10, wc_get_product( $product->get_id() )->get_stock_quantity() );
+		$this->assertSame( $revision_before, $this->order_revision( wc_get_order( $order->get_id() ) ) );
+	}
+
+	public function provide_delete_force(): array {
+		return array(
+			'trash' => array( null, '81' ),
+			'force' => array( true, '82' ),
+		);
+	}
+
+	/**
+	 * mono#1204, the stock-reduced arm: restoring and re-reducing nets out to the same
+	 * quantities but rewrites `_reduced_stock` item meta, which moves the revision on
+	 * its own. A refusal must therefore never reach the stock helpers at all.
+	 */
+	public function test_refused_force_delete_of_a_reduced_order_changes_nothing(): void {
+		update_option( 'woocommerce_manage_stock', 'yes' );
+		update_option( 'woocommerce_pos_settings_general', array( 'restore_stock_on_delete' => true ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 10,
+				'regular_price'  => 10,
+			)
+		);
+		$order = OrderHelper::create_order( array( 'product' => $product ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		wc_maybe_reduce_stock_levels( $order->get_id() );
+		$this->assertEquals( 6, wc_get_product( $product->get_id() )->get_stock_quantity() );
+		$revision_before = $this->order_revision( wc_get_order( $order->get_id() ) );
+
+		$request  = $this->order_delete_request(
+			wc_get_order( $order->get_id() ),
+			'10000000-0000-4000-8000-000000000083',
+			'20000000-0000-4000-8000-000000000083',
+			true
+		);
+		$response = $this->with_delete_denied(
+			function () use ( $request ) {
+				return $this->server->dispatch( $request );
+			}
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertEquals( 6, wc_get_product( $product->get_id() )->get_stock_quantity() );
+		$this->assertSame( $revision_before, $this->order_revision( wc_get_order( $order->get_id() ) ) );
 	}
 
 	public function test_delete_of_an_unresolvable_uuid_is_an_idempotent_noop(): void {

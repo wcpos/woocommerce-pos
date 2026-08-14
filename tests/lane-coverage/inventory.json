@@ -1,15 +1,15 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3072,
+        "cases": 3074,
         "v1_only": 740,
         "unresolved": 31,
         "by_lane": {
             "v1": 806,
-            "v2": 500,
-            "wc3": 278,
+            "v2": 502,
+            "wc3": 280,
             "wp2": 2,
-            "unresolved": 334,
+            "unresolved": 336,
             "unit": 1721
         },
         "warnings": {
@@ -39420,17 +39420,17 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 649
+                    "line": 761
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 650
+                    "line": 762
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 651
+                    "line": 763
                 }
             ]
         },
@@ -39459,7 +39459,7 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 681
+                    "line": 793
                 }
             ]
         },
@@ -39488,37 +39488,37 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 710
+                    "line": 822
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 711
+                    "line": 823
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 712
+                    "line": 824
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 713
+                    "line": 825
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 733
+                    "line": 845
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 734
+                    "line": 846
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 735
+                    "line": 847
                 }
             ]
         },
@@ -39547,17 +39547,17 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 459
+                    "line": 571
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 460
+                    "line": 572
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 461
+                    "line": 573
                 }
             ]
         },
@@ -39632,7 +39632,7 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 769
+                    "line": 881
                 }
             ]
         },
@@ -39663,7 +39663,7 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 387
+                    "line": 499
                 }
             ]
         },
@@ -39900,6 +39900,52 @@
             "warnings": []
         },
         {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Write_Contract::test_refused_delete_of_a_never_reduced_order_changes_nothing",
+            "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Write_Contract",
+            "method": "test_refused_delete_of_a_never_reduced_order_changes_nothing",
+            "behavior": "Test Rest Dispatch Write Contract",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Write_Contract::test_refused_force_delete_of_a_reduced_order_changes_nothing",
+            "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Write_Contract",
+            "method": "test_refused_force_delete_of_a_reduced_order_changes_nothing",
+            "behavior": "Test Rest Dispatch Write Contract",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2",
+                "wc3"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2",
+                "wc3"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
             "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Write_Contract::test_update_response_document_emits_typed_meta_and_plain_uuid",
             "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Write_Contract",
@@ -39924,22 +39970,22 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 506
+                    "line": 618
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 507
+                    "line": 619
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 508
+                    "line": 620
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 509
+                    "line": 621
                 }
             ]
         },
@@ -39968,12 +40014,12 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 425
+                    "line": 537
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 426
+                    "line": 538
                 }
             ]
         },
@@ -40004,7 +40050,7 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 574
+                    "line": 686
                 }
             ]
         },
@@ -40058,12 +40104,12 @@
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 626
+                    "line": 738
                 },
                 {
                     "pattern": "asserted-stubbed-response",
                     "file": "tests/includes/Sync/Test_Rest_Dispatch_Write_Contract.php",
-                    "line": 634
+                    "line": 746
                 }
             ]
         },
