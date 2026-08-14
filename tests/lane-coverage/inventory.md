@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3077
+- Cases: 3080
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 31
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 505, wc3 278, wp2 2, unresolved 339, pure unit 1721
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 508, wc3 278, wp2 2, unresolved 342, pure unit 1721
 - Blind-test warnings (advisory): self-installed-hook 66, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -932,7 +932,7 @@ These tests may be structurally incapable of failing because they install or stu
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Read_Controllers.php:722 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Read_Controllers.php:809 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record |
 
 ## All other behaviours
 
@@ -2848,8 +2848,11 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_config_fingerprint_returns_supported_collections | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_marks_deleted_order_as_deleted | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_marks_deleted_product_as_deleted | unresolved, v2 | unreviewed | — |
+| Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_marks_online_only_product_as_deleted | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_marks_trashed_product_as_deleted | unresolved, v2 | unreviewed | — |
+| Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_marks_trashed_variation_as_deleted | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_omits_deleted_product_without_explicit_absence | unresolved, v2 | unreviewed | — |
+| Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_omits_live_variation_without_stored_digest | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_omits_servable_product_without_stored_digest | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_digests_returns_stored_and_deleted_rows_in_request_order | unresolved, v2 | unreviewed | — |
 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_integrity_bucket_lists_current_product_digest | unresolved, v2 | unreviewed | — |
