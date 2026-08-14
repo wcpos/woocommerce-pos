@@ -50,7 +50,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	/**
 	 * Snapshot of plugin option rows taken before each test.
 	 *
-	 * @var array<string, string>
+	 * @var array<int, array{option_name: string, option_value: string, autoload: string}>
 	 */
 	private $options_snapshot = array();
 
@@ -75,10 +75,10 @@ class Test_Uninstall extends WP_UnitTestCase {
 
 		global $wpdb;
 		$rows                   = $wpdb->get_results(
-			"SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_%' OR option_name LIKE 'woocommerce\_pos\_%'",
+			"SELECT option_name, option_value, autoload FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_%' OR option_name LIKE 'woocommerce\_pos\_%'",
 			ARRAY_A
 		);
-		$this->options_snapshot = wp_list_pluck( $rows, 'option_value', 'option_name' );
+		$this->options_snapshot = $rows;
 	}
 
 	/**
@@ -101,14 +101,8 @@ class Test_Uninstall extends WP_UnitTestCase {
 		// and remove any plugin options a test added.
 		global $wpdb;
 		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_%' OR option_name LIKE 'woocommerce\_pos\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Test hygiene for committed writes.
-		foreach ( $this->options_snapshot as $name => $value ) {
-			$wpdb->insert(
-				$wpdb->options,
-				array(
-					'option_name'  => $name,
-					'option_value' => $value,
-				)
-			);
+		foreach ( $this->options_snapshot as $row ) {
+			$wpdb->insert( $wpdb->options, $row );
 		}
 		wp_cache_flush();
 
@@ -145,7 +139,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 
 		$table           = $wpdb->prefix . 'woocommerce_log';
 		$charset_collate = $wpdb->get_charset_collate();
-		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) {
 			return $table;
 		}
 
@@ -222,6 +216,57 @@ class Test_Uninstall extends WP_UnitTestCase {
 				unlink( $payload );
 			}
 			rmdir( $target );
+			rmdir( $root );
+		}
+	}
+
+	/**
+	 * Owned directories are removed without traversing nested symlink targets.
+	 */
+	public function test_uninstall_rmdir_removes_owned_directory_without_following_nested_symlink(): void {
+		$root          = sys_get_temp_dir() . '/wcpos-uninstall-' . uniqid();
+		$dir           = $root . '/wcpos-templates';
+		$nested        = $dir . '/nested';
+		$external      = $root . '/shared';
+		$external_file = $external . '/payload.txt';
+		$link          = $dir . '/shared-link';
+		wp_mkdir_p( $nested );
+		wp_mkdir_p( $external );
+		file_put_contents( $nested . '/cache.txt', 'cache' );
+		file_put_contents( $external_file, 'outside' );
+
+		if ( ! symlink( $external, $link ) ) {
+			unlink( $nested . '/cache.txt' );
+			unlink( $external_file );
+			rmdir( $nested );
+			rmdir( $dir );
+			rmdir( $external );
+			rmdir( $root );
+			$this->markTestSkipped( 'Symlinks are not available in this test environment.' );
+		}
+
+		try {
+			woocommerce_pos_uninstall_rmdir( $dir );
+
+			$this->assertDirectoryDoesNotExist( $dir );
+			$this->assertFileExists( $external_file, 'Nested symlink targets must not be traversed' );
+		} finally {
+			if ( is_link( $link ) ) {
+				unlink( $link );
+			}
+			if ( file_exists( $nested . '/cache.txt' ) ) {
+				unlink( $nested . '/cache.txt' );
+			}
+			if ( file_exists( $external_file ) ) {
+				unlink( $external_file );
+			}
+			if ( is_dir( $nested ) ) {
+				rmdir( $nested );
+			}
+			if ( is_dir( $dir ) ) {
+				rmdir( $dir );
+			}
+			rmdir( $external );
 			rmdir( $root );
 		}
 	}
@@ -546,12 +591,13 @@ class Test_Uninstall extends WP_UnitTestCase {
 		add_user_meta( $user_id, '_wcpos_logs_last_viewed', '2026-08-14' );
 		add_user_meta( $user_id, '_wcpos_consent_callout_hidden_until', '2026-09-01' );
 		add_user_meta( $user_id, '_wcpos_tax_ids', array( 1 ) );
+		add_user_meta( $user_id, 'wcpos_last_store_id', 123 );
 
 		// Act.
 		$this->run_uninstall( false );
 
 		// Assert.
-		foreach ( array( '_woocommerce_pos_refresh_tokens', '_woocommerce_pos_last_access', '_woocommerce_pos_uuid', '_wcpos_logs_last_viewed', '_wcpos_consent_callout_hidden_until', '_wcpos_tax_ids' ) as $key ) {
+		foreach ( array( '_woocommerce_pos_refresh_tokens', '_woocommerce_pos_last_access', '_woocommerce_pos_uuid', '_wcpos_logs_last_viewed', '_wcpos_consent_callout_hidden_until', '_wcpos_tax_ids', 'wcpos_last_store_id' ) as $key ) {
 			$this->assertEmpty( get_user_meta( $user_id, $key, true ), "{$key} should be deleted" );
 		}
 	}

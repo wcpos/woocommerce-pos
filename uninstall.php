@@ -322,6 +322,8 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$wpdb->delete( $log_table, array( 'source' => 'woocommerce-pos' ), array( '%s' ) );
 	}
 
+	// The custom i18n service downloads only .l10n.php files; WordPress owns
+	// any core-managed .mo and hashed .json artifacts in this directory.
 	$language_files = glob( trailingslashit( WP_LANG_DIR ) . 'plugins/woocommerce-pos-*.l10n.php' );
 	foreach ( is_array( $language_files ) ? $language_files : array() as $language_file ) {
 		if ( 1 !== preg_match( '/^woocommerce-pos-[a-z]{2,3}(?:_[A-Za-z0-9]+)*(?:@[A-Za-z0-9]+)?\.l10n\.php$/', basename( $language_file ) ) ) {
