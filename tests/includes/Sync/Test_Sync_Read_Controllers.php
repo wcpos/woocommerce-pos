@@ -182,6 +182,35 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A draft product with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_draft_product_as_deleted(): void {
+		$product = ProductHelper::create_simple_product();
+		$product->set_status( 'draft' );
+		$product->save();
+		$this->delete_stored_digest( 'product', $product->get_id() );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product->get_id(),
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product->get_id(),
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
 	 * A trashed variation is absent from the integrity scan even while its parent remains published.
 	 */
 	public function test_digests_marks_trashed_variation_as_deleted(): void {
@@ -315,6 +344,88 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 			),
 			$response->get_data()['digests']
 		);
+	}
+
+	/**
+	 * A deleted customer with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_deleted_customer_as_deleted(): void {
+		$customer_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		wp_delete_user( $customer_id );
+		$this->delete_stored_digest( 'customer', $customer_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include'    => (string) $customer_id,
+					'collection' => 'customers',
+					'absence'    => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $customer_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * Explicit absence resolves each collection's missing ids with one servability query.
+	 */
+	public function test_digests_batches_absent_servability_queries_per_collection(): void {
+		global $wpdb;
+		$queries       = array();
+		$capture_query = static function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+		$ids       = array( 900000001, 900000002, 900000003 );
+		$responses = array();
+
+		add_filter( 'query', $capture_query );
+		try {
+			foreach ( array( 'products', 'customers', 'orders' ) as $collection ) {
+				$responses[ $collection ] = ( new Digests_Controller() )->get_digests(
+					$this->request(
+						array(
+							'include'    => implode( ',', $ids ),
+							'collection' => $collection,
+							'absence'    => 'explicit',
+						)
+					)
+				);
+			}
+		} finally {
+			remove_filter( 'query', $capture_query );
+		}
+
+		$product_queries  = array_filter( $queries, static fn( string $query ): bool => false !== strpos( $query, 'SELECT catalog_post.ID' ) );
+		$customer_queries = array_filter( $queries, static fn( string $query ): bool => false !== strpos( $query, "EXISTS (SELECT 1 FROM {$wpdb->users} lu" ) );
+		$order_queries    = array_filter(
+			$queries,
+			static fn( string $query ): bool => false !== strpos( $query, "EXISTS (SELECT 1 FROM {$wpdb->posts} lp" )
+				|| false !== strpos( $query, "EXISTS (SELECT 1 FROM {$wpdb->prefix}wc_orders lo" )
+		);
+
+		$this->assertCount( 1, $product_queries );
+		$this->assertCount( 1, $customer_queries );
+		$this->assertCount( 1, $order_queries );
+		$expected = array_map(
+			static fn( int $id ): array => array(
+				'id'      => $id,
+				'deleted' => true,
+			),
+			$ids
+		);
+		foreach ( $responses as $response ) {
+			$this->assertSame( $expected, $response->get_data()['digests'] );
+		}
 	}
 
 	/**

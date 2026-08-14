@@ -111,7 +111,10 @@ final class Digests_Controller extends WP_REST_Controller {
 		} else {
 			$digests = $reader->read_digests( $read_ids );
 		}
-		$out = array();
+		$explicit_absence = 'explicit' === $request->get_param( 'absence' );
+		$absent_ids       = $explicit_absence ? array_values( array_diff( $ids, array_keys( $digests ) ) ) : array();
+		$servable = array_fill_keys( $this->servable_ids( $collection, $absent_ids ), true );
+		$out      = array();
 		// Preserve request order; servable ids with no stored digest remain absent.
 		foreach ( $ids as $id ) {
 			if ( isset( $digests[ $id ] ) ) {
@@ -119,7 +122,7 @@ final class Digests_Controller extends WP_REST_Controller {
 					'id' => $id,
 					'digest' => $digests[ $id ],
 				);
-			} elseif ( 'explicit' === $request->get_param( 'absence' ) && ! $this->is_servable( $collection, $id ) ) {
+			} elseif ( $explicit_absence && ! isset( $servable[ $id ] ) ) {
 				$out[] = array(
 					'id' => $id,
 					'deleted' => true,
@@ -130,25 +133,41 @@ final class Digests_Controller extends WP_REST_Controller {
 		return new WP_REST_Response( array( 'digests' => $out ), 200 );
 	}
 
-	private function is_servable( string $collection, int $id ): bool {
+	/**
+	 * Resolve the absent-id set against the integrity scan's canonical membership in one query.
+	 *
+	 * @param int[] $ids Absent ids in request order.
+	 *
+	 * @return int[] Servable ids in request order.
+	 */
+	private function servable_ids( string $collection, array $ids ): array {
 		global $wpdb;
-		if ( 'products' === $collection ) {
-			$wpdb->last_error = '';
-			$servable_ids     = $this->index->servable_product_ids( array( $id ), true );
-			/** @var string $last_error */
-			$last_error = $wpdb->last_error;
-
-			return '' !== $last_error || array() !== $servable_ids;
+		if ( array() === $ids ) {
+			return array();
 		}
-		$predicate = 'customers' === $collection
-			? $this->index->customer_live_row_exists_sql( '%d' )
-			: $this->index->order_live_row_exists_sql( '%d' );
 		$wpdb->last_error = '';
-		$exists           = $wpdb->get_var( $wpdb->prepare( 'SELECT ' . $predicate, $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Predicate comes from Digest_Index; id is prepared.
+		if ( 'products' === $collection ) {
+			$servable_ids = $this->index->servable_product_ids( $ids, true );
+		} else {
+			$predicate    = 'customers' === $collection
+				? $this->index->customer_live_row_exists_sql( 'requested.id' )
+				: $this->index->order_live_row_exists_sql( 'requested.id' );
+			$requested    = implode( ' UNION ALL ', array_fill( 0, \count( $ids ), 'SELECT %d AS id' ) );
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Predicates come from Digest_Index; requested ids use placeholders.
+			$servable_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					'SELECT requested.id FROM (' . $requested . ') requested WHERE ' . $predicate,
+					...$ids
+				)
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+		}
 		/** @var string $last_error */
 		$last_error = $wpdb->last_error;
 
-		return '' !== $last_error || (bool) $exists;
+		return '' !== $last_error
+			? $ids
+			: array_values( array_intersect( $ids, array_map( 'intval', (array) $servable_ids ) ) );
 	}
 
 	/**
