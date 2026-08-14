@@ -466,7 +466,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$per_page = (int) $request->get_param( 'per_page' );
 		$per_page = min( 100, max( 1, 0 === $per_page ? 20 : $per_page ) );
 		$page     = max( 1, (int) $request->get_param( 'page' ) );
-		$status   = $request->get_param( 'status' );
+		$status          = $request->get_param( 'status' );
+		$exclude_retried = 'active' === $status;
 		if ( 'active' === $status ) {
 			// The default queue view: everything not yet terminal-successful.
 			$status = array(
@@ -476,8 +477,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 		$filters = array(
-			'printer_id' => $request->get_param( 'printer_id' ),
-			'status'     => $status,
+			'printer_id'     => $request->get_param( 'printer_id' ),
+			'status'         => $status,
+			'exclude_retried' => $exclude_retried,
 		);
 
 		$jobs = array_map(
@@ -517,6 +519,12 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			$counts[ $status ] = 0;
 			foreach ( $summary as $per_status ) {
 				$counts[ $status ] += isset( $per_status[ $status ] ) ? $per_status[ $status ]['count'] : 0;
+			}
+		}
+		$counts['failed_unresolved'] = 0;
+		foreach ( $summary as $per_status ) {
+			if ( isset( $per_status[ Print_Job_Service::STATUS_FAILED ] ) ) {
+				$counts['failed_unresolved'] += $per_status[ Print_Job_Service::STATUS_FAILED ]['unresolved_count'];
 			}
 		}
 
@@ -609,6 +617,16 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 404 )
 			);
 		}
+		if ( $source['retried_to'] > 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_already_retried',
+				__( 'This print job has already been retried.', 'woocommerce-pos' ),
+				array(
+					'status'     => 409,
+					'retried_to' => $source['retried_to'],
+				)
+			);
+		}
 		if ( '' === $source['payload'] && '' === $source['template_id'] ) {
 			// A stripped raw job has nothing left to print — refuse loudly
 			// rather than queue a blank receipt.
@@ -645,6 +663,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return new WP_Error(
 				'wcpos_print_job_create_failed',
 				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+		if ( Print_Job_Service::STATUS_FAILED === $source['status'] && ! $this->jobs->mark_retried( (int) $source['id'], $new_id ) ) {
+			wp_delete_post( $new_id, true );
+
+			return new WP_Error(
+				'wcpos_print_job_retry_failed',
+				__( 'Print job retry could not be recorded.', 'woocommerce-pos' ),
 				array( 'status' => 500 )
 			);
 		}

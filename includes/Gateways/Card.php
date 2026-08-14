@@ -138,12 +138,16 @@ class Card extends Abstract_POS_Gateway {
 	public function calculate_cashback( $order_id ): void {
 		$message  = '';
 		$order    = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
 		$cashback = $order->get_meta( '_pos_card_cashback' );
 
 		// construct message.
 		if ( $cashback ) {
 			$message = /* translators: POS payment gateway label shown during checkout. */ __( 'Cashback', 'woocommerce-pos' ) . ': ';
-			$message .= wc_price( $cashback );
+			$message .= wc_price( $cashback, array( 'currency' => $order->get_currency() ) );
 		}
 
 		echo wp_kses_post( $message );

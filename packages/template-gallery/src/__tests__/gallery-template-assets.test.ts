@@ -21,10 +21,10 @@ function getBundledGalleryKeys(): string[] {
 const PREVIEW_DEVICE_SCALE_FACTOR = 2;
 const A4_PREVIEW_CSS_WIDTH = 794;
 
-// Templates whose preview PNG dimensions must match the 58mm paper width.
+// Templates whose preview WebP dimensions must match the 58mm paper width.
 const THERMAL_58MM_KEYS = new Set(['thermal-simple-58mm', 'thermal-detailed-58mm']);
 
-// All thermal templates (need a preview PNG sized to 58mm or 80mm).
+// All thermal templates (need a preview WebP sized to 58mm or 80mm).
 const THERMAL_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsWith('thermal-')));
 
 function findContentFile(key: string): string | null {
@@ -37,11 +37,17 @@ function findContentFile(key: string): string | null {
 	return null;
 }
 
-function readPngDimensions(filePath: string): { width: number; height: number } {
+function readLosslessWebpDimensions(filePath: string): { width: number; height: number } {
 	const buffer = fs.readFileSync(filePath);
+	expect(buffer.toString('ascii', 0, 4)).toBe('RIFF');
+	expect(buffer.toString('ascii', 8, 12)).toBe('WEBP');
+	expect(buffer.toString('ascii', 12, 16)).toBe('VP8L');
+	expect(buffer[20]).toBe(0x2f);
+
+	const bits = buffer.readUInt32LE(21);
 	return {
-		width: buffer.readUInt32BE(16),
-		height: buffer.readUInt32BE(20),
+		width: (bits & 0x3fff) + 1,
+		height: ((bits >> 14) & 0x3fff) + 1,
 	};
 }
 
@@ -170,7 +176,7 @@ describe('gallery template assets', () => {
 		}
 
 		for (const removedKey of ['branded-receipt', 'return-receipt', 'tax-invoice']) {
-			expect(fs.existsSync(path.join(previewDir, `${removedKey}.png`)), removedKey).toBe(
+			expect(fs.existsSync(path.join(previewDir, `${removedKey}.webp`)), removedKey).toBe(
 				false
 			);
 			expect(getGalleryPreviewSrc(removedKey), removedKey).toBeUndefined();
@@ -187,9 +193,9 @@ describe('gallery template assets', () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 
 		for (const key of getBundledGalleryKeys()) {
-			expect(fs.existsSync(path.join(previewDir, `${key}.png`)), key).toBe(true);
+			expect(fs.existsSync(path.join(previewDir, `${key}.webp`)), key).toBe(true);
 			expect(getGalleryPreviewSrc(key), key).toBe(
-				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.png`
+				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.webp`
 			);
 		}
 	});
@@ -199,7 +205,7 @@ describe('gallery template assets', () => {
 			const expectedWidth = THERMAL_KEYS.has(key)
 				? (THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR
 				: A4_PREVIEW_CSS_WIDTH * PREVIEW_DEVICE_SCALE_FACTOR;
-			const dimensions = readPngDimensions(path.join(previewDir, `${key}.png`));
+			const dimensions = readLosslessWebpDimensions(path.join(previewDir, `${key}.webp`));
 			expect(dimensions.width, key).toBe(expectedWidth);
 		}
 	});
@@ -208,7 +214,7 @@ describe('gallery template assets', () => {
 		for (const key of THERMAL_KEYS) {
 			const expectedWidth =
 				(THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR;
-			const dimensions = readPngDimensions(path.join(previewDir, `${key}.png`));
+			const dimensions = readLosslessWebpDimensions(path.join(previewDir, `${key}.webp`));
 			expect(dimensions.width, key).toBe(expectedWidth);
 		}
 	});

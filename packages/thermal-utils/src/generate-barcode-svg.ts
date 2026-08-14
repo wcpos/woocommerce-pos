@@ -5,9 +5,52 @@
  * This is a pure function — no DOM dependencies — suitable for
  * embedding in HTML strings rendered inside sandboxed iframes.
  */
-import * as bwipjs from 'bwip-js';
+import {
+	code128,
+	code39,
+	code93,
+	ean13,
+	ean8,
+	upca,
+	upce,
+	rationalizedCodabar,
+	interleaved2of5,
+	qrcode,
+	drawingSVG,
+	type RenderOptions,
+} from 'bwip-js';
 
-const BCID_ALIASES: Record<string, string> = { qr: 'qrcode' };
+/**
+ * Barcode `type` (from the template markup) → bwip-js encoder.
+ *
+ * The encoders are imported individually rather than through the generic
+ * `toSVG()`, which links every BWIPP symbology and so cannot be tree-shaken.
+ * Shipping only the symbologies we actually offer trims ~1MB of BWIPP down to
+ * the handful below. The keys mirror the server-side picqer map in
+ * `Barcode_Image.php` so the on-screen preview matches the printed output —
+ * and, like that map, an unknown type falls back to Code 128.
+ */
+interface BarcodeSpec {
+	bcid: string;
+	encode: (opts: RenderOptions) => string;
+}
+
+const BARCODE_SPECS: Record<string, BarcodeSpec> = {
+	code128: { bcid: 'code128', encode: (opts) => code128(opts, drawingSVG()) },
+	code39: { bcid: 'code39', encode: (opts) => code39(opts, drawingSVG()) },
+	code93: { bcid: 'code93', encode: (opts) => code93(opts, drawingSVG()) },
+	ean13: { bcid: 'ean13', encode: (opts) => ean13(opts, drawingSVG()) },
+	ean8: { bcid: 'ean8', encode: (opts) => ean8(opts, drawingSVG()) },
+	upca: { bcid: 'upca', encode: (opts) => upca(opts, drawingSVG()) },
+	upce: { bcid: 'upce', encode: (opts) => upce(opts, drawingSVG()) },
+	codabar: {
+		bcid: 'rationalizedCodabar',
+		encode: (opts) => rationalizedCodabar(opts, drawingSVG()),
+	},
+	itf: { bcid: 'interleaved2of5', encode: (opts) => interleaved2of5(opts, drawingSVG()) },
+	qr: { bcid: 'qrcode', encode: (opts) => qrcode(opts, drawingSVG()) },
+	qrcode: { bcid: 'qrcode', encode: (opts) => qrcode(opts, drawingSVG()) },
+};
 
 interface BarcodeOptions {
 	type?: string;
@@ -67,22 +110,29 @@ function renderBarcodeError(kind: 'barcode' | 'qrcode', barcodeType: string, tex
 }
 
 export function generateBarcodeSvg(value: string, options: BarcodeOptions = {}): string {
-	const { type = 'qr', scale = 3, height = 10, kind = type === 'qr' || type === 'qrcode' ? 'qrcode' : 'barcode', paperWidthChars } = options;
+	const { type = 'qr', scale = 3, height = 10, kind: requestedKind, paperWidthChars } = options;
+	const normalizedType = type.trim().toLowerCase();
+	const kind =
+		requestedKind ??
+		(normalizedType === 'qr' || normalizedType === 'qrcode' ? 'qrcode' : 'barcode');
 	const text = value.trim();
 	if (!text) return '';
 
-	const bcid = BCID_ALIASES[type] ?? type;
+	const spec = BARCODE_SPECS[normalizedType] ?? BARCODE_SPECS.code128;
+	const isQr = spec.bcid === 'qrcode';
 
 	try {
-		const svg = bwipjs.toSVG({
-			bcid,
+		const svg = spec.encode({
+			bcid: spec.bcid,
 			text,
 			scale: safeInteger(scale, 3, 1, 20),
-			...(bcid === 'qrcode' ? {} : { height: safeInteger(height, 10, 1, 600) }),
-			includetext: bcid !== 'qrcode',
+			...(isQr ? {} : { height: safeInteger(height, 10, 1, 600) }),
+			includetext: !isQr,
 		});
 		return `<div data-barcode-kind="${kind}" data-barcode-value="${escapeHtml(text)}" style="text-align: center; padding: 8px 0">${constrainSvg(svg, paperWidthChars, kind)}</div>`;
 	} catch (error) {
-		return renderBarcodeError(kind, bcid, text, error);
+		// Show the type the merchant chose (e.g. "itf"), not the internal BWIPP
+		// encoder name (e.g. "interleaved2of5") that spec.bcid resolves to.
+		return renderBarcodeError(kind, type, text, error);
 	}
 }

@@ -34,5 +34,5 @@ export function getGalleryPreviewSrc(templateKey: string): string | undefined {
 		return undefined;
 	}
 
-	return `${previewBaseUrl.replace(/\/$/, '')}/${templateKey}.png`;
+	return `${previewBaseUrl.replace(/\/$/, '')}/${templateKey}.webp`;
 }

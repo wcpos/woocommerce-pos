@@ -2,6 +2,8 @@
 /**
  * Tests for the WCPOS Cash Payment Gateway.
  *
+ * @package WCPOS\WooCommercePOS\Tests
+ *
  * Tests the cash payment gateway functionality including:
  * - Gateway registration and properties
  * - Payment processing (full and partial)
@@ -11,6 +13,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Gateways;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Gateways\Cash;
@@ -23,6 +26,8 @@ use WCPOS\WooCommercePOS\Gateways\Cash;
  * @coversNothing
  */
 class Test_Cash_Gateway extends WC_Unit_Test_Case {
+	use HPOSToggleTrait;
+
 	/**
 	 * The Cash gateway instance.
 	 *
@@ -102,10 +107,10 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$order->update_meta_data( '_pos_cash_change', '10.00' );
 		$order->save();
 
-		// Clear meta cache
+		// Clear meta cache.
 		wp_cache_flush();
 
-		// Use update_post_meta since payment_details uses get_post_meta
+		// Use update_post_meta since payment_details uses get_post_meta.
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '50.00' );
 		update_post_meta( $order->get_id(), '_pos_cash_change', '10.00' );
 
@@ -144,7 +149,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	public function test_calculate_change_outputs_message(): void {
 		$order = OrderHelper::create_order();
 
-		// Use update_post_meta since calculate_change uses get_post_meta
+		// Use update_post_meta since calculate_change uses get_post_meta.
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '50.00' );
 		update_post_meta( $order->get_id(), '_pos_cash_change', '10.00' );
 
@@ -154,6 +159,56 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 
 		$this->assertStringContainsString( 'Amount Tendered', $output );
 		$this->assertStringContainsString( 'Change', $output );
+	}
+
+	/**
+	 * Test calculate_change uses the order currency with legacy post meta.
+	 */
+	public function test_calculate_change_order_currency_differs_from_store_renders_order_currency_symbol(): void {
+		// Arrange.
+		$order_currency = 'EUR' === get_woocommerce_currency() ? 'USD' : 'EUR';
+		$order          = OrderHelper::create_order();
+		$order->set_currency( $order_currency );
+		$order->save();
+		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '50.00' );
+		update_post_meta( $order->get_id(), '_pos_cash_change', '10.00' );
+
+		// Act.
+		ob_start();
+		$this->gateway->calculate_change( $order->get_id() );
+		$output = ob_get_clean();
+
+		// Assert.
+		$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+	}
+
+	/**
+	 * Test calculate_change reads HPOS order meta and uses the order currency.
+	 */
+	public function test_calculate_change_hpos_order_meta_renders_order_currency_symbol(): void {
+		// Arrange.
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->setup_cot();
+
+		try {
+			$order_currency = 'EUR' === get_woocommerce_currency() ? 'USD' : 'EUR';
+			$order          = OrderHelper::create_order();
+			$order->set_currency( $order_currency );
+			$order->update_meta_data( '_pos_cash_amount_tendered', '50.00' );
+			$order->update_meta_data( '_pos_cash_change', '10.00' );
+			$order->save();
+
+			// Act.
+			ob_start();
+			$this->gateway->calculate_change( $order->get_id() );
+			$output = ob_get_clean();
+
+			// Assert.
+			$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+		} finally {
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
 	}
 
 	/**
@@ -180,14 +235,14 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$order->set_total( '40.00' );
 		$order->save();
 
-		// Store payment data directly (simulating what process_payment does)
+		// Store payment data directly (simulating what process_payment does).
 		$tendered = '50.00';
 		$change   = wc_format_decimal( \floatval( $tendered ) - \floatval( $order->get_total() ) );
 
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', $tendered );
 		update_post_meta( $order->get_id(), '_pos_cash_change', $change );
 
-		// Verify meta was stored
+		// Verify meta was stored.
 		$this->assertEquals( $tendered, get_post_meta( $order->get_id(), '_pos_cash_amount_tendered', true ) );
 		$this->assertEquals( '10', get_post_meta( $order->get_id(), '_pos_cash_change', true ) );
 	}
@@ -196,18 +251,18 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	 * Test change calculation logic (unit test of the calculation itself).
 	 */
 	public function test_change_calculation_logic(): void {
-		// Test case 1: Tendered more than total
+		// Test case 1: Tendered more than total.
 		$order_total = 40.00;
 		$tendered    = 50.00;
 		$change      = $tendered > $order_total ? wc_format_decimal( $tendered - $order_total ) : '0';
 		$this->assertEquals( '10', $change );
 
-		// Test case 2: Tendered exactly equals total
+		// Test case 2: Tendered exactly equals total.
 		$tendered = 40.00;
 		$change   = $tendered > $order_total ? wc_format_decimal( $tendered - $order_total ) : '0';
 		$this->assertEquals( '0', $change );
 
-		// Test case 3: Tendered less than total (partial payment)
+		// Test case 3: Tendered less than total (partial payment).
 		$tendered = 30.00;
 		$change   = $tendered > $order_total ? wc_format_decimal( $tendered - $order_total ) : '0';
 		$this->assertEquals( '0', $change );
@@ -220,7 +275,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$order_total = 100.00;
 		$tendered    = 60.00;
 
-		// Partial payment should result in remaining balance
+		// Partial payment should result in remaining balance.
 		$remaining = wc_format_decimal( $order_total - $tendered );
 
 		$this->assertEquals( '40', $remaining );
@@ -260,7 +315,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	}
 
 	// ==========================================================================
-	// DIRECT METHOD TESTS (for line coverage)
+	// DIRECT METHOD TESTS (for line coverage).
 	// ==========================================================================
 
 	/**
@@ -286,12 +341,12 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	public function test_direct_payment_details(): void {
 		$order = OrderHelper::create_order();
 
-		// Test with no meta set
+		// Test with no meta set.
 		$details = Cash::payment_details( $order );
 		$this->assertArrayHasKey( 'tendered', $details );
 		$this->assertArrayHasKey( 'change', $details );
 
-		// Set meta and test again
+		// Set meta and test again.
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '100.00' );
 		update_post_meta( $order->get_id(), '_pos_cash_change', '20.00' );
 
@@ -308,7 +363,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	public function test_direct_calculate_change_formatted(): void {
 		$order = OrderHelper::create_order();
 
-		// Set payment data
+		// Set payment data.
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '75.50' );
 		update_post_meta( $order->get_id(), '_pos_cash_change', '15.50' );
 
@@ -422,7 +477,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 
 		$this->assertEquals( '0', $change );
 
-		// The remaining balance
+		// The remaining balance.
 		$remaining = wc_format_decimal( $order_total - $tendered );
 		$this->assertEquals( '40', $remaining );
 	}
@@ -471,10 +526,26 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	 */
 	public function test_direct_multiple_payment_scenarios(): void {
 		$scenarios = array(
-			array( 'total' => 10.00, 'tendered' => 20.00, 'expected_change' => '10' ),
-			array( 'total' => 99.99, 'tendered' => 100.00, 'expected_change' => '0.01' ),
-			array( 'total' => 50.00, 'tendered' => 50.00, 'expected_change' => '0' ),
-			array( 'total' => 25.00, 'tendered' => 10.00, 'expected_change' => '0' ),
+			array(
+				'total' => 10.00,
+				'tendered' => 20.00,
+				'expected_change' => '10',
+			),
+			array(
+				'total' => 99.99,
+				'tendered' => 100.00,
+				'expected_change' => '0.01',
+			),
+			array(
+				'total' => 50.00,
+				'tendered' => 50.00,
+				'expected_change' => '0',
+			),
+			array(
+				'total' => 25.00,
+				'tendered' => 10.00,
+				'expected_change' => '0',
+			),
 		);
 
 		foreach ( $scenarios as $scenario ) {

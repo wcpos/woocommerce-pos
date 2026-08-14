@@ -45,6 +45,16 @@ class Star_Markup_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( '[barcode: type qr; data "https://x.test"', $out );
 	}
 
+	public function test_barcode_codabar_maps_to_nw7(): void {
+		$out = $this->emit( array(
+			array( 'type' => 'barcode', 'barcode_type' => 'codabar', 'height' => 40, 'value' => 'A12345B' ),
+		) );
+
+		// Star markup calls Codabar "nw7"; it must not silently fall back to Code 128.
+		$this->assertStringContainsString( '[barcode: type nw7; data "A12345B"', $out );
+		$this->assertStringNotContainsString( 'type code128', $out );
+	}
+
 	public function test_cut_and_feed(): void {
 		$out = $this->emit( array(
 			array( 'type' => 'feed', 'lines' => 2 ),

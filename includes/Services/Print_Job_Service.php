@@ -19,6 +19,7 @@ class Print_Job_Service {
 	const META_FORMAT     = '_wcpos_pj_format';
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
+	const META_RETRIED_TO = '_wcpos_pj_retried_to';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
 	const META_PN_KIND           = '_wcpos_pj_pn_kind';
 	const META_EXTERNAL_PROVIDER = '_wcpos_pj_external_provider';
@@ -173,6 +174,7 @@ class Print_Job_Service {
 			'auto_open_drawer'  => 'yes' === (string) get_post_meta( $id, self::META_AUTO_OPEN_DRAWER, true ),
 			'drawer_connector'  => self::normalize_drawer_connector( (string) get_post_meta( $id, self::META_DRAWER_CONNECTOR, true ) ),
 			'drawer_error'      => (string) get_post_meta( $id, self::META_DRAWER_ERROR, true ),
+			'retried_to'        => (int) get_post_meta( $id, self::META_RETRIED_TO, true ),
 		);
 	}
 
@@ -441,6 +443,7 @@ class Print_Job_Service {
 					'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
 					'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
 					'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
+					'retried_to'   => (int) get_post_meta( $id, self::META_RETRIED_TO, true ),
 				);
 			},
 			$ids
@@ -450,7 +453,7 @@ class Print_Job_Service {
 	/**
 	 * Count jobs matching the same filters query() accepts.
 	 *
-	 * @param array $filters printer_id / status / order_id / template_id / trigger.
+	 * @param array $filters printer_id / status / order_id / template_id / trigger / exclude_retried.
 	 *
 	 * @return int
 	 */
@@ -476,7 +479,7 @@ class Print_Job_Service {
 	 * refreshes every 30 seconds, so its summary must cost one query no
 	 * matter how many printers are registered.
 	 *
-	 * @return array<string, array<string, array{count: int, oldest_gmt: string}>> printer_id => status => stats.
+	 * @return array<string, array<string, array{count: int, unresolved_count: int, oldest_gmt: string}>> printer_id => status => stats.
 	 */
 	public function status_summary(): array {
 		global $wpdb;
@@ -485,14 +488,19 @@ class Print_Job_Service {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT printer.meta_value AS printer_id, status.meta_value AS job_status,
-						COUNT(DISTINCT p.ID) AS jobs, MIN(p.post_date_gmt) AS oldest_gmt
+						COUNT(DISTINCT p.ID) AS jobs,
+						COUNT(DISTINCT CASE WHEN status.meta_value = %s AND retried.post_id IS NULL THEN p.ID END) AS unresolved_jobs,
+						MIN(p.post_date_gmt) AS oldest_gmt
 				 FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} printer ON printer.post_id = p.ID AND printer.meta_key = %s
 				 INNER JOIN {$wpdb->postmeta} status ON status.post_id = p.ID AND status.meta_key = %s
+				 LEFT JOIN {$wpdb->postmeta} retried ON retried.post_id = p.ID AND retried.meta_key = %s
 				 WHERE p.post_type = %s AND p.post_status = 'publish'
 				 GROUP BY printer.meta_value, status.meta_value",
+				self::STATUS_FAILED,
 				self::META_PRINTER,
 				self::META_STATUS,
+				self::META_RETRIED_TO,
 				self::POST_TYPE
 			)
 		);
@@ -500,8 +508,9 @@ class Print_Job_Service {
 		$summary = array();
 		foreach ( (array) $rows as $row ) {
 			$summary[ (string) $row->printer_id ][ (string) $row->job_status ] = array(
-				'count'      => (int) $row->jobs,
-				'oldest_gmt' => (string) $row->oldest_gmt,
+				'count'            => (int) $row->jobs,
+				'unresolved_count' => (int) $row->unresolved_jobs,
+				'oldest_gmt'       => (string) $row->oldest_gmt,
 			);
 		}
 
@@ -659,11 +668,31 @@ class Print_Job_Service {
 			$status       = \is_array( $filters['status'] )
 				? array_map( 'sanitize_text_field', $filters['status'] )
 				: sanitize_text_field( $filters['status'] );
-			$meta_query[] = array(
-				'key'     => self::META_STATUS,
-				'value'   => $status,
-				'compare' => \is_array( $status ) ? 'IN' : '=',
-			);
+			if ( ! empty( $filters['exclude_retried'] ) && \in_array( self::STATUS_FAILED, (array) $status, true ) ) {
+				$active_statuses = array_values( array_diff( (array) $status, array( self::STATUS_FAILED ) ) );
+				$status_query    = array( 'relation' => 'OR' );
+				if ( ! empty( $active_statuses ) ) {
+					$status_query[] = $this->status_clause( $active_statuses );
+				}
+				$status_query[] = array(
+					'relation' => 'AND',
+					array(
+						'key'   => self::META_STATUS,
+						'value' => self::STATUS_FAILED,
+					),
+					array(
+						'key'     => self::META_RETRIED_TO,
+						'compare' => 'NOT EXISTS',
+					),
+				);
+				$meta_query[] = $status_query;
+			} else {
+				$meta_query[] = array(
+					'key'     => self::META_STATUS,
+					'value'   => $status,
+					'compare' => \is_array( $status ) ? 'IN' : '=',
+				);
+			}
 		}
 		if ( ! empty( $filters['order_id'] ) ) {
 			$meta_query[] = array(
@@ -710,6 +739,23 @@ class Print_Job_Service {
 	}
 
 	/**
+	 * Mark a source job as retried and discard its dead payload.
+	 *
+	 * @param int $id             Source job ID.
+	 * @param int $replacement_id Replacement job ID.
+	 *
+	 * @return bool Whether the retry was recorded.
+	 */
+	public function mark_retried( int $id, int $replacement_id ): bool {
+		if ( ! update_post_meta( $id, self::META_RETRIED_TO, $replacement_id ) ) {
+			return false;
+		}
+		$this->strip_payload( $id );
+
+		return true;
+	}
+
+	/**
 	 * Apply side effects for a status change.
 	 *
 	 * @param int    $id     Job ID.
@@ -727,14 +773,23 @@ class Print_Job_Service {
 			// job, and a raster receipt is hundreds of KB. The row survives
 			// with metadata only — that's all the duplicate-trigger guard
 			// and the queue's history view need. Failed jobs keep their
-			// payload so Retry can copy it.
-			wp_update_post(
-				array(
-					'ID'           => $id,
-					'post_content' => '',
-				)
-			);
+			// payload so Retry can copy it until a replacement is created.
+			$this->strip_payload( $id );
 		}
+	}
+
+	/**
+	 * Strip a job's stored payload while retaining its metadata.
+	 *
+	 * @param int $id Job ID.
+	 */
+	private function strip_payload( int $id ): void {
+		wp_update_post(
+			array(
+				'ID'           => $id,
+				'post_content' => '',
+			)
+		);
 	}
 
 	/**
