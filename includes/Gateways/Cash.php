@@ -192,16 +192,21 @@ class Cash extends WC_Payment_Gateway {
 	 * @param int $order_id Order ID.
 	 */
 	public function calculate_change( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
 		$message  = '';
-		$tendered = get_post_meta( $order_id, '_pos_cash_amount_tendered', true );
-		$change   = get_post_meta( $order_id, '_pos_cash_change', true );
+		$tendered = $order->get_meta( '_pos_cash_amount_tendered' );
+		$change   = $order->get_meta( '_pos_cash_change' );
 
 		// construct message.
 		if ( $tendered && $change ) {
 			$message = /* translators: Order note label for the cash amount received from the customer at checkout. */ __( 'Amount Tendered', 'woocommerce-pos' ) . ': ';
-			$message .= wc_price( $tendered ) . '<br>';
+			$message .= wc_price( $tendered, array( 'currency' => $order->get_currency() ) ) . '<br>';
 			$message .= /* translators: Money returned to the customer after a cash payment. */ _x( 'Change', 'Money returned from cash sale', 'woocommerce-pos' ) . ': ';
-			$message .= wc_price( $change );
+			$message .= wc_price( $change, array( 'currency' => $order->get_currency() ) );
 		}
 
 		echo wp_kses_post( $message );
