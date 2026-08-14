@@ -1,16 +1,16 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3074,
+        "cases": 3086,
         "v1_only": 740,
         "unresolved": 31,
         "by_lane": {
             "v1": 806,
-            "v2": 502,
+            "v2": 513,
             "wc3": 280,
             "wp2": 2,
-            "unresolved": 336,
-            "unit": 1721
+            "unresolved": 347,
+            "unit": 1722
         },
         "warnings": {
             "self-installed-hook": 66,
@@ -23924,6 +23924,21 @@
             "warnings": []
         },
         {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Render_Test::test_render_payload_unsupported_stored_format_returns_empty",
+            "file": "tests/includes/Services/Print_Job_Service_Render_Test.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Render_Test",
+            "method": "test_render_payload_unsupported_stored_format_returns_empty",
+            "behavior": "Print Job Service Render Test",
+            "own_lanes": [],
+            "class_lanes": [],
+            "lanes": [],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
             "key": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Test::test_cancel_if_waiting_refuses_non_print_post",
             "file": "tests/includes/Services/Print_Job_Service_Test.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Services\\Print_Job_Service_Test",
@@ -42611,7 +42626,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
-                    "line": 569
+                    "line": 921
                 }
             ]
         },
@@ -42661,10 +42676,241 @@
             "warnings": []
         },
         {
-            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_returns_stored_pairs_in_request_order",
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_batches_absent_servability_queries_per_collection",
             "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
-            "method": "test_digests_returns_stored_pairs_in_request_order",
+            "method": "test_digests_batches_absent_servability_queries_per_collection",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_deleted_customer_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_deleted_customer_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_deleted_order_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_deleted_order_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_deleted_product_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_deleted_product_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_draft_product_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_draft_product_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_online_only_product_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_online_only_product_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_trashed_product_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_trashed_product_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_marks_trashed_variation_as_deleted",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_marks_trashed_variation_as_deleted",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_omits_deleted_product_without_explicit_absence",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_omits_deleted_product_without_explicit_absence",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_omits_live_variation_without_stored_digest",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_omits_live_variation_without_stored_digest",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_omits_servable_product_without_stored_digest",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_omits_servable_product_without_stored_digest",
+            "behavior": "Test Sync Read Controllers",
+            "own_lanes": [],
+            "class_lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "lanes": [
+                "unresolved",
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers::test_digests_returns_stored_and_deleted_rows_in_request_order",
+            "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Read_Controllers",
+            "method": "test_digests_returns_stored_and_deleted_rows_in_request_order",
             "behavior": "Test Sync Read Controllers",
             "own_lanes": [],
             "class_lanes": [
@@ -47149,10 +47395,10 @@
             "warnings": []
         },
         {
-            "key": "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Receipt_Output_Adapters::test_starprnt_output_adapter_transforms_payload",
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Receipt_Output_Adapters::test_output_adapter_factory_starprnt_removed_throws",
             "file": "tests/includes/Templates/Test_Receipt_Output_Adapters.php",
             "class": "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Receipt_Output_Adapters",
-            "method": "test_starprnt_output_adapter_transforms_payload",
+            "method": "test_output_adapter_factory_starprnt_removed_throws",
             "behavior": "Test Receipt Output Adapters",
             "own_lanes": [],
             "class_lanes": [],

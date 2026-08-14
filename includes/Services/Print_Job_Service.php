@@ -317,10 +317,22 @@ class Print_Job_Service {
 				return '';
 			}
 
-			$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
-			$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
+			try {
+				$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+				$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
 
-			return $adapter->transform( $data );
+				return $adapter->transform( $data );
+			} catch ( \Throwable $e ) {
+				// A stored job can carry a format the factory no longer supports
+				// (e.g. the removed fixed-layout starprnt placeholder). Fail closed
+				// like the thermal branch above: log and print nothing rather than
+				// letting the poll 500 with a claimed job stuck.
+				\WCPOS\WooCommercePOS\Logger::log(
+					sprintf( 'Cloud print: fixed-layout render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
+				);
+
+				return '';
+			}
 		}
 
 		$payload = base64_decode( (string) $job['payload'], true );

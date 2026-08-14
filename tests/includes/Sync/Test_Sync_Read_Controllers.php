@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\API\V2\Catalog_Proxy_Controller;
@@ -60,21 +61,372 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Digests preserve request order and omit IDs without stored rows.
+	 * Remove one stored digest so a test controls the prime-pass state.
+	 *
+	 * @param string $object_type Stored digest object type.
+	 * @param int    $object_id   Stored digest object id.
 	 */
-	public function test_digests_returns_stored_pairs_in_request_order(): void {
-		$first  = ProductHelper::create_simple_product();
-		$second = ProductHelper::create_simple_product();
-		$digest = new Integrity_Digest();
+	private function delete_stored_digest( string $object_type, int $object_id ): void {
+		global $wpdb;
+
+		$wpdb->delete(
+			( new Integrity_Digest() )->table_name(),
+			array(
+				'object_type' => $object_type,
+				'object_id'   => $object_id,
+			),
+			array( '%s', '%d' )
+		);
+	}
+
+	/**
+	 * Digests preserve request order across stored and deleted rows.
+	 */
+	public function test_digests_returns_stored_and_deleted_rows_in_request_order(): void {
+		$first   = ProductHelper::create_simple_product();
+		$second  = ProductHelper::create_simple_product();
+		$deleted = ProductHelper::create_simple_product();
+		$digest  = new Integrity_Digest();
 		$digest->upsert_digest( $first->get_id() );
 		$digest->upsert_digest( $second->get_id() );
+		wp_delete_post( $deleted->get_id(), true );
 
 		$response = ( new Digests_Controller() )->get_digests(
-			$this->request( array( 'include' => $second->get_id() . ',' . $first->get_id() . ',999999' ) )
+			$this->request(
+				array(
+					'include' => $second->get_id() . ',' . $deleted->get_id() . ',' . $first->get_id(),
+					'absence' => 'explicit',
+				)
+			)
 		);
-		$ids = array_column( $response->get_data()['digests'], 'id' );
+		$rows = $response->get_data()['digests'];
 
-		$this->assertSame( array( $second->get_id(), $first->get_id() ), $ids );
+		$this->assertSame( array( $second->get_id(), $deleted->get_id(), $first->get_id() ), array_column( $rows, 'id' ) );
+		$this->assertArrayHasKey( 'digest', $rows[0] );
+		$this->assertSame(
+			array(
+				'id'      => $deleted->get_id(),
+				'deleted' => true,
+			),
+			$rows[1]
+		);
+		$this->assertArrayHasKey( 'digest', $rows[2] );
+	}
+
+	/**
+	 * A deleted product with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_deleted_product_as_deleted(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		wp_delete_post( $product_id, true );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A deleted product remains absent unless explicit absence is requested.
+	 */
+	public function test_digests_omits_deleted_product_without_explicit_absence(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		wp_delete_post( $product_id, true );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request( array( 'include' => (string) $product_id ) )
+		);
+
+		$this->assertSame( array(), $response->get_data()['digests'] );
+	}
+
+	/**
+	 * A trashed product with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_trashed_product_as_deleted(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		wp_trash_post( $product_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A draft product with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_draft_product_as_deleted(): void {
+		$product = ProductHelper::create_simple_product();
+		$product->set_status( 'draft' );
+		$product->save();
+		$this->delete_stored_digest( 'product', $product->get_id() );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product->get_id(),
+					'status'  => 'publish',
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product->get_id(),
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A trashed variation is absent from the integrity scan even while its parent remains published.
+	 */
+	public function test_digests_marks_trashed_variation_as_deleted(): void {
+		$parent       = ProductHelper::create_variation_product();
+		$variation_id = (int) $parent->get_children()[0];
+		wp_trash_post( $variation_id );
+		$this->delete_stored_digest( 'variation', $variation_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $variation_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $variation_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A live variation under a published parent remains servable without a stored digest.
+	 */
+	public function test_digests_omits_live_variation_without_stored_digest(): void {
+		$parent       = ProductHelper::create_variation_product();
+		$variation_id = (int) $parent->get_children()[0];
+		$this->delete_stored_digest( 'variation', $variation_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $variation_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame( array(), $response->get_data()['digests'] );
+	}
+
+	/**
+	 * A published product hidden from the POS is absent from the integrity scan.
+	 */
+	public function test_digests_marks_online_only_product_as_deleted(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$this->delete_stored_digest( 'product', $product_id );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $product_id ) ),
+					),
+				),
+			)
+		);
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $product_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A servable product without a stored digest remains absent.
+	 */
+	public function test_digests_omits_servable_product_without_stored_digest(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$this->delete_stored_digest( 'product', $product_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame( array(), $response->get_data()['digests'] );
+	}
+
+	/**
+	 * A deleted order with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_deleted_order_as_deleted(): void {
+		$order    = OrderHelper::create_order();
+		$order_id = $order->get_id();
+		$order->delete( true );
+		$this->delete_stored_digest( 'order', $order_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include'    => (string) $order_id,
+					'collection' => 'orders',
+					'absence'    => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $order_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * A deleted customer with no stored digest is authoritative absence.
+	 */
+	public function test_digests_marks_deleted_customer_as_deleted(): void {
+		$customer_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		wp_delete_user( $customer_id );
+		$this->delete_stored_digest( 'customer', $customer_id );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request(
+				array(
+					'include'    => (string) $customer_id,
+					'collection' => 'customers',
+					'absence'    => 'explicit',
+				)
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'id'      => $customer_id,
+					'deleted' => true,
+				),
+			),
+			$response->get_data()['digests']
+		);
+	}
+
+	/**
+	 * Explicit absence resolves each collection's missing ids with one servability query.
+	 */
+	public function test_digests_batches_absent_servability_queries_per_collection(): void {
+		global $wpdb;
+		$queries       = array();
+		$capture_query = static function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+		$ids       = array( 900000001, 900000002, 900000003 );
+		$responses = array();
+
+		add_filter( 'query', $capture_query );
+		try {
+			foreach ( array( 'products', 'customers', 'orders' ) as $collection ) {
+				$responses[ $collection ] = ( new Digests_Controller() )->get_digests(
+					$this->request(
+						array(
+							'include'    => implode( ',', $ids ),
+							'collection' => $collection,
+							'absence'    => 'explicit',
+						)
+					)
+				);
+			}
+		} finally {
+			remove_filter( 'query', $capture_query );
+		}
+
+		$product_queries  = array_filter( $queries, static fn( string $query ): bool => false !== strpos( $query, 'SELECT catalog_post.ID' ) );
+		$customer_queries = array_filter( $queries, static fn( string $query ): bool => false !== strpos( $query, "EXISTS (SELECT 1 FROM {$wpdb->users} lu" ) );
+		$order_queries    = array_filter(
+			$queries,
+			static fn( string $query ): bool => false !== strpos( $query, "EXISTS (SELECT 1 FROM {$wpdb->posts} lp" )
+				|| false !== strpos( $query, "EXISTS (SELECT 1 FROM {$wpdb->prefix}wc_orders lo" )
+		);
+
+		$this->assertCount( 1, $product_queries );
+		$this->assertCount( 1, $customer_queries );
+		$this->assertCount( 1, $order_queries );
+		$expected = array_map(
+			static fn( int $id ): array => array(
+				'id'      => $id,
+				'deleted' => true,
+			),
+			$ids
+		);
+		foreach ( $responses as $response ) {
+			$this->assertSame( $expected, $response->get_data()['digests'] );
+		}
 	}
 
 	/**
