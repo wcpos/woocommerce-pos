@@ -88,6 +88,24 @@ class Revision {
 		foreach ( $data as $key => $value ) {
 			if ( is_array( $value ) ) {
 				$data[ $key ] = self::sort_keys_recursive( $value );
+				// Taxonomy collections are sets; other lists retain semantic order.
+				if ( ! in_array( $key, array( 'categories', 'tags', 'brands' ), true ) || count( $value ) < 2 || array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
+					continue;
+				}
+				foreach ( $value as $term ) {
+					$id = is_array( $term ) ? ( $term['id'] ?? null ) : ( is_object( $term ) ? ( $term->id ?? null ) : null );
+					if ( ! is_numeric( $id ) ) {
+						continue 2;
+					}
+				}
+				usort(
+					$data[ $key ],
+					static function ( $left, $right ): int {
+						$left_id  = is_array( $left ) ? $left['id'] : $left->id;
+						$right_id = is_array( $right ) ? $right['id'] : $right->id;
+						return (int) $left_id <=> (int) $right_id;
+					}
+				);
 			}
 		}
 		return $data;
