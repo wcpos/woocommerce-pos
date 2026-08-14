@@ -232,8 +232,12 @@ export function TemplatesTable({
 }: TemplatesTableProps) {
 	const tableRef = React.useRef<HTMLTableElement>(null);
 
+	// Latest-ref pattern: updated in an effect (not during render) so the
+	// drag-and-drop monitor always sees the newest callback.
 	const onReorderRef = React.useRef(onReorder);
-	onReorderRef.current = onReorder;
+	React.useEffect(() => {
+		onReorderRef.current = onReorder;
+	});
 
 	// Set --table-width CSS variable so the drop indicator can span the full row.
 	React.useEffect(() => {

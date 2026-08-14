@@ -17,23 +17,30 @@ interface DeviceIconProps {
 	className?: string;
 }
 
-function pickIcon({ app_type, device_type }: DeviceInfo) {
+const ICONS = {
+	smartphone: DeviceSmartphone,
+	tablet: DeviceTablet,
+	laptop: DeviceLaptop,
+	web: DeviceWeb,
+} as const;
+
+function pickIconKey({ app_type, device_type }: DeviceInfo): keyof typeof ICONS {
 	switch (app_type) {
 		case 'ios_app':
 		case 'android_app':
-			return device_type === 'mobile' ? DeviceSmartphone : DeviceTablet;
+			return device_type === 'mobile' ? 'smartphone' : 'tablet';
 		case 'electron_app':
-			return DeviceLaptop;
+			return 'laptop';
 		case 'web':
 		default:
-			if (device_type === 'mobile') return DeviceSmartphone;
-			if (device_type === 'tablet') return DeviceTablet;
-			return DeviceWeb;
+			if (device_type === 'mobile') return 'smartphone';
+			if (device_type === 'tablet') return 'tablet';
+			return 'web';
 	}
 }
 
 function DeviceIcon({ deviceInfo, className }: DeviceIconProps) {
-	const Icon = pickIcon(deviceInfo);
+	const Icon = ICONS[pickIconKey(deviceInfo)];
 	return (
 		<Icon
 			className={classNames('wcpos:fill-current', className)}

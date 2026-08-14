@@ -97,7 +97,7 @@ class Landing_Profile {
 			array(
 				'wc_version'  => WC()->version,
 				'php_version' => PHP_VERSION,
-				'site_uuid'   => get_option( 'woocommerce_pos_uuid', '' ),
+				'site_uuid'   => wcpos_get_site_uuid(),
 				'user_uuid'   => get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ),
 				'user_role'   => ! empty( $user->roles ) ? $user->roles[0] : '',
 				'site_domain'  => $this->get_url_host( home_url() ),

@@ -1,6 +1,6 @@
 <?php
 
-namespace WCPOS\WooCommercePOS\API;
+namespace WCPOS\WooCommercePOS\API\V1;
 
 /**
  * Simulate the legacy WooCommerce empty-decimal coercion for one compatibility test.
@@ -23,7 +23,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Products_Controller;
+use WCPOS\WooCommercePOS\API\V1\Products_Controller;
 
 /**
  * @internal
@@ -201,6 +201,23 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
 	}
 
+	public function test_product_api_get_all_ids_accepts_scalar_fields_id(): void {
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', 'id' );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
+		$this->assertEquals( array( 'id' ), array_keys( $data[0] ) );
+	}
+
 	public function test_product_api_get_all_id_with_date_modified_gmt(): void {
 		$product1  = ProductHelper::create_simple_product();
 		$product2  = ProductHelper::create_simple_product();
@@ -354,6 +371,23 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$this->assertEquals( '1234567890', $data['barcode'] );
+	}
+
+	/**
+	 * The default barcode field (no settings saved) is the WooCommerce GTIN field.
+	 */
+	public function test_product_response_default_barcode_field_is_global_unique_id(): void {
+		$product  = ProductHelper::create_simple_product();
+		$product->set_global_unique_id( '4006381333931' );
+		$product->save();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$this->assertEquals( '4006381333931', $data['barcode'] );
 	}
 
 	public function test_product_update_global_unique_id_as_barcode(): void {
@@ -1623,6 +1657,46 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Online-only variations must not contribute to the parent price served to the POS.
+	 */
+	public function test_variable_product_parent_price_excludes_online_only_variations(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			static function () {
+				return array( 'pos_only_products' => true );
+			}
+		);
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$hidden        = new \WC_Product_Variation( $variation_ids[0] );
+		$visible       = new \WC_Product_Variation( $variation_ids[1] );
+		$hidden->set_regular_price( '9.50' );
+		$hidden->save();
+		$visible->set_regular_price( '25.00' );
+		$visible->save();
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'include', array( $product->get_id() ) );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '25.00', $data['price'] );
+	}
+
+	/**
 	 * When no variations have sale prices, the sale_price min/max should be empty strings, not 0.
 	 */
 	public function test_variable_product_no_sale_prices(): void {
@@ -1652,6 +1726,76 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		// sale_price min and max should be empty strings (not 0) when no variations are on sale.
 		$this->assertSame( '', $variable_prices['sale_price']['min'], 'sale_price min should be empty string when no variations are on sale.' );
 		$this->assertSame( '', $variable_prices['sale_price']['max'], 'sale_price max should be empty string when no variations are on sale.' );
+	}
+
+	/**
+	 * CHARACTERIZATION: the persisted variable-price metadata is byte-identical.
+	 *
+	 * The V1 lane stores a JSON string in postmeta, so key ORDER and decimal
+	 * formatting are part of the contract, not just the values. This pins the
+	 * exact bytes so the shared range service cannot quietly reshape them.
+	 */
+	public function test_variable_product_price_metadata_json_shape_is_stable(): void {
+		// Arrange.
+		$product = new \WC_Product_Variable();
+		$product->set_props(
+			array(
+				'name' => 'Variable Shape Test',
+				'sku'  => uniqid( 'VARIABLE SHAPE' ),
+			)
+		);
+		$attribute_data = ProductHelper::create_attribute( 'shape', array( 'small', 'large' ) );
+		$attribute      = new \WC_Product_Attribute();
+		$attribute->set_id( $attribute_data['attribute_id'] );
+		$attribute->set_name( $attribute_data['attribute_taxonomy'] );
+		$attribute->set_options( $attribute_data['term_ids'] );
+		$attribute->set_position( 1 );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+		$product->set_attributes( array( $attribute ) );
+		$product->save();
+
+		$variation_1 = new \WC_Product_Variation();
+		$variation_1->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'SHAPE SMALL' ),
+				'regular_price' => '20',
+				'sale_price'    => '15',
+			)
+		);
+		$variation_1->set_attributes( array( 'pa_shape' => 'small' ) );
+		$variation_1->save();
+
+		$variation_2 = new \WC_Product_Variation();
+		$variation_2->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'SHAPE LARGE' ),
+				'regular_price' => '30',
+			)
+		);
+		$variation_2->set_attributes( array( 'pa_shape' => 'large' ) );
+		$variation_2->save();
+		wc_delete_product_transients( $product->get_id() );
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$encoded  = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$encoded = $meta['value'];
+				break;
+			}
+		}
+
+		// Assert.
+		$this->assertEquals(
+			'{"price":{"min":"15.00","max":"30.00"},"regular_price":{"min":"20.00","max":"30.00"},"sale_price":{"min":"15.00","max":"15.00"}}',
+			$encoded
+		);
 	}
 
 	public function test_uuid_is_unique(): void {
@@ -1686,10 +1830,49 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 2, \count( array_unique( $uuids ) ) );
 	}
 
+	public function test_product_api_get_all_ids_with_include_filter(): void {
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $product1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $product1->get_id() ), $ids );
+		$this->assertNotContains( $product2->get_id(), $ids );
+	}
+
+	public function test_product_api_get_all_ids_with_exclude_filter(): void {
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $product1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $product1->get_id(), $ids );
+		$this->assertContains( $product2->get_id(), $ids );
+	}
+
 	/**
 	 * WC's batch_items() calls create_item() directly, bypassing per-item
 	 * schema validation, so malformed meta_data entries must be dropped before
 	 * WC core's unguarded $meta['key'] access fatals mid-batch on PHP 8.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_product_with_string_meta_data_entry_creates_product(): void {
 		// Arrange.

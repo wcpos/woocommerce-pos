@@ -413,10 +413,12 @@ export function AddPrinterWizard({
 	};
 
 	// Reset internal state when the modal transitions closed → open so each
-	// open starts fresh / on the correct step for the mode.
-	const prevOpen = React.useRef(false);
-	React.useEffect(() => {
-		if (open && !prevOpen.current) {
+	// open starts fresh / on the correct step for the mode. Done as a
+	// render-time adjustment so the first open render already has reset state.
+	const [prevOpen, setPrevOpen] = React.useState(false);
+	if (open !== prevOpen) {
+		setPrevOpen(open);
+		if (open) {
 			if (mode === 'setup' && setupPrinter) {
 				setProvider(setupPrinter.provider);
 				setStep(2);
@@ -427,8 +429,7 @@ export function AddPrinterWizard({
 			setName('');
 			resetProviderScopedState();
 		}
-		prevOpen.current = open;
-	}, [open, mode, resetProviderScopedState, setupPrinter]);
+	}
 
 	if (!open) {
 		return null;

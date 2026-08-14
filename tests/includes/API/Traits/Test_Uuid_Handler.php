@@ -5,12 +5,15 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\Traits;
 
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\StaticMockerHack;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use Ramsey\Uuid\Uuid;
 use WC_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
+use WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
 
 /**
@@ -18,13 +21,6 @@ use WP_User;
  */
 class Test_Uuid_Handler_Class {
 	use Uuid_Handler;
-
-	/**
-	 * Expose private method for testing.
-	 */
-	public function test_create_uuid(): string {
-		return $this->create_uuid();
-	}
 
 	/**
 	 * Expose private method for testing.
@@ -53,39 +49,28 @@ class Test_Uuid_Handler_Class {
 
 	/**
 	 * Expose private method for testing.
-	 *
-	 * @param mixed $object
-	 */
-	public function test_uuid_postmeta_exists( string $uuid, $object ): bool {
-		return $this->uuid_postmeta_exists( $uuid, $object );
-	}
-
-	/**
-	 * Expose private method for testing.
-	 */
-	public function test_uuid_usermeta_exists( string $uuid, int $exclude_id ): bool {
-		return $this->uuid_usermeta_exists( $uuid, $exclude_id );
-	}
-
-	/**
-	 * Expose private method for testing.
 	 */
 	public function test_get_order_ids_by_uuid( string $uuid ): array {
 		return $this->get_order_ids_by_uuid( $uuid );
 	}
 
 	/**
-	 * Expose private method for testing.
+	 * Expose the excluded order-item path for testing.
+	 *
+	 * @param mixed $item Order item.
 	 */
-	public function test_acquire_lock( string $lock_key, int $timeout = 10 ): bool {
-		return $this->acquire_lock( $lock_key, $timeout );
+	public function test_maybe_add_order_item_uuid( $item ): void {
+		$this->maybe_add_order_item_uuid( $item );
 	}
 
-	/**
-	 * Expose private method for testing.
-	 */
-	public function test_release_lock( string $lock_key ): void {
-		$this->release_lock( $lock_key );
+	/** Expose the order-item lock for a real datastore contention test. */
+	public function test_acquire_order_item_uuid_lock( string $lock_key, int $timeout ): bool {
+		return $this->acquire_order_item_uuid_lock( $lock_key, $timeout );
+	}
+
+	/** Release a lock acquired by the contention test. */
+	public function test_release_order_item_uuid_lock( string $lock_key ): void {
+		$this->release_order_item_uuid_lock( $lock_key );
 	}
 }
 
@@ -114,60 +99,55 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		FunctionsMockerHack::get_hack_instance()->reset();
+		StaticMockerHack::get_hack_instance()->reset();
 		parent::tearDown();
 	}
 
 	/**
-	 * Simulate a multisite install inside plugin code (CodeHacker only rewrites
-	 * calls in includes/, so test code still sees the real single-site functions).
+	 * Legacy record stamping delegates to the sync identity brain once.
 	 *
-	 * @param int $blog_id Blog id reported to plugin code.
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
-	private function mock_multisite( int $blog_id = 2 ): void {
-		FunctionsMockerHack::add_function_mocks(
+	public function test_post_uuid_mints_through_pos_uuid_once(): void {
+		$product = ProductHelper::create_simple_product();
+		$product->delete_meta_data( Api::UUID_META_KEY );
+		$product->save_meta_data();
+		$calls = 0;
+
+		StaticMockerHack::add_method_mocks(
 			array(
-				'is_multisite'        => function () {
-					return true;
-				},
-				'get_current_blog_id' => function () use ( $blog_id ) {
-					return $blog_id;
-				},
+				'Pos_Uuid' => array(
+					'ensure_uuid' => static function ( $object, array $opts = array() ) use ( &$calls ): string {
+						$calls++;
+						return Pos_Uuid::ensure_uuid( $object, $opts );
+					},
+				),
 			)
 		);
+
+		$this->handler->test_maybe_add_post_uuid( $product );
+		$uuid = $product->get_meta( Api::UUID_META_KEY );
+
+		$this->assertSame( 1, $calls );
+		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
+		$this->assertSame( $uuid, Pos_Uuid::ensure_uuid( wc_get_product( $product->get_id() ) ) );
 	}
 
 	/**
-	 * Test create_uuid generates valid UUID v4.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
+	 * Qualified calls must remain intact when the static mocker sees Pos_Uuid.
 	 */
-	public function test_create_uuid_generates_valid_uuid(): void {
-		$uuid = $this->handler->test_create_uuid();
+	public function test_static_mocker_preserves_qualified_pos_uuid_calls(): void {
+		$source = '<?php \\WCPOS\\WooCommercePOS\\Sync\\Pos_Uuid::register_hooks();';
 
-		$this->assertNotEmpty( $uuid );
-		$this->assertTrue( Uuid::isValid( $uuid ), 'Generated UUID should be valid' );
-	}
+		$hacked = StaticMockerHack::get_hack_instance()->hack( $source, '' );
 
-	/**
-	 * Test create_uuid generates unique UUIDs.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
-	 */
-	public function test_create_uuid_generates_unique_values(): void {
-		$uuid1 = $this->handler->test_create_uuid();
-		$uuid2 = $this->handler->test_create_uuid();
-		$uuid3 = $this->handler->test_create_uuid();
-
-		$this->assertNotEquals( $uuid1, $uuid2 );
-		$this->assertNotEquals( $uuid2, $uuid3 );
-		$this->assertNotEquals( $uuid1, $uuid3 );
+		$this->assertSame( $source, $hacked );
 	}
 
 	/**
 	 * Test maybe_add_post_uuid adds UUID to product.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_to_product(): void {
 		$product = ProductHelper::create_simple_product();
@@ -188,7 +168,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_post_uuid adds UUID to order.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_to_order(): void {
 		$order = OrderHelper::create_order();
@@ -209,7 +189,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_post_uuid does not overwrite existing valid UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_preserves_existing(): void {
 		$product       = ProductHelper::create_simple_product();
@@ -234,9 +214,45 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Pos_Uuid keeps the first valid UUID, rather than the trait deleting it
+	 * because an invalid UUID row happened to be first.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
+	 */
+	public function test_maybe_add_post_uuid_uses_pos_uuid_duplicate_resolution(): void {
+		$product    = ProductHelper::create_simple_product();
+		$valid_uuid = wp_generate_uuid4();
+		delete_post_meta( $product->get_id(), Api::UUID_META_KEY );
+		add_post_meta( $product->get_id(), Api::UUID_META_KEY, 'invalid-first' );
+		add_post_meta( $product->get_id(), Api::UUID_META_KEY, $valid_uuid );
+
+		$this->handler->test_maybe_add_post_uuid( wc_get_product( $product->get_id() ) );
+
+		$this->assertSame( array( $valid_uuid ), get_post_meta( $product->get_id(), Api::UUID_META_KEY, false ) );
+	}
+
+	/**
+	 * A trashed post is not a live UUID owner under sync collision semantics.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
+	 */
+	public function test_maybe_add_post_uuid_ignores_trashed_uuid_owner(): void {
+		$trashed = ProductHelper::create_simple_product();
+		$active  = ProductHelper::create_simple_product();
+		$uuid    = wp_generate_uuid4();
+		update_post_meta( $trashed->get_id(), Api::UUID_META_KEY, $uuid );
+		wp_trash_post( $trashed->get_id() );
+		update_post_meta( $active->get_id(), Api::UUID_META_KEY, $uuid );
+
+		$this->handler->test_maybe_add_post_uuid( wc_get_product( $active->get_id() ) );
+
+		$this->assertSame( $uuid, get_post_meta( $active->get_id(), Api::UUID_META_KEY, true ) );
+	}
+
+	/**
 	 * Test maybe_add_user_uuid adds UUID to user.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_user_uuid
 	 */
 	public function test_maybe_add_user_uuid(): void {
 		$user = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -257,7 +273,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_user_uuid preserves existing valid UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_user_uuid
 	 */
 	public function test_maybe_add_user_uuid_preserves_existing(): void {
 		$user          = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -276,208 +292,27 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test a legacy per-blog cashier uuid is adopted network-wide by ANY caller of
-	 * maybe_add_user_uuid — not just the cashier service — so the adopted identity
-	 * is the same whichever endpoint reads the user first.
+	 * User duplicate cleanup follows Pos_Uuid's first-valid rule.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_user_uuid
 	 */
-	public function test_maybe_add_user_uuid_multisite_adopts_legacy_per_blog_uuid(): void {
-		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$legacy_uuid = Uuid::uuid4()->toString();
-		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
-		$this->mock_multisite( 2 );
+	public function test_maybe_add_user_uuid_uses_pos_uuid_duplicate_resolution(): void {
+		$user       = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$valid_uuid = wp_generate_uuid4();
+		delete_user_meta( $user->ID, Api::UUID_META_KEY );
+		add_user_meta( $user->ID, Api::UUID_META_KEY, 'invalid-first' );
+		add_user_meta( $user->ID, Api::UUID_META_KEY, $valid_uuid );
 
 		$this->handler->test_maybe_add_user_uuid( $user );
 
-		$this->assertEquals( $legacy_uuid, get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ) );
-		$this->assertEquals(
-			$legacy_uuid,
-			get_user_meta( $user->ID, '_woocommerce_pos_uuid_2', true ),
-			'Legacy row should be left in place'
-		);
-
+		$this->assertSame( array( $valid_uuid ), get_user_meta( $user->ID, Api::UUID_META_KEY, false ) );
 		wp_delete_user( $user->ID );
-	}
-
-	/**
-	 * Test multisite user UUID coordination uses one network-global cache key.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Init::__construct
-	 */
-	public function test_user_uuid_lock_group_is_network_global(): void {
-		$original_blog_id = get_current_blog_id();
-		$lock_key         = 'test_user_uuid_lock_' . wp_generate_uuid4();
-		$lock_group       = 'wc_pos_user_uuid_locks';
-		$this->mock_multisite( 2 );
-
-		wp_cache_switch_to_blog( 1 );
-		$acquired_on_first_blog = wp_cache_add( $lock_key, true, $lock_group, 10 );
-		wp_cache_switch_to_blog( 2 );
-		$acquired_on_second_blog = wp_cache_add( $lock_key, true, $lock_group, 10 );
-		wp_cache_delete( $lock_key, $lock_group );
-		wp_cache_switch_to_blog( 1 );
-		wp_cache_delete( $lock_key, $lock_group );
-		wp_cache_switch_to_blog( $original_blog_id );
-
-		$this->assertTrue( $acquired_on_first_blog );
-		$this->assertFalse( $acquired_on_second_blog, 'The same user lock must collide across blog cache prefixes' );
-	}
-
-	/**
-	 * Test adoption replaces duplicate invalid rows with exactly one legacy UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
-	 */
-	public function test_maybe_add_user_uuid_multisite_adoption_collapses_duplicate_invalid_rows(): void {
-		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$legacy_uuid = Uuid::uuid4()->toString();
-		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid-first' );
-		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid-second' );
-		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
-		$this->mock_multisite( 2 );
-
-		$this->handler->test_maybe_add_user_uuid( $user );
-
-		$this->assertSame(
-			array( $legacy_uuid ),
-			get_user_meta( $user->ID, '_woocommerce_pos_uuid', false )
-		);
-
-		wp_delete_user( $user->ID );
-	}
-
-	/**
-	 * Test adoption preserves a network UUID inserted during legacy cleanup.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
-	 */
-	public function test_maybe_add_user_uuid_multisite_adoption_preserves_concurrent_network_uuid(): void {
-		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$legacy_uuid = Uuid::uuid4()->toString();
-		$winner_uuid = Uuid::uuid4()->toString();
-		$interleaved = false;
-		add_user_meta( $user->ID, '_woocommerce_pos_uuid', 'invalid' );
-		update_user_meta( $user->ID, '_woocommerce_pos_uuid_2', $legacy_uuid );
-		$this->mock_multisite( 2 );
-		FunctionsMockerHack::add_function_mocks(
-			array(
-				'delete_user_meta' => function ( $user_id, $key, $value = '' ) use ( $user, $winner_uuid, &$interleaved ) {
-					$deleted = \delete_user_meta( $user_id, $key, $value );
-					if ( $user->ID === $user_id && '_woocommerce_pos_uuid' === $key && '' === $value && ! $interleaved ) {
-						$interleaved = true;
-						\add_user_meta( $user_id, $key, $winner_uuid, true );
-					}
-
-					return $deleted;
-				},
-			)
-		);
-
-		$this->handler->test_maybe_add_user_uuid( $user );
-
-		$this->assertSame(
-			array( $winner_uuid ),
-			get_user_meta( $user->ID, '_woocommerce_pos_uuid', false )
-		);
-
-		wp_delete_user( $user->ID );
-	}
-
-	/**
-	 * Test a stale empty read cannot overwrite a concurrently inserted UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
-	 */
-	public function test_maybe_add_user_uuid_does_not_overwrite_concurrent_insert(): void {
-		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$winner_uuid = Uuid::uuid4()->toString();
-		$read_stale  = false;
-		FunctionsMockerHack::add_function_mocks(
-			array(
-				'get_user_meta' => function ( $user_id, $key, $single ) use ( $user, $winner_uuid, &$read_stale ) {
-					if ( $user->ID === $user_id && '_woocommerce_pos_uuid' === $key && ! $single && ! $read_stale ) {
-						$read_stale = true;
-						\add_user_meta( $user_id, $key, $winner_uuid, true );
-
-						return array();
-					}
-
-					return \get_user_meta( $user_id, $key, $single );
-				},
-			)
-		);
-
-		$this->handler->test_maybe_add_user_uuid( $user );
-
-		$this->assertSame( $winner_uuid, get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ) );
-
-		wp_delete_user( $user->ID );
-	}
-
-	/**
-	 * Test a legacy per-blog uuid already owned by ANOTHER user's network identity
-	 * is never adopted — the adopting user is minted a fresh uuid and the rightful
-	 * owner's identity is untouched.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
-	 */
-	public function test_maybe_add_user_uuid_multisite_skips_legacy_uuid_owned_by_other_user(): void {
-		$owner  = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$victim = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$uuid   = Uuid::uuid4()->toString();
-		update_user_meta( $owner->ID, '_woocommerce_pos_uuid', $uuid );
-		update_user_meta( $victim->ID, '_woocommerce_pos_uuid_2', $uuid );
-		$this->mock_multisite( 2 );
-
-		$this->handler->test_maybe_add_user_uuid( $victim );
-
-		$victim_uuid = get_user_meta( $victim->ID, '_woocommerce_pos_uuid', true );
-		$this->assertTrue( Uuid::isValid( $victim_uuid ), 'Adopting user should get a fresh valid uuid' );
-		$this->assertNotEquals( $uuid, $victim_uuid, 'Owned uuid must not be duplicated' );
-		$this->assertEquals(
-			$uuid,
-			get_user_meta( $owner->ID, '_woocommerce_pos_uuid', true ),
-			'Rightful owner keeps their identity'
-		);
-
-		wp_delete_user( $owner->ID );
-		wp_delete_user( $victim->ID );
-	}
-
-	/**
-	 * Test a legacy per-blog uuid already owned by another user's legacy key
-	 * is never adopted as a network identity.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::adopt_legacy_multisite_user_uuid
-	 */
-	public function test_maybe_add_user_uuid_multisite_skips_legacy_uuid_owned_by_other_user_legacy_key(): void {
-		$owner  = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$victim = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$uuid   = Uuid::uuid4()->toString();
-		update_user_meta( $owner->ID, '_woocommerce_pos_uuid_2', $uuid );
-		update_user_meta( $victim->ID, '_woocommerce_pos_uuid_2', $uuid );
-		$this->mock_multisite( 2 );
-
-		$this->handler->test_maybe_add_user_uuid( $victim );
-
-		$victim_uuid = get_user_meta( $victim->ID, '_woocommerce_pos_uuid', true );
-		$this->assertTrue( Uuid::isValid( $victim_uuid ), 'Adopting user should get a fresh valid uuid' );
-		$this->assertNotEquals( $uuid, $victim_uuid, 'Legacy-owned uuid must not be duplicated' );
-		$this->assertEquals(
-			$uuid,
-			get_user_meta( $owner->ID, '_woocommerce_pos_uuid_2', true ),
-			'Legacy owner keeps their identity'
-		);
-
-		wp_delete_user( $owner->ID );
-		wp_delete_user( $victim->ID );
 	}
 
 	/**
 	 * Test get_term_uuid adds and returns UUID for term.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_term_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_term_uuid
 	 */
 	public function test_get_term_uuid(): void {
 		// Create a product category
@@ -496,9 +331,29 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Term duplicate cleanup follows Pos_Uuid's first-valid rule.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_term_uuid
+	 */
+	public function test_get_term_uuid_uses_pos_uuid_duplicate_resolution(): void {
+		$created    = wp_insert_term( 'Duplicate UUID Category', 'product_cat' );
+		$term       = get_term( $created['term_id'], 'product_cat' );
+		$valid_uuid = wp_generate_uuid4();
+		delete_term_meta( $term->term_id, Api::UUID_META_KEY );
+		add_term_meta( $term->term_id, Api::UUID_META_KEY, 'invalid-first' );
+		add_term_meta( $term->term_id, Api::UUID_META_KEY, $valid_uuid );
+
+		$uuid = $this->handler->test_get_term_uuid( $term );
+
+		$this->assertSame( $valid_uuid, $uuid );
+		$this->assertSame( array( $valid_uuid ), get_term_meta( $term->term_id, Api::UUID_META_KEY, false ) );
+		wp_delete_term( $term->term_id, 'product_cat' );
+	}
+
+	/**
 	 * Test get_term_uuid persistently replaces corrupt term metadata.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_term_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_term_uuid
 	 */
 	public function test_get_term_uuid_replaces_corrupt_metadata_persistently(): void {
 		// Arrange.
@@ -521,82 +376,9 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test uuid_postmeta_exists returns false for unique UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_postmeta_exists
-	 */
-	public function test_uuid_postmeta_exists_unique(): void {
-		$product     = ProductHelper::create_simple_product();
-		$unique_uuid = Uuid::uuid4()->toString();
-
-		$exists = $this->handler->test_uuid_postmeta_exists( $unique_uuid, $product );
-
-		$this->assertFalse( $exists, 'Unique UUID should not exist' );
-	}
-
-	/**
-	 * Test uuid_postmeta_exists returns true for duplicate UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_postmeta_exists
-	 */
-	public function test_uuid_postmeta_exists_duplicate(): void {
-		// Create two products with the same UUID
-		$product1 = ProductHelper::create_simple_product();
-		$product2 = ProductHelper::create_simple_product();
-
-		$duplicate_uuid = Uuid::uuid4()->toString();
-
-		$product1->update_meta_data( '_woocommerce_pos_uuid', $duplicate_uuid );
-		$product1->save();
-
-		// Check if duplicate exists from perspective of product2
-		$exists = $this->handler->test_uuid_postmeta_exists( $duplicate_uuid, $product2 );
-
-		$this->assertTrue( $exists, 'Duplicate UUID should be detected' );
-	}
-
-	/**
-	 * Test uuid_usermeta_exists returns false for unique UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_usermeta_exists
-	 */
-	public function test_uuid_usermeta_exists_unique(): void {
-		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$unique_uuid = Uuid::uuid4()->toString();
-
-		$exists = $this->handler->test_uuid_usermeta_exists( $unique_uuid, $user->ID );
-
-		$this->assertFalse( $exists, 'Unique UUID should not exist' );
-
-		wp_delete_user( $user->ID );
-	}
-
-	/**
-	 * Test uuid_usermeta_exists returns true for duplicate UUID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_usermeta_exists
-	 */
-	public function test_uuid_usermeta_exists_duplicate(): void {
-		$user1 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-		$user2 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
-
-		$duplicate_uuid = Uuid::uuid4()->toString();
-
-		update_user_meta( $user1->ID, '_woocommerce_pos_uuid', $duplicate_uuid );
-
-		// Check if duplicate exists from perspective of user2
-		$exists = $this->handler->test_uuid_usermeta_exists( $duplicate_uuid, $user2->ID );
-
-		$this->assertTrue( $exists, 'Duplicate UUID should be detected' );
-
-		wp_delete_user( $user1->ID );
-		wp_delete_user( $user2->ID );
-	}
-
-	/**
 	 * Test get_order_ids_by_uuid returns correct order IDs.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_order_ids_by_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_order_ids_by_uuid
 	 */
 	public function test_get_order_ids_by_uuid(): void {
 		$order = OrderHelper::create_order();
@@ -611,9 +393,27 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Trashed CPT orders do not own UUIDs returned to sync callers.
+	 */
+	public function test_get_order_ids_by_uuid_ignores_trashed_orders(): void {
+		$uuid    = Uuid::uuid4()->toString();
+		$active  = OrderHelper::create_order();
+		$trashed = OrderHelper::create_order();
+		$active->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$active->save_meta_data();
+		$trashed->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$trashed->save_meta_data();
+		$trashed->delete( false );
+
+		$order_ids = $this->handler->test_get_order_ids_by_uuid( $uuid );
+
+		$this->assertSame( array( (string) $active->get_id() ), $order_ids );
+	}
+
+	/**
 	 * Test get_order_ids_by_uuid returns empty for non-existent UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_order_ids_by_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_order_ids_by_uuid
 	 */
 	public function test_get_order_ids_by_uuid_nonexistent(): void {
 		$order_ids = $this->handler->test_get_order_ids_by_uuid( 'nonexistent-uuid' );
@@ -623,40 +423,84 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test lock acquire and release.
+	 * Malformed order-item UUIDs are replaced with persisted UUIDs.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::acquire_lock
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::release_lock
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
 	 */
-	public function test_acquire_and_release_lock(): void {
-		$lock_key = 'test_lock_' . uniqid();
+	public function test_order_item_uuid_replaces_malformed_value(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->update_meta_data( Api::UUID_META_KEY, 'legacy-order-item-identity' );
+		$item->save_meta_data();
 
-		// Acquire lock
-		$acquired = $this->handler->test_acquire_lock( $lock_key, 1 );
-		$this->assertTrue( $acquired, 'Should acquire lock' );
+		$this->handler->test_maybe_add_order_item_uuid( $item );
 
-		// Release lock
-		$this->handler->test_release_lock( $lock_key );
-
-		// Should be able to acquire again
-		$acquired_again = $this->handler->test_acquire_lock( $lock_key, 1 );
-		$this->assertTrue( $acquired_again, 'Should acquire lock after release' );
-
-		// Cleanup
-		$this->handler->test_release_lock( $lock_key );
+		$uuid = $item->get_meta( Api::UUID_META_KEY );
+		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
+		$this->assertSame( $uuid, ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( Api::UUID_META_KEY ) );
 	}
 
 	/**
-	 * Test UUID format matches expected pattern.
+	 * A stale waiter reloads the UUID stored by the lock winner.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
 	 */
-	public function test_uuid_format(): void {
-		$uuid = $this->handler->test_create_uuid();
+	public function test_order_item_uuid_stale_objects_converge(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->delete_meta_data( Api::UUID_META_KEY );
+		$item->save_meta_data();
+		$stale_item = new \WC_Order_Item_Product( $item->get_id() );
+		$this->assertSame( '', $stale_item->get_meta( Api::UUID_META_KEY ) );
 
-		// UUID v4 pattern
-		$pattern = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+		$this->handler->test_maybe_add_order_item_uuid( $item );
+		$first_uuid = $item->get_meta( Api::UUID_META_KEY );
+		$this->handler->test_maybe_add_order_item_uuid( $stale_item );
 
-		$this->assertMatchesRegularExpression( $pattern, $uuid, 'UUID should match v4 format' );
+		$this->assertTrue( Pos_Uuid::is_uuid( $first_uuid ) );
+		$this->assertSame( $first_uuid, $stale_item->get_meta( Api::UUID_META_KEY ) );
+		$this->assertSame( $first_uuid, ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( Api::UUID_META_KEY ) );
+	}
+
+	/**
+	 * Pending item metadata survives the locked refresh used for UUID convergence.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
+	 */
+	public function test_order_item_uuid_preserves_pending_meta_data(): void {
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->update_meta_data( '_sku', 'SKU-123' );
+
+		$this->handler->test_maybe_add_order_item_uuid( $item );
+
+		$this->assertSame( 'SKU-123', $item->get_meta( '_sku' ) );
+		$this->assertSame( 'SKU-123', ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( '_sku' ) );
+	}
+
+	/**
+	 * The order-item UUID lock is shared across database connections.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::acquire_order_item_uuid_lock
+	 */
+	public function test_order_item_uuid_lock_is_datastore_backed(): void {
+		$lock_key = 'wc_pos_uuid_order_item_test';
+		$locker   = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, 0 ) ) );
+		$acquired = false;
+
+		try {
+			$acquired = $this->handler->test_acquire_order_item_uuid_lock( $lock_key, 1 );
+			$this->assertFalse( $acquired );
+		} finally {
+			if ( $acquired ) {
+				$this->handler->test_release_order_item_uuid_lock( $lock_key );
+			}
+			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
+			$locker->close();
+		}
 	}
 }

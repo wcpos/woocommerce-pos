@@ -134,7 +134,10 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
 	/**
 	 * Test for POS requests to the server.
 	 *
-	 * @param string $type Request type: 'query_var', 'header', or 'all'.
+	 * Core's rest_api_loaded() reads this query var, which remains the original
+	 * outer route during internal re-dispatches; this behavior is load-bearing.
+	 *
+	 * @param string $type Request type: 'query_var', 'header', 'rest_route', or 'all'.
 	 *
 	 * @return bool Whether this is a POS request.
 	 */
@@ -153,6 +156,11 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
 			if ( 1 == isset( $headers[ 'x-' . SHORT_NAME ] ) && $headers[ 'x-' . SHORT_NAME ] ) {
 				return true;
 			}
+		}
+
+		if ( ( 'all' == $type || 'rest_route' == $type ) && isset( $GLOBALS['wp']->query_vars['rest_route'] ) ) {
+			$route = '/' . ltrim( (string) $GLOBALS['wp']->query_vars['rest_route'], '/' );
+			return 1 === preg_match( '#^/' . preg_quote( SHORT_NAME, '#' ) . '/v\d+(?:/|$)#', $route );
 		}
 
 		return false;
@@ -205,6 +213,43 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
 		$settings_service = Settings::instance();
 
 		return $settings_service->get_settings( $id, $key );
+	}
+}
+
+/*
+ * Get the site UUID (Plugin State), generating and persisting it on first use.
+ *
+ * @return string Site UUID.
+ */
+if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
+	/**
+	 * Get the site UUID, generating and persisting it on first use.
+	 *
+	 * Single owner for the woocommerce_pos_uuid option — the
+	 * generate-if-missing logic previously lived in three places (REST index,
+	 * POS frontend, analytics) and could race.
+	 *
+	 * @return string Site UUID.
+	 */
+	function wcpos_get_site_uuid(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$uuid = get_option( 'woocommerce_pos_uuid', '' );
+		if ( \is_string( $uuid ) && '' !== $uuid ) {
+			return $uuid;
+		}
+
+		$uuid = \Ramsey\Uuid\Uuid::uuid4()->toString();
+
+		// add_option() is a no-op when the option already exists, so a
+		// concurrent request that won the race keeps its value.
+		if ( ! add_option( 'woocommerce_pos_uuid', $uuid ) ) {
+			$existing = get_option( 'woocommerce_pos_uuid', '' );
+			if ( \is_string( $existing ) && '' !== $existing ) {
+				return $existing;
+			}
+			update_option( 'woocommerce_pos_uuid', $uuid );
+		}
+
+		return $uuid;
 	}
 }
 

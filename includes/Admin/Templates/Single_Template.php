@@ -552,7 +552,7 @@ class Single_Template {
 		// Get sample receipt data from the preview builder.
 		$sample_data = self::get_sample_receipt_data();
 
-		$preview_url = rest_url( 'wcpos/v1/templates/' . $post->ID . '/preview' );
+		$preview_url = rest_url( 'wcpos/v2/templates/' . $post->ID . '/preview' );
 
 		$paper_width = get_post_meta( $post->ID, '_template_paper_width', true );
 

@@ -125,7 +125,7 @@ export function PreviewModal({
 	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
 	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
 	const orderId = source === 'order' ? 'latest' : undefined;
-	const { data: preview, isLoading, isFetching, isError } = usePreview(templateId, orderId);
+	const { data: preview, isFetching, isError } = usePreview(templateId, orderId);
 	const dialogRef = React.useRef<HTMLDivElement>(null);
 	const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 	const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
@@ -136,12 +136,13 @@ export function PreviewModal({
 		((preview.template_content != null && preview.receipt_data) || preview.preview_html)
 	);
 
-	// Revert to sample if order fetch fails
+	// Let the errored order observer mount and retry before falling back.
 	React.useEffect(() => {
-		if (isError && source === 'order') {
-			setSource('sample');
-		}
-	}, [isError, source]);
+		if (!isError || isFetching || source !== 'order') return;
+
+		const fallbackTimer = window.setTimeout(() => setSource('sample'), 0);
+		return () => window.clearTimeout(fallbackTimer);
+	}, [isError, isFetching, source]);
 
 	React.useEffect(() => {
 		previousFocusedElementRef.current =

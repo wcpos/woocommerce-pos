@@ -4,7 +4,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Product_Categories_Controller;
+use WCPOS\WooCommercePOS\API\V1\Product_Categories_Controller;
 
 /**
  * @internal
@@ -93,6 +93,40 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids  = wp_list_pluck( $data, 'id' );
 
 		$this->assertContains( $cat1['term_id'], $ids );
+		$this->assertContains( $cat2['term_id'], $ids );
+	}
+
+	public function test_product_category_api_get_all_ids_with_include_filter(): void {
+		$cat1    = ProductHelper::create_product_category( 'Fast Include Music' );
+		$cat2    = ProductHelper::create_product_category( 'Fast Include Clothes' );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $cat1['term_id'] ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $cat1['term_id'] ), $ids );
+		$this->assertNotContains( $cat2['term_id'], $ids );
+	}
+
+	public function test_product_category_api_get_all_ids_with_exclude_filter(): void {
+		$cat1    = ProductHelper::create_product_category( 'Fast Exclude Music' );
+		$cat2    = ProductHelper::create_product_category( 'Fast Exclude Clothes' );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $cat1['term_id'] ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $cat1['term_id'], $ids );
 		$this->assertContains( $cat2['term_id'], $ids );
 	}
 

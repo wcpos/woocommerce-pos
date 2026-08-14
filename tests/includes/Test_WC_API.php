@@ -77,6 +77,63 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
+	/**
+	 * WordPress matches REST routes case-insensitively, so a mixed-case path
+	 * dispatches to the products controller — the POS-only exclusion must not
+	 * be skippable by upper-casing the route.
+	 */
+	public function test_pos_only_products_excluded_on_mixed_case_route(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+
+				return $settings;
+			}
+		);
+		new WC_API(); // reinstantiate the class to apply the filter
+
+		$visible_product = ProductHelper::create_simple_product();
+		$hidden_product  = ProductHelper::create_simple_product();
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $hidden_product->get_id() ),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+			)
+		);
+
+		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
+		$request  = new WP_REST_Request( 'GET', '/WC/V3/products' );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $visible_product->get_id(), $data[0]['id'] );
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
+	}
+
 	public function test_pos_only_variations_via_store_api(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',

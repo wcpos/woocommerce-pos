@@ -229,14 +229,12 @@ the star to the remaining 32-CPL space at render time.
     <col width="*"></col>
     <col width="14" align="right"><bold>{{totals.total_incl_display}}</bold></col>
   </row>
-  {{#totals.total_saved_complete}}
   {{#totals.total_saved_incl}}
   <row>
     <col width="*">{{i18n.total_saved}}</col>
     <col width="12" align="right">{{totals.total_saved_incl_display}}</col>
   </row>
   {{/totals.total_saved_incl}}
-  {{/totals.total_saved_complete}}
   <line style="double" />
   {{#totals.refund_total}}
   <row>

@@ -29,6 +29,12 @@ class Print_Job_Service {
 	const META_AUTO_OPEN_DRAWER = '_wcpos_pj_auto_open_drawer';
 	const META_DRAWER_CONNECTOR = '_wcpos_pj_drawer_connector';
 	const META_DRAWER_ERROR     = '_wcpos_pj_drawer_error';
+
+	/**
+	 * The auto-print rule trigger (created|paid) that produced this job.
+	 * Absent on manual prints and on jobs created before triggers existed.
+	 */
+	const META_TRIGGER = '_wcpos_pj_trigger';
 	const CLAIM_LOCK_PREFIX     = 'wcpos_pj_claim_lock_';
 	const LIFECYCLE_LOCK_PREFIX = 'wcpos_pn_submit_lock_';
 	const LIFECYCLE_LOCK_TTL    = 120;
@@ -90,7 +96,7 @@ class Print_Job_Service {
 	/**
 	 * Create a print job.
 	 *
-	 * @param array $args printer_id (required), content_type, payload (base64), order_id, format, template_id, pn_kind.
+	 * @param array $args printer_id (required), content_type, payload (base64), order_id, format, template_id, pn_kind, trigger.
 	 *
 	 * @return int Job post ID.
 	 */
@@ -123,6 +129,9 @@ class Print_Job_Service {
 		}
 		if ( ! empty( $args['pn_kind'] ) ) {
 			update_post_meta( $id, self::META_PN_KIND, sanitize_text_field( (string) $args['pn_kind'] ) );
+		}
+		if ( ! empty( $args['trigger'] ) ) {
+			update_post_meta( $id, self::META_TRIGGER, sanitize_text_field( (string) $args['trigger'] ) );
 		}
 		if ( array_key_exists( 'auto_open_drawer', $args ) ) {
 			update_post_meta( $id, self::META_AUTO_OPEN_DRAWER, ! empty( $args['auto_open_drawer'] ) ? 'yes' : 'no' );
@@ -310,10 +319,22 @@ class Print_Job_Service {
 				return '';
 			}
 
-			$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
-			$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
+			try {
+				$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+				$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
 
-			return $adapter->transform( $data );
+				return $adapter->transform( $data );
+			} catch ( \Throwable $e ) {
+				// A stored job can carry a format the factory no longer supports
+				// (e.g. the removed fixed-layout starprnt placeholder). Fail closed
+				// like the thermal branch above: log and print nothing rather than
+				// letting the poll 500 with a claimed job stuck.
+				\WCPOS\WooCommercePOS\Logger::log(
+					sprintf( 'Cloud print: fixed-layout render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
+				);
+
+				return '';
+			}
 		}
 
 		$payload = base64_decode( (string) $job['payload'], true );
@@ -432,7 +453,7 @@ class Print_Job_Service {
 	/**
 	 * Count jobs matching the same filters query() accepts.
 	 *
-	 * @param array $filters printer_id / status / order_id / template_id / exclude_retried.
+	 * @param array $filters printer_id / status / order_id / template_id / trigger / exclude_retried.
 	 *
 	 * @return int
 	 */
@@ -684,6 +705,22 @@ class Print_Job_Service {
 			$meta_query[] = array(
 				'key'   => self::META_TEMPLATE,
 				'value' => sanitize_text_field( (string) $filters['template_id'] ),
+			);
+		}
+		if ( ! empty( $filters['trigger'] ) ) {
+			// Jobs attributable to this trigger: the same recorded trigger, or
+			// no trigger at all — manual prints and pre-trigger jobs count
+			// toward every rule so they keep suppressing auto reprints.
+			$meta_query[] = array(
+				'relation' => 'OR',
+				array(
+					'key'   => self::META_TRIGGER,
+					'value' => sanitize_text_field( (string) $filters['trigger'] ),
+				),
+				array(
+					'key'     => self::META_TRIGGER,
+					'compare' => 'NOT EXISTS',
+				),
 			);
 		}
 

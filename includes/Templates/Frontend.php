@@ -10,9 +10,11 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
-use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Template_Router;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -39,7 +41,7 @@ class Frontend {
 	 */
 	public function get_template(): void {
 		// force ssl.
-		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
+		if ( ! is_ssl() && Settings::instance()->force_ssl_enabled() ) {
 			wp_safe_redirect( woocommerce_pos_url() );
 			exit;
 		}
@@ -183,21 +185,19 @@ class Frontend {
 			wcpos_get_stores()
 		);
 
-		$site_uuid = get_option( 'woocommerce_pos_uuid' );
-		if ( ! $site_uuid ) {
-			$site_uuid = Uuid::uuid4()->toString();
-			update_option( 'woocommerce_pos_uuid', $site_uuid );
+		$site_uuid        = wcpos_get_site_uuid();
+		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' );
+		if ( false === $opfs_worker_hash ) {
+			$opfs_worker_hash = VERSION;
 		}
 
-		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
-		if ( ! $user_uuid ) {
-			$user_uuid = Uuid::uuid4()->toString();
-			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $user_uuid );
-		}
+		// Pos_Uuid is the sole authority for `_woocommerce_pos_uuid`: the value here
+		// must match what /cashier and /customers serve, or the client forks identities.
+		$user_uuid = Pos_Uuid::ensure_user_uuid( $user );
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $cdn_base_url . '/metadata.json?v=' . VERSION,
+			'manifest'       => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
 			'homepage'       => woocommerce_pos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
@@ -213,7 +213,7 @@ class Frontend {
 				'wcpos_version'      => VERSION,
 				'wp_api_url'         => get_rest_url(),
 				'wc_api_url'         => trailingslashit( get_rest_url( null, 'wc/v3' ) ),
-				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v1' ) ),
+				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v2' ) ),
 				'wcpos_login_url'    => Template_Router::get_auth_url(),
 				'locale'             => get_locale(),
 			),
@@ -240,7 +240,11 @@ class Frontend {
 		 * Add path to worker scripts.
 		 */
 		$idb_worker  = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
-		$opfs_worker = PLUGIN_URL . 'assets/js/opfs.worker.js';
+		$opfs_worker = add_query_arg(
+			'ver',
+			$opfs_worker_hash,
+			PLUGIN_URL . 'assets/js/opfs.worker.js'
+		);
 
 		// getScript helper and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
@@ -284,7 +288,11 @@ class Frontend {
     </script>" . "\n";
 
 		echo "<script>
-		var request = new Request(initialProps.manifest);
+		// no-cache: revalidate the manifest with the CDN (ETag/304) on every boot.
+		// jsDelivr serves it with max-age=604800 and the ?v= buster only changes on
+		// plugin deploys, so a default fetch pins users to a stale bundle for up to
+		// 7 days after a web-bundle publish.
+		var request = new Request(initialProps.manifest, { cache: 'no-cache' });
 
 		window.fetch(request)
 				.then(function(response) { return response.json(); })

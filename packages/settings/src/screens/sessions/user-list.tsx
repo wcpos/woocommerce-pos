@@ -9,6 +9,7 @@ interface UserListProps {
 	users: UserSessionData[];
 	selectedUserId: number | null;
 	currentUserId: number | null;
+	nowSeconds: number;
 	activeNowThresholdSeconds: number;
 	onSelect: (userId: number) => void;
 }
@@ -17,12 +18,11 @@ function UserList({
 	users,
 	selectedUserId,
 	currentUserId,
+	nowSeconds,
 	activeNowThresholdSeconds,
 	onSelect,
 }: UserListProps) {
 	const [filter, setFilter] = React.useState('');
-
-	const nowSeconds = Math.floor(Date.now() / 1000);
 
 	const filtered = React.useMemo(() => {
 		const needle = filter.trim().toLowerCase();

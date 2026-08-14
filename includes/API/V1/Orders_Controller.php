@@ -1,0 +1,1394 @@
+<?php
+/**
+ * Orders_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS\API\V1;
+
+\defined( 'ABSPATH' ) || die;
+
+if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
+	return;
+}
+
+use Automattic\WooCommerce\Utilities\OrderUtil;
+use Exception;
+use WC_Abstract_Order;
+use WC_Data;
+use WC_Email_Customer_Invoice;
+use WC_Order_Item;
+use WC_Order_Item_Fee;
+use WC_Order_Item_Product;
+use WC_REST_Orders_Controller;
+use WC_Tax;
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\VERSION;
+use WP_Error;
+use WP_REST_Request;
+use WP_REST_Response;
+
+use WP_Query;
+use WP_REST_Server;
+
+/**
+ * Orders controller class.
+ *
+ * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Orders_Controller methods
+ */
+class Orders_Controller extends WC_REST_Orders_Controller {
+	use Traits\Uuid_Handler;
+	use Traits\WCPOS_REST_API;
+
+	/**
+	 * Endpoint namespace.
+	 *
+	 * @var string
+	 */
+	protected $namespace = 'wcpos/v1';
+
+	/**
+	 * Canonical Collection Rule name => the request key this lane exposes it under.
+	 *
+	 * The direct lane's narrowing map. `created_via` is DELIBERATELY absent: the rule row
+	 * exists (the proxy lane claims it), but `wcpos/v1` has never supported the filter and
+	 * adding it here would be a wire change, not a refactor. See `Sync\Collection_Rules`.
+	 *
+	 * @var array<string, string>
+	 */
+	private const WCPOS_COLLECTION_PARAM_MAP = array(
+		'orderby'     => 'orderby',
+		'order'       => 'order',
+		'include'     => 'wcpos_include',
+		'exclude'     => 'wcpos_exclude',
+		'pos_cashier' => 'pos_cashier',
+		'pos_store'   => 'pos_store',
+	);
+
+	/**
+	 * Store the request object for use in lifecycle methods.
+	 *
+	 * @var WP_REST_Request|null
+	 */
+	protected $wcpos_request;
+
+	/**
+	 * The order object being created by the current request.
+	 *
+	 * @var WC_Abstract_Order|null
+	 */
+	private $creating_order;
+
+	/**
+	 * Whether High Performance Orders is enabled.
+	 *
+	 * @var bool
+	 */
+	private $hpos_enabled = false;
+
+	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+
+		if ( method_exists( parent::class, '__construct' ) ) {
+			parent::__construct();
+		}
+	}
+
+	/**
+	 * Check if the current user can update an order.
+	 *
+	 * Overrides the parent to fix HPOS compatibility. When HPOS is enabled with
+	 * sync disabled, get_post() returns a shop_order_placehold post type that has
+	 * map_meta_cap = false and no capability_type, causing WordPress to check the
+	 * generic 'edit_post' capability instead of 'edit_shop_order'. Non-admin roles
+	 * like cashier have 'edit_shop_orders' but not the generic 'edit_posts', so the
+	 * permission check fails.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function update_item_permissions_check( $request ) {
+		$result = parent::update_item_permissions_check( $request );
+
+		if ( ! is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		// Parent check failed - try direct capability check for HPOS compatibility.
+		$id    = (int) $request['id'];
+		$order = wc_get_order( $id );
+
+		if ( ! $order ) {
+			return $result;
+		}
+
+		if ( ! current_user_can( 'edit_shop_orders' ) ) {
+			return $result;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if the current user can delete an order.
+	 *
+	 * Same HPOS fix as update_item_permissions_check.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function delete_item_permissions_check( $request ) {
+		$result = parent::delete_item_permissions_check( $request );
+
+		if ( ! is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$id    = (int) $request['id'];
+		$order = wc_get_order( $id );
+
+		if ( ! $order ) {
+			return $result;
+		}
+
+		if ( ! current_user_can( 'delete_shop_orders' ) ) {
+			return $result;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Delete a single order.
+	 *
+	 * WooCommerce core does not restore stock when orders are trashed or deleted.
+	 * This override restores stock on successful deletion.
+	 *
+	 * @see https://github.com/woocommerce/woocommerce/issues/26716
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function delete_item( $request ) {
+		$order_id = (int) $request['id'];
+		$order    = wc_get_order( $order_id );
+
+		if ( ! $order ) {
+			return parent::delete_item( $request );
+		}
+
+		$setting = SettingsService::instance()->restore_stock_on_delete_enabled();
+
+		/**
+		 * Filter whether to restore stock when an order is deleted via the POS API.
+		 *
+		 * @since 1.9.0
+		 *
+		 * @param bool $restore_stock Whether to restore stock. Default from settings.
+		 * @param int  $order_id      The order ID being deleted.
+		 */
+		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $order_id );
+		$force         = (bool) $request->get_param( 'force' );
+
+		// Force-delete permanently removes the order, so restore stock beforehand.
+		if ( $restore_stock && $force ) {
+			wc_maybe_increase_stock_levels( $order_id );
+		}
+
+		$response = parent::delete_item( $request );
+
+		if ( is_wp_error( $response ) ) {
+			// Rollback pre-restore on force-delete failure.
+			if ( $restore_stock && $force ) {
+				wc_maybe_reduce_stock_levels( $order_id );
+			}
+
+			return $response;
+		}
+
+		// Trash path: order still exists, so restore stock after confirmed success.
+		if ( $restore_stock && ! $force ) {
+			wc_maybe_increase_stock_levels( $order_id );
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Dispatch request to parent controller, or override if needed.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
+	 */
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		/*
+		 * Force decimal rounding to 6 places for all order data. This matches the POS.
+		 *
+		 * @TODO - should this be flexible via a query param from the POS?
+		 */
+		$request->set_param( 'dp', '6' );
+
+		$this->wcpos_request = $request;
+		// set hpos_enabled again for tests to work @TODO - fix this.
+		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
+		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
+		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 1 );
+		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
+		// Negative-fee tax handling is registered globally by WCPOS\WooCommercePOS\Orders
+		// (request-gated) so the v2 push forward shares it — no per-dispatch registration.
+
+		/*
+		 * Check if the request is for all orders and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all order IDs.
+		 */
+		if ( Bulk_ID_Fast_Path::supports_request( $request ) ) {
+			return $this->wcpos_get_all_posts( $request );
+		}
+
+		return $dispatch_result;
+	}
+
+	/**
+	 * Register routes.
+	 */
+	public function register_routes(): void {
+		parent::register_routes();
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<order_id>[\d]+)/email',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'wcpos_send_email' ),
+					'permission_callback' => array( $this, 'wcpos_send_email_permissions_check' ),
+					'args'                => array_merge(
+						$this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ),
+						array(
+							'email'   => array(
+								'type'        => 'string',
+								'description' => /* translators: REST API schema field label or error message. */ __( 'Email address', 'woocommerce-pos' ),
+								'required'    => true,
+							),
+							'save_to' => array(
+								'type'        => 'string',
+								'description' => __( 'Save email to order', 'woocommerce-pos' ),
+								'required'    => false,
+							),
+						)
+					),
+				),
+				'schema' => array(),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/statuses',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'wcpos_get_order_statuses' ),
+					'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				),
+				'schema' => array( $this, 'wcpos_get_public_order_statuses_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Add custom fields to the order schema.
+	 */
+	public function get_item_schema() {
+		$schema = parent::get_item_schema();
+
+		// Add structured tax_ids property (TaxId[]) snapshotted from the customer
+		// at create time. Editable via update for corrections.
+		$schema['properties']['tax_ids'] = array(
+			'description' => __( 'Customer tax IDs snapshotted at sale time.', 'woocommerce-pos' ),
+			'type'        => 'array',
+			'context'     => array( 'view', 'edit' ),
+			'items'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'type'    => array(
+						'type'        => 'string',
+						'enum'        => Tax_Id_Types::all_types(),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID type.', 'woocommerce-pos' ),
+					),
+					'value'   => array(
+						'type'        => 'string',
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID value.', 'woocommerce-pos' ),
+					),
+					'country' => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => __( 'ISO 3166-1 alpha-2 country code.', 'woocommerce-pos' ),
+					),
+					'label'   => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Optional human-readable label.', 'woocommerce-pos' ),
+					),
+				),
+			),
+		);
+
+		// Check and remove email format validation from the billing property.
+		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
+			unset( $schema['properties']['billing']['properties']['email']['format'] );
+		}
+
+		// Modify line_items->parent_name to accept 'string' or 'null'.
+		if ( isset( $schema['properties']['line_items'] ) &&
+			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
+			$schema['properties']['line_items']['items']['properties']['parent_name']['type'] = array( 'string', 'null' );
+		}
+
+		// Check for 'stock_quantity' and allow decimal.
+		if ( $this->wcpos_allow_decimal_quantities() &&
+			   isset( $schema['properties']['line_items'] ) &&
+			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
+			$schema['properties']['line_items']['items']['properties']['quantity']['type'] = array( 'number' );
+		}
+
+		return $schema;
+	}
+
+
+	/**
+	 * Create a single order.
+	 * - Validate billing email.
+	 * - Do a sanity check on the UUID, if the internet connection is bad, several requests can be made with the same UUID.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function create_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		// check if the UUID is already in use.
+		if ( isset( $request['meta_data'] ) && \is_array( $request['meta_data'] ) ) {
+			foreach ( $request['meta_data'] as $meta ) {
+				if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
+					$uuid = $meta['value'];
+					$ids  = $this->get_order_ids_by_uuid( $uuid );
+
+					/*
+					 * If the UUID is already in use, and there is only one order with that UUID, return the existing order.
+					 * This can happen if the internet connection is bad and the request is made several times.
+					 *
+					 * @NOTE: This means that $request data is lost, but we can't update existing order because it has resource ids now.
+					 * The alternative would be to update the existing order, but that would require a lot of extra work.
+					 * Or return an error, which would be a bad user experience.
+					 */
+					if ( 1 === \count( $ids ) ) {
+						$order_id = (int) $ids[0];
+						Logger::log( 'UUID already in use, return existing order.', $order_id );
+
+						// Pre-flight: check meta count before WC loads the full order.
+						$meta_count      = $this->wcpos_preflight_meta_count( $order_id, 'order' );
+						$error_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
+
+						if ( $meta_count >= $error_threshold ) {
+							return $this->wcpos_build_safe_order_response( $order_id, $meta_count );
+						}
+
+						// Create a new WP_REST_Request object for the GET request.
+						$get_request = new WP_REST_Request( 'GET', $this->namespace . '/' . $this->rest_base . '/' . $order_id );
+						$get_request->set_param( 'id', $order_id );
+
+						return $this->get_item( $get_request );
+					}
+					if ( \count( $ids ) > 1 ) {
+						Logger::log( 'UUID already in use for multiple orders. This should not happen.', $ids );
+
+						return new WP_Error( 'woocommerce_rest_order_invalid_id', __( 'UUID already in use.', 'woocommerce' ), array( 'status' => 400 ) );
+					}
+				}
+			}
+		}
+
+		$valid_email = $this->wcpos_validate_billing_email( $request );
+		if ( is_wp_error( $valid_email ) ) {
+			return $valid_email;
+		}
+
+		// The POS audit meta is server-authoritative: WooCommerce applies `meta_data`
+		// (incl. `_`-prefixed) at create, and the before-save stamp only fills a MISSING
+		// `_pos_user` — so a client-forged value would land first and win. Strip the
+		// server-derived keys and drop invalid till values before the write.
+		if ( isset( $request['meta_data'] ) && \is_array( $request['meta_data'] ) ) {
+			$request->set_param( 'meta_data', Pos_Order_Audit::sanitize_create_meta( $request['meta_data'] ) );
+		}
+
+		$this->creating_order = null;
+
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9, 3 );
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
+
+		try {
+			// Proceed with the parent method to handle the creation.
+			$response = parent::create_item( $request );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9 );
+			$this->creating_order = null;
+		}
+
+		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
+
+		return $response;
+	}
+
+	/**
+	 * Record the exact order object prepared for this create request.
+	 *
+	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating Whether a new order is being created.
+	 *
+	 * @return WC_Data|WP_Error
+	 */
+	public function wcpos_track_creating_order( $order, WP_REST_Request $request, bool $creating ) {
+		if ( $creating && $order instanceof WC_Abstract_Order ) {
+			$this->creating_order = $order;
+		}
+
+		return $order;
+	}
+
+	/**
+	 * Preserve client-provided order creation time for offline-created orders.
+	 *
+	 * WooCommerce marks date_created/date_created_gmt as read-only in the REST
+	 * schema, so those fields are removed before the parent controller prepares
+	 * the order. WCPOS clients can create orders offline and later sync the full
+	 * local document; read the raw JSON payload here so the server keeps the
+	 * transaction time instead of the sync time.
+	 *
+	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating Whether a new order is being created.
+	 *
+	 * @return WC_Data|WP_Error
+	 */
+	public function wcpos_preserve_client_created_date_gmt( $order, WP_REST_Request $request, bool $creating ) {
+		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
+			return $order;
+		}
+		$this->creating_order = $order;
+
+		$body = $request->get_json_params();
+
+		if ( ! isset( $body['date_created_gmt'] ) ) {
+			return $order;
+		}
+
+		if ( ! is_scalar( $body['date_created_gmt'] ) ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_invalid_date_created_gmt',
+				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$client_date_gmt = wc_clean( wp_unslash( (string) $body['date_created_gmt'] ) );
+
+		if ( '' === $client_date_gmt ) {
+			return $order;
+		}
+
+		if ( 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/i', $client_date_gmt ) ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_invalid_date_created_gmt',
+				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// WooCommerce serializes *_gmt fields without a timezone suffix; treat bare values as UTC.
+		$parse_date_gmt = 'Z' === strtoupper( substr( $client_date_gmt, -1 ) )
+			? $client_date_gmt
+			: $client_date_gmt . 'Z';
+		$timestamp = rest_parse_date(
+			$parse_date_gmt,
+			true
+		);
+
+		if ( false === $timestamp ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_invalid_date_created_gmt',
+				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$maximum_future_timestamp = time() + DAY_IN_SECONDS;
+
+		if ( $timestamp > $maximum_future_timestamp ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_future_date_created_gmt',
+				__( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$order->set_date_created( $timestamp );
+
+		return $order;
+	}
+
+	/**
+	 * Update a single order.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		$valid_email = $this->wcpos_validate_billing_email( $request );
+		if ( is_wp_error( $valid_email ) ) {
+			return $valid_email;
+		}
+
+		// The audit trail is write-once at the sale: an update must not rewrite the
+		// cashier, store, or cash amounts (the gateway and Pro's store stamp remain
+		// the only writers after create). The existing audit rows' meta ids are
+		// protected too — an id-addressed entry would otherwise rename a row away.
+		if ( isset( $request['meta_data'] ) && \is_array( $request['meta_data'] ) ) {
+			$request->set_param(
+				'meta_data',
+				Pos_Order_Audit::strip_audit_meta(
+					$request['meta_data'],
+					Pos_Order_Audit::audit_meta_ids( wc_get_order( (int) $request['id'] ) )
+				)
+			);
+		}
+
+		// Proceed with the parent method to handle the update.
+		$response = parent::update_item( $request );
+		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, false );
+
+		return $response;
+	}
+
+	/**
+	 * Persist tax_ids onto the order.
+	 *
+	 * On create: if the request did not provide `tax_ids`, snapshot from the
+	 * resolved customer record so the order is self-contained. If the request
+	 * provided `tax_ids`, write those (cashier-entered tax IDs override).
+	 *
+	 * On update: only write what the request explicitly provided; never
+	 * re-snapshot, since editing a customer must not mutate historical orders.
+	 *
+	 * @param mixed           $response   Response from parent controller.
+	 * @param WP_REST_Request $request    Original request.
+	 * @param bool            $is_create  True for create, false for update.
+	 */
+	protected function wcpos_snapshot_tax_ids_to_order( $response, WP_REST_Request $request, bool $is_create ): void {
+		if ( ! ( $response instanceof WP_REST_Response ) ) {
+			return;
+		}
+
+		$data     = $response->get_data();
+		$order_id = isset( $data['id'] ) ? (int) $data['id'] : 0;
+		if ( $order_id <= 0 ) {
+			return;
+		}
+		$order = \wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
+		$tax_ids = $request->get_param( 'tax_ids' );
+		$writer  = new Tax_Id_Writer();
+
+		if ( \is_array( $tax_ids ) ) {
+			$writer->write_for_order( $order, $tax_ids );
+		} elseif ( $is_create ) {
+			$customer_id = (int) $order->get_customer_id();
+			if ( $customer_id > 0 ) {
+				$writer->snapshot_from_user_to_order( $order, $customer_id );
+			}
+		}
+
+		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+		$response->set_data( $data );
+	}
+
+	/**
+	 * Create or update a line item.
+	 *
+	 * @param array  $posted Line item data.
+	 * @param string $action 'create' to add line item or 'update' to update it.
+	 * @param object $item   Passed when updating an item. Null during creation.
+	 *
+	 * @throws \WC_REST_Exception Invalid data, server error.
+	 *
+	 * @return WC_Order_Item_Product
+	 */
+	public function prepare_line_items( $posted, $action = 'create', $item = null ) {
+		$item = parent::prepare_line_items( $posted, $action, $item );
+
+		/**
+		 * If you send a variation with meta_data, the meta_data will be duplicated
+		 * WooCommerce attempts to delete the duped meta_data in $item->set_product( $variation )
+		 * but later it gets added right back in $this->maybe_set_item_meta_data.
+		 *
+		 * To fix this we check for a variation_id and remove the meta_data before setting the product
+		 */
+		if ( 'create' !== $action && $item->get_variation_id() ) {
+			$attributes = wc_get_product_variation_attributes( $item->get_variation_id() );
+
+			// Loop through attributes and remove any duplicates.
+			foreach ( $attributes as $key => $value ) {
+				$attribute = str_replace( 'attribute_', '', $key );
+				$meta_data = $item->get_meta( $attribute, false );
+
+				if ( \is_array( $meta_data ) && \count( $meta_data ) > 1 ) {
+					$meta_to_keep = null;
+
+					// Check each meta to find one with an ID to keep.
+					foreach ( $meta_data as $meta ) {
+						if ( isset( $meta->id ) ) {
+							$meta_to_keep = $meta;
+
+							break;
+						}
+					}
+
+					// If no meta with an ID is found, keep the first one.
+					if ( ! $meta_to_keep ) {
+						$meta_to_keep = $meta_data[0];
+					}
+
+					// Remove all other meta data for this attribute.
+					foreach ( $meta_data as $meta ) {
+						if ( $meta !== $meta_to_keep ) {
+							if ( $meta->id ) {
+								$item->delete_meta_data_by_mid( $meta->id );
+							} else {
+								$meta->value = null;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return $item;
+	}
+
+	/**
+	 * Maybe set item meta if posted.
+	 *
+	 * @param WC_Order_Item $item   Order item data.
+	 * @param array         $posted Request data.
+	 */
+	public function maybe_set_item_meta_data( $item, $posted ): void {
+		/*
+		 * Call the parent method first to handle standard meta data
+		 * This will populate the attribute key, eg: 'pa_color' or 'logo'
+		 * BUT: if the attribute can be 'any' then we need to handle that
+		 */
+		parent::maybe_set_item_meta_data( $item, $posted );
+
+		// Ensure this is a product line item, not a fee or shipping.
+		if ( ! \is_object( $item ) || 'WC_Order_Item_Product' !== \get_class( $item ) ) {
+			return;
+		}
+
+		// SKU meta is not stored by default, we will add it for 'miscellaneous' products.
+		if ( isset( $posted['sku'] ) && 0 === $item->get_product_id() ) {
+			$item->add_meta_data( '_sku', $posted['sku'], true );
+		}
+
+		// Only proceed if there's a variation ID and we have posted meta.
+		if ( ! $item->get_variation_id() || empty( $posted['meta_data'] ) || ! \is_array( $posted['meta_data'] ) ) {
+			return;
+		}
+
+		$attributes        = wc_get_product_variation_attributes( $item->get_variation_id() );
+		$product_id        = $item->get_product_id();
+		$product           = wc_get_product( $product_id );
+		$parent_attributes = $product->get_attributes();
+
+		foreach ( $attributes as $key => $value ) {
+			if ( '' === $value ) {
+				$slug = str_replace( 'attribute_', '', $key );
+
+				if ( ! isset( $parent_attributes[ $slug ] ) ) {
+					continue;
+				}
+
+				$name = $parent_attributes[ $slug ]['name'] ?? $slug;
+				if ( $name === $slug ) {
+					$name = wc_attribute_label( $slug );
+				}
+
+				// find the value from $posted['meta_data'].
+				foreach ( $posted['meta_data'] as $meta ) {
+					// Match posted attribute label to the $name we just determined.
+					if ( isset( $meta['display_key'], $meta['display_value'] ) && $meta['display_key'] === $name ) {
+						$posted_value = $meta['display_value'];
+						// Only update if the posted value is non-empty.
+						if ( $posted_value ) {
+							$item->update_meta_data(
+								$slug,
+								$posted_value,
+								$meta['id'] ?? ''
+							);
+
+							break; // Stop searching once found.
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * The way WooCommerce handles negative fees is ... weird.
+	 * They by-pass the normal tax calculation, disregard the tax_status and tax_class, and apply the taxes to the fee line.
+	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
+	 * the wrong result.
+	 *
+	 * The implementation lives in WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes,
+	 * registered globally and request-gated so the v2 push forward shares it (issue #1403).
+	 * This public method is preserved for backward compatibility and delegates.
+	 *
+	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
+	 * @param array              $calculate_tax_for The tax calculation data.
+	 */
+	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
+		\WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes( $fee_item, $calculate_tax_for );
+	}
+
+	/**
+	 * Gets the product ID from posted ID.
+	 *
+	 * @param array  $posted Request data.
+	 * @param string $action 'create' to add line item or 'update' to update it.
+	 *
+	 * @throws WC_REST_Exception When SKU or ID is not valid.
+	 *
+	 * @return int
+	 */
+	public function get_product_id( $posted, $action = 'create' ) {
+		// If id = 0, ie: miscellaneaous product, just return 0.
+		if ( isset( $posted['product_id'] ) && 0 == $posted['product_id'] ) {
+			return 0;
+		}
+
+		// Bypass the sku check. Some users have products with duplicated SKUs, esp. variable/variations.
+		$data = $posted;
+		unset( $data['sku'] );
+
+		return parent::get_product_id( $data, $action );
+	}
+
+	/**
+	 * Validate billing email.
+	 * NOTE: we have removed the format check to allow empty email addresses.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
+		$billing = $request['billing'] ?? null;
+		$email   = \is_array( $billing ) ? ( $billing['email'] ?? null ) : null;
+
+		if ( ! \is_null( $email ) && '' !== $email && ! is_email( $email ) ) {
+			return new WP_Error(
+				'rest_invalid_param',
+				// translators: Use default WordPress translation.
+				__( 'Invalid email address.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Modify the collection params.
+	 */
+	public function get_collection_params() {
+		$params = parent::get_collection_params();
+
+		// Ensure 'per_page' is an array and has a 'minimum' key.
+		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
+			$params['per_page']['minimum'] = -1;
+		}
+
+		// Ensure 'orderby' is an array and has an 'enum' key that is also an array.
+		// The extra values are a PROJECTION of the Collection Rule sort rows, so the
+		// schema cannot advertise a sort the clause bodies do not implement.
+		if ( isset( $params['orderby'] ) && \is_array( $params['orderby'] ) && isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
+			$params['orderby']['enum'] = array_merge(
+				$params['orderby']['enum'],
+				Collection_Rules::orderby_enum( 'orders' )
+			);
+		}
+
+		// Add the 'pos_cashier' and 'pos_store' parameters (projection of the filter rows).
+		$params = array_merge( $params, Collection_Rules::collection_params( 'orders' ) );
+
+		return $params;
+	}
+
+	/**
+	 * Send order email, optionally add email address.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function wcpos_send_email( WP_REST_Request $request ) {
+		$this->wcpos_request = $request;
+		$order               = wc_get_order( (int) $request['order_id'] );
+		$email               = $request['email'];
+
+		if ( ! $order || $this->post_type !== $order->get_type() ) {
+			return new WP_Error( 'woocommerce_rest_order_invalid_id', __( 'Invalid order ID.', 'woocommerce' ), array( 'status' => 404 ) );
+		}
+
+		if ( 'billing' == $request['save_to'] ) {
+			$order->set_billing_email( $email );
+			$order->save();
+			// translators: %s: email address.
+			$order->add_order_note( \sprintf( __( 'Email address %s added to billing details from WCPOS.', 'woocommerce-pos' ), $email ), 0, true );
+		}
+
+		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
+		add_filter( 'woocommerce_email_recipient_customer_invoice', array( $this, 'wcpos_recipient_email_address' ), 99 );
+
+		// Send the customer invoice email.
+		WC()->payment_gateways();
+		WC()->shipping();
+		WC()->mailer()->customer_invoice( $order );
+
+		// Note the event.
+		// translators: %s: email address.
+		$order->add_order_note( \sprintf( __( 'Order details manually sent to %s from WCPOS.', 'woocommerce-pos' ), $email ), 0, true );
+
+		do_action( 'woocommerce_after_resend_order_email', $order, 'customer_invoice' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
+
+		$request->set_param( 'context', 'edit' );
+
+		return rest_ensure_response( array( 'success' => true ) );
+
+		// $response->set_status( 201 );
+	}
+
+	/**
+	 * Send email permissions check.
+	 */
+	public function wcpos_send_email_permissions_check() {
+		if ( ! wc_rest_check_post_permissions( $this->post_type, 'create' ) ) {
+			return new WP_Error( 'woocommerce_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Get the recipient email address, for manual sending of order emails.
+	 *
+	 * @return string
+	 */
+	public function wcpos_recipient_email_address() {
+		return $this->wcpos_request['email'];
+	}
+
+	/**
+	 * Get formatted order statuses.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function wcpos_get_order_statuses() {
+		$statuses           = wc_get_order_statuses();
+		$formatted_statuses = array();
+
+		foreach ( $statuses as $status_key => $status_name ) {
+			// Remove the 'wc-' prefix from the status key.
+			$status_id   = 'wc-' === substr( $status_key, 0, 3 ) ? substr( $status_key, 3 ) : $status_key;
+
+			$formatted_statuses[] = array(
+				'id'   => $status_id,
+				'name' => $status_name,
+			);
+		}
+
+		return rest_ensure_response( $formatted_statuses );
+	}
+
+	/**
+	 * Get the public order statuses schema.
+	 *
+	 * @return array
+	 */
+	public function wcpos_get_public_order_statuses_schema() {
+		return array(
+			'$schema'    => 'http://json-schema.org/draft-04/schema#',
+			'title'      => 'order_status',
+			'type'       => 'object',
+			'properties' => array(
+				'id' => array(
+					'description' => __( 'Unique identifier for the order status.', 'woocommerce-pos' ),
+					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+				'name' => array(
+					'description' => __( 'Display name of the order status.', 'woocommerce-pos' ),
+					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+			),
+		);
+	}
+
+	/**
+	 * Modify the order response.
+	 *
+	 * @param WP_REST_Response  $response The response object.
+	 * @param WC_Abstract_Order $order    Object data.
+	 * @param WP_REST_Request   $request  Request object.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function wcpos_order_response( WP_REST_Response $response, WC_Abstract_Order $order, WP_REST_Request $request ): WP_REST_Response {
+		$data = $response->get_data();
+
+		// Add UUID to order.
+		$this->maybe_add_post_uuid( $order );
+
+		// Add payment link to the order.
+		$pos_payment_url = add_query_arg(
+			array(
+				'pay_for_order' => true,
+				'key'           => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
+			),
+			wcpos_checkout_url( 'order-pay/' . $order->get_id() )
+		);
+
+		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
+
+		// Add receipt link to the order.
+		$pos_receipt_url = add_query_arg(
+			array(
+				'key' => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
+			),
+			wcpos_checkout_url( 'wcpos-receipt/' . $order->get_id() )
+		);
+		$response->add_link( 'receipt', $pos_receipt_url );
+
+		// WC core's get_image_id() returns a string; cast line item image IDs to int.
+		// Shared with the v2 order-document assembly — same cast, one implementation.
+		// This is the ONLY thing v1 borrows from it: the surrounding v1 response
+		// shape (HAL links via add_link, parsed meta_data) is frozen.
+		$data = Order_Serializer::cast_line_item_image_ids( $data );
+
+		// Parse the meta data before returning the response.
+		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
+
+		// Add structured tax_ids list (read fallback across legacy plugin meta keys).
+		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $order->get_id(), 'Order' );
+
+		$response->set_data( $data );
+
+		return $response;
+	}
+
+	/**
+	 * Build a safe order response when meta count exceeds the error threshold.
+	 *
+	 * Loads the order but suppresses the full meta serialization by filtering
+	 * get_meta_data to return empty, then substitutes only essential POS meta keys
+	 * queried directly from the database.
+	 *
+	 * @param int $order_id   The order ID.
+	 * @param int $meta_count The total meta count (for logging).
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function wcpos_build_safe_order_response( int $order_id, int $meta_count ) {
+		Logger::error(
+			"Order #{$order_id} has {$meta_count} meta_data entries. Returning response with essential meta only to prevent out-of-memory."
+		);
+
+		// Suppress meta loading during WC's response preparation.
+		add_filter( 'woocommerce_order_get_meta_data', array( $this, 'wcpos_return_empty_meta' ), 999 );
+
+		$get_request = new WP_REST_Request( 'GET', $this->namespace . '/' . $this->rest_base . '/' . $order_id );
+		$get_request->set_param( 'id', $order_id );
+		$response = $this->get_item( $get_request );
+
+		remove_filter( 'woocommerce_order_get_meta_data', array( $this, 'wcpos_return_empty_meta' ), 999 );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		// Replace the empty meta_data with our essential subset.
+		$data              = $response->get_data();
+		$data['meta_data'] = $this->wcpos_get_essential_meta( $order_id, 'order' );
+		$response->set_data( $data );
+
+		return $response;
+	}
+
+	/**
+	 * Filter callback to return empty meta data array.
+	 *
+	 * Used to suppress meta loading when we know it would cause OOM.
+	 *
+	 * @return array Empty array.
+	 */
+	public function wcpos_return_empty_meta(): array {
+		return array();
+	}
+
+	/**
+	 * Add UUID to order items.
+	 *
+	 * NOTE: OrderRefund can also be passed
+	 *
+	 * @param WC_Order_Item[]   $items     The order items.
+	 * @param WC_Abstract_Order $order     The order object.
+	 * @param array             $item_type string[] ['line_item' | 'fee' | 'shipping' | 'tax' | 'coupon'].
+	 *
+	 * @return WC_Order_Item[]
+	 */
+	public function wcpos_order_get_items( array $items, WC_Abstract_Order $order, array $item_type ): array {
+		foreach ( $items as $item ) {
+			$this->maybe_add_order_item_uuid( $item );
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Add extra data for wcpos orders.
+	 * - Add custom 'created_via' prop for POS orders, used in WC Admin display.
+	 *
+	 * @param WC_Abstract_Order $order The object being saved.
+	 *
+	 * @throws \WC_Data_Exception If order data is invalid.
+	 */
+	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
+		$is_creating_order = $order === $this->creating_order;
+
+		if ( $is_creating_order && method_exists( $order, 'set_created_via' ) ) {
+			$order->set_created_via( PLUGIN_NAME );
+			// Record provenance only; receipt calculations continue to infer historical
+			// pricing from the persisted line-item data of offline-synced orders.
+			$order->update_meta_data( '_woocommerce_pos_version', VERSION );
+		}
+
+		/**
+		 * `_pos_user` records who rang up the sale and is server-derived: the order
+		 * being created is always stamped with the authenticated user (any client-
+		 * supplied value was stripped before the write); on later saves only a missing
+		 * value is filled, so an edit under a different user never reassigns the
+		 * recorded cashier. The forced stamp is limited to the exact order prepared
+		 * for this request — an extension saving another new order mid-create must not
+		 * have that order's cashier overwritten.
+		 */
+		if ( $is_creating_order || ! $order->get_meta( '_pos_user' ) ) {
+			$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
+		}
+		// Immutable attribution anchor: stamped once with the creator, never
+		// rewritten (v2's reassignment flow only ever touches `_pos_user`).
+		if ( ! $order->get_meta( '_pos_user_created' ) ) {
+			$order->update_meta_data( '_pos_user_created', (string) get_current_user_id() );
+		}
+	}
+
+	/**
+	 * Filter the order query.
+	 *
+	 * @param array           $args    Query arguments.
+	 * @param WP_REST_Request $request Request object.
+	 */
+	public function wcpos_shop_order_query( array $args, WP_REST_Request $request ) {
+		// Check for wcpos_include/wcpos_exclude parameter.
+		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+			if ( $this->hpos_enabled ) {
+				add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orders_table_query_clauses' ), 10, 3 );
+			} else {
+				add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
+			}
+		}
+
+		return $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, $args );
+	}
+
+	/**
+	 * The Collection Rules plan for the order query in flight.
+	 *
+	 * One declaration table feeds both Read Lanes; this lane keeps its own `add_filter`
+	 * topology (Pro subclasses these callbacks) and delegates only the clause bodies.
+	 *
+	 * @param WP_REST_Request|null $request Request to plan against, defaulting to the dispatched one.
+	 *
+	 * @return Collection_Rules_Plan
+	 */
+	private function wcpos_collection_plan( ?WP_REST_Request $request = null ): Collection_Rules_Plan {
+		$request = $request instanceof WP_REST_Request ? $request : $this->wcpos_request;
+
+		return Collection_Rules::for_request(
+			'orders',
+			$request instanceof WP_REST_Request ? $request : new WP_REST_Request(),
+			self::WCPOS_COLLECTION_PARAM_MAP,
+			$this->hpos_enabled ? Collection_Rules::STORAGE_HPOS : Collection_Rules::STORAGE_POSTS
+		);
+	}
+
+	/**
+	 * Filter the WHERE clause of the query.
+	 *
+	 * @param string $where WHERE clause of the query.
+	 * @param object $query The WP_Query instance.
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_where_order_include_exclude( string $where, $query ) {
+		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_WHERE, $where, $query );
+	}
+
+	/**
+	 * Filters all query clauses at once.
+	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
+	 *
+	 * @param string[] $clauses Associative array of the clauses for the query.
+	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
+	 * @param array    $args    Query args.
+	 */
+	public function wcpos_hpos_orders_table_query_clauses( array $clauses, $query, array $args ) {
+		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, $clauses, $query );
+	}
+
+	/**
+	 * Returns array of all order ids.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function wcpos_get_all_posts( $request ) {
+		global $wpdb;
+
+		$start_time = microtime( true );
+
+		$hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$sql          = '';
+
+		$statuses = array_map(
+			function ( $status ) {
+				return "'$status'";
+			},
+			array_keys( wc_get_order_statuses() )
+		);
+
+		if ( $hpos_enabled ) {
+			$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'id', 'date_updated_gmt' );
+			$sql .= "SELECT DISTINCT {$select_fields} FROM {$wpdb->prefix}wc_orders WHERE type = 'shop_order'";
+			$sql .= ' AND status IN (' . implode( ',', $statuses ) . ')';
+
+			$modified_after_date = Bulk_ID_Fast_Path::modified_after_gmt( $request );
+			if ( $modified_after_date ) {
+				$sql .= $wpdb->prepare( ' AND date_updated_gmt > %s', $modified_after_date );
+			}
+
+			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->prefix}wc_orders.id" );
+			$sql .= " ORDER BY {$wpdb->prefix}wc_orders.date_created_gmt DESC";
+		} else {
+			$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'ID', 'post_modified_gmt' );
+			$sql .= "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts} WHERE post_type = 'shop_order'";
+			$sql .= ' AND post_status IN (' . implode( ',', $statuses ) . ')';
+
+			$modified_after_date = Bulk_ID_Fast_Path::modified_after_gmt( $request );
+			if ( $modified_after_date ) {
+				$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
+			}
+
+			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->posts}.ID" );
+			$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
+		}
+
+		try {
+			$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is built with prepare() for dynamic parts, static parts are safe.
+
+			return Bulk_ID_Fast_Path::response( $this, $results, $start_time );
+		} catch ( Exception $e ) {
+			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching order data: ' . $e->getMessage(), 'Error fetching order data.' );
+		}
+	}
+
+	/**
+	 * Filters all query clauses at once.
+	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
+	 *
+	 * @param string[] $clauses Associative array of the clauses for the query.
+	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
+	 * @param array    $args    Query args.
+	 *
+	 * @return string[] $clauses
+	 */
+	public function wcpos_hpos_orderby_query( array $clauses, $query, $args ) {
+		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_ORDERBY, $clauses, $query, (array) $args );
+	}
+
+	/**
+	 * Modify ORDER BY clause for legacy (non-HPOS) order status sorting.
+	 *
+	 * @param string   $orderby The ORDER BY clause.
+	 * @param WP_Query $query   The WP_Query instance.
+	 *
+	 * @return string Modified ORDER BY clause.
+	 */
+	public function wcpos_legacy_order_status_orderby( string $orderby, WP_Query $query ): string {
+		$rewritten = $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_ORDERBY, $orderby, $query );
+
+		// Remove filter after use. The rule rewrites the clause only for a shop_order
+		// query, so a changed value is exactly the "this was our order query" signal the
+		// inline post_type check used to provide.
+		if ( $rewritten !== $orderby ) {
+			remove_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10 );
+		}
+
+		return $rewritten;
+	}
+
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args = parent::prepare_objects_query( $request );
+
+		/*
+		 * Extend the orderby parameter to include custom options.
+		 * Legacy order options.
+		 */
+		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
+			if ( 'status' === $request['orderby'] ) {
+				// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
+				add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
+			}
+
+			$args = $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
+		}
+
+		/*
+		 * Extend the orderby parameter to include custom options.
+		 * HOPS orders options.
+		 */
+		if ( isset( $request['orderby'] ) && $this->hpos_enabled ) {
+			add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_query' ), 10, 3 );
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Override WooCommerce V3's calculate_coupons to handle the POS sending
+	 * back full order data (including coupon line IDs).
+	 *
+	 * WooCommerce V3 treats coupon_lines differently from other line types:
+	 * instead of using IDs to match existing items, it does a full remove-and-
+	 * reapply by code. It also rejects any coupon_line with an 'id' field.
+	 *
+	 * Since the POS always sends the complete order object on updates, coupon_lines
+	 * will contain IDs from the previous response. We compare the requested coupon
+	 * codes with the existing ones on the order: if they match, we skip the
+	 * recalculation entirely (preserving stable line item IDs). If they differ,
+	 * we strip the IDs and delegate to the parent for the remove-and-reapply.
+	 *
+	 * @throws \WC_REST_Exception When a coupon is invalid.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @param \WC_Order       $order   Order object.
+	 *
+	 * @return bool True if coupons were recalculated, false if skipped.
+	 */
+	protected function calculate_coupons( $request, $order ) {
+		if ( ! isset( $request['coupon_lines'] ) || ! \is_array( $request['coupon_lines'] ) ) {
+			return false;
+		}
+
+		// Extract coupon codes from the request.
+		$requested_codes = array();
+		foreach ( $request['coupon_lines'] as $item ) {
+			$code = $item['code'] ?? '';
+			if ( '' !== $code ) {
+				$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
+			}
+		}
+
+		// Get the existing coupon codes on the order.
+		$existing_codes = array_map(
+			function ( $coupon ) {
+				return wc_strtolower( $coupon->get_code() );
+			},
+			array_values( $order->get_coupons() )
+		);
+
+		sort( $requested_codes );
+		sort( $existing_codes );
+
+		// If the coupon codes haven't changed, skip recalculation entirely.
+		// This preserves stable coupon line item IDs across saves.
+		if ( $requested_codes === $existing_codes ) {
+			return false;
+		}
+
+		// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
+		$coupon_lines = $request['coupon_lines'];
+		foreach ( $coupon_lines as &$coupon_line ) {
+			unset( $coupon_line['id'] );
+		}
+		$request->set_param( 'coupon_lines', $coupon_lines );
+
+		return parent::calculate_coupons( $request, $order );
+	}
+}

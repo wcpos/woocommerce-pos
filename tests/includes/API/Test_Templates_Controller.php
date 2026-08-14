@@ -22,7 +22,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\API\Templates_Controller;
+use WCPOS\WooCommercePOS\API\V1\Templates_Controller;
 use WCPOS\WooCommercePOS\Templates;
 
 /**

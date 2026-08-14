@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 
 /**
  * Tests for stock restoration on order deletion.

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FieldPicker } from './field-picker';
+import { FieldTreeNode } from './field-tree-node';
 
 import type { FieldSchema } from '../types';
 
@@ -214,6 +215,40 @@ describe('FieldPicker', () => {
 
 		expect(container.textContent).toContain('Order');
 		expect(container.textContent).not.toContain('No fields match');
+	});
+
+	it('keeps ancestors visible when a grandchild matches the search', async () => {
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<FieldTreeNode
+					sectionKey="root"
+					section={{ label: 'Root', fields: {} }}
+					children={[
+						{
+							sectionKey: 'root.child',
+							section: { label: 'Child', fields: {} },
+							children: [
+								{
+									sectionKey: 'deep-match',
+									section: { label: 'Grandchild', fields: {} },
+									children: [],
+								},
+							],
+						},
+					]}
+					searchFilter="deep-match"
+					onInsertField={vi.fn()}
+				/>
+			);
+		});
+
+		expect(container.textContent).toContain('Root');
+		expect(container.textContent).toContain('Grandchild');
 	});
 
 	it('does not cap its own height so it can match the editor column', async () => {

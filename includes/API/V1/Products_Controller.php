@@ -1,0 +1,769 @@
+<?php
+/**
+ * Products_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS\API\V1;
+
+\defined( 'ABSPATH' ) || die;
+
+if ( ! class_exists( 'WC_REST_Products_Controller' ) ) {
+	return;
+}
+
+use Exception;
+use WC_Data;
+use WC_Product;
+use WC_Product_Variable;
+use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WP_Error;
+use WP_Query;
+use WP_REST_Request;
+use WP_REST_Response;
+
+/**
+ * Products controller class.
+ *
+ * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Products_Controller methods
+ */
+class Products_Controller extends WC_REST_Products_Controller {
+	use Traits\Product_Helpers;
+	use Traits\Query_Helpers;
+	use Traits\Uuid_Handler;
+	use Traits\WCPOS_REST_API;
+
+	/**
+	 * Endpoint namespace.
+	 *
+	 * @var string
+	 */
+	protected $namespace = 'wcpos/v1';
+
+	/**
+	 * Allow decimal quantities.
+	 *
+	 * @var bool
+	 */
+	protected $allow_decimal_quantities = false;
+
+	/**
+	 * Store the current request object.
+	 *
+	 * @var WP_REST_Request|null
+	 */
+	protected $wcpos_request;
+
+	/**
+	 * Memoized parent collection params.
+	 *
+	 * @var array|null
+	 */
+	protected $wcpos_parent_collection_params = null;
+
+	/**
+	 * Dispatch request to parent controller, or override if needed.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
+	 *
+	 * @return mixed $dispatch_result Dispatch result, will be used if not empty.
+	 */
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
+
+		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
+		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
+		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
+		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
+		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
+
+		/*
+		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all product IDs.
+		 */
+		if ( Bulk_ID_Fast_Path::supports_request( $request ) ) {
+			return $this->wcpos_get_all_posts( $request );
+		}
+
+		return $dispatch_result;
+	}
+
+	/**
+	 * Create a single product.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function create_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		return parent::create_item( $request );
+	}
+
+	/**
+	 * Update a single product.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_item( $request ) {
+		$invalid_meta = $this->wcpos_sanitize_meta_data_param( $request );
+		if ( is_wp_error( $invalid_meta ) ) {
+			return $invalid_meta;
+		}
+
+		return parent::update_item( $request );
+	}
+
+	/**
+	 * Add custom fields to the product schema.
+	 * - Add 'barcode' property to the product schema.
+	 * - Allow decimal quantities if enabled.
+	 *
+	 * Overrides the parent method.
+	 *
+	 * @return array $schema The product schema.
+	 */
+	public function get_item_schema() {
+		$schema = parent::get_item_schema();
+
+		// Add the 'barcode' property if 'properties' exists and is an array.
+		if ( isset( $schema['properties'] ) && \is_array( $schema['properties'] ) ) {
+			$schema['properties']['barcode'] = array(
+				'description' => /* translators: REST API schema field label or error message. */ __( 'Barcode', 'woocommerce-pos' ),
+				'type'        => 'string',
+				'context'     => array( 'view', 'edit' ),
+				'readonly'    => false,
+			);
+		}
+
+		// Check for 'stock_quantity' and allow decimal.
+		// Note: 'number' is the valid JSON schema type for decimals (not 'float').
+		if ( $this->wcpos_allow_decimal_quantities() &&
+			isset( $schema['properties']['stock_quantity'] ) &&
+			\is_array( $schema['properties']['stock_quantity'] ) ) {
+			$schema['properties']['stock_quantity']['type'] = 'number';
+		}
+
+		return $schema;
+	}
+
+
+	/**
+	 * Modify the collection params.
+	 * - Allow 'per_page' to be set to -1.
+	 * - Add custom sorting options.
+	 *
+	 * Overrides the parent method.
+	 *
+	 * @return array $params The collection parameters.
+	 */
+	public function get_collection_params() {
+		$params = $this->wcpos_get_parent_collection_params();
+
+		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying.
+		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
+			$params['per_page']['minimum'] = -1;
+		}
+
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
+			$params['brand'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Limit result set to products assigned to brand IDs or slugs, separated by commas.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand_operator' ) ) {
+			$params['brand_operator'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product brand terms.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'enum'              => array( 'in', 'not_in', 'and' ),
+				'default'           => 'in',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		if ( ! $this->wcpos_parent_collection_supports_param( 'category_operator' ) ) {
+			$params['category_operator'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product category terms.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'enum'              => array( 'in', 'not_in', 'and' ),
+				'default'           => 'in',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		if ( ! $this->wcpos_parent_collection_supports_param( 'tag_operator' ) ) {
+			$params['tag_operator'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product tag terms.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'enum'              => array( 'in', 'not_in', 'and' ),
+				'default'           => 'in',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		// Ensure 'orderby' is set and is an array before attempting to modify it.
+		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
+			// Define new sorting options.
+			$new_sort_options = array(
+				'sku',
+				'barcode',
+				'stock_quantity',
+				'stock_status',
+			);
+			// Merge new options, avoiding duplicates.
+			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
+		}
+
+		return $params;
+	}
+
+	/**
+	 * Filter the product response.
+	 *
+	 * @param WP_REST_Response $response The response object.
+	 * @param WC_Product       $product  Product data.
+	 * @param WP_REST_Request  $request  Request object.
+	 *
+	 * @return WP_REST_Response $response The response object.
+	 */
+	public function wcpos_product_response( WP_REST_Response $response, WC_Product $product, WP_REST_Request $request ): WP_REST_Response {
+		$data = $response->get_data();
+
+		// Add the UUID to the product response.
+		$this->maybe_add_post_uuid( $product );
+
+		// Add the barcode to the product response.
+		$data['barcode'] = $this->wcpos_get_barcode( $product );
+
+		// Check if the response has an image.
+		if ( isset( $data['images'] ) && ! empty( $data['images'] ) ) {
+			foreach ( $data['images'] as $key => $image ) {
+				// Replace the full size 'src' with the URL of the medium size image.
+				$image_id          = $image['id'];
+				$medium_image_data = image_downsize( $image_id, 'medium' );
+
+				if ( $medium_image_data ) {
+					$data['images'][ $key ]['src'] = $medium_image_data[0];
+				} else {
+					$data['images'][ $key ]['src'] = $image['src'];
+				}
+			}
+		}
+
+		/*
+		 * If product is variable, add the max and min prices and add them to the meta data
+		 * @TODO - only need to update if there is a change
+		 */
+		if ( $product->is_type( 'variable' ) && $product instanceof WC_Product_Variable ) {
+			$minimum_price = '';
+			$price_array   = $this->wcpos_get_variable_product_price_ranges( $product, $minimum_price );
+
+			// A simple-to-variable conversion can leave old simple price fields on the
+			// parent. Serve the current minimum, but do not pair independent regular and
+			// sale minima from different variations into a false parent-level sale.
+			if ( array_key_exists( 'price', $data ) ) {
+				$decimals      = null !== $request->get_param( 'dp' ) ? absint( $request->get_param( 'dp' ) ) : wc_get_price_decimals();
+				$data['price'] = '' === $minimum_price ? '' : wc_format_decimal( $minimum_price, $decimals );
+			}
+			foreach ( array( 'regular_price', 'sale_price' ) as $price_key ) {
+				if ( array_key_exists( $price_key, $data ) ) {
+					$data[ $price_key ] = '';
+				}
+			}
+
+			// Try encoding the array into JSON.
+			$encoded_price = wp_json_encode( $price_array );
+
+			// Check if the encoding was successful.
+			if ( false === $encoded_price ) {
+				// JSON encode failed, log the original array for debugging.
+				Logger::log( 'JSON encoding of price array failed: ' . json_last_error_msg(), $price_array );
+			} else {
+				// Update the meta data with the successfully encoded price data.
+				$product->update_meta_data( '_woocommerce_pos_variable_prices', $encoded_price );
+			}
+		}
+
+		// Parse the meta data before returning the response.
+		$data['meta_data'] = $this->wcpos_parse_meta_data( $product );
+
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $product->get_id(), 'Product' );
+
+		// Set any changes to the response data.
+		$response->set_data( $data );
+
+		return $response;
+	}
+
+	/**
+	 * Build variable product price ranges from current variation data.
+	 *
+	 * Thin adapter over {@see Variable_Price_Range}, THE canonical computation
+	 * shared with the V2 sync read lane. This lane persists the DECIMAL rendering
+	 * to `_woocommerce_pos_variable_prices` postmeta: every value formatted at the
+	 * store's price precision, all three sub-ranges always present.
+	 *
+	 * @param WC_Product_Variable $product       Variable product.
+	 * @param string|null         $minimum_price Unrounded filtered minimum price, passed by reference.
+	 *
+	 * @return array{price: array{min: string, max: string}, regular_price: array{min: string, max: string},
+	 *               sale_price: array{min: string, max: string}}
+	 */
+	private function wcpos_get_variable_product_price_ranges( WC_Product_Variable $product, ?string &$minimum_price = null ): array {
+		$computed      = Variable_Price_Range::for( $product, Variable_Price_Range::FORMAT_DECIMAL );
+		$minimum_price = $computed['minimum_price'];
+
+		return $computed['ranges'];
+	}
+
+	/**
+	 * Fires after a single object is created or updated via the REST API.
+	 *
+	 * @param WC_Data         $object   Inserted object.
+	 * @param WP_REST_Request $request  Request object.
+	 * @param bool            $creating True when creating object, false when updating.
+	 */
+	public function wcpos_insert_product_object( WC_Data $object, WP_REST_Request $request, $creating ): void {
+		// Update the barcode if it is set in the request.
+		if ( $request->has_param( 'barcode' ) ) {
+			Barcode_Field::write( $object, $request->get_param( 'barcode' ) );
+		}
+	}
+
+	/**
+	 * Filter to adjust the WordPress search SQL query
+	 * - Search for the product title and SKU and barcode
+	 * - Do not search product description.
+	 *
+	 * @param string   $search   The search SQL query.
+	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
+		global $wpdb;
+
+		if ( empty( $search ) ) {
+			return $search; // skip processing - no search term in query.
+		}
+
+		$q            = $wp_query->query_vars;
+		$n            = ! empty( $q['exact'] ) ? '' : '%';
+		$search_terms = (array) $q['search_terms'];
+
+		// Fields in the main 'posts' table.
+		$post_fields = array( 'post_title' );
+
+		// Meta fields to search.
+		$meta_fields = Barcode_Field::search_keys();
+
+		$search_conditions = array();
+
+		foreach ( $search_terms as $term ) {
+			$term = $n . $wpdb->esc_like( $term ) . $n;
+
+			// Search in post fields.
+			foreach ( $post_fields as $field ) {
+				$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
+			}
+
+			// Search in meta fields.
+			foreach ( $meta_fields as $field ) {
+				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
+			}
+		}
+
+		if ( ! empty( $search_conditions ) ) {
+			$search = ' AND (' . implode( ' OR ', $search_conditions ) . ') ';
+			if ( ! is_user_logged_in() ) {
+				$search .= " AND ($wpdb->posts.post_password = '') ";
+			}
+		}
+
+		return $search;
+	}
+
+	/**
+	 * Filters all query clauses at once, for convenience.
+	 *
+	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
+	 * fields (SELECT), and LIMIT clauses.
+	 *
+	 * @param string[] $clauses  Associative array of the clauses for the query.
+	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
+	 */
+	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
+		global $wpdb;
+
+		// Handle NULL values in stock_quantity sorting
+		// By default, MySQL sorts NULLs first in ASC and last in DESC
+		// We want NULLs to always be last regardless of sort direction.
+		if ( isset( $this->wcpos_request ) ) {
+			$orderby = $this->wcpos_request->get_param( 'orderby' );
+			$order   = strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' );
+
+			if ( 'stock_quantity' === $orderby ) {
+				// Modify ORDER BY to put NULLs last
+				// Use CASE to assign a sort priority: non-NULL = 0, NULL = 1
+				// Then sort by the actual value.
+				$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
+			}
+		}
+
+		return $clauses;
+	}
+
+	/**
+	 * Filter the query arguments for a request.
+	 *
+	 * @param array           $args    Key value array of query var to query value.
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array $args Key value array of query var to query value.
+	 */
+	public function wcpos_product_query( array $args, WP_REST_Request $request ) {
+		if ( ! empty( $request['search'] ) ) {
+			// We need to set the query up for a postmeta join.
+			add_filter( 'posts_join', array( $this, 'wcpos_posts_join_to_products_search' ), 10, 2 );
+			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_product_search' ), 10, 2 );
+		}
+
+		// if POS only products are enabled, exclude online-only products.
+		if ( $this->wcpos_pos_only_products_enabled() ) {
+			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_exclude_online_only' ), 10, 2 );
+		}
+
+		// Check for wcpos_include/wcpos_exclude parameter.
+		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 20, 2 );
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Check whether the parent WooCommerce REST controller already supports a collection param.
+	 *
+	 * If WooCommerce adds native REST support for Store API-style product filters, WCPOS
+	 * should defer to the parent implementation instead of adding duplicate tax queries.
+	 *
+	 * @param string $param Collection parameter name.
+	 *
+	 * @return bool
+	 */
+	protected function wcpos_parent_collection_supports_param( string $param ): bool {
+		$params = $this->wcpos_get_parent_collection_params();
+
+		return isset( $params[ $param ] );
+	}
+
+	/**
+	 * Get parent collection params once per controller instance.
+	 *
+	 * @return array
+	 */
+	protected function wcpos_get_parent_collection_params(): array {
+		if ( null === $this->wcpos_parent_collection_params ) {
+			$this->wcpos_parent_collection_params = parent::get_collection_params();
+		}
+
+		return $this->wcpos_parent_collection_params;
+	}
+
+	/**
+	 * Parse one or more taxonomy terms from a Store API-style request parameter.
+	 *
+	 * @param WP_REST_Request $request The request used.
+	 * @param string          $param   Request parameter name.
+	 *
+	 * @return array{field?:string,terms?:array<int,int|string>}
+	 */
+	protected function wcpos_get_store_api_tax_terms_from_request( WP_REST_Request $request, string $param ): array {
+		$value = $request->get_param( $param );
+
+		if ( empty( $value ) ) {
+			return array();
+		}
+
+		$terms = array_filter( array_map( 'trim', explode( ',', (string) $value ) ) );
+		if ( empty( $terms ) ) {
+			return array();
+		}
+
+		$ids = wp_parse_id_list( $terms );
+		if ( \count( $ids ) === \count( $terms ) ) {
+			return array(
+				'field' => 'term_id',
+				'terms' => $ids,
+			);
+		}
+
+		return array(
+			'field' => 'slug',
+			'terms' => $terms,
+		);
+	}
+
+	/**
+	 * Convert Store API-style taxonomy operators to WP_Query tax query operators.
+	 *
+	 * @param string|null $operator Store API taxonomy operator.
+	 *
+	 * @return string
+	 */
+	protected function wcpos_get_store_api_tax_operator( ?string $operator ): string {
+		$operators = array(
+			'and'    => 'AND',
+			'in'     => 'IN',
+			'not_in' => 'NOT IN',
+		);
+
+		return $operators[ $operator ?? 'in' ] ?? 'IN';
+	}
+
+	/**
+	 * Apply Store API taxonomy fallback query behavior for params missing in Woo REST.
+	 *
+	 * @param array           $args    Prepared query args.
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array
+	 */
+	protected function wcpos_apply_store_api_tax_operator_fallbacks( array $args, WP_REST_Request $request ): array {
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
+			$brand_terms = $this->wcpos_get_store_api_tax_terms_from_request( $request, 'brand' );
+			if ( isset( $brand_terms['field'], $brand_terms['terms'] ) && taxonomy_exists( 'product_brand' ) ) {
+				if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
+					$args['tax_query'] = array();
+				}
+
+				$args['tax_query'][] = array(
+					'taxonomy' => 'product_brand',
+					'field'    => $brand_terms['field'],
+					'terms'    => $brand_terms['terms'],
+					'operator' => $this->wcpos_get_store_api_tax_operator( $request->get_param( 'brand_operator' ) ),
+				);
+			}
+		}
+
+		$operator_fallbacks = array(
+			'category_operator' => 'product_cat',
+			'tag_operator'      => 'product_tag',
+		);
+		$query_params       = $request->get_query_params();
+
+		foreach ( $operator_fallbacks as $param => $taxonomy ) {
+			if ( $this->wcpos_parent_collection_supports_param( $param ) || ! array_key_exists( $param, $query_params ) ) {
+				continue;
+			}
+
+			if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
+				continue;
+			}
+
+			$args['tax_query'] = $this->wcpos_replace_tax_query_operator_for_taxonomy(
+				$args['tax_query'],
+				$taxonomy,
+				$this->wcpos_get_store_api_tax_operator( $request->get_param( $param ) )
+			);
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Replace a tax query clause operator for one taxonomy.
+	 *
+	 * @param array  $tax_query Tax query clauses.
+	 * @param string $taxonomy  Taxonomy to match.
+	 * @param string $operator  WP_Tax_Query operator.
+	 *
+	 * @return array
+	 */
+	protected function wcpos_replace_tax_query_operator_for_taxonomy( array $tax_query, string $taxonomy, string $operator ): array {
+		foreach ( $tax_query as $key => $clause ) {
+			if ( ! \is_array( $clause ) || ! isset( $clause['taxonomy'] ) || $taxonomy !== $clause['taxonomy'] ) {
+				continue;
+			}
+
+			$tax_query[ $key ]['operator'] = $operator;
+		}
+
+		return $tax_query;
+	}
+
+	/**
+	 * Filters the JOIN clause of the query.
+	 *
+	 * @param string   $join  The JOIN clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_join_to_products_search( string $join, WP_Query $query ) {
+		global $wpdb;
+
+		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
+			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
+		}
+
+		return $join;
+	}
+
+	/**
+	 * Filters the GROUP BY clause of the query.
+	 *
+	 * @param string   $groupby The GROUP BY clause of the query.
+	 * @param WP_Query $query   The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_groupby_product_search( string $groupby, WP_Query $query ) {
+		global $wpdb;
+
+		if ( ! empty( $query->query_vars['s'] ) ) {
+			$groupby = "{$wpdb->posts}.ID";
+		}
+
+		return $groupby;
+	}
+
+	/**
+	 * Filters the WHERE clause of the query.
+	 *
+	 * Exclusion set and feature gate both come from Sync\Pos_Visibility, the single POS visibility
+	 * authority.
+	 *
+	 * @param string   $where The WHERE clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_where_product_exclude_online_only( string $where, WP_Query $query ) {
+		global $wpdb;
+
+		return ( new Pos_Visibility() )->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::PRODUCTS );
+	}
+
+	/**
+	 * Filters the WHERE clause of the query.
+	 *
+	 * @param string   $where The WHERE clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_where_product_include_exclude( string $where, WP_Query $query ) {
+		global $wpdb;
+
+		// Handle 'wcpos_include'.
+		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
+			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
+			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
+		}
+
+		// Handle 'wcpos_exclude'.
+		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
+			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
+			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
+		}
+
+		return $where;
+	}
+
+
+	/**
+	 * Returns array of all product ids, name.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function wcpos_get_all_posts( $request ) {
+		global $wpdb;
+
+		$start_time = microtime( true );
+		$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'ID', 'post_modified_gmt' );
+
+		$sql  = "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts}";
+		$sql .= " WHERE post_type = 'product' AND post_status = 'publish'";
+
+		// Drop the POS-hidden ids — Sync\Pos_Visibility owns both the exclusion set and the feature gate.
+		$sql = ( new Pos_Visibility() )->apply_to_sql_where( $sql, 'ID', Pos_Visibility::PRODUCTS );
+
+		$modified_after_date = Bulk_ID_Fast_Path::modified_after_gmt( $request );
+		if ( $modified_after_date ) {
+			$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
+		}
+
+		$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->posts}.ID" );
+		$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
+
+		try {
+			$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built with prepare() above.
+
+			return Bulk_ID_Fast_Path::response( $this, $results, $start_time );
+		} catch ( Exception $e ) {
+			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching product data: ' . $e->getMessage(), 'Error fetching product data.' );
+		}
+	}
+
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args = parent::prepare_objects_query( $request );
+		$args = $this->wcpos_apply_store_api_tax_operator_fallbacks( $args, $request );
+
+		// Add custom 'orderby' options.
+		if ( isset( $request['orderby'] ) ) {
+			switch ( $request['orderby'] ) {
+				case 'sku':
+					$args['meta_key'] = '_sku';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'barcode':
+					$args['meta_key'] = Barcode_Field::orderby_key();
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'stock_quantity':
+					$args['meta_key'] = '_stock';
+					$args['orderby']  = 'meta_value_num';
+
+					break;
+				case 'stock_status':
+					$args['meta_key'] = '_stock_status';
+					$args['orderby']  = 'meta_value';
+
+					break;
+			}
+		}
+
+		return $args;
+	}
+}

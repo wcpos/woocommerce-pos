@@ -360,6 +360,96 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'bacs', $data['gateway_id'] );
 	}
 
+
+	/**
+	 * It accepts a direct PHP interface gateway without a legacy checkout hook.
+	 */
+	public function test_checkout_accepts_interface_gateway_without_legacy_hook(): void {
+		$this->ensure_interface_checkout_gateway_class();
+
+		$class_name  = __NAMESPACE__ . '\Interface_Checkout_Test_Gateway';
+		$add_gateway = static function ( $gateways ) use ( $class_name ) {
+			$gateways[] = $class_name;
+
+			return $gateways;
+		};
+		$enable_gateway = static function ( $settings ) {
+			$settings['gateways']['wcpos_interface_checkout']['enabled'] = true;
+
+			return $settings;
+		};
+
+		add_filter( 'woocommerce_payment_gateways', $add_gateway );
+		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable_gateway );
+		$registry                   = \WC_Payment_Gateways::instance();
+		$registry->payment_gateways = array();
+		$registry->init();
+
+		try {
+			$this->assertFalse( has_action( 'wcpos_process_checkout_action_wcpos_interface_checkout' ) );
+
+			$order = OrderHelper::create_order(
+				array(
+					'payment_method' => 'wcpos_interface_checkout',
+					'total'          => '50.00',
+				)
+			);
+
+			$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+			$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+			$request->set_body_params(
+				array(
+					'gateway_id'   => 'wcpos_interface_checkout',
+					'action'       => 'start',
+					'payment_data' => array(
+						'reader_id' => 'rdr_checkout',
+					),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+			$this->assertSame( 'completed', $data['status'] );
+			$this->assertSame( 'wcpos_interface_checkout', $data['gateway_id'] );
+			$this->assertSame( 'rdr_checkout', $data['provider_data']['reader_id'] );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+		}
+	}
+
+	/**
+	 * Ensure the interface-only checkout gateway exists after the production interface is loaded.
+	 */
+	private function ensure_interface_checkout_gateway_class(): void {
+		if ( ! interface_exists( 'WCPOS\\WooCommercePOS\\Payments\\Gateway_Adapter_Interface' ) ) {
+			$this->fail( 'Gateway_Adapter_Interface must exist for direct POS gateway adapters.' );
+		}
+
+		if ( class_exists( __NAMESPACE__ . '\\Interface_Checkout_Test_Gateway', false ) ) {
+			return;
+		}
+
+		eval(
+			'namespace ' . __NAMESPACE__ . ';' .
+			'class Interface_Checkout_Test_Gateway extends \\WC_Payment_Gateway implements \\WCPOS\\WooCommercePOS\\Payments\\Gateway_Adapter_Interface {' .
+			'public function __construct() { $this->id = "wcpos_interface_checkout"; $this->title = "Interface Checkout"; $this->description = ""; $this->enabled = "yes"; $this->supports = array( "products" ); }' .
+			'public function get_pos_provider( ?\\WP_REST_Request $request = null ): string { return "interface_provider"; }' .
+			'public function get_pos_type( ?\\WP_REST_Request $request = null ): string { return "terminal"; }' .
+			'public function get_pos_provider_data( ?\\WP_REST_Request $request = null ): array { return array(); }' .
+			'public function supports_pos_checkout( ?\\WP_REST_Request $request = null ): bool { return true; }' .
+			'public function supports_pos_automatic_refunds( ?\\WP_REST_Request $request = null ): bool { return false; }' .
+			'public function supports_pos_provider_refunds( ?\\WP_REST_Request $request = null ): bool { return false; }' .
+			'public function get_pos_bootstrap_response( array $context, ?\\WP_REST_Request $request = null ): array { return array( "gateway_id" => $this->id, "status" => "ready", "expires_at" => null, "provider_data" => array() ); }' .
+			'public function process_pos_checkout_action( array $state, string $action, array $payment_data, \\WC_Order $order, ?\\WP_REST_Request $request = null ) { $state["status"] = "completed"; $state["provider_data"] = array( "reader_id" => $payment_data["reader_id"] ?? "" ); return $state; }' .
+			'}'
+		);
+	}
+
 	/**
 	 * Build the in-flight claim option key for an order-scoped checkout request.
 	 *

@@ -191,7 +191,7 @@ describe('CloudPrint editing', () => {
 				printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
 				assignments: [],
 			}),
-			postSettings: () => Promise.reject({ message: 'Could not save rule.' }),
+			postSettings: () => Promise.reject(new Error('Could not save rule.')),
 			templates: [
 				{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' },
 			],

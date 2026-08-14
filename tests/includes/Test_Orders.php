@@ -782,6 +782,44 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Typed round-trip regression: after a typed sync push lands through wc/v3,
+	 * `_woocommerce_pos_data` is stored as a native PHP array, not a JSON string.
+	 * The consumers must read it shape-tolerantly (a bare json_decode fatals on
+	 * PHP 8 with an array argument).
+	 */
+	public function test_order_item_product_reads_array_valued_pos_data(): void {
+		$order = $this->create_pos_order();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Typed Misc Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		// Native array value — the post-typed-push storage form.
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			array(
+				'price'         => '12.00',
+				'regular_price' => '18.00',
+				'tax_status'    => 'none',
+			)
+		);
+		$item->save();
+		$order->add_item( $item );
+		$order->save();
+
+		$product = apply_filters( 'woocommerce_order_item_product', false, $item );
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertEquals( '12.00', $product->get_price() );
+		$this->assertEquals( '18.00', $product->get_regular_price() );
+
+		// The tax hook path must also survive the array form.
+		$item->set_taxes( array( 'total' => array( 1 => '1.00' ) ) );
+		do_action( 'woocommerce_order_item_after_calculate_taxes', $item, null );
+		$this->assertSame( array(), array_filter( $item->get_taxes()['total'] ?? array() ) );
+	}
+
+	/**
 	 * Test order_item_product creates a product for misc items.
 	 */
 	public function test_order_item_product_creates_misc_product(): void {
@@ -1031,9 +1069,10 @@ class Test_Orders extends WC_Unit_Test_Case {
 		// The global value should have been applied to all gateways.
 		$this->assertEquals( 'wc-processing', $gw_settings['gateways']['pos_cash']['order_status'] );
 
-		// The global checkout setting should have been removed.
+		// Approved behaviour change (settings-section-registry plan): reads are pure;
+		// the legacy seed persists until a payment-gateways save reflects it.
 		$checkout = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$this->assertArrayNotHasKey( 'order_status', $checkout );
+		$this->assertArrayHasKey( 'order_status', $checkout );
 	}
 
 	// ==========================================================================

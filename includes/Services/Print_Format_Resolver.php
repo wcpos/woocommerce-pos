@@ -24,7 +24,9 @@ class Print_Format_Resolver {
 	 * @return array{kind:string, content_type:string}
 	 */
 	public function resolve( array $printer, array $template ): array {
-		$provider = (string) ( $printer['provider'] ?? '' );
+		// Printer rows saved before the provider field existed have none; they
+		// must behave as the default provider, not fall through every branch.
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 		$engine   = (string) ( $template['engine'] ?? '' );
 
 		if ( 'printnode' === $provider ) {
@@ -87,6 +89,6 @@ class Print_Format_Resolver {
 	 * @return string
 	 */
 	public function content_type_for_printer( array $printer ): string {
-		return Provider::content_type( (string) ( $printer['provider'] ?? '' ) );
+		return Provider::content_type( Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null ) );
 	}
 }

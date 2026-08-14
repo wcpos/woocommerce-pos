@@ -27,7 +27,7 @@ class Products {
 		add_action( 'woocommerce_product_set_stock', array( $this, 'product_set_stock' ) );
 		add_action( 'woocommerce_variation_set_stock', array( $this, 'product_set_stock' ) );
 
-		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
+		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
 		if ( $pos_only_products ) {
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ) );
@@ -45,8 +45,8 @@ class Products {
 		 *
 		 * @TODO - this will affect the online store as well, should I make it POS only?
 		 */
-		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
-		if ( \is_bool( $allow_decimal_quantities ) && $allow_decimal_quantities ) {
+		$allow_decimal_quantities = Settings::instance()->decimal_qty_enabled();
+		if ( $allow_decimal_quantities ) {
 			remove_filter( 'woocommerce_stock_amount', 'intval' );
 			add_filter( 'woocommerce_stock_amount', 'floatval' );
 			add_action( 'woocommerce_before_product_object_save', array( $this, 'save_decimal_quantities' ) );

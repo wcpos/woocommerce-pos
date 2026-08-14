@@ -158,6 +158,22 @@ A distributable plugin zip is produced by the [`release.yml`](./.github/workflow
 
 PHP unit tests run against a matrix of WordPress, WooCommerce and PHP versions; coverage is reported to Codecov.
 
+### What counts as "ported"
+
+A test counts as coverage for current behaviour **only if it exercises the lane the app
+actually calls**. The client talks `wcpos/v2` and `wc/v3`; the `wcpos/v1` namespace is frozen,
+with a single still-live route (`wcpos/v1/products/variations`). Tests that dispatch to
+`wcpos/v1` are **legacy pins** — they document what the old namespace did, they do not prove
+current behaviour works, and a green v1 test is not evidence that a behaviour was ported.
+
+The mapping of behaviour → test case → dispatched lane → verdict is generated on demand
+under [`tests/lane-coverage/`](./tests/lane-coverage/) with
+`php scripts/lane-coverage.php --write`. The generated inventories are gitignored; lane coverage is
+enforced by [`lane-coverage.yml`](./.github/workflows/lane-coverage.yml): the list of behaviours
+whose only coverage is a v1 route may shrink, never grow. Read
+[`tests/lane-coverage/README.md`](./tests/lane-coverage/README.md) before adding tests to any
+API controller.
+
 ## 🔗 Links
 
 - 🌐 Website — [wcpos.com](https://wcpos.com)

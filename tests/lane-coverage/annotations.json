@@ -1,0 +1,74 @@
+{
+  "_readme": "Hand-authored. Behaviour names and verdicts only. Verdicts are human judgement and NEVER affect whether a case is classified v1-only — see tests/lane-coverage/README.md. Anything not listed here is 'unreviewed', which is the honest default: it means nobody has judged it yet.",
+  "classes": {
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Print_Jobs_CloudPRNT_Test": { "behavior": "Print jobs over the CloudPRNT transport" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Print_Jobs_Controller_Test": { "behavior": "Print job queue REST surface" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Print_Jobs_EpsonSDP_Test": { "behavior": "Print jobs over the Epson SDP transport" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Settings_CloudPrint_Test": { "behavior": "Cloud print settings REST surface" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Auth_API": { "behavior": "POS authentication and JWT issuance" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Cashier_Controller": { "behavior": "Cashier identity and capabilities" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Checkout_Controller": { "behavior": "Checkout and order payment" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Class_Aliases": { "behavior": "V1/V2 controller class aliasing" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Coupons_Controller": { "behavior": "Coupon reads and writes over the POS lane" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Customers_Controller": { "behavior": "Customer reads and writes over the POS lane" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Data_Order_Statuses_Controller": { "behavior": "Order status vocabulary" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Decimal_Quantities": { "behavior": "Decimal line-item quantities" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Extensions_Controller": { "behavior": "Extension discovery REST surface" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Gateway_Bootstrap_Controller": { "behavior": "Payment gateway bootstrap payload" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_HPOS_Orders_Controller": { "behavior": "Order reads and writes under HPOS" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_JWT_Plugin_Compatibility": { "behavior": "Compatibility with third-party JWT plugins" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Logs_Controller": { "behavior": "Client log ingestion" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Benchmark": { "behavior": "Meta data volume benchmark" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Performance": { "behavior": "Meta data response performance" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Value_Benchmark": { "behavior": "Meta value serialisation benchmark" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Order_Taxes": { "behavior": "Tax calculation on POS orders" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Orders_Controller": { "behavior": "Order reads and writes over the POS lane" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Orders_Stock_Restore": { "behavior": "Stock restoration on order cancel or refund" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Payment_Gateways_Controller": { "behavior": "Payment gateway listing" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Permissions": { "behavior": "POS endpoint permission checks" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Print_Queue": { "behavior": "Print queue lifecycle" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Brands_Controller": { "behavior": "Product brand reads" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Categories_Controller": { "behavior": "Product category reads" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Tags_Controller": { "behavior": "Product tag reads" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Variations_Controller": { "behavior": "Variation reads, barcode and GTIN handling" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Products_Controller": { "behavior": "Product reads, barcode and GTIN handling" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Receipts_Controller": { "behavior": "Receipt rendering REST surface" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Relay_Integration": { "behavior": "Relay transport integration" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Route_Classifier": { "behavior": "REST route classification into POS lanes" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Stores_API": { "behavior": "Store listing REST surface" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Taxes_Controller": { "behavior": "Tax rate reads" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Templates_Controller": { "behavior": "Receipt and document template REST surface" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Templates_Controller_Response": { "behavior": "Template response shape" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Traits\\Test_Uuid_Handler": { "behavior": "UUID assignment and lookup on POS records" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Traits\\Test_Uuid_Handler_Class": { "behavior": "UUID handler trait internals" },
+    "WCPOS\\WooCommercePOS\\Tests\\Admin\\Templates\\Test_Single_Template_Save": { "behavior": "Template save from wp-admin" },
+    "WCPOS\\WooCommercePOS\\Tests\\Admin\\Test_Consent": { "behavior": "Telemetry consent handling" },
+    "WCPOS\\WooCommercePOS\\Tests\\Payments\\Test_Gateway_Contract": { "behavior": "Payment gateway conformance contract" },
+    "WCPOS\\WooCommercePOS\\Tests\\Services\\Test_Stock_Validator": { "behavior": "Stock validation before checkout" },
+    "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Collection_Rules_Guard_HPOS": { "behavior": "Sync collection rules under HPOS" },
+    "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Rest_Dispatch_Fee_Tax": { "behavior": "Fee and tax handling on sync dispatch" },
+    "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Sync_Status": { "behavior": "Sync status reporting" },
+    "WCPOS\\WooCommercePOS\\Tests\\Templates\\Test_Received": { "behavior": "Order received template" },
+    "WCPOS\\WooCommercePOS\\Tests\\Test_Init_REST_Logging": { "behavior": "REST request logging at init" },
+    "WCPOS\\WooCommercePOS\\Tests\\Test_Wcpos_Functions": { "behavior": "Plugin helper functions" },
+    "WCPOS\\WooCommercePOS\\Tests\\Test_Wcpos_Request_REST_Integration": { "behavior": "POS request detection for REST calls" }
+  },
+  "cases": {
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Variations_Controller::test_variation_update_global_unique_id_as_barcode": {
+      "verdict": "gap",
+      "note": "Variation GTIN writes are guarded only through the v1 barcode alias. The v2 catalog proxy covers product GTIN push and variation CUSTOM-META barcode push, but not variation global_unique_id. Defect unverified; coverage gap is real. Audit 2026-08-10."
+    },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Variations_Controller::test_variation_get_global_unique_id_as_barcode": {
+      "verdict": "gap",
+      "note": "Variation GTIN reads have no v2 counterpart; see the sibling write case. Audit 2026-08-10."
+    },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Variations_Controller::test_variation_response_contains_global_unique_id_as_barcode": {
+      "verdict": "gap",
+      "note": "Variation GTIN reads have no v2 counterpart; see the sibling write case. Audit 2026-08-10."
+    },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Variations_Controller::test_variation_response_default_barcode_field_is_global_unique_id": {
+      "verdict": "gap",
+      "note": "Variation GTIN default-field behaviour has no v2 counterpart. Audit 2026-08-10."
+    }
+  }
+}

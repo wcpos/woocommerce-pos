@@ -35,7 +35,7 @@ class WC_API {
 	 * Constructor.
 	 */
 	public function __construct() {
-		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
+		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
 		if ( $pos_only_products ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'set_woocommerce_rest_api_request_flags' ), 10, 3 );
@@ -51,7 +51,10 @@ class WC_API {
 	 * @param \WP_REST_Request $request The request object.
 	 */
 	public function set_woocommerce_rest_api_request_flags( $result, $server, $request ) {
-		$route = $request->get_route();
+		// WordPress matches REST routes case-insensitively, so a mixed-case path
+		// still dispatches to the products controller — flag detection must not
+		// be skippable by upper-casing the route.
+		$route = strtolower( $request->get_route() );
 
 		if ( 0 === strpos( $route, '/wc/v3/products' ) || 0 === strpos( $route, '/wc/v2/products' ) || 0 === strpos( $route, '/wc/v1/products' ) ) {
 			$this->is_woocommerce_rest_api_products_request = true;

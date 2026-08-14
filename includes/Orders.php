@@ -67,6 +67,7 @@ class Orders {
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
+		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( __CLASS__, 'fee_after_calculate_taxes' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid_for_product', array( $this, 'coupon_is_valid_for_product' ), 10, 4 );
 		add_action( 'woocommerce_order_after_calculate_totals', array( __CLASS__, 'cleanup_temp_caches' ), 999 );
@@ -147,29 +148,7 @@ class Orders {
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
 		if ( woocommerce_pos_request() ) {
-			$gateway_status = $this->get_gateway_order_status( $order->get_payment_method() );
-
-			// This filter expects statuses without the 'wc-' prefix.
-			$normalized_status = 0 === strpos( $gateway_status, 'wc-' )
-				? substr( $gateway_status, 3 )
-				: $gateway_status;
-
-			if ( '' === $normalized_status ) {
-				return $status;
-			}
-
-			$valid_statuses = array_map(
-				function ( string $order_status ): string {
-					return 0 === strpos( $order_status, 'wc-' )
-						? substr( $order_status, 3 )
-						: $order_status;
-				},
-				array_keys( wc_get_order_statuses() )
-			);
-
-			return \in_array( $normalized_status, $valid_statuses, true )
-				? $normalized_status
-				: $status;
+			return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
 		}
 
 		return $status;
@@ -196,14 +175,29 @@ class Orders {
 			return $status;
 		}
 
-		$gateway_order_status = $this->get_gateway_order_status( $order->get_payment_method() );
+		return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
+	}
 
-		$normalized_status = 0 === strpos( $gateway_order_status, 'wc-' )
-			? substr( $gateway_order_status, 3 )
-			: $gateway_order_status;
+	/**
+	 * Normalise a configured gateway order status for the WooCommerce status filters.
+	 *
+	 * Both `woocommerce_payment_complete_order_status` and the offline gateway
+	 * `*_process_payment_order_status` filters expect a status *without* the `wc-`
+	 * prefix, so the prefix is stripped and the result validated against the
+	 * registered order statuses. Anything empty or unrecognised falls back.
+	 *
+	 * @param string $candidate The configured status, which may carry the `wc-` prefix.
+	 * @param string $fallback  Status to return when the candidate is empty or unknown.
+	 *
+	 * @return string
+	 */
+	private function normalize_status( string $candidate, string $fallback ): string {
+		$normalized_status = 0 === strpos( $candidate, 'wc-' )
+			? substr( $candidate, 3 )
+			: $candidate;
 
 		if ( '' === $normalized_status ) {
-			return $status;
+			return $fallback;
 		}
 
 		$valid_statuses = array_map(
@@ -217,7 +211,7 @@ class Orders {
 
 		return \in_array( $normalized_status, $valid_statuses, true )
 			? $normalized_status
-			: $status;
+			: $fallback;
 	}
 
 	/**
@@ -282,9 +276,11 @@ class Orders {
 			}
 
 			// Misc products are synthetic and never persisted to DB, so we can
-			// safely apply POS price context directly.
-			$pos_data = json_decode( $pos_data_json, true );
-			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+			// safely apply POS price context directly. Shape-tolerant read: the
+			// storage may hold the historical JSON string or a native array
+			// (after a typed sync push lands through wc/v3).
+			$pos_data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $pos_data_json );
+			if ( \is_array( $pos_data ) ) {
 				if ( isset( $pos_data['price'] ) ) {
 					$product->set_price( $pos_data['price'] );
 				}
@@ -317,8 +313,8 @@ class Orders {
 			return $product;
 		}
 
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
+		$pos_data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $pos_data_json );
+		if ( ! \is_array( $pos_data ) ) {
 			return $product;
 		}
 
@@ -569,12 +565,7 @@ class Orders {
 			return null;
 		}
 
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
-			return null;
-		}
-
-		return $pos_data;
+		return \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $pos_data_json );
 	}
 
 	/**
@@ -615,6 +606,60 @@ class Orders {
 	}
 
 	/**
+	 * Respect a negative fee line's own tax_status and tax_class on POS-marked requests.
+	 *
+	 * WooCommerce routes negative fees through its discount tax path, disregarding the
+	 * fee's tax_status and tax_class and allocating line-item tax rates proportionally
+	 * instead. The v1 controller corrected this per-dispatch (issue #1403 row 2); this
+	 * global, request-gated registration serves both the v1 routes and the v2 push's
+	 * inner wc/v3 forward (which carries the X-WCPOS header) with one implementation.
+	 * Static so V1\Orders_Controller can delegate without constructing the service.
+	 *
+	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
+	 * @param array              $calculate_tax_for The tax calculation location data.
+	 *
+	 * @return void
+	 */
+	public static function fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
+		if ( $fee_item->get_total() >= 0 ) {
+			return;
+		}
+
+		// Gate on the ORDER being a POS order (durable — survives wp-admin
+		// Recalculate, bulk actions, and third-party recalculations), with the
+		// POS request marker only as the supplement for the creation moment,
+		// before the order is marked. A per-request-only gate silently flipped a
+		// POS order's fee tax whenever a non-POS caller recalculated it.
+		//
+		// STOPGAP (2026-08-06 ruling): this preserves the existing POS fee-tax
+		// semantics consistently, but the semantics themselves are slated for
+		// replacement — negative fees are disowned by WooCommerce and the
+		// override over-declares VAT on tax-inclusive stores. The plan of record
+		// is migrating till discounts to virtual percent coupons; see
+		// .claude/research/2026-08-06-wc-negative-fee-tax.md.
+		// wcpos_is_pos_order() safely returns false for any non-order input.
+		if ( ! wcpos_is_pos_order( $fee_item->get_order() ) && ! wcpos_request() ) {
+			return;
+		}
+
+		if ( 'taxable' === $fee_item->get_tax_status() ) {
+			// Use the fee's own tax_class if set, otherwise the default class.
+			$tax_class                      = $fee_item->get_tax_class();
+			$calculate_tax_for['tax_class'] = $tax_class ? $tax_class : '';
+
+			$tax_rates      = WC_Tax::find_rates( $calculate_tax_for );
+			$discount_taxes = WC_Tax::calc_tax( (float) $fee_item->get_total(), $tax_rates );
+
+			$fee_item->set_taxes( array( 'total' => $discount_taxes ) );
+		} else {
+			// Clear taxes entirely when the fee's tax_status is 'none'.
+			$fee_item->set_taxes( array() );
+		}
+
+		$fee_item->save();
+	}
+
+	/**
 	 * Calculate taxes for an order item.
 	 *
 	 * @param WC_Order_Item|WC_Order_Item_Shipping $item Order item object.
@@ -626,14 +671,14 @@ class Orders {
 
 		foreach ( $meta_data as $meta ) {
 			if ( '_woocommerce_pos_data' === $meta->key ) {
-				$pos_data = json_decode( $meta->value, true );
+				$pos_data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $meta->value );
 
-				if ( JSON_ERROR_NONE === json_last_error() ) {
+				if ( null !== $pos_data ) {
 					if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
 						$item->set_taxes( false );
 					}
 				} else {
-					Logger::log( 'JSON parse error: ' . json_last_error_msg() );
+					Logger::log( 'Unreadable _woocommerce_pos_data meta value on order item.' );
 				}
 
 				break;

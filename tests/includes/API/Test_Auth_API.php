@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Auth;
+use WCPOS\WooCommercePOS\API\V1\Auth;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WP_REST_Request;
 use WP_UnitTestCase;
@@ -163,6 +163,21 @@ class Test_Auth_API extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'error', $data );
 		$this->assertEquals( 'invalid_request', $data['error'] );
+	}
+
+	/**
+	 * Test login user data includes granted capabilities.
+	 */
+	public function test_login_user_data_includes_capabilities_array(): void {
+		$this->regular_user->add_cap( 'edit_products' );
+
+		$data = $this->auth_service->get_user_data( $this->regular_user );
+
+		$this->assertArrayHasKey( 'capabilities', $data );
+		$this->assertIsArray( $data['capabilities'] );
+		$this->assertContains( 'edit_products', $data['capabilities'] );
+
+		$this->regular_user->remove_cap( 'edit_products' );
 	}
 
 	/**

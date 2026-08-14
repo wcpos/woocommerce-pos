@@ -448,6 +448,38 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Templates render an available inclusive aggregate even when the store's display basis is incomplete.
+	 */
+	public function test_price_bearing_gallery_templates_render_available_inclusive_total_saved(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		$exclusive_incomplete = array(
+			'total_saved'          => null,
+			'total_saved_incl'     => 8,
+			'total_saved_excl'     => null,
+			'total_saved_complete' => false,
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, true, true, $exclusive_incomplete );
+			$this->assertStringContainsString( 'TOTAL-SAVED-INCL', $rendered, $filename . ' must render the available inclusive aggregate' );
+		}
+	}
+
+	/**
 	 * Legacy lines still show one reduction when a template has no line-discount row.
 	 */
 	public function test_legacy_templates_without_line_discount_render_savings_without_coupon(): void {

@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Extensions;
+use WCPOS\WooCommercePOS\API\V1\Extensions;
 use WCPOS\WooCommercePOS\Services\Extensions as ExtensionsService;
 
 /**

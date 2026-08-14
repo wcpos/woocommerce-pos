@@ -183,19 +183,34 @@ class Test_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Verify that the route_map in API only contains wcpos/v1 routes,
-	 * ensuring the dispatch guard works correctly.
+	 * Verify that the route_map in API only contains routes from registered
+	 * WCPOS namespaces, ensuring the dispatch guard works correctly.
 	 */
 	public function test_route_map_only_contains_wcpos_routes(): void {
 		$api = new \WCPOS\WooCommercePOS\API();
+		$this->assertSame( array( 'wcpos/v1', 'wcpos/v2' ), $api->get_route_namespaces() );
 
 		$reflection = new \ReflectionClass( $api );
 		$property   = $reflection->getProperty( 'route_map' );
 		$property->setAccessible( true );
 		$route_map = $property->getValue( $api );
 
-		foreach ( $route_map as $route => $key ) {
-			$this->assertStringStartsWith( '/wcpos/v1/', $route, "Route map should only contain wcpos/v1 routes, found: $route" );
+		$prefixes = array_map(
+			static function ( string $ns ): string {
+				return '/' . $ns . '/';
+			},
+			$api->get_route_namespaces()
+		);
+
+		foreach ( array_keys( $route_map ) as $route ) {
+			$in_wcpos_namespace = false;
+			foreach ( $prefixes as $prefix ) {
+				if ( 0 === strpos( $route, $prefix ) ) {
+					$in_wcpos_namespace = true;
+					break;
+				}
+			}
+			$this->assertTrue( $in_wcpos_namespace, "Route map should only contain WCPOS-namespace routes, found: $route" );
 		}
 	}
 

@@ -162,7 +162,10 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $this->user );
 
 		$product  = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product(
-			array( 'regular_price' => 18, 'price' => 18 )
+			array(
+				'regular_price' => 18,
+				'price' => 18,
+			)
 		);
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
@@ -177,7 +180,10 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $this->shop_manager );
 
 		$product  = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product(
-			array( 'regular_price' => 18, 'price' => 18 )
+			array(
+				'regular_price' => 18,
+				'price' => 18,
+			)
 		);
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
@@ -192,7 +198,10 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $this->cashier );
 
 		$product  = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product(
-			array( 'regular_price' => 18, 'price' => 18 )
+			array(
+				'regular_price' => 18,
+				'price' => 18,
+			)
 		);
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
@@ -201,9 +210,10 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that a cashier cannot create a product.
+	 * Cashiers create products by default (decision amended 2026-08-07):
+	 * create/edit are default cashier grants, deletes stay merchant opt-in.
 	 */
-	public function test_cashier_cannot_create_product(): void {
+	public function test_cashier_can_create_product(): void {
 		wp_set_current_user( $this->cashier );
 
 		$request = $this->wp_rest_post_request( '/wcpos/v1/products' );
@@ -215,7 +225,7 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		);
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 201, $response->get_status() );
 	}
 
 	// ──────────────────────────────────────────────

@@ -16,8 +16,8 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use WC_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
 use WCPOS\WooCommercePOS\Services\Cashier;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
 
 /**
@@ -89,29 +89,6 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Build an object exposing the Uuid_Handler user-uuid path, as used by the
-	 * /customers endpoint (Customers_Controller::wcpos_customer_response).
-	 *
-	 * @return object Object with a public ensure( WP_User $user ): string method.
-	 */
-	private function customers_uuid_handler() {
-		return new class() {
-			use Uuid_Handler;
-
-			/**
-			 * Serve the user uuid exactly as the /customers endpoint does.
-			 *
-			 * @param WP_User $user User object.
-			 */
-			public function ensure( WP_User $user ): string {
-				$this->maybe_add_user_uuid( $user );
-
-				return (string) get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
-			}
-		};
-	}
-
-	/**
 	 * Test singleton instance.
 	 */
 	public function test_singleton_instance(): void {
@@ -176,17 +153,17 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test the cashier uuid matches the identity served by the /customers
-	 * endpoint (Uuid_Handler::maybe_add_user_uuid) on multisite.
+	 * Test the cashier uuid matches the identity served by the uuid authority
+	 * (Pos_Uuid, used by the /customers endpoint) on multisite.
 	 *
 	 * The POS client keys its RxDB documents on this uuid, so the same WP_User
 	 * must present ONE identity regardless of which endpoint reads them.
 	 */
-	public function test_get_cashier_uuid_multisite_matches_customers_endpoint_uuid(): void {
+	public function test_get_cashier_uuid_multisite_matches_pos_uuid_authority(): void {
 		$this->mock_multisite();
 
 		$cashier_uuid  = $this->service->get_cashier_uuid( $this->user );
-		$customer_uuid = $this->customers_uuid_handler()->ensure( $this->user );
+		$customer_uuid = Pos_Uuid::ensure_user_uuid( $this->user );
 
 		$this->assertSame( $customer_uuid, $cashier_uuid );
 	}
@@ -220,7 +197,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 
 	/**
 	 * Test an existing network-wide uuid wins over a legacy per-blog uuid, because
-	 * the network uuid is what /customers has already served to clients.
+	 * the network uuid is what /customers has already served to the client.
 	 */
 	public function test_get_cashier_uuid_multisite_prefers_network_uuid_over_legacy(): void {
 		$network_uuid = wp_generate_uuid4();
@@ -271,9 +248,14 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test the lock-timeout fallback returns a concurrently persisted winner.
+	 * Test a concurrent first-stamp winner is returned instead of our own mint.
+	 *
+	 * (Ported from main, where wp_cache_add was the lock primitive; on next the
+	 * mocked wp_generate_uuid4 injects the winner row mid-mint, exercising the
+	 * mint-path re-read convergence in Pos_Uuid. GET_LOCK contention itself is
+	 * covered in Test_Pos_Uuid.)
 	 */
-	public function test_get_cashier_uuid_lock_timeout_preserves_concurrent_insert(): void {
+	public function test_get_cashier_uuid_concurrent_first_stamp_returns_winner(): void {
 		$winner_uuid   = wp_generate_uuid4();
 		$fallback_uuid = wp_generate_uuid4();
 		FunctionsMockerHack::add_function_mocks(
@@ -364,9 +346,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	public function test_has_store_access(): void {
 		$stores = $this->service->get_accessible_stores( $this->user );
 
-		if ( empty( $stores ) ) {
-			$this->markTestSkipped( 'No stores available for testing' );
-		}
+		$this->assertNotEmpty( $stores, 'Free ships a default store; an empty list is the regression.' );
 
 		$store_id   = $stores[0]->get_id();
 		$has_access = $this->service->has_store_access( $this->user, $store_id );
@@ -389,9 +369,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	public function test_get_accessible_store_returns_store(): void {
 		$stores = $this->service->get_accessible_stores( $this->user );
 
-		if ( empty( $stores ) ) {
-			$this->markTestSkipped( 'No stores available for testing' );
-		}
+		$this->assertNotEmpty( $stores, 'Free ships a default store; an empty list is the regression.' );
 
 		$store_id = $stores[0]->get_id();
 		$store    = $this->service->get_accessible_store( $this->user, $store_id );

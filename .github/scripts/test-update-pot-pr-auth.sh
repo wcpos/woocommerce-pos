@@ -8,8 +8,8 @@ if [[ ! -f "$WORKFLOW_FILE" ]]; then
   exit 1
 fi
 
-if ! grep -Fq 'wp-cli/i18n-command:v2.2.13' "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command:v2.2.13" >&2
+if ! grep -Fq 'git clone --depth 1 --branch v2.2.13 https://github.com/wp-cli/i18n-command.git' "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to clone wp-cli/i18n-command v2.2.13" >&2
   exit 1
 fi
 
