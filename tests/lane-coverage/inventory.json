@@ -42580,7 +42580,7 @@
                 {
                     "pattern": "self-installed-hook",
                     "file": "tests/includes/Sync/Test_Sync_Read_Controllers.php",
-                    "line": 920
+                    "line": 921
                 }
             ]
         },

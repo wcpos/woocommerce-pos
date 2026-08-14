@@ -194,6 +194,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 			$this->request(
 				array(
 					'include' => (string) $product->get_id(),
+					'status'  => 'publish',
 					'absence' => 'explicit',
 				)
 			)

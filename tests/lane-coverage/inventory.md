@@ -932,7 +932,7 @@ These tests may be structurally incapable of failing because they install or stu
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_digest_failure_does_not_break_the_host_write |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_new_customer_lifecycle_hook_refreshes_the_customer_digest |
 | self-installed-hook | tests/includes/Sync/Test_Sync_Observation.php:31 | Test Sync Observation | tests/includes/Sync/Test_Sync_Observation.php:test_product_and_customer_saves_upsert_digest_rows |
-| self-installed-hook | tests/includes/Sync/Test_Sync_Read_Controllers.php:920 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record |
+| self-installed-hook | tests/includes/Sync/Test_Sync_Read_Controllers.php:921 | Test Sync Read Controllers | tests/includes/Sync/Test_Sync_Read_Controllers.php:test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record |
 
 ## All other behaviours
 
