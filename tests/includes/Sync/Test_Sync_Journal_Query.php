@@ -150,12 +150,14 @@ class Test_Sync_Journal_Query extends Sync_Store_Test_Case {
 	public function test_rows_after_sequence_returns_empty_when_table_is_missing(): void {
 		global $wpdb;
 		$table = $this->journal->table_name();
+		$previous_suppress_errors = $wpdb->suppress_errors();
 		$wpdb->query( 'DROP TABLE ' . $table ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Deliberate missing-table test.
 
 		try {
 			$this->assertSame( array(), $this->journal->rows_after_sequence( 0, 10 ) );
 		} finally {
 			$this->journal->install();
+			$wpdb->suppress_errors( $previous_suppress_errors );
 		}
 	}
 

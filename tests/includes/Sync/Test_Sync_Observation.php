@@ -60,9 +60,11 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			return $query;
 		};
 
+		$previous_suppress_errors = $wpdb->suppress_errors();
 		add_filter( 'query', $break_digest );
 		$product = ProductHelper::create_simple_product();
 		remove_filter( 'query', $break_digest );
+		$wpdb->suppress_errors( $previous_suppress_errors );
 
 		$this->assertInstanceOf( \WC_Product::class, $product );
 		$this->assertGreaterThan( 0, $product->get_id(), 'The host write must survive a broken digest store' );
@@ -87,6 +89,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			return false;
 		};
 
+		$previous_suppress_errors = $wpdb->suppress_errors();
 		add_filter( 'query', $break_digest_delete );
 		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		try {
@@ -95,6 +98,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		} finally {
 			remove_filter( 'query', $break_digest_delete );
 			remove_filter( 'woocommerce_pos_logging', $capture_log );
+			$wpdb->suppress_errors( $previous_suppress_errors );
 		}
 
 		$this->assertStringContainsString( 'delete stored customer digest failed', implode( "\n", $messages ) );
