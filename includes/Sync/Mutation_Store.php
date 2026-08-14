@@ -304,7 +304,20 @@ class Mutation_Store {
 			)
 		);
 
-		return $this->delete_by_mutation_ids( $ids );
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%s' ) );
+		$affected     = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$this->table_name()} WHERE mutation_id IN ({$placeholders}) AND status IN ('done','applied')"
+				. " AND ( ( operation <> 'create' AND created_at < %s ) OR ( operation = 'create' AND created_at < %s ) )",
+				array_merge( $ids, array( $cutoff_gmt, $create_cutoff_gmt ) )
+			)
+		);
+
+		return false === $affected ? 0 : (int) $affected;
 	}
 
 	/**
@@ -335,25 +348,16 @@ class Mutation_Store {
 			)
 		);
 
-		return $this->delete_by_mutation_ids( $ids );
-	}
-
-	/**
-	 * Delete rows by primary key, returning the count actually removed.
-	 *
-	 * @param string[] $ids Mutation ids.
-	 *
-	 * @return int Rows deleted.
-	 */
-	private function delete_by_mutation_ids( array $ids ): int {
-		global $wpdb;
 		if ( empty( $ids ) ) {
 			return 0;
 		}
 
 		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%s' ) );
 		$affected     = $wpdb->query(
-			$wpdb->prepare( "DELETE FROM {$this->table_name()} WHERE mutation_id IN ({$placeholders})", $ids )
+			$wpdb->prepare(
+				"DELETE FROM {$this->table_name()} WHERE mutation_id IN ({$placeholders}) AND status IN ('poison','blocked') AND created_at < %s",
+				array_merge( $ids, array( $cutoff_gmt ) )
+			)
 		);
 
 		return false === $affected ? 0 : (int) $affected;

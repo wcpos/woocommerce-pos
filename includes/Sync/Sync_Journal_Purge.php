@@ -142,10 +142,11 @@ final class Sync_Journal_Purge {
 		$create_days  = max( $settled_days, (int) apply_filters( 'woocommerce_pos_sync_mutation_create_retention_days', self::DEFAULT_CREATE_RETENTION_DAYS ) );
 		$failure_days = max( 0, (int) apply_filters( 'woocommerce_pos_sync_mutation_failure_retention_days', self::DEFAULT_FAILURE_RETENTION_DAYS ) );
 
-		// Journal work runs first, so mutation expiry needs a reserved floor
-		// (like pruning has against compaction) or a saturated journal would
-		// starve it every run, including the 5-minute reschedules.
-		$mutation_floor = ( $settled_days > 0 || $failure_days > 0 ) ? self::MIN_MUTATION_DELETES_PER_RUN : 0;
+		// Journal work runs first, so each active mutation-expiry phase needs a
+		// reserved floor or an earlier saturated phase would starve it every run.
+		$settled_floor = $settled_days > 0 ? self::MIN_MUTATION_DELETES_PER_RUN : 0;
+		$failure_floor = $failure_days > 0 ? self::MIN_MUTATION_DELETES_PER_RUN : 0;
+		$mutation_floor = $settled_floor + $failure_floor;
 
 		$compaction = $this->drain(
 			fn ( int $limit ): int => $this->sync_journal->compact( $compaction_cutoff, $compaction_gmt, $limit ),
@@ -172,7 +173,7 @@ final class Sync_Journal_Purge {
 			$settled     = $this->drain(
 				fn ( int $limit ): int => $this->mutation_store->prune_settled( $settled_gmt, $create_gmt, $limit ),
 				$batch,
-				self::MAX_DELETES_PER_RUN - $deleted
+				self::MAX_DELETES_PER_RUN - $deleted - $failure_floor
 			);
 			$deleted += $settled['deleted'];
 			$capped   = $capped || $settled['capped'];

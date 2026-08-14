@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge;
 
@@ -41,6 +42,7 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 	 */
 	public function tearDown(): void {
 		remove_all_filters( 'woocommerce_pos_change_log_tombstone_retention_days' );
+		remove_all_filters( 'woocommerce_pos_sync_mutation_failure_retention_days' );
 		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
 		wp_clear_scheduled_hook( Sync_Journal_Purge::PURGE_HOOK );
 		parent::tearDown();
@@ -299,6 +301,37 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 		$this->assertGreaterThan( 0, $this->journal->prune_watermark() );
 		$this->assertLessThanOrEqual( Sync_Journal_Purge::MAX_DELETES_PER_RUN, $deleted );
 		$this->assertNotEquals( false, wp_next_scheduled( Sync_Journal_Purge::PURGE_HOOK ) );
+	}
+
+	/**
+	 * Settled mutation expiry cannot consume the slice reserved for failures.
+	 */
+	public function test_purge_expired_reserves_a_slice_for_opted_in_failure_retention(): void {
+		add_filter(
+			'woocommerce_pos_sync_mutation_failure_retention_days',
+			static function (): int {
+				return 30;
+			}
+		);
+		$failure_limit = 0;
+		$store         = $this->getMockBuilder( Mutation_Store::class )
+			->onlyMethods( array( 'prune_settled', 'prune_failed' ) )
+			->getMock();
+		$store->method( 'prune_settled' )->willReturnCallback(
+			static function ( string $settled_gmt, string $create_gmt, int $limit ): int {
+				return $limit;
+			}
+		);
+		$store->expects( $this->atLeastOnce() )->method( 'prune_failed' )->willReturnCallback(
+			static function ( string $cutoff_gmt, int $limit ) use ( &$failure_limit ): int {
+				$failure_limit = $limit;
+				return 0;
+			}
+		);
+
+		( new Sync_Journal_Purge( $this->journal, $store ) )->purge_expired();
+
+		$this->assertSame( Sync_Journal_Purge::MIN_MUTATION_DELETES_PER_RUN, $failure_limit );
 	}
 
 	/**

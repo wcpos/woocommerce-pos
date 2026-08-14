@@ -33,6 +33,18 @@ class Test_Mutation_Replay_After_Prune extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Restore global state changed by the REST fixture.
+	 */
+	public function tearDown(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		parent::tearDown();
+		delete_option( Api::OPTION_ENABLED );
+
+		$this->assertArrayNotHasKey( 'HTTP_X_WCPOS', $_SERVER );
+		$this->assertFalse( get_option( Api::OPTION_ENABLED ) );
+	}
+
+	/**
 	 * Dispatch the SAME create envelope (fixed mutationId and recordId).
 	 *
 	 * @return WP_REST_Response

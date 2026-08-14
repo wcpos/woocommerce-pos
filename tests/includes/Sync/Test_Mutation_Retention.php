@@ -174,6 +174,57 @@ class Test_Mutation_Retention extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * The final delete must not remove a new pending reservation that reused a
+	 * mutation id after another worker deleted the selected retention row.
+	 *
+	 * @dataProvider provide_prune_race_cases
+	 *
+	 * @param string $mutation_id Mutation id used by the race.
+	 * @param string $status      Initially eligible status.
+	 * @param string $method      Prune method under test.
+	 */
+	public function test_prune_rechecks_eligibility_before_deleting( string $mutation_id, string $status, string $method ): void {
+		$this->seed_mutation( $mutation_id, $status, 100 );
+		$interleaved = false;
+		$filter      = function ( string $query ) use ( &$filter, &$interleaved, $mutation_id ): string {
+			if ( false !== strpos( $query, "DELETE FROM {$this->store->table_name()}" ) && false !== strpos( $query, $mutation_id ) ) {
+				remove_filter( 'query', $filter );
+				global $wpdb;
+				$wpdb->delete( $this->store->table_name(), array( 'mutation_id' => $mutation_id ) );
+				$interleaved = $this->store->reserve( 'products', $mutation_id, 'replacement-uuid', 'update' );
+			}
+
+			return $query;
+		};
+
+		add_filter( 'query', $filter );
+		try {
+			$future  = gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS );
+			$deleted = 'prune_settled' === $method
+				? $this->store->prune_settled( $future, $future, 1 )
+				: $this->store->prune_failed( $future, 1 );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertTrue( $interleaved, 'The selected row should be replaced before the final delete' );
+		$this->assertSame( 0, $deleted, 'The replacement pending reservation must not be retention-pruned' );
+		$this->assertSame( 'pending', $this->store->lookup( 'products', $mutation_id )['status'] ?? null );
+	}
+
+	/**
+	 * Retention paths that must re-check eligibility in the final delete.
+	 *
+	 * @return array<string, array{string, string, string}>
+	 */
+	public function provide_prune_race_cases(): array {
+		return array(
+			'settled row' => array( 'race-settled', 'done', 'prune_settled' ),
+			'failure row' => array( 'race-failure', 'poison', 'prune_failed' ),
+		);
+	}
+
+	/**
 	 * Creates get a longer window than other settled rows: the mutation row
 	 * is the only replay guard for a create whose record was later deleted.
 	 */
