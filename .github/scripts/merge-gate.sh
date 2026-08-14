@@ -31,6 +31,21 @@ pr_merge_state() {
   gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json mergeStateStatus --jq '.mergeStateStatus'
 }
 
+# A lane-promotion PR merges the whole `next` development lane into `main` —
+# either from `next` itself or from a `promote/*` cut of it carrying
+# promotion-only fixups (e.g. the Pro composer-pin flip). Only same-repo
+# branches qualify: a fork can name its branches anything.
+is_lane_promotion_pr() {
+  local refs head base repository
+  refs="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+    --json headRefName,baseRefName,headRepository \
+    --jq '[.headRefName, .baseRefName, .headRepository.nameWithOwner] | @tsv')" || return 1
+  IFS=$'\t' read -r head base repository <<< "$refs"
+  [[ "$repository" == "$GITHUB_REPOSITORY" ]] || return 1
+  [[ "$base" == "main" ]] || return 1
+  [[ "$head" == "next" || "$head" == promote/* ]] || return 1
+}
+
 is_translation_author() {
   [[ "$TRANSLATION_AUTHORS" == *"|${PR_AUTHOR}|"* ]]
 }
@@ -329,25 +344,23 @@ main() {
     fi
   done
   if [[ "$merge_state" == "UNKNOWN" ]]; then
-    log "Merge state stayed UNKNOWN after ${MERGE_STATE_MAX_ATTEMPTS} attempts; failing closed."
+    log "PR mergeability is still being computed (UNKNOWN); failing closed. Re-run the merge gate once GitHub reports a definitive state."
     return 1
   fi
   if [[ "$merge_state" == "DIRTY" ]]; then
     log "Resolve the merge conflicts and update the PR branch before CI can run."
     return 1
   fi
-  # GitHub reports UNKNOWN until it finishes computing mergeability, and a
-  # conflicted PR passes through UNKNOWN on its way to DIRTY. Treating it as
-  # "not conflicted" would let a still-unmergeable PR reach the allowlist
-  # bypass below, so fail closed and let a re-run pick up the settled state.
-  if [[ "$merge_state" == "UNKNOWN" ]]; then
-    log "PR mergeability is still being computed (UNKNOWN); failing closed. Re-run the merge gate once GitHub reports a definitive state."
-    return 1
-  fi
-
   # Runs before the allowlist bypasses: a fix-bot commit must carry its proof
-  # no matter which lane or PR shape it rides in on.
-  if ! enforce_bot_fix_discipline; then
+  # no matter which lane or PR shape it rides in on. Exception: a
+  # lane-promotion PR carries the entire dev cycle's history — every commit
+  # was already gated by the PR that landed it on `next`, and trailers cannot
+  # be added to published history — so the per-commit discipline is skipped
+  # for the promotion shape only. The promotion's content is still gated by
+  # the required checks below.
+  if is_lane_promotion_pr; then
+    log "Lane-promotion PR (next → main); skipping per-commit fix-bot discipline."
+  elif ! enforce_bot_fix_discipline; then
     return 1
   fi
 
