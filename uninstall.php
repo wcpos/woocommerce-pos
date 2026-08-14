@@ -89,6 +89,28 @@ function woocommerce_pos_uninstall_remove_all_data(): bool {
 }
 
 /**
+ * Whether WCPOS Pro is present on this install (active or merely on disk).
+ *
+ * Pro shares the free plugin's log source and translation namespace, so log
+ * and translation cleanup is skipped while Pro may still be using them. The
+ * detection result passes through a filter so tests can pin either state
+ * deterministically, regardless of what exists on the checkout's disk —
+ * during a real uninstall no plugin code is loaded, so the filter is a
+ * pass-through.
+ */
+function woocommerce_pos_uninstall_pro_installed(): bool {
+	$pro_plugin = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
+	$installed  = file_exists( trailingslashit( WP_PLUGIN_DIR ) . $pro_plugin )
+		|| in_array( $pro_plugin, (array) get_option( 'active_plugins', array() ), true );
+	if ( ! $installed && \function_exists( 'is_multisite' ) && is_multisite() ) {
+		$network_plugins = (array) get_site_option( 'active_sitewide_plugins', array() );
+		$installed       = isset( $network_plugins[ $pro_plugin ] );
+	}
+
+	return (bool) apply_filters( 'woocommerce_pos_uninstall_pro_installed', $installed );
+}
+
+/**
  * Delete POS session/token/preference user meta.
  *
  * Network-wide by nature: wp_usermeta is shared across a multisite network
@@ -306,13 +328,7 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 
 	// 6. Plugin-owned files: downloaded translations, template render cache,
 	// dompdf scratch, and this plugin's unshared WooCommerce logs.
-	$pro_plugin     = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
-	$active_plugins = (array) get_option( 'active_plugins', array() );
-	$pro_installed  = file_exists( trailingslashit( WP_PLUGIN_DIR ) . $pro_plugin ) || in_array( $pro_plugin, $active_plugins, true );
-	if ( ! $pro_installed && function_exists( 'is_multisite' ) && is_multisite() ) {
-		$network_plugins = (array) get_site_option( 'active_sitewide_plugins', array() );
-		$pro_installed   = isset( $network_plugins[ $pro_plugin ] );
-	}
+	$pro_installed = woocommerce_pos_uninstall_pro_installed();
 
 	$log_table = $wpdb->prefix . 'woocommerce_log';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WooCommerce's known per-site log table; uninstall context.

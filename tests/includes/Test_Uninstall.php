@@ -132,6 +132,17 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Pin Pro-presence detection to a fixed state via the uninstall filter, so
+	 * tests behave identically whether or not the checkout has Pro on disk.
+	 *
+	 * @param bool $installed Desired detection result.
+	 */
+	private function pin_pro_installed( bool $installed ): void {
+		remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+		add_filter( 'woocommerce_pos_uninstall_pro_installed', $installed ? '__return_true' : '__return_false' );
+	}
+
+	/**
 	 * Ensure the WooCommerce database log table exists for uninstall fixtures.
 	 */
 	private function ensure_log_table_exists(): string {
@@ -143,7 +154,9 @@ class Test_Uninstall extends WP_UnitTestCase {
 			return $table;
 		}
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Test fixture DDL.
 		$wpdb->query(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
 			"CREATE TABLE {$table} (
 				log_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				timestamp datetime NOT NULL,
@@ -442,10 +455,8 @@ class Test_Uninstall extends WP_UnitTestCase {
 	public function test_uninstall_database_logs_respects_source_ownership(): void {
 		global $wpdb;
 
-		$table          = $this->ensure_log_table_exists();
-		$active_plugins = get_option( 'active_plugins', array() );
-		$pro_plugin     = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
-		$insert_log     = function ( string $source ) use ( $wpdb, $table ): void {
+		$table      = $this->ensure_log_table_exists();
+		$insert_log = function ( string $source ) use ( $wpdb, $table ): void {
 			$wpdb->insert(
 				$table,
 				array(
@@ -459,24 +470,24 @@ class Test_Uninstall extends WP_UnitTestCase {
 		};
 
 		try {
-			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" );
-			update_option( 'active_plugins', array_values( array_diff( $active_plugins, array( $pro_plugin ) ) ) );
+			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
+			$this->pin_pro_installed( false );
 			$insert_log( 'woocommerce-pos' );
 			$insert_log( 'woocommerce-pos-extension' );
 
 			$this->run_uninstall( false );
 
-			$this->assertSame( '0', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ) );
-			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos-extension'" ) );
+			$this->assertSame( '0', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos-extension'" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
 
 			$insert_log( 'woocommerce-pos' );
-			update_option( 'active_plugins', array_values( array_unique( array_merge( $active_plugins, array( $pro_plugin ) ) ) ) );
+			$this->pin_pro_installed( true );
 			$this->run_uninstall( false );
 
-			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ), 'Active Pro shares the core log source' );
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ), 'Installed Pro shares the core log source' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
 		} finally {
-			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" );
-			update_option( 'active_plugins', $active_plugins );
+			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
+			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
 		}
 	}
 
@@ -484,15 +495,13 @@ class Test_Uninstall extends WP_UnitTestCase {
 	 * File cleanup deletes only an unshared, date-anchored free log source.
 	 */
 	public function test_uninstall_file_logs_respects_source_ownership(): void {
-		$log_dir        = trailingslashit( wp_upload_dir()['basedir'] ) . 'wc-logs/';
-		$free_log       = $log_dir . 'woocommerce-pos-2026-08-14-fixture.log';
-		$extension_log  = $log_dir . 'woocommerce-pos-extension-2026-08-14-fixture.log';
-		$active_plugins = get_option( 'active_plugins', array() );
-		$pro_plugin     = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
+		$log_dir       = trailingslashit( wp_upload_dir()['basedir'] ) . 'wc-logs/';
+		$free_log      = $log_dir . 'woocommerce-pos-2026-08-14-fixture.log';
+		$extension_log = $log_dir . 'woocommerce-pos-extension-2026-08-14-fixture.log';
 		wp_mkdir_p( $log_dir );
 
 		try {
-			update_option( 'active_plugins', array_values( array_diff( $active_plugins, array( $pro_plugin ) ) ) );
+			$this->pin_pro_installed( false );
 			file_put_contents( $free_log, 'free' );
 			file_put_contents( $extension_log, 'extension' );
 
@@ -502,17 +511,17 @@ class Test_Uninstall extends WP_UnitTestCase {
 			$this->assertFileExists( $extension_log );
 
 			file_put_contents( $free_log, 'shared with Pro' );
-			update_option( 'active_plugins', array_values( array_unique( array_merge( $active_plugins, array( $pro_plugin ) ) ) ) );
+			$this->pin_pro_installed( true );
 			$this->run_uninstall( false );
 
-			$this->assertFileExists( $free_log, 'Active Pro shares the core file-log source' );
+			$this->assertFileExists( $free_log, 'Installed Pro shares the core file-log source' );
 		} finally {
 			foreach ( array( $free_log, $extension_log ) as $file ) {
 				if ( file_exists( $file ) ) {
 					unlink( $file );
 				}
 			}
-			update_option( 'active_plugins', $active_plugins );
+			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
 		}
 	}
 
