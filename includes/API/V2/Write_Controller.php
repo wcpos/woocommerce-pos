@@ -1121,10 +1121,12 @@ class Write_Controller extends WP_REST_Controller {
 			}
 			$route = $meta['route'] . '/' . (int) $variation->get_parent_id() . '/variations/' . $id;
 		}
+		$force   = 'orders' === $collection ? (bool) ( $m['force'] ?? false ) : true;
 		$request = new WP_REST_Request( 'DELETE', $route );
 		$request->set_param( 'id', $id );
-		$request->set_param( 'force', 'orders' === $collection ? ( $m['force'] ?? false ) : true );
+		$request->set_param( 'force', $force );
 		$restore_stock = false;
+		$pre_restored  = false;
 		if ( 'orders' === $collection ) {
 			$setting = SettingsService::instance()->restore_stock_on_delete_enabled();
 
@@ -1139,27 +1141,91 @@ class Write_Controller extends WP_REST_Controller {
 			$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $id );
 
 			// WC core does not restore stock when orders are deleted (v1 carried
-			// this same override; see woocommerce/woocommerce#26716). The v2
-			// contract restores BEFORE the forwarded delete (trash or permanent)
-			// and rolls back below if the forward fails.
-			if ( $restore_stock ) {
+			// this same override; see woocommerce/woocommerce#26716).
+			//
+			// A REFUSED delete must leave the order EXACTLY as it found it (mono#1204).
+			// The forwarded wc/v3 delete runs its own capability check, so a cashier
+			// without delete caps gets a 403 from INSIDE `dispatch_write` — after
+			// anything this method did first. Two rules keep that path inert:
+			//
+			//  1. Pre-restore only when the order is about to be PERMANENTLY removed;
+			//     once it is gone there is no order left to read the reduced quantities
+			//     from. The trash path keeps the order, so it restores AFTER a
+			//     confirmed delete (the v1 controller's shape).
+			//  2. Pre-restore only when the order's stock was ACTUALLY reduced, and
+			//     roll back only a restore that actually ran. The two helpers are not
+			//     symmetric: `wc_maybe_increase_stock_levels()` no-ops on an order
+			//     that was never reduced, while `wc_maybe_reduce_stock_levels()`
+			//     happily reduces one. An unguarded pair therefore turned a refused
+			//     delete of a `pos-open` order into a phantom stock reduction — and,
+			//     because reducing rewrites `_reduced_stock` line-item meta, into a
+			//     revision bump that left the client's baseRevision stale and every
+			//     later push 409ing with `woo_rxdb_sync_conflict`.
+			//  3. Pre-flight the capability gate the forward will apply. Restoring and
+			//     re-reducing a stock-reduced order nets out to the same quantities but
+			//     rewrites its `_reduced_stock` item meta, which is enough to move the
+			//     revision on its own — so a refusal must not reach the stock helpers
+			//     at all. The rollback below stays as the net for the rarer failures
+			//     (validation, a plugin veto) that only the forward can discover.
+			if ( $restore_stock && $force && $this->order_stock_reduced( $id ) && $this->can_forward_delete( $id ) ) {
 				wc_maybe_increase_stock_levels( $id );
+				$pre_restored = true;
 			}
 		}
 		$response = $this->dispatch_write( $request );
 		if ( $response->get_status() >= 400 ) {
-			// Rollback the pre-restore on a failed delete.
-			if ( $restore_stock ) {
+			// Roll back ONLY a pre-restore that actually happened.
+			if ( $pre_restored ) {
 				wc_maybe_reduce_stock_levels( $id );
 			}
 
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
+		}
+		// Trash path: the order still exists, so restore stock after confirmed success.
+		if ( $restore_stock && ! $force ) {
+			wc_maybe_increase_stock_levels( $id );
 		}
 		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
 		if ( is_wp_error( $finalized ) ) {
 			return $finalized;
 		}
 		return new WP_REST_Response( (object) array(), 200 );
+	}
+
+	/**
+	 * Whether an order's stock has already been reduced.
+	 *
+	 * The pre-restore gate: `wc_maybe_increase_stock_levels()` is a no-op unless this
+	 * is true, while its rollback partner is NOT — so the delete path must know the
+	 * answer before it touches either.
+	 *
+	 * @param int $id The order id.
+	 */
+	private function order_stock_reduced( int $id ): bool {
+		$order = wc_get_order( $id );
+		if ( ! $order instanceof \WC_Order ) {
+			return false;
+		}
+		return (bool) $order->get_data_store()->get_stock_reduced( $id );
+	}
+
+	/**
+	 * Whether the forwarded wc/v3 order delete would pass its capability gate.
+	 *
+	 * Asks the SAME question the forward will, under the same
+	 * `woocommerce_rest_check_permissions` filter `dispatch_write()` installs, so the
+	 * pre-flight and the forward can never disagree. Used only to keep the stock
+	 * pre-restore off a delete that is going to be refused.
+	 *
+	 * @param int $id The order id.
+	 */
+	private function can_forward_delete( int $id ): bool {
+		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		try {
+			return (bool) wc_rest_check_post_permissions( 'shop_order', 'delete', $id );
+		} finally {
+			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+		}
 	}
 
 	private function checkpoint_and_finalize( string $mutation_id, int $remote_id, int $response_status ) {
