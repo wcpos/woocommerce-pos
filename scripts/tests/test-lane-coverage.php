@@ -63,6 +63,22 @@ class Test_Lane_Coverage_Fixture {
 	public function test_v1_collection_prefix_collision() {
 		$this->wp_rest_get_request( '/wcpos/v1/products/variations-legacy' );
 	}
+
+	public function test_live_v1_subtree_root() {
+		$this->wp_rest_get_request( '/wcpos/v1/print-jobs' );
+	}
+
+	public function test_live_v1_subtree_descendant() {
+		$this->wp_rest_get_request( '/wcpos/v1/print-jobs/queue' );
+	}
+
+	public function test_live_v1_subtree_dynamic_descendant() {
+		$this->wp_rest_get_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' );
+	}
+
+	public function test_live_v1_subtree_prefix_collision() {
+		$this->wp_rest_get_request( '/wcpos/v1/print-jobs-legacy' );
+	}
 }
 
 class Test_Lane_Coverage_Helper_Fixture {
@@ -109,6 +125,10 @@ $expected = array(
 	'test_live_v1_collection_concatenation' => array( array( 'v1' ), false, false ),
 	'test_v1_collection_descendant'   => array( array( 'v1' ), true, false ),
 	'test_v1_collection_prefix_collision' => array( array( 'v1' ), true, false ),
+	'test_live_v1_subtree_root'        => array( array( 'v1' ), false, false ),
+	'test_live_v1_subtree_descendant'  => array( array( 'v1' ), false, false ),
+	'test_live_v1_subtree_dynamic_descendant' => array( array( 'v1' ), false, false ),
+	'test_live_v1_subtree_prefix_collision' => array( array( 'v1' ), true, false ),
 	'test_unresolved_helper_route'     => array( array( 'unresolved' ), false, true ),
 );
 
