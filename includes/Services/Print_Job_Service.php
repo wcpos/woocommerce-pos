@@ -458,7 +458,7 @@ class Print_Job_Service {
 	 * refreshes every 30 seconds, so its summary must cost one query no
 	 * matter how many printers are registered.
 	 *
-	 * @return array<string, array<string, array{count: int, oldest_gmt: string}>> printer_id => status => stats.
+	 * @return array<string, array<string, array{count: int, unresolved_count: int, oldest_gmt: string}>> printer_id => status => stats.
 	 */
 	public function status_summary(): array {
 		global $wpdb;
@@ -467,14 +467,19 @@ class Print_Job_Service {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT printer.meta_value AS printer_id, status.meta_value AS job_status,
-						COUNT(DISTINCT p.ID) AS jobs, MIN(p.post_date_gmt) AS oldest_gmt
+						COUNT(DISTINCT p.ID) AS jobs,
+						COUNT(DISTINCT CASE WHEN status.meta_value = %s AND retried.post_id IS NULL THEN p.ID END) AS unresolved_jobs,
+						MIN(p.post_date_gmt) AS oldest_gmt
 				 FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} printer ON printer.post_id = p.ID AND printer.meta_key = %s
 				 INNER JOIN {$wpdb->postmeta} status ON status.post_id = p.ID AND status.meta_key = %s
+				 LEFT JOIN {$wpdb->postmeta} retried ON retried.post_id = p.ID AND retried.meta_key = %s
 				 WHERE p.post_type = %s AND p.post_status = 'publish'
 				 GROUP BY printer.meta_value, status.meta_value",
+				self::STATUS_FAILED,
 				self::META_PRINTER,
 				self::META_STATUS,
+				self::META_RETRIED_TO,
 				self::POST_TYPE
 			)
 		);
@@ -482,8 +487,9 @@ class Print_Job_Service {
 		$summary = array();
 		foreach ( (array) $rows as $row ) {
 			$summary[ (string) $row->printer_id ][ (string) $row->job_status ] = array(
-				'count'      => (int) $row->jobs,
-				'oldest_gmt' => (string) $row->oldest_gmt,
+				'count'            => (int) $row->jobs,
+				'unresolved_count' => (int) $row->unresolved_jobs,
+				'oldest_gmt'       => (string) $row->oldest_gmt,
 			);
 		}
 
@@ -700,10 +706,16 @@ class Print_Job_Service {
 	 *
 	 * @param int $id             Source job ID.
 	 * @param int $replacement_id Replacement job ID.
+	 *
+	 * @return bool Whether the retry was recorded.
 	 */
-	public function mark_retried( int $id, int $replacement_id ): void {
-		update_post_meta( $id, self::META_RETRIED_TO, $replacement_id );
+	public function mark_retried( int $id, int $replacement_id ): bool {
+		if ( ! update_post_meta( $id, self::META_RETRIED_TO, $replacement_id ) ) {
+			return false;
+		}
 		$this->strip_payload( $id );
+
+		return true;
 	}
 
 	/**

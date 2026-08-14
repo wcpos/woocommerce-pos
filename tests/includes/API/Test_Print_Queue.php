@@ -249,6 +249,8 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $failed ), array_column( $active['jobs'], 'id' ) );
 		$this->assertEquals( array( $retried, $failed ), array_column( $history['jobs'], 'id' ) );
 		$this->assertEquals( 999, $history['jobs'][0]['retried_to'] );
+		$this->assertEquals( 2, $active['summary']['counts']['failed'] );
+		$this->assertEquals( 1, $active['summary']['counts']['failed_unresolved'] );
 	}
 
 	/**

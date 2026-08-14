@@ -504,6 +504,12 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				$counts[ $status ] += isset( $per_status[ $status ] ) ? $per_status[ $status ]['count'] : 0;
 			}
 		}
+		$counts['failed_unresolved'] = 0;
+		foreach ( $summary as $per_status ) {
+			if ( isset( $per_status[ Print_Job_Service::STATUS_FAILED ] ) ) {
+				$counts['failed_unresolved'] += $per_status[ Print_Job_Service::STATUS_FAILED ]['unresolved_count'];
+			}
+		}
 
 		$printers = array();
 		foreach ( $this->registry->get_printers() as $printer ) {
@@ -643,7 +649,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 500 )
 			);
 		}
-		$this->jobs->mark_retried( (int) $source['id'], $new_id );
+		if ( Print_Job_Service::STATUS_FAILED === $source['status'] && ! $this->jobs->mark_retried( (int) $source['id'], $new_id ) ) {
+			wp_delete_post( $new_id, true );
+
+			return new WP_Error(
+				'wcpos_print_job_retry_failed',
+				__( 'Print job retry could not be recorded.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		// Push providers (PrintNode, Star Online) never poll the queue — their
 		// jobs only move when CRON_SUBMIT fires. Without this the replacement

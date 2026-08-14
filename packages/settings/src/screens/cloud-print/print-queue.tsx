@@ -177,7 +177,43 @@ export function PrintQueue() {
 		mutationFn: (id: number) =>
 			apiFetch({ path: `wcpos/v1/print-jobs/${id}/reprint?wcpos=1`, method: 'POST' }),
 		onSuccess: invalidate,
-		onError: onMutationError,
+		onError: (error, id) => {
+			const retryError = error as { code?: string; data?: { retried_to?: number } };
+			const retriedTo = retryError.data?.retried_to;
+			if (retryError.code !== 'wcpos_print_job_already_retried' || !retriedTo) {
+				onMutationError();
+				return;
+			}
+
+			setSelected(new Set());
+			queryClient.setQueriesData<QueueResponse>({ queryKey: [QUEUE_QUERY_KEY] }, (cached) => {
+				if (!cached) {
+					return cached;
+				}
+				const wasUnresolved = cached.jobs.some((job) => job.id === id && !job.retried_to);
+				return {
+					...cached,
+					jobs: cached.jobs.map((job) => (job.id === id ? { ...job, retried_to: retriedTo } : job)),
+					summary: {
+						...cached.summary,
+						counts: {
+							...cached.summary.counts,
+							failed_unresolved: Math.max(
+								0,
+								(cached.summary.counts.failed_unresolved ?? cached.summary.counts.failed ?? 0) -
+									(wasUnresolved ? 1 : 0)
+							),
+						},
+					},
+				};
+			});
+			addSnackbar({
+				message: t('cloud_print.queue_retried_as', 'Retried as #{id}', {
+					id: String(retriedTo),
+				}),
+				status: 'success',
+			});
+		},
 	});
 
 	// A cancel can empty the current page (e.g. the last row of page 2):
@@ -229,7 +265,10 @@ export function PrintQueue() {
 
 	const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
-	const activeCount = (counts.pending ?? 0) + (counts.claimed ?? 0) + (counts.failed ?? 0);
+	const activeCount =
+		(counts.pending ?? 0) +
+		(counts.claimed ?? 0) +
+		(counts.failed_unresolved ?? counts.failed ?? 0);
 	const statusOptions = [
 		{
 			label: t('cloud_print.queue_status_active', 'Needs attention ({count})', {
