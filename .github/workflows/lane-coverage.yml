@@ -66,6 +66,10 @@ jobs:
       - name: Scan is healthy and annotations are valid
         run: |
           set -euo pipefail
+          if [ ! -f tests/lane-coverage/annotations.json ]; then
+            echo "::error file=tests/lane-coverage/annotations.json::Lane-coverage annotations file is missing."
+            exit 1
+          fi
           status=0
           php scripts/lane-coverage.php --json > /dev/null || status=$?
           if [ "$status" -ne 0 ]; then
