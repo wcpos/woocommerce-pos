@@ -334,6 +334,8 @@ class Settings {
 			"
 		);
 
+		$result = array_merge( $result, Barcode_Field::CORE_FIELDS );
+
 		if ( ! empty( $custom_field ) ) {
 			$result[] = $custom_field;
 		}
