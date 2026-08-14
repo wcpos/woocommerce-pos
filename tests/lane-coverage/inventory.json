@@ -1,12 +1,12 @@
 {
     "generated_by": "scripts/lane-coverage.php",
     "summary": {
-        "cases": 3086,
+        "cases": 3089,
         "v1_only": 740,
         "unresolved": 31,
         "by_lane": {
             "v1": 806,
-            "v2": 513,
+            "v2": 516,
             "wc3": 280,
             "wp2": 2,
             "unresolved": 347,
@@ -34927,6 +34927,63 @@
             "own_lanes": [
                 "v2"
             ],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_scan_aggregates_are_cached_within_the_ttl",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_scan_aggregates_are_cached_within_the_ttl",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_scan_cache_can_be_disabled_by_ttl_filter",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_scan_cache_can_be_disabled_by_ttl_filter",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
+            "class_lanes": [
+                "v2"
+            ],
+            "lanes": [
+                "v2"
+            ],
+            "v1_only": false,
+            "unresolved": false,
+            "verdict": "unreviewed",
+            "note": null,
+            "warnings": []
+        },
+        {
+            "key": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan::test_scan_detects_digest_drift_after_cache_expiry",
+            "file": "tests/includes/Sync/Test_Integrity_Scan.php",
+            "class": "WCPOS\\WooCommercePOS\\Tests\\Sync\\Test_Integrity_Scan",
+            "method": "test_scan_detects_digest_drift_after_cache_expiry",
+            "behavior": "Test Integrity Scan",
+            "own_lanes": [],
             "class_lanes": [
                 "v2"
             ],

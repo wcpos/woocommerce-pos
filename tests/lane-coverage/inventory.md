@@ -5,10 +5,10 @@
 A test counts as coverage for current behaviour only if it exercises the lane the app
 actually calls. v1-route tests are legacy pins and do not count — see README.md here.
 
-- Cases: 3086
+- Cases: 3089
 - v1-only cases: 740
 - Unresolved-route cases (not proven current, not claimed v1): 31
-- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 513, wc3 280, wp2 2, unresolved 347, pure unit 1722
+- By lane (overlapping; a case touching two lanes is counted twice): v1 806, v2 516, wc3 280, wp2 2, unresolved 347, pure unit 1722
 - Blind-test warnings (advisory): self-installed-hook 66, asserted-stubbed-response 19
 
 ## Behaviours whose only coverage is a v1 route
@@ -1853,6 +1853,9 @@ These tests may be structurally incapable of failing because they install or stu
 | Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_order_scan_reflects_orders_and_detects_a_direct_sql_delete | v2 | unreviewed | — |
 | Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_product_publish_scan_completion_includes_orphaned_digest_id | v2 | unreviewed | — |
 | Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_product_publish_scan_matches_bucket_listing_membership | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_aggregates_are_cached_within_the_ttl | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_cache_can_be_disabled_by_ttl_filter | v2 | unreviewed | — |
+| Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_detects_digest_drift_after_cache_expiry | v2 | unreviewed | — |
 | Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_rejects_an_unsupported_collection | v2 | unreviewed | — |
 | Test Integrity Scan | tests/includes/Sync/Test_Integrity_Scan.php:test_scan_rejects_order_collection_drill_down | v2 | unreviewed | — |
 | Test Integrity Self Heal | tests/includes/Sync/Test_Integrity_Self_Heal.php:test_empty_stored_table_returns_no_aggregate_mismatches_and_schedules_rebuild | v2 | unreviewed | — |
