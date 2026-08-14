@@ -177,11 +177,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	 * path removes them, and later test classes rely on activation state).
 	 */
 	private function restore_roles_and_caps(): void {
-		$activator  = new Activator();
-		$reflection = new \ReflectionClass( $activator );
-		$method     = $reflection->getMethod( 'single_activate' );
-		$method->setAccessible( true );
-		$method->invoke( $activator, false );
+		( new Activator() )->single_activate( false );
 	}
 
 	/**
