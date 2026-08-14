@@ -92,7 +92,12 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		wp_delete_post( $deleted->get_id(), true );
 
 		$response = ( new Digests_Controller() )->get_digests(
-			$this->request( array( 'include' => $second->get_id() . ',' . $deleted->get_id() . ',' . $first->get_id() ) )
+			$this->request(
+				array(
+					'include' => $second->get_id() . ',' . $deleted->get_id() . ',' . $first->get_id(),
+					'absence' => 'explicit',
+				)
+			)
 		);
 		$rows = $response->get_data()['digests'];
 
@@ -116,7 +121,12 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		wp_delete_post( $product_id, true );
 
 		$response = ( new Digests_Controller() )->get_digests(
-			$this->request( array( 'include' => (string) $product_id ) )
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
 		);
 
 		$this->assertSame(
@@ -131,6 +141,20 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A deleted product remains absent unless explicit absence is requested.
+	 */
+	public function test_digests_omits_deleted_product_without_explicit_absence(): void {
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		wp_delete_post( $product_id, true );
+
+		$response = ( new Digests_Controller() )->get_digests(
+			$this->request( array( 'include' => (string) $product_id ) )
+		);
+
+		$this->assertSame( array(), $response->get_data()['digests'] );
+	}
+
+	/**
 	 * A trashed product with no stored digest is authoritative absence.
 	 */
 	public function test_digests_marks_trashed_product_as_deleted(): void {
@@ -138,7 +162,12 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		wp_trash_post( $product_id );
 
 		$response = ( new Digests_Controller() )->get_digests(
-			$this->request( array( 'include' => (string) $product_id ) )
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
 		);
 
 		$this->assertSame(
@@ -160,7 +189,12 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$this->delete_stored_digest( 'product', $product_id );
 
 		$response = ( new Digests_Controller() )->get_digests(
-			$this->request( array( 'include' => (string) $product_id ) )
+			$this->request(
+				array(
+					'include' => (string) $product_id,
+					'absence' => 'explicit',
+				)
+			)
 		);
 
 		$this->assertSame( array(), $response->get_data()['digests'] );
@@ -180,6 +214,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 				array(
 					'include'    => (string) $order_id,
 					'collection' => 'orders',
+					'absence'    => 'explicit',
 				)
 			)
 		);

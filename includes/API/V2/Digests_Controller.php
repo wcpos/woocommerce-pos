@@ -26,8 +26,8 @@ use WP_REST_Server;
  * `{id, digest}` the client needs to backfill its existence-reconcile manifest for records that were
  * already resident BEFORE Leg 3 shipped, so the first reconcile audit doesn't re-pull the whole catalog
  * just to seed manifest rows. Digest-on-pull (#331/#332) covers records pulled AFTER Leg 3; this covers
- * the pre-existing resident set. Servable ids with no stored digest remain absent; unservable ids are
- * returned as `{id, deleted: true}` so the caller can prune authoritative absence.
+ * the pre-existing resident set. Servable ids with no stored digest remain absent; when `absence=explicit`,
+ * unservable ids are returned as `{id, deleted: true}` so the caller can prune authoritative absence.
  */
 final class Digests_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
@@ -65,6 +65,12 @@ final class Digests_Controller extends WP_REST_Controller {
 							return 'publish' === $status ? 'publish' : '';
 						},
 						'description'       => "Set to 'publish' to scope product digests to the readable catalog.",
+					),
+					'absence' => array(
+						'sanitize_callback' => static function ( $absence ) {
+							return 'explicit' === $absence ? 'explicit' : '';
+						},
+						'description'       => "Set to 'explicit' to return deleted rows for unservable ids.",
 					),
 				),
 			)
@@ -113,7 +119,7 @@ final class Digests_Controller extends WP_REST_Controller {
 					'id' => $id,
 					'digest' => $digests[ $id ],
 				);
-			} elseif ( ! $this->is_servable( $collection, $id ) ) {
+			} elseif ( 'explicit' === $request->get_param( 'absence' ) && ! $this->is_servable( $collection, $id ) ) {
 				$out[] = array(
 					'id' => $id,
 					'deleted' => true,
