@@ -10,6 +10,7 @@ import { groupByDay } from './group-by-day';
 import { markLogsRead } from './use-unread-log-counts';
 import Notice from '../../components/notice';
 import { Select } from '../../components/ui';
+import { useNowMs } from '../../hooks/use-now';
 import { t } from '../../translations';
 
 const ALL_SOURCES = 'all';
@@ -240,7 +241,7 @@ function Logs() {
 	const levelParam = filter === 'all' ? '' : `&level=${filter}`;
 	const sourceParam = `&source=${encodeURIComponent(source)}`;
 
-	const { data } = useSuspenseQuery<LogsResponse>({
+	const { data, dataUpdatedAt } = useSuspenseQuery<LogsResponse>({
 		queryKey: ['logs', filter, source, page],
 		queryFn: () =>
 			apiFetch({
@@ -269,13 +270,19 @@ function Logs() {
 		markLogsRead();
 	}, []);
 
-	React.useEffect(() => {
+	// Collapse the expanded row when a new fetch arrives — render-time
+	// adjustment instead of a state-syncing effect.
+	const [prevData, setPrevData] = React.useState<LogsResponse | undefined>(data);
+	if (data !== prevData) {
+		setPrevData(data);
 		setExpandedKey(null);
-	}, [entries]);
+	}
 
-	// `Date.now()` pinned to the entries reference — day boundaries only matter
-	// when a new fetch arrives. Recomputing on every render would defeat the memo.
-	const groups = React.useMemo(() => groupByDay(entries, Date.now()), [entries]);
+	// Purity-safe clock for day grouping: seeded from the fetch timestamp, then
+	// ticking, so "Today"/"Yesterday" labels stay correct across midnight even
+	// while react-query serves cached data.
+	const nowMs = useNowMs(dataUpdatedAt, 60_000);
+	const groups = React.useMemo(() => groupByDay(entries, nowMs), [entries, nowMs]);
 
 	const filters = [
 		{ key: 'all', label: t('common.all', 'All') },

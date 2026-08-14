@@ -9,7 +9,9 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use Ramsey\Uuid\Uuid;
 use WC_Order_Item_Fee;
-use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -20,6 +22,7 @@ use const WCPOS\WooCommercePOS\VERSION;
  */
 class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	use HPOSToggleTrait;
+	use Order_Address_Scrub_Helpers;
 
 	/**
 	 * @var OrdersTableDataStore
@@ -61,6 +64,24 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertTrue( OrderUtil::custom_orders_table_usage_is_enabled() );
 		$order    = OrderHelper::create_order();
 		$this->assert_order_record_existence( $order->get_id(), true, true );
+	}
+
+	/**
+	 * Trashed HPOS orders do not own UUIDs returned to sync callers.
+	 */
+	public function test_pos_uuid_lookup_ignores_trashed_hpos_orders(): void {
+		$uuid    = wp_generate_uuid4();
+		$active  = OrderHelper::create_order();
+		$trashed = OrderHelper::create_order();
+		$active->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$active->save_meta_data();
+		$trashed->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$trashed->save_meta_data();
+		$trashed->delete( false );
+
+		$order_ids = Pos_Uuid::get_order_ids_by_uuid( $uuid );
+
+		$this->assertSame( array( (string) $active->get_id() ), $order_ids );
 	}
 
 	public function test_namespace_property(): void {
@@ -199,6 +220,40 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for product ID {$d['id']}." );
 			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for product ID {$d['id']} is not correctly formatted." );
 		}
+	}
+
+	public function test_order_api_get_all_ids_with_include_filter_hpos(): void {
+		$order1  = OrderHelper::create_order();
+		$order2  = OrderHelper::create_order();
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $order1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $order1->get_id() ), $ids );
+		$this->assertNotContains( $order2->get_id(), $ids );
+	}
+
+	public function test_order_api_get_all_ids_with_exclude_filter_hpos(): void {
+		$order1  = OrderHelper::create_order();
+		$order2  = OrderHelper::create_order();
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $order1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $order1->get_id(), $ids );
+		$this->assertContains( $order2->get_id(), $ids );
 	}
 
 	/**
@@ -824,7 +879,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	public function test_order_search_by_id(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -894,7 +949,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	public function test_order_search_by_id_with_includes(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -908,7 +963,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	public function test_order_search_by_id_with_excludes(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -1084,6 +1139,11 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	 * HPOS mirror: WC's batch_items() bypasses per-item schema validation, so
 	 * malformed meta_data entries must be dropped before WC core's unguarded
 	 * $meta['key'] access fatals mid-batch on PHP 8.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_order_with_string_meta_data_entry_creates_order(): void {
 		// Arrange.
@@ -1118,6 +1178,11 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	/**
 	 * HPOS mirror: same bypass on the update path.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_update_order_with_string_meta_data_entry_updates_order(): void {
 		// Arrange.

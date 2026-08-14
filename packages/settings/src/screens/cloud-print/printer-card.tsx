@@ -139,9 +139,15 @@ export function PrinterCard({
 	// (which blurs *and* calls commitName) can't fire two renames/saves.
 	const lastCommittedName = React.useRef(printer.name);
 
-	// Keep local name state in sync when the printer prop changes.
-	React.useEffect(() => {
+	// Keep local name state in sync when the printer prop changes — a
+	// render-time adjustment instead of a state-syncing effect; the ref is
+	// updated in an effect since refs must not be written during render.
+	const [prevPropName, setPrevPropName] = React.useState(printer.name);
+	if (printer.name !== prevPropName) {
+		setPrevPropName(printer.name);
 		setName(printer.name);
+	}
+	React.useEffect(() => {
 		lastCommittedName.current = printer.name;
 	}, [printer.name]);
 

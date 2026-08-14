@@ -7,7 +7,9 @@ import { t, i18nPromise } from './translations';
 const globalHooks = window.wp && window.wp.hooks;
 
 function WrappedReport({ Component, ...props }) {
-	const [isReady, setIsReady] = React.useState(false);
+	// The state value is intentionally unread; changing it re-renders once
+	// translations have loaded so t() calls use the loaded strings.
+	const [, setIsReady] = React.useState(false);
 
 	React.useEffect(() => {
 		i18nPromise.then(() => setIsReady(true));

@@ -15,7 +15,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
@@ -106,7 +107,7 @@ class Analytics {
 			return $this->enabled_cache;
 		}
 
-		$consent             = woocommerce_pos_get_settings( 'general', 'tracking_consent' );
+		$consent             = Settings::instance()->tracking_consent();
 		$this->enabled_cache = ( 'allowed' === $consent );
 
 		return $this->enabled_cache;
@@ -316,11 +317,10 @@ class Analytics {
 	/**
 	 * Get the distinct ID for the current user.
 	 *
-	 * Returns the user's POS UUID meta, lazily provisioning it if
-	 * missing. This matches the existing pattern in
-	 * `Templates\Frontend` for users who load the POS frontend, and
-	 * ensures analytics events from the WP admin (where `Frontend` is
-	 * never loaded) still have a stable `distinct_id`.
+	 * Delegates to Pos_Uuid — the sole authority for `_woocommerce_pos_uuid` — so
+	 * analytics events carry the SAME identity the /cashier and /customers
+	 * endpoints serve, lazily provisioning it for admin-only installs (where the
+	 * POS frontend has never loaded).
 	 *
 	 * Empty string when no user is logged in.
 	 */
@@ -330,15 +330,7 @@ class Analytics {
 			return '';
 		}
 
-		$uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
-		if ( \is_string( $uuid ) && '' !== $uuid ) {
-			return $uuid;
-		}
-
-		$uuid = Uuid::uuid4()->toString();
-		update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
-
-		return $uuid;
+		return Pos_Uuid::ensure_user_uuid( $user );
 	}
 
 	/**
@@ -349,15 +341,7 @@ class Analytics {
 	 * still have a stable site identifier for grouping.
 	 */
 	public function get_site_id(): string {
-		$uuid = get_option( 'woocommerce_pos_uuid', '' );
-		if ( \is_string( $uuid ) && '' !== $uuid ) {
-			return $uuid;
-		}
-
-		$uuid = Uuid::uuid4()->toString();
-		update_option( 'woocommerce_pos_uuid', $uuid );
-
-		return $uuid;
+		return wcpos_get_site_uuid();
 	}
 
 	/**

@@ -55,6 +55,10 @@ export interface CloudAssignment {
 	store_id?: number;
 	scope: 'every' | 'pos' | 'online';
 	template_id: string;
+	copies?: number;
+	// When to print: as soon as the order exists, or once it's paid.
+	// Server normalizes missing values to 'paid' on read.
+	trigger?: 'created' | 'paid';
 }
 
 export interface CloudPrintSettings {

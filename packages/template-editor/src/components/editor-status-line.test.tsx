@@ -60,6 +60,6 @@ describe('EditorStatusLine', () => {
 		expect(container.textContent).not.toContain('Synced to form');
 		expect(container.textContent).not.toContain('Auto-saved');
 		expect(container.textContent).not.toContain('Unsaved changes');
-		expect(container.querySelector('[role=\"status\"]')).toBeNull();
+		expect(container.querySelector('[role="status"]')).toBeNull();
 	});
 });

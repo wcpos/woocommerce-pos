@@ -45,6 +45,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		'woocommerce_pos_settings_tools',
 		'woocommerce_pos_settings_license',
 		'woocommerce_pos_settings_access',
+		'woocommerce_pos_settings_tax_ids',
+		'woocommerce_pos_settings_visibility',
+		'woocommerce_pos_settings_cloud_print',
 		'woocommerce_pos_visibility_products',
 		'woocommerce_pos_visibility_variations',
 	);
@@ -90,7 +93,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertTrue( $settings['generate_username'] );
 		$this->assertFalse( $settings['default_customer_is_cashier'] );
 		$this->assertEquals( 0, $settings['default_customer'] );
-		$this->assertEquals( '_sku', $settings['barcode_field'] );
+		$this->assertEquals( '_global_unique_id', $settings['barcode_field'] );
 		$this->assertEquals( 'undecided', $settings['tracking_consent'] );
 		$this->assertSame( array(), $settings['store_tax_ids'] );
 		$this->assertSame( '', $settings['store_name'] );
@@ -118,6 +121,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertNull( $scheme );
 	}
 
+	/**
+	 * Store detail strings are trimmed and stripped of markup on save.
+	 */
 	public function test_save_general_settings_sanitizes_store_details_strings(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -136,6 +142,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertSame( "Line 1\nLine 2", $result['policies_and_conditions'] );
 	}
 
+	/**
+	 * An invalid store email is dropped rather than persisted.
+	 */
 	public function test_save_general_settings_drops_invalid_email(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -145,6 +154,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertSame( '', $result['store_email'] );
 	}
 
+	/**
+	 * The read-only store_defaults key is stripped from the save payload.
+	 */
 	public function test_save_general_settings_strips_store_defaults_from_payload(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -160,6 +172,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'store_defaults', $persisted );
 	}
 
+	/**
+	 * Store tax IDs are sanitized on save.
+	 */
 	public function test_save_general_settings_sanitizes_store_tax_ids(): void {
 		$result = $this->settings->save_settings(
 			'general',
@@ -374,7 +389,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertIsArray( $settings );
 
 		$settings = $this->settings->get_settings( 'general', 'barcode_field' );
-		$this->assertEquals( '_sku', $settings );
+		$this->assertEquals( '_global_unique_id', $settings );
 	}
 
 	/**
@@ -427,15 +442,34 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	/**
 	 * Direct test: get_barcodes.
 	 *
+	 * `_sku` and `_global_unique_id` are product properties, not guaranteed to
+	 * exist as postmeta rows, so they must be offered even on a store with no
+	 * products.
+	 *
 	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_barcodes
 	 */
 	public function test_direct_get_barcodes(): void {
 		$result = $this->settings->get_barcodes();
 
 		$this->assertIsArray( $result );
-		// Result contains meta keys as strings.
-		// Should contain at least the default barcode field.
 		$this->assertContains( '_sku', $result );
+		$this->assertContains( '_global_unique_id', $result );
+	}
+
+	/**
+	 * A saved custom barcode field must not push `_sku` or `_global_unique_id`
+	 * out of the selectable list — otherwise the merchant cannot switch back.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_barcodes
+	 */
+	public function test_get_barcodes_with_custom_field_keeps_core_fields_selectable(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_custom_barcode' ) );
+
+		$result = $this->settings->get_barcodes();
+
+		$this->assertContains( '_custom_barcode', $result );
+		$this->assertContains( '_sku', $result );
+		$this->assertContains( '_global_unique_id', $result );
 	}
 
 	/**
@@ -699,6 +733,43 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertFalse( $result['admin_emails']['enabled'] );
 		$this->assertIsArray( $result['customer_emails'] );
 		$this->assertFalse( $result['customer_emails']['enabled'] );
+	}
+
+	/**
+	 * The delete_all_settings() method is a core factory reset: it deletes explicit core
+	 * section options without deleting extension-registered section options.
+	 */
+	public function test_delete_all_settings_deletes_core_options_only(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$user = wp_get_current_user();
+		$user->add_cap( 'manage_woocommerce_pos' );
+
+		$core_options = array(
+			'woocommerce_pos_settings_general',
+			'woocommerce_pos_settings_tax_ids',
+			'woocommerce_pos_settings_checkout',
+			'woocommerce_pos_settings_payment_gateways',
+			'woocommerce_pos_settings_tools',
+			'woocommerce_pos_settings_visibility',
+			'woocommerce_pos_settings_access',
+			'woocommerce_pos_settings_license',
+			'woocommerce_pos_settings_cloud_print',
+		);
+
+		foreach ( $core_options as $option ) {
+			update_option( $option, array( 'marker' => $option ) );
+		}
+		update_option( 'woocommerce_pos_settings_thirdparty', array( 'marker' => 'thirdparty' ) );
+
+		$this->assertTrue( Settings::delete_all_settings() );
+
+		foreach ( $core_options as $option ) {
+			$this->assertFalse( get_option( $option ), $option . ' should be deleted' );
+		}
+		$this->assertSame( array( 'marker' => 'thirdparty' ), get_option( 'woocommerce_pos_settings_thirdparty' ) );
+
+		delete_option( 'woocommerce_pos_settings_thirdparty' );
 	}
 
 	/**

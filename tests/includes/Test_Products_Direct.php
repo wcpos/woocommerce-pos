@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use Exception;
 use WC_Product_Simple;
 use WC_Product_Variation;
 use WC_Unit_Test_Case;
@@ -248,16 +247,9 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$products = new Products();
 		$product  = ProductHelper::create_simple_product();
 
-		// Should not throw exception for regular product
-		$exception_thrown = false;
+		$products->store_api_prevent_pos_only_add_to_cart( $product );
 
-		try {
-			$products->store_api_prevent_pos_only_add_to_cart( $product );
-		} catch ( Exception $e ) {
-			$exception_thrown = true;
-		}
-
-		$this->assertFalse( $exception_thrown );
+		$this->assertTrue( $product->is_purchasable() );
 	}
 
 	/**

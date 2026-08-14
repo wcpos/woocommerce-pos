@@ -9,7 +9,8 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Coupons_Controller;
+use WCPOS\WooCommercePOS\API\V1\Coupons_Controller;
+use WCPOS\WooCommercePOS\Sync\Api;
 
 /**
  * Coupons controller tests.
@@ -194,6 +195,24 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Coupon UUID cleanup uses the shared first-valid identity rule.
+	 */
+	public function test_coupon_response_uses_shared_uuid_duplicate_resolution(): void {
+		$coupon     = CouponHelper::create_coupon( 'duplicateuuidcoupon' );
+		$valid_uuid = wp_generate_uuid4();
+		delete_post_meta( $coupon->get_id(), Api::UUID_META_KEY );
+		add_post_meta( $coupon->get_id(), Api::UUID_META_KEY, 'invalid-first' );
+		add_post_meta( $coupon->get_id(), Api::UUID_META_KEY, $valid_uuid );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons/' . $coupon->get_id() );
+		$this->trigger_dispatch( $request );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $valid_uuid ), get_post_meta( $coupon->get_id(), Api::UUID_META_KEY, false ) );
+	}
+
+	/**
 	 * A corrupt stored coupon UUID must be regenerated and persisted on read.
 	 */
 	public function test_coupon_response_with_corrupt_stored_uuid_regenerates_uuid(): void {
@@ -227,67 +246,6 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Coupon batch creates must drop malformed metadata entries before WC core.
-	 */
-	public function test_batch_create_coupon_with_string_meta_data_entry_creates_coupon(): void {
-		// Arrange.
-		$request = $this->wp_rest_post_request( '/wcpos/v1/coupons/batch' );
-		$request->set_body_params(
-			array(
-				'create' => array(
-					array(
-						'code'          => 'batchcouponcreate',
-						'discount_type' => 'fixed_cart',
-						'amount'        => '5.00',
-						'meta_data'     => array( 'not-an-object' ),
-					),
-				),
-			)
-		);
-
-		// Act.
-		$this->trigger_dispatch( $request );
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-
-		// Assert.
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
-		$created_coupon = new \WC_Coupon( $data['create'][0]['id'] );
-		$this->assertEquals( $data['create'][0]['id'], $created_coupon->get_id() );
-	}
-
-	/**
-	 * Coupon batch updates must drop malformed metadata entries before WC core.
-	 */
-	public function test_batch_update_coupon_with_string_meta_data_entry_updates_coupon(): void {
-		// Arrange.
-		$coupon  = CouponHelper::create_coupon( 'batchcouponupdate' );
-		$request = $this->wp_rest_post_request( '/wcpos/v1/coupons/batch' );
-		$request->set_body_params(
-			array(
-				'update' => array(
-					array(
-						'id'        => $coupon->get_id(),
-						'amount'    => '9.00',
-						'meta_data' => array( 'not-an-object' ),
-					),
-				),
-			)
-		);
-
-		// Act.
-		$this->trigger_dispatch( $request );
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-
-		// Assert.
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
-		$this->assertEquals( '9.00', $data['update'][0]['amount'] );
-	}
-
-	/**
 	 * Test coupon API returns all IDs.
 	 */
 	public function test_coupon_api_get_all_ids(): void {
@@ -306,6 +264,44 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids  = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( $coupon1->get_id(), $coupon2->get_id() ), $ids );
+	}
+
+	public function test_coupon_api_get_all_ids_with_include_filter(): void {
+		$coupon1 = CouponHelper::create_coupon( 'fastincludeone' );
+		$coupon2 = CouponHelper::create_coupon( 'fastincludetwo' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $coupon1->get_id() ) );
+
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $coupon1->get_id() ), $ids );
+		$this->assertNotContains( $coupon2->get_id(), $ids );
+	}
+
+	public function test_coupon_api_get_all_ids_with_exclude_filter(): void {
+		$coupon1 = CouponHelper::create_coupon( 'fastexcludeone' );
+		$coupon2 = CouponHelper::create_coupon( 'fastexcludetwo' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $coupon1->get_id() ) );
+
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $coupon1->get_id(), $ids );
+		$this->assertContains( $coupon2->get_id(), $ids );
 	}
 
 	/**
@@ -329,6 +325,10 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Test orderby=code ascending.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): `orderby=code` has no client caller —
+	 * the coupons list disables sorting on the code column — so it is deliberately
+	 * NOT ported to the v2 read lane. See Coupons_Controller::get_collection_params().
 	 */
 	public function test_coupon_orderby_code_asc(): void {
 		$coupon_b = CouponHelper::create_coupon( 'bravo' );
@@ -356,6 +356,10 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Test orderby=code descending.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): `orderby=code` has no client caller —
+	 * the coupons list disables sorting on the code column — so it is deliberately
+	 * NOT ported to the v2 read lane. See Coupons_Controller::get_collection_params().
 	 */
 	public function test_coupon_orderby_code_desc(): void {
 		$coupon_b = CouponHelper::create_coupon( 'bravo' );
@@ -473,6 +477,77 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 			strtotime( $data['date_modified_gmt'] ),
 			"date_modified_gmt in response should be updated. Original: {$original_modified_gmt}, Response: {$data['date_modified_gmt']}"
 		);
+	}
+
+	/**
+	 * Coupon batch create must drop malformed meta_data entries before WC core
+	 * reads them without per-item schema validation.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
+	 */
+	public function test_batch_create_coupon_with_string_meta_data_entry_creates_coupon(): void {
+		// Arrange.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/coupons/batch' );
+		$request->set_body_params(
+			array(
+				'create' => array(
+					array(
+						'code'      => 'batch-meta-coupon',
+						'amount'    => '10',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'create', $data );
+		$this->assertArrayNotHasKey( 'error', $data['create'][0] );
+		$this->assertGreaterThan( 0, $data['create'][0]['id'] );
+		$this->assertEquals( 'batch-meta-coupon', $data['create'][0]['code'] );
+	}
+
+	/**
+	 * Coupon batch update has the same per-item schema bypass as create.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
+	 */
+	public function test_batch_update_coupon_with_string_meta_data_entry_updates_coupon(): void {
+		// Arrange.
+		$coupon  = CouponHelper::create_coupon( 'batch-update-meta-coupon' );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/coupons/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array(
+						'id'        => $coupon->get_id(),
+						'amount'    => '15',
+						'meta_data' => array( 'not-an-object' ),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'update', $data );
+		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
+		$this->assertEquals( '15.00', $data['update'][0]['amount'] );
 	}
 
 	/**

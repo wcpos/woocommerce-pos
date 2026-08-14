@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Logs;
+use WCPOS\WooCommercePOS\API\V1\Logs;
 
 /**
  * Logs Controller test case.
@@ -269,7 +269,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 			'2026-02-11T00:00:00+00:00'
 		);
 
-		$counts = \WCPOS\WooCommercePOS\API\Logs::get_unread_counts( get_current_user_id() );
+		$counts = \WCPOS\WooCommercePOS\API\V1\Logs::get_unread_counts( get_current_user_id() );
 		$this->assertEquals( 1, $counts['error'] );
 		$this->assertEquals( 2, $counts['warning'] );
 	}
@@ -283,7 +283,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 			"2026-02-11T09:00:00+00:00 INFO Just info\n"
 		);
 
-		$counts = \WCPOS\WooCommercePOS\API\Logs::get_unread_counts( get_current_user_id() );
+		$counts = \WCPOS\WooCommercePOS\API\V1\Logs::get_unread_counts( get_current_user_id() );
 		$this->assertEquals( 1, $counts['error'] );
 		$this->assertEquals( 0, $counts['warning'] );
 	}

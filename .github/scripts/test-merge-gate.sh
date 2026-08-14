@@ -246,6 +246,15 @@ run_case "merge-state lookup failure fails closed" fail \
   MOCK_MERGE_STATE_FAIL="true" \
   MOCK_NO_CHECKS_EXPECTED="true"
 
+run_case "indeterminate merge state fails closed despite allowlist" fail \
+  PR_AUTHOR="translations-ci[bot]" \
+  PR_TITLE="chore: update translation version to 2026.5.6" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_MERGE_STATE="UNKNOWN" \
+  MERGE_GATE_MERGE_STATE_MAX_ATTEMPTS="2" \
+  MOCK_NO_CHECKS_EXPECTED="true"
+
 run_case "merge state stuck at UNKNOWN fails closed" fail \
   PR_AUTHOR="kilbot" \
   PR_TITLE="feat: normal change" \

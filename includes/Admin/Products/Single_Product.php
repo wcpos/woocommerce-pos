@@ -12,7 +12,6 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
-use WCPOS\WooCommercePOS\Registry;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Post;
@@ -40,9 +39,7 @@ class Single_Product {
 	 * Constructor.
 	 */
 	public function __construct() {
-		Registry::get_instance()->set( static::class, $this );
-
-		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$this->barcode_field = Settings::instance()->barcode_field();
 
 		// visibility options.
 		$this->options = array(
@@ -51,14 +48,14 @@ class Single_Product {
 			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
-		if ( $this->barcode_field && ! \in_array( $this->barcode_field, $this->get_excluded_barcode_fields(), true ) ) {
+		if ( $this->barcode_field && ! \in_array( $this->barcode_field, self::get_excluded_barcode_fields(), true ) ) {
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3 );
 			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
-		if ( woocommerce_pos_get_settings( 'general', 'pos_only_products' ) ) {
+		if ( Settings::instance()->pos_only_products_enabled() ) {
 			add_action( 'save_post', array( $this, 'save_post' ), 10, 2 );
 			add_action( 'post_submitbox_misc_actions', array( $this, 'post_submitbox_misc_actions' ), 99 );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_pos_only_products' ), 10, 3 );
@@ -326,7 +323,7 @@ class Single_Product {
 	 *
 	 * @return array Array of excluded barcode field keys.
 	 */
-	private function get_excluded_barcode_fields(): array {
+	public static function get_excluded_barcode_fields(): array {
 		$excluded_fields = array(
 			'_sku',                 // default WooCommerce SKU field.
 			'_global_unique_id',    // default WooCommerce GTIN, UPC, EAN, or ISBN.

@@ -1,38 +1,42 @@
+import { fixupConfigRules } from '@eslint/compat';
 import { defineConfig } from 'eslint/config';
 import universeWeb from 'eslint-config-universe/flat/web.js';
 
 /**
- * Shared flat config for all workspace packages (settings, analytics, consent,
- * template-editor, template-gallery). Each package runs `eslint src` and ESLint
- * resolves this file by walking up from the package directory.
+ * Shared ESLint flat config for all JS/TS packages in this workspace.
  *
- * Rule overrides ported from @wcpos/eslint-config-wordpress (eslintrc-style,
- * incompatible with ESLint >= 10).
- *
- * ESLint is pinned to 9.x at the workspace root: eslint-config-universe's
- * plugin stack (eslint-plugin-import, eslint-plugin-react) still uses APIs
- * removed in ESLint 10 and crashes at lint time under 10.x.
+ * Replaces the eslintrc-style `@wcpos/eslint-config-wordpress` shared config,
+ * which ESLint 10 can no longer load. Each package runs `eslint src` and picks
+ * this file up from the repo root.
  */
 export default defineConfig([
 	{
-		ignores: ['**/build/**', '**/dist/**', 'vendor/**', 'packages/eslint/**'],
+		ignores: [
+			'**/node_modules/',
+			'**/dist/',
+			'**/build/',
+			'vendor/',
+			'vendor_prefixed/',
+			'packages/eslint/**',
+		],
 	},
-	universeWeb,
+	// fixupConfigRules restores plugin APIs removed in ESLint 10 (eslint-plugin-import
+	// and eslint-plugin-react still target v9) until universe ships v10-ready deps.
+	// TODO(#1257): drop the wrapper (and @eslint/compat) once eslint-config-universe
+	// supports ESLint 10 natively — removal recipe is in the issue.
+	...fixupConfigRules(universeWeb),
 	{
 		settings: {
 			react: {
-				// eslint-plugin-react's version auto-detect uses context.getFilename,
-				// removed in ESLint 10; pin the version instead of detecting
 				version: '18.3',
 			},
 		},
 		rules: {
-			// eslint-plugin-node rules, disabled upstream; the plugin is namespaced `n` in flat config
+			// eslint-plugin-node rules, disabled upstream; the plugin is namespaced `n` in flat config.
 			'n/handle-callback-err': 'off',
 			'n/no-callback-literal': 'off',
-			// React Compiler diagnostics added in eslint-plugin-react-hooks v7 recommended.
-			// The previous lint gate (react-hooks v5) only enforced rules-of-hooks, so keep
-			// these as warnings until the flagged code is refactored deliberately.
+			// Keep newly enabled React Compiler diagnostics non-blocking until
+			// the affected code is deliberately refactored.
 			'react-hooks/static-components': 'warn',
 			'react-hooks/use-memo': 'warn',
 			'react-hooks/preserve-manual-memoization': 'warn',
@@ -43,6 +47,9 @@ export default defineConfig([
 			'react-hooks/error-boundaries': 'warn',
 			'react-hooks/purity': 'warn',
 			'react-hooks/set-state-in-render': 'warn',
+			// `void somePromise()` statements are our idiom for intentionally
+			// un-awaited promises.
+			'no-void': ['warn', { allowAsStatement: true }],
 			// Prefer function declarations for named components
 			'react/function-component-definition': [
 				'error',

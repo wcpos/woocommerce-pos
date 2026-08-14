@@ -39,6 +39,41 @@ class Init {
 		// upgrader_process_complete) are in place before those actions
 		// fire on a plugin activation or update request.
 		new Consent();
+		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
+		add_action( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::REBUILD_HOOK, array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'run_scheduled_rebuild' ) );
+		// Gate on the schema latch, not a live Health probe: the latch is only
+		// set AFTER install verified every table (latch-after-verify), so a
+		// per-request SHOW TABLES sweep buys nothing — and a table lost after
+		// latching is already survivable (observer writes fail open and the
+		// REST health gate 503s the sync endpoints).
+		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
+		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
+			if ( $sync_schema_latched ) {
+				// Normalize structured meta at priority 5, before revision stamps at 9
+				// and UUID, digest, and variable-price stamps at priority 10. Kept out
+				// of the augmentation pipeline because it also serves the order lane.
+				\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
+				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
+				add_filter( 'woocommerce_pos_sync_order_pull_payloads', array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10, 3 );
+				// ONE seam for both product read lanes: the batch catalog proxy and the
+				// per-object serializer. Every stamper is declared once inside; both
+				// public filter names stay live as projections of it.
+				\WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline::install();
+			}
+
+			// Identity is core, not an observer benchmark variable: every product is
+			// born with a UUID whenever the sync feature is enabled, even before the
+			// schema latch is healthy. The before-save hook writes it in the same save.
+			\WCPOS\WooCommercePOS\Sync\Pos_Uuid::register_hooks();
+
+			if ( $sync_schema_latched ) {
+				( new \WCPOS\WooCommercePOS\Sync\Sync_Journal() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
+			}
+
+			( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
+		}
 
 		// Init hooks.
 		add_action( 'init', array( $this, 'init' ) );
@@ -54,14 +89,32 @@ class Init {
 		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
 
 		/*
-		 * Add JWT authentication filter.
+		 * Add the global JWT authentication filter and its core-route audit guard.
 		 *
 		 * Hook order: plugins_loaded -> init (determine_current_user) -> rest_api_init
 		 *
-		 * This filter runs at priority 20 (after WordPress core's cookie auth at priority 10).
+		 * This filter runs at priority 20, after WordPress core's cookie auth handlers.
 		 * It must be registered here (during plugins_loaded) because determine_current_user
 		 * fires during 'init', which is BEFORE rest_api_init where our API class loads.
+		 * Because it authenticates WCPOS Bearer tokens on EVERY
+		 * REST request (marked or not), the audit-meta guard for core routes
+		 * must be registered just as unconditionally — never from the
+		 * X-WCPOS-gated API class, whose marker an attacker simply omits.
+		 * Registering it first lets its priority-20 provenance filter run after
+		 * core's cookie handlers but before WCPOS's JWT filter.
 		 */
+		( new Services\Core_Order_Audit_Guard() )->register_hooks();
+
+		// Coupon post-date touch. Unconditional and lane-agnostic on purpose: a
+		// meta-only coupon edit (amount, discount_type, usage limits) never moves
+		// post_modified, and the client's catalogue replication is date-based
+		// (?modified_after, filtered by WooCommerce on post_modified_gmt), so an
+		// untouched coupon is invisible to every other till. That is true whether
+		// the edit came from the POS, wp-admin, WP-CLI or another plugin — so this
+		// sits outside the Sync\Api::is_enabled() gate above, which only guards the
+		// v2 sync TABLES this does not use.
+		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
+
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
 	}
 
@@ -166,6 +219,11 @@ class Init {
 		$is_wcpos_request = woocommerce_pos_request();
 
 		if ( $is_wcpos_request ) {
+			if ( ! wcpos_request( 'header' ) && ! wcpos_request( 'query_var' ) ) {
+				// Namespace-detected only: routes still register, but surface
+				// that a proxy/WAF is stripping the X-WCPOS marker.
+				$this->log_unmarked_wcpos_rest_request();
+			}
 			new API();
 		} else {
 			// Queue the registration at a later priority of the SAME
@@ -174,7 +232,6 @@ class Init {
 			// When this method is called outside the action (tests), the
 			// add_action is simply inert.
 			add_action( 'rest_api_init', array( $this, 'register_public_relay_routes' ), 30 );
-			$this->log_unmarked_wcpos_rest_request();
 			new WC_API();
 		}
 	}
@@ -200,10 +257,11 @@ class Init {
 	}
 
 	/**
-	 * Log requests for a WCPOS namespace that omitted the required request marker.
+	 * Log requests for a WCPOS namespace that omitted the request marker.
 	 *
-	 * This runs before WCPOS routes are registered, so it captures the otherwise
-	 * silent rest_no_route response. Warnings are limited by API version to avoid
+	 * Namespace detection registers the routes anyway; this surfaces that a
+	 * proxy/WAF is stripping the X-WCPOS marker so misconfigured hosts stay
+	 * visible in the logs. Warnings are limited by API version to avoid
 	 * allowing repeated unauthenticated requests to flood WooCommerce logs.
 	 */
 	private function log_unmarked_wcpos_rest_request(): void {
@@ -229,7 +287,7 @@ class Init {
 		}
 
 		set_transient( $transient, 1, 5 * MINUTE_IN_SECONDS );
-		Logger::warning( $route . ': missing WCPOS request marker.' );
+		Logger::warning( $route . ': request marker missing (routes still registered via namespace detection).' );
 	}
 
 	/**
@@ -264,6 +322,9 @@ class Init {
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
 		if ( 'OPTIONS' == $request->get_method() ) {
+			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing', 'X-WCPOS-Memory-Peak', 'X-WCPOS-Pressure', 'ETag', 'Date' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
+			$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
+
 			$allow_headers = array(
 				'Authorization',            // For user-agent authentication with a server.
 				'X-WP-Nonce',               // WordPress-specific header, used for CSRF protection.
@@ -272,7 +333,9 @@ class Init {
 				'Content-Type',             // Specifies the media type of the resource.
 				'X-HTTP-Method-Override',   // Used to override the HTTP method.
 				'X-WCPOS',                  // Used to identify WCPOS requests.
+				'If-None-Match',            // Conditional sequence-log polling (304s).
 			);
+			$allow_headers = Sync\Header_Mirror::allow_cors_headers( $allow_headers );
 
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
 			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
@@ -362,6 +425,9 @@ class Init {
 		new Orders();
 		new Emails();
 		new Templates();
+		new Services\Stock_Validator();
+		new Services\Decimal_Quantities();
+		new Services\Customer_Meta_Parity();
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();

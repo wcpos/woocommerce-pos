@@ -8,6 +8,16 @@ import { chromium } from '@playwright/test';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
+
+// Fail fast with an actionable message rather than mid-run after the
+// browser capture loop has already started.
+try {
+	execFileSync('cwebp', ['-version'], { stdio: 'ignore' });
+} catch {
+	throw new Error(
+		'cwebp not found on PATH — install the webp tools first (macOS: `brew install webp`, Debian/Ubuntu: `apt install webp`).'
+	);
+}
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 794;

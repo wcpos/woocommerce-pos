@@ -2,7 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use ReflectionMethod;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Session_Context;
 use WP_Error;
 use WP_UnitTestCase;
 
@@ -12,6 +14,11 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Auth_Service extends WP_UnitTestCase {
+	/**
+	 * A desktop Chrome user agent, used by the session-context tests.
+	 */
+	private const CHROME_DESKTOP_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 	private $auth_service;
 	private $test_user;
 
@@ -88,6 +95,33 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'token_type', $tokens );
 		$this->assertArrayHasKey( 'expires_at', $tokens );
 		$this->assertEquals( 'Bearer', $tokens['token_type'] );
+	}
+
+	/**
+	 * Test token pair expiry metadata comes from the issued access token.
+	 */
+	public function test_generate_token_pair_expires_at_matches_access_token_exp_claim(): void {
+		$filter_calls         = 0;
+		$access_expiry_filter = function ( $expire, $issued_at ) use ( &$filter_calls ) {
+			++$filter_calls;
+
+			return $issued_at + ( 300 * $filter_calls );
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
+
+		try {
+			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10 );
+		}
+
+		$this->assertIsArray( $tokens );
+
+		$access_decoded = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertEquals( (int) $access_decoded->exp, $tokens['expires_at'] );
 	}
 
 	/**
@@ -553,6 +587,35 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test refresh expiry metadata comes from the issued access token.
+	 */
+	public function test_refresh_access_token_expires_at_matches_access_token_exp_claim(): void {
+		$refresh_token = $this->auth_service->generate_refresh_token( $this->test_user );
+
+		$filter_calls         = 0;
+		$access_expiry_filter = function ( $expire, $issued_at ) use ( &$filter_calls ) {
+			++$filter_calls;
+
+			return $issued_at + ( 300 * $filter_calls );
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
+
+		try {
+			$result = $this->auth_service->refresh_access_token( $refresh_token );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10 );
+		}
+
+		$this->assertIsArray( $result );
+
+		$access_decoded = $this->auth_service->validate_token( $result['access_token'], 'access' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertEquals( (int) $access_decoded->exp, $result['expires_at'] );
+	}
+
+	/**
 	 * Test permission checking for self.
 	 */
 	public function test_can_manage_own_sessions(): void {
@@ -721,6 +784,105 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 		// Access token should be invalid because its refresh_jti is blacklisted
 		$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Test session blacklist outlives previously issued access tokens.
+	 */
+	public function test_revoke_session_blacklist_covers_previously_issued_access_token_expiry(): void {
+		$long_access_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 10;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
+
+		try {
+			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10 );
+		}
+
+		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh_decoded );
+
+		$short_blacklist_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 1;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
+
+		try {
+			$result = $this->auth_service->revoke_session_with_blacklist(
+				$this->test_user->ID,
+				$refresh_decoded->jti
+			);
+
+			sleep( 2 );
+
+			$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
+		}
+
+		$this->assertTrue( $result );
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Test legacy sessions without recorded access expiry still get conservative blacklists.
+	 */
+	public function test_revoke_session_blacklist_covers_legacy_session_without_recorded_access_expiry(): void {
+		$long_access_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 10;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
+
+		try {
+			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10 );
+		}
+
+		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh_decoded );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+		$this->assertIsArray( $refresh_tokens );
+		$this->assertArrayHasKey( $refresh_decoded->jti, $refresh_tokens );
+
+		unset( $refresh_tokens[ $refresh_decoded->jti ]['access_expires'] );
+		update_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+
+		$short_blacklist_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 1;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
+
+		try {
+			$result = $this->auth_service->revoke_session_with_blacklist(
+				$this->test_user->ID,
+				$refresh_decoded->jti
+			);
+
+			sleep( 2 );
+
+			$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
+		}
+
+		$this->assertTrue( $result );
 		$this->assertInstanceOf( WP_Error::class, $validated );
 		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
 	}
@@ -944,5 +1106,261 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$result = $this->auth_service->update_session_activity( $this->test_user->ID, 'nonexistent-jti' );
 
 		$this->assertFalse( $result );
+	}
+
+	/**
+	 * An explicit ios platform sets the app type, forces tablet, and takes the
+	 * declared version and build.
+	 */
+	public function test_store_session_with_ios_platform_overrides_device_info(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, 'ios', '1.4.0', '412' )
+		);
+
+		$this->assertEquals( 'ios_app', $device_info['app_type'] );
+		$this->assertEquals( 'tablet', $device_info['device_type'] );
+		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( '1.4.0', $device_info['browser_version'] );
+		$this->assertEquals( '412', $device_info['build'] );
+	}
+
+	/**
+	 * An explicit android platform behaves like ios.
+	 */
+	public function test_store_session_with_android_platform_overrides_device_info(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, 'android', '2.0.1', '77' )
+		);
+
+		$this->assertEquals( 'android_app', $device_info['app_type'] );
+		$this->assertEquals( 'tablet', $device_info['device_type'] );
+		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( '2.0.1', $device_info['browser_version'] );
+		$this->assertEquals( '77', $device_info['build'] );
+	}
+
+	/**
+	 * An explicit electron platform forces desktop.
+	 */
+	public function test_store_session_with_electron_platform_overrides_device_info(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, 'electron', '3.1.0', '5' )
+		);
+
+		$this->assertEquals( 'electron_app', $device_info['app_type'] );
+		$this->assertEquals( 'desktop', $device_info['device_type'] );
+		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( '3.1.0', $device_info['browser_version'] );
+		$this->assertEquals( '5', $device_info['build'] );
+	}
+
+	/**
+	 * An explicit web platform keeps the browser identity parsed from the user
+	 * agent and leaves the device type alone.
+	 */
+	public function test_store_session_with_web_platform_keeps_parsed_browser(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, 'web', '', '' )
+		);
+
+		$this->assertEquals( 'web', $device_info['app_type'] );
+		$this->assertEquals( 'desktop', $device_info['device_type'] );
+		$this->assertEquals( 'Chrome', $device_info['browser'] );
+		$this->assertEquals( '120.0.0.0', $device_info['browser_version'] );
+		$this->assertArrayNotHasKey( 'build', $device_info );
+	}
+
+	/**
+	 * A platform declared without a version or build keeps the version parsed
+	 * from the user agent and records no build.
+	 */
+	public function test_store_session_with_platform_only_keeps_parsed_version_and_no_build(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, 'ios' )
+		);
+
+		$this->assertEquals( 'ios_app', $device_info['app_type'] );
+		$this->assertEquals( 'tablet', $device_info['device_type'] );
+		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( '120.0.0.0', $device_info['browser_version'] );
+		$this->assertArrayNotHasKey( 'build', $device_info );
+	}
+
+	/**
+	 * With no platform declared the device info comes purely from the user agent.
+	 */
+	public function test_store_session_without_platform_falls_back_to_user_agent(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT )
+		);
+
+		$this->assertEquals( 'web', $device_info['app_type'] );
+		$this->assertEquals( 'desktop', $device_info['device_type'] );
+		$this->assertEquals( 'Chrome', $device_info['browser'] );
+		$this->assertEquals( '120.0.0.0', $device_info['browser_version'] );
+		$this->assertEquals( 'Windows', $device_info['os'] );
+		$this->assertArrayNotHasKey( 'build', $device_info );
+	}
+
+	/**
+	 * A platform value outside the allow list is ignored entirely.
+	 */
+	public function test_store_session_with_unknown_platform_is_ignored(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, 'blackberry', '9.9.9', '1' )
+		);
+
+		$this->assertEquals( 'web', $device_info['app_type'] );
+		$this->assertEquals( 'desktop', $device_info['device_type'] );
+		$this->assertEquals( 'Chrome', $device_info['browser'] );
+		$this->assertEquals( '120.0.0.0', $device_info['browser_version'] );
+		$this->assertArrayNotHasKey( 'build', $device_info );
+	}
+
+	/**
+	 * The session records the user agent and IP carried by the context.
+	 */
+	public function test_store_session_records_context_user_agent_and_ip(): void {
+		$session = $this->store_session_with_context(
+			new Session_Context( self::CHROME_DESKTOP_USER_AGENT, '', '', '', '203.0.113.9' )
+		);
+
+		$this->assertEquals( self::CHROME_DESKTOP_USER_AGENT, $session['user_agent'] );
+		$this->assertEquals( '203.0.113.9', $session['ip_address'] );
+	}
+
+	/**
+	 * The Cloudflare header wins over X-Forwarded-For and the remote address all
+	 * the way through to the stored session.
+	 */
+	public function test_store_session_ip_precedence_prefers_cloudflare_header(): void {
+		$session = $this->store_session_with_context(
+			Session_Context::from_request(
+				array(
+					'HTTP_USER_AGENT'       => self::CHROME_DESKTOP_USER_AGENT,
+					'HTTP_CF_CONNECTING_IP' => '203.0.113.1',
+					'HTTP_X_FORWARDED_FOR'  => '203.0.113.2',
+					'REMOTE_ADDR'           => '203.0.113.4',
+				),
+				array()
+			)
+		);
+
+		$this->assertEquals( '203.0.113.1', $session['ip_address'] );
+	}
+
+	/**
+	 * Without the Cloudflare header, X-Forwarded-For wins over the remote address.
+	 */
+	public function test_store_session_ip_precedence_prefers_forwarded_for_over_remote_addr(): void {
+		$session = $this->store_session_with_context(
+			Session_Context::from_request(
+				array(
+					'HTTP_USER_AGENT'      => self::CHROME_DESKTOP_USER_AGENT,
+					'HTTP_X_FORWARDED_FOR' => '203.0.113.2, 198.51.100.1',
+					'REMOTE_ADDR'          => '203.0.113.4',
+				),
+				array()
+			)
+		);
+
+		$this->assertEquals( '203.0.113.2', $session['ip_address'] );
+	}
+
+	/**
+	 * With no proxy headers the remote address is used.
+	 */
+	public function test_store_session_ip_precedence_falls_back_to_remote_addr(): void {
+		$session = $this->store_session_with_context(
+			Session_Context::from_request(
+				array(
+					'HTTP_USER_AGENT' => self::CHROME_DESKTOP_USER_AGENT,
+					'REMOTE_ADDR'     => '203.0.113.4',
+				),
+				array()
+			)
+		);
+
+		$this->assertEquals( '203.0.113.4', $session['ip_address'] );
+	}
+
+	/**
+	 * Platform metadata supplied as request params reaches the stored session.
+	 */
+	public function test_store_session_reads_platform_metadata_from_request_params(): void {
+		$device_info = $this->store_session_and_get_device_info(
+			Session_Context::from_request(
+				array( 'HTTP_USER_AGENT' => self::CHROME_DESKTOP_USER_AGENT ),
+				array(
+					'platform' => 'electron',
+					'version'  => '4.2.0',
+					'build'    => '18',
+				)
+			)
+		);
+
+		$this->assertEquals( 'electron_app', $device_info['app_type'] );
+		$this->assertEquals( 'desktop', $device_info['device_type'] );
+		$this->assertEquals( '4.2.0', $device_info['browser_version'] );
+		$this->assertEquals( '18', $device_info['build'] );
+	}
+
+	/**
+	 * With no context supplied the session is recorded against the live request.
+	 *
+	 * This pins the default path: if store_refresh_token_jti() stopped calling
+	 * Session_Context::from_request() the recorded IP would be empty. The
+	 * user-agent half of the same wiring is covered by test_device_info_parsing.
+	 */
+	public function test_generate_refresh_token_without_context_records_live_request_ip(): void {
+		$expected_ip = Session_Context::client_ip_from_request();
+		$this->assertNotEmpty( $expected_ip, 'The test request is expected to carry a client IP.' );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+
+		$this->assertCount( 1, $sessions );
+		$this->assertEquals( $expected_ip, $sessions[0]['ip_address'] );
+	}
+
+	/**
+	 * Store a session against an injected context and return the stored session.
+	 *
+	 * store_refresh_token_jti() is private; the optional Session_Context
+	 * parameter is the seam this exercises, so it is invoked by reflection
+	 * rather than by mutating superglobals.
+	 *
+	 * @param Session_Context $context The context to record the session against.
+	 *
+	 * @return array The stored session.
+	 */
+	private function store_session_with_context( Session_Context $context ): array {
+		$jti    = wp_generate_uuid4();
+		$method = new ReflectionMethod( Auth::class, 'store_refresh_token_jti' );
+		$method->setAccessible( true );
+		$method->invoke( $this->auth_service, $this->test_user->ID, $jti, time() + DAY_IN_SECONDS, $context );
+
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+
+		foreach ( $sessions as $session ) {
+			if ( $session['jti'] === $jti ) {
+				return $session;
+			}
+		}
+
+		$this->fail( 'The stored session was not found.' );
+	}
+
+	/**
+	 * Store a session against an injected context and return its device info.
+	 *
+	 * @param Session_Context $context The context to record the session against.
+	 *
+	 * @return array The stored device info.
+	 */
+	private function store_session_and_get_device_info( Session_Context $context ): array {
+		$session = $this->store_session_with_context( $context );
+
+		return $session['device_info'];
 	}
 }

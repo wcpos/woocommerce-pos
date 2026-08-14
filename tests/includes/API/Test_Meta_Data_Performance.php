@@ -12,8 +12,8 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Orders_Controller;
-use WCPOS\WooCommercePOS\API\Products_Controller;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Products_Controller;
 
 /**
  * Meta Data Performance test case.

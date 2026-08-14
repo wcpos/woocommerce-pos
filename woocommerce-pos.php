@@ -3,7 +3,7 @@
  * Plugin Name:       WCPOS – Point of Sale for WooCommerce
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
  * Description:       A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href="http://wordpress.org/plugins/woocommerce/">WooCommerce</a>.
- * Version:           1.9.17
+ * Version:           1.10.0
  * Author:            kilbot
  * Author URI:        http://wcpos.com
  * Text Domain:       woocommerce-pos
@@ -25,8 +25,11 @@ namespace WCPOS\WooCommercePOS;
 
 // Define plugin constants (use define() with checks to avoid conflicts when Pro plugin is active).
 if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
-	\define( __NAMESPACE__ . '\VERSION', '1.9.17' );
+	\define( __NAMESPACE__ . '\VERSION', '1.10.0' );
 }
+require_once __DIR__ . '/includes/API/V2/Ping.php';
+API\V2\Ping::maybe_serve();
+
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
 	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.7.8' );
 }
@@ -118,8 +121,16 @@ function wcpos_load_autoloaders(): void { // phpcs:ignore WordPress.NamingConven
 }
 
 wcpos_load_autoloaders();
+require_once __DIR__ . '/includes/API/class-aliases.php';
 
 if ( \defined( 'WP_CLI' ) && WP_CLI ) {
+	if ( ! class_exists( \WCPOS\WooCommercePOS\Services\Anon_ID::class ) ) {
+		require_once __DIR__ . '/includes/Services/Anon_ID.php';
+	}
+	if ( ! class_exists( \WCPOS\WooCommercePOS\CLI\Anon_ID_Command::class ) ) {
+		require_once __DIR__ . '/includes/CLI/Anon_ID_Command.php';
+	}
+
 	\WP_CLI::add_command( 'wcpos anon-id', \WCPOS\WooCommercePOS\CLI\Anon_ID_Command::class );
 }
 

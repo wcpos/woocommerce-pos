@@ -14,6 +14,12 @@ interface FailedResponse {
 	method: string;
 }
 
+const WP_ADMIN_AJAX_DENYLIST = [
+	'action=dashboard-widgets',
+	'/wp-json/wc-admin/onboarding/free-extensions',
+	'action=wp-compression-test',
+];
+
 /**
  * Returns true if a same-origin response/request failure should be ignored by
  * the assertion in afterEach. Off-origin failures (analytics, external CDN
@@ -29,6 +35,14 @@ function isIgnoredFailure(url: string, status: number): boolean {
 
 	const baseUrl = new URL(process.env.WP_BASE_URL || 'http://localhost:8888');
 	if (parsed.host !== baseUrl.host) {
+		return true;
+	}
+
+	// WP Admin dashboard requests that are unavailable in wp-env are cosmetic.
+	if (
+		(status === 0 || status === 404) &&
+		WP_ADMIN_AJAX_DENYLIST.some((entry) => parsed.href.includes(entry))
+	) {
 		return true;
 	}
 
@@ -113,6 +127,8 @@ export const test = base.extend<{ adminPage: Page }>({
 			page.waitForURL(/\/wp-admin\//, { waitUntil: 'domcontentloaded', timeout: 60000 }),
 			page.click('#wp-submit'),
 		]);
+		failedResponses.length = 0;
+		pageErrors.length = 0;
 
 		await use(page);
 

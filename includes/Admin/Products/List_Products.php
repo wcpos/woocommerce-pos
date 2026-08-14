@@ -39,7 +39,7 @@ class List_Products {
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$this->barcode_field = Settings::instance()->barcode_field();
 
 		// visibility options.
 		$this->options = array(
@@ -48,24 +48,14 @@ class List_Products {
 			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
-		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
-			// product.
+		if ( $this->barcode_field && ! \in_array( $this->barcode_field, Single_Product::get_excluded_barcode_fields(), true ) ) {
+			// product. The variation barcode field is registered by Single_Product,
+			// which owns the only implementation of those callbacks.
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
-			// variations.
-			add_action(
-				'woocommerce_product_after_variable_attributes',
-				array(
-					$this,
-					'after_variable_attributes_barcode_field',
-				),
-				10,
-				3
-			);
-			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
-		if ( woocommerce_pos_get_settings( 'general', 'pos_only_products' ) ) {
+		if ( Settings::instance()->pos_only_products_enabled() ) {
 			add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 			add_filter( 'views_edit-product', array( $this, 'pos_visibility_filters' ), 10, 1 );
 			add_action( 'bulk_edit_custom_box', array( $this, 'bulk_edit' ), 10, 2 );

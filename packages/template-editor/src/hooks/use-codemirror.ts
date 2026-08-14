@@ -54,10 +54,14 @@ export function useCodemirror({
 	const viewRef = useRef<EditorView | null>(null);
 	const wrapCompartment = useRef(new Compartment());
 
+	// Latest-ref pattern: updated in an effect (not during render) so the
+	// CodeMirror listeners always see the newest callbacks.
 	const onChangeRef = useRef(onChange);
-	onChangeRef.current = onChange;
 	const onCursorChangeRef = useRef(onCursorChange);
-	onCursorChangeRef.current = onCursorChange;
+	useEffect(() => {
+		onChangeRef.current = onChange;
+		onCursorChangeRef.current = onCursorChange;
+	});
 
 	useEffect(() => {
 		if (!containerRef.current) return;

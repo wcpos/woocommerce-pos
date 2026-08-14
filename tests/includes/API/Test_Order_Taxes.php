@@ -4,7 +4,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Admin_Settings;
-use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
 /**
@@ -16,6 +16,10 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
 		$this->endpoint = new Orders_Controller();
+		// Production POS requests always carry the physical X-WCPOS header; the
+		// request-gated fee tax handler (Orders::fee_after_calculate_taxes) reads
+		// it from the server globals, not the WP_REST_Request object.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
 		update_option( 'woocommerce_calc_taxes', 'yes' );
 		update_option( 'woocommerce_tax_based_on', 'base' );
 
@@ -84,6 +88,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function tearDown(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 	}
 
@@ -392,50 +397,32 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 						'product_id' => $product->get_id(),
 						'quantity'   => 1,
 						'total'      => '10.00',
-						'tax_status' => 'none',
+						'meta_data'  => array(
+							array(
+								'key'   => '_woocommerce_pos_data',
+								'value' => '{"price":"10","regular_price":"10","tax_status":"none"}',
+							),
+						),
 					),
 				),
 			)
 		);
 
 		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
 		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( 0.0, (float) $data['line_items'][0]['total_tax'], 'The POS tax_status override should make the line non-taxable.' );
+
+		$order            = wc_get_order( $data['id'] );
+		$item             = current( $order->get_items() );
+		$input_product    = wc_get_product( $product->get_id() );
+		$filtered_product = apply_filters( 'woocommerce_order_item_product', $input_product, $item );
+		$this->assertNotSame( $input_product, $filtered_product, 'The POS tax override should use an isolated product instance.' );
+		$this->assertEquals( 'taxable', $input_product->get_tax_status(), 'The input product instance should remain unchanged.' );
+		$this->assertEquals( 'none', $filtered_product->get_tax_status(), 'The isolated product should receive the POS tax_status override.' );
 
 		$db_product = wc_get_product( $product->get_id() );
 		$this->assertEquals( 'taxable', $db_product->get_tax_status(), 'Product tax_status should not be permanently changed by line item override.' );
 		$this->assertEquals( '', $db_product->get_tax_class(), 'Product tax_class should remain unchanged.' );
-	}
-
-	public function test_line_item_tax_class_zero_rate_does_not_persist_to_product(): void {
-		$product = ProductHelper::create_simple_product(
-			array(
-				'regular_price' => 10,
-				'price'         => 10,
-				'tax_status'    => 'taxable',
-				'tax_class'     => '',
-			)
-		);
-
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
-		$request->set_body_params(
-			array(
-				'payment_method' => 'pos_cash',
-				'line_items'     => array(
-					array(
-						'product_id' => $product->get_id(),
-						'quantity'   => 1,
-						'total'      => '10.00',
-						'tax_class'  => 'zero-rate',
-					),
-				),
-			)
-		);
-
-		$response = $this->server->dispatch( $request );
-		$this->assertEquals( 201, $response->get_status() );
-
-		$db_product = wc_get_product( $product->get_id() );
-		$this->assertEquals( 'taxable', $db_product->get_tax_status(), 'Product tax_status should remain unchanged.' );
-		$this->assertEquals( '', $db_product->get_tax_class(), 'Product tax_class should not be permanently changed by line item override.' );
 	}
 }

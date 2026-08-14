@@ -119,14 +119,30 @@ export function usePrinterStatus(printer: CloudPrinter): {
 		statusDetail: printer.status_detail,
 	});
 
-	React.useEffect(() => {
-		setState({ status: printer.status, statusDetail: printer.status_detail });
+	const [prevPropState, setPrevPropState] = React.useState({
+		status: printer.status,
+		statusDetail: printer.status_detail,
+	});
+	if (
+		printer.status !== prevPropState.status ||
+		printer.status_detail !== prevPropState.statusDetail
+	) {
+		const nextState = {
+			status: printer.status,
+			statusDetail: printer.status_detail,
+		};
+		setPrevPropState(nextState);
+		setState(nextState);
+	}
 
-		return subscribeToPrinterStatusUpdates((settings) => {
-			const next = settings.printers.find((nextPrinter) => nextPrinter.id === printer.id);
-			setState({ status: next?.status, statusDetail: next?.status_detail });
-		});
-	}, [printer.id, printer.status, printer.status_detail]);
+	React.useEffect(
+		() =>
+			subscribeToPrinterStatusUpdates((settings) => {
+				const next = settings.printers.find((nextPrinter) => nextPrinter.id === printer.id);
+				setState({ status: next?.status, statusDetail: next?.status_detail });
+			}),
+		[printer.id]
+	);
 
 	return state;
 }

@@ -22,6 +22,7 @@ afterEach(() => {
 	}
 	mountedRoots.length = 0;
 	document.body.innerHTML = '';
+	delete (window as any).wcpos;
 	vi.clearAllMocks();
 });
 
@@ -183,5 +184,78 @@ describe('PreviewModal logicless previews', () => {
 
 		expect(container.querySelector('iframe')).toBeNull();
 		expect(container.textContent).toContain('Create a POS order first');
+	});
+
+	it('mounts an errored order preview before falling back to sample data', async () => {
+		(window as any).wcpos = { templateGallery: { hasPosOrders: true } };
+		let orderObserverMounted = false;
+		const samplePreview: PreviewResponse = {
+			engine: 'logicless',
+			template_content: '<p>Sample preview</p>',
+			receipt_data: {},
+			order_id: 0,
+			template_id: 'invoice',
+		};
+
+		usePreviewMock.mockImplementation((_templateId, orderId) => {
+			React.useEffect(() => {
+				if (orderId === 'latest') orderObserverMounted = true;
+			}, [orderId]);
+
+			return orderId === 'latest'
+				? ({ data: undefined, isFetching: false, isError: true } as ReturnType<typeof usePreview>)
+				: ({
+						data: samplePreview,
+						isFetching: false,
+						isError: false,
+					} as ReturnType<typeof usePreview>);
+		});
+
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PreviewModal templateId="invoice" templateName="Invoice" isGallery onClose={() => {}} />
+			);
+		});
+		await act(async () => {
+			await new Promise((resolve) => window.setTimeout(resolve, 0));
+		});
+
+		expect(orderObserverMounted).toBe(true);
+		expect(usePreviewMock).toHaveBeenCalledWith('invoice', 'latest');
+		expect(usePreviewMock).toHaveBeenCalledWith('invoice', undefined);
+		expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain('Sample preview');
+	});
+
+	it('keeps the order source selected while its retry is fetching', async () => {
+		(window as any).wcpos = { templateGallery: { hasPosOrders: true } };
+		usePreviewMock.mockImplementation(
+			(_templateId, orderId) =>
+				({
+					data: undefined,
+					isFetching: orderId === 'latest',
+					isError: orderId === 'latest',
+				}) as ReturnType<typeof usePreview>
+		);
+
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PreviewModal templateId="invoice" templateName="Invoice" isGallery onClose={() => {}} />
+			);
+		});
+		await act(async () => {
+			await new Promise((resolve) => window.setTimeout(resolve, 0));
+		});
+
+		expect(usePreviewMock).not.toHaveBeenCalledWith('invoice', undefined);
 	});
 });

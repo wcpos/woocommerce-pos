@@ -3,11 +3,11 @@
  * POS order audit-meta authority.
  *
  * Single source of truth for the `_pos_*` audit keys (who rang up the sale,
- * which store, the cash amounts) used by the wcpos/v1 orders controller. The
- * server is the sole authoritative writer of this trail: `_pos_user` and
- * `_woocommerce_pos_version` are always server-derived, and the till-sourced
- * values (`_pos_store`, cash-tender) are accepted from the client payload
- * only at create and only when valid.
+ * which store, the cash amounts) shared by the wcpos/v1 orders controller and
+ * the wcpos/v2 write controller. The server is the sole authoritative writer
+ * of this trail: `_pos_user` and `_woocommerce_pos_version` are always
+ * server-derived, and the till-sourced values (`_pos_store`, cash-tender) are
+ * accepted from the client payload only at create and only when valid.
  *
  * @package WCPOS\WooCommercePOS\Services
  */
@@ -23,7 +23,7 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const SERVER_META_KEYS = array( '_pos_user', '_woocommerce_pos_version' );
+	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_woocommerce_pos_version' );
 
 	/**
 	 * Audit keys sourced from the till at the sale (client-supplied, validated,
@@ -40,6 +40,16 @@ final class Pos_Order_Audit {
 	 * @var string[]
 	 */
 	private const CASH_META_KEYS = array( '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
+
+	/**
+	 * The monetary till keys, for callers that stamp cash amounts
+	 * (Write_Controller::stamp_order_till_meta on the v2 update path).
+	 *
+	 * @return string[]
+	 */
+	public static function cash_meta_keys(): array {
+		return self::CASH_META_KEYS;
+	}
 
 	/**
 	 * Every audit key: the server-derived and the till-sourced set.
@@ -72,9 +82,12 @@ final class Pos_Order_Audit {
 	}
 
 	/**
-	 * A `meta_data` array with every audit key removed — used by the update
-	 * path. The audit trail is write-once at the sale: an edit under a
-	 * different cashier/store (or a forged payload) must not rewrite it.
+	 * A `meta_data` array with every audit key removed — used by the v1 update
+	 * path and both v2 forwards. The audit trail is write-once at the sale: an
+	 * edit under a different cashier/store (or a forged payload) must not
+	 * rewrite it. (The one sanctioned exception is v2's explicit reassignment
+	 * flow in Write_Controller, which re-stamps `_pos_user`/`_pos_store` with
+	 * its own authorization checks and an order note.)
 	 *
 	 * WooCommerce resolves an entry by its `id` BEFORE its `key` and overwrites
 	 * both the row's key and value — so an id-addressed entry under a harmless

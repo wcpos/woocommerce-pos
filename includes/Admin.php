@@ -97,8 +97,6 @@ class Admin {
 	/**
 	 * Conditionally load subclasses based on admin screen.
 	 *
-	 * @TODO - I need to register the instances to allow remove_action/remove_filter.
-	 *
 	 * @param WP_Screen $current_screen Current screen object.
 	 */
 	public function current_screen( $current_screen ): void {

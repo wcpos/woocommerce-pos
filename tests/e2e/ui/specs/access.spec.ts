@@ -23,10 +23,18 @@ test.describe('Access Settings', () => {
 	});
 
 	test('selecting a role renders its capability groups', async ({ adminPage }) => {
-		// Administrator is selected by default. Capabilities are grouped under
-		// WCPOS / WooCommerce / WordPress headings — at least the WCPOS and
-		// WordPress groups must render or the capability tree is broken. The
-		// group testids are keyed off the non-translatable group ids.
+		// Administrator is selected by default. Since the task-group redesign
+		// (#1514 / PR #1597) the primary UI is the task list; the raw
+		// capability tree is behind the Advanced disclosure, which mounts its
+		// content only while open.
+		await expect(adminPage.getByTestId('access-task-groups')).toBeVisible({
+			timeout: 10000,
+		});
+		await adminPage.getByTestId('access-advanced-summary').click();
+		// Capabilities are grouped under WCPOS / WooCommerce / WordPress
+		// headings — at least the WCPOS and WordPress groups must render or
+		// the capability tree is broken. The group testids are keyed off the
+		// non-translatable group ids.
 		await expect(adminPage.getByTestId('access-capability-group-wcpos')).toBeVisible({
 			timeout: 10000,
 		});

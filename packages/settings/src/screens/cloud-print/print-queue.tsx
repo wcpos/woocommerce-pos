@@ -207,6 +207,10 @@ export function PrintQueue() {
 					},
 				};
 			});
+			// The patch above is instant feedback only — filtered views need a
+			// refetch to reconcile (the active list must drop the now-resolved
+			// job and total/counts come back from the server).
+			void queryClient.invalidateQueries({ queryKey: [QUEUE_QUERY_KEY] });
 			addSnackbar({
 				message: t('cloud_print.queue_retried_as', 'Retried as #{id}', {
 					id: String(retriedTo),

@@ -90,11 +90,17 @@ function General() {
 		...(data?.store_defaults ?? {}),
 	};
 
-	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
-	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
+	// The pro override can't be resolved at module scope (it registers on
+	// `window.wcpos` after this module loads), so look it up once and memoize —
+	// the identity is stable, no component is created per render.
+	const ResolvedStoreDetailsBlock = React.useMemo(
+		() => getStoreDetailsBlockOverride() ?? StoreDetailsBlock,
+		[]
+	);
 
 	return (
 		<>
+			{/* eslint-disable-next-line react-hooks/static-components -- resolved from the pro registry; identity is stable (memoized above) */}
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
 			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
@@ -138,7 +144,7 @@ function General() {
 							<BarcodeSelect
 								selected={isString(data?.barcode_field) ? data?.barcode_field || '' : ''}
 								onSelect={(value) => {
-									mutate({ barcode_field: value || '_sku' });
+									mutate({ barcode_field: value || '_global_unique_id' });
 								}}
 							/>
 						</React.Suspense>

@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Customers_Controller;
+use WCPOS\WooCommercePOS\API\V1\Customers_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 
@@ -125,6 +125,75 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids  = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( 1, $this->user, $customer->get_id() ), $ids );
+	}
+
+	public function test_customer_api_get_all_ids_with_include_filter(): void {
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $customer1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $customer1->get_id() ), $ids );
+		$this->assertNotContains( $customer2->get_id(), $ids );
+	}
+
+	public function test_customer_api_get_all_ids_with_include_and_exclude_filter(): void {
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $customer1->get_id(), $customer2->get_id() ) );
+		$request->set_param( 'exclude', array( $customer2->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $customer1->get_id() ), $ids );
+		$this->assertNotContains( $customer2->get_id(), $ids );
+	}
+
+	public function test_customer_api_get_all_ids_with_exclude_filter(): void {
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $customer1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $customer1->get_id(), $ids );
+		$this->assertContains( $customer2->get_id(), $ids );
+	}
+
+	public function test_customer_api_get_all_ids_with_modified_after_returns_updated_ids_without_date_field(): void {
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'last_update', time() );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'modified_after', gmdate( 'Y-m-d\TH:i:s', time() - 60 ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertContains( $customer->get_id(), $ids );
 	}
 
 	/**
@@ -316,15 +385,66 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Orderby role — skipped: wp_capabilities is a serialized array so string
-	 * comparison does not reflect actual role names.
+	 * Orderby role.
 	 *
-	 * To fix this properly we would need a pre_user_query filter to extract and
-	 * sort by the actual role name, which is complex and may have performance
-	 * implications.
+	 * Roles live in the serialized `wp_capabilities` usermeta, so a naive
+	 * meta_value sort is noise. `wcpos_customer_query` + `wcpos_orderby_role`
+	 * rank users by role hierarchy (administrator → subscriber, unknown last),
+	 * with multi-role users taking their highest-privilege position. This
+	 * asserts the full ladder in both directions and the multi-role rule.
+	 *
+	 * Users are created with distinct hierarchy ranks and the response is
+	 * filtered to just those IDs, so interleaved fixtures (eg. the admin the
+	 * base test class authenticates as) do not affect the assertion.
 	 */
 	public function test_orderby_role(): void {
-		$this->markTestSkipped( 'Role sorting is a known limitation - wp_capabilities is a serialized array' );
+		$admin_id      = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id    = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$editor_id     = $this->factory->user->create( array( 'role' => 'editor' ) );
+		$customer_id   = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$subscriber_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+
+		// Multi-role user: primary customer, but also shop_manager. Must sort by
+		// the highest-privilege role (shop_manager, rank 2), not customer.
+		$multi_id   = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$multi_user = new \WP_User( $multi_id );
+		$multi_user->add_role( 'shop_manager' );
+
+		// Expected order by hierarchy rank (asc): admin(1) <
+		// shop_manager/multi(2) < cashier(3) < editor(4) < customer(7) <
+		// subscriber(8).
+		$expected_asc  = array( $admin_id, $multi_id, $cashier_id, $editor_id, $customer_id, $subscriber_id );
+		$expected_desc = array_reverse( $expected_asc );
+		$my_ids        = $expected_asc;
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'     => 'all',
+				'orderby'  => 'role',
+				'order'    => 'asc',
+				'per_page' => 100,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+		$ids_in_order = wp_list_pluck( $response->get_data(), 'id' );
+		$filtered_asc = array_values( array_intersect( $ids_in_order, $my_ids ) );
+		$this->assertEquals( $expected_asc, $filtered_asc );
+
+		// Reverse order.
+		$request->set_query_params(
+			array(
+				'role'     => 'all',
+				'orderby'  => 'role',
+				'order'    => 'desc',
+				'per_page' => 100,
+			)
+		);
+		$response      = $this->server->dispatch( $request );
+		$ids_in_order  = wp_list_pluck( $response->get_data(), 'id' );
+		$filtered_desc = array_values( array_intersect( $ids_in_order, $my_ids ) );
+		$this->assertEquals( $expected_desc, $filtered_desc );
 	}
 
 	/**
@@ -475,6 +595,169 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer9->get_id(), $data[0]['id'] );
+	}
+
+	/**
+	 * Customer search requires every whitespace-separated term to match a searchable field.
+	 *
+	 * @dataProvider customer_search_matching_terms_provider
+	 *
+	 * @param string $search Search string.
+	 */
+	public function test_customer_search_matches_every_term( string $search ): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name'      => 'Jane',
+				'last_name'       => 'Smith',
+				'email'           => 'multiword.customer@example.com',
+				'billing_company' => 'Acme Consulting',
+			)
+		);
+		wp_update_user(
+			array(
+				'ID'           => $customer->get_id(),
+				'display_name' => 'WCPOS Customer',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => $search,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer->get_id(), $data[0]['id'] );
+	}
+
+	/**
+	 * A customer matching the same term in several fields is returned once.
+	 *
+	 * The previous implementation matched meta via a JOIN, which could return the same user
+	 * once per matching meta row and inflate the reported total.
+	 */
+	public function test_customer_search_does_not_duplicate_multi_field_matches(): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name'      => 'Acme',
+				'last_name'       => 'Acme',
+				'email'           => 'acme@example.com',
+				'billing_company' => 'Acme Industries',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => 'Acme',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$headers  = $response->get_headers();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer->get_id(), $data[0]['id'] );
+		$this->assertEquals( 1, (int) $headers['X-WP-Total'] );
+	}
+
+	/**
+	 * A whitespace-only search has no terms and behaves like no search at all.
+	 */
+	public function test_customer_search_ignores_whitespace_only_search(): void {
+		CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Jane',
+				'last_name'  => 'Smith',
+			)
+		);
+
+		$no_search_request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$no_search_request->set_query_params( array( 'role' => 'all' ) );
+		$no_search_response = $this->server->dispatch( $no_search_request );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => "\u{00A0}",
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals(
+			wp_list_pluck( $no_search_response->get_data(), 'id' ),
+			wp_list_pluck( $response->get_data(), 'id' )
+		);
+	}
+
+	/**
+	 * The search hook is a no-op on a query it did not prepare.
+	 *
+	 * WordPress fires pre_user_query for every WP_User_Query, and this callback can outlive our
+	 * own query if that query is short-circuited before running. Firing on an unrelated query
+	 * (no _wcpos_search marker) must not touch its WHERE clause.
+	 */
+	public function test_search_hook_leaves_unrelated_query_untouched(): void {
+		$controller = new Customers_Controller();
+		$query      = new \WP_User_Query();
+
+		$query->query_vars  = array();
+		$query->query_where = 'WHERE 1=1';
+
+		$controller->wcpos_search_user_table( $query );
+
+		$this->assertEquals( 'WHERE 1=1', $query->query_where );
+	}
+
+	/**
+	 * Customer search excludes customers when any term does not match.
+	 */
+	public function test_customer_search_returns_empty_when_any_term_does_not_match(): void {
+		CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Jane',
+				'last_name'  => 'Smith',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => 'Jane Nonexistent',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEmpty( $response->get_data() );
+	}
+
+	/**
+	 * Customer search terms that should match.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function customer_search_matching_terms_provider(): array {
+		return array(
+			'full name'                 => array( 'Jane Smith' ),
+			'reversed name'             => array( 'Smith Jane' ),
+			'single term'               => array( 'Jane' ),
+			'email'                     => array( 'multiword.customer@example.com' ),
+			'billing company'           => array( 'Acme Consulting' ),
+			'display name'              => array( 'WCPOS Customer' ),
+			'extra internal whitespace' => array( "Jane \t  Smith" ),
+			'term limit'                => array( 'Jane Jane Jane Jane Jane Jane Jane Jane Jane Jane Nonexistent' ),
+		);
 	}
 
 	/**
@@ -673,6 +956,11 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * WC's batch_items() calls create_item() directly, bypassing per-item
 	 * schema validation, so malformed meta_data entries must be dropped before
 	 * WC core's unguarded $meta['key'] access fatals mid-batch on PHP 8.
+	 *
+	 * LEGACY v1 PIN (lane audit 2026-08-10): this tolerance is v1-batch-only and is
+	 * deliberately NOT ported to the v2 push lane, which forwards one mutation per
+	 * request and lets wc/v3 reject a malformed payload. See
+	 * WCPOS_REST_API::wcpos_sanitize_meta_data_param() for the ruling.
 	 */
 	public function test_batch_create_customer_with_string_meta_data_entry_creates_customer(): void {
 		// Arrange.
