@@ -46,7 +46,11 @@ if [[ "$args" == pr\ diff* && "$args" == *--patch* ]]; then
 fi
 
 if [[ "$args" == pr\ view* && "$args" == *headRefName* ]]; then
-  printf '%s\t%s\t%s\n' "${MOCK_HEAD_REF:-feature/x}" "${MOCK_BASE_REF:-main}" "${MOCK_HEAD_OWNER:-wcpos}"
+  if [[ "$args" == *headRepositoryOwner* ]]; then
+    printf '%s\t%s\t%s\n' "${MOCK_HEAD_REF:-feature/x}" "${MOCK_BASE_REF:-main}" "${MOCK_HEAD_OWNER:-wcpos}"
+  else
+    printf '%s\t%s\t%s\n' "${MOCK_HEAD_REF:-feature/x}" "${MOCK_BASE_REF:-main}" "${MOCK_HEAD_REPOSITORY:-wcpos/test}"
+  fi
   exit 0
 fi
 
@@ -117,10 +121,12 @@ run_case() {
   shift 2
   local checks_sentinel="$tmpdir/checks-invoked"
   local merge_state_counter="$tmpdir/merge-state-count"
-  local no_checks_expected=false assignment
+  local no_checks_expected=false checks_expected=false assignment
   for assignment in "$@"; do
     if [[ "$assignment" == "MOCK_NO_CHECKS_EXPECTED=true" ]]; then
       no_checks_expected=true
+    elif [[ "$assignment" == "MOCK_CHECKS_EXPECTED=true" ]]; then
+      checks_expected=true
     fi
   done
   rm -f "$checks_sentinel"
@@ -153,6 +159,10 @@ run_case() {
   fi
   if [[ "$no_checks_expected" == "true" && -e "$checks_sentinel" ]]; then
     echo "Expected $name not to query PR checks" >&2
+    return 1
+  fi
+  if [[ "$checks_expected" == "true" && ! -e "$checks_sentinel" ]]; then
+    echo "Expected $name to query PR checks" >&2
     return 1
   fi
 }
@@ -268,6 +278,10 @@ run_case "merge state stuck at UNKNOWN fails closed" fail \
   MOCK_MERGE_STATE="UNKNOWN" \
   MERGE_GATE_MERGE_STATE_MAX_ATTEMPTS="2" \
   MOCK_NO_CHECKS_EXPECTED="true"
+if ! grep -Fq "PR mergeability is still being computed (UNKNOWN); failing closed. Re-run the merge gate once GitHub reports a definitive state." "$tmpdir/out"; then
+  echo "Expected UNKNOWN merge state to fail with an actionable retry message" >&2
+  exit 1
+fi
 
 run_case "merge state UNKNOWN then CLEAN proceeds" pass \
   PR_AUTHOR="kilbot" \
@@ -435,6 +449,7 @@ run_case "lane promotion from next skips fix-bot discipline" pass \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_HEAD_REF="next" \
+  MOCK_CHECKS_EXPECTED=true \
   MOCK_PR_COMMITS="$bot_commits" \
   MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer"
@@ -448,6 +463,7 @@ run_case "promote/* cut of next also skips discipline" pass \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_HEAD_REF="promote/1.10" \
+  MOCK_CHECKS_EXPECTED=true \
   MOCK_PR_COMMITS="$bot_commits" \
   MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer"
@@ -458,6 +474,18 @@ run_case "fork branch named next does not bypass discipline" fail \
   MOCK_PATCH="" \
   MOCK_HEAD_REF="next" \
   MOCK_HEAD_OWNER="attacker" \
+  MOCK_HEAD_REPOSITORY="attacker/test" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1="fix: bot commit without trailer" \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "same-owner fork branch named next does not bypass discipline" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="Promote next to main: v1.10.0" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_HEAD_REF="next" \
+  MOCK_HEAD_REPOSITORY="wcpos/fork" \
   MOCK_PR_COMMITS="$bot_commits" \
   MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer" \
