@@ -106,6 +106,57 @@ class Test_Activator extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Re-syncing the cashier role removes the obsolete customer-create capability.
+	 *
+	 * @covers ::create_pos_roles
+	 */
+	public function test_cashier_role_resync_removes_obsolete_customer_create_capability(): void {
+		// Arrange.
+		$active_capability   = version_compare( WC_VERSION, '9.9', '>=' ) ? 'create_customers' : 'promote_users';
+		$obsolete_capability = 'create_customers' === $active_capability ? 'promote_users' : 'create_customers';
+		$cashier             = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
+		$cashier->add_cap( $obsolete_capability );
+
+		// Act.
+		( new Activator() )->single_activate( false );
+
+		// Assert.
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
+		$this->assertTrue( $cashier->has_cap( $active_capability ) );
+		$this->assertFalse( $cashier->has_cap( $obsolete_capability ) );
+	}
+
+	/**
+	 * A failed role-option write leaves the fingerprint stale so activation retries.
+	 *
+	 * @covers ::single_activate
+	 */
+	public function test_single_activate_when_role_write_fails_does_not_update_fingerprint(): void {
+		// Arrange.
+		$activator = new Activator();
+		$activator->single_activate( false );
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
+		$cashier->remove_cap( 'manage_product_terms' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, 'stale' );
+
+		$reject_role_update = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+		$role_option        = wp_roles()->role_key;
+		add_filter( "pre_update_option_{$role_option}", $reject_role_update, 10, 2 );
+
+		// Act.
+		$activator->single_activate( false );
+		remove_filter( "pre_update_option_{$role_option}", $reject_role_update, 10 );
+
+		// Assert.
+		$this->assertEquals( 'stale', get_option( self::ROLE_CAPS_FINGERPRINT_OPTION ) );
+	}
+
+	/**
 	 * A stale role-capabilities fingerprint re-syncs roles without a version bump.
 	 *
 	 * @covers ::role_caps_fingerprint
@@ -131,6 +182,8 @@ class Test_Activator extends WP_UnitTestCase {
 		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
 
 		// Assert.
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
 		$definition = $reflection->getMethod( 'role_capability_definition' );
 		$definition->setAccessible( true );
 		foreach ( array_keys( $definition->invoke( null )['cashier'] ) as $capability ) {

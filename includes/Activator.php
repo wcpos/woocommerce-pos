@@ -112,7 +112,27 @@ class Activator {
 				'shop_manager'  => $role_capabilities['shop_manager'],
 			)
 		);
-		update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+
+		$stored_roles        = get_option( wp_roles()->role_key, array() );
+		$roles_are_persisted = is_array( $stored_roles );
+		if ( $roles_are_persisted ) {
+			foreach ( $role_capabilities as $slug => $capabilities ) {
+				$required_capabilities = 'cashier' === $slug
+					? array_merge( array( 'access_woocommerce_pos' ), array_keys( $capabilities ) )
+					: $capabilities;
+				foreach ( $required_capabilities as $capability ) {
+					if ( empty( $stored_roles[ $slug ]['capabilities'][ $capability ] ) ) {
+						$roles_are_persisted = false;
+						break 2;
+					}
+				}
+			}
+		}
+
+		$obsolete_customer_create_cap = isset( $role_capabilities['cashier']['create_customers'] ) ? 'promote_users' : 'create_customers';
+		if ( $roles_are_persisted && empty( $stored_roles['cashier']['capabilities'][ $obsolete_customer_create_cap ] ) ) {
+			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+		}
 
 		// Flag the consent pop-up for the next admin page load. Done here
 		// because the `activated_plugin` action in Admin\Consent fires
@@ -305,9 +325,8 @@ class Activator {
 			// requires translations to be loaded (WordPress 6.7+).
 			add_action(
 				'init',
-				function () use ( $locked_role_caps_fingerprint ) {
+				function () {
 					$this->single_activate( false );
-					update_option( 'woocommerce_pos_role_caps_fingerprint', $locked_role_caps_fingerprint, true );
 				}
 			);
 		}
@@ -472,6 +491,12 @@ class Activator {
 			__( 'Cashier', 'woocommerce-pos' ),
 			$cashier_capabilities
 		);
+
+		$obsolete_customer_create_cap = isset( $cashier_capabilities['create_customers'] ) ? 'promote_users' : 'create_customers';
+		$cashier                      = get_role( 'cashier' );
+		if ( $cashier ) {
+			$cashier->remove_cap( $obsolete_customer_create_cap );
+		}
 
 		// Sync all capabilities to the existing role. add_role() is a no-op when
 		// the role already exists, so capabilities added in newer versions would
