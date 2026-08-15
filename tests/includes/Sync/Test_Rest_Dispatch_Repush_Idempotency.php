@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WP_REST_Response;
 
 /**
@@ -63,7 +62,6 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	 * @return void
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 		update_option( 'woocommerce_calc_taxes', 'no' );
@@ -77,7 +75,6 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

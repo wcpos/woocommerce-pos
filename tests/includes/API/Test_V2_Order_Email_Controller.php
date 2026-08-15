@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 
 /**
  * wcpos/v2 order-email registration and route-boundary tests.
@@ -18,16 +17,14 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Enable the sync surface before REST routes are registered.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * Remove the sync feature flag after each test.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

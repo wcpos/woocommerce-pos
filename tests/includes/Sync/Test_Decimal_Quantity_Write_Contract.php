@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
@@ -28,7 +27,6 @@ class Test_Decimal_Quantity_Write_Contract extends Sync_REST_Store_Test_Case {
 	 * Enable the v2 sync routes and mark requests as POS requests.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		// wcpos_request() reads the transport headers, not WP_REST_Request headers.
 		$_SERVER['HTTP_X_WCPOS'] = '1';
@@ -40,7 +38,6 @@ class Test_Decimal_Quantity_Write_Contract extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

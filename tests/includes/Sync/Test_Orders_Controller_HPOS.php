@@ -26,7 +26,6 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 	 * Enable the v2 sync routes and HPOS before creating orders.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -35,7 +34,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Restore posts storage and the sync feature flag.
+	 * Restore posts storage and sync schema state.
 	 */
 	public function tearDown(): void {
 		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10 );
@@ -44,7 +43,6 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 		delete_option( Api::SCHEMA_OPTION );
 	}
 

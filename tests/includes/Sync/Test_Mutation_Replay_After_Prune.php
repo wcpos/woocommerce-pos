@@ -12,7 +12,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WP_REST_Response;
 
@@ -27,7 +26,6 @@ class Test_Mutation_Replay_After_Prune extends Sync_REST_Store_Test_Case {
 	 * Enable the push route.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 	}
@@ -38,10 +36,8 @@ class Test_Mutation_Replay_After_Prune extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 
 		$this->assertArrayNotHasKey( 'HTTP_X_WCPOS', $_SERVER );
-		$this->assertFalse( get_option( Api::OPTION_ENABLED ) );
 	}
 
 	/**

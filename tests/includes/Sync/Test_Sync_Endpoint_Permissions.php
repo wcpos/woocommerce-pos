@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
-use WCPOS\WooCommercePOS\Sync\Api;
 use WP_REST_Request;
 
 /**
@@ -24,11 +23,10 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 	private $coupon_post_type;
 
 	/**
-	 * Enable the sync routes before REST initialization and pin the disabled-
+	 * Initialize REST routes and pin the disabled-
 	 * coupons state that exposes WooCommerce's unregistered-post-type check.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		update_option( 'woocommerce_enable_coupons', 'no' );
@@ -39,14 +37,13 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Restore inherited coupon registration and remove the feature flag.
+	 * Restore inherited coupon registration.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
 		if ( null !== $this->coupon_post_type ) {
 			register_post_type( 'shop_coupon', get_object_vars( $this->coupon_post_type ) );
 		}
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

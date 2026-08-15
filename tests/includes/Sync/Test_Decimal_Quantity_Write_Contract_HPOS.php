@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WP_REST_Response;
 
 /**
@@ -23,7 +22,6 @@ class Test_Decimal_Quantity_Write_Contract_HPOS extends Sync_REST_Store_Test_Cas
 	 * Enable the v2 sync routes, POS request marker, and HPOS.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
@@ -42,7 +40,6 @@ class Test_Decimal_Quantity_Write_Contract_HPOS extends Sync_REST_Store_Test_Cas
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

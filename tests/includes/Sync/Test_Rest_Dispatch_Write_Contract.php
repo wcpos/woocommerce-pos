@@ -113,7 +113,6 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$this->previous_general_settings    = get_option( 'woocommerce_pos_settings_general', null );
 		$this->store = new Dispatch_Fake_Mutation_Store();
 		Dispatch_Write_Controller::$store = $this->store;
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$admin_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin_id );
@@ -162,7 +161,6 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		}
 		unset( $GLOBALS['wcpos_sync_contract_responses'], $GLOBALS['wcpos_sync_contract_calls'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	public function intercept_wc_request( $result, $server, WP_REST_Request $request ) {

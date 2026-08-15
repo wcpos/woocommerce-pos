@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_HPOS_Unit_Test_Case;
 
 /**
@@ -31,7 +30,6 @@ class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 	 * Enable sync routes, HPOS, and create HPOS-backed fixtures.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -49,6 +47,5 @@ class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 }
