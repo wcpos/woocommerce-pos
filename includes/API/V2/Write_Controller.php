@@ -925,7 +925,6 @@ class Write_Controller extends WP_REST_Controller {
 		);
 	}
 
-	/** Wrap a fetched record in the success envelope, passing errors through. */
 	/**
 	 * Wrap a collection document in the write-ack envelope.
 	 *

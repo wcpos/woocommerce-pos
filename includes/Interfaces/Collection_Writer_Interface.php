@@ -11,10 +11,18 @@ namespace WCPOS\WooCommercePOS\Interfaces;
 
 /** Adapts collection behavior around the controller-owned mutation protocol. */
 interface Collection_Writer_Interface {
-	/** Prepare a create payload and route. */
+	/**
+	 * Prepare a create payload and route.
+	 *
+	 * @return array|object Prepared write with method, route, payload, context, and optional context_factory keys; or validation error.
+	 */
 	public function prepare_create( array $meta, array $payload, callable $validate_tax_ids );
 
-	/** Prepare an update payload and route. */
+	/**
+	 * Prepare an update payload and route.
+	 *
+	 * @return array|object Prepared write with method, route, payload, context, and optional context_factory keys; or validation error.
+	 */
 	public function prepare_update( array $meta, int $id, array $payload, callable $validate_tax_ids );
 
 	/** Validate and repair an already-existing create target. */

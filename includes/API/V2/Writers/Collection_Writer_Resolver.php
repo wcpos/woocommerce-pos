@@ -10,16 +10,17 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Interfaces\Collection_Writer_Interface;
+use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 
 /** Resolves registry metadata to one collection writer. */
 final class Collection_Writer_Resolver {
-	/** @var mixed Mutation store for order audit persistence. */
+	/** @var object Mutation store for order audit persistence. */
 	private $store;
 
 	/** Construct the resolver. */
-	public function __construct( $store = null ) {
-		$this->store = $store;
+	public function __construct( ?object $store = null ) {
+		$this->store = $store ?? new Mutation_Store();
 	}
 
 	/** Resolve with the variation post-type override before the shared post id type. */

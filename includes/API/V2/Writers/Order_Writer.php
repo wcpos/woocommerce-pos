@@ -22,14 +22,14 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
-	/** @var mixed Mutation store used for HPOS-safe audit persistence. */
+	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
 
 	/** @var Order_Write_Payload Order forward payload shaper. */
 	private Order_Write_Payload $order_payload;
 
 	/** Construct the order writer. */
-	public function __construct( $store = null, ?Order_Write_Payload $order_payload = null ) {
+	public function __construct( object $store, ?Order_Write_Payload $order_payload = null ) {
 		$this->store         = $store;
 		$this->order_payload = $order_payload ?? new Order_Write_Payload();
 	}
@@ -168,7 +168,7 @@ class Order_Writer extends Null_Writer {
 					$order->update_meta_data( $key, $value );
 				}
 			}
-			if ( $is_create && $creating && null !== $context['created_gmt'] && ! is_wp_error( $order ) ) {
+			if ( $is_create && $creating && null !== $context['created_gmt'] && $order instanceof \WC_Order ) {
 				$order->set_date_created( $context['created_gmt'] );
 			}
 			return $order;
