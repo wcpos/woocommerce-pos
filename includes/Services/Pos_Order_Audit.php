@@ -14,6 +14,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Sync\Meta_Entry;
+
 /**
  * Pos_Order_Audit service.
  */
@@ -200,7 +202,7 @@ final class Pos_Order_Audit {
 	 * @return string|null
 	 */
 	private static function entry_key( $entry ) {
-		$key = \is_array( $entry ) ? ( $entry['key'] ?? null ) : ( \is_object( $entry ) ? ( $entry->key ?? null ) : null );
+		$key = Meta_Entry::key( $entry );
 
 		return \is_scalar( $key ) ? (string) $key : null;
 	}
@@ -213,6 +215,6 @@ final class Pos_Order_Audit {
 	 * @return mixed
 	 */
 	private static function entry_value( $entry ) {
-		return \is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( \is_object( $entry ) ? ( $entry->value ?? '' ) : '' );
+		return Meta_Entry::value( $entry ) ?? '';
 	}
 }

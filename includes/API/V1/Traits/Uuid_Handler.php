@@ -7,11 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\API\V1\Traits;
 
-use Ramsey\Uuid\Uuid;
 use WC_Abstract_Order;
 use WC_Data;
 use WC_Order_Item;
-use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
 
@@ -79,33 +77,7 @@ trait Uuid_Handler {
 	 * @return void
 	 */
 	private function maybe_add_order_item_uuid( WC_Order_Item $item ): void {
-		if ( Pos_Uuid::is_uuid( $item->get_meta( Pos_Uuid::META_KEY ) ) ) {
-			return;
-		}
-
-		$lock_key = 'wc_pos_uuid_order_item_' . $item->get_id();
-		if ( ! $this->acquire_order_item_uuid_lock( $lock_key, 10 ) ) {
-			Logger::log( 'Unable to acquire lock for order item UUID update for order item id ' . $item->get_id() );
-			return;
-		}
-		try {
-			// Persist any pending meta, then check the STORED uuid directly —
-			// a full read_meta_data(true) reload would clobber sibling in-memory
-			// meta on lanes where the datastore cache lags (HPOS misc `_sku`).
-			$item->save_meta_data();
-			$uuid = wc_get_order_item_meta( $item->get_id(), Pos_Uuid::META_KEY, true );
-			if ( ! Pos_Uuid::is_uuid( $uuid ) ) {
-				$uuid = Uuid::uuid4()->toString();
-				$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
-				$item->save_meta_data();
-			} elseif ( $uuid !== $item->get_meta( Pos_Uuid::META_KEY ) ) {
-				// A concurrent request minted first; converge the stale in-memory
-				// item on the stored winner so the served payload carries it.
-				$item->update_meta_data( Pos_Uuid::META_KEY, $uuid );
-			}
-		} finally {
-			$this->release_order_item_uuid_lock( $lock_key );
-		}
+		Pos_Uuid::ensure_order_item_uuid( $item );
 	}
 
 	/**

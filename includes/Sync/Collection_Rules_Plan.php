@@ -496,8 +496,9 @@ final class Collection_Rules_Plan {
 			return $entry;
 		}
 
-		if ( \is_array( $entry ) && \is_string( $entry['key'] ?? null ) && '' !== $entry['key'] ) {
-			return $entry['key'];
+		$key = Meta_Entry::key( $entry );
+		if ( \is_array( $entry ) && \is_string( $key ) && '' !== $key ) {
+			return $key;
 		}
 
 		return null;

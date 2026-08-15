@@ -234,7 +234,7 @@ final class Order_Write_Payload {
 					$meta         = $line['meta_data'] ?? array();
 					$has_sku_meta = false;
 					foreach ( $meta as $j => $entry ) {
-						if ( is_array( $entry ) && '_sku' === ( $entry['key'] ?? null ) ) {
+						if ( is_array( $entry ) && '_sku' === Meta_Entry::key( $entry ) ) {
 							$meta[ $j ]['value'] = $typed_sku;
 							$has_sku_meta        = true;
 						}
@@ -300,8 +300,8 @@ final class Order_Write_Payload {
 					continue;
 				}
 				foreach ( $line['meta_data'] as $meta ) {
-					if ( is_array( $meta ) && Pos_Uuid::META_KEY === ( $meta['key'] ?? '' ) && is_string( $meta['value'] ?? null ) ) {
-						$uuid = $meta['value'];
+					if ( is_array( $meta ) && Pos_Uuid::META_KEY === Meta_Entry::key( $meta ) && is_string( Meta_Entry::value( $meta ) ) ) {
+						$uuid = Meta_Entry::value( $meta );
 						if ( 1 === count( $matches[ $uuid ] ?? array() ) ) {
 							$payload[ $payload_key ][ $index ]['id'] = $matches[ $uuid ][0];
 						}

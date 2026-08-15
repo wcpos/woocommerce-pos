@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -650,8 +651,8 @@ class Write_Controller extends WP_REST_Controller {
 	private function stamp_order_till_meta( int $id, array $payload ): void {
 		$meta = array();
 		foreach ( ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array() ) as $entry ) {
-			$key   = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
-			$value = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( is_object( $entry ) ? ( $entry->value ?? '' ) : '' );
+			$key   = Meta_Entry::key( $entry );
+			$value = Meta_Entry::value( $entry ) ?? '';
 			if ( is_scalar( $key ) && in_array( (string) $key, \WCPOS\WooCommercePOS\Services\Pos_Order_Audit::cash_meta_keys(), true ) && is_scalar( $value ) && '' !== (string) $value ) {
 				$meta[ (string) $key ] = (string) $value;
 			}
@@ -856,9 +857,9 @@ class Write_Controller extends WP_REST_Controller {
 		$pos_reassignment = array();
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && isset( $m['payload']['meta_data'] ) && is_array( $m['payload']['meta_data'] ) ) {
 			foreach ( $m['payload']['meta_data'] as $entry ) {
-				$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+				$key = Meta_Entry::key( $entry );
 				if ( is_scalar( $key ) && in_array( (string) $key, array( '_pos_user', '_pos_store' ), true ) ) {
-					$pos_reassignment[ (string) $key ] = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( $entry->value ?? '' );
+					$pos_reassignment[ (string) $key ] = Meta_Entry::value( $entry ) ?? '';
 				}
 			}
 		}
