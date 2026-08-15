@@ -47,33 +47,31 @@ class Init {
 		// latching is already survivable (observer writes fail open and the
 		// REST health gate 503s the sync endpoints).
 		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
-		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
-			if ( $sync_schema_latched ) {
-				// Normalize structured meta at priority 5, before revision stamps at 9
-				// and UUID, digest, and variable-price stamps at priority 10. Kept out
-				// of the augmentation pipeline because it also serves the order lane.
-				\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
-				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-				add_filter( 'woocommerce_pos_sync_order_pull_payloads', array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10, 3 );
-				// ONE seam for both product read lanes: the batch catalog proxy and the
-				// per-object serializer. Every stamper is declared once inside; both
-				// public filter names stay live as projections of it.
-				\WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline::install();
-			}
-
-			// Identity is core, not an observer benchmark variable: every product is
-			// born with a UUID whenever the sync feature is enabled, even before the
-			// schema latch is healthy. The before-save hook writes it in the same save.
-			\WCPOS\WooCommercePOS\Sync\Pos_Uuid::register_hooks();
-
-			if ( $sync_schema_latched ) {
-				( new \WCPOS\WooCommercePOS\Sync\Sync_Journal() )->register_hooks();
-				( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
-				( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
-			}
-
-			( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
+		if ( $sync_schema_latched ) {
+			// Normalize structured meta at priority 5, before revision stamps at 9
+			// and UUID, digest, and variable-price stamps at priority 10. Kept out
+			// of the augmentation pipeline because it also serves the order lane.
+			\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
+			add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
+			add_filter( 'woocommerce_pos_sync_order_pull_payloads', array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10, 3 );
+			// ONE seam for both product read lanes: the batch catalog proxy and the
+			// per-object serializer. Every stamper is declared once inside; both
+			// public filter names stay live as projections of it.
+			\WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline::install();
 		}
+
+		// Identity is core, not an observer benchmark variable: every product is
+		// born with a UUID even before the schema latch is healthy. The before-save
+		// hook writes it in the same save.
+		\WCPOS\WooCommercePOS\Sync\Pos_Uuid::register_hooks();
+
+		if ( $sync_schema_latched ) {
+			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal() )->register_hooks();
+			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
+			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
+		}
+
+		( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
 
 		// Init hooks.
 		add_action( 'init', array( $this, 'init' ) );
@@ -111,8 +109,8 @@ class Init {
 		// (?modified_after, filtered by WooCommerce on post_modified_gmt), so an
 		// untouched coupon is invisible to every other till. That is true whether
 		// the edit came from the POS, wp-admin, WP-CLI or another plugin — so this
-		// sits outside the Sync\Api::is_enabled() gate above, which only guards the
-		// v2 sync TABLES this does not use.
+		// sits outside the schema latch above because it does not use the v2 sync
+		// tables.
 		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
 
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );

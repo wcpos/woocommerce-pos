@@ -25,12 +25,6 @@ use WP_REST_Request;
  * tax_ids absent for all roles) is on #1309.
  */
 class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case {
-	/**
-	 * Sync API enabled value before this fixture overwrites it.
-	 *
-	 * @var bool|null
-	 */
-	private $original_sync_api_enabled;
 
 	/**
 	 * Customer carrying assorted meta: non-protected, protected, tax-ids-style.
@@ -40,13 +34,11 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 	private $customer;
 
 	/**
-	 * Enable sync routes, register uuid stampers + the parity service (Init.php
-	 * registrations do not run in the phpunit bootstrap), mark the request as
-	 * POS, and seed the customer fixture.
+	 * Register uuid stampers + the parity service (Init.php registrations do not
+	 * run in the phpunit bootstrap), mark the request as POS, and seed the
+	 * customer fixture.
 	 */
 	public function setUp(): void {
-		$this->original_sync_api_enabled = get_option( Api::OPTION_ENABLED, null );
-		update_option( Api::OPTION_ENABLED, true );
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		parent::setUp();
 		new Customer_Meta_Parity();
@@ -72,11 +64,6 @@ class Test_Catalog_Proxy_Customer_Meta_Parity extends WCPOS_REST_Unit_Test_Case 
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
-		if ( null === $this->original_sync_api_enabled ) {
-			delete_option( Api::OPTION_ENABLED );
-		} else {
-			update_option( Api::OPTION_ENABLED, $this->original_sync_api_enabled );
-		}
 	}
 
 	/**

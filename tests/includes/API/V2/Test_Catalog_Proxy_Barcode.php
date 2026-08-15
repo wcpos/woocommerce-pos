@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
@@ -23,16 +22,14 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	 * Enable the v2 routes before REST initialization.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * Remove the feature flag written outside the test transaction.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

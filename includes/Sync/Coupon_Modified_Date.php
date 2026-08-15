@@ -33,9 +33,8 @@ class Coupon_Modified_Date {
 	/**
 	 * Listen for every coupon save, whatever wrote it.
 	 *
-	 * Registered UNCONDITIONALLY from Init — deliberately NOT behind the
-	 * `Sync\Api::is_enabled()` gate, and not behind the schema latch, because
-	 * this touches `wp_posts` only and the client's catalogue replication is
+	 * Registered UNCONDITIONALLY from Init — deliberately not behind the schema
+	 * latch, because this touches `wp_posts` only and the client's replication is
 	 * date-based on BOTH lanes. A cashier does not care which surface a discount
 	 * was edited from: a merchant changing a coupon amount in wp-admin, over
 	 * WP-CLI, or from another plugin has changed the coupon, and every till must

@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WP_REST_Response;
 
 /**
@@ -46,7 +45,6 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 	 * stock management on.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 		$this->original_checkout_settings = get_option( 'woocommerce_pos_settings_checkout' );
@@ -66,7 +64,6 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 		}
 		update_option( 'woocommerce_manage_stock', $this->original_manage_stock );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

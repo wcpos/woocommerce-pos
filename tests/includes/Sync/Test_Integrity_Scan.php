@@ -11,7 +11,6 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
@@ -29,7 +28,6 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 * Enable sync routes and isolate visibility/cron state.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
 		parent::setUp();
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
@@ -41,7 +39,6 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 */
 	public function tearDown(): void {
 		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
-		delete_option( Api::OPTION_ENABLED );
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
 		delete_transient( Integrity_Digest::REBUILD_LOCK );

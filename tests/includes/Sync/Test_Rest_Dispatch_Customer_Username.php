@@ -30,7 +30,6 @@ class Test_Rest_Dispatch_Customer_Username extends Sync_REST_Store_Test_Case {
 	private $previous_password_option;
 
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		$this->previous_username_option = get_option( 'woocommerce_registration_generate_username' );
@@ -41,8 +40,6 @@ class Test_Rest_Dispatch_Customer_Username extends Sync_REST_Store_Test_Case {
 		update_option( 'woocommerce_registration_generate_username', $this->previous_username_option );
 		update_option( 'woocommerce_registration_generate_password', $this->previous_password_option );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
-		$this->assertFalse( get_option( Api::OPTION_ENABLED ) );
 	}
 
 	private function push_customer_create( string $email, string $record_id, string $mutation_id, ?string $username = null ) {

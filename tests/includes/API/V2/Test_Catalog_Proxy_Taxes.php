@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
@@ -19,18 +18,16 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 	 * Enable v2 routes before REST initialization and authenticate a cashier.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 	}
 
 	/**
-	 * Remove the sync feature flag written outside the test transaction.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

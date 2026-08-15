@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 
@@ -24,7 +23,6 @@ class Test_Pos_Uuid_HPOS extends Sync_REST_Store_Test_Case {
 	 * Enable HPOS for each test in this class.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
@@ -39,7 +37,6 @@ class Test_Pos_Uuid_HPOS extends Sync_REST_Store_Test_Case {
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

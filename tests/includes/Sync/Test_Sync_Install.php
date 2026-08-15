@@ -7,10 +7,12 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Health;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 
 /**
  * Sync schema installer tests.
@@ -291,6 +293,37 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A same-request write after schema migration reaches both sync observers.
+	 */
+	public function test_version_check_registers_observers_after_sync_schema_upgrade(): void {
+		$original_observers = $this->detach_sync_observers();
+
+		try {
+			update_option( 'woocommerce_pos_db_version', \WCPOS\WooCommercePOS\VERSION );
+			update_option( Api::SCHEMA_OPTION, '4', false );
+			delete_option( 'woocommerce_pos_db_upgrade_lock.lock' );
+			remove_all_actions( 'woocommerce_init' );
+
+			$activator     = new Activator();
+			$reflection    = new \ReflectionClass( $activator );
+			$version_check = $reflection->getMethod( 'version_check' );
+			$version_check->setAccessible( true );
+			$version_check->invoke( $activator );
+
+			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+			$product_id = ProductHelper::create_simple_product()->get_id();
+
+			$this->assertGreaterThan( 0, ( new Sync_Journal() )->head_sequence( array( 'product' ) ) );
+			$this->assertArrayHasKey( $product_id, ( new Integrity_Digest() )->read_digests( array( $product_id ) ) );
+		} finally {
+			$this->detach_sync_observers();
+			foreach ( $original_observers as $observer ) {
+				add_filter( $observer['hook'], $observer['callback'], $observer['priority'], $observer['accepted_args'] );
+			}
+		}
+	}
+
+	/**
 	 * The schema upgrade clears the retired legacy purge cron — its class is
 	 * gone, so a surviving recurring event would fire an unhandled hook forever.
 	 */
@@ -302,5 +335,36 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		( new Activator() )->install_sync_schema();
 
 		$this->assertFalse( wp_next_scheduled( 'wcpos_change_log_purge' ) );
+	}
+
+	/**
+	 * Detach journal and digest observers, returning their hook registrations.
+	 *
+	 * @return array<int, array{hook: string, callback: callable, priority: int, accepted_args: int}>
+	 */
+	private function detach_sync_observers(): array {
+		global $wp_filter;
+
+		$detached = array();
+		foreach ( $wp_filter as $hook_name => $hook ) {
+			foreach ( $hook->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $callback ) {
+					$function = $callback['function'];
+					if ( ! \is_array( $function ) || ! isset( $function[0] ) || ( ! $function[0] instanceof Sync_Journal && ! $function[0] instanceof Integrity_Digest ) ) {
+						continue;
+					}
+
+					$detached[] = array(
+						'hook'          => $hook_name,
+						'callback'      => $function,
+						'priority'      => $priority,
+						'accepted_args' => $callback['accepted_args'],
+					);
+					remove_filter( $hook_name, $function, $priority );
+				}
+			}
+		}
+
+		return $detached;
 	}
 }

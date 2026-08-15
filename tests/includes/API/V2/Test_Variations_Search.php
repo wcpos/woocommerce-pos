@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
@@ -26,7 +25,6 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 * Enable v2 routes before REST initialization.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
@@ -41,7 +39,6 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		delete_option( 'woocommerce_pos_settings_general' );
 		delete_option( Pos_Visibility::OPTION );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

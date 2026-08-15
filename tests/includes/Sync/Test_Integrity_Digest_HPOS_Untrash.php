@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -37,7 +36,6 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	 * Enable the sync surface and COT storage; wire the digest observer.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -59,7 +57,6 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

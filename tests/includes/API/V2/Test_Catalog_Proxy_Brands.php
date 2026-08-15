@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -20,7 +19,6 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 	 * Enable v2 routes before REST initialization and authenticate a cashier.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		if ( ! taxonomy_exists( 'product_brand' ) || ! class_exists( 'WC_REST_Product_Brands_Controller' ) ) {
@@ -35,7 +33,6 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		parent::tearDown();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

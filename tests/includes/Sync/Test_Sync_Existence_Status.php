@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -19,19 +18,17 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  */
 class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 	/**
-	 * Enable sync routes before REST initialization.
+	 * Initialize REST routes before status checks.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * Remove the non-transactional feature flag.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

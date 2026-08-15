@@ -38,7 +38,6 @@ class Test_Rest_Dispatch_Line_Reconciliation extends Sync_REST_Store_Test_Case {
 	 * @return void
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		$_SERVER['HTTP_X_WCPOS'] = '1';
@@ -52,7 +51,6 @@ class Test_Rest_Dispatch_Line_Reconciliation extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

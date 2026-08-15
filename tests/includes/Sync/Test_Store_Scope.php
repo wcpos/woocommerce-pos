@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
@@ -39,7 +38,6 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 	private $captured = array();
 
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$this->captured = array();
 		Store_Scope::reset();
@@ -47,7 +45,6 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 
 	public function tearDown(): void {
 		Store_Scope::reset();
-		delete_option( Api::OPTION_ENABLED );
 		parent::tearDown();
 	}
 

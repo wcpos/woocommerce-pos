@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
 use WC_Order_Item_Product;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_REST_Request;
@@ -36,7 +35,6 @@ class Test_Order_Serialization_Precision extends Sync_REST_Store_Test_Case {
 	public function setUp(): void {
 		$this->previous_price_decimals = get_option( 'woocommerce_price_num_decimals', null );
 		update_option( 'woocommerce_price_num_decimals', 2 );
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
@@ -49,7 +47,6 @@ class Test_Order_Serialization_Precision extends Sync_REST_Store_Test_Case {
 		} else {
 			update_option( 'woocommerce_price_num_decimals', $this->previous_price_decimals );
 		}
-		delete_option( Api::OPTION_ENABLED );
 		parent::tearDown();
 	}
 

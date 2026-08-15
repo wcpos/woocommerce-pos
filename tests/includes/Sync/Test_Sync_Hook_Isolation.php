@@ -31,10 +31,9 @@ use WP_REST_Request;
  */
 class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Enable the sync feature flag before routes are registered.
+	 * Install the sync schema and register route hooks.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		( new Activator() )->install_sync_schema();
 		add_filter( 'woocommerce_pos_sync_serialized_product', array( Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
 		add_filter( 'woocommerce_pos_sync_serialized_product', array( Variable_Prices::class, 'stamp_serialized_variable_prices' ), 10, 3 );
@@ -49,13 +48,12 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Remove the sync feature flag after each test.
+	 * Restore sync schema and hook state after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		// setUp committed the flag before the transaction started; delete it
-		// after the rollback or the rollback restores the committed row.
-		delete_option( Api::OPTION_ENABLED );
+		// setUp committed the schema latch before the transaction started; delete
+		// it after the rollback or the rollback restores the committed row.
 		delete_option( Api::SCHEMA_OPTION );
 		remove_all_filters( 'woocommerce_pos_sync_proxy_response' );
 		remove_all_filters( 'woocommerce_pos_sync_serialized_product' );

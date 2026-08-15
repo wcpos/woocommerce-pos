@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_REST_Response;
 
@@ -24,10 +23,9 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	private $customer;
 
 	/**
-	 * Enable sync routes and create the customer fixture.
+	 * Create the customer fixture after REST initialization.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		$this->customer = CustomerHelper::create_customer(

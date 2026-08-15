@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
@@ -25,7 +24,6 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	 * Enable v2 routes before REST initialization and authenticate a cashier.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
@@ -37,7 +35,6 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		delete_option( 'woocommerce_pos_settings_general' );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

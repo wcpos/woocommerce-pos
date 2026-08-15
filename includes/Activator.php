@@ -349,9 +349,13 @@ class Activator {
 		// into before_delete_post and assume WC()->order_factory is available.
 		add_action(
 			'woocommerce_init',
-			function () use ( $locked_old, $release_lock ) {
+			function () use ( $locked_old, $locked_sync_needs_upgrade, $release_lock ) {
 				try {
 					$this->db_upgrade( $locked_old, VERSION );
+					if ( $locked_sync_needs_upgrade && Sync_Api::SCHEMA_VERSION === get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
+						( new Sync_Journal() )->register_hooks();
+						( new Integrity_Digest() )->register_hooks();
+					}
 				} finally {
 					$release_lock();
 					remove_action( 'shutdown', $release_lock );

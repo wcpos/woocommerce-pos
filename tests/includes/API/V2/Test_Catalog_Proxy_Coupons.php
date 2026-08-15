@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -21,7 +20,6 @@ class Test_Catalog_Proxy_Coupons extends WCPOS_REST_Unit_Test_Case {
 	 * Enable v2 routes before REST initialization and authenticate a cashier.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
@@ -31,7 +29,6 @@ class Test_Catalog_Proxy_Coupons extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		parent::tearDown();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**
