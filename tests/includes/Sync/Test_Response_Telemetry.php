@@ -20,19 +20,17 @@ use WP_REST_Response;
  */
 class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Enable the sync feature flag before routes are registered.
+	 * Initialize REST routes before telemetry checks.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * Remove the sync feature flag after each test.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

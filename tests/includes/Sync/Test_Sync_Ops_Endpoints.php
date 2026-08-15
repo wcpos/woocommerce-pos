@@ -23,19 +23,17 @@ use WP_REST_Request;
  */
 class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 	/**
-	 * Enable the sync routes before REST initialization.
+	 * Initialize REST routes before endpoint checks.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * Remove the non-transactional feature flag.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

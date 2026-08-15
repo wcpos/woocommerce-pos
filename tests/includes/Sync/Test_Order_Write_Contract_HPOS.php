@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_REST_Response;
 
@@ -22,7 +21,6 @@ class Test_Order_Write_Contract_HPOS extends Sync_REST_Store_Test_Case {
 	 * Enable the v2 sync routes and HPOS before dispatching writes.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -31,7 +29,7 @@ class Test_Order_Write_Contract_HPOS extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Restore posts storage and the sync feature flag.
+	 * Restore posts storage.
 	 */
 	public function tearDown(): void {
 		$this->toggle_cot_feature_and_usage( false );
@@ -39,7 +37,6 @@ class Test_Order_Write_Contract_HPOS extends Sync_REST_Store_Test_Case {
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

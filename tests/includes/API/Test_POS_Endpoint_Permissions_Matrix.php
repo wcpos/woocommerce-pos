@@ -17,7 +17,6 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
-use WCPOS\WooCommercePOS\Sync\Api as SyncApi;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 use WP_Error;
 use WP_REST_Request;
@@ -69,7 +68,6 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 	);
 
 	public function setUp(): void {
-		update_option( SyncApi::OPTION_ENABLED, true );
 		parent::setUp();
 
 		$this->auth_service = AuthService::instance();
@@ -103,7 +101,6 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 		}
 
 		parent::tearDown();
-		delete_option( SyncApi::OPTION_ENABLED );
 	}
 
 	/**

@@ -25,10 +25,9 @@ use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
  */
 class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Enable sync before REST initialization.
+	 * Initialize REST routes before classification checks.
 	 */
 	public function setUp(): void {
-		update_option( Sync_Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
@@ -37,7 +36,6 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Sync_Api::OPTION_ENABLED );
 	}
 
 	/**

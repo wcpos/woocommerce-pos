@@ -13,7 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
- * Sync status tests with the feature flag enabled.
+ * Sync status tests.
  *
  * @internal
  *
@@ -23,10 +23,9 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  */
 class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Enable the sync feature flag before routes are registered.
+	 * Drop sync tables before routes are registered.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		$this->drop_sync_tables();
 		delete_option( Api::SCHEMA_OPTION );
 
@@ -34,14 +33,13 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Remove the sync feature flag after each test.
+	 * Restore sync tables and schema state after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
 		// Post-rollback hygiene: setUp committed state BEFORE the transaction
-		// started (flag on, tables dropped), so cleanup must run AFTER the
+		// started (tables dropped), so cleanup must run AFTER the
 		// rollback or it gets undone. Restore tables for later classes.
-		delete_option( Api::OPTION_ENABLED );
 		delete_option( Api::SCHEMA_OPTION );
 		( new Activator() )->install_sync_schema();
 		delete_option( Api::SCHEMA_OPTION );
@@ -147,7 +145,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Authorized POS users can inspect the missing sync tables.
 	 */
-	public function test_sync_status_with_flag_enabled_and_cashier_returns_unhealthy_status(): void {
+	public function test_sync_status_with_cashier_returns_unhealthy_status(): void {
 		global $wpdb;
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
@@ -192,7 +190,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * The orders read lanes (increment 2c) are registered and health-gated: with
-	 * no tables installed they 503 rather than 404, proving both the flag
+	 * no tables installed they 503 rather than 404, proving both route
 	 * registration and the shared install-health gate apply.
 	 */
 	public function test_sync_orders_lanes_are_registered_and_health_gated(): void {

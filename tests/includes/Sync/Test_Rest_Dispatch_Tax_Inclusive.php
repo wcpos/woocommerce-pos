@@ -13,7 +13,6 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
 use WC_Order_Item_Product;
 use WC_Product;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WP_REST_Response;
 
@@ -36,7 +35,6 @@ class Test_Rest_Dispatch_Tax_Inclusive extends Sync_REST_Store_Test_Case {
 	 * @return void
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		update_option( 'woocommerce_prices_include_tax', 'yes' );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
@@ -74,7 +72,6 @@ class Test_Rest_Dispatch_Tax_Inclusive extends Sync_REST_Store_Test_Case {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 		update_option( 'woocommerce_prices_include_tax', 'no' );
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

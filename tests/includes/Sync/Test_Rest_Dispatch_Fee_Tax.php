@@ -27,7 +27,6 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 	private const REC = '6c9f2b4d-3e5a-4b7c-8d9e-2e3f4a5b6c7d';
 
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		// The fee handler gates on wcpos_request(), which reads the real HTTP header.
@@ -62,7 +61,6 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 		WC_Tax::delete_tax_class_by( 'slug', 'reduced-rate-pin' );
 		update_option( 'woocommerce_calc_taxes', 'no' );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/** Push one order-create envelope through the real route; returns the REST response. */

@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Admin_Settings;
 use WC_Product;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WP_REST_Response;
 
@@ -33,7 +32,6 @@ class Test_Rest_Dispatch_Order_Taxes extends Sync_REST_Store_Test_Case {
 	 * same GB/US tax table the v1 matrix uses.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 		update_option( 'woocommerce_calc_taxes', 'yes' );
@@ -79,7 +77,6 @@ class Test_Rest_Dispatch_Order_Taxes extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

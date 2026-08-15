@@ -30,7 +30,6 @@ class Test_Rest_Dispatch_Customer_Tax_Ids extends Sync_REST_Store_Test_Case {
 	private $forwarded = array();
 
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		// The #1391 parity filter (Customer_Meta_Parity, registered by Init during the
@@ -46,7 +45,6 @@ class Test_Rest_Dispatch_Customer_Tax_Ids extends Sync_REST_Store_Test_Case {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		remove_filter( 'rest_pre_dispatch', array( $this, 'capture_wc_request' ), 1 );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/** Capture-only: the inner wc/v3 dispatch stays real. */

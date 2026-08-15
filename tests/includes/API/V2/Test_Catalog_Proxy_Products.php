@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -22,7 +21,6 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 * Enable v2 routes and the read-time identity stamper.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		parent::setUp();
 	}
@@ -33,7 +31,6 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		parent::tearDown();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

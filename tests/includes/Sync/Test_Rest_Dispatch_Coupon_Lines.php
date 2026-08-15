@@ -31,7 +31,6 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 	private $mutation_seq = 0;
 
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		$_SERVER['HTTP_X_WCPOS'] = '1';
@@ -40,7 +39,6 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	private function make_coupon( string $code, float $amount ): void {

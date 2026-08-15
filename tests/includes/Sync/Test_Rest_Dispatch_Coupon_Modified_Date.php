@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 require_once __DIR__ . '/coupon-modified-date-clock.php';
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
@@ -67,7 +66,6 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 	 * Enable the v2 routes and mark the request as POS.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 	}
@@ -79,7 +77,6 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 		unset( $GLOBALS['woocommerce_pos_coupon_modified_date_now_gmt'] );
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**
@@ -251,9 +248,9 @@ class Test_Rest_Dispatch_Coupon_Modified_Date extends Sync_REST_Store_Test_Case 
 	 *
 	 * Guards the wiring the behaviour tests above cannot: they would still pass if
 	 * something else moved the date. This fails if the Init registration is
-	 * removed or moved back behind the Sync\Api::is_enabled() gate — note the
-	 * sync feature is NOT enabled at plugins_loaded in this suite, which is
-	 * exactly the condition that must not switch the listener off.
+	 * removed or moved behind the schema latch — note the schema is NOT latched
+	 * at plugins_loaded in this suite, which is exactly the condition that must
+	 * not switch the listener off.
 	 */
 	public function test_the_touch_listener_is_registered_unconditionally_by_init(): void {
 		$this->assertNotFalse(

@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
@@ -31,13 +30,11 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 	);
 
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

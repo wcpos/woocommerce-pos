@@ -8,6 +8,8 @@ use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\BypassFinalsHack;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\StaticMockerHack;
 use Automattic\WooCommerce\Testing\Tools\DependencyManagement\MockableLegacyProxy;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 
 error_reporting( E_ALL );
 ini_set( 'display_errors', 1 );
@@ -45,6 +47,7 @@ class Bootstrap {
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
 		require $this->tests_dir . '/includes/bootstrap.php';
+		$this->detach_bootstrap_sync_observers();
 		$this->includes();
 
 		// re-initialize dependency injection, this needs to be the last operation after everything else is in place.
@@ -167,6 +170,26 @@ class Bootstrap {
 		}
 
 		throw new \Exception( 'WordPress died: ' . $message );
+	}
+
+	/**
+	 * Keep the one-process suite isolated from observers attached during bootstrap.
+	 */
+	private function detach_bootstrap_sync_observers(): void {
+		global $wp_filter;
+
+		foreach ( $wp_filter as $hook_name => $hook ) {
+			foreach ( $hook->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $callback ) {
+					$function = $callback['function'];
+					if ( ! \is_array( $function ) || ! isset( $function[0] ) || ( ! $function[0] instanceof Sync_Journal && ! $function[0] instanceof Integrity_Digest ) ) {
+						continue;
+					}
+
+					remove_filter( $hook_name, $function, $priority );
+				}
+			}
+		}
 	}
 
 	public static function instance() {

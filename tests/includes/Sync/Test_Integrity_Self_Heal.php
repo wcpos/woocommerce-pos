@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -23,7 +22,6 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 	 * Enable sync routes and isolate cron state.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
@@ -33,7 +31,6 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 	 * Remove non-transactional option, transient, and cron state.
 	 */
 	public function tearDown(): void {
-		delete_option( Api::OPTION_ENABLED );
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
 		parent::tearDown();

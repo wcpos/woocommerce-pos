@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
@@ -20,19 +19,16 @@ class Test_Collection_Rules_Parity extends WCPOS_REST_Unit_Test_Case {
 	use Collection_Rules_Parity_Tests;
 
 	/**
-	 * Enable the sync routes so the proxy lane is registered.
+	 * Initialize REST routes before parity checks.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * The sync flag is written before the parent transaction starts, so the
-	 * rollback restores true — delete it explicitly for later suites.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 }

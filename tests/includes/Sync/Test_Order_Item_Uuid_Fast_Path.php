@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /**
@@ -21,16 +20,14 @@ class Test_Order_Item_Uuid_Fast_Path extends Sync_REST_Store_Test_Case {
 	 * Enable v2 sync before REST routes are registered.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
 	}
 
 	/**
-	 * Restore the sync feature flag.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

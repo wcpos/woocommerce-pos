@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Product_Images;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 
@@ -21,21 +20,18 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 	 * Enable the v2 routes before REST initialization.
 	 */
 	public function setUp(): void {
-		update_option( Api::OPTION_ENABLED, true );
-		// Init.php only attaches the image stampers when the sync flag was set
-		// at plugins_loaded, which never holds in the test bootstrap — attach
-		// them here, mirroring Test_Sync_Hook_Isolation.
+		// Init.php registrations do not run in the test bootstrap, so attach the
+		// image stampers here, mirroring Test_Sync_Hook_Isolation.
 		add_filter( 'woocommerce_pos_sync_proxy_response', array( Product_Images::class, 'stamp_proxy_product_images' ), 10, 3 );
 		add_filter( 'woocommerce_pos_sync_serialized_product', array( Product_Images::class, 'stamp_serialized_product_images' ), 10, 3 );
 		parent::setUp();
 	}
 
 	/**
-	 * Remove the feature flag written outside the test transaction.
+	 * Clean up after each test.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Api::OPTION_ENABLED );
 		remove_filter( 'woocommerce_pos_sync_proxy_response', array( Product_Images::class, 'stamp_proxy_product_images' ), 10 );
 		remove_filter( 'woocommerce_pos_sync_serialized_product', array( Product_Images::class, 'stamp_serialized_product_images' ), 10 );
 	}
