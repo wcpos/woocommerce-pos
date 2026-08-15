@@ -24,6 +24,10 @@ class Visibility_Override_Fixture_Section extends Abstract_Section {
 				'pos_only'    => array( 'ids' => array( 101 ) ),
 				'online_only' => array( 'ids' => array( 202 ) ),
 			),
+			'store-2' => array(
+				'pos_only'    => array( 'ids' => array( 111 ) ),
+				'online_only' => array( 'ids' => array( 222 ) ),
+			),
 		),
 		'variations' => array(
 			'default' => array(
@@ -95,6 +99,7 @@ class Test_Visibility_Section extends WP_UnitTestCase {
 
 		$this->assertSame( $override->read(), $settings->get_visibility_settings() );
 		$this->assertSame( $override->read()['products']['default'], $settings->get_product_visibility_settings() );
+		$this->assertSame( $override->read()['products']['store-2'], $settings->get_product_visibility_settings( 'store-2' ) );
 		$this->assertSame( array( 'ids' => array( 101 ) ), $settings->get_pos_only_product_visibility_settings() );
 		$this->assertSame( array( 'ids' => array( 202 ) ), $settings->get_online_only_product_visibility_settings() );
 		$this->assertSame( $override->read()['variations']['default'], $settings->get_variations_visibility_settings() );
@@ -115,6 +120,23 @@ class Test_Visibility_Section extends WP_UnitTestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( array( 101, 505 ), $override->read()['products']['default']['pos_only']['ids'] );
+
+		$result = $settings->update_visibility_settings(
+			array(
+				'post_type'  => 'products',
+				'scope'      => 'store-2',
+				'ids'        => array( 606 ),
+				'visibility' => 'pos_only',
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( array( 111, 606 ), $override->read()['products']['store-2']['pos_only']['ids'] );
+		$this->assertSame( array( 222 ), $override->read()['products']['store-2']['online_only']['ids'] );
+		$this->assertSame( array( 101, 505 ), $override->read()['products']['default']['pos_only']['ids'] );
+		$this->assertSame( array( 202 ), $override->read()['products']['default']['online_only']['ids'] );
+		$this->assertSame( array( 303 ), $override->read()['variations']['default']['pos_only']['ids'] );
+		$this->assertSame( array( 404 ), $override->read()['variations']['default']['online_only']['ids'] );
 	}
 
 	/**
