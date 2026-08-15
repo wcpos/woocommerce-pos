@@ -215,6 +215,7 @@ class Test_Meta_Data_Repair_Service extends WP_UnitTestCase {
 			)
 		);
 		$post_id = $product->get_id();
+		delete_post_meta( $post_id, '_woocommerce_pos_uuid' );
 		$this->insert_duplicates( $post_id, '_wpcom_is_markdown', '1', 4 );
 
 		Meta_Data_Repair::remove_exact_duplicate_postmeta_rows(

@@ -102,7 +102,7 @@ class Test_Update_1_8_12 extends WP_UnitTestCase {
 	public function test_does_not_touch_non_pos_posts(): void {
 		$product = ProductHelper::create_simple_product( array( 'regular_price' => 18, 'price' => 18 ) );
 		$post_id = $product->get_id();
-		// Deliberately NOT calling mark_pos_touched().
+		delete_post_meta( $post_id, '_woocommerce_pos_uuid' );
 
 		$this->insert_duplicates( $post_id, '_wpcom_is_markdown', '1' );
 		$this->assertEquals( 25, $this->count_meta_rows( $post_id, '_wpcom_is_markdown' ) );
