@@ -40,8 +40,8 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		}
 		if ( isset( $params['search'] ) ) {
 			$search = trim( (string) $params['search'] );
-			if ( '' !== $search ) {
-				unset( $params['search'] );
+			unset( $params['search'] );
+			if ( 0 !== preg_match( '/\S/u', $search ) ) {
 				$this->delegated['search'] = $search;
 			}
 		}
@@ -119,7 +119,6 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
 		global $wpdb;
 
-		remove_action( 'pre_user_query', array( $this, 'search_user_table' ) );
 		if ( empty( $query->query_vars['_wcpos_search'] ) ) {
 			return;
 		}
@@ -164,7 +163,6 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $when_sql is built from %s placeholders whose values are passed to prepare() as arguments.
 		global $wpdb;
 
-		remove_action( 'pre_user_query', array( $this, 'orderby_role' ) );
 		if ( empty( $query->query_vars['_wcpos_orderby_role'] ) ) {
 			return;
 		}
