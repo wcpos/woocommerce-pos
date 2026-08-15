@@ -31,7 +31,7 @@ class Test_Collection_Rules_Install_Topology extends WP_UnitTestCase {
 	 * @return \WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan
 	 */
 	private function plan_for( array $params ) {
-		$request = new WP_REST_Request( 'GET', '/wcpos/v1/orders' );
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
 		foreach ( $params as $key => $value ) {
 			$request->set_param( $key, $value );
 		}
