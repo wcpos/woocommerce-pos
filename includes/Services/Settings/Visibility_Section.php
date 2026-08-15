@@ -117,7 +117,13 @@ class Visibility_Section extends Abstract_Section {
 	 */
 	public function update_visibility_settings( array $args ) {
 		// Validate and normalize arguments.
-		if ( empty( $args['post_type'] ) || ! isset( $args['ids'] ) ) {
+		$defaults = $this->defaults();
+		if (
+			empty( $args['post_type'] )
+			|| ! \is_string( $args['post_type'] )
+			|| ! isset( $defaults[ $args['post_type'] ] )
+			|| ! isset( $args['ids'] )
+		) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
 				/* translators: Error message shown when invalid arguments are provided. */
@@ -146,6 +152,10 @@ class Visibility_Section extends Abstract_Section {
 
 		// Get the current visibility settings.
 		$current_settings = $this->get_visibility_settings();
+		$current_settings[ $post_type ][ $scope ] = array_replace_recursive(
+			$defaults[ $post_type ]['default'],
+			$current_settings[ $post_type ][ $scope ] ?? array()
+		);
 
 		// Define the opposite visibility type.
 		$opposite_visibility = ( 'pos_only' === $visibility ) ? 'online_only' : 'pos_only';

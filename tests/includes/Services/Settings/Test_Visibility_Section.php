@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Visibility_Section;
+use WP_Error;
 use WP_UnitTestCase;
 
 /**
@@ -189,5 +190,43 @@ class Test_Visibility_Section extends WP_UnitTestCase {
 
 		$this->assertSame( array(), $section->get_pos_only_product_visibility_settings()['ids'] );
 		$this->assertSame( array(), $section->get_online_only_product_visibility_settings()['ids'] );
+	}
+
+	/**
+	 * Updating a new scope initializes it from the default visibility shape.
+	 */
+	public function test_update_visibility_settings_initializes_a_missing_scope(): void {
+		$section = new Visibility_Section();
+
+		$result = $section->update_visibility_settings(
+			array(
+				'post_type'  => 'products',
+				'scope'      => 'store-2',
+				'ids'        => array( 606 ),
+				'visibility' => 'pos_only',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $result );
+		$this->assertSame( array( 606 ), $section->get_pos_only_product_visibility_settings( 'store-2' )['ids'] );
+		$this->assertSame( array(), $section->get_online_only_product_visibility_settings( 'store-2' )['ids'] );
+	}
+
+	/**
+	 * Updating an unsupported post type returns the existing invalid-arguments error.
+	 */
+	public function test_update_visibility_settings_rejects_an_unsupported_post_type(): void {
+		$section = new Visibility_Section();
+
+		$result = $section->update_visibility_settings(
+			array(
+				'post_type'  => 'orders',
+				'ids'        => array( 707 ),
+				'visibility' => 'pos_only',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_settings_error', $result->get_error_code() );
 	}
 }
