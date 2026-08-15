@@ -373,7 +373,7 @@ class Settings {
 	 * @return array
 	 */
 	public function get_visibility_settings(): array {
-		return $this->sections()->get( 'visibility' )->get_visibility_settings();
+		return $this->visibility_section()->get_visibility_settings();
 	}
 
 	/**
@@ -384,7 +384,7 @@ class Settings {
 	 * @return bool|WP_Error True on success, WP_Error on failure.
 	 */
 	public function update_visibility_settings( array $args ) {
-		return $this->sections()->get( 'visibility' )->update_visibility_settings( $args );
+		return $this->visibility_section()->update_visibility_settings( $args );
 	}
 
 	/**
@@ -395,7 +395,7 @@ class Settings {
 	 * @return array $settings The product visibility settings, eg: { pos_only: { ids: [1, 2, 3] }, online_only: { ids: [4, 5, 6] }
 	 */
 	public function get_product_visibility_settings( $scope = 'default' ) {
-		return $this->sections()->get( 'visibility' )->get_product_visibility_settings( $scope );
+		return $this->visibility_section()->get_product_visibility_settings( $scope );
 	}
 
 	/**
@@ -406,7 +406,7 @@ class Settings {
 	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
 	 */
 	public function get_pos_only_product_visibility_settings( $scope = 'default' ) {
-		return $this->sections()->get( 'visibility' )->get_pos_only_product_visibility_settings( $scope );
+		return $this->visibility_section()->get_pos_only_product_visibility_settings( $scope );
 	}
 
 	/**
@@ -417,7 +417,7 @@ class Settings {
 	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
 	 */
 	public function get_online_only_product_visibility_settings( $scope = 'default' ) {
-		return $this->sections()->get( 'visibility' )->get_online_only_product_visibility_settings( $scope );
+		return $this->visibility_section()->get_online_only_product_visibility_settings( $scope );
 	}
 
 	/**
@@ -428,7 +428,7 @@ class Settings {
 	 * @return array $settings The product visibility settings, eg: { pos_only: { ids: [1, 2, 3] }, online_only: { ids: [4, 5, 6] }
 	 */
 	public function get_variations_visibility_settings( $scope = 'default' ) {
-		return $this->sections()->get( 'visibility' )->get_variations_visibility_settings( $scope );
+		return $this->visibility_section()->get_variations_visibility_settings( $scope );
 	}
 
 	/**
@@ -439,7 +439,7 @@ class Settings {
 	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
 	 */
 	public function get_pos_only_variations_visibility_settings( $scope = 'default' ) {
-		return $this->sections()->get( 'visibility' )->get_pos_only_variations_visibility_settings( $scope );
+		return $this->visibility_section()->get_pos_only_variations_visibility_settings( $scope );
 	}
 
 	/**
@@ -450,7 +450,7 @@ class Settings {
 	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
 	 */
 	public function get_online_only_variations_visibility_settings( $scope = 'default' ) {
-		return $this->sections()->get( 'visibility' )->get_online_only_variations_visibility_settings( $scope );
+		return $this->visibility_section()->get_online_only_variations_visibility_settings( $scope );
 	}
 
 	/**
@@ -461,7 +461,7 @@ class Settings {
 	 * @return bool
 	 */
 	public function is_product_pos_only( $product_id ) {
-		return $this->sections()->get( 'visibility' )->is_product_pos_only( $product_id );
+		return $this->visibility_section()->is_product_pos_only( $product_id );
 	}
 
 	/**
@@ -472,7 +472,7 @@ class Settings {
 	 * @return bool
 	 */
 	public function is_product_online_only( $product_id ) {
-		return $this->sections()->get( 'visibility' )->is_product_online_only( $product_id );
+		return $this->visibility_section()->is_product_online_only( $product_id );
 	}
 
 	/**
@@ -483,7 +483,7 @@ class Settings {
 	 * @return bool
 	 */
 	public function is_variation_pos_only( $variation_id ) {
-		return $this->sections()->get( 'visibility' )->is_variation_pos_only( $variation_id );
+		return $this->visibility_section()->is_variation_pos_only( $variation_id );
 	}
 
 	/**
@@ -494,7 +494,16 @@ class Settings {
 	 * @return bool
 	 */
 	public function is_variation_online_only( $variation_id ) {
-		return $this->sections()->get( 'visibility' )->is_variation_online_only( $variation_id );
+		return $this->visibility_section()->is_variation_online_only( $variation_id );
+	}
+
+	/**
+	 * Visibility behavior bound to the registered section's storage surface.
+	 */
+	private function visibility_section(): Visibility_Section {
+		$section = $this->sections()->get( 'visibility' );
+
+		return $section instanceof Visibility_Section ? $section : new Visibility_Section( $section );
 	}
 
 	/**

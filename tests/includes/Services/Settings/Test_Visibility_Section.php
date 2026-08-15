@@ -7,8 +7,53 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services\Settings;
 
+use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Visibility_Section;
 use WP_UnitTestCase;
+
+/**
+ * Generic visibility override with no visibility-specific methods.
+ */
+class Visibility_Override_Fixture_Section extends Abstract_Section {
+	/** @var array */
+	private $settings = array(
+		'products'   => array(
+			'default' => array(
+				'pos_only'    => array( 'ids' => array( 101 ) ),
+				'online_only' => array( 'ids' => array( 202 ) ),
+			),
+		),
+		'variations' => array(
+			'default' => array(
+				'pos_only'    => array( 'ids' => array( 303 ) ),
+				'online_only' => array( 'ids' => array( 404 ) ),
+			),
+		),
+	);
+
+	/** {@inheritDoc} */
+	public function id(): string {
+		return 'visibility';
+	}
+
+	/** {@inheritDoc} */
+	public function defaults(): array {
+		return array();
+	}
+
+	/** {@inheritDoc} */
+	public function read(): array {
+		return $this->settings;
+	}
+
+	/** {@inheritDoc} */
+	public function write( array $settings ) {
+		$this->settings = $settings;
+
+		return $this->settings;
+	}
+}
 
 /**
  * Test_Visibility_Section class.
@@ -18,12 +63,57 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Visibility_Section extends WP_UnitTestCase {
+	/** @var null|callable */
+	private $register_override;
+
 	/**
 	 * Clean options between tests.
 	 */
 	public function tearDown(): void {
+		if ( null !== $this->register_override ) {
+			remove_action( 'woocommerce_pos_register_settings_sections', $this->register_override );
+			$this->register_override = null;
+		}
+		Settings::instance()->reset_sections_for_testing();
 		delete_option( 'woocommerce_pos_settings_visibility' );
 		parent::tearDown();
+	}
+
+	/**
+	 * Every legacy facade remains compatible with a generic registry override.
+	 */
+	public function test_visibility_facades_use_generic_registry_override_read_and_write(): void {
+		$override                = new Visibility_Override_Fixture_Section();
+		$this->register_override = static function ( $registry ) use ( $override ): void {
+			$registry->register( $override );
+		};
+		add_action( 'woocommerce_pos_register_settings_sections', $this->register_override );
+
+		$settings = Settings::instance();
+		$settings->reset_sections_for_testing();
+
+		$this->assertSame( $override->read(), $settings->get_visibility_settings() );
+		$this->assertSame( $override->read()['products']['default'], $settings->get_product_visibility_settings() );
+		$this->assertSame( array( 'ids' => array( 101 ) ), $settings->get_pos_only_product_visibility_settings() );
+		$this->assertSame( array( 'ids' => array( 202 ) ), $settings->get_online_only_product_visibility_settings() );
+		$this->assertSame( $override->read()['variations']['default'], $settings->get_variations_visibility_settings() );
+		$this->assertSame( array( 'ids' => array( 303 ) ), $settings->get_pos_only_variations_visibility_settings() );
+		$this->assertSame( array( 'ids' => array( 404 ) ), $settings->get_online_only_variations_visibility_settings() );
+		$this->assertTrue( $settings->is_product_pos_only( 101 ) );
+		$this->assertTrue( $settings->is_product_online_only( 202 ) );
+		$this->assertTrue( $settings->is_variation_pos_only( 303 ) );
+		$this->assertTrue( $settings->is_variation_online_only( 404 ) );
+
+		$result = $settings->update_visibility_settings(
+			array(
+				'post_type'  => 'products',
+				'ids'        => array( 505 ),
+				'visibility' => 'pos_only',
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( array( 101, 505 ), $override->read()['products']['default']['pos_only']['ids'] );
 	}
 
 	/**

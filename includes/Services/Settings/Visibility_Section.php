@@ -8,12 +8,43 @@
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WP_Error;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 
 /**
  * The Visibility Settings Section: POS-only / online-only id lists for
  * products and variations, per scope.
  */
 class Visibility_Section extends Abstract_Section {
+	/**
+	 * Registered section providing the visibility storage surface.
+	 *
+	 * @var null|Settings_Section_Interface
+	 */
+	private $storage;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param null|Settings_Section_Interface $storage Registered visibility section override.
+	 */
+	public function __construct( ?Settings_Section_Interface $storage = null ) {
+		$this->storage = $storage;
+	}
+
+	/** {@inheritDoc} */
+	public function read(): array {
+		return $this->storage ? $this->storage->read() : parent::read();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param array $settings The full visibility settings array to persist.
+	 */
+	public function write( array $settings ) {
+		return $this->storage ? $this->storage->write( $settings ) : parent::write( $settings );
+	}
+
 	/**
 	 * Section id.
 	 */
