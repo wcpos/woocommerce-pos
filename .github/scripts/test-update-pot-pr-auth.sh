@@ -13,6 +13,24 @@ if ! grep -Fq 'git clone --depth 1 --branch v2.2.13 https://github.com/wp-cli/i1
   exit 1
 fi
 
+advisory_key=$(awk '
+  /composer config .* --json/ { getline; print $1; exit }
+' "$WORKFLOW_FILE")
+if [[ "$advisory_key" != 'audit.ignore' ]]; then
+  echo "Expected POT workflow to use Composer's portable audit.ignore key" >&2
+  exit 1
+fi
+
+composer_config_dir=$(mktemp -d)
+trap 'rm -rf "$composer_config_dir"' EXIT
+printf '{"name":"wcpos/update-pot-regression"}\n' > "$composer_config_dir/composer.json"
+
+if ! composer config --working-dir="$composer_config_dir" --no-plugins --json \
+  "$advisory_key" '["wp-coding-standards/wpcs"]'; then
+  echo "Expected POT workflow advisory key to be supported by Composer: $advisory_key" >&2
+  exit 1
+fi
+
 if ! grep -A4 -F 'name: Checkout code' "$WORKFLOW_FILE" | grep -Fq 'ref: main'; then
   echo "Expected POT generation to start from main" >&2
   exit 1

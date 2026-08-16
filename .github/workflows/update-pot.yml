@@ -55,7 +55,7 @@ jobs:
           # and v3.0.0 requires ^3.0, neither of which is published on Packagist
           # (latest stable is v2.12.0), so both fail to resolve outright.
           composer config --working-dir="$RUNNER_TEMP/i18n-command" --no-plugins --json \
-            policy.advisories.ignore '["wp-coding-standards/wpcs"]'
+            audit.ignore '["wp-coding-standards/wpcs"]'
           composer install --no-dev --no-interaction --working-dir="$RUNNER_TEMP/i18n-command"
 
       - name: Update POT file
