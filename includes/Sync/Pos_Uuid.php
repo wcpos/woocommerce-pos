@@ -8,7 +8,9 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use Exception;
+use Ramsey\Uuid\Uuid;
 use WC_Customer;
+use WC_Order_Item;
 use WCPOS\WooCommercePOS\Logger;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
@@ -52,11 +54,11 @@ class Pos_Uuid {
 	 */
 	public static function read_valid_uuid_from_meta( array $meta_data ): string {
 		foreach ( $meta_data as $meta ) {
-			$key = \is_object( $meta ) ? ( $meta->key ?? null ) : ( \is_array( $meta ) ? ( $meta['key'] ?? null ) : null );
+			$key = Meta_Entry::key( $meta );
 			if ( self::META_KEY !== $key ) {
 				continue;
 			}
-			$value = \is_object( $meta ) ? ( $meta->value ?? null ) : ( \is_array( $meta ) ? ( $meta['value'] ?? null ) : null );
+			$value = Meta_Entry::value( $meta );
 			if ( self::is_uuid( $value ) ) {
 				return $value;
 			}
@@ -168,6 +170,45 @@ class Pos_Uuid {
 			$customer,
 			array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_user' ) )
 		);
+	}
+
+	/**
+	 * Ensure the WC_Order_Item has a valid UUID.
+	 *
+	 * @param WC_Order_Item $item The order item object.
+	 * @return void
+	 */
+	public static function ensure_order_item_uuid( WC_Order_Item $item ): void {
+		global $wpdb;
+
+		if ( self::is_uuid( $item->get_meta( self::META_KEY ) ) ) {
+			return;
+		}
+
+		$lock_key = 'wc_pos_uuid_order_item_' . $item->get_id();
+		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, 10 ) );
+		if ( '1' !== (string) $acquired ) {
+			Logger::log( 'Unable to acquire lock for order item UUID update for order item id ' . $item->get_id() );
+			return;
+		}
+		try {
+			// Persist any pending meta, then check the STORED uuid directly —
+			// a full read_meta_data(true) reload would clobber sibling in-memory
+			// meta on lanes where the datastore cache lags (HPOS misc `_sku`).
+			$item->save_meta_data();
+			$uuid = wc_get_order_item_meta( $item->get_id(), self::META_KEY, true );
+			if ( ! self::is_uuid( $uuid ) ) {
+				$uuid = Uuid::uuid4()->toString();
+				$item->update_meta_data( self::META_KEY, $uuid );
+				$item->save_meta_data();
+			} elseif ( $uuid !== $item->get_meta( self::META_KEY ) ) {
+				// A concurrent request minted first; converge the stale in-memory
+				// item on the stored winner so the served payload carries it.
+				$item->update_meta_data( self::META_KEY, $uuid );
+			}
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
+		}
 	}
 
 	/**
@@ -296,7 +337,7 @@ class Pos_Uuid {
 		$meta   = ( isset( $payload['meta_data'] ) && \is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		$others = array();
 		foreach ( $meta as $entry ) {
-			$key = \is_array( $entry ) ? ( $entry['key'] ?? null ) : ( \is_object( $entry ) ? ( $entry->key ?? null ) : null );
+			$key = Meta_Entry::key( $entry );
 			if ( self::META_KEY !== $key ) {
 				$others[] = $entry;
 			}
@@ -594,10 +635,10 @@ class Pos_Uuid {
 		$kept_valid = false;
 		$deleted    = false;
 		foreach ( (array) $object->get_meta_data() as $meta ) {
-			if ( ! \is_object( $meta ) || self::META_KEY !== ( $meta->key ?? null ) ) {
+			if ( ! \is_object( $meta ) || self::META_KEY !== Meta_Entry::key( $meta ) ) {
 				continue;
 			}
-			if ( ! $kept_valid && self::is_uuid( $meta->value ?? null ) ) {
+			if ( ! $kept_valid && self::is_uuid( Meta_Entry::value( $meta ) ) ) {
 				$kept_valid = true; // keep the first valid uuid meta
 
 				continue;

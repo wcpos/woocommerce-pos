@@ -11,12 +11,9 @@ namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_Order;
 use WC_REST_Orders_Controller;
-use WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WP_REST_Request;
 final class Order_Serializer {
-	use Uuid_Handler;
-
 	/**
 	 * The augmentation set shared by EVERY v2 order lane — pull, proxy, and the
 	 * write-ack. Applied in this order, which is also the order the keys land in
@@ -177,7 +174,7 @@ final class Order_Serializer {
 				if ( ! isset( $order_items[ $item_id ] ) ) {
 					continue;
 				}
-				$this->maybe_add_order_item_uuid( $order_items[ $item_id ] );
+				Pos_Uuid::ensure_order_item_uuid( $order_items[ $item_id ] );
 				$uuid = $order_items[ $item_id ]->get_meta( Pos_Uuid::META_KEY, true );
 				if ( Pos_Uuid::is_uuid( $uuid ) ) {
 					$served_item = Pos_Uuid::ensure_in_payload( $served_item, $uuid );
@@ -320,7 +317,7 @@ final class Order_Serializer {
 				array_filter(
 					$payload['meta_data'],
 					static function ( $entry ): bool {
-						$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+						$key = Meta_Entry::key( $entry );
 						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true );
 					}
 				)
@@ -376,7 +373,7 @@ final class Order_Serializer {
 					array_filter(
 						$item['meta_data'],
 						static function ( $entry ): bool {
-							$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+							$key = Meta_Entry::key( $entry );
 							return '_woocommerce_pos_uuid' !== $key;
 						}
 					)
@@ -426,7 +423,7 @@ final class Order_Serializer {
 			array_filter(
 				$payload['meta_data'],
 				static function ( $entry ): bool {
-					$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+					$key = Meta_Entry::key( $entry );
 					return '_woocommerce_pos_uuid' !== $key;
 				}
 			)

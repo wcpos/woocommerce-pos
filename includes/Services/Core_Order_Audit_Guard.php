@@ -23,6 +23,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WP_Error;
 use WP_REST_Request;
 use WCPOS\WooCommercePOS\API;
@@ -132,7 +133,7 @@ final class Core_Order_Audit_Guard {
 		$has_audit_key = false;
 		foreach ( $candidates as $candidate ) {
 			foreach ( $this->meta_entries( $candidate[0] ) as $entry ) {
-				if ( \in_array( $entry['key'] ?? null, $audit_keys, true ) ) {
+				if ( \in_array( Meta_Entry::key( $entry ), $audit_keys, true ) ) {
 					$has_audit_key = true;
 					break 2;
 				}

@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Interfaces\Push_Provider_Adapter_Interface;
 
 /**
  * Cloud_Print_Submit_Service class.
@@ -94,142 +95,36 @@ class Cloud_Print_Submit_Service {
 			}
 
 			$provider = (string) ( $printer['provider'] ?? '' );
-			if ( 'star-online' === $provider ) {
-				$this->submit_star_online( $job_id, $job, $printer );
-
-				return;
-			}
-
-			if ( 'printnode' !== $provider ) {
+			$adapter  = Provider::adapter( $provider );
+			if ( ! $adapter instanceof Push_Provider_Adapter_Interface ) {
 				$this->fail( $job_id, 'Cloud print: unsupported push provider for job.' );
 
 				return;
 			}
 
-			$api_key       = (string) ( $printer['printnode_api_key'] ?? '' );
-			$pn_printer_id = (int) ( $printer['printnode_printer_id'] ?? 0 );
-			if ( '' === $api_key || 0 === $pn_printer_id ) {
-				$this->fail( $job_id, 'Cloud print: PrintNode printer is missing an API key or printer id.' );
-
-				return;
-			}
-
 			$payload = $this->jobs->render_payload( $job );
-			if ( '' === $payload ) {
-				$this->fail( $job_id, 'Cloud print: PrintNode job produced no printable content.' );
-
-				return;
-			}
-
-			$content_type = 'escpos' === $job['pn_kind'] ? 'raw_base64' : 'pdf_base64';
-			$title        = $this->title_for( $job );
-
-			$result = ( new PrintNode_Client( $api_key ) )->submit_job(
-				$pn_printer_id,
-				$title,
-				$content_type,
-				base64_encode( $payload )
-			);
-
-			if ( is_wp_error( $result ) ) {
-				$this->handle_submit_error( $job_id, $result->get_error_message() );
-
-				return;
-			}
-
-			$this->jobs->record_external_submission( $job_id, 'printnode', (string) $result['id'], 'submitted' );
-
-			if ( 'pdf' === $job['pn_kind'] && ! empty( $job['auto_open_drawer'] ) ) {
-				$drawer_result = $this->submit_printnode_drawer_kick( $api_key, $pn_printer_id, $job );
-				if ( is_wp_error( $drawer_result ) ) {
-					update_post_meta( $job_id, Print_Job_Service::META_DRAWER_ERROR, sanitize_text_field( $drawer_result->get_error_message() ) );
-					Logger::log( sprintf( 'Cloud print: PrintNode drawer kick failed for job %d after receipt submission.', $job_id ) );
+			$result  = $adapter->submit( $printer, $job, $payload, $this->title_for( $job ) );
+			if ( ! $result['success'] ) {
+				if ( $result['retryable'] ) {
+					$this->handle_submit_error( $job_id, $result['error'] );
+				} else {
+					$this->fail( $job_id, $result['error'] );
 				}
+
+				return;
+			}
+
+			$this->jobs->record_external_submission( $job_id, $provider, $result['external_job_id'], 'submitted' );
+
+			if ( '' !== $result['drawer_error'] ) {
+				update_post_meta( $job_id, Print_Job_Service::META_DRAWER_ERROR, sanitize_text_field( $result['drawer_error'] ) );
+				Logger::log( sprintf( 'Cloud print: PrintNode drawer kick failed for job %d after receipt submission.', $job_id ) );
 			}
 
 			$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
 		} finally {
 			$this->jobs->release_lifecycle_lock( $job_id );
 		}
-	}
-
-	/**
-	 * Submit a best-effort raw ESC/POS drawer kick for a PrintNode PDF job.
-	 *
-	 * @param string $api_key       PrintNode API key.
-	 * @param int    $pn_printer_id PrintNode printer id.
-	 * @param array  $job           Job data.
-	 *
-	 * @return array|\WP_Error
-	 */
-	private function submit_printnode_drawer_kick( string $api_key, int $pn_printer_id, array $job ) {
-		$title = $this->title_for( $job ) . ' Cash Drawer';
-
-		return ( new PrintNode_Client( $api_key ) )->submit_job(
-			$pn_printer_id,
-			$title,
-			'raw_base64',
-			base64_encode( $this->drawer_kick_bytes( (string) ( $job['drawer_connector'] ?? 'pin2' ) ) )
-		);
-	}
-
-	/**
-	 * Build ESC/POS drawer kick bytes for PrintNode raw jobs.
-	 *
-	 * @param string $connector pin2 or pin5.
-	 *
-	 * @return string
-	 */
-	private function drawer_kick_bytes( string $connector ): string {
-		$connector = Print_Job_Service::normalize_drawer_connector( $connector );
-		$pin       = 'pin5' === $connector ? "\x01" : "\x00";
-
-		return "\x1B\x70" . $pin . "\x19\xFA";
-	}
-
-	/**
-	 * Submit a queued Star Online job: render Star markup and POST it to stario.online.
-	 *
-	 * @param int   $job_id  Job id.
-	 * @param array $job     Job array.
-	 * @param array $printer Registered star-online printer.
-	 */
-	private function submit_star_online( int $job_id, array $job, array $printer ): void {
-		$api_key   = (string) ( $printer['star_api_key'] ?? '' );
-		$url       = (string) ( $printer['star_cloudprnt_url'] ?? '' );
-		$device_id = (string) ( $printer['star_device_id'] ?? '' );
-		$api_base  = Star_Online_Client::api_base_from_cloudprnt_url( $url );
-		$group     = Star_Online_Client::group_from_cloudprnt_url( $url );
-
-		if ( '' === $api_key || null === $api_base || '' === $group || '' === $device_id ) {
-			$this->fail( $job_id, 'Cloud print: Star Online printer is misconfigured.' );
-
-			return;
-		}
-
-		$payload = $this->jobs->render_payload( $job );
-		if ( '' === $payload ) {
-			$this->fail( $job_id, 'Cloud print: Star Online job produced no printable content.' );
-
-			return;
-		}
-
-		$result = ( new Star_Online_Client( $api_base, $api_key ) )->submit_job(
-			$group,
-			$device_id,
-			$this->title_for( $job ),
-			'text/vnd.star.markup',
-			$payload
-		);
-
-		if ( is_wp_error( $result ) ) {
-			$this->handle_submit_error( $job_id, $result->get_error_message() );
-
-			return;
-		}
-
-		$this->jobs->record_external_submission( $job_id, 'star-online', (string) $result['id'], 'submitted' );
-		$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
 	}
 
 	/**

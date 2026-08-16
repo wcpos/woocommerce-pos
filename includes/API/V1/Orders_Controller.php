@@ -1147,8 +1147,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param WP_REST_Request $request Request object.
 	 */
 	public function wcpos_shop_order_query( array $args, WP_REST_Request $request ) {
-		// Check for wcpos_include/wcpos_exclude parameter.
-		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+		// Which id-set rows this request claims is the declaration table's question,
+		// not a literal list of param names — so a new `id_set` row installs on this
+		// lane too, instead of only on the proxy lane.
+		if ( $this->wcpos_collection_plan( $request )->claims_id_sets() ) {
 			if ( $this->hpos_enabled ) {
 				add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orders_table_query_clauses' ), 10, 3 );
 			} else {
@@ -1311,7 +1313,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * Legacy order options.
 		 */
 		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
-			if ( 'status' === $request['orderby'] ) {
+			// Whether the claimed sort needs the legacy rewrite is declared by the sort's
+			// own row, so a second `posts_orderby` recipe reaches both Read Lanes.
+			if ( $this->wcpos_collection_plan( $request )->needs_legacy_posts_orderby() ) {
 				// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
 				add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
 			}

@@ -828,48 +828,50 @@ class Preview_Receipt_Builder {
 		$presentation_hints = $this->store_resolver->build_presentation_hints( $currency, $prices_include_tax );
 		$tax                = $this->store_resolver->build_tax_section();
 
-		$fiscal = array(
-			'immutable_id'      => '12345:42',
-			'receipt_number'    => '00042',
-			'sequence'          => 42,
-			'hash'              => 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
-			'qr_payload'        => 'https://example.com/verify?id=SAMPLE-001',
-			'tax_agency_code'   => 'SAMPLE',
-			'signed_at'         => gmdate( 'Y-m-d\TH:i:s\Z' ),
-			'signature_excerpt' => 'A1B2',
-			'document_label'    => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax Receipt', 'woocommerce-pos' ),
-			'is_reprint'        => false,
-			'reprint_count'     => 0,
-			'extra_fields'      => array(
-				array(
-					'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax ID', 'woocommerce-pos' ),
-					'value' => 'XX-1234567',
+		$fiscal = Receipt_Payload_Assembler::fiscal(
+			array(
+				'immutable_id'      => '12345:42',
+				'receipt_number'    => '00042',
+				'sequence'          => 42,
+				'hash'              => 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
+				'qr_payload'        => 'https://example.com/verify?id=SAMPLE-001',
+				'tax_agency_code'   => 'SAMPLE',
+				'signed_at'         => gmdate( 'Y-m-d\TH:i:s\Z' ),
+				'signature_excerpt' => 'A1B2',
+				'document_label'    => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax Receipt', 'woocommerce-pos' ),
+				'is_reprint'        => false,
+				'reprint_count'     => 0,
+				'extra_fields'      => array(
+					array(
+						'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax ID', 'woocommerce-pos' ),
+						'value' => 'XX-1234567',
+					),
+					array(
+						'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Auth Code', 'woocommerce-pos' ),
+						'value' => 'ABC-789',
+					),
 				),
-				array(
-					'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Auth Code', 'woocommerce-pos' ),
-					'value' => 'ABC-789',
-				),
-			),
+			)
 		);
 
-		return array(
-			'order'              => $order,
-			'store'              => $store,
-			'cashier'            => $cashier,
-			'customer'           => $customer,
-			'lines'              => $lines,
-			'fees'               => $fees,
-			'shipping'           => $shipping,
-			'discounts'          => $discounts,
-			'totals'             => $totals,
-			'tax'                => $tax,
-			'tax_summary'        => $tax_summary,
-			'has_tax_summary'    => ! empty( $tax_summary ),
-			'payments'           => $payments,
-			'refunds'            => $refunds,
-			'fiscal'             => $fiscal,
-			'presentation_hints' => $presentation_hints,
-			'i18n'               => Receipt_I18n_Labels::get_labels( $presentation_hints['locale'] ?? '' ),
+		return Receipt_Payload_Assembler::assemble(
+			array(
+				'order'              => $order,
+				'store'              => $store,
+				'cashier'            => $cashier,
+				'customer'           => $customer,
+				'lines'              => $lines,
+				'fees'               => $fees,
+				'shipping'           => $shipping,
+				'discounts'          => $discounts,
+				'totals'             => $totals,
+				'tax'                => $tax,
+				'tax_summary'        => $tax_summary,
+				'payments'           => $payments,
+				'refunds'            => $refunds,
+				'fiscal'             => $fiscal,
+				'presentation_hints' => $presentation_hints,
+			)
 		);
 	}
 

@@ -276,37 +276,20 @@ class Cloud_Print_Trigger_Service {
 			return 0;
 		}
 
-		if ( 'printnode' === $provider ) {
-			$job_id = $jobs->create(
-				array(
-					'printer_id'   => $printer_id,
-					'order_id'     => $order_id,
-					'template_id'  => $template_id,
-					'content_type' => $fmt['content_type'],
-					'pn_kind'      => $fmt['kind'],
-					'trigger'      => $trigger,
-					'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
-					'drawer_connector' => $drawer_options['drawer_connector'],
-				)
-			);
-			if ( $job_id > 0 ) {
-				wp_schedule_single_event( time(), self::CRON_SUBMIT, array( $job_id ) );
-			}
-
-			return $job_id;
+		$job_args = array(
+			'printer_id'      => $printer_id,
+			'content_type'    => $fmt['content_type'],
+			'order_id'        => $order_id,
+			'template_id'     => $template_id,
+			'trigger'         => $trigger,
+			'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
+			'drawer_connector' => $drawer_options['drawer_connector'],
+		);
+		if ( Provider::stores_job_kind( $provider ) ) {
+			$job_args['pn_kind'] = $fmt['kind'];
 		}
 
-		$job_id = $jobs->create(
-			array(
-				'printer_id'   => $printer_id,
-				'content_type' => $fmt['content_type'],
-				'order_id'     => $order_id,
-				'template_id'  => $template_id,
-				'trigger'      => $trigger,
-				'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
-				'drawer_connector' => $drawer_options['drawer_connector'],
-			)
-		);
+		$job_id = $jobs->create( $job_args );
 
 		// Push providers (e.g. Star Online) don't poll us; submit out-of-band.
 		if ( $job_id > 0 && Provider::requires_submit( $provider ) ) {
@@ -328,7 +311,7 @@ class Cloud_Print_Trigger_Service {
 	 * @return array{auto_open_drawer:bool, drawer_connector:string}
 	 */
 	private static function drawer_options_for_provider( string $provider, array $drawer_options ): array {
-		if ( ! in_array( $provider, array( 'epson-sdp', 'printnode' ), true ) ) {
+		if ( ! Provider::supports_drawer( $provider ) ) {
 			return array(
 				'auto_open_drawer' => false,
 				'drawer_connector' => 'pin2',

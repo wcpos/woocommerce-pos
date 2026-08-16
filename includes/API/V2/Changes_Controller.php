@@ -208,7 +208,7 @@ final class Changes_Controller extends WP_REST_Controller {
 			// original row shape so their checked-in tests stay valid.
 			if ( $is_all ) {
 				if ( '' !== $object_type ) {
-					$mapped = $this->collection_for_object_type( $object_type );
+					$mapped = Collections::collection_for_object_type( $object_type );
 					if ( null === $mapped ) {
 						// Fail closed: an unknown/future object_type (or a typo)
 						// must NOT be mis-labelled — the client would pull the
@@ -671,21 +671,6 @@ final class Changes_Controller extends WP_REST_Controller {
 		}
 
 		return array( 'product', 'variation' );
-	}
-
-	/**
-	 * Map a journal object_type to the client-facing collection name via
-	 * THE registry (#421 increment 5). Returns null for an unknown
-	 * object_type — the caller DROPS the row and logs once. The old switch
-	 * fell through to 'products', which made a missing case pull a PRODUCT
-	 * with the changed record's numeric id (the exact mis-pull the registry's
-	 * fail-closed contract exists to kill); `product` now resolves
-	 * explicitly, not as a default.
-	 */
-	private function collection_for_object_type( string $object_type ): ?string {
-		$row = Collections::by_object_type( $object_type );
-
-		return null === $row ? null : $row['_collection'];
 	}
 
 	private function tax_rates_table(): string {

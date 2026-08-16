@@ -27,42 +27,15 @@ class Print_Format_Resolver {
 		// Printer rows saved before the provider field existed have none; they
 		// must behave as the default provider, not fall through every branch.
 		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
-		$engine   = (string) ( $template['engine'] ?? '' );
-
-		if ( 'printnode' === $provider ) {
-			if ( 'thermal' !== $engine ) {
-				return array(
-					'kind' => 'pdf',
-					'content_type' => 'application/pdf',
-				);
-			}
-
-			$format = (string) ( $printer['printnode_format'] ?? 'pdf' );
-			if ( 'raw' === $format ) {
-				return array(
-					'kind' => 'escpos',
-					'content_type' => 'application/octet-stream',
-				);
-			}
-
-			return array(
-				'kind' => 'pdf',
-				'content_type' => 'application/pdf',
-			);
-		}
-
-		$wire = Provider::wire_format( $provider, $engine );
-		if ( null === $wire ) {
+		$adapter  = Provider::adapter( $provider );
+		if ( null === $adapter ) {
 			return array(
 				'kind' => '',
 				'content_type' => '',
 			);
 		}
 
-		return array(
-			'kind' => $wire,
-			'content_type' => Provider::content_type( $provider ),
-		);
+		return $adapter->format( $printer, $template );
 	}
 
 	/**
@@ -89,6 +62,9 @@ class Print_Format_Resolver {
 	 * @return string
 	 */
 	public function content_type_for_printer( array $printer ): string {
-		return Provider::content_type( Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null ) );
+		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
+		$adapter  = Provider::adapter( $provider );
+
+		return null === $adapter ? 'application/octet-stream' : $adapter->content_type();
 	}
 }
