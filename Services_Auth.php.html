@@ -81,6 +81,58 @@ class Auth {
 	}
 
 	/**
+	 * Authenticate the current request from its Bearer token.
+	 *
+	 * @return false|int|WP_Error User ID, validation error, or false when no Bearer token is present.
+	 */
+	public function authenticate_request() {
+		$auth_header = $this->get_auth_header();
+		if ( ! \is_string( $auth_header ) ) {
+			return false;
+		}
+		list( $token ) = sscanf( $auth_header, 'Bearer %s' );
+		if ( ! $token ) {
+			return false;
+		}
+
+		$decoded_token = $this->validate_token( $token );
+		if ( is_wp_error( $decoded_token ) ) {
+			return $decoded_token;
+		}
+
+		return absint( $decoded_token->data->user->id );
+	}
+
+	/**
+	 * Get authorization header/param value.
+	 *
+	 * Checks multiple sources for the authorization token:
+	 * 1. HTTP_AUTHORIZATION server variable (standard)
+	 * 2. REDIRECT_HTTP_AUTHORIZATION (Apache CGI workaround)
+	 * 3. authorization query parameter (for servers that strip auth headers)
+	 *
+	 * @return false|string The authorization value or false if not found.
+	 */
+	public function get_auth_header() {
+		// Check HTTP_AUTHORIZATION (not empty - htaccess SetEnvIf can set empty value).
+		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
+			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) );
+		}
+
+		// Check REDIRECT_HTTP_AUTHORIZATION (Apache CGI).
+		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+			return sanitize_text_field( wp_unslash( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) );
+		}
+
+		// Check authorization query param.
+		if ( ! empty( $_GET['authorization'] ) ) {
+			return sanitize_text_field( wp_unslash( $_GET['authorization'] ) );
+		}
+
+		return false;
+	}
+
+	/**
 	 * Generate a secret key if it doesn't exist, or return the existing one.
 	 *
 	 * @return string
