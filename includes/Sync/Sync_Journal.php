@@ -375,11 +375,15 @@ final class Sync_Journal {
 
 	/** Arm a one-shot write after an HPOS order restore is persisted. */
 	public function record_cot_order_untrashed( int $order_id ): void {
-		$handler = function ( $order ) use ( $order_id, &$handler ): void {
-			if ( ! is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! method_exists( $order, 'get_status' ) || (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
+		$handler = function ( \WC_Order $order ) use ( $order_id, &$handler ): void {
+			if ( (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
 				return;
 			}
 			remove_action( 'woocommerce_after_order_object_save', $handler );
+			foreach ( array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ) as $meta_key ) {
+				$order->delete_meta_data( $meta_key );
+			}
+			$order->save_meta_data();
 			$this->record_order_untrashed( $order_id );
 		};
 		add_action( 'woocommerce_after_order_object_save', $handler );

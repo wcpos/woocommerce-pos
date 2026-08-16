@@ -278,15 +278,24 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 
 			wp_cache_flush();
 			$cursor = $this->journal->head_sequence();
+			$trash_status_after_handler = null;
+			$observe_cleanup = function ( $saved_order ) use ( $order_id, &$trash_status_after_handler ): void {
+				if ( (int) $saved_order->get_id() === $order_id && 'trash' !== $saved_order->get_status() ) {
+					$trash_status_after_handler = $saved_order->get_meta( '_wp_trash_meta_status' );
+				}
+			};
 			$intervening_save = static function ( int $order_id ): void {
 				wc_get_order( $order_id )->save();
 			};
+			add_action( 'woocommerce_after_order_object_save', $observe_cleanup, 20, 1 );
 			add_action( 'woocommerce_untrash_order', $intervening_save, 20, 1 );
 			try {
 				wc_get_order( $order_id )->untrash();
 			} finally {
+				remove_action( 'woocommerce_after_order_object_save', $observe_cleanup, 20 );
 				remove_action( 'woocommerce_untrash_order', $intervening_save, 20 );
 			}
+			$this->assertSame( '', $trash_status_after_handler, 'The journal handler must remove transient trash metadata before later save observers run.' );
 			$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:untrash', false );
 		} finally {
 			$this->toggle_cot_feature_and_usage( false );
