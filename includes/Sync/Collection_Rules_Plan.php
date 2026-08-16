@@ -317,6 +317,37 @@ final class Collection_Rules_Plan {
 	}
 
 	/**
+	 * Whether this plan claims any non-empty id set.
+	 *
+	 * Both Read Lanes ask the declaration table this question rather than
+	 * testing for the presence of a specific request param, so a new `id_set`
+	 * row applies on both lanes or neither.
+	 *
+	 * Note this is deliberately narrower than `isset( $request['wcpos_include'] )`:
+	 * a present-but-empty value claims nothing. That is not a behaviour change —
+	 * both clause bodies already skip empty sets (`apply_legacy_id_sets()` iterates
+	 * `claimed_id_sets()`, `apply_hpos_filters()` guards on `array() !== $value`),
+	 * so installing the callback for an empty set appended nothing anyway.
+	 *
+	 * @return bool
+	 */
+	public function claims_id_sets(): bool {
+		return array() !== $this->claimed_id_sets();
+	}
+
+	/**
+	 * Whether the claimed sort needs the legacy `posts_orderby` rewrite.
+	 *
+	 * Reads the sort's declaration instead of naming a sort inline, so a second
+	 * `posts_orderby` recipe added to the table is picked up by both Read Lanes.
+	 *
+	 * @return bool
+	 */
+	public function needs_legacy_posts_orderby(): bool {
+		return null !== $this->sort && isset( $this->rules['sorts'][ $this->sort ]['posts']['posts_orderby'] );
+	}
+
+	/**
 	 * Attach every callback this plan needs for a proxied forward.
 	 *
 	 * @return array<int, array{0: string, 1: callable, 2: int}> Bindings, in install order.
@@ -355,7 +386,7 @@ final class Collection_Rules_Plan {
 			return $bindings;
 		}
 
-		if ( null !== $this->sort && isset( $this->rules['sorts'][ $this->sort ]['posts']['posts_orderby'] ) ) {
+		if ( $this->needs_legacy_posts_orderby() ) {
 			$orderby_callback = function ( $orderby, $query = null ) {
 				return $this->filter( self::HOOK_POSTS_ORDERBY, $orderby, $query );
 			};
@@ -363,7 +394,7 @@ final class Collection_Rules_Plan {
 			$bindings[] = array( 'posts_orderby', $orderby_callback, 10 );
 		}
 
-		if ( array() !== $this->claimed_id_sets() ) {
+		if ( $this->claims_id_sets() ) {
 			/*
 			 * `posts_where` fires for EVERY WP_Query, and `wcpos/v1` leaves its callback
 			 * installed for the remainder of the request without a post-type guard (frozen
