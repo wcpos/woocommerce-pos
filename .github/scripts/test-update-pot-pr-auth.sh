@@ -13,21 +13,27 @@ if ! grep -Fq 'git clone --depth 1 --branch v2.2.13 https://github.com/wp-cli/i1
   exit 1
 fi
 
-advisory_key=$(awk '
-  /composer config .* --json/ { getline; print $1; exit }
+advisory_assignment=$(awk '
+  /composer config .* --json/ { getline; sub(/^[[:space:]]*/, ""); print; exit }
 ' "$WORKFLOW_FILE")
-if [[ "$advisory_key" != 'audit.ignore' ]]; then
-  echo "Expected POT workflow to use Composer's portable audit.ignore key" >&2
+expected_advisory_assignment="audit.ignore '{\"GHSA-3pwp-g2mj-5p3v\":{\"reason\":\"WPCS is resolved only in this temporary clone and is not installed or executed by this job.\",\"apply\":\"all\"}}'"
+if [[ "$advisory_assignment" != "$expected_advisory_assignment" ]]; then
+  echo 'Expected POT workflow to ignore only GHSA-3pwp-g2mj-5p3v with its documented reason' >&2
   exit 1
 fi
+
+advisory_key=${advisory_assignment%% *}
+advisory_value=${advisory_assignment#* }
+advisory_value=${advisory_value#\'}
+advisory_value=${advisory_value%\'}
 
 composer_config_dir=$(mktemp -d)
 trap 'rm -rf "$composer_config_dir"' EXIT
 printf '{"name":"wcpos/update-pot-regression"}\n' > "$composer_config_dir/composer.json"
 
 if ! composer config --working-dir="$composer_config_dir" --no-plugins --json \
-  "$advisory_key" '["wp-coding-standards/wpcs"]'; then
-  echo "Expected POT workflow advisory key to be supported by Composer: $advisory_key" >&2
+  "$advisory_key" "$advisory_value"; then
+  echo "Expected POT workflow advisory assignment to be supported by Composer: $advisory_assignment" >&2
   exit 1
 fi
 
