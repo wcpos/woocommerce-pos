@@ -9,7 +9,16 @@
 
 namespace WCPOS\WooCommercePOS\Interfaces;
 
-/** Adapts collection behavior around the controller-owned mutation protocol. */
+/**
+ * Adapts collection behavior around the controller-owned mutation protocol.
+ *
+ * @internal Not a public extension point. Unlike the other contracts in this
+ * namespace, this shape is provisional: six of its methods still take a
+ * `callable` for the controller's default implementation, and the intended
+ * follow-up is to push those defaults into Null_Writer and let the other
+ * writers extend it. Third-party code must not implement this interface —
+ * narrowing it later would otherwise be a breaking change on a released line.
+ */
 interface Collection_Writer_Interface {
 	/**
 	 * Prepare a create payload and route.
