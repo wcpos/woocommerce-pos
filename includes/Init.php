@@ -176,28 +176,12 @@ class Init {
 			return $user_id;
 		}
 
-		// Check for authorization token (header or param).
-		$auth_header = $this->get_auth_header_early();
-		if ( ! \is_string( $auth_header ) || empty( $auth_header ) ) {
+		$authenticated_user_id = AuthService::instance()->authenticate_request();
+		if ( false === $authenticated_user_id || is_wp_error( $authenticated_user_id ) ) {
 			return $user_id;
 		}
 
-		// Extract Bearer token.
-		list( $token ) = sscanf( $auth_header, 'Bearer %s' );
-		if ( ! $token ) {
-			return $user_id;
-		}
-
-		// Validate token - this will fail for non-WCPOS tokens.
-		$auth_service  = AuthService::instance();
-		$decoded_token = $auth_service->validate_token( $token );
-
-		if ( is_wp_error( $decoded_token ) ) {
-			return $user_id;
-		}
-
-		// Return the authenticated user ID.
-		return absint( $decoded_token->data->user->id );
+		return $authenticated_user_id;
 	}
 
 	/**
@@ -375,35 +359,6 @@ class Init {
 				header_remove( 'X-Frame-Options' );
 			}
 		}
-	}
-
-	/**
-	 * Get authorization header/param value.
-	 *
-	 * Checks multiple sources for the authorization token:
-	 * 1. HTTP_AUTHORIZATION server variable (standard)
-	 * 2. REDIRECT_HTTP_AUTHORIZATION (Apache CGI workaround)
-	 * 3. authorization query parameter (for servers that strip auth headers)
-	 *
-	 * @return false|string The authorization value or false if not found.
-	 */
-	private function get_auth_header_early() {
-		// Check HTTP_AUTHORIZATION (not empty - htaccess SetEnvIf can set empty value).
-		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) );
-		}
-
-		// Check REDIRECT_HTTP_AUTHORIZATION (Apache CGI).
-		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) );
-		}
-
-		// Check authorization query param.
-		if ( ! empty( $_GET['authorization'] ) ) {
-			return sanitize_text_field( wp_unslash( $_GET['authorization'] ) );
-		}
-
-		return false;
 	}
 
 	/**

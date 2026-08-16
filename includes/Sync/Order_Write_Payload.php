@@ -83,11 +83,7 @@ final class Order_Write_Payload {
 	 */
 	private function sanitize_order_wc_payload( array $payload ): array {
 		$payload = $this->recover_any_variation_attributes( $payload );
-		if ( isset( $payload['billing'] ) && is_array( $payload['billing'] )
-			&& array_key_exists( 'email', $payload['billing'] )
-			&& ( '' === $payload['billing']['email'] || null === $payload['billing']['email'] ) ) {
-			unset( $payload['billing']['email'] );
-		}
+		$payload = $this->without_empty_billing_email( $payload );
 		if ( isset( $payload['line_items'] ) && is_array( $payload['line_items'] ) ) {
 			foreach ( $payload['line_items'] as $i => $line ) {
 				if ( is_array( $line ) && array_key_exists( 'parent_name', $line ) && null === $line['parent_name'] ) {
@@ -123,6 +119,24 @@ final class Order_Write_Payload {
 					}
 				}
 			}
+		}
+		return $payload;
+	}
+
+	/**
+	 * Drop a billing email value that wc/v3 rejects but POS treats as absent.
+	 *
+	 * Shared with customer writes so both lanes retain the v1 walk-in rule.
+	 *
+	 * @param array $payload Payload about to be forwarded to wc/v3.
+	 *
+	 * @return array Payload with an empty billing email removed.
+	 */
+	public function without_empty_billing_email( array $payload ): array {
+		if ( isset( $payload['billing'] ) && is_array( $payload['billing'] )
+			&& array_key_exists( 'email', $payload['billing'] )
+			&& ( '' === $payload['billing']['email'] || null === $payload['billing']['email'] ) ) {
+			unset( $payload['billing']['email'] );
 		}
 		return $payload;
 	}

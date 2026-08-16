@@ -1,0 +1,54 @@
+<?php
+/**
+ * Collection writer lifecycle contract.
+ *
+ * @package WCPOS\WooCommercePOS\Interfaces
+ */
+
+// phpcs:disable Squiz.Commenting, Generic.Commenting -- Lifecycle docblocks are intentionally concise.
+
+namespace WCPOS\WooCommercePOS\Interfaces;
+
+/**
+ * Adapts collection behavior around the controller-owned mutation protocol.
+ *
+ * @internal Not a public extension point. Unlike the other contracts in this
+ * namespace, this shape is provisional: six of its methods still take a
+ * `callable` for the controller's default implementation, and the intended
+ * follow-up is to push those defaults into Null_Writer and let the other
+ * writers extend it. Third-party code must not implement this interface —
+ * narrowing it later would otherwise be a breaking change on a released line.
+ */
+interface Collection_Writer_Interface {
+	/**
+	 * Prepare a create payload and route.
+	 *
+	 * @return array|object Prepared write with method, route, payload, context, and optional context_factory keys; or validation error.
+	 */
+	public function prepare_create( array $meta, array $payload, callable $validate_tax_ids );
+
+	/**
+	 * Prepare an update payload and route.
+	 *
+	 * @return array|object Prepared write with method, route, payload, context, and optional context_factory keys; or validation error.
+	 */
+	public function prepare_update( array $meta, int $id, array $payload, callable $validate_tax_ids );
+
+	/** Validate and repair an already-existing create target. */
+	public function validate_existing_create( int $id, array $payload, array $prepared );
+
+	/** Forward a prepared write within collection hooks. */
+	public function forward( array $prepared, callable $forward );
+
+	/** Persist collection data at a named create/update lifecycle phase. */
+	public function persist( string $phase, int $id, array $payload, array $current = array(), array $response_data = array(), array $context = array() ): void;
+
+	/** Execute the collection-specific delete forward. */
+	public function delete( array $meta, int $id, array $mutation, callable $dispatch, callable $can_delete );
+
+	/** Read the collection's authoritative response document. */
+	public function document( array $meta, int $id, callable $default_document );
+
+	/** Shape a bare document for the mutation response. */
+	public function build_response_document( array $bare, string $record_id, array $meta, int $id, callable $default_builder ): array;
+}
