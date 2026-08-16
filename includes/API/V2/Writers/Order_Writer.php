@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -223,9 +224,9 @@ class Order_Writer extends Null_Writer {
 	private function prepare_order_update_after_read( int $id, array $payload ): array {
 		$reassignment = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
-			$key = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
+			$key = Meta_Entry::key( $entry );
 			if ( is_scalar( $key ) && in_array( (string) $key, array( '_pos_user', '_pos_store' ), true ) ) {
-				$reassignment[ (string) $key ] = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( $entry->value ?? '' );
+				$reassignment[ (string) $key ] = Meta_Entry::value( $entry ) ?? '';
 			}
 		}
 		$authorized = isset( $reassignment['_pos_store'] ) && is_scalar( $reassignment['_pos_store'] ) && '' !== (string) $reassignment['_pos_store']
@@ -337,8 +338,8 @@ class Order_Writer extends Null_Writer {
 	private function stamp_order_till_meta( int $id, array $payload ): void {
 		$meta = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
-			$key   = is_array( $entry ) ? ( $entry['key'] ?? null ) : ( is_object( $entry ) ? ( $entry->key ?? null ) : null );
-			$value = is_array( $entry ) ? ( $entry['value'] ?? '' ) : ( is_object( $entry ) ? ( $entry->value ?? '' ) : '' );
+			$key   = Meta_Entry::key( $entry );
+			$value = Meta_Entry::value( $entry ) ?? '';
 			if ( is_scalar( $key ) && in_array( (string) $key, Pos_Order_Audit::cash_meta_keys(), true ) && is_scalar( $value ) && '' !== (string) $value ) {
 				$meta[ (string) $key ] = (string) $value;
 			}

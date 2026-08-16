@@ -360,7 +360,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		// assuming 'products' (ADR 0005 — engine reads DriftedId.collection).
 		$changes = array();
 		foreach ( $rows as $row ) {
-			$collection = $this->collection_for_object_type( (string) ( $row['object_type'] ?? '' ) );
+			$collection = Collections::collection_for_object_type( (string) ( $row['object_type'] ?? '' ) );
 			if ( null === $collection ) {
 				// Fail closed (#421 increment 5): the digest SQL constrains
 				// object_type to this id-space's own types, so this cannot
@@ -393,20 +393,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 				'drill-down: per-id stored-vs-current digest mismatches in one bucket.'
 			)
 		);
-	}
-
-	/**
-	 * Map a digest object_type to the engine's collection name. The hash-checksum
-	 * digest only stores 'product' | 'variation' (OBJECT_TYPES_SQL), so anything
-	 * that isn't a variation is a product.
-	 */
-	private function collection_for_object_type( string $object_type ): ?string {
-		// Registry-backed (#421 increment 5): the digest tables only store the
-		// id-space's own object_types, but an unknown value must fail closed
-		// (null → the caller drops the row) rather than masquerade as products.
-		$row = Collections::by_object_type( $object_type );
-
-		return null === $row ? null : $row['_collection'];
 	}
 
 	/**

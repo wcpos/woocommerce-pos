@@ -157,7 +157,7 @@ final class Variable_Prices {
 		$others = array();
 		$meta   = ( isset( $payload['meta_data'] ) && \is_array( $payload['meta_data'] ) ) ? $payload['meta_data'] : array();
 		foreach ( $meta as $entry ) {
-			$entry_key = \is_array( $entry ) ? ( $entry['key'] ?? null ) : ( \is_object( $entry ) ? ( $entry->key ?? null ) : null );
+			$entry_key = Meta_Entry::key( $entry );
 			if ( $key !== $entry_key ) {
 				$others[] = $entry;
 			}

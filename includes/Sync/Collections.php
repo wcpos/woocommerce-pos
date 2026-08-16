@@ -275,6 +275,13 @@ final class Collections {
 		return null;
 	}
 
+	/** Resolve a singular object type to its canonical collection name. */
+	public static function collection_for_object_type( string $object_type ): ?string {
+		$row = self::by_object_type( $object_type );
+
+		return null === $row ? null : $row['_collection'];
+	}
+
 	/** Inverse lookup: proxy resource slug → row (tax_rates' slug is `taxes`). */
 	public static function by_proxy_slug( string $slug ): ?array {
 		foreach ( self::ROWS as $collection => $row ) {
