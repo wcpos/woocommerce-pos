@@ -39,10 +39,15 @@ class Cloud_Print_Diagnostic {
 	 *
 	 * @param string $printer_name Display name.
 	 *
+	 * @throws \RuntimeException When the PrintNode adapter cannot be resolved.
+	 *
 	 * @return string PDF document bytes.
 	 */
 	public function build_pdf( string $printer_name ): string {
 		$adapter = Provider::adapter( 'printnode' );
+		if ( null === $adapter ) {
+			throw new \RuntimeException( esc_html( 'Unknown cloud-print provider: printnode' ) );
+		}
 
 		return base64_decode( $adapter->diagnostic( $printer_name )['payload'], true );
 	}
@@ -52,10 +57,15 @@ class Cloud_Print_Diagnostic {
 	 *
 	 * @param string $printer_name Display name.
 	 *
+	 * @throws \RuntimeException When the Star Online adapter cannot be resolved.
+	 *
 	 * @return string Star Document Markup source.
 	 */
 	public function star_markup( string $printer_name ): string {
 		$adapter = Provider::adapter( 'star-online' );
+		if ( null === $adapter ) {
+			throw new \RuntimeException( esc_html( 'Unknown cloud-print provider: star-online' ) );
+		}
 
 		return base64_decode( $adapter->diagnostic( $printer_name )['payload'], true );
 	}
