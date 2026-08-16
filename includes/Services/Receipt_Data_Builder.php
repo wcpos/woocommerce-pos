@@ -373,39 +373,41 @@ class Receipt_Data_Builder {
 
 		$tax_summary = $this->get_tax_summary( $order );
 
-		$fiscal = array(
-			'immutable_id'      => '',
-			'receipt_number'    => '',
-			'sequence'          => null,
-			'hash'              => '',
-			'qr_payload'        => '',
-			'tax_agency_code'   => '',
-			'signed_at'         => '',
-			'signature_excerpt' => '',
-			'document_label'    => '',
-			'is_reprint'        => false,
-			'reprint_count'     => 0,
-			'extra_fields'      => array(),
+		$fiscal = Receipt_Payload_Assembler::fiscal(
+			array(
+				'immutable_id'      => '',
+				'receipt_number'    => '',
+				'sequence'          => null,
+				'hash'              => '',
+				'qr_payload'        => '',
+				'tax_agency_code'   => '',
+				'signed_at'         => '',
+				'signature_excerpt' => '',
+				'document_label'    => '',
+				'is_reprint'        => false,
+				'reprint_count'     => 0,
+				'extra_fields'      => array(),
+			)
 		);
 
-		return array(
-			'order'              => $order_data,
-			'store'              => $store,
-			'cashier'            => $cashier,
-			'customer'           => $customer,
-			'lines'              => $lines,
-			'fees'               => $fees,
-			'shipping'           => $shipping,
-			'discounts'          => $discounts,
-			'totals'             => $totals,
-			'tax'                => $tax,
-			'tax_summary'        => $tax_summary,
-			'has_tax_summary'    => ! empty( $tax_summary ),
-			'payments'           => $payments,
-			'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone, $date_locale ),
-			'fiscal'             => $fiscal,
-			'presentation_hints' => $presentation_hints,
-			'i18n'               => Receipt_I18n_Labels::get_labels( $presentation_hints['locale'] ?? '' ),
+		return Receipt_Payload_Assembler::assemble(
+			array(
+				'order'              => $order_data,
+				'store'              => $store,
+				'cashier'            => $cashier,
+				'customer'           => $customer,
+				'lines'              => $lines,
+				'fees'               => $fees,
+				'shipping'           => $shipping,
+				'discounts'          => $discounts,
+				'totals'             => $totals,
+				'tax'                => $tax,
+				'tax_summary'        => $tax_summary,
+				'payments'           => $payments,
+				'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone, $date_locale ),
+				'fiscal'             => $fiscal,
+				'presentation_hints' => $presentation_hints,
+			)
 		);
 	}
 
