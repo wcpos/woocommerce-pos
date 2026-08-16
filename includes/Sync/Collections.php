@@ -66,9 +66,10 @@ final class Collections {
 				'loader'      => 'product',
 			),
 			'proxy'       => array(
-				'route' => '/products',
+				'route'    => '/products',
 				'wc_route' => '/wc/v3/products',
-				'slug' => 'products',
+				'slug'     => 'products',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior::class,
 			),
 			'write'       => array( 'route' => '/wc/v3/products' ),
 			'journal'     => array( 'object_type' => 'product' ),
@@ -114,9 +115,10 @@ final class Collections {
 				'loader'      => 'order',
 			),
 			'proxy'       => array(
-				'route' => '/orders',
+				'route'    => '/orders',
 				'wc_route' => '/wc/v3/orders',
-				'slug' => 'orders',
+				'slug'     => 'orders',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Orders_Proxy_Behavior::class,
 			),
 			'write'       => array( 'route' => '/wc/v3/orders' ),
 			'journal'     => array( 'object_type' => 'order' ), // orders consume the journal via the payload-windowed pull lane, catalogue via the pointer stream
@@ -136,9 +138,10 @@ final class Collections {
 				'loader'      => 'customer',
 			),
 			'proxy'       => array(
-				'route' => '/customers',
+				'route'    => '/customers',
 				'wc_route' => '/wc/v3/customers',
-				'slug' => 'customers',
+				'slug'     => 'customers',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Customers_Proxy_Behavior::class,
 			),
 			'write'       => array( 'route' => '/wc/v3/customers' ),
 			'journal'     => array( 'object_type' => 'customer' ),
@@ -159,9 +162,10 @@ final class Collections {
 				'loader'      => 'term',
 			),
 			'proxy'       => array(
-				'route' => '/products/categories',
+				'route'    => '/products/categories',
 				'wc_route' => '/wc/v3/products/categories',
-				'slug' => 'categories',
+				'slug'     => 'categories',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Null_Proxy_Behavior::class,
 			),
 			'write'       => array( 'route' => '/wc/v3/products/categories' ),
 			'journal'     => array( 'object_type' => 'category' ),
@@ -182,9 +186,10 @@ final class Collections {
 				'loader'      => 'term',
 			),
 			'proxy'       => array(
-				'route' => '/products/brands',
+				'route'    => '/products/brands',
 				'wc_route' => '/wc/v3/products/brands',
-				'slug' => 'brands',
+				'slug'     => 'brands',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Null_Proxy_Behavior::class,
 			),
 			'write'       => array( 'route' => '/wc/v3/products/brands' ),
 			'journal'     => array( 'object_type' => 'brand' ),
@@ -205,9 +210,10 @@ final class Collections {
 				'loader'      => 'term',
 			),
 			'proxy'       => array(
-				'route' => '/products/tags',
+				'route'    => '/products/tags',
 				'wc_route' => '/wc/v3/products/tags',
-				'slug' => 'tags',
+				'slug'     => 'tags',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Null_Proxy_Behavior::class,
 			),
 			'write'       => null, // read-only: no client push path exists
 			'journal'     => array( 'object_type' => 'tag' ),
@@ -228,9 +234,10 @@ final class Collections {
 				'loader'      => 'coupon',
 			),
 			'proxy'       => array(
-				'route' => '/coupons',
+				'route'    => '/coupons',
 				'wc_route' => '/wc/v3/coupons',
-				'slug' => 'coupons',
+				'slug'     => 'coupons',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Coupons_Proxy_Behavior::class,
 			),
 			'write'       => array( 'route' => '/wc/v3/coupons' ),
 			'journal'     => array( 'object_type' => 'coupon' ),
@@ -245,9 +252,10 @@ final class Collections {
 			'object_type' => 'tax_rate',
 			'identity'    => null, // ADR 0009: keyed by WooCommerce id — no uuid identity, principled
 			'proxy'       => array(
-				'route' => '/taxes',
+				'route'    => '/taxes',
 				'wc_route' => '/wc/v3/taxes',
-				'slug' => 'taxes',
+				'slug'     => 'taxes',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Taxes_Proxy_Behavior::class,
 			),
 			'write'       => null, // principled read-only
 			'journal'     => array( 'object_type' => 'tax_rate' ),
@@ -273,6 +281,13 @@ final class Collections {
 			}
 		}
 		return null;
+	}
+
+	/** Resolve a singular object type to its canonical collection name. */
+	public static function collection_for_object_type( string $object_type ): ?string {
+		$row = self::by_object_type( $object_type );
+
+		return null === $row ? null : $row['_collection'];
 	}
 
 	/** Inverse lookup: proxy resource slug → row (tax_rates' slug is `taxes`). */

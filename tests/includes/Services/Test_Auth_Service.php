@@ -24,6 +24,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 	public function setUp(): void {
 		parent::setUp();
+		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'] );
 		$this->auth_service = Auth::instance();
 
 		// Create a test user
@@ -35,6 +36,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	public function tearDown(): void {
+		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'] );
 		parent::tearDown();
 		unset( $this->auth_service );
 		
@@ -42,6 +44,52 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		if ( $this->test_user ) {
 			wp_delete_user( $this->test_user->ID );
 		}
+	}
+
+	/**
+	 * Authenticate_request returns the user ID for a valid standard Authorization header.
+	 */
+	public function test_authenticate_request_accepts_valid_http_authorization_header(): void {
+		$token                         = $this->auth_service->generate_access_token( $this->test_user );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $token;
+
+		$this->assertSame( $this->test_user->ID, $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request returns a WP_Error for an invalid token.
+	 */
+	public function test_authenticate_request_returns_error_for_invalid_token(): void {
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer invalid.token.here';
+
+		$this->assertWPError( $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request returns false when no authorization credential exists.
+	 */
+	public function test_authenticate_request_returns_false_without_authorization(): void {
+		$this->assertFalse( $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request reads the redirected Authorization header.
+	 */
+	public function test_authenticate_request_accepts_redirect_http_authorization_header(): void {
+		$token                                  = $this->auth_service->generate_access_token( $this->test_user );
+		$_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Bearer ' . $token;
+
+		$this->assertSame( $this->test_user->ID, $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request reads the authorization query parameter.
+	 */
+	public function test_authenticate_request_accepts_authorization_query_parameter(): void {
+		$token                 = $this->auth_service->generate_access_token( $this->test_user );
+		$_GET['authorization'] = 'Bearer ' . $token;
+
+		$this->assertSame( $this->test_user->ID, $this->auth_service->authenticate_request() );
 	}
 
 	/**

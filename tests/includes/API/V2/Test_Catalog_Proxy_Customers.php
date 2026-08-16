@@ -142,6 +142,72 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Unicode whitespace is a no-op, matching the V1 customer search contract.
+	 */
+	public function test_unicode_whitespace_search_is_a_no_op(): void {
+		$response = $this->dispatch_customers(
+			array(
+				'include' => (string) $this->customer->get_id(),
+				'role'    => 'all',
+				'search'  => "\xC2\xA0",
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $this->customer->get_id() ), array_column( $response->get_data(), 'id' ) );
+	}
+
+	/**
+	 * An unrelated user query must not consume hooks intended for the marked customer query.
+	 */
+	public function test_customer_hooks_survive_an_unrelated_user_query(): void {
+		$customer_id = $this->factory->user->create(
+			array(
+				'role'         => 'customer',
+				'user_login'   => 'aaa.scoped-hook-customer',
+				'display_name' => 'A Scoped Hook',
+			)
+		);
+		$admin_id    = $this->factory->user->create(
+			array(
+				'role'         => 'administrator',
+				'user_login'   => 'zzz.scoped-hook-admin',
+				'display_name' => 'Z Scoped Hook',
+			)
+		);
+		$unmatched_id = $this->factory->user->create(
+			array(
+				'role'         => 'subscriber',
+				'user_login'   => 'middle.unmatched',
+				'display_name' => 'No Match',
+			)
+		);
+		$run_unrelated_query = static function ( array $args ): array {
+			new \WP_User_Query( array( 'fields' => 'ids', 'number' => 1 ) );
+
+			return $args;
+		};
+
+		add_filter( 'woocommerce_rest_customer_query', $run_unrelated_query, 9 );
+		try {
+			$response = $this->dispatch_customers(
+				array(
+					'include' => implode( ',', array( $customer_id, $admin_id, $unmatched_id ) ),
+					'role'    => 'all',
+					'search'  => 'Scoped Hook',
+					'orderby' => 'role',
+					'order'   => 'asc',
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_rest_customer_query', $run_unrelated_query, 9 );
+		}
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( $admin_id, $customer_id ), array_column( $response->get_data(), 'id' ) );
+	}
+
+	/**
 	 * Customer rows expose the complete v2 field set.
 	 */
 	public function test_customer_row_has_full_v2_field_set(): void {

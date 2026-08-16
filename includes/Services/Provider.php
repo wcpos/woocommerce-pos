@@ -11,6 +11,12 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Interfaces\Provider_Adapter_Interface;
+use WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter;
+use WCPOS\WooCommercePOS\Services\Providers\Printnode_Adapter;
+use WCPOS\WooCommercePOS\Services\Providers\Star_Cloudprnt_Adapter;
+use WCPOS\WooCommercePOS\Services\Providers\Star_Online_Adapter;
+
 /**
  * Provider class.
  */
@@ -39,6 +45,8 @@ class Provider {
 			'supports_server_diagnostic' => true,
 			'thermal_wire_format'        => 'starprnt',
 			'template_engines'           => 'thermal',
+			'stores_job_kind'            => false,
+			'supports_drawer'            => false,
 		),
 		'epson-sdp'      => array(
 			'polling'                    => true,
@@ -47,6 +55,8 @@ class Provider {
 			'supports_server_diagnostic' => true,
 			'thermal_wire_format'        => 'epos-xml',
 			'template_engines'           => 'thermal',
+			'stores_job_kind'            => false,
+			'supports_drawer'            => true,
 		),
 		'printnode'      => array(
 			'polling'                    => false,
@@ -55,6 +65,8 @@ class Provider {
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => null,
 			'template_engines'           => 'all',
+			'stores_job_kind'            => true,
+			'supports_drawer'            => true,
 		),
 		'star-online'    => array(
 			'polling'                    => false,
@@ -63,6 +75,8 @@ class Provider {
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => 'star-markup',
 			'template_engines'           => 'thermal',
+			'stores_job_kind'            => false,
+			'supports_drawer'            => false,
 		),
 	);
 
@@ -89,6 +103,33 @@ class Provider {
 	 */
 	public static function normalize( ?string $provider ): string {
 		return \in_array( $provider, self::valid(), true ) ? (string) $provider : self::DEFAULT_PROVIDER;
+	}
+
+	/**
+	 * Resolve a provider adapter.
+	 *
+	 * An empty legacy-row value uses normalize()'s Star CloudPRNT default;
+	 * non-empty unknown keys remain unknown and return null.
+	 *
+	 * @param string $provider Provider key or empty legacy-row value.
+	 *
+	 * @return Provider_Adapter_Interface|null
+	 */
+	public static function adapter( string $provider ): ?Provider_Adapter_Interface {
+		$provider = '' === $provider ? self::normalize( $provider ) : $provider;
+
+		switch ( $provider ) {
+			case 'star-cloudprnt':
+				return new Star_Cloudprnt_Adapter();
+			case 'epson-sdp':
+				return new Epson_Sdp_Adapter();
+			case 'printnode':
+				return new Printnode_Adapter();
+			case 'star-online':
+				return new Star_Online_Adapter();
+			default:
+				return null;
+		}
 	}
 
 	/**
@@ -179,6 +220,28 @@ class Provider {
 	 */
 	public static function template_engines( string $provider ): string {
 		return (string) ( self::CAPABILITIES[ $provider ]['template_engines'] ?? 'thermal' );
+	}
+
+	/**
+	 * Whether jobs for the provider persist their resolved kind separately.
+	 *
+	 * @param string $provider Provider key.
+	 *
+	 * @return bool
+	 */
+	public static function stores_job_kind( string $provider ): bool {
+		return (bool) ( self::CAPABILITIES[ $provider ]['stores_job_kind'] ?? false );
+	}
+
+	/**
+	 * Whether the provider supports the generic drawer metadata contract.
+	 *
+	 * @param string $provider Provider key.
+	 *
+	 * @return bool
+	 */
+	public static function supports_drawer( string $provider ): bool {
+		return (bool) ( self::CAPABILITIES[ $provider ]['supports_drawer'] ?? false );
 	}
 
 	/**

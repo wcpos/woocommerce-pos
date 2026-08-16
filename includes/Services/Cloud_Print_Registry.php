@@ -158,24 +158,31 @@ class Cloud_Print_Registry {
 	 */
 	public function status_for( string $printer_id ): string {
 		$printer = $this->get_printer( $printer_id );
-		if ( null !== $printer && 'printnode' === ( $printer['provider'] ?? '' ) ) {
-			return $this->printnode_status( $printer );
-		}
-
-		if ( null !== $printer && 'star-online' === ( $printer['provider'] ?? '' ) ) {
-			return $this->star_online_status( $printer );
-		}
-
-		if ( null !== $printer && Provider::is_polling( (string) ( $printer['provider'] ?? '' ) ) ) {
-			$relay_status = Cloud_Print_Relay_Service::status( $printer_id );
-			if ( null !== $relay_status && 'blocked' === $relay_status['origin_status'] ) {
-				return 'blocked';
+		if ( null !== $printer ) {
+			$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
+			$adapter  = Provider::adapter( $provider );
+			if ( null !== $adapter ) {
+				return $adapter->status(
+					$printer,
+					array(
+						'now'          => time(),
+						'seen'         => $this->get_seen( $printer_id ),
+						'seen_ttl'     => self::SEEN_TTL,
+						'cache_ttl'    => self::PN_STATUS_TTL,
+						'relay_status' => Provider::is_polling( $provider ) ? Cloud_Print_Relay_Service::status( $printer_id ) : null,
+					)
+				);
 			}
-			if ( null !== $relay_status && null !== $relay_status['last_seen_seconds_ago'] && $relay_status['last_seen_seconds_ago'] <= self::SEEN_TTL ) {
-				return 'connected';
-			}
 		}
 
+		/*
+		 * Shared fallthrough, kept from the pre-adapter implementation: a
+		 * printer_id with a recorded poll but no registry row — or a row whose
+		 * provider is unrecognised — is still reported from its last-seen
+		 * timestamp, not as 'waiting'. Returning early here instead reported a
+		 * recently-polled printer as never-seen.
+		 * `test_status_connected_when_recently_seen` pins this.
+		 */
 		$seen = $this->get_seen( $printer_id );
 		if ( 0 === $seen ) {
 			return 'waiting';
@@ -196,65 +203,5 @@ class Cloud_Print_Registry {
 	 */
 	public function status_detail_for( string $printer_id ): ?string {
 		return Cloud_Print_Relay_Service::status_detail( $printer_id );
-	}
-
-	/**
-	 * Resolve a PrintNode printer's live status, cached for PN_STATUS_TTL seconds.
-	 *
-	 * All outcomes are cached, including 'unknown'/'offline', to avoid hammering
-	 * the PrintNode API on every settings read.
-	 *
-	 * @param array $printer Registered PrintNode printer.
-	 *
-	 * @return string 'online', 'offline', or 'unknown'.
-	 */
-	private function printnode_status( array $printer ): string {
-		$key    = 'wcpos_cloud_print_pn_status_' . md5( (string) $printer['id'] );
-		$cached = get_transient( $key );
-		if ( false !== $cached ) {
-			return (string) $cached;
-		}
-
-		$api_key       = (string) ( $printer['printnode_api_key'] ?? '' );
-		$pn_printer_id = (int) ( $printer['printnode_printer_id'] ?? 0 );
-		if ( '' === $api_key || 0 === $pn_printer_id ) {
-			$status = 'unknown';
-		} else {
-			$status = ( new PrintNode_Client( $api_key ) )->printer_state( $pn_printer_id );
-		}
-
-		set_transient( $key, $status, self::PN_STATUS_TTL );
-
-		return $status;
-	}
-	/**
-	 * Resolve a Star Online device's live status, cached for PN_STATUS_TTL seconds.
-	 *
-	 * @param array $printer Registered star-online printer.
-	 *
-	 * @return string 'online', 'offline', or 'unknown'.
-	 */
-	private function star_online_status( array $printer ): string {
-		$key    = 'wcpos_cloud_print_star_status_' . md5( (string) $printer['id'] );
-		$cached = get_transient( $key );
-		if ( false !== $cached ) {
-			return (string) $cached;
-		}
-
-		$api_key   = (string) ( $printer['star_api_key'] ?? '' );
-		$url       = (string) ( $printer['star_cloudprnt_url'] ?? '' );
-		$device_id = (string) ( $printer['star_device_id'] ?? '' );
-		$api_base  = Star_Online_Client::api_base_from_cloudprnt_url( $url );
-		$group     = Star_Online_Client::group_from_cloudprnt_url( $url );
-
-		if ( '' === $api_key || null === $api_base || '' === $group || '' === $device_id ) {
-			$status = 'unknown';
-		} else {
-			$status = ( new Star_Online_Client( $api_base, $api_key ) )->device_state( $group, $device_id );
-		}
-
-		set_transient( $key, $status, self::PN_STATUS_TTL );
-
-		return $status;
 	}
 }

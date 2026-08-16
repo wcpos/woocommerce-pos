@@ -209,15 +209,6 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Raise the session `group_concat_max_len` before ANY query built on the digest expression.
-	 *
-	 * @deprecated Use {@see Digest_Index::raise_group_concat_max_len()}.
-	 */
-	public function raise_group_concat_max_len(): void {
-		$this->index->raise_group_concat_max_len();
-	}
-
-	/**
 	 * Bulk-read the STORED 64-bit digests for the given product/variation ids → `[id => digest string]`.
 	 * The digest is BIGINT UNSIGNED (above PHP_INT_MAX), so it is returned as a STRING (ADR 0014 M1).
 	 * Ids with no stored digest yet (never hooked/rebuilt) are simply absent from the result.
@@ -395,30 +386,12 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Canonical per-row digest SELECT.
-	 *
-	 * @deprecated Use {@see Digest_Index::row_digest_select_sql()}.
-	 */
-	public function row_digest_select_sql( string $where_sql = '' ): string {
-		return $this->index->row_digest_select_sql( $where_sql );
-	}
-
-	/**
 	 * Canonical per-CUSTOMER digest SELECT (ADR 0015, Leg-3 phase 7).
 	 *
 	 * @deprecated Use {@see Digest_Index::customer_digest_select_sql()}.
 	 */
 	public function customer_digest_select_sql( string $where_sql = '' ): string {
 		return $this->index->customer_digest_select_sql( $where_sql );
-	}
-
-	/**
-	 * Canonical per-ORDER digest SELECT (ADR 0015, Leg-3 phase 7) — HPOS/CPT-aware.
-	 *
-	 * @deprecated Use {@see Digest_Index::order_digest_select_sql()}.
-	 */
-	public function order_digest_select_sql( string $id_condition = '' ): string {
-		return $this->index->order_digest_select_sql( $id_condition );
 	}
 
 	/**
@@ -455,24 +428,6 @@ final class Integrity_Digest {
 			$out[ (int) $row['object_id'] ] = (string) $row['digest'];
 		}
 		return $out;
-	}
-
-	/**
-	 * Live-row predicate reused by the drill-down's deleted branch and the rebuild's orphan prune.
-	 *
-	 * @deprecated Use {@see Digest_Index::live_row_exists_sql()}.
-	 */
-	public function live_row_exists_sql( string $id_expr ): string {
-		return $this->index->live_row_exists_sql( $id_expr );
-	}
-
-	/**
-	 * Customer analogue of {@see live_row_exists_sql}: the id still names any WordPress user (ADR 0015).
-	 *
-	 * @deprecated Use {@see Digest_Index::customer_live_row_exists_sql()}.
-	 */
-	public function customer_live_row_exists_sql( string $id_expr ): string {
-		return $this->index->customer_live_row_exists_sql( $id_expr );
 	}
 
 	/**
@@ -525,15 +480,6 @@ final class Integrity_Digest {
 		if ( false === $deleted ) {
 			throw new RuntimeException( 'delete stored customer digest failed: ' . $wpdb->last_error );
 		}
-	}
-
-	/**
-	 * Order analogue of {@see live_row_exists_sql} — HPOS/CPT-aware (ADR 0015, Leg-3 phase 7).
-	 *
-	 * @deprecated Use {@see Digest_Index::order_live_row_exists_sql()}.
-	 */
-	public function order_live_row_exists_sql( string $id_expr ): string {
-		return $this->index->order_live_row_exists_sql( $id_expr );
 	}
 
 	/**
@@ -763,7 +709,7 @@ final class Integrity_Digest {
 		}
 
 		// Leg-3 phase 7 (ADR 0015): orders share the digest table via their own 'order' rows (HPOS or CPT).
-		// Same prune-orphans + INSERT…SELECT pass; order_digest_select_sql() emits the storage-correct SQL
+		// Same prune-orphans + INSERT…SELECT pass; Digest_Index::order_digest_select_sql() emits the storage-correct SQL
 		// (the CPT path GROUP BYs, the HPOS path does not — both valid as an INSERT…SELECT source).
 		$order_orphans = $wpdb->query(
 			'DELETE FROM ' . $this->table_name()
