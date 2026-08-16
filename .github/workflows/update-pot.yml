@@ -44,6 +44,18 @@ jobs:
           # is an anonymous public checkout and the dependencies come from Packagist,
           # so no GitHub token is needed.
           git clone --depth 1 --branch v2.2.13 https://github.com/wp-cli/i18n-command.git "$RUNNER_TEMP/i18n-command"
+          # i18n-command ships no composer.lock, so `install` resolves the whole
+          # graph — and Composer resolves require-dev even under --no-dev, it just
+          # skips installing it. That makes the build fail on a security advisory
+          # against wp-coding-standards/wpcs 2.3.0, a linting standard this job
+          # never installs or runs. Ignore only GHSA-3pwp-g2mj-5p3v in this
+          # throwaway clone so future WPCS advisories remain blocking.
+          #
+          # Bumping the pin is not an escape: v2.7.3 requires wp-cli/wp-cli ^2.13
+          # and v3.0.0 requires ^3.0, neither of which is published on Packagist
+          # (latest stable is v2.12.0), so both fail to resolve outright.
+          composer config --working-dir="$RUNNER_TEMP/i18n-command" --no-plugins --json \
+            audit.ignore '{"GHSA-3pwp-g2mj-5p3v":{"reason":"WPCS is resolved only in this temporary clone and is not installed or executed by this job.","apply":"all"}}'
           composer install --no-dev --no-interaction --working-dir="$RUNNER_TEMP/i18n-command"
 
       - name: Update POT file
