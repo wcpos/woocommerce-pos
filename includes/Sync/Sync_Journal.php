@@ -373,20 +373,16 @@ final class Sync_Journal {
 		$this->record_order_change( $order_id, 'hook:untrash', false );
 	}
 
-	/** Arm a one-shot write after an HPOS order restore is persisted. */
+	/** Arm a one-shot write after an HPOS order restore finishes its metadata cleanup. */
 	public function record_cot_order_untrashed( int $order_id ): void {
-		$handler = function ( \WC_Order $order ) use ( $order_id, &$handler ): void {
-			if ( (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
+		$handler = function ( $_meta_id, $object_id, $meta_key ) use ( $order_id, &$handler ): void {
+			if ( (int) $object_id !== $order_id || '_wp_trash_meta_time' !== $meta_key ) {
 				return;
 			}
-			remove_action( 'woocommerce_after_order_object_save', $handler );
-			foreach ( array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ) as $meta_key ) {
-				$order->delete_meta_data( $meta_key );
-			}
-			$order->save_meta_data();
+			remove_action( 'deleted_order_meta', $handler );
 			$this->record_order_untrashed( $order_id );
 		};
-		add_action( 'woocommerce_after_order_object_save', $handler );
+		add_action( 'deleted_order_meta', $handler, 10, 3 );
 	}
 
 	public function record_order_change( int $order_id, string $origin, bool $deleted ): bool {

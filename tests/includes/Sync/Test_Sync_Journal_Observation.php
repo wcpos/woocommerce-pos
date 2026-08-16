@@ -278,24 +278,24 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 
 			wp_cache_flush();
 			$cursor = $this->journal->head_sequence();
-			$trash_status_after_handler = null;
-			$observe_cleanup = function ( $saved_order ) use ( $order_id, &$trash_status_after_handler ): void {
-				if ( (int) $saved_order->get_id() === $order_id && 'trash' !== $saved_order->get_status() ) {
-					$trash_status_after_handler = $saved_order->get_meta( '_wp_trash_meta_status' );
+			$untrash_rows_before_cleanup = null;
+			$observe_cleanup = function ( $_meta_id, $object_id, $meta_key ) use ( $order_id, $cursor, &$untrash_rows_before_cleanup ): void {
+				if ( $order_id === (int) $object_id && '_wp_trash_meta_status' === $meta_key ) {
+					$untrash_rows_before_cleanup = wp_list_filter( $this->rows_for( 'order', $order_id, $cursor ), array( 'origin' => 'hook:untrash' ) );
 				}
 			};
 			$intervening_save = static function ( int $order_id ): void {
 				wc_get_order( $order_id )->save();
 			};
-			add_action( 'woocommerce_after_order_object_save', $observe_cleanup, 20, 1 );
+			add_action( 'deleted_order_meta', $observe_cleanup, 10, 3 );
 			add_action( 'woocommerce_untrash_order', $intervening_save, 20, 1 );
 			try {
 				wc_get_order( $order_id )->untrash();
 			} finally {
-				remove_action( 'woocommerce_after_order_object_save', $observe_cleanup, 20 );
+				remove_action( 'deleted_order_meta', $observe_cleanup );
 				remove_action( 'woocommerce_untrash_order', $intervening_save, 20 );
 			}
-			$this->assertSame( '', $trash_status_after_handler, 'The journal handler must remove transient trash metadata before later save observers run.' );
+			$this->assertSame( array(), $untrash_rows_before_cleanup, 'The untrash row must wait for transient trash metadata cleanup.' );
 			$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:untrash', false );
 		} finally {
 			$this->toggle_cot_feature_and_usage( false );
