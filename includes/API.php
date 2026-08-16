@@ -430,24 +430,7 @@ class API {
 	 * @return false|string
 	 */
 	public function get_auth_header() {
-		// Check if HTTP_AUTHORIZATION is set and not empty
-		// (htaccess SetEnvIf can set an empty value when no header is present).
-		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) );
-		}
-
-		// Check for alternative header in $_SERVER.
-		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) );
-		}
-
-		// Check for authorization param in URL ($_GET).
-		if ( ! empty( $_GET['authorization'] ) ) {
-			return sanitize_text_field( wp_unslash( $_GET['authorization'] ) );
-		}
-
-		// Return false if none of the variables are set.
-		return false;
+		return Auth::instance()->get_auth_header();
 	}
 
 	/**
@@ -699,32 +682,12 @@ class API {
 	 * @return false|int|\WP_Error
 	 */
 	private function authenticate( $user_id ) {
-		// check if there is an auth header.
-		$auth_header = $this->get_auth_header();
-		if ( ! \is_string( $auth_header ) ) {
-			return $user_id;
+		$authenticated_user_id = Auth::instance()->authenticate_request();
+
+		if ( is_wp_error( $authenticated_user_id ) ) {
+			return false === $user_id ? $authenticated_user_id : $user_id;
 		}
 
-		// Extract Bearer token from Authorization Header.
-		list($token) = sscanf( $auth_header, 'Bearer %s' );
-
-		if ( $token ) {
-			$auth_service  = Auth::instance();
-			$decoded_token = $auth_service->validate_token( $token );
-
-			// Check if validate_token returned WP_Error and user_id is null.
-			if ( is_wp_error( $decoded_token ) && false === $user_id ) {
-				return $decoded_token;
-			}
-
-			// If the token is valid, set the user_id.
-			if ( ! is_wp_error( $decoded_token ) ) {
-				$user_id = $decoded_token->data->user->id;
-
-				return absint( $user_id );
-			}
-		}
-
-		return $user_id;
+		return false === $authenticated_user_id ? $user_id : $authenticated_user_id;
 	}
 }
