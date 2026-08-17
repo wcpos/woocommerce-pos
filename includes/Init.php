@@ -232,7 +232,7 @@ class Init {
 			'/print-jobs/relay-verification',
 			array(
 				'methods'             => 'GET',
-				'callback'            => array( new API\Print_Jobs_Controller(), 'relay_verification' ),
+				'callback'            => array( new API\V1\Print_Jobs_Controller(), 'relay_verification' ),
 				'permission_callback' => '__return_true',
 			)
 		);

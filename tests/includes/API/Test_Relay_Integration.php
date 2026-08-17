@@ -149,6 +149,9 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * It serves the verification route even when the WCPOS request marker is absent.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_relay_verification_route_registered_without_wcpos_marker(): void {
 		// Arrange: fire rest_api_init on a fresh server exactly as WordPress
@@ -166,6 +169,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$wp_rest_server = $previous;
+		$this->assertFalse( class_exists( 'WCPOS\\WooCommercePOS\\API\\Print_Jobs_Controller', false ) );
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( array( 'token' => 'pending-token' ), $response->get_data() );
 	}
