@@ -373,16 +373,39 @@ final class Sync_Journal {
 		$this->record_order_change( $order_id, 'hook:untrash', false );
 	}
 
-	/** Arm a one-shot write after an HPOS order restore is persisted. */
+	/**
+	 * Record an HPOS order's restore once the status change has settled.
+	 *
+	 * `woocommerce_untrash_order` fires BEFORE the data store restores the
+	 * status, so the row cannot be written there. The restore then performs
+	 * MORE THAN ONE object save, so arming on the first
+	 * `woocommerce_after_order_object_save` whose status is not `trash`
+	 * captures a revision from part-way through the restore — anything a later
+	 * save changes is missing from it, and the journal advertises a revision
+	 * the order does not have.
+	 *
+	 * Measured sequence for an HPOS untrash (status read from wc_orders):
+	 *
+	 *   woocommerce_untrash_order                stored=trash
+	 *   after_order_object_save  object=pending  stored=wc-pending
+	 *   after_order_object_save  object=pending  stored=wc-pending
+	 *   woocommerce_order_status_changed         stored=wc-pending  from=trash
+	 *
+	 * `woocommerce_order_status_changed` fires once, last, with the stored
+	 * status settled — so observe that instead. CPT orders never reach here:
+	 * their restore fires only `untrashed_post` (see record_post_untrashed).
+	 *
+	 * @param int $order_id Order being restored.
+	 */
 	public function record_cot_order_untrashed( int $order_id ): void {
-		$handler = function ( $order ) use ( $order_id, &$handler ): void {
-			if ( ! is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! method_exists( $order, 'get_status' ) || (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
+		$handler = function ( $id, $from ) use ( $order_id, &$handler ): void {
+			if ( (int) $id !== $order_id || 'trash' !== $from ) {
 				return;
 			}
-			remove_action( 'woocommerce_after_order_object_save', $handler );
+			remove_action( 'woocommerce_order_status_changed', $handler );
 			$this->record_order_untrashed( $order_id );
 		};
-		add_action( 'woocommerce_after_order_object_save', $handler );
+		add_action( 'woocommerce_order_status_changed', $handler, 10, 2 );
 	}
 
 	public function record_order_change( int $order_id, string $origin, bool $deleted ): bool {
