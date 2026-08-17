@@ -399,6 +399,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			} finally {
 				remove_action( 'woocommerce_after_order_object_save', $mutate, 11 );
 			}
+			$this->assertTrue( $mutated, 'Expected the post-one-shot mutation probe to run.' );
 
 			$rows = array_values(
 				array_filter(
