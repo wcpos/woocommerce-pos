@@ -281,13 +281,140 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			$intervening_save = static function ( int $order_id ): void {
 				wc_get_order( $order_id )->save();
 			};
+
+			/*
+			 * This assertion has failed intermittently in CI (one matrix cell,
+			 * green on rerun with identical code) and the failure told us only
+			 * the test name. The journal's HPOS untrash row is written by a
+			 * one-shot armed on `woocommerce_untrash_order` that fires on the
+			 * next `woocommerce_after_order_object_save` whose IN-MEMORY status
+			 * is not `trash` — and the in-memory status runs ahead of the
+			 * stored one during a restore (measured: at the first
+			 * before-save the object reads `pending` while the row still
+			 * reads `trash`). Whether a caller's `wc_get_order()` hands back an
+			 * object ahead of or behind the row therefore decides when the
+			 * one-shot is consumed. Record the sequence so the next failure
+			 * says which interleaving produced it instead of just "no row".
+			 */
+			$trace = array();
+			$probe = function ( string $label ) use ( &$trace, $order_id ): void {
+				global $wpdb;
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$stored = $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}wc_orders WHERE id = %d", $order_id ) );
+				$trace[] = $label . ' stored=' . ( null === $stored ? '(none)' : $stored );
+			};
+			$trace_save = function ( $o ) use ( $probe, $order_id ): void {
+				if ( ! \is_object( $o ) || ! method_exists( $o, 'get_id' ) || (int) $o->get_id() !== $order_id ) {
+					return;
+				}
+				$probe( 'after_order_object_save object=' . $o->get_status() );
+			};
+			$trace_untrash = function ( $id ) use ( $probe, $order_id ): void {
+				if ( (int) $id !== $order_id ) {
+					return;
+				}
+				$probe( 'woocommerce_untrash_order' );
+			};
+			add_action( 'woocommerce_after_order_object_save', $trace_save, 1, 1 );
+			add_action( 'woocommerce_untrash_order', $trace_untrash, 1, 1 );
+
 			add_action( 'woocommerce_untrash_order', $intervening_save, 20, 1 );
 			try {
 				wc_get_order( $order_id )->untrash();
 			} finally {
 				remove_action( 'woocommerce_untrash_order', $intervening_save, 20 );
+				remove_action( 'woocommerce_after_order_object_save', $trace_save, 1 );
+				remove_action( 'woocommerce_untrash_order', $trace_untrash, 1 );
 			}
-			$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:untrash', false );
+			$probe( 'after untrash() returned' );
+
+			$rows    = $this->rows_for( 'order', $order_id, $cursor );
+			$origins = array_map(
+				static function ( array $row ): string {
+					return $row['origin'] . ( $row['deleted'] ? ' (deleted)' : '' );
+				},
+				$rows
+			);
+			$context = "\nHook sequence observed:\n  " . implode( "\n  ", $trace )
+				. "\nJournal rows past the cursor: " . ( array() === $origins ? '(none)' : implode( ', ', $origins ) );
+
+			/*
+			 * Assert the untrash row EXISTS rather than that it is the last row.
+			 * Two rows are legitimately appended here — `hook:update` from the
+			 * intervening save and `hook:untrash` from the journal's one-shot —
+			 * and nothing orders them: which lands last depends on whether the
+			 * intervening save's `woocommerce_update_order` fires before or
+			 * after the one-shot. Asserting on the last row made this test
+			 * order-dependent, which is what made it fail intermittently in CI
+			 * on one matrix cell while passing on rerun with identical code.
+			 */
+			$this->assertNotEmpty( $rows, "No journal row was appended for the HPOS untrash of order {$order_id}." . $context );
+			$untrash_rows = array_values(
+				array_filter(
+					$rows,
+					static function ( array $row ): bool {
+						return 'hook:untrash' === $row['origin'];
+					}
+				)
+			);
+			$this->assertCount( 1, $untrash_rows, "Expected exactly one hook:untrash row for order {$order_id}." . $context );
+			$this->assert_order_row( $untrash_rows[0], 'hook:untrash', false );
+		} finally {
+			$this->toggle_cot_feature_and_usage( false );
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
+	}
+
+	public function test_hpos_untrash_row_records_the_settled_order_revision(): void {
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->setup_cot();
+		$this->toggle_cot_feature_and_usage( true );
+		try {
+			$order    = wc_create_order();
+			$order_id = $order->get_id();
+			$order->delete( false );
+			wp_cache_flush();
+			$cursor = $this->journal->head_sequence();
+
+			/*
+			 * The restore performs more than one object save. The journal's
+			 * one-shot fires on the FIRST save whose status is not `trash`, so
+			 * anything the restore changes afterwards is not reflected in the
+			 * revision it records. Force exactly that: mutate the order once,
+			 * immediately after the one-shot would have run.
+			 */
+			$mutated = false;
+			$mutate  = function ( $o ) use ( &$mutated, $order_id ): void {
+				if ( $mutated || ! \is_object( $o ) || (int) $o->get_id() !== $order_id || 'trash' === $o->get_status() ) {
+					return;
+				}
+				$mutated = true;
+				$o->update_meta_data( '_wcpos_untrash_revision_probe', 'changed-after-the-one-shot' );
+				$o->save_meta_data();
+			};
+			add_action( 'woocommerce_after_order_object_save', $mutate, 11, 1 );
+			try {
+				wc_get_order( $order_id )->untrash();
+			} finally {
+				remove_action( 'woocommerce_after_order_object_save', $mutate, 11 );
+			}
+			$this->assertTrue( $mutated, 'Expected the post-one-shot mutation probe to run.' );
+
+			$rows = array_values(
+				array_filter(
+					$this->rows_for( 'order', $order_id, $cursor ),
+					static function ( array $row ): bool {
+						return 'hook:untrash' === $row['origin'];
+					}
+				)
+			);
+			$this->assertCount( 1, $rows, 'Expected exactly one hook:untrash row.' );
+			$this->assertSame(
+				$this->order_revision( $order_id ),
+				$rows[0]['revision'],
+				'The untrash row must record the revision of the SETTLED order, not one captured part-way through the restore.'
+			);
 		} finally {
 			$this->toggle_cot_feature_and_usage( false );
 			$this->clean_up_cot_setup();
