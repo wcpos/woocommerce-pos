@@ -366,6 +366,61 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		}
 	}
 
+	public function test_hpos_untrash_row_records_the_settled_order_revision(): void {
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->setup_cot();
+		$this->toggle_cot_feature_and_usage( true );
+		try {
+			$order    = wc_create_order();
+			$order_id = $order->get_id();
+			$order->delete( false );
+			wp_cache_flush();
+			$cursor = $this->journal->head_sequence();
+
+			/*
+			 * The restore performs more than one object save. The journal's
+			 * one-shot fires on the FIRST save whose status is not `trash`, so
+			 * anything the restore changes afterwards is not reflected in the
+			 * revision it records. Force exactly that: mutate the order once,
+			 * immediately after the one-shot would have run.
+			 */
+			$mutated = false;
+			$mutate  = function ( $o ) use ( &$mutated, $order_id ): void {
+				if ( $mutated || ! \is_object( $o ) || (int) $o->get_id() !== $order_id || 'trash' === $o->get_status() ) {
+					return;
+				}
+				$mutated = true;
+				$o->update_meta_data( '_wcpos_untrash_revision_probe', 'changed-after-the-one-shot' );
+				$o->save_meta_data();
+			};
+			add_action( 'woocommerce_after_order_object_save', $mutate, 11, 1 );
+			try {
+				wc_get_order( $order_id )->untrash();
+			} finally {
+				remove_action( 'woocommerce_after_order_object_save', $mutate, 11 );
+			}
+
+			$rows = array_values(
+				array_filter(
+					$this->rows_for( 'order', $order_id, $cursor ),
+					static function ( array $row ): bool {
+						return 'hook:untrash' === $row['origin'];
+					}
+				)
+			);
+			$this->assertCount( 1, $rows, 'Expected exactly one hook:untrash row.' );
+			$this->assertSame(
+				$this->order_revision( $order_id ),
+				$rows[0]['revision'],
+				'The untrash row must record the revision of the SETTLED order, not one captured part-way through the restore.'
+			);
+		} finally {
+			$this->toggle_cot_feature_and_usage( false );
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
+	}
+
 	public function test_order_backfill_appends_order_rows_and_advances_the_id_cursor(): void {
 		global $wpdb;
 		wc_create_order();
