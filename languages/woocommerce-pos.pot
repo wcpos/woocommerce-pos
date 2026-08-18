@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-16T20:33:46+00:00\n"
+"POT-Creation-Date: 2026-08-18T16:16:10+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1117,20 +1117,20 @@ msgstr ""
 
 #. translators: POS order status label.
 #: includes/Orders.php:84
-#: includes/Orders.php:697
+#: includes/Orders.php:699
 msgctxt "Order status"
 msgid "POS - Open"
 msgstr ""
 
 #. translators: POS order status label.
 #: includes/Orders.php:85
-#: includes/Orders.php:715
+#: includes/Orders.php:717
 msgctxt "Order status"
 msgid "POS - Partial Payment"
 msgstr ""
 
 #. translators: %s is the number of orders with POS - Open status.
-#: includes/Orders.php:703
+#: includes/Orders.php:705
 #, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
@@ -1138,7 +1138,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of orders with POS - Partial Payment status.
-#: includes/Orders.php:721
+#: includes/Orders.php:723
 #, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
