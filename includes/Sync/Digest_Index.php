@@ -35,10 +35,10 @@ namespace WCPOS\WooCommercePOS\Sync;
 final class Digest_Index {
 
 	/**
-	 * Postmeta keys covered by the product/variation digest. Must include every key the
-	 * sql-bypass fixture mutates (_price and _regular_price today — see
-	 * class-fixtures-controller.php sql_bypass()) plus the keys a
-	 * hook-bypassing import/inventory tool plausibly touches.
+	 * Postmeta keys covered by the product/variation digest. Must include every key a
+	 * hook-bypassing import/inventory tool plausibly touches: the digest is what lets
+	 * the client notice a write that never fired a WordPress hook, so a key missing
+	 * here is a change the POS can never detect.
 	 */
 	public const DIGESTED_META_KEYS = array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
 

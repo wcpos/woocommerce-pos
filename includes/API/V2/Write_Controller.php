@@ -300,8 +300,8 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	private function envelope( WP_REST_Request $request ): array {
-		// Prefer the parsed JSON body (the pattern push/fixtures controllers use) so a
-		// nested `payload` object is read reliably; fall back to get_param otherwise.
+		// Prefer the parsed JSON body so a nested `payload` object is read reliably;
+		// fall back to get_param otherwise.
 		$json = method_exists( $request, 'get_json_params' ) ? $request->get_json_params() : null;
 		$src  = ( is_array( $json ) && ! empty( $json ) ) ? $json : null;
 		$get  = static function ( string $key ) use ( $request, $src ) {

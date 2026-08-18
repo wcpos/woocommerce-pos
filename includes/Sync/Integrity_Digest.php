@@ -42,14 +42,6 @@ use RuntimeException;
  */
 final class Integrity_Digest {
 
-	/**
-	 * Wall-clock ms spent inside the digest write hooks during the CURRENT
-	 * request. Read (and reset) by the product-edit fixture for the
-	 * hook-overhead bench's per-component breakdown. Two microtime() calls
-	 * per hook fire — negligible against the INSERT…SELECT it wraps.
-	 */
-	public static float $request_write_ms = 0.0;
-
 	/** @see Digest_Index::DIGESTED_META_KEYS The digest formula's home. */
 	public const DIGESTED_META_KEYS = Digest_Index::DIGESTED_META_KEYS;
 
@@ -112,7 +104,6 @@ final class Integrity_Digest {
 		}
 		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
 	}
-
 
 	/**
 	 * Same save/delete hooks the change-log listens to (products and
@@ -521,7 +512,6 @@ final class Integrity_Digest {
 	/** Order analogue of {@see upsert_customer_digest}: compute + store one order's digest (HPOS or CPT). */
 	public function upsert_order_digest( int $order_id ): void {
 		global $wpdb;
-		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
 		$result = $wpdb->query(
 			$wpdb->prepare(
@@ -532,7 +522,6 @@ final class Integrity_Digest {
 				$order_id
 			)
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
 			throw new RuntimeException( 'upsert stored order digest failed: ' . $wpdb->last_error );
 		}
@@ -579,7 +568,6 @@ final class Integrity_Digest {
 	 */
 	private function delete_post_digest( int $post_id, string $post_type ): void {
 		global $wpdb;
-		$started = microtime( true );
 		$deleted = $wpdb->delete(
 			$this->table_name(),
 			array(
@@ -588,7 +576,6 @@ final class Integrity_Digest {
 			),
 			array( '%s', '%d' )
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $deleted ) {
 			throw new RuntimeException( 'delete stored digest failed: ' . $wpdb->last_error );
 		}
@@ -603,7 +590,6 @@ final class Integrity_Digest {
 		global $wpdb;
 		// Time from BEFORE the session setup so timing.digest_ms covers ALL digest hook work
 		// (the raise runs inside the save hook — codex P3).
-		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
 		$result = $wpdb->query(
 			$wpdb->prepare(
@@ -614,7 +600,6 @@ final class Integrity_Digest {
 				$post_id
 			)
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
 			throw new RuntimeException( 'upsert stored digest failed: ' . $wpdb->last_error );
 		}
@@ -627,7 +612,6 @@ final class Integrity_Digest {
 	 */
 	public function upsert_customer_digest( int $user_id ): void {
 		global $wpdb;
-		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
 		$result = $wpdb->query(
 			$wpdb->prepare(
@@ -638,7 +622,6 @@ final class Integrity_Digest {
 				$user_id
 			)
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
 			throw new RuntimeException( 'upsert stored customer digest failed: ' . $wpdb->last_error );
 		}

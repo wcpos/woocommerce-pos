@@ -37,10 +37,6 @@ use WP_REST_Request;
  * current out-of-band operations endpoints (/uuid/backfill,
  * /orders/index/backfill, /integrity/rebuild) cannot create the gated tables,
  * so they stay gated and fail against an unhealthy store.
- *
- * NOT for the fixtures controller: its check is deliberately different
- * (manage_options + the lab-mode guard, and the routes are lab-gated at
- * registration).
  */
 trait Endpoint_Permissions {
 	/**
