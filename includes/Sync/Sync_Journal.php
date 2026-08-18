@@ -21,9 +21,6 @@ final class Sync_Journal {
 	/** Generation marker for the journal sequence space. */
 	public const EPOCH_OPTION = 'woocommerce_pos_sync_journal_epoch';
 
-	/** Wall-clock ms spent inside record() during the CURRENT request. */
-	public static float $request_write_ms = 0.0;
-
 	/** Per-request dedup of identical customer lifecycle events. */
 	private array $recorded_this_request = array();
 
@@ -469,7 +466,6 @@ final class Sync_Journal {
 				);
 			}
 		}
-		$started = microtime( true );
 		$now = gmdate( 'Y-m-d H:i:s' );
 		$wpdb->insert(
 			$this->table_name(),
@@ -487,7 +483,6 @@ final class Sync_Journal {
 		if ( null !== $dedup_key ) {
 			$this->recorded_this_request[ $dedup_key ] = $dedup ? true : (int) $wpdb->insert_id;
 		}
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 	}
 
 	/** Return the persisted order-backfill cursor. */
