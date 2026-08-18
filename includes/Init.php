@@ -19,7 +19,6 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
-use const DOING_AJAX;
 
 /**
  * Init class.
