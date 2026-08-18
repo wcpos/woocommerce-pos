@@ -30,10 +30,9 @@ class Single_Product {
 	/**
 	 * Visibility options for POS products.
 	 *
-	 * @phpstan-ignore-next-line
 	 * @var array
 	 */
-	private $options;
+	private $options; // @phpstan-ignore property.onlyWritten
 
 	/**
 	 * Constructor.

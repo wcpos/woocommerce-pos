@@ -103,6 +103,7 @@ class Opening_Hours_Formatter {
 			}
 		}
 
+		// @phpstan-ignore notIdentical.alwaysTrue (belt-and-braces for empty input)
 		if ( null !== $current ) {
 			$groups[] = $current;
 		}

@@ -21,13 +21,13 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.1",
-    "eslint": "^9.39.5",
-    "jsdom": "^29.1.1",
+    "eslint": "^10.8.1",
+    "jsdom": "^30.0.1",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.2.4",
@@ -35,5 +35,5 @@
     "vite": "^8.0.11",
     "vitest": "^4.1.5"
   },
-  "packageManager": "pnpm@11.1.1"
+  "packageManager": "pnpm@11.22.0"
 }

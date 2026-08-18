@@ -133,15 +133,10 @@ describe('AutoPrintRules', () => {
 			assignments: [{ printer_id: 'kitchen', store_id: 0, scope: 'every', template_id: '11' }],
 		});
 
-		expect(screen.getByTestId('rule-scope-0')).toHaveStyle({
-			width: 'calc(11ch + 3.5rem)',
-		});
-		expect(screen.getByTestId('rule-printer-0')).toHaveStyle({
-			width: 'calc(7ch + 3.5rem)',
-		});
-		expect(screen.getByTestId('rule-template-0')).toHaveStyle({
-			width: 'calc(16ch + 3.5rem)',
-		});
+		// jsdom evaluates calc() in computed styles, so assert the inline declaration.
+		expect(screen.getByTestId('rule-scope-0').style.width).toBe('calc(11ch + 3.5rem)');
+		expect(screen.getByTestId('rule-printer-0').style.width).toBe('calc(7ch + 3.5rem)');
+		expect(screen.getByTestId('rule-template-0').style.width).toBe('calc(16ch + 3.5rem)');
 	});
 
 	it('changing scope select calls onChange with scope updated and other fields preserved', () => {

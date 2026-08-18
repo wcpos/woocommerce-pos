@@ -155,29 +155,33 @@ export function resolveTaskGroups(capabilities: CapabilityGroups): ResolvedTaskG
 			(task.alternatives || []).every((alternatives) =>
 				alternatives.some((name) => name in index)
 			)
-	).map((task) => {
-		const names = [...task.capabilities];
+	)
+		.map((task) => {
+			const names = [...task.capabilities];
 
-		(task.alternatives || []).forEach((alternatives) => {
-			const present = alternatives.find((name) => name in index);
-			if (present) {
-				names.push(present);
-			}
-		});
+			(task.alternatives || []).forEach((alternatives) => {
+				const present = alternatives.find((name) => name in index);
+				if (present) {
+					names.push(present);
+				}
+			});
 
-		const members = names
-			.filter((name) => name in index)
-			.map((name) => ({ group: index[name], name }));
+			const members = names
+				.filter((name) => name in index)
+				.map((name) => ({ group: index[name], name }));
 
-		const grantedCount = members.filter(({ group, name }) => capabilities[group][name]).length;
+			const grantedCount = members.filter(
+				({ group, name }) => capabilities[group][name]
+			).length;
 
-		return {
-			task,
-			members,
-			allGranted: members.length > 0 && grantedCount === members.length,
-			partiallyGranted: grantedCount > 0 && grantedCount < members.length,
-		};
-	}).filter(({ members }) => members.length > 0);
+			return {
+				task,
+				members,
+				allGranted: members.length > 0 && grantedCount === members.length,
+				partiallyGranted: grantedCount > 0 && grantedCount < members.length,
+			};
+		})
+		.filter(({ members }) => members.length > 0);
 }
 
 /**

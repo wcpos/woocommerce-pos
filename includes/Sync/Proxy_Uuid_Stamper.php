@@ -394,6 +394,7 @@ final class Proxy_Uuid_Stamper {
 			$existing = $config['bulk_read']( $ids );
 			$seen     = $existing;
 		}
+		/** @var list<string> $seen */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- narrow the bulk_read closure return for PHPStan.
 		$collision = array_fill_keys(
 			array_keys(
 				array_filter(

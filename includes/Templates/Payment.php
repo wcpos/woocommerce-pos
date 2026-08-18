@@ -27,10 +27,9 @@ class Payment {
 	/**
 	 * The gateway ID.
 	 *
-	 * @phpstan-ignore-next-line
 	 * @var string
 	 */
-	private $gateway_id;
+	private $gateway_id; // @phpstan-ignore property.unused
 
 	/**
 	 * The order.
@@ -203,9 +202,6 @@ class Payment {
 			 */
 			wp_set_current_user( $this->order->get_customer_id() );
 			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 10, 2 );
-
-			// create nonce for customer
-			// $nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';.
 
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $this->order_id ) ) {
@@ -538,24 +534,5 @@ class Payment {
 			$settings_service = Settings::instance();
 			$settings_service->save_settings( 'checkout', $new_settings );
 		}
-	}
-
-	/**
-	 * Custom version of wp_create_nonce that uses the customer ID.
-	 *
-	 * @phpstan-ignore-next-line
-	 */
-	private function create_customer_nonce() {
-		$user = wp_get_current_user();
-		$uid  = (int) $user->ID;
-		// if ( ! $uid ) {
-		// ** This filter is documented in wp-includes/pluggable.php */
-		// $uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
-		// }.
-
-		$token = '';
-		$i     = wp_nonce_tick();
-
-		return substr( wp_hash( $i . '|woocommerce-pay|' . $uid . '|' . $token, 'nonce' ), - 12, 10 );
 	}
 }

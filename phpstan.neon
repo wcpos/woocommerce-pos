@@ -1,5 +1,6 @@
 parameters:
     level: 5
+    treatPhpDocTypesAsCertain: false
     paths:
         - includes
     excludePaths:
@@ -15,6 +16,17 @@ parameters:
 
     # Ignore errors in third-party code
     ignoreErrors:
+        # Runtime guards are deliberate here: method_exists()/is_array() checks defend
+        # against WC/WP versions and filter payloads the stubs don't model.
+        - identifier: function.alreadyNarrowedType
+        # Defensive re-indexing and offset checks on data phpstan types as already safe.
+        - identifier: arrayValues.list
+        - identifier: isset.offset
+        # Plugin-path constants resolve at runtime, not statically.
+        -
+            identifier: requireOnce.fileNotFound
+            path: includes/Init.php
+
         # Allow dynamic property access for WordPress objects
         - '#Access to an undefined property WC_Order::\$#'
         - '#Access to an undefined property WC_Product::\$#'
