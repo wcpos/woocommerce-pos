@@ -25,13 +25,6 @@ class Payment {
 	private $order_id;
 
 	/**
-	 * The gateway ID.
-	 *
-	 * @var string
-	 */
-	private $gateway_id; // @phpstan-ignore property.unused
-
-	/**
 	 * The order.
 	 *
 	 * @var \WC_Order
@@ -74,8 +67,6 @@ class Payment {
 	public function __construct( int $order_id ) {
 		$this->order_id   = $order_id;
 		$this->check_troubleshooting_form_submission();
-		// $this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
-
 		$settings_service        = Settings::instance();
 		$this->disable_wp_head   = (bool) $settings_service->get_settings( 'checkout', 'disable_wp_head' );
 		$this->disable_wp_footer = (bool) $settings_service->get_settings( 'checkout', 'disable_wp_footer' );
@@ -171,10 +162,6 @@ class Payment {
 			\define( 'WOOCOMMERCE_CHECKOUT', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WooCommerce constant.
 		}
 
-		// if ( ! $this->gateway_id ) {
-		// wp_die( /* translators: Short WCPOS UI label; keep concise. */ esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
-		// }.
-
 		do_action( 'woocommerce_pos_before_pay' );
 
 		try {
@@ -211,11 +198,6 @@ class Payment {
 			// We need to reload the gateways here to use the current customer details.
 			WC()->payment_gateways()->init();
 			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
-
-			// if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
-			// $gateway         = $available_gateways[ $this->gateway_id ];
-			// $gateway->chosen = true;
-			// }.
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', /* translators: Short WCPOS UI label; keep concise. */ __( 'Pay for order', 'woocommerce-pos' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 

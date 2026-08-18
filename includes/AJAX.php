@@ -34,26 +34,6 @@ class AJAX {
 	);
 
 	/**
-	 * WooCommerce AJAX actions that we need to hook into on the Order admin pages.
-	 *
-	 * @var string[]
-	 */
-	private $order_actions = array( // @phpstan-ignore property.onlyWritten
-		'woocommerce_add_order_item',
-		'woocommerce_add_order_fee',
-		'woocommerce_add_order_shipping',
-		'woocommerce_add_order_tax',
-		'woocommerce_add_coupon_discount',
-		'woocommerce_remove_order_coupon',
-		'woocommerce_remove_order_item',
-		'woocommerce_remove_order_tax',
-		'woocommerce_calc_line_taxes',
-		'woocommerce_save_order_items',
-		'woocommerce_load_order_items',
-		'woocommerce_get_order_details',
-	);
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
