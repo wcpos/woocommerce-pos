@@ -498,6 +498,71 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test per-gateway order status is applied to POS orders outside POS requests.
+	 */
+	public function test_per_gateway_order_status_for_payment_complete_pos_order_outside_pos_request_returns_configured_status(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+				),
+			)
+		);
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
+
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+
+		// Act.
+		$status = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order );
+
+		// Assert.
+		$this->assertEquals( 'on-hold', $status );
+	}
+
+	/**
+	 * Test per-gateway order status is not applied to non-POS orders outside POS requests.
+	 */
+	public function test_per_gateway_order_status_for_payment_complete_non_pos_order_outside_pos_request_returns_default_status(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+				),
+			)
+		);
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'checkout' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
+
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+
+		// Act.
+		$status = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order );
+
+		// Assert.
+		$this->assertEquals( 'processing', $status );
+	}
+
+	/**
 	 * Test per-gateway order status returns different statuses for different gateways.
 	 */
 	public function test_per_gateway_order_status_differs_by_gateway(): void {
