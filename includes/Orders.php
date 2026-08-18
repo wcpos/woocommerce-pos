@@ -139,6 +139,8 @@ class Orders {
 
 	/**
 	 * Payment complete order status.
+	 * POS orders are also matched by order origin because gateway webhooks and
+	 * reconciliation crons complete payment outside POS requests.
 	 *
 	 * @param string            $status Order status.
 	 * @param int               $id     Order ID.
@@ -147,7 +149,7 @@ class Orders {
 	 * @return string
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
-		if ( woocommerce_pos_request() ) {
+		if ( woocommerce_pos_request() || woocommerce_pos_is_pos_order( $order ) ) {
 			return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
 		}
 
