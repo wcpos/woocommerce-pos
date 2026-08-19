@@ -395,7 +395,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$this->maybe_schedule_stale_digest_rebuild( $bucket, $changes );
+		$this->maybe_schedule_stale_digest_rebuild( $bucket, $bucket_size, $changes );
 
 		return rest_ensure_response(
 			$this->envelope(
@@ -419,6 +419,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			return false;
 		}
 
+		$this->save_drift_streaks( array() );
 		$this->schedule_guarded_rebuild();
 
 		return true;
@@ -447,10 +448,11 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * still sees the mismatch — the point at which the drift is provably the
 	 * stored side's problem, not a delivery problem.
 	 *
-	 * @param int   $bucket  Bucket just drilled down.
-	 * @param array $changes Rows the drill-down is returning.
+	 * @param int   $bucket      Bucket just drilled down.
+	 * @param int   $bucket_size Number of ids covered by the bucket.
+	 * @param array $changes     Rows the drill-down is returning.
 	 */
-	private function maybe_schedule_stale_digest_rebuild( int $bucket, array $changes ): void {
+	private function maybe_schedule_stale_digest_rebuild( int $bucket, int $bucket_size, array $changes ): void {
 		$stale = 0;
 		foreach ( $changes as $change ) {
 			if ( 'changed' === ( $change['status'] ?? '' ) ) {
@@ -463,20 +465,22 @@ final class Integrity_Controller extends WP_REST_Controller {
 			$streaks = array();
 		}
 
+		$streak_key = $bucket_size . ':' . $bucket;
+
 		if ( 0 === $stale ) {
 			// Reconciled (or only deletions/missing_stored left) — forget it.
-			if ( isset( $streaks[ $bucket ] ) ) {
-				unset( $streaks[ $bucket ] );
+			if ( isset( $streaks[ $streak_key ] ) ) {
+				unset( $streaks[ $streak_key ] );
 				$this->save_drift_streaks( $streaks );
 			}
 
 			return;
 		}
 
-		$streak = ( (int) ( $streaks[ $bucket ] ?? 0 ) ) + 1;
+		$streak = ( (int) ( $streaks[ $streak_key ] ?? 0 ) ) + 1;
 
 		if ( $streak < self::DRIFT_REBUILD_THRESHOLD ) {
-			$streaks[ $bucket ] = $streak;
+			$streaks[ $streak_key ] = $streak;
 			$this->save_drift_streaks( $streaks );
 
 			return;
@@ -484,8 +488,9 @@ final class Integrity_Controller extends WP_REST_Controller {
 
 		Logger::log(
 			\sprintf(
-				'WCPOS sync: bucket %d reported %d stale stored digest(s) on %d consecutive drill-downs; scheduling an integrity digest rebuild.',
+				'WCPOS sync: bucket %d (size %d) reported %d stale stored digest(s) on %d consecutive drill-downs; scheduling an integrity digest rebuild.',
 				$bucket,
+				$bucket_size,
 				$stale,
 				$streak
 			)
@@ -502,7 +507,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * cannot grow an unbounded option. Never autoloaded — it is read only on
 	 * the drill-down path.
 	 *
-	 * @param array $streaks Bucket => consecutive drifted drill-downs.
+	 * @param array $streaks Bucket-size:bucket => consecutive drifted drill-downs.
 	 */
 	private function save_drift_streaks( array $streaks ): void {
 		if ( \count( $streaks ) > self::DRIFT_STREAK_MAX_BUCKETS ) {

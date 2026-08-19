@@ -183,12 +183,12 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Cron entry point for rebuilding an unexpectedly empty stored digest table.
+	 * Cron entry point for rebuilding unexpectedly empty or stale product digests.
 	 */
 	public static function run_scheduled_rebuild(): void {
 		$lease = get_transient( self::REBUILD_LOCK );
 		try {
-			( new self() )->rebuild();
+			( new self() )->rebuild( true );
 		} catch ( \Throwable $exception ) {
 			Logger::error( 'WCPOS sync: scheduled integrity digest rebuild failed: ' . $exception->getMessage() );
 		} finally {
@@ -649,8 +649,10 @@ final class Integrity_Digest {
 	 * INSERT…SELECT pass. Pre-existing catalogs (the 10k seed) become fully
 	 * digestable in one call; measured timing is returned so the lab can
 	 * report the backfill price.
+	 *
+	 * @param bool $products_only Whether to stop after rebuilding product digests.
 	 */
-	public function rebuild(): array {
+	public function rebuild( bool $products_only = false ): array {
 		global $wpdb;
 		$this->index->raise_group_concat_max_len();
 		$started = microtime( true );
@@ -682,6 +684,19 @@ final class Integrity_Digest {
 		);
 		if ( false === $writes ) {
 			throw new RuntimeException( 'rebuild stored digests failed: ' . $wpdb->last_error );
+		}
+
+		if ( $products_only ) {
+			$stored_total = (int) $wpdb->get_var(
+				'SELECT COUNT(*) FROM ' . $this->table_name() . ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL
+			);
+
+			return array(
+				'writes' => (int) $writes,
+				'orphans_deleted' => (int) $orphans_deleted,
+				'stored_total' => $stored_total,
+				'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
+			);
 		}
 
 		// Leg-3 phase 7 (ADR 0015): customers share the digest table via their own 'customer' rows —
