@@ -19,7 +19,6 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
-use const DOING_AJAX;
 
 /**
  * Init class.
@@ -407,7 +406,7 @@ class Init {
 			add_action( 'wp_ajax_wcpos_track_upgrade_click_ajax', array( Menu::class, 'handle_upgrade_click_ajax' ) );
 			add_action( 'admin_post_wcpos_track_upgrade_click', array( Menu::class, 'handle_upgrade_click_redirect' ) );
 
-			if ( \defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			if ( wp_doing_ajax() ) {
 				new AJAX();
 			} else {
 				new Admin();

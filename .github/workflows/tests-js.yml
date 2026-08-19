@@ -13,7 +13,9 @@ on:
       - "package.json"
       - "packages/*/src/translations/locales/en/*.json"
       - ".github/scripts/test-deploy-dev-workflow.sh"
+      - ".github/scripts/test-pnpm-workflow-version.sh"
       - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/*.yml"
       - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
@@ -29,7 +31,9 @@ on:
       - "package.json"
       - "packages/*/src/translations/locales/en/*.json"
       - ".github/scripts/test-deploy-dev-workflow.sh"
+      - ".github/scripts/test-pnpm-workflow-version.sh"
       - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/*.yml"
       - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
@@ -57,10 +61,11 @@ jobs:
       - name: Validate JS translation workflow
         run: bash .github/scripts/test-push-js-strings.sh
 
+      - name: Validate pnpm workflow version source
+        run: bash .github/scripts/test-pnpm-workflow-version.sh
+
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
-        with:
-          version: '11.1.1'
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

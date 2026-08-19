@@ -323,6 +323,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WC_Product_Variable $product       Variable product.
 	 * @param string|null         $minimum_price Unrounded filtered minimum price, passed by reference.
 	 *
+	 * @phpstan-param-out string $minimum_price
+	 *
 	 * @return array{price: array{min: string, max: string}, regular_price: array{min: string, max: string},
 	 *               sale_price: array{min: string, max: string}}
 	 */

@@ -3,14 +3,9 @@ module.exports = function (api) {
 
 	const presets = ['@babel/preset-env', '@babel/preset-react', '@babel/preset-typescript'];
 
-	const plugins = [
-		[
-			'@babel/plugin-transform-runtime',
-			{
-				regenerator: true,
-			},
-		],
-	];
+	// No transform-runtime: helpers are inlined so prebuilt deps keep their own
+	// @babel/runtime v7 helper paths (v8 removed helpers/esm/*).
+	const plugins = [];
 
 	return {
 		presets,

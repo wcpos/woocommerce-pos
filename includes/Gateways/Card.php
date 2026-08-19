@@ -6,7 +6,6 @@
  *
  * @see        https://wcpos.com
  *
- * @extends     WC_Payment_Gateway
  * @package WCPOS\WooCommercePOS
  */
 

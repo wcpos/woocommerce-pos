@@ -10,7 +10,7 @@ on:
       pnpm-version:
         description: Version of pnpm to use
         type: string
-        default: "11.1.1"
+        default: ""  # empty -> pnpm/action-setup reads packageManager from package.json
 
 jobs:
   setup:
