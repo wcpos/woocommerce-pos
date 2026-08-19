@@ -38,7 +38,7 @@ final class Stable_Sort {
 		// GLOBAL direction applies to every field, so a desc sort ties by ID DESC
 		// while the client renders ties by id ASC. Normalize that form back to the
 		// bare key so the rewrite below pins ID ASC either way.
-		if ( \is_string( $orderby ) && str_ends_with( $orderby, ' ID' ) ) {
+		if ( \is_string( $orderby ) && ' ID' === substr( $orderby, -3 ) ) {
 			$orderby = substr( $orderby, 0, -3 );
 		}
 		if ( ! \is_string( $orderby ) || ! \in_array( $orderby, self::TIED_POST_ORDERBYS, true ) ) {

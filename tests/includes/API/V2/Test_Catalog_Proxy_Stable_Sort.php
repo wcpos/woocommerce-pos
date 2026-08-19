@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\API\V2\Proxy\Stable_Sort;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -45,8 +46,31 @@ class Test_Catalog_Proxy_Stable_Sort extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( $params );
 
 		$response = $this->server->dispatch( $request );
-		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertEquals( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		return $response->get_data();
+	}
+
+	/**
+	 * The existing ID suffix is normalized on supported PHP 7.4 runtimes.
+	 */
+	public function test_post_orderby_with_existing_id_tiebreak_is_normalized(): void {
+		$args = Stable_Sort::with_post_id_tiebreak(
+			array(
+				'orderby' => 'date ID',
+				'order'   => 'desc',
+			)
+		);
+
+		$this->assertEquals(
+			array(
+				'orderby' => array(
+					'date' => 'DESC',
+					'ID'   => 'ASC',
+				),
+				'order'   => 'desc',
+			),
+			$args
+		);
 	}
 
 	/**
@@ -78,7 +102,7 @@ class Test_Catalog_Proxy_Stable_Sort extends WCPOS_REST_Unit_Test_Case {
 					static fn ( int $id ): bool => \in_array( $id, $ids, true )
 				)
 			);
-			$this->assertSame( array_values( $ids ), $tied, "tied titles must list id-ascending ({$order})" );
+			$this->assertEquals( array_values( $ids ), $tied, "tied titles must list id-ascending ({$order})" );
 		}
 	}
 
@@ -111,7 +135,7 @@ class Test_Catalog_Proxy_Stable_Sort extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		$tied = array_values( array_intersect( $walked, $ids ) );
-		$this->assertSame( $ids, $tied, 'each tied row appears exactly once, in id order, across pages' );
+		$this->assertEquals( $ids, $tied, 'each tied row appears exactly once, in id order, across pages' );
 	}
 
 	/**
@@ -148,7 +172,7 @@ class Test_Catalog_Proxy_Stable_Sort extends WCPOS_REST_Unit_Test_Case {
 					static fn ( int $id ): bool => \in_array( $id, $tied_ids, true )
 				)
 			);
-			$this->assertSame( $tied_ids, $tied, "tied names must list term_id-ascending ({$order})" );
+			$this->assertEquals( $tied_ids, $tied, "tied names must list term_id-ascending ({$order})" );
 		}
 	}
 
@@ -171,7 +195,7 @@ class Test_Catalog_Proxy_Stable_Sort extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 			// The tie premise must hold or the assertion below tests nothing.
-			$this->assertSame( $stamp, get_post( $coupon->get_id() )->post_date );
+			$this->assertEquals( $stamp, get_post( $coupon->get_id() )->post_date );
 			$ids[] = $coupon->get_id();
 		}
 		sort( $ids );
@@ -190,6 +214,6 @@ class Test_Catalog_Proxy_Stable_Sort extends WCPOS_REST_Unit_Test_Case {
 				static fn ( int $id ): bool => \in_array( $id, $ids, true )
 			)
 		);
-		$this->assertSame( $ids, $tied, 'tied dates must list id-ascending even under desc' );
+		$this->assertEquals( $ids, $tied, 'tied dates must list id-ascending even under desc' );
 	}
 }
