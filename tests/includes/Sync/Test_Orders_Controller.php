@@ -90,7 +90,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * A pull document is keyed by the order's uuid (the ADR 0021 re-key), never
-	 * the numeric order id, and carries the wooOrderId + journal metadata.
+	 * the numeric order id, and carries the journal metadata. Remote identity
+	 * rides payload.id only (ADR 0029 decision 6 retired the wooOrderId key).
 	 */
 	public function test_pull_document_is_keyed_by_uuid_and_carries_journal_metadata(): void {
 		$order = OrderHelper::create_order();
@@ -114,7 +115,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		// THE re-key: the document id is the uuid, not woo-order:<id>.
 		$this->assertSame( $this->order_uuids[ $order->get_id() ], $document['id'] );
 		$this->assertNotSame( '', $document['id'] );
-		$this->assertSame( $order->get_id(), $document['wooOrderId'] );
+		$this->assertArrayNotHasKey( 'wooOrderId', $document );
+		$this->assertEquals( $order->get_id(), $document['payload']['id'] );
 		$this->assertSame( 'custom-pull', $document['sync']['source'] );
 		$this->assertFalse( $document['local']['dirty'] );
 
@@ -458,7 +460,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 			);
 			$data = $response->get_data();
 
-			$received_order_ids = array_merge( $received_order_ids, array_column( $data['documents'], 'wooOrderId' ) );
+			$received_order_ids = array_merge( $received_order_ids, array_map( static fn ( array $document ) => $document['payload']['id'], $data['documents'] ) );
 			$checkpoint = array(
 				'updated_at_gmt' => $data['checkpoint']['updatedAtGmt'],
 				'order_id' => $data['checkpoint']['orderId'],

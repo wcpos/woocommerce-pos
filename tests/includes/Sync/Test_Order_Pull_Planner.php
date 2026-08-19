@@ -282,7 +282,6 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertSame(
 			array(
 				'id' => self::UUID_A, // THE re-key: keyed by uuid, read from the FULL payload
-				'wooOrderId' => 10,
 				'payload' => $sparse, // the CLIENT payload ships
 				'sync' => array(
 					'revision' => 'r',
