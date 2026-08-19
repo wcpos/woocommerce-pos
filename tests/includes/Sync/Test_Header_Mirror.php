@@ -42,7 +42,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		return array_map( 'trim', explode( ',', $sent_headers['Access-Control-Expose-Headers'] ) );
 	}
 
-	public function test_allow_cors_headers_forwards_to_the_shared_sync_allow_list(): void {
+	public function test_allow_cors_headers_appends_the_mirror_headers_without_duplicates(): void {
 		$this->assertSame(
 			array( 'Authorization', 'Idempotency-Key', 'If-Match', 'If-None-Match', 'X-WCPOS-Store' ),
 			Header_Mirror::allow_cors_headers( array( 'Authorization' ) )
