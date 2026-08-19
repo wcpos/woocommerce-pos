@@ -44,6 +44,20 @@ final class Integrity_Controller extends WP_REST_Controller {
 	public const DEFAULT_BUCKET_SIZE   = 1000;
 	public const DEFAULT_LIMIT_BUCKETS = 50;
 
+	/**
+	 * Consecutive drill-downs a bucket may report stale stored digests before
+	 * the rebuild is scheduled. Must stay ABOVE the client's own escalation
+	 * threshold (DEFAULT_HYBRID_POLICY.escalateToRevisionHashAfter = 2) so the
+	 * client has pulled the drifted ids before the stored side is re-baselined.
+	 */
+	public const DRIFT_REBUILD_THRESHOLD = 3;
+
+	/** Per-bucket drift streaks; never autoloaded, read only on the drill-down path. */
+	public const DRIFT_STREAK_OPTION = 'wcpos_integrity_drift_streaks';
+
+	/** Hard cap on tracked buckets so the option cannot grow unbounded. */
+	public const DRIFT_STREAK_MAX_BUCKETS = 256;
+
 	private Integrity_Digest $digests;
 
 	private Digest_Index $index;
@@ -381,6 +395,8 @@ final class Integrity_Controller extends WP_REST_Controller {
 			);
 		}
 
+		$this->maybe_schedule_stale_digest_rebuild( $bucket, $changes );
+
 		return rest_ensure_response(
 			$this->envelope(
 				array(
@@ -403,6 +419,110 @@ final class Integrity_Controller extends WP_REST_Controller {
 			return false;
 		}
 
+		$this->schedule_guarded_rebuild();
+
+		return true;
+	}
+
+	/**
+	 * Schedule the rebuild when a bucket keeps reporting the SAME stale stored
+	 * digests drill-down after drill-down.
+	 *
+	 * A 'changed' row means the stored side has a digest that no longer matches
+	 * the row — i.e. a write that bypassed the hooks (bulk import, WP-CLI,
+	 * direct SQL, a migration plugin). Pulling cannot fix that: the client
+	 * refreshes its own copy, but nothing rewrites the STORED digest, so the
+	 * bucket mismatches forever and the till shows a permanent "records need
+	 * attention" for data that is already correct. Observed on dev-pro
+	 * 2026-08-19: 138 products drifted by a hookless bulk edit, re-escalated
+	 * every sweep, local copies byte-identical to the server.
+	 *
+	 * Why a STREAK and not the first sight of drift: for a hookless write the
+	 * integrity scan is the ONLY signal — such a write bypasses the sequence
+	 * log too — so re-baselining on first detection would erase the one thing
+	 * telling clients to re-pull. The client drills a mismatched bucket every
+	 * sweep and issues targeted pulls each time; it escalates at 2 consecutive
+	 * post-pull mismatches (DEFAULT_HYBRID_POLICY.escalateToRevisionHashAfter).
+	 * Rebuilding at 3 therefore only ever fires AFTER the client has pulled and
+	 * still sees the mismatch — the point at which the drift is provably the
+	 * stored side's problem, not a delivery problem.
+	 *
+	 * @param int   $bucket  Bucket just drilled down.
+	 * @param array $changes Rows the drill-down is returning.
+	 */
+	private function maybe_schedule_stale_digest_rebuild( int $bucket, array $changes ): void {
+		$stale = 0;
+		foreach ( $changes as $change ) {
+			if ( 'changed' === ( $change['status'] ?? '' ) ) {
+				++$stale;
+			}
+		}
+
+		$streaks = get_option( self::DRIFT_STREAK_OPTION, array() );
+		if ( ! \is_array( $streaks ) ) {
+			$streaks = array();
+		}
+
+		if ( 0 === $stale ) {
+			// Reconciled (or only deletions/missing_stored left) — forget it.
+			if ( isset( $streaks[ $bucket ] ) ) {
+				unset( $streaks[ $bucket ] );
+				$this->save_drift_streaks( $streaks );
+			}
+
+			return;
+		}
+
+		$streak = ( (int) ( $streaks[ $bucket ] ?? 0 ) ) + 1;
+
+		if ( $streak < self::DRIFT_REBUILD_THRESHOLD ) {
+			$streaks[ $bucket ] = $streak;
+			$this->save_drift_streaks( $streaks );
+
+			return;
+		}
+
+		Logger::log(
+			\sprintf(
+				'WCPOS sync: bucket %d reported %d stale stored digest(s) on %d consecutive drill-downs; scheduling an integrity digest rebuild.',
+				$bucket,
+				$stale,
+				$streak
+			)
+		);
+
+		// The rebuild re-digests the whole product space, so every bucket's
+		// streak is moot once it is queued.
+		$this->save_drift_streaks( array() );
+		$this->schedule_guarded_rebuild();
+	}
+
+	/**
+	 * Persist the per-bucket streak map, bounded so a pathological catalogue
+	 * cannot grow an unbounded option. Never autoloaded — it is read only on
+	 * the drill-down path.
+	 *
+	 * @param array $streaks Bucket => consecutive drifted drill-downs.
+	 */
+	private function save_drift_streaks( array $streaks ): void {
+		if ( \count( $streaks ) > self::DRIFT_STREAK_MAX_BUCKETS ) {
+			arsort( $streaks );
+			$streaks = \array_slice( $streaks, 0, self::DRIFT_STREAK_MAX_BUCKETS, true );
+		}
+
+		if ( array() === $streaks ) {
+			delete_option( self::DRIFT_STREAK_OPTION );
+
+			return;
+		}
+
+		update_option( self::DRIFT_STREAK_OPTION, $streaks, false );
+	}
+
+	/**
+	 * Queue one rebuild behind the owner-token lease. Shared by both triggers.
+	 */
+	private function schedule_guarded_rebuild(): void {
 		if ( false === get_transient( Integrity_Digest::REBUILD_LOCK ) ) {
 			// Owner-token lease: a rebuild outliving the TTL must not delete a
 			// SUCCESSOR's lock in its finally (the callback captures the token
@@ -413,7 +533,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 				// An identical event is already queued (e.g. a concurrent scan
 				// won the race, or a prior lock expired before cron fired):
 				// keep the fresh lease and do not stack another event.
-				return true;
+				return;
 			}
 			if ( false === wp_schedule_single_event( time(), Integrity_Digest::REBUILD_HOOK ) ) {
 				if ( get_transient( Integrity_Digest::REBUILD_LOCK ) === $token ) {
@@ -422,8 +542,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 				Logger::error( 'WCPOS sync: failed to schedule integrity digest rebuild.' );
 			}
 		}
-
-		return true;
 	}
 
 	/**
