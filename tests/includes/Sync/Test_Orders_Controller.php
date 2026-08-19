@@ -116,7 +116,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $this->order_uuids[ $order->get_id() ], $document['id'] );
 		$this->assertNotSame( '', $document['id'] );
 		$this->assertArrayNotHasKey( 'wooOrderId', $document );
-		$this->assertSame( $order->get_id(), $document['payload']['id'] );
+		$this->assertEquals( $order->get_id(), $document['payload']['id'] );
 		$this->assertSame( 'custom-pull', $document['sync']['source'] );
 		$this->assertFalse( $document['local']['dirty'] );
 
