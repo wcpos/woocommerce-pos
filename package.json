@@ -53,5 +53,8 @@
     "turbo": "^2.9.9",
     "wp-hookdoc": "0.2.0"
   },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "packageManager": "pnpm@11.1.1"
 }
