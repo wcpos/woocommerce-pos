@@ -26,12 +26,12 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
 		$data     = $response->get_data();
 
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( wcpos_get_site_uuid(), $data['uuid'] );
-		$this->assertSame( get_bloginfo( 'name' ), $data['name'] );
-		$this->assertSame( get_option( 'siteurl' ), $data['url'] );
-		$this->assertSame( get_bloginfo( 'version' ), $data['wp_version'] );
-		$this->assertSame( VERSION, $data['wcpos_version'] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( wcpos_get_site_uuid(), $data['uuid'] );
+		$this->assertEquals( get_bloginfo( 'name' ), $data['name'] );
+		$this->assertEquals( get_option( 'siteurl' ), $data['url'] );
+		$this->assertEquals( get_bloginfo( 'version' ), $data['wp_version'] );
+		$this->assertEquals( VERSION, $data['wcpos_version'] );
 		$this->assertContains( 'wcpos/v2', $data['namespaces'] );
 		$this->assertNotEmpty( $data['authentication']['wcpos']['endpoints']['authorization'] );
 	}
@@ -43,7 +43,7 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
 		$data     = $response->get_data();
 
-		$this->assertSame( WC()->version, $data['wc_version'] );
+		$this->assertEquals( WC()->version, $data['wc_version'] );
 		$this->assertContains( 'wc/v3', $data['namespaces'] );
 	}
 
@@ -61,6 +61,6 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
 
 		remove_filter( 'wcpos_rest_site_info', $filter );
-		$this->assertSame( 'extension-value', $response->get_data()['extension_field'] );
+		$this->assertEquals( 'extension-value', $response->get_data()['extension_field'] );
 	}
 }
