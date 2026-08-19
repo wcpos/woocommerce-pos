@@ -11,7 +11,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\API as WCPOS_API;
 use WCPOS\WooCommercePOS\Init;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Cors;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -64,7 +63,7 @@ class Test_Cors extends WP_UnitTestCase {
 				$this->sent_headers[ $key ] = $value;
 			}
 		};
-		$request = new WP_REST_Request( 'OPTIONS', '/' . Api::ROUTE_NAMESPACE . '/taxes' );
+		$request = new WP_REST_Request( 'OPTIONS', '/wcpos/v2/taxes' );
 
 		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
