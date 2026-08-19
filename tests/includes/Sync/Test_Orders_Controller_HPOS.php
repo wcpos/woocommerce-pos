@@ -136,7 +136,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 
 		$document = $data['documents'][0];
 		$this->assertSame( $uuid, $document['id'] );
-		$this->assertSame( $order->get_id(), $document['wooOrderId'] );
+		$this->assertArrayNotHasKey( 'wooOrderId', $document );
 		$this->assertSame( $order->get_id(), $document['payload']['id'] );
 		$this->assertSame( 'processing', $document['payload']['status'] );
 		$this->assertSame( 'HPOS Pull', $document['payload']['billing']['first_name'] );

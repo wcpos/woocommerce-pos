@@ -44,7 +44,7 @@ final class Order_Document {
 	 *
 	 * @param array  $identity_payload The FULL serialized payload (uuid source of truth).
 	 * @param array  $client_payload   The payload actually shipped.
-	 * @param int    $order_id         The numeric Woo order id (wooOrderId).
+	 * @param int    $order_id         The numeric Woo order id (for the uuid guard's error message).
 	 * @param string $revision         The document revision (index row's, or the canonical fallback).
 	 * @param array  $checkpoint       The per-document checkpoint (updatedAtGmt/orderId/revision/sequence).
 	 * @param bool   $partial          Whether $client_payload is a partial fieldset.
@@ -54,8 +54,10 @@ final class Order_Document {
 	 */
 	public static function build( array $identity_payload, array $client_payload, int $order_id, string $revision, array $checkpoint, bool $partial, string $source ): array {
 		return array(
+			// ADR 0029 decision 6: no per-document wooOrderId key — the client derives
+			// remote identity from payload.id at its ingest edge. The deletes channel
+			// (a SEPARATE response key) still speaks numeric order ids.
 			'id' => self::require_uuid( $identity_payload, $order_id ),
-			'wooOrderId' => $order_id,
 			'payload' => $client_payload,
 			'sync' => array(
 				'revision' => $revision,
