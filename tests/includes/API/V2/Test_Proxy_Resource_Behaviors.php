@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\API\V2\Proxy\Orders_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Taxes_Proxy_Behavior;
+use WCPOS\WooCommercePOS\API\V2\Proxy\Terms_Proxy_Behavior;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_REST_Request;
@@ -42,9 +43,11 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 			'products'   => Products_Proxy_Behavior::class,
 			'orders'     => Orders_Proxy_Behavior::class,
 			'customers'  => Customers_Proxy_Behavior::class,
-			'categories' => Null_Proxy_Behavior::class,
-			'brands'     => Null_Proxy_Behavior::class,
-			'tags'       => Null_Proxy_Behavior::class,
+			// Terms carry the stable name-sort tiebreak since mono#1371 made
+			// name asc their default walk order (see Terms_Proxy_Behavior).
+			'categories' => Terms_Proxy_Behavior::class,
+			'brands'     => Terms_Proxy_Behavior::class,
+			'tags'       => Terms_Proxy_Behavior::class,
 			'coupons'    => Coupons_Proxy_Behavior::class,
 			'tax_rates'  => Taxes_Proxy_Behavior::class,
 		);

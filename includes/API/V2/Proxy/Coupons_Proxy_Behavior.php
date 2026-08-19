@@ -26,6 +26,16 @@ final class Coupons_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		};
 		add_filter( 'woocommerce_rest_check_permissions', $filter, 10, 4 );
 
-		return array( array( 'woocommerce_rest_check_permissions', $filter, 10 ) );
+		// Coupon date/modified sorts tie routinely (imports share timestamps);
+		// pin the id tiebreak so multi-page walks stay stable (see Stable_Sort).
+		$stable_sort = static function ( $args ) {
+			return Stable_Sort::with_post_id_tiebreak( (array) $args );
+		};
+		add_filter( 'woocommerce_rest_shop_coupon_object_query', $stable_sort );
+
+		return array(
+			array( 'woocommerce_rest_check_permissions', $filter, 10 ),
+			array( 'woocommerce_rest_shop_coupon_object_query', $stable_sort, 10 ),
+		);
 	}
 }
