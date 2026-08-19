@@ -43,12 +43,6 @@ final class Header_Mirror {
 		return null;
 	}
 
-	/** rest_allowed_cors_headers filter: let the mirror headers through CORS preflight so a cross-origin
-	 * browser transport (an absolute sync base URL) can send them — WP's default allow-list excludes them. */
-	public static function allow_cors_headers( array $headers ): array {
-		return array_values( array_unique( array_merge( $headers, self::HEADERS ) ) );
-	}
-
 	private static function header_value( WP_REST_Request $request, string $name ): ?string {
 		$value = $request->get_header( $name );
 		if ( null === $value ) {

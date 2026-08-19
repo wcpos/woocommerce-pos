@@ -293,13 +293,11 @@ class API {
 		$allow_headers[] = 'X-WCPOS';
 		$allow_headers[] = 'X-HTTP-Method-Override';
 		$allow_headers[] = 'X-WCPOS-Idempotency-Key';
-		// The till's store scope (pro#425). A custom header makes every cross-origin
-		// sync request preflight, so omitting it here would take the whole v2 lane
-		// down on the web client, not merely lose the scope.
-		$allow_headers[] = \WCPOS\WooCommercePOS\Sync\Store_Scope::HEADER;
-		$allow_headers   = \WCPOS\WooCommercePOS\Sync\Header_Mirror::allow_cors_headers( $allow_headers );
 
-		return $allow_headers;
+		// The sync-lane headers (store scope, write mirror, conditional
+		// polling) live in one shared set — see Sync\Cors for why both this
+		// filter and Init's preflight handler must carry all of them.
+		return \WCPOS\WooCommercePOS\Sync\Cors::allow_headers( $allow_headers );
 	}
 
 	/**

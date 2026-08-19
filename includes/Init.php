@@ -314,9 +314,12 @@ class Init {
 				'Content-Type',             // Specifies the media type of the resource.
 				'X-HTTP-Method-Override',   // Used to override the HTTP method.
 				'X-WCPOS',                  // Used to identify WCPOS requests.
-				'If-None-Match',            // Conditional sequence-log polling (304s).
 			);
-			$allow_headers = Sync\Header_Mirror::allow_cors_headers( $allow_headers );
+			// The sync-lane headers live in one shared set: this list and the
+			// rest_allowed_cors_headers filter (API.php) both publish the
+			// allow-list, and a sync header present in only one of them takes
+			// the v2 lane down for cross-origin web clients — see Sync\Cors.
+			$allow_headers = Sync\Cors::allow_headers( $allow_headers );
 
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
 			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
