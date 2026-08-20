@@ -54,8 +54,12 @@ class Test_Response_Envelope extends WCPOS_REST_Unit_Test_Case {
 					$data = $response->get_data();
 
 					// Assert.
-					if ( 0 === stripos( $route, '/wcpos/v2/push/' ) ) {
-						$this->assertEquals( $body, $data, "{$method} {$route} must retain its write-contract body." );
+					if ( 0 === stripos( $route, '/wcpos/v2/push/' ) || 0 === strcasecmp( $route, '/wcpos/v2/ping' ) ) {
+						// push/*: golden write-contract bodies. ping: the live
+						// fast path (Ping::maybe_serve) exits before REST
+						// filters exist, so the REST fallback stays identical
+						// to it — ping body-mirrors its own metadata.
+						$this->assertEquals( $body, $data, "{$method} {$route} must retain its unwrapped body." );
 					} else {
 						$this->assertEquals( array( 'data', '_wcpos' ), array_keys( $data ), "{$method} {$route} did not use the uniform envelope." );
 						$this->assertEquals( $body, $data['data'], "{$method} {$route} changed the original body." );
@@ -181,6 +185,46 @@ class Test_Response_Envelope extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $body, $marked_response->get_data()['data'] );
 		$this->assertEquals( 1, $marked_response->get_data()['_wcpos']['v'] );
 		$this->assertEquals( $body, $unmarked_response->get_data() );
+	}
+
+	/**
+	 * Raw byte responses (receipt PDFs, printer payloads) are never wrapped:
+	 * Raw_Response serves get_raw_body() through its own callback, so a
+	 * wrapped JSON body would be a promise the client never receives.
+	 */
+	public function test_raw_byte_responses_are_never_wrapped(): void {
+		// Arrange.
+		$raw     = \WCPOS\WooCommercePOS\API\V1\Raw_Response::serve( '%PDF-1.7 bytes', 'application/pdf' );
+		$before  = $raw->get_data();
+		$request = $this->envelope_request( 'GET', '/wcpos/v1/receipts/42/pdf' );
+
+		// Act.
+		Response_Envelope::filter_response( $raw, null, $request );
+
+		// Assert.
+		$this->assertEquals( $before, $raw->get_data() );
+		$this->assertEquals( '%PDF-1.7 bytes', $raw->get_raw_body() );
+	}
+
+	/**
+	 * Response-level links serialize INSIDE data (byte-faithful to the
+	 * unenveloped body) and are not re-appended as a third top-level key.
+	 */
+	public function test_response_links_serialize_inside_the_wrapped_data(): void {
+		// Arrange.
+		$response = new WP_REST_Response( array( 'id' => 42 ), 200 );
+		$response->add_link( 'self', 'https://example.test/wp-json/wcpos/v2/products/42' );
+		$request = $this->envelope_request( 'GET', self::CURRENT_LANE_ROUTE . '/42' );
+
+		// Act.
+		Response_Envelope::filter_response( $response, null, $request );
+		$data   = $response->get_data();
+		$served = rest_get_server()->response_to_data( $response, false );
+
+		// Assert.
+		$this->assertEquals( array( 'data', '_wcpos' ), array_keys( $served ), 'WP re-appended _links outside the envelope.' );
+		$this->assertArrayHasKey( '_links', $data['data'], 'The original response links must ride inside data.' );
+		$this->assertEquals( 42, $data['data']['id'] );
 	}
 
 	/**

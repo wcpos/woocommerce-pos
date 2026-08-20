@@ -37,6 +37,18 @@ final class Response_Envelope {
 			|| '1' !== (string) $request->get_param( '_wcpos_envelope' )
 			|| ! self::is_wcpos_request( $request, $route )
 			|| 0 === strpos( $route, '/' . Api::ROUTE_NAMESPACE . '/push/' )
+			// Raw byte responses (receipt PDFs, printer payloads) serve
+			// get_raw_body() through their own rest_pre_serve_request callback;
+			// wrapping their unused JSON data would promise an envelope the
+			// client never receives.
+			|| $response instanceof \WCPOS\WooCommercePOS\API\V1\Raw_Response
+			// The reachability ping is deliberately dependency-free: its live
+			// fast path (Ping::maybe_serve) echoes and exits before any REST
+			// filter exists, and its payload already body-mirrors the pressure
+			// metadata. Exempting it here keeps the REST fallback identical to
+			// the fast path instead of pretending coverage the live route
+			// cannot have.
+			|| '/' . Api::ROUTE_NAMESPACE . '/ping' === $route
 			|| 304 === $response->get_status()
 			|| $response->get_status() >= 400
 		) {
@@ -86,9 +98,24 @@ final class Response_Envelope {
 			}
 		}
 
+		// Serialize response-level links INTO data before wrapping (single-item
+		// responses attach _links at serving time via response_to_data; without
+		// this, WP would append _links as a third top-level key and body.data
+		// would lose them), then clear them so they are not appended again.
+		$data = $response->get_data();
+		if ( $response instanceof \WP_REST_Response && \function_exists( 'rest_get_server' ) ) {
+			$links = $response->get_links();
+			if ( array() !== $links ) {
+				$data = rest_get_server()->response_to_data( $response, false );
+				foreach ( array_keys( $links ) as $rel ) {
+					$response->remove_link( (string) $rel );
+				}
+			}
+		}
+
 		$response->set_data(
 			array(
-				'data' => $response->get_data(),
+				'data' => $data,
 				'_wcpos' => $meta,
 			)
 		);
