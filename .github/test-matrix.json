@@ -1,6 +1,6 @@
 {
   "description": "Pinned test matrix versions. Updated automatically by update-test-matrix.yml workflow.",
-  "lastUpdated": "2026-08-13",
+  "lastUpdated": "2026-08-20",
   "php": {
     "minimum": "7.4",
     "stable": "8.2",
@@ -8,8 +8,8 @@
     "experimental": "8.5"
   },
   "wordpress": {
-    "minimum": "6.9.4",
-    "stable": "7.0.4"
+    "minimum": "7.0.4",
+    "stable": "7.1"
   },
   "woocommerce": {
     "minimum": "10.9.4",
