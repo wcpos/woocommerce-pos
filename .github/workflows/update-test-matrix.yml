@@ -254,12 +254,12 @@ jobs:
         run: |
           .github/scripts/sync-tested-up-to.sh
           if [ -n "$(git status --porcelain)" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "wp_tested=$(jq -r '.wordpress.stable' .github/test-matrix.json | cut -d. -f1,2)" >> $GITHUB_OUTPUT
-          echo "wc_tested=$(jq -r '.woocommerce.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "wp_tested=$(jq -r '.wordpress.stable' .github/test-matrix.json | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
+          echo "wc_tested=$(jq -r '.woocommerce.stable' .github/test-matrix.json)" >> "$GITHUB_OUTPUT"
 
       - name: Generate GitHub App token
         if: steps.updates.outputs.needed == 'true' || steps.headers.outputs.changed == 'true'
