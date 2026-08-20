@@ -162,6 +162,23 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * The sequence-log ETag remains a strong, double-quoted opaque tag so
+	 * intermediaries such as nginx preserve it.
+	 */
+	public function test_sequence_log_etag_is_strong_and_double_quoted(): void {
+		// Arrange.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/changes/sequence-log' );
+
+		// Act.
+		$etag = (string) $this->server->dispatch( $request )->get_headers()['ETag'];
+
+		// Assert.
+		$this->assertEquals( '"', substr( $etag, 0, 1 ) );
+		$this->assertEquals( '"', substr( $etag, -1 ) );
+		$this->assertEquals( false, 0 === strpos( $etag, 'W/' ) );
+	}
+
+	/**
 	 * Both polling routes expose the same journal generation marker.
 	 */
 	public function test_tick_and_sequence_log_share_epoch_and_install_changes_it(): void {

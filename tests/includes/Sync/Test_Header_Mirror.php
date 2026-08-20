@@ -133,6 +133,25 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertSame( 422, $bad->get_error_data()['status'] );
 	}
 
+	/**
+	 * Canonical body mirrors remain usable when a proxy blanks both headers.
+	 *
+	 * Built on the literal current-lane write route the mirror guards, so the
+	 * lane-coverage scanner can classify this case.
+	 */
+	public function test_body_mirrors_are_accepted_when_headers_are_blank(): void {
+		// Arrange.
+		$request = new WP_REST_Request( 'POST', '/wcpos/v2/push/products' );
+		$request->set_header( 'Idempotency-Key', '' );
+		$request->set_header( 'If-Match', '' );
+
+		// Act.
+		$result = Header_Mirror::assert( $request, 'mutation-id', 'revision-id' );
+
+		// Assert.
+		$this->assertNull( $result );
+	}
+
 	public function test_if_match_weak_tag_is_unquoted_before_compare(): void {
 		$this->assertNull( Header_Mirror::assert( $this->request( array( 'If-Match' => 'W/"rev-1"' ) ), 'mid', 'rev-1' ) );
 	}
