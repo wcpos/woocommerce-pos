@@ -135,15 +135,15 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 
 	/**
 	 * Canonical body mirrors remain usable when a proxy blanks both headers.
+	 *
+	 * Built on the literal current-lane write route the mirror guards, so the
+	 * lane-coverage scanner can classify this case.
 	 */
 	public function test_body_mirrors_are_accepted_when_headers_are_blank(): void {
 		// Arrange.
-		$request = $this->request(
-			array(
-				'Idempotency-Key' => '',
-				'If-Match'        => '',
-			)
-		);
+		$request = new WP_REST_Request( 'POST', '/wcpos/v2/push/products' );
+		$request->set_header( 'Idempotency-Key', '' );
+		$request->set_header( 'If-Match', '' );
 
 		// Act.
 		$result = Header_Mirror::assert( $request, 'mutation-id', 'revision-id' );
