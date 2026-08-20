@@ -313,6 +313,17 @@ class API {
 	 * @return bool $served
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
+		if ( preg_match( '#^/wcpos/v[12](?:/|$)#', $request->get_route() ) ) {
+			$response_headers = array_change_key_case( $result->get_headers(), CASE_LOWER );
+			$vary_headers     = isset( $response_headers['vary'] ) ? array_map( 'trim', explode( ',', (string) $response_headers['vary'] ) ) : array();
+			$vary_headers     = array_merge( $vary_headers, array( 'Origin', 'Authorization' ) );
+			$vary_headers     = array_change_key_case( array_combine( $vary_headers, $vary_headers ), CASE_LOWER );
+
+			$server->send_header( 'Cache-Control', 'private, no-store' );
+			$server->send_header( 'Vary', implode( ', ', $vary_headers ) );
+			do_action( 'litespeed_control_set_nocache', 'wcpos rest response' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook
+		}
+
 		$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing', 'X-WCPOS-Memory-Peak', 'X-WCPOS-Pressure', 'ETag', 'Date' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
 
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
