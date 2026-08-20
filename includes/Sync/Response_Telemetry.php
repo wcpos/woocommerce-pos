@@ -277,7 +277,7 @@ final class Response_Telemetry {
 	 *
 	 * @return array<int, float|int>
 	 */
-	private static function server_load(): array {
+	public static function server_load(): array {
 		if ( 0 !== stripos( PHP_OS, 'WIN' ) && function_exists( 'sys_getloadavg' ) ) {
 			$load = sys_getloadavg();
 			if ( is_array( $load ) && 3 === count( $load ) ) {
