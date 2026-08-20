@@ -100,6 +100,47 @@ grep -Fqx ' * WC tested up to:   11.1.0' "$PRO_DIR/woocommerce-pos-pro.php" \
   || fail "pro plugin WC tested up to not synced"
 
 # ---------------------------------------------------------------------------
+# Malformed existing values are healed, not silently skipped
+# ---------------------------------------------------------------------------
+HEAL_DIR="$TMP_DIR/heal"
+mkdir "$HEAL_DIR"
+cp "$TMP_DIR/matrix.json" "$HEAL_DIR/matrix.json"
+cat > "$HEAL_DIR/readme.txt" <<'EOF'
+=== Fixture ===
+Tested up to:
+EOF
+cat > "$HEAL_DIR/woocommerce-pos.php" <<'EOF'
+<?php
+/**
+ * Tested up to:      7.0 (unverified)
+ * WC tested up to:   n/a
+ */
+EOF
+(cd "$HEAL_DIR" && "$SYNC_SCRIPT" matrix.json)
+grep -qE '^Tested up to:[[:space:]]*7\.2$' "$HEAL_DIR/readme.txt" \
+  || fail "empty readme.txt value was not healed: $(grep 'Tested up to' "$HEAL_DIR/readme.txt")"
+grep -Fqx ' * Tested up to:      7.2' "$HEAL_DIR/woocommerce-pos.php" \
+  || fail "suffixed plugin value was not healed: $(grep 'Tested up to' "$HEAL_DIR/woocommerce-pos.php")"
+grep -Fqx ' * WC tested up to:   11.1.0' "$HEAL_DIR/woocommerce-pos.php" \
+  || fail "non-numeric WC value was not healed: $(grep 'WC tested' "$HEAL_DIR/woocommerce-pos.php")"
+
+# ---------------------------------------------------------------------------
+# A targeted file missing the header line must fail loudly, not no-op
+# ---------------------------------------------------------------------------
+MISSING_DIR="$TMP_DIR/missing"
+mkdir "$MISSING_DIR"
+cp "$TMP_DIR/matrix.json" "$MISSING_DIR/matrix.json"
+cat > "$MISSING_DIR/woocommerce-pos.php" <<'EOF'
+<?php
+/**
+ * Plugin Name: Fixture without tested-up-to headers
+ */
+EOF
+if (cd "$MISSING_DIR" && "$SYNC_SCRIPT" matrix.json 2>/dev/null); then
+  fail "sync script silently accepted a plugin file with no tested-up-to header"
+fi
+
+# ---------------------------------------------------------------------------
 # Invalid matrix input must fail loudly
 # ---------------------------------------------------------------------------
 echo '{"wordpress":{"stable":""},"woocommerce":{"stable":"11.1.0"}}' > "$TMP_DIR/bad.json"
