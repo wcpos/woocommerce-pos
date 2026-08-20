@@ -302,6 +302,13 @@ class Init {
 	 * @return bool $served
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
+		// WP dispatches REST routes case-insensitively, so this guard must too.
+		// Registered here (not in API) because the relay's consent callback is
+		// served without constructing API — see register_public_relay_routes().
+		if ( preg_match( '#^/wcpos/v[12](?:/|$)#i', $request->get_route() ) ) {
+			$this->send_cache_defeating_headers( $result, $server );
+		}
+
 		if ( 'OPTIONS' == $request->get_method() ) {
 			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing', 'X-WCPOS-Memory-Peak', 'X-WCPOS-Pressure', 'ETag', 'Date' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
 			$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
@@ -331,6 +338,51 @@ class Init {
 		}
 
 		return $served;
+	}
+
+	/**
+	 * Defeat shared caching of WCPOS REST responses.
+	 *
+	 * Hosting layers cache authenticated REST GETs and replay them across
+	 * users (LiteSpeed caches REST by default for 7 days with no
+	 * Authorization bypass; WP Engine's edge cache excludes /wp-json/wc but
+	 * not /wp-json/wcpos; Sucuri's default levels ignore Cache-Control).
+	 *
+	 * Vary is defense-in-depth for intermediaries that ignore no-store but
+	 * honor Vary: Authorization keys the cache per bearer token, and
+	 * X-WCPOS-Store per store scope — the same token requesting different
+	 * X-WCPOS-Store values receives store-specific pricing and taxes, so a
+	 * shared cache entry must not span stores either. Existing Vary tokens
+	 * are preserved (deduped case-insensitively); a wildcard Vary stays
+	 * alone, since '*' is grammatically an alternative to a field list.
+	 *
+	 * @param WP_HTTP_Response $result Result to send to the client.
+	 * @param WP_REST_Server   $server Server instance.
+	 */
+	private function send_cache_defeating_headers( WP_HTTP_Response $result, WP_REST_Server $server ): void {
+		$response_headers = array_change_key_case( $result->get_headers(), CASE_LOWER );
+		$existing_vary    = isset( $response_headers['vary'] )
+			? array_values(
+				array_filter(
+					array_map( 'trim', explode( ',', (string) $response_headers['vary'] ) ),
+					static function ( string $token ): bool {
+						return '' !== $token;
+					}
+				)
+			)
+			: array();
+
+		if ( in_array( '*', $existing_vary, true ) ) {
+			$vary = '*';
+		} else {
+			$vary_tokens = array_merge( $existing_vary, array( 'Origin', 'Authorization', 'X-WCPOS-Store' ) );
+			$vary_tokens = array_change_key_case( array_combine( $vary_tokens, $vary_tokens ), CASE_LOWER );
+			$vary        = implode( ', ', $vary_tokens );
+		}
+
+		$server->send_header( 'Cache-Control', 'private, no-store' );
+		$server->send_header( 'Vary', $vary );
+		do_action( 'litespeed_control_set_nocache', 'wcpos rest response' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook
 	}
 
 	/**
