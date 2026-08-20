@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WCPOS\WooCommercePOS\API as Root_API;
-use WCPOS\WooCommercePOS\API\V2\Ping;
 use WP_HTTP_Response;
 use WP_REST_Request;
 
@@ -78,23 +77,19 @@ final class Response_Envelope {
 				$meta['validator'] = (string) $headers['etag'];
 			}
 		} else {
-			$pressure = isset( $headers['x-wcpos-pressure'] ) ? (string) $headers['x-wcpos-pressure'] : Ping::pressure_bucket();
-			if ( null !== $pressure && '' !== $pressure ) {
-				$meta['pressure'] = $pressure;
+			if ( isset( $headers['x-wcpos-pressure'] ) && '' !== (string) $headers['x-wcpos-pressure'] ) {
+				$meta['pressure'] = (string) $headers['x-wcpos-pressure'];
 			}
 
-			$server_load = isset( $headers['x-server-load'] )
-				? json_decode( (string) $headers['x-server-load'], true )
-				: Response_Telemetry::server_load();
-			if ( is_array( $server_load ) && 3 === count( $server_load ) ) {
-				$meta['server_load'] = array_values( $server_load );
+			if ( isset( $headers['x-server-load'] ) ) {
+				$server_load = json_decode( (string) $headers['x-server-load'], true );
+				if ( is_array( $server_load ) && 3 === count( $server_load ) ) {
+					$meta['server_load'] = array_values( $server_load );
+				}
 			}
 
-			$memory_peak = isset( $headers['x-wcpos-memory-peak'] )
-				? (int) $headers['x-wcpos-memory-peak']
-				: memory_get_peak_usage( true );
-			if ( $memory_peak >= 0 ) {
-				$meta['memory_peak_bytes'] = $memory_peak;
+			if ( isset( $headers['x-wcpos-memory-peak'] ) && (int) $headers['x-wcpos-memory-peak'] >= 0 ) {
+				$meta['memory_peak_bytes'] = (int) $headers['x-wcpos-memory-peak'];
 			}
 		}
 

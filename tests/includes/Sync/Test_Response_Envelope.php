@@ -184,6 +184,9 @@ class Test_Response_Envelope extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertEquals( $body, $marked_response->get_data()['data'] );
 		$this->assertEquals( 1, $marked_response->get_data()['_wcpos']['v'] );
+		$this->assertArrayNotHasKey( 'pressure', $marked_response->get_data()['_wcpos'] );
+		$this->assertArrayNotHasKey( 'server_load', $marked_response->get_data()['_wcpos'] );
+		$this->assertArrayNotHasKey( 'memory_peak_bytes', $marked_response->get_data()['_wcpos'] );
 		$this->assertEquals( $body, $unmarked_response->get_data() );
 	}
 
