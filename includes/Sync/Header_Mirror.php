@@ -43,11 +43,6 @@ final class Header_Mirror {
 		return null;
 	}
 
-	/** Backward-compatible alias for the shared sync CORS allow-list. */
-	public static function allow_cors_headers( array $headers ): array {
-		return Cors::allow_headers( $headers );
-	}
-
 	private static function header_value( WP_REST_Request $request, string $name ): ?string {
 		$value = $request->get_header( $name );
 		if ( null === $value ) {

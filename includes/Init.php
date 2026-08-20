@@ -324,6 +324,10 @@ class Init {
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
 			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
 			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', $allow_headers ) );
+			// Without this the Fetch spec caches a preflight for only FIVE
+			// seconds, so every cross-origin POS request is two requests.
+			// 7200 is Chromium's cap (Firefox allows 86400).
+			$server->send_header( 'Access-Control-Max-Age', '7200' );
 		}
 
 		return $served;

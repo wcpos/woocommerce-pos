@@ -292,11 +292,10 @@ class API {
 	public function rest_allowed_cors_headers( array $allow_headers ): array {
 		$allow_headers[] = 'X-WCPOS';
 		$allow_headers[] = 'X-HTTP-Method-Override';
-		$allow_headers[] = 'X-WCPOS-Idempotency-Key';
 
-		// The sync-lane headers (store scope, write mirror, conditional
-		// polling) live in one shared set — see Sync\Cors for why both this
-		// filter and Init's preflight handler must carry all of them.
+		// The POS-client headers (store scope, idempotency, write mirror,
+		// conditional polling) live in one shared set — see Sync\Cors for why
+		// both this filter and Init's preflight handler must carry all of them.
 		return \WCPOS\WooCommercePOS\Sync\Cors::allow_headers( $allow_headers );
 	}
 

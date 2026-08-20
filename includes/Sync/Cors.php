@@ -34,11 +34,13 @@ namespace WCPOS\WooCommercePOS\Sync;
  */
 final class Cors {
 	/**
-	 * Sync-lane request headers beyond WP core's CORS defaults.
+	 * POS-client request headers beyond WP core's CORS defaults.
 	 *
-	 * - `Idempotency-Key` / `If-Match` — the write path's standard-header
+	 * - `Idempotency-Key` / `If-Match` — the v2 write path's standard-header
 	 *   mirror ({@see Header_Mirror::HEADERS}).
 	 * - `If-None-Match` — conditional sequence-log polling (304s).
+	 * - `X-WCPOS-Idempotency-Key` — the checkout/refund lane's idempotency
+	 *   key (v1-shaped, predates the ADR 0011 mirror).
 	 * - `X-WCPOS-Store` — the till's store scope ({@see Store_Scope::HEADER},
 	 *   pro#425).
 	 *
@@ -47,7 +49,11 @@ final class Cors {
 	public static function headers(): array {
 		return array_merge(
 			Header_Mirror::HEADERS,
-			array( 'If-None-Match', Store_Scope::HEADER )
+			array(
+				'If-None-Match',
+				'X-WCPOS-Idempotency-Key',
+				Store_Scope::HEADER,
+			)
 		);
 	}
 
