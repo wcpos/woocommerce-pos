@@ -56,6 +56,7 @@ final class Api {
 	 */
 	public static function register_controllers( array $controllers ): array {
 		Response_Telemetry::register_hooks();
+		Retry_After_Mirror::register_hooks();
 		Response_Envelope::register_hooks();
 		$controllers['sync-status']     = Status_Controller::class;
 		$controllers['sync-catalog']    = Catalog_Proxy_Controller::class;
