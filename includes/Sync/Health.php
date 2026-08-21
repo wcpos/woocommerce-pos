@@ -14,6 +14,8 @@ final class Health {
 	public const SYNC_JOURNAL_TABLE  = 'wcpos_sync_journal';
 	public const STORED_DIGEST_TABLE = 'wcpos_sync_stored_digest';
 	public const MUTATIONS_TABLE     = 'wcpos_sync_mutations';
+	/** Schema-install retry hint exposed to WCPOS clients. */
+	public const RETRY_AFTER_SECONDS = 30;
 
 	/**
 	 * Check whether a database table exists.
@@ -73,7 +75,10 @@ final class Health {
 		return new \WP_Error(
 			'wcpos_sync_unavailable',
 			__( 'The WCPOS sync store is not installed yet (initialising or a schema install failed). Retry shortly.', 'woocommerce-pos' ),
-			array( 'status' => 503 )
+			array(
+				'status'              => 503,
+				'retry_after_seconds' => self::RETRY_AFTER_SECONDS,
+			)
 		);
 	}
 }
