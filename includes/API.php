@@ -201,6 +201,7 @@ class API {
 			'woocommerce_pos_rest_api_v2_controllers',
 			array(
 				'ping'              => API\V2\Ping::class,
+				'echo_probe'        => API\V2\Echo_Probe::class,
 				'site'              => API\V2\Site::class,
 				'auth'              => API\V2\Auth::class,
 				'settings'          => API\V2\Settings::class,
