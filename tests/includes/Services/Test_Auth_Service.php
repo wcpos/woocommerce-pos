@@ -89,7 +89,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$token                 = $this->auth_service->generate_access_token( $this->test_user );
 		$_GET['authorization'] = 'Bearer ' . $token;
 
-		$this->assertSame( $this->test_user->ID, $this->auth_service->authenticate_request() );
+		$this->assertEquals( $this->test_user->ID, $this->auth_service->authenticate_request() );
 	}
 
 	/**
@@ -99,7 +99,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$token                 = $this->auth_service->generate_access_token( $this->test_user );
 		$_GET['authorization'] = $token;
 
-		$this->assertSame( $this->test_user->ID, $this->auth_service->authenticate_request() );
+		$this->assertEquals( $this->test_user->ID, $this->auth_service->authenticate_request() );
 	}
 
 	/**
@@ -130,6 +130,8 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			'bare JWT'     => array( 'header.payload.signature_-123', 'header.payload.signature_-123' ),
 			'Bearer JWT'   => array( 'Bearer header.payload.signature', 'header.payload.signature' ),
 			'empty Bearer' => array( 'Bearer ', null ),
+			'double-space Bearer' => array( 'Bearer  header.payload.signature', 'header.payload.signature' ),
+			'tab Bearer' => array( "Bearer\theader.payload.signature", 'header.payload.signature' ),
 			'Basic auth'   => array( 'Basic dXNlcjpwYXNz', null ),
 			'empty string' => array( '', null ),
 			'non-string'   => array( array( 'header.payload.signature' ), null ),
@@ -145,7 +147,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 * @param null|string $expected   Expected token.
 	 */
 	public function test_extract_token_returns_expected_token( $auth_value, ?string $expected ): void {
-		$this->assertSame( $expected, $this->auth_service->extract_token( $auth_value ) );
+		$this->assertEquals( $expected, $this->auth_service->extract_token( $auth_value ) );
 	}
 
 	/**

@@ -59,10 +59,10 @@ class Auth {
 			return null;
 		}
 
-		if ( 0 === strpos( $auth_value, 'Bearer ' ) ) {
-			$token = substr( $auth_value, 7 );
-
-			return '' !== $token ? $token : null;
+		// Match the old sscanf( 'Bearer %s' ) semantics exactly: any run of
+		// whitespace after the scheme, token = the next non-whitespace run.
+		if ( 1 === preg_match( '/^Bearer\s+(\S+)/', $auth_value, $matches ) ) {
+			return $matches[1];
 		}
 
 		return 1 === preg_match( '/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/', $auth_value ) ? $auth_value : null;
