@@ -105,7 +105,9 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 	 *
 	 * @param string $header The raw header value.
 	 */
-	public function test_resolve_does_not_fall_back_to_the_store_id_param_for_v2( string $header ): void {
+	public function test_resolve_does_not_fall_back_to_the_store_id_param_for_a_sent_but_unusable_v2_header( string $header ): void {
+		// #1558 review ruling: a header that WAS sent but is unusable stamps
+		// nothing — only true absence (a stripping proxy) invites the param.
 		$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
 		$request->set_header( Store_Scope::HEADER, $header );
 		$request->set_param( 'store_id', '9' );
@@ -113,11 +115,14 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 		$this->assertNull( Store_Scope::resolve( $request ) );
 	}
 
-	public function test_resolve_does_not_fall_back_to_the_store_id_param_when_v2_header_is_absent(): void {
+	public function test_resolve_falls_back_to_the_store_id_param_when_v2_header_is_absent(): void {
+		// Hostile-headers B6 (wcpos-infra#72): a proxy that strips
+		// X-WCPOS-Store produces ABSENCE, and the till republishes its scope
+		// as a param the proxy cannot touch.
 		$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
 		$request->set_param( 'store_id', '9' );
 
-		$this->assertNull( Store_Scope::resolve( $request ) );
+		$this->assertEquals( 9, Store_Scope::resolve( $request ) );
 	}
 
 	public function test_resolve_prefers_the_header_over_the_param(): void {
@@ -223,7 +228,7 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 	 * @param null|string $header The raw v2 scope header, or null when absent.
 	 * @param null|int    $expected The authoritative scope expected downstream.
 	 */
-	public function test_the_catalog_proxy_does_not_forward_a_legacy_scope_from_the_query( ?string $header, ?int $expected ): void {
+	public function test_the_catalog_proxy_forwards_the_query_scope_only_when_the_header_is_absent( ?string $header, ?int $expected ): void {
 		$this->capture_product_scope();
 		ProductHelper::create_simple_product();
 
@@ -244,7 +249,9 @@ class Test_Store_Scope extends Sync_REST_Store_Test_Case {
 	 */
 	public function provide_catalog_headers_with_legacy_scope(): array {
 		return array(
-			'absent header'    => array( null, null ),
+			// Absence = a stripping proxy: the query fallback carries the scope
+			// (hostile-headers B6). Sent-but-malformed stamps nothing (#1558).
+			'absent header'    => array( null, 9 ),
 			'malformed header' => array( 'store-9', null ),
 			'valid header'     => array( '7', 7 ),
 		);
