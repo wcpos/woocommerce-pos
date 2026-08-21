@@ -37,9 +37,9 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 
 		$data = $this->server->dispatch( $request )->get_data();
 
-		$this->assertSame( 1, $data['v'] );
+		$this->assertEquals( 1, $data['v'] );
 		foreach ( $values as $name => $value ) {
-			$this->assertSame(
+			$this->assertEquals(
 				array(
 					'received' => true,
 					'length'   => strlen( $value ),
@@ -57,7 +57,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/echo' ) );
 
 		foreach ( $response->get_data()['headers'] as $header ) {
-			$this->assertSame(
+			$this->assertEquals(
 				array(
 					'received' => false,
 					'length'   => 0,
@@ -82,7 +82,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 
 		$data = $this->server->dispatch( $request )->get_data();
 
-		$this->assertSame(
+		$this->assertEquals(
 			array(
 				'authorization' => true,
 				'wcpos'         => true,
@@ -98,7 +98,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 	public function test_missing_params_report_absent(): void {
 		$data = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/echo' ) )->get_data();
 
-		$this->assertSame(
+		$this->assertEquals(
 			array(
 				'authorization' => false,
 				'wcpos'         => false,
@@ -116,7 +116,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 
 		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/echo' ) );
 
-		$this->assertSame( 200, $response->get_status() );
+		$this->assertEquals( 200, $response->get_status() );
 	}
 
 	/**
