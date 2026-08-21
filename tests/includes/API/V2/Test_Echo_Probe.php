@@ -71,12 +71,19 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 	 * Apache CGI's REDIRECT_HTTP_AUTHORIZATION counts as header arrival.
 	 */
 	public function test_redirect_http_authorization_reports_received(): void {
+		$had_redirect      = array_key_exists( 'REDIRECT_HTTP_AUTHORIZATION', $_SERVER );
+		$previous_redirect = $had_redirect ? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] : null;
+
 		$_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Bearer redirected-token';
 
 		try {
 			$data = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/echo' ) )->get_data();
 		} finally {
-			unset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+			if ( $had_redirect ) {
+				$_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = $previous_redirect;
+			} else {
+				unset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+			}
 		}
 
 		$this->assertEquals(
