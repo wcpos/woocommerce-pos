@@ -48,17 +48,35 @@ class Auth {
 	}
 
 	/**
-	 * Authenticate the current request from its Bearer token.
+	 * Extract a WCPOS token from an authorization value.
 	 *
-	 * @return false|int|WP_Error User ID, validation error, or false when no Bearer token is present.
+	 * @param mixed $auth_value Authorization value.
+	 *
+	 * @return null|string
+	 */
+	public function extract_token( $auth_value ): ?string {
+		if ( ! \is_string( $auth_value ) || '' === $auth_value ) {
+			return null;
+		}
+
+		if ( 0 === strpos( $auth_value, 'Bearer ' ) ) {
+			$token = substr( $auth_value, 7 );
+
+			return '' !== $token ? $token : null;
+		}
+
+		return 1 === preg_match( '/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/', $auth_value ) ? $auth_value : null;
+	}
+
+	/**
+	 * Authenticate the current request from its WCPOS token.
+	 *
+	 * @return false|int|WP_Error User ID, validation error, or false when no WCPOS token is present.
 	 */
 	public function authenticate_request() {
 		$auth_header = $this->get_auth_header();
-		if ( ! \is_string( $auth_header ) ) {
-			return false;
-		}
-		list( $token ) = sscanf( $auth_header, 'Bearer %s' );
-		if ( ! $token ) {
+		$token       = $this->extract_token( $auth_header );
+		if ( null === $token ) {
 			return false;
 		}
 

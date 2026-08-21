@@ -256,12 +256,12 @@ final class Core_Order_Audit_Guard {
 	}
 
 	/**
-	 * Whether the current request was authenticated by a WCPOS Bearer token.
+	 * Whether the current request was authenticated by a WCPOS token.
 	 *
 	 * Authentication filters before WCPOS's priority-20 filter retain provenance
 	 * for cookie and other credentials. If determine_current_user was skipped
 	 * because the user was already loaded, that also represents prior auth.
-	 * Otherwise, re-validate the Bearer token and require it to resolve to the
+	 * Otherwise, re-validate the token and require it to resolve to the
 	 * current user.
 	 *
 	 * @return bool
@@ -280,12 +280,13 @@ final class Core_Order_Audit_Guard {
 			return false;
 		}
 
-		list( $token ) = sscanf( $auth_header, 'Bearer %s' );
-		if ( ! $token ) {
+		$auth_service = Auth::instance();
+		$token        = $auth_service->extract_token( $auth_header );
+		if ( null === $token ) {
 			return false;
 		}
 
-		$decoded = Auth::instance()->validate_token( $token );
+		$decoded = $auth_service->validate_token( $token );
 		if ( is_wp_error( $decoded ) ) {
 			return false;
 		}
