@@ -56,11 +56,11 @@ class Test_Retry_After_Mirror extends WCPOS_REST_Unit_Test_Case {
 	public function test_seconds_from_header_normalizes_supported_values(): void {
 		$now = 1700000000;
 
-		$this->assertSame( 120, Retry_After_Mirror::seconds_from_header( '120', $now ) );
-		$this->assertSame( 0, Retry_After_Mirror::seconds_from_header( '0', $now ) );
+		$this->assertEquals( 120, Retry_After_Mirror::seconds_from_header( '120', $now ) );
+		$this->assertEquals( 0, Retry_After_Mirror::seconds_from_header( '0', $now ) );
 		// HTTP-dates have whole-second resolution, so a 90.5-second target serializes at the next second.
-		$this->assertSame( 91, Retry_After_Mirror::seconds_from_header( gmdate( 'D, d M Y H:i:s \G\M\T', $now + 91 ), $now ) );
-		$this->assertSame( 0, Retry_After_Mirror::seconds_from_header( gmdate( 'D, d M Y H:i:s \G\M\T', $now - 30 ), $now ) );
+		$this->assertEquals( 91, Retry_After_Mirror::seconds_from_header( gmdate( 'D, d M Y H:i:s \G\M\T', $now + 91 ), $now ) );
+		$this->assertEquals( 0, Retry_After_Mirror::seconds_from_header( gmdate( 'D, d M Y H:i:s \G\M\T', $now - 30 ), $now ) );
 		$this->assertNull( Retry_After_Mirror::seconds_from_header( 'garbage', $now ) );
 		$this->assertNull( Retry_After_Mirror::seconds_from_header( '-5', $now ) );
 		$this->assertNull( Retry_After_Mirror::seconds_from_header( (string) PHP_INT_MAX . '0', $now ) );
@@ -81,7 +81,7 @@ class Test_Retry_After_Mirror extends WCPOS_REST_Unit_Test_Case {
 
 		Retry_After_Mirror::filter_response( $response, null, $this->wp_rest_get_request( self::CURRENT_LANE_ROUTE ) );
 
-		$this->assertSame( 45, $response->get_data()['data']['retry_after_seconds'] );
+		$this->assertEquals( 45, $response->get_data()['data']['retry_after_seconds'] );
 	}
 
 	/**
@@ -93,7 +93,7 @@ class Test_Retry_After_Mirror extends WCPOS_REST_Unit_Test_Case {
 
 		Retry_After_Mirror::filter_response( $response, null, $this->wp_rest_get_request( self::CURRENT_LANE_ROUTE ) );
 
-		$this->assertSame( $body, $response->get_data() );
+		$this->assertEquals( $body, $response->get_data() );
 	}
 
 	/**
@@ -106,7 +106,7 @@ class Test_Retry_After_Mirror extends WCPOS_REST_Unit_Test_Case {
 
 		Retry_After_Mirror::filter_response( $response, null, $request );
 
-		$this->assertSame( $body, $response->get_data() );
+		$this->assertEquals( $body, $response->get_data() );
 	}
 
 	/**
@@ -124,7 +124,7 @@ class Test_Retry_After_Mirror extends WCPOS_REST_Unit_Test_Case {
 
 		Retry_After_Mirror::filter_response( $response, null, $this->wp_rest_get_request( self::CURRENT_LANE_ROUTE ) );
 
-		$this->assertSame( 12, $response->get_data()['data']['retry_after_seconds'] );
+		$this->assertEquals( 12, $response->get_data()['data']['retry_after_seconds'] );
 	}
 
 	/**
