@@ -81,8 +81,11 @@ final class Store_Scope {
 	/**
 	 * Resolve the store scope of an incoming WCPOS request.
 	 *
-	 * The header is authoritative for the v2 lane; the `store_id` param is only
-	 * honoured on the v1 lane, where it is the wire form of the scope.
+	 * A usable header always wins. When NO header arrived at all, the
+	 * `store_id` param is honoured on both lanes — v1's native wire form, and
+	 * the v2 fallback for hosts that strip the header (hostile-headers B6,
+	 * wcpos-infra#72). A header that was sent but is unusable still resolves
+	 * to UNKNOWN on v2 — see the ruling in the resolve() body.
 	 *
 	 * @param WP_REST_Request $request The incoming request.
 	 *
@@ -96,7 +99,16 @@ final class Store_Scope {
 			return $scope;
 		}
 
-		if ( 0 !== strpos( $request->get_route(), '/wcpos/v1/' ) ) {
+		// Absent and malformed are different signals (#1558 review ruling):
+		// only a header that never arrived invites another wire form. A header
+		// that WAS sent but is unusable stamps NOTHING — the caller believes it
+		// named a store, and substituting a scope from elsewhere would land the
+		// write somewhere it did not name. Hostile hosts STRIP the header
+		// (absence), so the hostile case is exactly the one the param covers
+		// (hostile-headers B6, wcpos-infra#72). The v1 lane keeps its legacy
+		// behavior: the param IS its native wire form.
+		$is_v1 = 0 === strpos( $request->get_route(), '/wcpos/v1/' );
+		if ( ! $is_v1 && null !== $header ) {
 			return null;
 		}
 
