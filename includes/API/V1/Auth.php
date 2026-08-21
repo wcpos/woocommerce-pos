@@ -570,16 +570,15 @@ class Auth extends WP_REST_Controller {
 			return null;
 		}
 
-		// Extract token from "Bearer TOKEN".
-		$token = str_replace( 'Bearer ', '', $auth_header );
+		$auth_service = AuthService::instance();
+		$token        = $auth_service->extract_token( $auth_header );
 
-		if ( empty( $token ) ) {
+		if ( null === $token ) {
 			return null;
 		}
 
 		// Try to decode as refresh token first.
-		$auth_service = AuthService::instance();
-		$decoded      = $auth_service->validate_token( $token, 'refresh' );
+		$decoded = $auth_service->validate_token( $token, 'refresh' );
 
 		if ( ! is_wp_error( $decoded ) ) {
 			return $decoded->jti ?? null;

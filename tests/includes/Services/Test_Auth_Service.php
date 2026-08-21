@@ -85,11 +85,69 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	/**
 	 * Authenticate_request reads the authorization query parameter.
 	 */
-	public function test_authenticate_request_accepts_authorization_query_parameter(): void {
+	public function test_authenticate_request_accepts_bearer_authorization_query_parameter(): void {
 		$token                 = $this->auth_service->generate_access_token( $this->test_user );
 		$_GET['authorization'] = 'Bearer ' . $token;
 
-		$this->assertSame( $this->test_user->ID, $this->auth_service->authenticate_request() );
+		$this->assertEquals( $this->test_user->ID, $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request accepts a bare JWT in the authorization query parameter.
+	 */
+	public function test_authenticate_request_accepts_bare_jwt_authorization_query_parameter(): void {
+		$token                 = $this->auth_service->generate_access_token( $this->test_user );
+		$_GET['authorization'] = $token;
+
+		$this->assertEquals( $this->test_user->ID, $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request ignores Basic credentials for other authentication plugins.
+	 */
+	public function test_authenticate_request_returns_false_for_basic_authorization_header(): void {
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Basic dXNlcjpwYXNz';
+
+		$this->assertFalse( $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authenticate_request rejects a bare value that is not shaped like a JWT.
+	 */
+	public function test_authenticate_request_returns_false_for_bare_non_jwt_value(): void {
+		$_GET['authorization'] = 'not-a-jwt';
+
+		$this->assertFalse( $this->auth_service->authenticate_request() );
+	}
+
+	/**
+	 * Authorization values and their expected extracted tokens.
+	 *
+	 * @return array<string, array{mixed, null|string}>
+	 */
+	public function extract_token_provider(): array {
+		return array(
+			'bare JWT'     => array( 'header.payload.signature_-123', 'header.payload.signature_-123' ),
+			'Bearer JWT'   => array( 'Bearer header.payload.signature', 'header.payload.signature' ),
+			'empty Bearer' => array( 'Bearer ', null ),
+			'double-space Bearer' => array( 'Bearer  header.payload.signature', 'header.payload.signature' ),
+			'tab Bearer' => array( "Bearer\theader.payload.signature", 'header.payload.signature' ),
+			'Basic auth'   => array( 'Basic dXNlcjpwYXNz', null ),
+			'empty string' => array( '', null ),
+			'non-string'   => array( array( 'header.payload.signature' ), null ),
+		);
+	}
+
+	/**
+	 * Extract_token accepts only Bearer credentials and bare JWT-shaped values.
+	 *
+	 * @dataProvider extract_token_provider
+	 *
+	 * @param mixed       $auth_value Authorization value.
+	 * @param null|string $expected   Expected token.
+	 */
+	public function test_extract_token_returns_expected_token( $auth_value, ?string $expected ): void {
+		$this->assertEquals( $expected, $this->auth_service->extract_token( $auth_value ) );
 	}
 
 	/**
