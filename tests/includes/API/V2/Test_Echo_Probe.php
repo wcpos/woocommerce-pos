@@ -68,6 +68,28 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Apache CGI's REDIRECT_HTTP_AUTHORIZATION counts as header arrival.
+	 */
+	public function test_redirect_http_authorization_reports_received(): void {
+		$_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Bearer redirected-token';
+
+		try {
+			$data = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/echo' ) )->get_data();
+		} finally {
+			unset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+		}
+
+		$this->assertEquals(
+			array(
+				'received' => true,
+				'length'   => strlen( 'Bearer redirected-token' ),
+			),
+			$data['headers']['authorization']
+		);
+		$this->assertStringNotContainsString( 'redirected-token', wp_json_encode( $data ) );
+	}
+
+	/**
 	 * Non-empty fallback query parameters report their presence.
 	 */
 	public function test_non_empty_params_report_present(): void {
