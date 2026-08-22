@@ -10,6 +10,14 @@
 - Added: `woocommerce_pos_consent_copy` filter so the tracking-consent prompt copy can be overridden.
 - Added: `woocommerce_pos_get_anon_id()` accessor (used by the Pro licence-activation request).
 
+### 🖨️ Barcode printing fixes
+
+- **Fixed:** thermal receipts now print the barcode symbology the template asks for. The ESC/POS and StarPRNT lanes ignored `<barcode type="…">` entirely and printed everything as Code 128 — so a template specifying EAN-13, UPC-A, ITF or Codabar produced a Code 128 barcode instead.
+- **Fixed:** ESC/POS Code 128 barcodes were sent without the code-set selector Epson's `GS k` command requires. Genuine Epson hardware prints nothing at all in that case and reports no error; many clones auto-select, which is why this went unnoticed. Code 128 barcodes now carry the selector.
+- **Fixed:** the ePOS-Print XML lane emitted `upca` / `upce`, which Epson's `<barcode>` element rejects. It now emits `upc_a` / `upc_e`.
+- **Fixed:** a `<barcode type="qr">` rendered noticeably smaller in the on-screen template preview than it printed. Preview and print now agree.
+- **Changed:** if a barcode value does not satisfy the rules of the symbology it declares (for example a non-numeric EAN-13, or an odd-length ITF), thermal lanes now print the value as plain text instead of silently substituting a scannable Code 128. Merchants relying on the old fallback will see text where they previously got a barcode — the template's symbology or its value needs correcting.
+
 ---
 
 ## 🧾 Receipt Templates — Complete Rebuild
