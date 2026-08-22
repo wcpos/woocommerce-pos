@@ -585,6 +585,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+		$current_data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v2/settings/cloud-print' ) )->get_data();
 
 		// Assert.
 		$this->assertEquals(
@@ -595,6 +596,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 			),
 			$data['relay']
 		);
+		$this->assertSame( $data['relay'], $current_data['relay'] );
 	}
 
 	/**
