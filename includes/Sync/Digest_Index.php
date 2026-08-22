@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Queries use internal table names and generated SQL fragments.
 
@@ -35,12 +37,18 @@ namespace WCPOS\WooCommercePOS\Sync;
 final class Digest_Index {
 
 	/**
-	 * Postmeta keys covered by the product/variation digest. Must include every key the
+	 * Legacy baseline of postmeta keys covered by the product/variation digest. Must include every key the
 	 * sql-bypass fixture mutates (_price and _regular_price today — see
 	 * class-fixtures-controller.php sql_bypass()) plus the keys a
 	 * hook-bypassing import/inventory tool plausibly touches.
 	 */
 	public const DIGESTED_META_KEYS = array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
+
+	/**
+	 * Option recording the key set the STORED digests were computed from.
+	 * Never autoloaded — read only on the scan path. See {@see digest_formula_fingerprint}.
+	 */
+	public const FORMULA_FP_OPTION = 'wcpos_integrity_digest_formula_fp';
 
 	/**
 	 * Customer usermeta folded into the digest (ADR 0015, Leg-3 phase 7). Kept small + stable —
@@ -68,6 +76,79 @@ final class Digest_Index {
 
 	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
 	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
+
+	/**
+	 * Request-level memo for {@see digested_meta_keys}, KEYED BY BLOG ID. The hook write path
+	 * recomputes the digest on every product save, and the barcode key costs an option read to
+	 * resolve, so the set is resolved once per blog per request. Deliberately NOT invalidated
+	 * when the setting changes mid-request: every digest written during one request must use
+	 * ONE key set, or the stored side of a single request disagrees with itself.
+	 *
+	 * The blog-id key is load-bearing on multisite (the plugin network-activates). `barcode_field`
+	 * is a per-site option and `Abstract_Section::read()` re-reads it uncached, so the SETTING
+	 * follows switch_to_blog() correctly — a process-wide memo would not, and a batch that walks
+	 * sites would then digest site B's products under site A's barcode key: the stored side would
+	 * silently cover the wrong meta key, which is the exact staleness this class exists to catch.
+	 *
+	 * @var array<int, string[]>
+	 */
+	private static array $memoized_digested_meta_keys = array();
+
+	/**
+	 * The postmeta keys the product/variation digest ACTUALLY covers: the legacy baseline plus
+	 * the site's configured WCPOS barcode key (mono#1234).
+	 *
+	 * The barcode field is merchant-configurable to any meta key, and only `_sku` /
+	 * `_global_unique_id` are baseline keys. A custom carrier key was therefore undigested:
+	 * a hookless write to it (importer, direct SQL, inventory tool) produced no journal row
+	 * and no digest mismatch, so a till's barcodes went stale INDEFINITELY — the one field
+	 * cashiers key on. Folding the configured key in closes that at tier-2 latency.
+	 *
+	 * Sorted so the set has ONE spelling, which is what makes
+	 * {@see digest_formula_fingerprint} stable across requests.
+	 *
+	 * @return string[]
+	 */
+	public static function digested_meta_keys(): array {
+		$blog_id = get_current_blog_id();
+		if ( ! isset( self::$memoized_digested_meta_keys[ $blog_id ] ) ) {
+			$keys = array_values( array_unique( array_merge( self::DIGESTED_META_KEYS, array( Barcode_Field::meta_key() ) ) ) );
+			sort( $keys );
+			self::$memoized_digested_meta_keys[ $blog_id ] = $keys;
+		}
+
+		return self::$memoized_digested_meta_keys[ $blog_id ];
+	}
+
+	/**
+	 * Fingerprint of the key set the digest formula currently uses.
+	 *
+	 * Stored and live digests are only comparable when BOTH were computed from the same key
+	 * set. Change the set without rebuilding and every stored digest is an old-formula value:
+	 * every bucket mismatches at once and the merchant sees a store-wide false "N records need
+	 * attention" for data that is already correct. So the set that produced the stored digests
+	 * is recorded (by {@see \WCPOS\WooCommercePOS\Sync\Integrity_Digest::rebuild}) and
+	 * compared on scan.
+	 */
+	public static function digest_formula_fingerprint(): string {
+		return md5( implode( ',', self::digested_meta_keys() ) );
+	}
+
+	/**
+	 * Fingerprint of the BARE baseline — the formula every install used before mono#1234.
+	 *
+	 * The upgrade path must not flood. Installs upgrading into this code have no recorded
+	 * fingerprint, and assuming the worst would schedule a rebuild on every store. A default
+	 * store (barcode = `_sku` or `_global_unique_id`, both already baseline keys) has an
+	 * unchanged set, so seeding the missing option with THIS value rebuilds only the stores
+	 * whose formula genuinely moved: the custom-carrier ones.
+	 */
+	public static function legacy_formula_fingerprint(): string {
+		$keys = self::DIGESTED_META_KEYS;
+		sort( $keys );
+
+		return md5( implode( ',', $keys ) );
+	}
 
 	/**
 	 * The POS servable-set contract (ADR 0014 WP-M5). Injectable for tests; the
@@ -105,7 +186,7 @@ final class Digest_Index {
 	 * computes the digest with the byte-identical expression.
 	 *
 	 * 64-bit digest — CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', ...)),1,16),16,10) AS UNSIGNED) — over the wp_posts content columns plus
-	 * the DIGESTED_META_KEYS rows (key=value pairs ordered by meta_key then
+	 * the {@see digested_meta_keys} rows (key=value pairs ordered by meta_key then
 	 * meta_id, so duplicate meta rows digest deterministically). Every
 	 * nullable operand is COALESCE'd because CONCAT_WS silently SKIPS NULL
 	 * arguments — ('a', NULL, 'b') would collide with ('a', 'b', '') —
@@ -118,7 +199,12 @@ final class Digest_Index {
 	 */
 	public function row_digest_select_sql( string $where_sql = '' ): string {
 		global $wpdb;
-		$meta_keys_sql = "('" . implode( "','", self::DIGESTED_META_KEYS ) . "')";
+		// esc_sql because one of these keys is merchant-settable free text: the
+		// `barcode_field` setting's REST validator accepts any string, so an
+		// apostrophe would otherwise terminate the IN list — breaking EVERY digest
+		// query (hook upsert and scan alike) and taking the integrity backstop down
+		// with it. The baseline keys are literals; the barcode key is not.
+		$meta_keys_sql = "('" . implode( "','", array_map( 'esc_sql', self::digested_meta_keys() ) ) . "')";
 
 		return 'SELECT p.ID AS id,'
 			. " CASE WHEN p.post_type = 'product_variation' THEN 'variation' ELSE 'product' END AS object_type,"

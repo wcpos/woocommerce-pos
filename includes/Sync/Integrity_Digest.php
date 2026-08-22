@@ -50,7 +50,11 @@ final class Integrity_Digest {
 	 */
 	public static float $request_write_ms = 0.0;
 
-	/** @see Digest_Index::DIGESTED_META_KEYS The digest formula's home. */
+	/**
+	 * @see Digest_Index::DIGESTED_META_KEYS The BASELINE key set.
+	 * The formula the digest actually uses is Digest_Index::digested_meta_keys(),
+	 * which folds in the configured barcode key (mono#1234).
+	 */
 	public const DIGESTED_META_KEYS = Digest_Index::DIGESTED_META_KEYS;
 
 	/** @see Digest_Index::CUSTOMER_DIGESTED_META_KEYS The digest formula's home. */
@@ -685,6 +689,7 @@ final class Integrity_Digest {
 		if ( false === $writes ) {
 			throw new RuntimeException( 'rebuild stored digests failed: ' . $wpdb->last_error );
 		}
+		update_option( Digest_Index::FORMULA_FP_OPTION, Digest_Index::digest_formula_fingerprint(), false );
 
 		if ( $products_only ) {
 			$stored_total = (int) $wpdb->get_var(
