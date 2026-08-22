@@ -103,6 +103,19 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 'wcpos_insufficient_stock', $response->get_data()['code'] );
 		$this->assertSame( 1.0, (float) wc_get_product( $product->get_id() )->get_stock_quantity() );
+
+		// And the rejected create must not have taken the OTHER order's hold with it
+		// on the way out. Stock being unchanged is not enough: a rollback that
+		// released someone else's reservation would leave the unit unheld and the
+		// next checkout free to oversell it.
+		global $wpdb;
+		$held = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT order_id FROM {$wpdb->wc_reserved_stock} WHERE product_id = %d",
+				$product->get_id()
+			)
+		);
+		$this->assertSame( array( $other->get_id() ), array_map( 'intval', $held ), 'the other order keeps its hold' );
 	}
 
 	/**
