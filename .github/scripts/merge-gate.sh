@@ -255,12 +255,17 @@ trailer_block_has_tested() {
   printf '%s\n' "$1" | awk -v require_php="$require_php" '
     BEGIN {
       block = ""
-      split("delegated|unavailable|not initialized|not initialised|could not start|could not run|did not run|not run locally|n/a", admits_skipped, "|")
+      # NOTE: bare "skipped" is deliberately NOT here. PHPUnit prints its own
+      # "Skipped: 6" in a genuine result line, so it would reject real runs. The
+      # entries below name the SUITE being skipped, which a real result never does.
+      split("delegated|unavailable|not initialized|not initialised|could not start|failed to start|could not run|did not run|not run|not executed|unable to run|suite skipped|phpunit skipped|n/a", admits_skipped, "|")
     }
     /^[[:space:]]*$/ { block = ""; next }
     { block = block $0 "\n" }
     END {
-      if (match(block, /(^|\n)Tested:[^\n]*/) == 0) exit 1
+      # The WHOLE trailer, not just its first physical line: an admission on a
+      # continuation line would otherwise sit outside the scanned value.
+      if (match(block, /(^|\n)Tested:[^\n]*(\n[^\n]*)*/) == 0) exit 1
       value = substr(block, RSTART, RLENGTH)
       sub(/(^|\n)Tested:[[:space:]]*/, "", value)
       if (length(value) < 8 || value !~ /[0-9]/) exit 1
@@ -339,6 +344,13 @@ enforce_bot_fix_discipline() {
         has_config=true
       fi
     done <<< "$files"
+    # Before the source/config exemption, not after: a commit that ONLY narrows an
+    # existing test has neither, so `continue` used to skip this check entirely —
+    # and a test-narrowing follow-up is exactly the shape this rule exists to stop.
+    if [[ -n "$rewritten_tests" ]]; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) removes lines from an existing test: ${rewritten_tests}. Add coverage freely, but narrowing or rewriting a test a human wrote — dropping a data-set, an assertion, a case — is how a claim gets fitted to the evidence instead of the other way round. Split that out for a human to review."
+      failed=1
+    fi
     [[ "$has_source" == "true" || "$has_config" == "true" ]] || continue
     if [[ "$has_source" == "true" && "$has_test" != "true" ]]; then
       log "✗ Fix-bot commit ${sha:0:8} ($author) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
@@ -347,10 +359,6 @@ enforce_bot_fix_discipline() {
     if ! msg="$(commit_message "$sha")"; then
       log "Could not read the message for fix-bot commit ${sha:0:8}; failing closed."
       return 1
-    fi
-    if [[ -n "$rewritten_tests" ]]; then
-      log "✗ Fix-bot commit ${sha:0:8} ($author) removes lines from an existing test: ${rewritten_tests}. Add coverage freely, but narrowing or rewriting a test a human wrote — dropping a data-set, an assertion, a case — is how a claim gets fitted to the evidence instead of the other way round. Split that out for a human to review."
-      failed=1
     fi
     local require_php=0
     [[ "$has_php" == "true" ]] && require_php=1

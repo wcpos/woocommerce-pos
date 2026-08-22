@@ -457,6 +457,49 @@ run_case "fix-bot adding to an existing test passes" pass \
   MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nmodified\t0\ttests/includes/Test_X.php' \
   MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
 
+# Review findings on #1655, each pinned.
+run_case "fix-bot test-only commit that narrows a test still fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="tests/includes/Test_X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t12\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'test: drop a data set\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot test-only commit that only adds still passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="test: more coverage" \
+  MOCK_CHANGED_FILES="tests/includes/Test_X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'added\t0\ttests/includes/Test_Y.php' \
+  MOCK_COMMIT_MSG_c1=$'test: add coverage\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot trailer hiding the admission on a continuation line fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit (3376 tests)\n  delegated to CI because wp-env could not start'
+
+run_case "fix-bot trailer saying the suite was not run fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit not run (exit=1); lint OK (20/20 files)'
+
+# A REAL phpunit result quotes its own skipped count. That must still pass, which is
+# why bare "skipped" is not an admission term.
+run_case "fix-bot trailer quoting phpunit's own skipped count passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (3376 tests, 16736 assertions, 6 skipped) — wp-env WC 10.4.3'
+
 run_case "fix-bot gate-script edit needs its harness touched" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
