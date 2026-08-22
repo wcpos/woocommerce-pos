@@ -11,6 +11,12 @@
 - Added: `woocommerce_pos_consent_copy` filter so the tracking-consent prompt copy can be overridden.
 - Added: `woocommerce_pos_get_anon_id()` accessor (used by the Pro licence-activation request).
 
+### 🌐 REST CORS contract
+
+- **Breaking (developers):** `API::rest_allowed_cors_headers()` and `API::rest_pre_serve_request()` are removed, along with `Init::rest_pre_serve_request()`. The WCPOS REST wire contract — CORS allow-list, expose-list, preflight and cache-defeating `Vary` — now has a single owner, `WCPOS\WooCommercePOS\Rest_Cors`, registered unconditionally. The `rest_exposed_cors_headers` and `rest_allowed_cors_headers` filters are unchanged and still the supported extension points; `Sync\Cors` keeps its method names and signatures.
+- **Fixed:** the allow-list and expose-list were published by two independent handlers that had to be kept in step by hand, which had already caused three regressions (a missing `X-WCPOS-Store`, then `X-WCPOS-Idempotency-Key`). One writer now publishes both, so a header cannot be present on one path and absent from the other.
+- **Changed:** WCPOS no longer stamps its CORS headers on preflight requests that are not destined for it. A cross-origin `OPTIONS` to another plugin's REST route now keeps WordPress core's own answer, where previously WCPOS claimed every preflight on the site.
+
 ---
 
 ## 🧾 Receipt Templates — Complete Rebuild
