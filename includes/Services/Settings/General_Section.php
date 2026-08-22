@@ -143,8 +143,8 @@ class General_Section extends Abstract_Section {
 	}
 
 	/**
-	 * REST endpoint args for the general update route. Moved verbatim from
-	 * API\Settings::get_general_endpoint_args().
+	 * REST endpoint args for the general update route (formerly the legacy
+	 * API\Settings controller's get_general_endpoint_args(), removed in 1.10).
 	 */
 	public function endpoint_args(): array {
 		return array(

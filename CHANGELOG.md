@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- **Breaking (developers):** the `WCPOS\WooCommercePOS\API\Settings` REST controller is now an alias of `API\V1\Settings`, which serves every settings section through `get_section_settings()` / `update_section_settings()`. The per-section public methods (`get_general_settings()`, `update_access_settings()`, `get_general_endpoint_args()`, `remove_license_transient()`, …) are removed without compatibility wrappers; the REST routes, `woocommerce_pos_*` filters, and `Services\Settings` are unchanged. Code that called or overrode the per-section controller methods must move to the section API; the licence-transient clear now lives on `Init::remove_license_transient()`.
 - Added: anonymous analytics identifier (`wcpos_anon_id`) for the admin welcome screen — random UUID, no store data, deleted on uninstall, manageable via `wp wcpos anon-id rotate|delete`. Landing data contract `schema_version` bumped to 2.
 - Added: `woocommerce_pos_consent_copy` filter so the tracking-consent prompt copy can be overridden.
 - Added: `woocommerce_pos_get_anon_id()` accessor (used by the Pro licence-activation request).

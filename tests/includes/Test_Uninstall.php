@@ -532,6 +532,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 		wp_mkdir_p( $language_dir );
 
 		try {
+			$this->pin_pro_installed( false );
 			file_put_contents( $free_file, '<?php return array();' );
 			file_put_contents( $pro_file, '<?php return array();' );
 			file_put_contents( $extension_file, '<?php return array();' );
@@ -547,6 +548,55 @@ class Test_Uninstall extends WP_UnitTestCase {
 					unlink( $file );
 				}
 			}
+			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * Translations share the `woocommerce-pos` text domain with Pro's bundled
+	 * core, so both the primary and fallback language locations survive a free
+	 * uninstall while Pro remains installed.
+	 */
+	public function test_uninstall_translations_preserved_when_pro_installed(): void {
+		$primary_file  = trailingslashit( WP_LANG_DIR ) . 'plugins/woocommerce-pos-zz_ZZ.l10n.php';
+		$fallback_dir  = trailingslashit( wp_upload_dir()['basedir'] ) . 'wcpos-languages/';
+		$fallback_file = $fallback_dir . 'woocommerce-pos-zz_ZZ.l10n.php';
+		wp_mkdir_p( \dirname( $primary_file ) );
+		wp_mkdir_p( $fallback_dir );
+
+		try {
+			$this->pin_pro_installed( true );
+			file_put_contents( $primary_file, '<?php return array();' );
+			file_put_contents( $fallback_file, '<?php return array();' );
+			set_transient( 'wcpos_i18n_woocommerce-pos_zz_ZZ', '2026.7.8', WEEK_IN_SECONDS );
+			set_transient( 'wcpos_i18n_woocommerce-pos-pro_zz_ZZ', '2026.8.0', WEEK_IN_SECONDS );
+
+			$this->run_uninstall( false );
+
+			$this->assertFileExists( $primary_file, 'Installed Pro shares the primary translation files' );
+			$this->assertFileExists( $fallback_file, 'Installed Pro shares the fallback language directory' );
+			$this->assertSame( '2026.7.8', get_transient( 'wcpos_i18n_woocommerce-pos_zz_ZZ' ), 'Kept files keep their version cache so Pro does not re-download' );
+			$this->assertSame( '2026.8.0', get_transient( 'wcpos_i18n_woocommerce-pos-pro_zz_ZZ' ) );
+
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+
+			$this->assertFileDoesNotExist( $primary_file );
+			$this->assertDirectoryDoesNotExist( $fallback_dir );
+			$this->assertFalse( get_transient( 'wcpos_i18n_woocommerce-pos_zz_ZZ' ) );
+			$this->assertSame( '2026.8.0', get_transient( 'wcpos_i18n_woocommerce-pos-pro_zz_ZZ' ), 'Pro transients are never ours to delete' );
+		} finally {
+			delete_transient( 'wcpos_i18n_woocommerce-pos_zz_ZZ' );
+			delete_transient( 'wcpos_i18n_woocommerce-pos-pro_zz_ZZ' );
+			foreach ( array( $primary_file, $fallback_file ) as $file ) {
+				if ( file_exists( $file ) ) {
+					unlink( $file );
+				}
+			}
+			if ( is_dir( $fallback_dir ) ) {
+				rmdir( $fallback_dir );
+			}
+			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
 		}
 	}
 

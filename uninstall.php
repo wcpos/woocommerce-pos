@@ -280,6 +280,10 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		remove_role( 'cashier' );
 	}
 
+	// Pro bundles the free core, so artifacts shared with it (translations,
+	// their cache transients, WooCommerce logs) stay while Pro is installed.
+	$pro_installed = woocommerce_pos_uninstall_pro_installed();
+
 	// 5. Delete plugin options and transients. Both plugin prefixes are
 	// swept; WCPOS Pro's data is ALWAYS excluded (it belongs to a different
 	// plugin), and user-authored configuration is excluded unless $remove_all.
@@ -307,6 +311,11 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$wpdb->esc_like( 'woocommerce_pos_store_email' ),
 		$wpdb->esc_like( 'woocommerce_pos_refund_returns_policy' ),
 	);
+	if ( $pro_installed ) {
+		// Version cache for the shared `woocommerce-pos` translations kept below.
+		$preserved[] = $wpdb->esc_like( '_transient_wcpos_i18n_woocommerce-pos_' ) . '%';
+		$preserved[] = $wpdb->esc_like( '_transient_timeout_wcpos_i18n_woocommerce-pos_' ) . '%';
+	}
 	if ( ! $remove_all ) {
 		$preserved = array_merge(
 			$preserved,
@@ -328,8 +337,6 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 
 	// 6. Plugin-owned files: downloaded translations, template render cache,
 	// dompdf scratch, and this plugin's unshared WooCommerce logs.
-	$pro_installed = woocommerce_pos_uninstall_pro_installed();
-
 	$log_table = $wpdb->prefix . 'woocommerce_log';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WooCommerce's known per-site log table; uninstall context.
 	$log_table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $log_table ) ) );
@@ -340,18 +347,25 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 
 	// The custom i18n service downloads only .l10n.php files; WordPress owns
 	// any core-managed .mo and hashed .json artifacts in this directory.
-	$language_files = glob( trailingslashit( WP_LANG_DIR ) . 'plugins/woocommerce-pos-*.l10n.php' );
-	foreach ( is_array( $language_files ) ? $language_files : array() as $language_file ) {
-		if ( 1 !== preg_match( '/^woocommerce-pos-[a-z]{2,3}(?:_[A-Za-z0-9]+)*(?:@[A-Za-z0-9]+)?\.l10n\.php$/', basename( $language_file ) ) ) {
-			continue;
+	// The `woocommerce-pos` text domain is shared with Pro's bundled core, so
+	// its translations stay in place while Pro remains installed.
+	if ( ! $pro_installed ) {
+		$language_files = glob( trailingslashit( WP_LANG_DIR ) . 'plugins/woocommerce-pos-*.l10n.php' );
+		foreach ( is_array( $language_files ) ? $language_files : array() as $language_file ) {
+			if ( 1 !== preg_match( '/^woocommerce-pos-[a-z]{2,3}(?:_[A-Za-z0-9]+)*(?:@[A-Za-z0-9]+)?\.l10n\.php$/', basename( $language_file ) ) ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions -- WP_Filesystem is not initialised during uninstall.
+			unlink( $language_file );
 		}
-		// phpcs:ignore WordPress.WP.AlternativeFunctions -- WP_Filesystem is not initialised during uninstall.
-		unlink( $language_file );
 	}
 
 	$uploads = wp_upload_dir( null, false );
 	if ( empty( $uploads['error'] ) && ! empty( $uploads['basedir'] ) ) {
-		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-languages' );
+		// The fallback language directory also holds Pro's own downloads.
+		if ( ! $pro_installed ) {
+			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-languages' );
+		}
 		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-templates' );
 
 		if ( ! $pro_installed ) {
