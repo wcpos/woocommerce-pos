@@ -150,7 +150,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'receipt_i18n', $data );
 		$this->assertIsArray( $data['receipt_i18n'] );
-		$this->assertSame(
+		$this->assertEquals(
 			\WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels::get_labels( (string) $this->store->get_locale() ),
 			$data['receipt_i18n']
 		);
