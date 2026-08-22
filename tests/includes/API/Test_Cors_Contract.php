@@ -103,29 +103,26 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', '/wp/v2/types' ), $server );
 
 		// Assert.
-		$this->assertSame(
-			array(),
-			array_filter(
-				array_keys( $server->sent_headers ),
-				static function ( string $header ): bool {
-					return 0 === stripos( $header, 'Access-Control-' );
-				}
-			)
-		);
+		$this->assertSame( array(), $this->cors_fields( $server ) );
 	}
 
 	/**
-	 * A preflight carries no marker (Fetch spec), so it is answered on every
-	 * namespace — including the wc/v3 collections the POS reads, where the
-	 * WCPOS API class is never constructed.
+	 * A preflight carries no marker (Fetch spec), so it is recognised by its
+	 * route or by the headers it announces — the wc/v3 case is the preflight
+	 * for a marked request to a route where the WCPOS API class is never
+	 * constructed.
 	 */
 	public function test_options_preflight_publishes_the_full_preflight_contract(): void {
 		foreach ( array( self::CURRENT_LANE_ROUTE, self::NON_WCPOS_ROUTE ) as $route ) {
 			// Arrange.
-			$server = $this->new_spy_server();
+			$server  = $this->new_spy_server();
+			$request = new WP_REST_Request( 'OPTIONS', $route );
+			if ( self::NON_WCPOS_ROUTE === $route ) {
+				$request->set_header( 'Access-Control-Request-Headers', 'authorization,content-type,x-wcpos' );
+			}
 
 			// Act.
-			Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'OPTIONS', $route ), $server );
+			Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
 			// Assert.
 			$this->assertSame( '*', $server->sent_headers['Access-Control-Allow-Origin'] ?? null, "{$route} preflight must answer with the WCPOS origin." );
@@ -152,6 +149,51 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 				"{$route} preflight published the wrong allow-list."
 			);
 		}
+	}
+
+	/**
+	 * THE BOUNDARY: a preflight for somebody else's route is not ours to
+	 * answer. Priority 20 means a later writer WINS, so claiming every OPTIONS
+	 * request (as the priority-5 handler harmlessly did) would replace core's
+	 * origin-specific Access-Control-Allow-Origin with `*` on unrelated
+	 * plugins' routes, and `*` invalidates the `Access-Control-Allow-
+	 * Credentials: true` core sends beside it — breaking credentialed
+	 * cross-origin requests on sites that merely have WCPOS installed.
+	 *
+	 * Core's answer is left untouched, and it still carries the WCPOS
+	 * allow-list, because core builds that through rest_allowed_cors_headers.
+	 */
+	public function test_unmarked_preflight_to_a_non_wcpos_namespace_is_left_to_core(): void {
+		// Arrange.
+		$server = $this->new_spy_server();
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'OPTIONS', '/wp/v2/posts' ), $server );
+
+		// Assert.
+		$this->assertSame( array(), $this->cors_fields( $server ) );
+		$this->assertContains(
+			'X-WCPOS',
+			apply_filters( 'rest_allowed_cors_headers', self::CORE_ALLOW_DEFAULTS, new WP_REST_Request( 'OPTIONS', '/wp/v2/posts' ) ),
+			"Core's own allow-list write must still carry the WCPOS headers."
+		);
+	}
+
+	/**
+	 * A preflight that announces somebody else's custom header is theirs, even
+	 * when the name merely contains ours.
+	 */
+	public function test_preflight_announcing_a_foreign_header_is_not_claimed(): void {
+		// Arrange.
+		$server  = $this->new_spy_server();
+		$request = new WP_REST_Request( 'OPTIONS', self::NON_WCPOS_ROUTE );
+		$request->set_header( 'Access-Control-Request-Headers', 'authorization,x-vendor-x-wcpos-lookalike' );
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		// Assert.
+		$this->assertSame( array(), $this->cors_fields( $server ) );
 	}
 
 	/**
@@ -255,6 +297,24 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 				$this->writes[]             = $key;
 			}
 		};
+	}
+
+	/**
+	 * Every Access-Control field the spy server was asked to send.
+	 *
+	 * @param WP_REST_Server $server Spy server.
+	 *
+	 * @return string[]
+	 */
+	private function cors_fields( WP_REST_Server $server ): array {
+		return array_values(
+			array_filter(
+				array_keys( $server->sent_headers ),
+				static function ( string $header ): bool {
+					return 0 === stripos( $header, 'Access-Control-' );
+				}
+			)
+		);
 	}
 
 	/**

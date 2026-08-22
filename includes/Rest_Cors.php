@@ -32,9 +32,11 @@ use WP_REST_Server;
  * priority 10, and it publishes an ORIGIN-SPECIFIC `Access-Control-Allow-
  * Origin`. `WP_REST_Server::send_header()` calls PHP's `header()` with
  * `$replace = true`, so the last writer wins: running at 20 is what makes the
- * WCPOS `*` origin survive on EVERY lane, including a preflight to a
- * non-WCPOS namespace (`/wc/v3/...`), which the POS also uses and where API
- * is never constructed. Everything WCPOS writes must therefore run after 10.
+ * WCPOS `*` origin survive on the lanes that are ours, including a preflight
+ * to a non-WCPOS namespace (`/wc/v3/...`) that announces a WCPOS header,
+ * where API is never constructed. Everything WCPOS writes must therefore run
+ * after 10 — and, because a later writer WINS rather than merely adds, what
+ * we claim has to be exactly ours ({@see self::owns_request()}).
  * Raw byte responses echo their body from their own callback and are pushed
  * to priority 30 for the same reason ({@see API\V1\Raw_Response::serve()}):
  * headers cannot be sent after the body.
@@ -127,6 +129,17 @@ final class Rest_Cors {
 	private const CACHE_ROUTE_PATTERN = '#^/wcpos/v[12](?:/|$)#i';
 
 	/**
+	 * The prefix every WCPOS-specific request header shares.
+	 *
+	 * A preflight carries no headers of its own, but it ANNOUNCES the ones the
+	 * real request will send in `Access-Control-Request-Headers` — the marker
+	 * `X-WCPOS` plus the scope and idempotency headers ({@see Sync\Cors}) all
+	 * start with this, so a preflight destined for us is identifiable without
+	 * having to guess from the route alone.
+	 */
+	private const MARKER_HEADER_PREFIX = 'x-wcpos';
+
+	/**
 	 * Register the wire contract. Unconditional — see the class docblock.
 	 */
 	public static function register_hooks(): void {
@@ -191,30 +204,30 @@ final class Rest_Cors {
 	}
 
 	/**
-	 * Whether this request gets the WCPOS CORS contract.
+	 * Whether this request is destined for WCPOS.
 	 *
-	 * The union of what the two former writers covered:
+	 * Ours is: a WCPOS-namespace route (marked or not — the relay consent
+	 * route is deliberately unmarked), a marked request whatever the route
+	 * (the POS reads `wc/v3` collections too), or a preflight that ANNOUNCES
+	 * one of our headers.
 	 *
-	 * - every OPTIONS request, because a preflight cannot carry the marker
-	 *   that would identify it as ours (Fetch spec) and answering it with
-	 *   core's shorter allow-list blocks the request it precedes;
-	 * - every WCPOS-namespace route, marked or not (the relay consent route
-	 *   is deliberately unmarked);
-	 * - every marked request, whatever the route — the POS reads `wc/v3` and
-	 *   `wp/v2` collections too.
-	 *
-	 * Requests that are none of these belong to the rest of the site and keep
-	 * WP core's own CORS answer untouched.
+	 * Note what is NOT here: a bare OPTIONS. The old handler claimed every
+	 * preflight on the site, which was harmless only because it ran at
+	 * priority 5 and core overwrote it at 10. At priority 20 we win, and
+	 * stamping `Access-Control-Allow-Origin: *` on another plugin's route
+	 * would break credentialed cross-origin requests that have nothing to do
+	 * with WCPOS (core pairs its origin-specific answer with
+	 * `Access-Control-Allow-Credentials: true`, which `*` invalidates).
+	 * Preflights we do not claim keep core's answer, and they still carry the
+	 * full WCPOS allow-list: core builds that one through
+	 * `rest_allowed_cors_headers`, which {@see self::allowed_cors_headers()}
+	 * filters unconditionally.
 	 *
 	 * @param WP_REST_Request $request Request used to generate the response.
 	 *
 	 * @return bool
 	 */
 	private static function owns_request( WP_REST_Request $request ): bool {
-		if ( 'OPTIONS' === $request->get_method() ) {
-			return true;
-		}
-
 		if ( preg_match( self::ROUTE_PATTERN, (string) $request->get_route() ) ) {
 			return true;
 		}
@@ -226,8 +239,38 @@ final class Rest_Cors {
 		// The query-var marker, for clients behind a proxy that strips custom
 		// request headers ({@see wcpos_request()}).
 		$query_params = $request->get_query_params();
+		if ( ! empty( $query_params[ SHORT_NAME ] ) ) {
+			return true;
+		}
 
-		return ! empty( $query_params[ SHORT_NAME ] );
+		return 'OPTIONS' === $request->get_method() && self::preflight_announces_wcpos( $request );
+	}
+
+	/**
+	 * Whether a preflight says the request it precedes will be a WCPOS one.
+	 *
+	 * The browser builds `Access-Control-Request-Headers` from the headers the
+	 * real request carries, so a marked request to a route outside our
+	 * namespaces — the shape that took the till offline in 23bcdb47 and
+	 * 118a091f — announces `x-wcpos` here and is answered as ours.
+	 *
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return bool
+	 */
+	private static function preflight_announces_wcpos( WP_REST_Request $request ): bool {
+		$announced = (string) $request->get_header( 'Access-Control-Request-Headers' );
+		if ( '' === $announced ) {
+			return false;
+		}
+
+		foreach ( explode( ',', strtolower( $announced ) ) as $header ) {
+			if ( 0 === strpos( trim( $header ), self::MARKER_HEADER_PREFIX ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
