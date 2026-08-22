@@ -3,8 +3,9 @@
  * Thermal Markup Parser Class.
  *
  * Parses a thermal XML template string into a nested AST array. This is a PHP
- * port of the JS receipt-renderer `parse-xml.ts` and mirrors its defaults and
- * behavior so server-rendered output matches the client renderer.
+ * port of `parseXml()` / `parseChildren()` in
+ * packages/thermal-utils/src/thermal-renderer.ts, and mirrors their defaults and
+ * behaviour so server-rendered output matches the client preview.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -277,7 +278,13 @@ class Thermal_Markup_Parser {
 	}
 
 	/**
-	 * Convert a barcode height into a QR code size, mirroring heightToQrSize.
+	 * Convert a barcode height into a QR code size.
+	 *
+	 * A QR written as `<barcode type="qr" height="40">` carries a pixel height
+	 * where a QR wants a module scale, so the height is folded into the scale the
+	 * `<qrcode size="...">` element would have used. Mirrored by heightToQrSize()
+	 * in packages/thermal-utils/src/thermal-renderer.ts; the two must agree or a
+	 * QR previews at a different size than it prints.
 	 *
 	 * @param int $height The barcode height.
 	 *

@@ -3,7 +3,7 @@
  * Originally derived from @wcpos/printer/src/renderer/.
  */
 import Mustache from 'mustache';
-import { generateBarcodeSvg } from './generate-barcode-svg';
+import { generateBarcodeSvg, isQrBarcodeType } from './generate-barcode-svg';
 import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 // -- AST Types --
@@ -131,6 +131,20 @@ function enumAttr<T extends string>(
 		: fallback;
 }
 
+/**
+ * Convert a `<barcode>` pixel height into a QR module scale.
+ *
+ * A QR code written as `<barcode type="qr" height="40">` carries a pixel height
+ * where a QR wants a module scale, so the height is folded into the scale the
+ * `<qrcode size="...">` element would have used. Mirrored exactly by
+ * `Thermal_Markup_Parser::height_to_qr_size()` so a QR is the same size on
+ * screen as it is on paper.
+ */
+function heightToQrSize(height: number): number {
+	if (height <= 0) return 4;
+	return Math.max(2, Math.min(10, Math.round(height / 10)));
+}
+
 function parseChildren(parent: Element): ThermalNode[] {
 	const nodes: ThermalNode[] = [];
 
@@ -187,14 +201,29 @@ function parseChildren(parent: Element): ThermalNode[] {
 					style: enumAttr(el, 'style', ['single', 'dashed', 'dotted', 'double'] as const, 'single'),
 				});
 				break;
-			case 'barcode':
+			case 'barcode': {
+				const barcodeType = el.getAttribute('type') ?? 'code128';
+				// A QR type on a <barcode> element becomes a qrcode node, exactly
+				// as Thermal_Markup_Parser::parse_children() does it. Left as a
+				// barcode node the preview would size it by bwip-js scale 2 and
+				// label it data-barcode-kind="barcode", so the merchant would see
+				// a QR smaller than the one the printer produces.
+				if (isQrBarcodeType(barcodeType)) {
+					nodes.push({
+						type: 'qrcode',
+						size: heightToQrSize(intAttr(el, 'height', 40)),
+						value: (el.textContent ?? '').trim(),
+					});
+					break;
+				}
 				nodes.push({
 					type: 'barcode',
-					barcodeType: el.getAttribute('type') ?? 'code128',
+					barcodeType,
 					height: intAttr(el, 'height', 40),
 					value: (el.textContent ?? '').trim(),
 				});
 				break;
+			}
 			case 'qrcode':
 				nodes.push({
 					type: 'qrcode',

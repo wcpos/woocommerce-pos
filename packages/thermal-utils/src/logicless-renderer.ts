@@ -1,6 +1,6 @@
 import Mustache from 'mustache';
 
-import { generateBarcodeSvg } from './generate-barcode-svg';
+import { generateBarcodeSvg, isQrBarcodeType } from './generate-barcode-svg';
 import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 function stripHtmlComments(template: string): string {
@@ -47,7 +47,7 @@ function processBarcodeMarkers(html: string): string {
 		const rawType = tagName === 'qrcode' ? 'qrcode' : el.getAttribute('data-barcode') || el.getAttribute('type') || 'qr';
 		const type = rawType.trim().toLowerCase();
 		const value = el.getAttribute('data-value') || el.textContent || '';
-		const kind = type === 'qr' || type === 'qrcode' ? 'qrcode' : 'barcode';
+		const kind = isQrBarcodeType(type) ? 'qrcode' : 'barcode';
 
 		if (value.trim()) {
 			const rawHeight = numericAttribute(el, 'height', 40);
