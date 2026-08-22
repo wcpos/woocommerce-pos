@@ -4,11 +4,21 @@ namespace WCPOS\WooCommercePOS\Tests\Abstracts;
 
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WP_UnitTestCase;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 
 /**
  * Test double that mirrors Pro's ability to seed Store properties directly.
  */
 class Store_With_Test_Tax_Ids extends Store {
+	/**
+	 * Seed the store locale.
+	 *
+	 * @param string $locale Locale to seed.
+	 */
+	public function set_test_locale( string $locale ): void {
+		$this->set_prop( 'locale', $locale );
+	}
+
 	/**
 	 * Seed structured tax IDs using the Store data property.
 	 *
@@ -146,14 +156,38 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 	 * the same translated labels as server-built payloads (mono#1252).
 	 */
 	public function test_store_payload_includes_receipt_i18n_labels(): void {
-		$data = $this->store->get_data();
+		global $wp_locale_switcher;
 
+		$store = new Store_With_Test_Tax_Ids();
+		$store->set_test_locale( 'nl_NL' );
+
+		$available_languages = new \ReflectionProperty( $wp_locale_switcher, 'available_languages' );
+		$available_languages->setAccessible( true );
+		$original_languages = $available_languages->getValue( $wp_locale_switcher );
+		$available_languages->setValue( $wp_locale_switcher, array_merge( $original_languages, array( 'nl_NL' ) ) );
+
+		$translation_filter = static function ( $translation, $text, $domain ) {
+			if ( 'woocommerce-pos' === $domain && 'Order' === $text && 'nl_NL' === get_locale() ) {
+				return 'Bestelling';
+			}
+
+			return $translation;
+		};
+		add_filter( 'gettext', $translation_filter, 10, 3 );
+		set_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL', TRANSLATION_VERSION, DAY_IN_SECONDS );
+
+		try {
+			$data = $store->get_data();
+		} finally {
+			delete_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL' );
+			remove_filter( 'gettext', $translation_filter, 10 );
+			$available_languages->setValue( $wp_locale_switcher, $original_languages );
+		}
+
+		$this->assertEquals( 'nl_NL', $store->get_locale() );
 		$this->assertArrayHasKey( 'receipt_i18n', $data );
 		$this->assertIsArray( $data['receipt_i18n'] );
-		$this->assertEquals(
-			\WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels::get_labels( (string) $this->store->get_locale() ),
-			$data['receipt_i18n']
-		);
+		$this->assertEquals( 'Bestelling', $data['receipt_i18n']['order'] );
 		// Spot-check a key the stock gallery templates rely on.
 		$this->assertArrayHasKey( 'total_refunded', $data['receipt_i18n'] );
 	}
