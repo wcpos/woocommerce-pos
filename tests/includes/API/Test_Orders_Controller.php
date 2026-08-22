@@ -498,6 +498,209 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Creating a paid order reserves stock before payment completion.
+	 *
+	 * @dataProvider order_create_route_provider
+	 */
+	public function test_create_paid_order_blocks_before_reducing_insufficient_stock( bool $current_lane ): void {
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		// wcpos_request() reads getallheaders()/$_SERVER, not the WP_REST_Request
+		// object, so the base class's X-WCPOS request header is not enough here.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'  => true,
+				'stock_quantity' => 1,
+				'backorders'    => 'no',
+			)
+		);
+
+		try {
+			$order_count = count( wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+			$request     = $current_lane
+				? $this->wp_rest_post_request( '/wc/v3/orders' )
+				: $this->wp_rest_post_request( '/wcpos/v1/orders' );
+			$request->set_body_params(
+				array(
+					'set_paid'      => true,
+					'payment_method' => 'pos_cash',
+					'line_items'     => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 2,
+						),
+					),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertEquals( 400, $response->get_status(), wp_json_encode( $data ) );
+			$this->assertEquals( 'wcpos_insufficient_stock', $data['code'] );
+			$this->assertEquals( 1.0, (float) wc_get_product( $product->get_id() )->get_stock_quantity() );
+			$this->assertCount( $order_count, wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
+	/** A thrown stock validation deletes the temporary order before propagating. */
+	public function test_create_deletes_order_when_stock_validation_throws(): void {
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 1,
+				'backorders'     => 'no',
+			)
+		);
+		$throw_validation = static function (): void {
+			throw new \RuntimeException( 'stock validation failed' );
+		};
+		add_filter( 'woocommerce_query_for_reserved_stock', $throw_validation, 20 );
+
+		try {
+			$order_count = count( wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+			$request     = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+			$request->set_body_params(
+				array(
+					'set_paid'  => true,
+					'line_items' => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 1,
+						),
+					),
+				)
+			);
+
+			try {
+				$this->server->dispatch( $request );
+				$this->fail( 'Expected stock validation to throw.' );
+			} catch ( \RuntimeException $exception ) {
+				$this->assertSame( 'stock validation failed', $exception->getMessage() );
+			}
+
+			$this->assertCount( $order_count, wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+		} finally {
+			remove_filter( 'woocommerce_query_for_reserved_stock', $throw_validation, 20 );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
+	/**
+	 * A paid create behaves identically on the POS route and on core's.
+	 *
+	 * The overselling sequence persists the order as `pending` and re-applies the
+	 * requested status itself, so it could easily drift from WooCommerce for the
+	 * same payload. It must not. Measured on this tree,
+	 * `woocommerce_payment_complete` does NOT fire for status=completed +
+	 * set_paid=true on EITHER lane — payment_complete() only transitions an order
+	 * still on-hold/pending/failed/cancelled, and the status was already applied.
+	 * So this pins PARITY with core rather than either absolute value, and keeps
+	 * holding if WooCommerce ever changes that rule.
+	 */
+	public function test_create_completed_paid_order_matches_core_behaviour(): void {
+		$legacy  = $this->create_completed_paid_order( '/wcpos/v1/orders' );
+		$current = $this->create_completed_paid_order( '/wc/v3/orders' );
+
+		$this->assertSame( 201, $legacy['status'], wp_json_encode( $legacy ) );
+		$this->assertSame( 201, $current['status'], wp_json_encode( $current ) );
+		$this->assertSame( $current['order_status'], $legacy['order_status'], 'order status parity' );
+		$this->assertSame( $current['hook_fired'], $legacy['hook_fired'], 'payment_complete hook parity' );
+		$this->assertSame( $current['has_date_paid'], $legacy['has_date_paid'], 'date_paid parity' );
+		$this->assertSame( $current['transaction_id'], $legacy['transaction_id'], 'transaction_id parity' );
+		$this->assertSame( $current['stock_after'], $legacy['stock_after'], 'stock movement parity' );
+	}
+
+	/**
+	 * Create one completed+paid order through $route and report what happened.
+	 *
+	 * @param string $route REST route to create through.
+	 * @return array<string,mixed>
+	 */
+	private function create_completed_paid_order( string $route ): array {
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+				'regular_price'  => '10.00',
+				'backorders'     => 'no',
+			)
+		);
+
+		$hook_fired = false;
+		$recorder   = static function () use ( &$hook_fired ): void {
+			$hook_fired = true;
+		};
+		add_action( 'woocommerce_payment_complete', $recorder );
+
+		try {
+			$request = $this->wp_rest_post_request( $route );
+			$request->set_body_params(
+				array(
+					'set_paid'       => true,
+					'status'         => 'completed',
+					'transaction_id' => 'TXN-PARITY',
+					'payment_method' => 'pos_cash',
+					'line_items'     => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 1,
+						),
+					),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+			$order    = isset( $data['id'] ) ? wc_get_order( $data['id'] ) : null;
+
+			return array(
+				'status'         => $response->get_status(),
+				'order_status'   => $order ? $order->get_status() : null,
+				'hook_fired'     => $hook_fired,
+				'has_date_paid'  => $order ? ( null !== $order->get_date_paid() ) : null,
+				'transaction_id' => $order ? $order->get_transaction_id() : null,
+				'stock_after'    => (float) wc_get_product( $product->get_id() )->get_stock_quantity(),
+			);
+		} finally {
+			remove_action( 'woocommerce_payment_complete', $recorder );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
+	/** @return array<string,array<bool>> */
+	public function order_create_route_provider(): array {
+		return array(
+			'legacy wcpos/v1' => array( false ),
+			'current wc/v3'   => array( true ),
+		);
+	}
+
+	/**
 	 * Newly created POS orders record the accepting WCPOS plugin version.
 	 */
 	public function test_create_order_records_wcpos_version_meta(): void {

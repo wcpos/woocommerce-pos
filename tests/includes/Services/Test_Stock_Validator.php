@@ -14,6 +14,7 @@ use WC_Product;
 use WP_Error;
 use WP_REST_Request;
 use WC_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 
 /**
  * Test_Stock_Validator class.
@@ -100,6 +101,22 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertSame( $order, $result );
 	}
 
+	/** The legacy exempt-status filter remains part of the public contract. */
+	public function test_legacy_exempt_status_filter_is_honoured(): void {
+		$add_exempt_status = static function ( array $statuses ): array {
+			$statuses[] = 'custom-draft';
+
+			return $statuses;
+		};
+		add_filter( 'woocommerce_pos_stock_validation_exempt_statuses', $add_exempt_status );
+
+		try {
+			$this->assertFalse( Stock_Validator::instance()->should_validate_create_payload( 'custom-draft', false ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_stock_validation_exempt_statuses', $add_exempt_status );
+		}
+	}
+
 	/** Non-POS REST writes are not validated. */
 	public function test_non_pos_request_does_not_validate_stock(): void {
 		$this->set_prevent_overselling( true );
@@ -170,6 +187,45 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		);
 	}
 
+	/**
+	 * Unmanaged out-of-stock products honor permitted backorder modes.
+	 *
+	 * WooCommerce will not PERSIST backorders on an unmanaged product:
+	 * `WC_Product::validate_props()` forces `backorders` to 'no' whenever
+	 * `manage_stock` is false, so the stored value can never be 'yes'/'notify'
+	 * here. The guard still has to hold, because `get_backorders()` is
+	 * filterable — an extension can report a permitted mode for a product whose
+	 * stored value is 'no'. Filtering the getter is therefore the only way to
+	 * reach this branch, and the only way it is reached in production.
+	 *
+	 * @dataProvider backorder_provider
+	 * @param string $backorders Backorder mode.
+	 */
+	public function test_unmanaged_out_of_stock_backorders_do_not_block( string $backorders ): void {
+		$this->set_prevent_overselling( true );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock' => false,
+				'stock_status' => 'outofstock',
+			)
+		);
+		$this->assertSame( 'no', $product->get_backorders(), 'WooCommerce clears backorders on unmanaged stock' );
+
+		$filter = static function () use ( $backorders ) {
+			return $backorders;
+		};
+		add_filter( 'woocommerce_product_get_backorders', $filter );
+
+		try {
+			$order  = $this->create_order( 'processing', array( array( $product, 1 ) ) );
+			$result = $this->validate( $order );
+		} finally {
+			remove_filter( 'woocommerce_product_get_backorders', $filter );
+		}
+
+		$this->assertSame( $order, $result );
+	}
+
 	/** Variation-level stock is used when the variation manages stock. */
 	public function test_variation_managed_stock_is_validated(): void {
 		$this->set_prevent_overselling( true );
@@ -222,6 +278,416 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertEquals( array( 3.0, 3.0 ), array_column( $items, 'available' ) );
 	}
 
+	/** Exact decimal quantities do not exceed exactly matching parent stock. */
+	public function test_parent_managed_stock_uses_fixed_decimal_precision(): void {
+		$this->set_prevent_overselling( true );
+		$parent = ProductHelper::create_variation_product();
+		$parent->set_manage_stock( true );
+		$parent->set_stock_quantity( 0.3 );
+		$parent->set_backorders( 'no' );
+		$parent->save();
+
+		$variation_a = wc_get_product( $parent->get_children()[0] );
+		$variation_b = wc_get_product( $parent->get_children()[1] );
+		$variation_a->set_manage_stock( false );
+		$variation_a->save();
+		$variation_b->set_manage_stock( false );
+		$variation_b->save();
+		$order = $this->create_order(
+			'processing',
+			array(
+				array( $variation_a, 0.1 ),
+				array( $variation_b, 0.2 ),
+			)
+		);
+
+		$result = $this->validate( $order );
+
+		$this->assertSame( $order, $result );
+	}
+
+	/** Stock precision is independent from the store's currency precision. */
+	public function test_fractional_stock_validation_ignores_currency_precision(): void {
+		$original_price_decimals = get_option( 'woocommerce_price_num_decimals' );
+		update_option( 'woocommerce_price_num_decimals', 0 );
+
+		try {
+			$this->set_prevent_overselling( true );
+			$product = $this->create_stock_product( 0.001 );
+			$order   = $this->create_order( 'processing', array( array( $product, 0.002 ) ) );
+
+			$result = $this->validate( $order );
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertEquals( 0.001, $result->get_error_data()['items'][0]['available'] );
+		} finally {
+			if ( false === $original_price_decimals ) {
+				delete_option( 'woocommerce_price_num_decimals' );
+			} else {
+				update_option( 'woocommerce_price_num_decimals', $original_price_decimals );
+			}
+		}
+	}
+
+	/** Active WooCommerce reservations reduce sellable stock. */
+	public function test_held_stock_is_subtracted_from_available_stock(): void {
+		$this->set_prevent_overselling( true );
+		$product    = $this->create_stock_product( 2 );
+		$held_order = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+		$held_order->save();
+		wc_reserve_stock_for_order( $held_order );
+
+		try {
+			$order  = $this->create_order( 'processing', array( array( $product, 2 ) ) );
+			$result = $this->validate( $order );
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertEquals( 1.0, $result->get_error_data()['items'][0]['available'] );
+		} finally {
+			wc_release_stock_for_order( $held_order );
+		}
+	}
+
+	/** A successful checkout validation reserves stock for the next request. */
+	public function test_checkout_validation_reserves_stock_for_other_orders(): void {
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$order_a = $this->create_order( 'pos-open', array( array( $product, 1 ) ) );
+		$order_b = $this->create_order( 'pos-open', array( array( $product, 1 ) ) );
+		$order_a->save();
+		$order_b->save();
+
+		try {
+			$result_a = $this->validate( $order_a, 'processing' );
+			$result_b = $this->validate( $order_b, 'processing' );
+
+			$this->assertSame( $order_a, $result_a );
+			$this->assertInstanceOf( WP_Error::class, $result_b );
+			$this->assertEquals( 0.0, $result_b->get_error_data()['items'][0]['available'] );
+		} finally {
+			wc_release_stock_for_order( $order_a );
+			wc_release_stock_for_order( $order_b );
+		}
+	}
+
+	/**
+	 * Revalidating an order never lets another order take a unit it already holds.
+	 *
+	 * The compensation snapshot deliberately does NOT release this order's holds
+	 * before re-reserving — pruning only what left the order — precisely so there
+	 * is no instant where the unit is unclaimed. This drives another order at the
+	 * stock in the middle of revalidation and pins that it cannot get in: the
+	 * second claim is refused, the first order keeps exactly its hold, and the
+	 * product is never held beyond the stock that exists.
+	 */
+	public function test_revalidation_does_not_surrender_a_held_unit_to_another_order(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$order_a = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+		$order_b = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+		$order_a->save();
+		$order_b->save();
+		wc_reserve_stock_for_order( $order_a );
+
+		$b_claimed  = null;
+		$claim_stock = null;
+		$claim_stock = static function ( string $query ) use ( &$claim_stock, &$b_claimed, $order_b ): string {
+			remove_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
+			try {
+				wc_reserve_stock_for_order( $order_b );
+				$b_claimed = true;
+			} catch ( \Throwable $exception ) {
+				// WooCommerce refuses the claim while order A still holds the unit.
+				$b_claimed = false;
+			}
+
+			return $query;
+		};
+		add_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
+
+		try {
+			$result = $this->validate( $order_a, 'processing' );
+
+			$this->assertFalse( $b_claimed, 'a second order must not take a unit this one holds' );
+			$this->assertSame( $order_a, $result, 'the holding order still validates' );
+
+			$held = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT order_id, stock_quantity FROM {$wpdb->wc_reserved_stock} WHERE product_id = %d ORDER BY order_id",
+					$product->get_id()
+				),
+				ARRAY_A
+			);
+			$this->assertCount( 1, $held, 'exactly one order may hold the only unit' );
+			$this->assertSame( $order_a->get_id(), (int) $held[0]['order_id'] );
+			$this->assertEquals( 1.0, (float) $held[0]['stock_quantity'] );
+		} finally {
+			remove_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
+			wc_release_stock_for_order( $order_a );
+			wc_release_stock_for_order( $order_b );
+		}
+	}
+
+	/** Failed validation restores the original active hold without extending it. */
+	public function test_failed_validation_preserves_reservation_times(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$held_product = $this->create_stock_product( 1 );
+		$short_product = $this->create_stock_product( 0 );
+		$order = $this->create_order( 'pending', array( array( $held_product, 1 ) ) );
+		$order->save();
+		wc_reserve_stock_for_order( $order );
+		$order->add_product( $short_product, 1 );
+		$order->save();
+		$timestamp = '2000-01-01 00:00:00';
+		$expires   = '2099-01-01 00:00:00';
+		$wpdb->update(
+			$wpdb->wc_reserved_stock,
+			array( 'timestamp' => $timestamp, 'expires' => $expires ),
+			array( 'order_id' => $order->get_id(), 'product_id' => $held_product->get_id() ),
+			array( '%s', '%s' ),
+			array( '%d', '%d' )
+		);
+
+		try {
+			$result = $this->validate( $order, 'processing' );
+			$row    = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT timestamp, expires FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d AND product_id = %d",
+					$order->get_id(),
+					$held_product->get_id()
+				),
+				ARRAY_A
+			);
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertSame( array( 'timestamp' => $timestamp, 'expires' => $expires ), $row );
+		} finally {
+			wc_release_stock_for_order( $order );
+		}
+	}
+
+	/** Expired holds are not renewed when a later validation fails. */
+	public function test_failed_validation_does_not_restore_expired_reservation(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$order   = $this->create_order( 'pending', array( array( $product, 2 ) ) );
+		$order->save();
+		$wpdb->insert(
+			$wpdb->wc_reserved_stock,
+			array(
+				'order_id'      => $order->get_id(),
+				'product_id'    => $product->get_id(),
+				'stock_quantity' => '1.000000',
+				'timestamp'     => '2000-01-01 00:00:00',
+				'expires'       => '2000-01-01 01:00:00',
+			),
+			array( '%d', '%d', '%s', '%s', '%s' )
+		);
+
+		try {
+			$result = $this->validate( $order, 'processing' );
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				)
+			);
+		} finally {
+			wc_release_stock_for_order( $order );
+		}
+	}
+
+	/** A failed compensation is surfaced without first deleting an existing hold. */
+	public function test_reservation_restore_failure_is_propagated_without_losing_hold(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$held_product  = $this->create_stock_product( 1 );
+		$short_product = $this->create_stock_product( 0 );
+		$order = $this->create_order( 'pending', array( array( $held_product, 1 ) ) );
+		$order->save();
+		wc_reserve_stock_for_order( $order );
+		$order->add_product( $short_product, 1 );
+		$order->save();
+
+		$reserve_queries = 0;
+		$fail_restore    = static function ( string $query ) use ( &$reserve_queries, $wpdb ): string {
+			if ( false !== strpos( $query, "INSERT INTO {$wpdb->wc_reserved_stock}" ) && 3 === ++$reserve_queries ) {
+				return "SELECT * FROM {$wpdb->prefix}wcpos_missing_restore_table";
+			}
+
+			return $query;
+		};
+		add_filter( 'query', $fail_restore );
+		$suppress_errors = $wpdb->suppress_errors( true );
+		$caught          = null;
+
+		try {
+			try {
+				$this->validate( $order, 'processing' );
+			} catch ( \RuntimeException $exception ) {
+				$caught = $exception;
+			}
+
+			$this->assertInstanceOf( \RuntimeException::class, $caught );
+			$this->assertSame( 'Unable to restore stock reservation.', $caught->getMessage() );
+			$this->assertEquals(
+				1.0,
+				(float) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT stock_quantity FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d AND product_id = %d",
+						$order->get_id(),
+						$held_product->get_id()
+					)
+				)
+			);
+		} finally {
+			$wpdb->suppress_errors( $suppress_errors );
+			remove_filter( 'query', $fail_restore );
+			wc_release_stock_for_order( $order );
+		}
+	}
+
+	/** A post-validation payment exception removes the order and its reservation. */
+	public function test_paid_create_cleans_up_when_payment_completion_throws(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$product->set_regular_price( '10' );
+		$product->save();
+		$order_id = 0;
+		$throw_payment_complete = static function (): void {
+			throw new \Error( 'payment completion failed' );
+		};
+		add_action( 'woocommerce_payment_complete', $throw_payment_complete );
+
+		try {
+			try {
+				Stock_Validator::instance()->around_paid_create(
+					array( 'set_paid' => true ),
+					function () use ( &$order_id, $product ): WC_Order {
+						$order = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+						$order->calculate_totals();
+						$order->save();
+						$order_id = $order->get_id();
+
+						return $order;
+					}
+				);
+				$this->fail( 'Expected payment completion to throw.' );
+			} catch ( \Error $exception ) {
+				$this->assertSame( 'payment completion failed', $exception->getMessage() );
+			}
+
+			$this->assertFalse( wc_get_order( $order_id ) );
+			$this->assertEquals( 1.0, (float) wc_get_product( $product->get_id() )->get_stock_quantity() );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order_id
+					)
+				)
+			);
+		} finally {
+			remove_action( 'woocommerce_payment_complete', $throw_payment_complete );
+		}
+	}
+
+	/** Revalidation replaces reservations for products removed from the order. */
+	public function test_checkout_revalidation_removes_stale_reservations(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product_a = $this->create_stock_product( 5 );
+		$product_b = $this->create_stock_product( 5 );
+		$order     = $this->create_order(
+			'pos-open',
+			array(
+				array( $product_a, 1 ),
+				array( $product_b, 1 ),
+			)
+		);
+		$order->save();
+
+		try {
+			$this->assertSame( $order, $this->validate( $order, 'processing' ) );
+			foreach ( $order->get_items() as $item_id => $item ) {
+				if ( $product_b->get_id() === $item->get_product_id() ) {
+					$order->remove_item( $item_id );
+				}
+			}
+			$order->save();
+
+			$this->assertSame( $order, $this->validate( $order, 'processing' ) );
+			$held_product_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT product_id FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d ORDER BY product_id",
+					$order->get_id()
+				)
+			);
+			$this->assertSame( array( $product_a->get_id() ), array_map( 'intval', $held_product_ids ) );
+
+			foreach ( array_keys( $order->get_items() ) as $item_id ) {
+				$order->remove_item( $item_id );
+			}
+			$order->save();
+			$this->assertSame( $order, $this->validate( $order, 'processing' ) );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				)
+			);
+		} finally {
+			wc_release_stock_for_order( $order );
+		}
+	}
+
+	/** A failed multi-product validation rolls back earlier reservations. */
+	public function test_failed_validation_rolls_back_partial_reservations(): void {
+		$this->set_prevent_overselling( true );
+		$product_a = $this->create_stock_product( 1 );
+		$product_b = $this->create_stock_product( 0 );
+		$order_a   = $this->create_order(
+			'pos-open',
+			array(
+				array( $product_a, 1 ),
+				array( $product_b, 1 ),
+			)
+		);
+		$order_b   = $this->create_order( 'pos-open', array( array( $product_a, 1 ) ) );
+		$order_a->save();
+		$order_b->save();
+
+		try {
+			$result_a = $this->validate( $order_a, 'processing' );
+			$result_b = $this->validate( $order_b, 'processing' );
+
+			$this->assertInstanceOf( WP_Error::class, $result_a );
+			$this->assertSame( $order_b, $result_b );
+		} finally {
+			wc_release_stock_for_order( $order_a );
+			wc_release_stock_for_order( $order_b );
+		}
+	}
+
 	/** An unmanaged product with out-of-stock status blocks checkout. */
 	public function test_unmanaged_out_of_stock_product_blocks(): void {
 		$this->set_prevent_overselling( true );
@@ -234,6 +700,14 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$item = $result->get_error_data()['items'][0];
 		$this->assertNull( $item['available'] );
 		$this->assertEquals( 'out_of_stock_status', $item['reason'] );
+		$this->assertSame( 'no', $item['backorders'] );
+	}
+
+	/** The registered validator cannot be instantiated outside its singleton. */
+	public function test_stock_validator_constructor_is_private(): void {
+		$reflection = new \ReflectionClass( Stock_Validator::class );
+
+		$this->assertTrue( $reflection->getConstructor()->isPrivate() );
 	}
 
 	/** Miscellaneous lines without product IDs are skipped. */
@@ -250,6 +724,60 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$result = $this->validate( $order );
 
 		$this->assertSame( $order, $result );
+	}
+
+	/** Non-misc lines whose product was deleted block checkout. */
+	public function test_deleted_product_line_blocks_checkout(): void {
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		// Capture the id first: WC_Data::delete() resets the object's id to 0.
+		$product_id = $product->get_id();
+		$order      = $this->create_order( 'processing', array( array( $product, 1 ) ) );
+		$order->save();
+		$product->delete( true );
+
+		$result = $this->validate( $order );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$item = $result->get_error_data()['items'][0];
+		$this->assertSame( 'product_not_found', $item['reason'] );
+		$this->assertSame( $product_id, $item['product_id'] );
+		$this->assertNull( $item['available'] );
+	}
+
+	/**
+	 * A failed group leaves no reservation behind for the line that succeeded.
+	 *
+	 * The reservations across stock owners are all-or-nothing: product A has
+	 * enough stock and gets reserved, product B does not, so A's hold must be
+	 * gone by the time the WP_Error is returned. Otherwise a rejected checkout
+	 * would keep silently holding stock until the hold-stock window expired.
+	 */
+	public function test_failed_group_releases_the_reservation_made_for_the_passing_line(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$plenty = $this->create_stock_product( 50 );
+		$short  = $this->create_stock_product( 1 );
+		$order  = $this->create_order(
+			'processing',
+			array(
+				array( $plenty, 1 ),
+				array( $short, 5 ),
+			)
+		);
+		$order->save();
+
+		$result = $this->validate( $order );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$held = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+				$order->get_id()
+			)
+		);
+		$this->assertSame( 0, (int) $held, 'a rejected checkout must not leave stock reserved' );
 	}
 
 	/** Every failing line is included in the error response. */
@@ -323,7 +851,7 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 	 * @return WC_Order|WP_Error
 	 */
 	private function validate( WC_Order $order, ?string $status = null ) {
-		$request = new WP_REST_Request( 'POST', '/wcpos/v1/orders' );
+		$request = new WP_REST_Request( 'POST', '/wcpos/v2/orders' );
 		if ( null !== $status ) {
 			$request->set_param( 'status', $status );
 		}

@@ -378,7 +378,7 @@ class Init {
 		new Orders();
 		new Emails();
 		new Templates();
-		new Services\Stock_Validator();
+		Services\Stock_Validator::instance();
 		new Services\Decimal_Quantities();
 		new Services\Customer_Meta_Parity();
 		new Services\Print_Job_Service();

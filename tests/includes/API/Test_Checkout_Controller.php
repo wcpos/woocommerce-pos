@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 
 /**
  * Checkout controller tests.
@@ -17,6 +18,71 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
  * @coversNothing
  */
 class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
+	/** Direct gateway checkout validates stock before dispatch. */
+	public function test_checkout_validates_stock_before_dispatching_gateway(): void {
+		global $wpdb;
+
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		// wcpos_request() reads getallheaders()/$_SERVER, not the WP_REST_Request
+		// object, so the base class's X-WCPOS request header is not enough here.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'  => true,
+				'stock_quantity' => 1,
+				'backorders'    => 'no',
+			)
+		);
+		$order = wc_create_order();
+		$order->set_status( 'pos-open' );
+		$order->set_payment_method( 'pos_cash' );
+		$item_id = $order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->save();
+		wc_reserve_stock_for_order( $order );
+		$item = $order->get_item( $item_id );
+		$item->set_quantity( 2 );
+		$item->save();
+
+		try {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
+			$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+			$request->set_body_params(
+				array(
+					'gateway_id'   => 'pos_cash',
+					'action'       => 'start',
+					'payment_data' => array( 'amount_tendered' => $order->get_total() ),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertSame( 400, $response->get_status(), wp_json_encode( $data ) );
+			$this->assertSame( 'wcpos_insufficient_stock', $data['code'] );
+			$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				),
+				'a rejected checkout must release its restored reservation'
+			);
+		} finally {
+			wc_release_stock_for_order( $order );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
 	/**
 	 * It releases the idempotency claim after a successful checkout.
 	 */
@@ -51,15 +117,29 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * It releases the idempotency claim when checkout processing throws.
 	 */
 	public function test_checkout_releases_idempotency_claim_when_gateway_throws(): void {
-		$key   = wp_generate_uuid4();
-		$order = OrderHelper::create_order(
+		global $wpdb;
+
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+				'backorders'     => 'no',
+			)
+		);
+		$key     = wp_generate_uuid4();
+		$order   = OrderHelper::create_order(
 			array(
 				'payment_method' => 'pos_cash',
 				'total'          => '50.00',
 			)
 		);
+		$order->add_product( $product, 1 );
+		$order->save();
 
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
 		$request->set_header( 'X-WCPOS-Idempotency-Key', $key );
 		$request->set_body_params(
 			array(
@@ -83,8 +163,87 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		} catch ( \RuntimeException $exception ) {
 			$this->assertSame( 'boom', $exception->getMessage() );
 			$this->assertFalse( get_option( $this->get_claim_option_key( $order->get_id(), $key ) ) );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				),
+				'a gateway exception must release checkout stock'
+			);
 		} finally {
 			remove_filter( 'wcpos_process_checkout_action_pos_cash', $callback, 1 );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
+	/** It releases checkout stock when the gateway returns an error. */
+	public function test_checkout_releases_stock_when_gateway_returns_error(): void {
+		global $wpdb;
+
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+				'backorders'     => 'no',
+			)
+		);
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'pos_cash',
+				'total'          => '50.00',
+			)
+		);
+		$order->add_product( $product, 1 );
+		$order->save();
+		$callback = static function () {
+			return new \WP_Error( 'gateway_failed', 'Gateway failed.', array( 'status' => 502 ) );
+		};
+		add_filter( 'wcpos_process_checkout_action_pos_cash', $callback, 1 );
+
+		try {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
+			$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+			$request->set_body_params(
+				array(
+					'gateway_id'   => 'pos_cash',
+					'action'       => 'start',
+					'payment_data' => array( 'amount_tendered' => '50.00' ),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 502, $response->get_status() );
+			$this->assertSame( 'gateway_failed', $response->get_data()['code'] );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				),
+				'a gateway error must release checkout stock'
+			);
+		} finally {
+			remove_filter( 'wcpos_process_checkout_action_pos_cash', $callback, 1 );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
 		}
 	}
 
