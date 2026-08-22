@@ -117,6 +117,7 @@ class Checkout_Controller extends WC_REST_Controller {
 	 * Create a checkout state mutation.
 	 *
 	 * @param WP_REST_Request $request Request object.
+	 * @throws \Throwable When gateway processing fails.
 	 */
 	public function create_item( $request ) {
 		$order = $this->get_order( (int) $request['id'] );
@@ -191,9 +192,19 @@ class Checkout_Controller extends WC_REST_Controller {
 					return $validation;
 				}
 			}
-			$state        = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
+			try {
+				$state = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
+			} catch ( \Throwable $exception ) {
+				if ( 'start' === $action ) {
+					Stock_Validator::instance()->release_checkout_stock( $order );
+				}
+				throw $exception;
+			}
 
 			if ( is_wp_error( $state ) ) {
+				if ( 'start' === $action ) {
+					Stock_Validator::instance()->release_checkout_stock( $order );
+				}
 				return $state;
 			}
 

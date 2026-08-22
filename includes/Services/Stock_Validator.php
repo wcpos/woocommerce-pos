@@ -18,6 +18,9 @@ use WP_REST_Request;
  * Rejects paid POS orders whose quantities exceed available stock.
  */
 class Stock_Validator {
+	/** POS order quantities are serialized to six decimal places. */
+	private const STOCK_PRECISION = 6;
+
 	/**
 	 * Registered validator instance.
 	 *
@@ -204,7 +207,8 @@ class Stock_Validator {
 		}
 
 		\ksort( $managed_stock );
-		$reserving = 0 < $order->get_id() && ! empty( $managed_stock );
+		$persisted = 0 < $order->get_id();
+		$reserving = $persisted && ! empty( $managed_stock );
 		// Each reserve_stock() call is atomic on its own — a single
 		// INSERT ... SELECT ... FOR UPDATE, the same shape WooCommerce's own
 		// ReserveStock uses. What still has to be all-or-nothing is the set of
@@ -215,7 +219,10 @@ class Stock_Validator {
 		// (including the one the WP test framework wraps every test in). So the
 		// group is undone by compensation instead: snapshot this order's rows
 		// first, restore them on any failure.
-		$prior_reservations = $reserving ? $this->existing_reservations( $order->get_id() ) : array();
+		$prior_reservations = $persisted ? $this->existing_reservations( $order->get_id() ) : array();
+		if ( $persisted ) {
+			$this->release_checkout_stock( $order );
+		}
 
 		try {
 			foreach ( $managed_stock as $group ) {
@@ -250,13 +257,13 @@ class Stock_Validator {
 				}
 			}
 		} catch ( \Throwable $exception ) {
-			if ( $reserving ) {
+			if ( $persisted ) {
 				$this->restore_reservations( $order->get_id(), $prior_reservations );
 			}
 			throw $exception;
 		}
 
-		if ( $reserving && ! empty( $failures ) ) {
+		if ( $persisted && ! empty( $failures ) ) {
 			$this->restore_reservations( $order->get_id(), $prior_reservations );
 		}
 
@@ -372,7 +379,7 @@ class Stock_Validator {
 		$stock_query    = $data_store->get_query_for_stock( $owner_id );
 		$reserved_query = $this->reserved_stock_query( $owner_id, $order->get_id() );
 		$minutes        = max( 1, (int) get_option( 'woocommerce_hold_stock_minutes', 60 ) );
-		$precision      = wc_get_rounding_precision();
+		$precision      = self::STOCK_PRECISION;
 		$scale          = 10 ** $precision;
 		$quantity       = wc_format_decimal( $this->stock_quantity( $requested_units ), $precision );
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WooCommerce supplies the stock subquery; all values are prepared.
@@ -457,7 +464,7 @@ class Stock_Validator {
 	 * @param float $quantity Stock quantity.
 	 */
 	private function stock_units( float $quantity ): int {
-		return (int) \round( $quantity * ( 10 ** wc_get_rounding_precision() ) );
+		return (int) \round( $quantity * ( 10 ** self::STOCK_PRECISION ) );
 	}
 
 	/**
@@ -466,7 +473,7 @@ class Stock_Validator {
 	 * @param int $units Fixed-precision stock units.
 	 */
 	private function stock_quantity( int $units ): float {
-		return $units / ( 10 ** wc_get_rounding_precision() );
+		return $units / ( 10 ** self::STOCK_PRECISION );
 	}
 
 	/**
