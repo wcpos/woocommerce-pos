@@ -30,6 +30,7 @@
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
 use WCPOS\WooCommercePOS\Templates\Barcode_Image;
+use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
 
 /**
  * Html_Thermal_Emitter class.
@@ -164,7 +165,7 @@ class Html_Thermal_Emitter {
 			case 'barcode':
 				$barcode_type = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 				$value        = isset( $node['value'] ) ? (string) $node['value'] : '';
-				if ( $this->is_qr_barcode_type( $barcode_type ) ) {
+				if ( Barcode_Symbology::is_qr( $barcode_type ) ) {
 					return $this->render_qrcode( $value, $this->height_to_qr_size( isset( $node['height'] ) ? (int) $node['height'] : 40 ) );
 				}
 				return $this->render_barcode( $barcode_type, $value, isset( $node['height'] ) ? (int) $node['height'] : 40 );
@@ -342,19 +343,6 @@ class Html_Thermal_Emitter {
 	 */
 	private function render_barcode_fallback( string $text ): string {
 		return '<div style="text-align: center; padding: 8px 0"><code>' . $this->escape_html( $text ) . '</code></div>';
-	}
-
-	/**
-	 * Determine whether a barcode type should be rendered as a QR code.
-	 *
-	 * @param string $type The barcode type string.
-	 *
-	 * @return bool True when the type is a QR variant.
-	 */
-	private function is_qr_barcode_type( string $type ): bool {
-		$normalized = strtolower( trim( $type ) );
-
-		return 'qrcode' === $normalized || 'qr' === $normalized;
 	}
 
 	/**

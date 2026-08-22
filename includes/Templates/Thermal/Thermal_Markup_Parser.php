@@ -18,6 +18,7 @@ use DOMDocument;
 use DOMElement;
 use DOMNode;
 use RuntimeException;
+use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
 
 /**
  * Thermal_Markup_Parser class.
@@ -146,7 +147,7 @@ class Thermal_Markup_Parser {
 					break;
 				case 'barcode':
 					$type = $child->hasAttribute( 'type' ) ? $child->getAttribute( 'type' ) : 'code128';
-					if ( $this->is_qr_barcode_type( $type ) ) {
+					if ( Barcode_Symbology::is_qr( $type ) ) {
 						$nodes[] = array(
 							'type'  => 'qrcode',
 							'size'  => $this->height_to_qr_size( $this->int_attr( $child, 'height', 40 ) ),
@@ -273,19 +274,6 @@ class Thermal_Markup_Parser {
 		$value = (int) $raw;
 
 		return ( (string) $value === $raw && $value <= PHP_INT_MAX ) ? $value : $fallback;
-	}
-
-	/**
-	 * Determine whether a barcode type should be rendered as a QR code.
-	 *
-	 * @param string $type The barcode type attribute value.
-	 *
-	 * @return bool True when the type is a QR variant.
-	 */
-	private function is_qr_barcode_type( string $type ): bool {
-		$normalized = strtolower( trim( $type ) );
-
-		return 'qrcode' === $normalized || 'qr' === $normalized;
 	}
 
 	/**

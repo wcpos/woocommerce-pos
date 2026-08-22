@@ -12,6 +12,8 @@
 
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
+
 /**
  * Star_Markup_Thermal_Emitter class.
  */
@@ -268,8 +270,8 @@ class Star_Markup_Thermal_Emitter {
 	 */
 	private function emit_barcode( array $node ): void {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
-		$type  = isset( $node['barcode_type'] ) ? strtolower( (string) $node['barcode_type'] ) : 'code128';
-		$this->buffer .= sprintf( '[barcode: type %s; data "%s"; hri]', $this->barcode_type( $type ), $this->data_escape( $value ) );
+		$type  = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
+		$this->buffer .= sprintf( '[barcode: type %s; data "%s"; hri]', Barcode_Symbology::star_markup_name( $type ), $this->data_escape( $value ) );
 	}
 
 	/**
@@ -281,26 +283,6 @@ class Star_Markup_Thermal_Emitter {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
 		$cell  = isset( $node['size'] ) ? max( 1, min( 8, (int) $node['size'] ) ) : 3;
 		$this->buffer .= sprintf( '[barcode: type qr; data "%s"; cell %d; ec medium]', $this->data_escape( $value ), $cell );
-	}
-
-	/**
-	 * Map a parser barcode type to a Star markup barcode type.
-	 *
-	 * @param string $type Parser barcode type.
-	 *
-	 * @return string
-	 */
-	private function barcode_type( string $type ): string {
-		// Star markup names Codabar "nw7"; the parser, client preview, and PDF
-		// path all use "codabar", so translate it here instead of silently
-		// falling back to Code 128.
-		if ( 'codabar' === $type ) {
-			return 'nw7';
-		}
-
-		$allowed = array( 'code128', 'code39', 'code93', 'ean13', 'ean8', 'upca', 'upce', 'itf', 'nw7' );
-
-		return \in_array( $type, $allowed, true ) ? $type : 'code128';
 	}
 
 	/**

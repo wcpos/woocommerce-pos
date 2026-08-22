@@ -57,7 +57,7 @@ class Barcode_Image {
 
 					// Clamp the height so a malformed template dimension cannot
 					// allocate a huge raster.
-					return $generator->getBarcode( $text, self::barcode_constant( $type ), 2, max( 8, min( 600, $height ) ) );
+					return $generator->getBarcode( $text, Barcode_Symbology::picqer_type( $type ), 2, max( 8, min( 600, $height ) ) );
 				}
 			);
 
@@ -189,7 +189,7 @@ class Barcode_Image {
 		}
 		$type = strtolower( trim( $raw_type ) );
 
-		if ( 'qr' === $type || 'qrcode' === $type ) {
+		if ( Barcode_Symbology::is_qr( $type ) ) {
 			$size = (int) self::attr( $attrs, 'size' );
 
 			return self::qrcode_img( $value, $size > 0 ? $size : 4 );
@@ -268,31 +268,6 @@ class Barcode_Image {
 		}
 
 		return '';
-	}
-
-	/**
-	 * Map a barcode type string to a picqer generator constant.
-	 *
-	 * @param string $type The barcode type string.
-	 *
-	 * @return string The picqer TYPE_* constant value.
-	 */
-	private static function barcode_constant( string $type ): string {
-		$map = array(
-			'code128' => BarcodeGeneratorPNG::TYPE_CODE_128,
-			'code39'  => BarcodeGeneratorPNG::TYPE_CODE_39,
-			'code93'  => BarcodeGeneratorPNG::TYPE_CODE_93,
-			'ean13'   => BarcodeGeneratorPNG::TYPE_EAN_13,
-			'ean8'    => BarcodeGeneratorPNG::TYPE_EAN_8,
-			'upca'    => BarcodeGeneratorPNG::TYPE_UPC_A,
-			'upce'    => BarcodeGeneratorPNG::TYPE_UPC_E,
-			'codabar' => BarcodeGeneratorPNG::TYPE_CODABAR,
-			'itf'     => BarcodeGeneratorPNG::TYPE_INTERLEAVED_2_5,
-		);
-
-		$normalized = strtolower( trim( $type ) );
-
-		return isset( $map[ $normalized ] ) ? $map[ $normalized ] : BarcodeGeneratorPNG::TYPE_CODE_128;
 	}
 
 	/**

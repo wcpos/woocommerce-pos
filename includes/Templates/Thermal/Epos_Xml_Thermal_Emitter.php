@@ -28,6 +28,8 @@
 
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
+
 /**
  * Epos_Xml_Thermal_Emitter class.
  */
@@ -555,6 +557,10 @@ class Epos_Xml_Thermal_Emitter {
 	/**
 	 * Emit a native barcode element.
 	 *
+	 * The `type` attribute is an ePOS-Print enum, not the template's spelling —
+	 * the UPC pair is underscored there (`upc_a` / `upc_e`) and the unseparated
+	 * form is rejected — so the name comes from Barcode_Symbology.
+	 *
 	 * @param array $node The barcode AST node.
 	 *
 	 * @return void
@@ -565,7 +571,7 @@ class Epos_Xml_Thermal_Emitter {
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		$height = max( 1, min( 255, $height ) );
 
-		$this->buffer .= '<barcode type="' . $this->escape( $type ) . '" hri="none" height="' . $height . '">' . $this->escape( $value ) . '</barcode>';
+		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '">' . $this->escape( $value ) . '</barcode>';
 	}
 
 	/**
