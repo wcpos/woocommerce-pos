@@ -119,16 +119,104 @@ class Stock_Validator {
 	}
 
 	/**
+	 * Run a paid order create as create-pending -> reserve -> complete.
+	 *
+	 * Reservations in `wc_reserved_stock` are keyed by order id, and the only
+	 * hook that fires before an order is written — `pre_insert` — has no id yet,
+	 * so a filter can compare availability but can never take a lock. Nor can a
+	 * hook INSIDE WC_Order::save() reject: that method catches every exception
+	 * and `handle_exception()` only writes it to the log, so a throw there is
+	 * swallowed and the sale proceeds. The order therefore has to exist, in a
+	 * status that reduces no stock, before it can be validated — which is
+	 * exactly what WC_Checkout::process_checkout() does for the storefront
+	 * (create pending, wc_reserve_stock_for_order(), then take payment).
+	 *
+	 * Both write lanes route through here so the sequence exists once: wcpos/v1
+	 * wraps parent::save_object(), and the v2 push surface wraps its wc/v3
+	 * forward. $write receives the neutralised intent and must return the
+	 * created WC_Order (or a WP_Error).
+	 *
+	 * @param array    $intent Requested status, set_paid flag and transaction id.
+	 * @param callable $write  Performs the create; receives the neutralised intent.
+	 * @return WC_Order|WP_Error
+	 * @throws \Throwable Re-thrown after the provisional order is removed.
+	 */
+	public function around_paid_create( array $intent, callable $write ) {
+		$order = $write(
+			array(
+				'status'   => 'pending',
+				'set_paid' => false,
+			)
+		);
+
+		if ( is_wp_error( $order ) || ! $order instanceof WC_Order ) {
+			return $order;
+		}
+
+		try {
+			$validation = $this->validate_checkout( $order );
+		} catch ( \Throwable $exception ) {
+			// The provisional order is ours; nothing has been paid or reduced at
+			// `pending`, so remove it rather than leaving a ghost behind.
+			$order->delete( true );
+
+			throw $exception;
+		}
+
+		if ( is_wp_error( $validation ) ) {
+			$order->delete( true );
+
+			return $validation;
+		}
+
+		// WooCommerce's own save_object() applies the requested status and THEN
+		// calls payment_complete(). Keeping that sequence is what makes a POS sale
+		// behave identically to the same payload through wp-admin or wc/v3, and
+		// stops the result depending on whether prevent-overselling is enabled.
+		$target_status = isset( $intent['status'] ) ? (string) $intent['status'] : '';
+		if ( '' !== $target_status ) {
+			$order->set_status( $target_status );
+			$order->save();
+		}
+		if ( ! empty( $intent['set_paid'] ) ) {
+			$order->payment_complete( isset( $intent['transaction_id'] ) ? (string) $intent['transaction_id'] : '' );
+		}
+
+		return wc_get_order( $order->get_id() );
+	}
+
+	/**
+	 * Whether a new-order request is attempting checkout rather than draft sync.
+	 *
+	 * @param WP_REST_Request $request REST request.
+	 */
+	/**
+	 * Payload-shaped twin of should_validate_create_request().
+	 *
+	 * The v2 push lane holds a decoded payload rather than a WP_REST_Request, so
+	 * both callers share this predicate instead of each deciding for itself what
+	 * counts as a checkout rather than a draft sync.
+	 *
+	 * @param string $status   Requested order status ('' when absent).
+	 * @param bool   $set_paid Whether the payload asks to mark the order paid.
+	 */
+	public function should_validate_create_payload( string $status, bool $set_paid ): bool {
+		$target_status = '' === $status ? 'pending' : $status;
+		$target_status = 0 === strpos( $target_status, 'wc-' ) ? substr( $target_status, 3 ) : $target_status;
+
+		return $set_paid || ! \in_array( $target_status, $this->exempt_statuses(), true );
+	}
+
+	/**
 	 * Whether a new-order request is attempting checkout rather than draft sync.
 	 *
 	 * @param WP_REST_Request $request REST request.
 	 */
 	public function should_validate_create_request( WP_REST_Request $request ): bool {
-		$target_status = $request->has_param( 'status' ) ? (string) $request->get_param( 'status' ) : 'pending';
-		$target_status = 0 === strpos( $target_status, 'wc-' ) ? substr( $target_status, 3 ) : $target_status;
-		$set_paid      = $request->has_param( 'set_paid' ) && rest_sanitize_boolean( $request->get_param( 'set_paid' ) );
-
-		return $set_paid || ! \in_array( $target_status, $this->exempt_statuses(), true );
+		return $this->should_validate_create_payload(
+			$request->has_param( 'status' ) ? (string) $request->get_param( 'status' ) : '',
+			$request->has_param( 'set_paid' ) && rest_sanitize_boolean( $request->get_param( 'set_paid' ) )
+		);
 	}
 
 	/**
@@ -220,8 +308,15 @@ class Stock_Validator {
 		// group is undone by compensation instead: snapshot this order's rows
 		// first, then reacquire them on failure when stock is still available.
 		$prior_reservations = $persisted ? $this->existing_reservations( $order->get_id() ) : array();
+
+		// Drop only what left the order. Releasing everything and re-reserving
+		// would leave this order holding nothing in between, which is exactly the
+		// gap another till can take. Gated on $persisted rather than $reserving,
+		// because an order whose LAST stock-managed line was removed has an empty
+		// managed set and still needs its rows dropped — prune_reservations()
+		// treats that as "keep nothing".
 		if ( $persisted ) {
-			$this->release_checkout_stock( $order );
+			$this->prune_reservations( $order->get_id(), array_keys( $managed_stock ) );
 		}
 
 		try {
@@ -327,6 +422,34 @@ class Stock_Validator {
 		);
 
 		return \is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Drop this order's holds for stock owners it no longer contains.
+	 *
+	 * @param int        $order_id Order ID.
+	 * @param array<int> $keep_ids Stock-owner IDs still on the order.
+	 */
+	private function prune_reservations( int $order_id, array $keep_ids ): void {
+		global $wpdb;
+
+		if ( empty( $keep_ids ) ) {
+			$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->wc_reserved_stock,
+				array( 'order_id' => $order_id ),
+				array( '%d' )
+			);
+
+			return;
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, \count( $keep_ids ), '%d' ) );
+		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d AND product_id NOT IN ( {$placeholders} )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				array_merge( array( $order_id ), array_map( 'intval', $keep_ids ) )
+			)
+		);
 	}
 
 	/**
