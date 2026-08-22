@@ -27,8 +27,18 @@ final class Sync_Journal {
 	/** Per-request dedup of identical customer lifecycle events. */
 	private array $recorded_this_request = array();
 
-	/** Highest sequence ever removed by lossy tombstone pruning. */
-	const PRUNE_WATERMARK_OPTION = 'wcpos_change_log_prune_watermark';
+	/**
+	 * Option-name prefix for the per-object-type lossy-prune watermarks.
+	 *
+	 * The watermark is scoped per object type for the same reason heads are
+	 * stream-scoped: the streams share one AUTO_INCREMENT space, so a single
+	 * global watermark advanced by an order prune would sit far above a quiet
+	 * catalogue stream's head. Every catalogue cursor would then read as
+	 * "below the horizon" and rebaseline on EVERY poll, forever — and
+	 * symmetrically for the order lane. A stream's horizon may only move for
+	 * rows that stream can serve.
+	 */
+	const PRUNE_WATERMARK_OPTION_PREFIX = 'wcpos_change_log_prune_watermark_';
 
 	public function table_name(): string {
 		global $wpdb;
@@ -61,7 +71,7 @@ final class Sync_Journal {
 		dbDelta( $this->schema_sql( $table_name, $wpdb->get_charset_collate() ) );
 
 		if ( ! $table_existed && Health::table_exists( $table_name ) ) {
-			delete_option( self::PRUNE_WATERMARK_OPTION );
+			self::reset_prune_watermarks();
 		}
 		if ( ! Health::table_exists( $table_name ) ) {
 			return;
@@ -714,8 +724,15 @@ final class Sync_Journal {
 		return false === $deleted ? 0 : (int) $deleted;
 	}
 
-	/** Delete one batch of expired tombstones — the log's only LOSSY deletion. */
-	public function prune_tombstones( int $cutoff_sequence, string $cutoff_gmt, int $batch ): array {
+	/**
+	 * Delete one batch of expired tombstones — the log's only LOSSY deletion.
+	 *
+	 * @param int    $cutoff_sequence Highest sequence this batch may remove.
+	 * @param string $cutoff_gmt      Rows created before this are expired.
+	 * @param int    $batch           Maximum rows to remove.
+	 * @param array  $object_types    Restrict to one stream's types; empty = every type.
+	 */
+	public function prune_tombstones( int $cutoff_sequence, string $cutoff_gmt, int $batch, array $object_types = array() ): array {
 		global $wpdb;
 		$none = array(
 			'deleted'   => 0,
@@ -725,26 +742,53 @@ final class Sync_Journal {
 			return $none;
 		}
 
-		$sequences = array_map(
-			'intval',
-			$wpdb->get_col(
-				$wpdb->prepare(
-					'SELECT sequence FROM ' . $this->table_name()
-					. ' WHERE deleted = 1 AND sequence <= %d AND created_gmt < %s'
-					. ' ORDER BY sequence ASC LIMIT %d',
-					$cutoff_sequence,
-					$cutoff_gmt,
-					$batch
-				)
-			)
+		// Each stream is pruned under its OWN cutoff (Sync_Journal_Purge), so the
+		// batch must not reach across streams: an order tombstone is not eligible
+		// merely because the catalogue's cutoff cleared it.
+		$types      = array_values( array_unique( array_filter( array_map( 'strval', $object_types ), static fn( string $type ): bool => '' !== $type ) ) );
+		$type_where = '';
+		$type_args  = array();
+		if ( array() !== $types ) {
+			$type_where = ' AND object_type IN (' . implode( ',', array_fill( 0, \count( $types ), '%s' ) ) . ')';
+			$type_args  = $types;
+		}
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT sequence, object_type FROM ' . $this->table_name()
+				. ' WHERE deleted = 1 AND sequence <= %d AND created_gmt < %s' . $type_where // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- %s placeholder list generated from count().
+				. ' ORDER BY sequence ASC LIMIT %d',
+				$cutoff_sequence,
+				$cutoff_gmt,
+				...array_merge( $type_args, array( $batch ) )
+			),
+			ARRAY_A
 		);
-		if ( empty( $sequences ) ) {
+		if ( empty( $rows ) ) {
 			return $none;
 		}
+
+		// Each pruned row raises ONLY its own object type's watermark: a client
+		// reading a stream that never held these rows has missed nothing.
+		$sequences = array();
+		$per_type  = array();
+		foreach ( $rows as $row ) {
+			$sequence      = (int) $row['sequence'];
+			$object_type   = (string) $row['object_type'];
+			$sequences[]   = $sequence;
+			$per_type[ $object_type ] = max( $per_type[ $object_type ] ?? 0, $sequence );
+		}
 		$watermark = max( $sequences );
-		$this->advance_prune_watermark( $watermark );
-		if ( $this->prune_watermark() < $watermark ) {
-			return $none;
+
+		// Publish every watermark BEFORE deleting anything. A row deleted while
+		// its type's horizon still reads below it is silently lost history — no
+		// client would ever learn to reconcile it — so a failed write aborts the
+		// whole batch and the next run retries it.
+		foreach ( $per_type as $object_type => $sequence ) {
+			$this->advance_prune_watermark( $object_type, $sequence );
+			if ( $this->prune_watermark( array( $object_type ) ) < $sequence ) {
+				return $none;
+			}
 		}
 
 		$deleted = $wpdb->query(
@@ -770,30 +814,90 @@ final class Sync_Journal {
 		);
 	}
 
-	/** Highest sequence ever removed by lossy tombstone pruning. */
-	public function prune_watermark(): int {
-		return (int) get_option( self::PRUNE_WATERMARK_OPTION, 0 );
+	/** Option holding one object type's lossy-prune watermark. */
+	public static function prune_watermark_option( string $object_type ): string {
+		return self::PRUNE_WATERMARK_OPTION_PREFIX . $object_type;
 	}
 
-	/** Advance the persisted prune watermark (never moves backwards). */
-	public function advance_prune_watermark( int $sequence ): void {
+	/**
+	 * Highest sequence ever removed by lossy tombstone pruning FROM A STREAM.
+	 *
+	 * Mirrors head_sequence(): the caller names the object types its stream
+	 * serves and gets that stream's boundary. An empty list means every
+	 * registered type — the whole journal's boundary.
+	 *
+	 * @param array $object_types Object types the reading stream serves.
+	 */
+	public function prune_watermark( array $object_types = array() ): int {
+		$watermark = 0;
+		foreach ( self::watermark_object_types( $object_types ) as $object_type ) {
+			$watermark = max( $watermark, (int) get_option( self::prune_watermark_option( $object_type ), 0 ) );
+		}
+
+		return $watermark;
+	}
+
+	/**
+	 * Advance one object type's persisted watermark (never moves backwards).
+	 *
+	 * @param string $object_type Journal object type the pruned rows belonged to.
+	 * @param int    $sequence    Highest sequence pruned for that type.
+	 */
+	public function advance_prune_watermark( string $object_type, int $sequence ): void {
 		global $wpdb;
-		if ( $sequence <= 0 ) {
+		if ( $sequence <= 0 || '' === $object_type ) {
 			return;
 		}
 
+		$option = self::prune_watermark_option( $object_type );
 		$wpdb->query(
 			$wpdb->prepare(
 				'INSERT INTO ' . $wpdb->options . " (option_name, option_value, autoload) VALUES (%s, %d, 'yes')"
 				. ' ON DUPLICATE KEY UPDATE option_value = GREATEST(CAST(option_value AS UNSIGNED), %d)',
-				self::PRUNE_WATERMARK_OPTION,
+				$option,
 				$sequence,
 				$sequence
 			)
 		);
-		wp_cache_delete( self::PRUNE_WATERMARK_OPTION, 'options' );
+		wp_cache_delete( $option, 'options' );
 		wp_cache_delete( 'alloptions', 'options' );
 		wp_cache_delete( 'notoptions', 'options' );
+	}
+
+	/** Drop every per-type watermark — the journal's history is starting over. */
+	public static function reset_prune_watermarks(): void {
+		global $wpdb;
+
+		// Trailing separator trimmed from the LIKE so this also clears the single
+		// pre-stream-scoping watermark a pre-release install may still carry.
+		$names = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
+				$wpdb->esc_like( rtrim( self::PRUNE_WATERMARK_OPTION_PREFIX, '_' ) ) . '%'
+			)
+		);
+		foreach ( (array) $names as $name ) {
+			delete_option( (string) $name );
+		}
+	}
+
+	/**
+	 * Object types a watermark read covers: the named stream, or all of them.
+	 *
+	 * @param array $object_types Object types named by the caller.
+	 */
+	private static function watermark_object_types( array $object_types ): array {
+		$types = array_values(
+			array_filter(
+				array_map( 'strval', $object_types ),
+				static fn( string $type ): bool => '' !== $type
+			)
+		);
+		if ( array() !== $types ) {
+			return array_unique( $types );
+		}
+
+		return array_unique( array_merge( array( 'order' ), self::catalogue_object_types() ) );
 	}
 
 	/** One page of the change stream past a cursor, plus the head it was read against. */

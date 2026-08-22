@@ -136,7 +136,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		$activator  = new Activator();
 		$journal = new Sync_Journal();
 		$activator->install_sync_schema();
-		$journal->advance_prune_watermark( 40 );
+		$journal->advance_prune_watermark( 'product', 40 );
 
 		$activator->install_sync_schema();
 		$this->assertSame( 40, $journal->prune_watermark() );

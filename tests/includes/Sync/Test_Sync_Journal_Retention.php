@@ -31,14 +31,14 @@ class Test_Sync_Journal_Retention extends Sync_Store_Test_Case {
 		$this->journal->install();
 		global $wpdb;
 		$wpdb->query( 'DELETE FROM ' . $this->journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 	}
 
 	/**
 	 * Remove the persisted watermark between tests.
 	 */
 	public function tearDown(): void {
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 		parent::tearDown();
 	}
 
@@ -232,8 +232,8 @@ class Test_Sync_Journal_Retention extends Sync_Store_Test_Case {
 		$this->assertEquals( 0, $this->journal->prune_watermark() );
 
 		// Act.
-		$this->journal->advance_prune_watermark( 40 );
-		$this->journal->advance_prune_watermark( 25 );
+		$this->journal->advance_prune_watermark( 'product', 40 );
+		$this->journal->advance_prune_watermark( 'product', 25 );
 
 		// Assert.
 		$this->assertEquals( 40, $this->journal->prune_watermark() );
@@ -246,16 +246,16 @@ class Test_Sync_Journal_Retention extends Sync_Store_Test_Case {
 		global $wpdb;
 
 		// Arrange: this worker cached 10 while another worker persisted 50.
-		update_option( Sync_Journal::PRUNE_WATERMARK_OPTION, 10, true );
+		update_option( Sync_Journal::prune_watermark_option( 'product' ), 10, true );
 		$this->assertEquals( 10, $this->journal->prune_watermark() );
 		$wpdb->update(
 			$wpdb->options,
 			array( 'option_value' => 50 ),
-			array( 'option_name' => Sync_Journal::PRUNE_WATERMARK_OPTION )
+			array( 'option_name' => Sync_Journal::prune_watermark_option( 'product' ) )
 		);
 
 		// Act.
-		$this->journal->advance_prune_watermark( 40 );
+		$this->journal->advance_prune_watermark( 'product', 40 );
 
 		// Assert.
 		$this->assertEquals( 50, $this->journal->prune_watermark() );
@@ -278,7 +278,7 @@ class Test_Sync_Journal_Retention extends Sync_Store_Test_Case {
 		$second = $this->journal->head_sequence();
 		$this->journal->record( 'product', 33, false, '', 'test', false );
 		$concurrent = $second + 1000;
-		update_option( Sync_Journal::PRUNE_WATERMARK_OPTION, 1, true );
+		update_option( Sync_Journal::prune_watermark_option( 'product' ), 1, true );
 
 		// A second worker persists a higher watermark between our select and our
 		// write; its write lands in the table, not in this process's option cache.
@@ -289,7 +289,7 @@ class Test_Sync_Journal_Retention extends Sync_Store_Test_Case {
 				$wpdb->update(
 					$wpdb->options,
 					array( 'option_value' => $concurrent ),
-					array( 'option_name' => Sync_Journal::PRUNE_WATERMARK_OPTION )
+					array( 'option_name' => Sync_Journal::prune_watermark_option( 'product' ) )
 				);
 			}
 
@@ -303,7 +303,7 @@ class Test_Sync_Journal_Retention extends Sync_Store_Test_Case {
 		$persisted = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
-				Sync_Journal::PRUNE_WATERMARK_OPTION
+				Sync_Journal::prune_watermark_option( 'product' )
 			)
 		);
 

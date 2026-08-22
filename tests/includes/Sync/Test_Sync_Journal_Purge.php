@@ -33,7 +33,7 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 		$this->journal->install();
 		global $wpdb;
 		$wpdb->query( 'DELETE FROM ' . $this->journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 		wp_clear_scheduled_hook( Sync_Journal_Purge::PURGE_HOOK );
 	}
 
@@ -43,7 +43,7 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 	public function tearDown(): void {
 		remove_all_filters( 'woocommerce_pos_change_log_tombstone_retention_days' );
 		remove_all_filters( 'woocommerce_pos_sync_mutation_failure_retention_days' );
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 		wp_clear_scheduled_hook( Sync_Journal_Purge::PURGE_HOOK );
 		parent::tearDown();
 	}
@@ -163,7 +163,7 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 		$this->journal->record( 'product', 33, false, '', 'test', false );
 		$this->age_row( $aged_tombstone, 91 );
 		$block_watermark = static function ( string $query ): string {
-			if ( false !== strpos( $query, 'INSERT INTO' ) && false !== strpos( $query, Sync_Journal::PRUNE_WATERMARK_OPTION ) ) {
+			if ( false !== strpos( $query, 'INSERT INTO' ) && false !== strpos( $query, Sync_Journal::PRUNE_WATERMARK_OPTION_PREFIX ) ) {
 				return 'SELECT * FROM wcpos_missing_watermark_table';
 			}
 
@@ -201,6 +201,126 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 		$this->assertCount( 1, $this->journal->rows_after_sequence( 0, 10 ) );
 		$this->assertSame( $aged_tombstone, $this->journal->head_sequence( array( 'order' ) ) );
 		$this->assertSame( 0, $this->journal->prune_watermark() );
+	}
+
+	/**
+	 * A narrowed stream's head is protected by its OWN type, not the catalogue's.
+	 *
+	 * `/changes/sequence-log?collection=tax_rates` is independently readable, so
+	 * a tax-rate tombstone that is the newest tax_rate row must survive even when
+	 * a newer product row holds the catalogue head. Pruning it would serve that
+	 * stream a head below its own horizon, and its clients would rebaseline on
+	 * every poll (free#1560 review round 2).
+	 */
+	public function test_purge_expired_keeps_an_aged_tombstone_that_is_its_own_types_head(): void {
+		// Arrange: the tax_rates stream's newest row is an expired tombstone,
+		// while a newer product row holds the catalogue head above it.
+		$this->journal->record( 'tax_rate', 7, true, '', 'test', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'product', 11, false, '', 'test', false );
+		$this->age_row( $aged_tombstone, 91 );
+
+		// Act.
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		// Assert: the tax_rates stream keeps a head, and never one below its horizon.
+		$this->assertSame( $aged_tombstone, $this->journal->head_sequence( array( 'tax_rate' ) ) );
+		$this->assertSame( 0, $this->journal->prune_watermark( array( 'tax_rate' ) ) );
+	}
+
+	/**
+	 * A quiet catalogue must not block order-tombstone pruning.
+	 *
+	 * The cutoff is clamped per stream, not by the lowest head in the journal:
+	 * with a static catalogue every order tombstone sits above the catalogue
+	 * head, and one shared clamp would leave the order lane growing forever —
+	 * the unbounded-growth gap the unified journal closes (free#1560).
+	 */
+	public function test_purge_expired_prunes_order_tombstones_while_the_catalogue_stream_is_quiet(): void {
+		// Arrange: the catalogue's newest row predates every order row.
+		$this->journal->record( 'product', 11, false, '', 'test', false );
+		$this->journal->record( 'order', 101, true, 'deleted', 'hook:delete', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'order', 102, false, 'rev', 'hook:update', false );
+		$order_head = $this->journal->head_sequence();
+		$this->age_row( $aged_tombstone, 91 );
+
+		// Act.
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		// Assert: the tombstone is gone and the order head is intact.
+		$order_rows = $this->journal->rows_after_sequence( 0, 10 );
+		$this->assertCount( 1, $order_rows );
+		$this->assertSame( 102, $order_rows[0]['order_id'] );
+		$this->assertSame( $order_head, $this->journal->head_sequence( array( 'order' ) ) );
+	}
+
+	/**
+	 * An order prune leaves the CATALOGUE stream's horizon where it was.
+	 *
+	 * The streams share one AUTO_INCREMENT space, so an order tombstone's
+	 * sequence routinely sits far above a quiet catalogue stream's head. A
+	 * shared watermark would put every catalogue cursor below the horizon and
+	 * rebaseline it on every poll, forever (free#1560 review, blocker B4).
+	 */
+	public function test_purge_expired_with_pruned_order_tombstone_keeps_catalogue_horizon_unmoved(): void {
+		// Arrange: a quiet catalogue whose head sits below a busy order lane.
+		$this->journal->record( 'product', 11, false, '', 'test', false );
+		$catalogue_head = $this->journal->head_sequence( Sync_Journal::catalogue_object_types() );
+		$this->journal->record( 'order', 101, true, 'deleted', 'hook:delete', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'order', 102, false, 'rev', 'hook:update', false );
+		$this->age_row( $aged_tombstone, 91 );
+
+		// Act.
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		// Assert: the order lane learns of the lossy prune; the catalogue does not.
+		$this->assertSame( $aged_tombstone, $this->journal->prune_watermark( array( 'order' ) ) );
+		$this->assertSame( 0, $this->journal->prune_watermark( Sync_Journal::catalogue_object_types() ) );
+		$this->assertGreaterThan( $catalogue_head, $aged_tombstone );
+	}
+
+	/**
+	 * The mirror: a catalogue prune leaves the ORDER lane's horizon unmoved.
+	 */
+	public function test_purge_expired_with_pruned_catalogue_tombstone_keeps_order_horizon_unmoved(): void {
+		// Arrange: an order lane sitting below a busier catalogue.
+		$this->journal->record( 'order', 101, false, 'rev', 'hook:update', false );
+		$this->journal->record( 'product', 11, true, '', 'test', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'product', 22, false, '', 'test', false );
+		$this->age_row( $aged_tombstone, 91 );
+
+		// Act.
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		// Assert.
+		$this->assertSame( $aged_tombstone, $this->journal->prune_watermark( Sync_Journal::catalogue_object_types() ) );
+		$this->assertSame( 0, $this->journal->prune_watermark( array( 'order' ) ) );
+	}
+
+	/**
+	 * A prune advances only the pruned types, even inside one batch.
+	 */
+	public function test_prune_tombstones_advances_each_object_type_to_its_own_highest_row(): void {
+		// Arrange: interleaved tombstones of two types in one prunable batch.
+		$this->journal->record( 'product', 11, true, '', 'test', false );
+		$product_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'order', 101, true, 'deleted', 'hook:delete', false );
+		$order_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'product', 22, false, '', 'test', false );
+		$this->journal->record( 'order', 102, false, 'rev', 'hook:update', false );
+		$this->age_row( $product_tombstone, 91 );
+		$this->age_row( $order_tombstone, 91 );
+
+		// Act.
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		// Assert: each type carries its OWN boundary, not the batch maximum.
+		$this->assertSame( $product_tombstone, $this->journal->prune_watermark( array( 'product' ) ) );
+		$this->assertSame( $order_tombstone, $this->journal->prune_watermark( array( 'order' ) ) );
+		$this->assertSame( 0, $this->journal->prune_watermark( array( 'coupon' ) ) );
 	}
 
 	/**

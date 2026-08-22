@@ -100,14 +100,31 @@ class Test_Changes_Tick extends Sync_REST_Store_Test_Case {
 		// Arrange.
 		$log = new Sync_Journal();
 		$log->record( 'product', 11, false, '', 'test', false );
-		$log->advance_prune_watermark( 5 );
+		$log->advance_prune_watermark( 'product', 5 );
 
 		// Act.
 		$tick = $this->server->dispatch( $this->tick_request() )->get_data();
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 
 		// Assert: the graduated tick lifts checkpoint to the top level.
 		$this->assertEquals( 5, $tick['checkpoint']['horizon'] );
+	}
+
+	/**
+	 * Tick is the catalogue lane's probe: an order prune is not its horizon.
+	 */
+	public function test_tick_with_pruned_order_history_keeps_catalogue_horizon_zero(): void {
+		// Arrange.
+		$log = new Sync_Journal();
+		$log->record( 'product', 11, false, '', 'test', false );
+		$log->advance_prune_watermark( 'order', $log->head_sequence() + 5000 );
+
+		// Act.
+		$tick = $this->server->dispatch( $this->tick_request() )->get_data();
+		Sync_Journal::reset_prune_watermarks();
+
+		// Assert.
+		$this->assertSame( 0, $tick['checkpoint']['horizon'] );
 	}
 
 	/**
