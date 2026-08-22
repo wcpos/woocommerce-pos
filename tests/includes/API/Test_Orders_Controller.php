@@ -501,6 +501,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_create_paid_order_blocks_before_reducing_insufficient_stock(): void {
 		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
 		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		// wcpos_request() reads getallheaders()/$_SERVER, not the WP_REST_Request
+		// object, so the base class's X-WCPOS request header is not enough here.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
 		$product = ProductHelper::create_simple_product(
 			array(
 				'manage_stock'  => true,
@@ -531,6 +534,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertEquals( 'wcpos_insufficient_stock', $data['code'] );
 			$this->assertEquals( 1.0, (float) wc_get_product( $product->get_id() )->get_stock_quantity() );
 		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
 			if ( false === $original_settings ) {
 				delete_option( 'woocommerce_pos_settings_checkout' );
 			} else {

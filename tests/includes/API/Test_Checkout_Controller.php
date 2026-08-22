@@ -22,6 +22,9 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_checkout_validates_stock_before_dispatching_gateway(): void {
 		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
 		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		// wcpos_request() reads getallheaders()/$_SERVER, not the WP_REST_Request
+		// object, so the base class's X-WCPOS request header is not enough here.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
 		$product = ProductHelper::create_simple_product(
 			array(
 				'manage_stock'  => true,
@@ -54,6 +57,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'wcpos_insufficient_stock', $data['code'] );
 			$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
 		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
 			if ( false === $original_settings ) {
 				delete_option( 'woocommerce_pos_settings_checkout' );
 			} else {
