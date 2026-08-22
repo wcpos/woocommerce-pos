@@ -130,7 +130,7 @@ class Barcode_Symbology {
 	);
 
 	/**
-	 * ePOS-Print XML `<barcode type>` attribute values.
+	 * Attribute values for the ePOS-Print XML `<barcode type>` element.
 	 *
 	 * Only the UPC pair differs from the canonical spelling: ePOS-Print
 	 * underscores them, and rejects the unseparated form outright.
