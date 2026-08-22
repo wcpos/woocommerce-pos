@@ -114,32 +114,44 @@ final class Sync_Journal_Purge {
 
 		$tombstone_days = (int) apply_filters( 'woocommerce_pos_change_log_tombstone_retention_days', 90 );
 		$tombstone_gmt  = gmdate( 'Y-m-d H:i:s', $now - $tombstone_days * DAY_IN_SECONDS );
-		// Never let a served stream's head regress: clamp each stream's cutoff
-		// below ITS OWN newest row. The newest ORDER row can be an expired
-		// tombstone while newer catalogue rows hold the global head above it;
-		// pruning it would drop the order-lane head below live client
-		// checkpoints (whose cursor-past-head guard then forces a full resync),
-		// and vice versa. This also preserves the original rationale: an idle
-		// store whose last event is an old tombstone must not see a head
-		// regress, and MySQL 5.7 reuses AUTO_INCREMENT after restart.
+		// Never let a served stream's head regress: clamp each object type's
+		// cutoff below ITS OWN newest row. An expired tombstone can be the newest
+		// row of its type while other types hold the global head above it;
+		// pruning it would drop that stream's head below live client checkpoints,
+		// whose cursor-past-head guard then forces a full resync. This also
+		// preserves the original rationale: an idle store whose last event is an
+		// old tombstone must not see a head regress, and MySQL 5.7 reuses
+		// AUTO_INCREMENT after restart.
 		//
-		// The clamp is PER STREAM, not one global minimum: the streams share an
-		// AUTO_INCREMENT space, so a quiet catalogue's head sits far below the
-		// order lane's tombstones and a shared cutoff would leave them
-		// unprunable forever — the unbounded-growth bug the unified journal
-		// exists to close (free#1560).
+		// PER OBJECT TYPE, not per lane and not one global minimum.
+		//
+		// One global minimum starves. The streams share an AUTO_INCREMENT space,
+		// so a quiet catalogue's head sits far below the order lane's tombstones,
+		// and the lowest head would leave them unprunable forever — the
+		// unbounded-growth bug the unified journal exists to close.
+		//
+		// A whole-catalogue clamp is too coarse the other way. The sequence-log is
+		// independently readable narrowed to one collection
+		// (`?collection=tax_rates`), so a tax-rate tombstone that is the newest
+		// tax_rate row must survive even when a newer product row holds the
+		// catalogue head — otherwise that stream serves a head below its own
+		// horizon and its clients rebaseline on every poll.
+		//
+		// Per type is the granularity the watermarks already use, and it holds
+		// for any future narrowing of the read surface. It costs at most one
+		// un-prunable tombstone per object type (free#1560).
 		$tombstone_streams = array();
 		if ( $tombstone_days > 0 ) {
 			$age_cutoff = $this->sync_journal->sequence_at_or_before( $tombstone_gmt );
-			foreach ( array( array( 'order' ), Sync_Journal::catalogue_object_types() ) as $stream_types ) {
-				if ( array() === $stream_types ) {
+			foreach ( array_unique( array_merge( array( 'order' ), Sync_Journal::catalogue_object_types() ) ) as $object_type ) {
+				if ( '' === $object_type ) {
 					continue;
 				}
-				$stream_head   = $this->sync_journal->head_sequence( $stream_types );
+				$stream_head   = $this->sync_journal->head_sequence( array( $object_type ) );
 				$stream_cutoff = $stream_head > 0 ? min( $age_cutoff, $stream_head - 1 ) : $age_cutoff;
 				if ( $stream_cutoff > 0 ) {
 					$tombstone_streams[] = array(
-						'types'  => $stream_types,
+						'types'  => array( $object_type ),
 						'cutoff' => $stream_cutoff,
 					);
 				}
@@ -169,10 +181,10 @@ final class Sync_Journal_Purge {
 		$capped  = $compaction['capped'];
 
 		if ( $pruning_active ) {
-			// Every stream is guaranteed an equal share of the pruning budget, so
-			// a saturated order lane cannot starve catalogue tombstones (or the
-			// reverse). Reserving only the LATER streams' shares lets each stream
-			// spend whatever the ones before it left unused.
+			// Every type is guaranteed an equal share of the pruning budget, so a
+			// saturated order lane cannot starve catalogue tombstones (or the
+			// reverse). Reserving only the LATER types' shares lets each one
+			// spend whatever the types before it left.
 			$prune_budget  = max( 0, self::MAX_DELETES_PER_RUN - $deleted - $mutation_floor );
 			$stream_share  = intdiv( $prune_budget, \count( $tombstone_streams ) );
 			$streams_left  = \count( $tombstone_streams );

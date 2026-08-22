@@ -204,6 +204,31 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A narrowed stream's head is protected by its OWN type, not the catalogue's.
+	 *
+	 * `/changes/sequence-log?collection=tax_rates` is independently readable, so
+	 * a tax-rate tombstone that is the newest tax_rate row must survive even when
+	 * a newer product row holds the catalogue head. Pruning it would serve that
+	 * stream a head below its own horizon, and its clients would rebaseline on
+	 * every poll (free#1560 review round 2).
+	 */
+	public function test_purge_expired_keeps_an_aged_tombstone_that_is_its_own_types_head(): void {
+		// Arrange: the tax_rates stream's newest row is an expired tombstone,
+		// while a newer product row holds the catalogue head above it.
+		$this->journal->record( 'tax_rate', 7, true, '', 'test', false );
+		$aged_tombstone = $this->journal->head_sequence();
+		$this->journal->record( 'product', 11, false, '', 'test', false );
+		$this->age_row( $aged_tombstone, 91 );
+
+		// Act.
+		( new Sync_Journal_Purge( $this->journal ) )->purge_expired();
+
+		// Assert: the tax_rates stream keeps a head, and never one below its horizon.
+		$this->assertSame( $aged_tombstone, $this->journal->head_sequence( array( 'tax_rate' ) ) );
+		$this->assertSame( 0, $this->journal->prune_watermark( array( 'tax_rate' ) ) );
+	}
+
+	/**
 	 * A quiet catalogue must not block order-tombstone pruning.
 	 *
 	 * The cutoff is clamped per stream, not by the lowest head in the journal:

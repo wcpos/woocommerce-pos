@@ -3,7 +3,7 @@
 This directory contains the controllers for the `wcpos/v2` sync REST surface.
 The sync engine and shared domain services remain under `includes/Sync`.
 
-## Version-skew stance for the sync journal (decided 2026-08-23, free#1560)
+## Version-skew stance for the sync journal (decided 2026-08-22, free#1560)
 
 **1.10.0 is a hard cutover for this protocol, not a compatibility window.**
 
