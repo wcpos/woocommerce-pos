@@ -13,7 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
- * Product digests follow the configured POS barcode key without upgrade floods.
+ * Product digests follow the configured WCPOS barcode key without upgrade floods.
  *
  * @covers \WCPOS\WooCommercePOS\Sync\Digest_Index
  * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Digest

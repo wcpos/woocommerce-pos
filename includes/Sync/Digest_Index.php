@@ -96,7 +96,7 @@ final class Digest_Index {
 
 	/**
 	 * The postmeta keys the product/variation digest ACTUALLY covers: the legacy baseline plus
-	 * the site's configured POS barcode key (mono#1234).
+	 * the site's configured WCPOS barcode key (mono#1234).
 	 *
 	 * The barcode field is merchant-configurable to any meta key, and only `_sku` /
 	 * `_global_unique_id` are baseline keys. A custom carrier key was therefore undigested:
