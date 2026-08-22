@@ -146,8 +146,32 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
 
-		$this->assertSame( $journal->prune_watermark(), $data['horizon'] );
+		$this->assertSame( $journal->prune_watermark( array( 'order' ) ), $data['horizon'] );
 		$this->assertSame( $tombstone_sequence, $data['horizon'] );
+	}
+
+	/**
+	 * The mirror of the head rule: a CATALOGUE prune is not the order lane's
+	 * horizon. A shared watermark would drive the till's order cursor into
+	 * resetForResync on every pull (free#1560 review, blocker B4).
+	 */
+	public function test_pull_horizon_ignores_catalogue_tombstone_prune(): void {
+		// Arrange: a catalogue tombstone prunes above the order lane's head.
+		$journal = new Sync_Journal();
+		$journal->record( 'order', 999998, false, 'rev', 'test', false );
+		$journal->record( 'product', 123, true, '', 'test', false );
+		$catalogue_tombstone = $journal->head_sequence();
+		$journal->record( 'product', 124, false, '', 'test', false );
+
+		$result = $journal->prune_tombstones( $catalogue_tombstone, '2999-01-01 00:00:00', 10 );
+		$this->assertSame( 1, $result['deleted'] );
+
+		// Act.
+		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
+
+		// Assert.
+		$this->assertSame( 0, $data['horizon'] );
+		$this->assertSame( $catalogue_tombstone, $journal->prune_watermark( array( 'product' ) ) );
 	}
 
 	/**

@@ -505,13 +505,39 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		// Act.
 		$before_pruning = $controller->sequence_log( $this->request() )->get_data();
-		$log->advance_prune_watermark( 7 );
+		$log->advance_prune_watermark( 'product', 7 );
 		$after_pruning = $controller->sequence_log( $this->request() )->get_data();
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 
 		// Assert: zero until lossy pruning happens, then the pruned boundary.
 		$this->assertEquals( 0, $before_pruning['checkpoint']['horizon'] );
 		$this->assertEquals( 7, $after_pruning['checkpoint']['horizon'] );
+	}
+
+	/**
+	 * An ORDER prune must not move the catalogue stream's horizon.
+	 *
+	 * Both streams share one AUTO_INCREMENT space, so an order watermark sits
+	 * above a quiet catalogue head. Serving it here would put every catalogue
+	 * cursor below the horizon and rebaseline the lane on every poll, forever
+	 * (free#1560 review, blocker B4). The validator must stay stable too, or
+	 * the idle 304 path dies with it.
+	 */
+	public function test_sequence_log_with_pruned_order_history_keeps_catalogue_horizon_and_etag(): void {
+		// Arrange.
+		$log = new Sync_Journal();
+		$log->record( 'product', 11, false, '', 'test', false );
+		$controller = new Changes_Controller( $log );
+		$before     = $controller->sequence_log( $this->request() );
+
+		// Act: the order lane prunes far above this stream's head.
+		$log->advance_prune_watermark( 'order', $log->head_sequence() + 5000 );
+		$after = $controller->sequence_log( $this->request() );
+		Sync_Journal::reset_prune_watermarks();
+
+		// Assert.
+		$this->assertSame( 0, $after->get_data()['checkpoint']['horizon'] );
+		$this->assertSame( $before->get_headers()['ETag'], $after->get_headers()['ETag'] );
 	}
 
 	/**
@@ -1142,10 +1168,10 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$etag = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
 
-		$journal->advance_prune_watermark( 1 );
+		$journal->advance_prune_watermark( 'product', 1 );
 		$after_horizon = $controller->sequence_log( $this->request() )->get_headers()['ETag'];
 		$this->assertNotSame( $etag, $after_horizon );
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 
 		$journal->regenerate_epoch();
 		$after_epoch = $controller->sequence_log( $this->request() )->get_headers()['ETag'];

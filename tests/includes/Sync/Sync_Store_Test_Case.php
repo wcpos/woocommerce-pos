@@ -43,7 +43,7 @@ abstract class Sync_Store_Test_Case extends WP_UnitTestCase {
 		delete_option( Api::SCHEMA_OPTION );
 		delete_option( Sync_Journal::EPOCH_OPTION );
 		delete_option( Sync_Journal::BACKFILL_OPTION );
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 	}
 
 	/**

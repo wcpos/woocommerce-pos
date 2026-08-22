@@ -114,27 +114,39 @@ final class Sync_Journal_Purge {
 
 		$tombstone_days = (int) apply_filters( 'woocommerce_pos_change_log_tombstone_retention_days', 90 );
 		$tombstone_gmt  = gmdate( 'Y-m-d H:i:s', $now - $tombstone_days * DAY_IN_SECONDS );
-		// Never let ANY served stream's head regress: clamp below the newest row
-		// of each non-empty stream, not merely the global head. Heads are
-		// stream-scoped — the newest ORDER row can be an expired tombstone while
-		// newer catalogue rows hold the global head above it; pruning it would
-		// drop the order-lane head below live client checkpoints (whose
-		// cursor-past-head guard then forces a full resync), and vice versa.
-		// This also preserves the original rationale: an idle store whose last
-		// event is an old tombstone must not see a head regress, and MySQL 5.7
-		// reuses AUTO_INCREMENT after restart.
-		$tombstone_cutoff = 0;
+		// Never let a served stream's head regress: clamp each stream's cutoff
+		// below ITS OWN newest row. The newest ORDER row can be an expired
+		// tombstone while newer catalogue rows hold the global head above it;
+		// pruning it would drop the order-lane head below live client
+		// checkpoints (whose cursor-past-head guard then forces a full resync),
+		// and vice versa. This also preserves the original rationale: an idle
+		// store whose last event is an old tombstone must not see a head
+		// regress, and MySQL 5.7 reuses AUTO_INCREMENT after restart.
+		//
+		// The clamp is PER STREAM, not one global minimum: the streams share an
+		// AUTO_INCREMENT space, so a quiet catalogue's head sits far below the
+		// order lane's tombstones and a shared cutoff would leave them
+		// unprunable forever — the unbounded-growth bug the unified journal
+		// exists to close (free#1560).
+		$tombstone_streams = array();
 		if ( $tombstone_days > 0 ) {
-			$tombstone_cutoff = $this->sync_journal->sequence_at_or_before( $tombstone_gmt );
+			$age_cutoff = $this->sync_journal->sequence_at_or_before( $tombstone_gmt );
 			foreach ( array( array( 'order' ), Sync_Journal::catalogue_object_types() ) as $stream_types ) {
-				$stream_head = $this->sync_journal->head_sequence( $stream_types );
-				if ( $stream_head > 0 ) {
-					$tombstone_cutoff = min( $tombstone_cutoff, $stream_head - 1 );
+				if ( array() === $stream_types ) {
+					continue;
+				}
+				$stream_head   = $this->sync_journal->head_sequence( $stream_types );
+				$stream_cutoff = $stream_head > 0 ? min( $age_cutoff, $stream_head - 1 ) : $age_cutoff;
+				if ( $stream_cutoff > 0 ) {
+					$tombstone_streams[] = array(
+						'types'  => $stream_types,
+						'cutoff' => $stream_cutoff,
+					);
 				}
 			}
 		}
 
-		$pruning_active = $tombstone_days > 0;
+		$pruning_active = array() !== $tombstone_streams;
 
 		// Mutation retention windows. The create window never drops below the
 		// general settled window — creates are the riskier class to prune.
@@ -157,13 +169,29 @@ final class Sync_Journal_Purge {
 		$capped  = $compaction['capped'];
 
 		if ( $pruning_active ) {
-			$pruning = $this->drain(
-				fn ( int $limit ): int => $this->sync_journal->prune_tombstones( $tombstone_cutoff, $tombstone_gmt, $limit )['deleted'],
-				$batch,
-				self::MAX_DELETES_PER_RUN - $deleted - $mutation_floor
-			);
-			$deleted += $pruning['deleted'];
-			$capped   = $capped || $pruning['capped'];
+			// Every stream is guaranteed an equal share of the pruning budget, so
+			// a saturated order lane cannot starve catalogue tombstones (or the
+			// reverse). Reserving only the LATER streams' shares lets each stream
+			// spend whatever the ones before it left unused.
+			$prune_budget  = max( 0, self::MAX_DELETES_PER_RUN - $deleted - $mutation_floor );
+			$stream_share  = intdiv( $prune_budget, \count( $tombstone_streams ) );
+			$streams_left  = \count( $tombstone_streams );
+			$prune_spent   = 0;
+			foreach ( $tombstone_streams as $stream ) {
+				--$streams_left;
+				$ceiling = $prune_budget - $prune_spent - $streams_left * $stream_share;
+				if ( $ceiling <= 0 ) {
+					continue;
+				}
+				$pruning      = $this->drain(
+					fn ( int $limit ): int => $this->sync_journal->prune_tombstones( $stream['cutoff'], $tombstone_gmt, $limit, $stream['types'] )['deleted'],
+					$batch,
+					$ceiling
+				);
+				$prune_spent += $pruning['deleted'];
+				$capped       = $capped || $pruning['capped'];
+			}
+			$deleted += $prune_spent;
 		}
 
 		// Expire settled mutation rows (done/applied) past their replay window.

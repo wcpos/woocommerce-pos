@@ -172,7 +172,11 @@ final class Changes_Controller extends WP_REST_Controller {
 		// that moves on foreign writes would leave this stream's cursor forever
 		// "behind" — killing the 304 idle path and forcing an empty 200 per poll.
 		$head_sequence = $this->journal->head_sequence( $stream_types );
-		$etag          = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		// STREAM-SCOPED horizon, for the same reason: a prune on the OTHER
+		// stream must not read as lost history here (see Sync_Journal's
+		// PRUNE_WATERMARK_OPTION_PREFIX).
+		$horizon = $this->journal->prune_watermark( $stream_types );
+		$etag    = $this->sequence_log_etag( $head_sequence, $config_fingerprint, $horizon );
 		$headers       = array(
 			'ETag'          => $etag,
 			'Cache-Control' => 'no-store',
@@ -247,13 +251,15 @@ final class Changes_Controller extends WP_REST_Controller {
 		// never match the client's next at-head poll, costing one useless full 200.
 		// A newer-head ETag can't hide rows — the 304 branch still requires the NEXT
 		// request's since to equal that request's freshly-read head.
-		$headers['ETag'] = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
 		// The lossy-pruning boundary, NOT MIN(sequence): compaction keeps each
 		// object's newest row, so the oldest surviving sequence says nothing
 		// about pruned tombstones above it. A cursor at or past the watermark
 		// has missed nothing; below it, the client must reconcile via the
-		// integrity surfaces. Zero = no lossy pruning has ever run.
-		$horizon = $this->journal->prune_watermark();
+		// integrity surfaces. Zero = no lossy pruning has ever run. Re-read
+		// after the page for the same reason the head is: a prune concurrent
+		// with the page read must be reported, never silently served past.
+		$horizon         = $this->journal->prune_watermark( $stream_types );
+		$headers['ETag'] = $this->sequence_log_etag( $head_sequence, $config_fingerprint, $horizon );
 
 		$data                       = $this->envelope(
 			$collection,
@@ -510,8 +516,10 @@ final class Changes_Controller extends WP_REST_Controller {
 		$config_fingerprint = $this->config_fingerprint_data( $request, true );
 		// Tick is the catalogue lane's probe — serve the catalogue stream's head,
 		// not the global one, or steady order writes would kill the 304 idle path.
-		$head_sequence = $this->journal->head_sequence( $this->object_types_for_collection( 'all' ) );
-		$etag          = $this->sequence_log_etag( $head_sequence, $config_fingerprint );
+		$stream_types  = $this->object_types_for_collection( 'all' );
+		$head_sequence = $this->journal->head_sequence( $stream_types );
+		$horizon       = $this->journal->prune_watermark( $stream_types );
+		$etag          = $this->sequence_log_etag( $head_sequence, $config_fingerprint, $horizon );
 		$headers            = array(
 			'ETag'          => $etag,
 			'Cache-Control' => 'no-store',
@@ -526,7 +534,7 @@ final class Changes_Controller extends WP_REST_Controller {
 				'checkpoint'         => array(
 					'since'   => $since,
 					'head'    => $head_sequence,
-					'horizon' => $this->journal->prune_watermark(),
+					'horizon' => $horizon,
 					'epoch'   => $this->journal->ensure_epoch(),
 				),
 				'changes'            => array(),
@@ -545,7 +553,7 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * The sequence-log validator: head sequence + a stable hash of the
 	 * representation-affecting fingerprint data.
 	 */
-	private function sequence_log_etag( int $head_sequence, array $config_fingerprint ): string {
+	private function sequence_log_etag( int $head_sequence, array $config_fingerprint, int $horizon ): string {
 		// The validator must cover EVERY client-visible reset boundary, not just
 		// head+config: an install can regenerate the epoch, and retention can
 		// advance the horizon, while this stream's head is unchanged — an at-head
@@ -557,7 +565,7 @@ final class Changes_Controller extends WP_REST_Controller {
 					'fingerprints'   => $config_fingerprint['fingerprints'],
 					'barcode_fields' => $config_fingerprint['barcode_fields'],
 					'epoch'          => $this->journal->ensure_epoch(),
-					'horizon'        => $this->journal->prune_watermark(),
+					'horizon'        => $horizon,
 				)
 			)
 		) . '"';

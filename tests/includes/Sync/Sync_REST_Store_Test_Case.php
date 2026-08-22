@@ -38,7 +38,7 @@ abstract class Sync_REST_Store_Test_Case extends WCPOS_REST_HPOS_Unit_Test_Case 
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table names.
 		}
 		delete_option( Sync_Journal::EPOCH_OPTION );
-		delete_option( Sync_Journal::PRUNE_WATERMARK_OPTION );
+		Sync_Journal::reset_prune_watermarks();
 		// Journal-authoritative default: sequence-zero pulls only trust the
 		// journal once backfill is complete (Order_Query baseline rule), and
 		// these suites pin journal-served behaviour. Tests exercising the

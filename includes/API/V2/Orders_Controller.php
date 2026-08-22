@@ -180,7 +180,7 @@ final class Orders_Controller extends WP_REST_Controller {
 				'hasMore'    => $has_more,
 				'epoch'      => $journal->ensure_epoch(), // F8 journal epoch — client resyncs on mismatch
 				'head'       => $journal->head_sequence( array( 'order' ) ), // F8 order-lane head — client resyncs if its cursor exceeds it; stream-scoped so catalogue writes don't move it
-				'horizon'    => $journal->prune_watermark(),
+				'horizon'    => $journal->prune_watermark( array( 'order' ) ),
 			)
 		);
 	}
