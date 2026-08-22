@@ -11,6 +11,7 @@ use DateTimeZone;
 use WCPOS\WooCommercePOS\Services\Opening_Hours_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WP_UnitTestCase;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 
 /**
  * @internal
@@ -310,6 +311,95 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 		$friday = Receipt_Date_Formatter::weekday_short( $this->reference_day_timestamp( 4 ), $utc, 'nl_NL' );
 
 		$this->assertStringStartsWith( $monday . "\u{2013}" . $friday, $lines[0] );
+	}
+
+	/**
+	 * Render opening hours with `nl_NL` genuinely switchable.
+	 *
+	 * WP_Locale_Switcher captures get_available_languages() up front and refuses
+	 * to switch to a locale with no installed language pack, so the locale has
+	 * to be injected. The `missing` transient is the i18n loader's negative
+	 * cache — without it `new i18n()` would try to fetch translations from the
+	 * CDN. Mirrors the fixture in Test_Store_Abstract.
+	 *
+	 * The unload is load-bearing: WCPOS's i18n loader installs the text domain
+	 * directly, so restore_previous_locale() leaves it in place and every later
+	 * test in the process would then read plugin strings in Dutch.
+	 *
+	 * @param callable $render Receives nothing, returns the formatted string.
+	 * @return string
+	 */
+	private function render_with_switchable_dutch( callable $render ): string {
+		global $wp_locale_switcher;
+
+		$available_languages = new \ReflectionProperty( $wp_locale_switcher, 'available_languages' );
+		$available_languages->setAccessible( true );
+		$original_languages = $available_languages->getValue( $wp_locale_switcher );
+		$available_languages->setValue( $wp_locale_switcher, array_merge( $original_languages, array( 'nl_NL' ) ) );
+
+		$translation_filter = static function ( $translation, $text, $domain ) {
+			if ( 'woocommerce-pos' === $domain && 'Closed' === $text ) {
+				return 'CLOSED[' . get_locale() . ']';
+			}
+
+			return $translation;
+		};
+		add_filter( 'gettext', $translation_filter, 10, 3 );
+		set_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL', TRANSLATION_VERSION, DAY_IN_SECONDS );
+
+		try {
+			return $render();
+		} finally {
+			unload_textdomain( 'woocommerce-pos' );
+			delete_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL' );
+			remove_filter( 'gettext', $translation_filter, 10 );
+			$available_languages->setValue( $wp_locale_switcher, $original_languages );
+		}
+	}
+
+	public function test_format_vertical_resolves_the_closed_label_in_the_receipt_locale(): void {
+		// The day names and times follow the receipt locale, so the closed-day
+		// label must too — otherwise the line reads "zo Closed".
+		$hours = $this->get_all_closed();
+
+		$result = $this->render_with_switchable_dutch(
+			static function () use ( $hours ) {
+				return Opening_Hours_Formatter::format_vertical( $hours, 'nl_NL' );
+			}
+		);
+
+		$this->assertStringContainsString( 'CLOSED[nl_NL]', $result );
+		$this->assertStringNotContainsString( 'CLOSED[' . get_locale() . ']', $result );
+	}
+
+	public function test_format_compact_and_inline_resolve_the_closed_label_in_the_receipt_locale(): void {
+		$hours = $this->get_standard_hours();
+
+		$compact = $this->render_with_switchable_dutch(
+			static function () use ( $hours ) {
+				return Opening_Hours_Formatter::format_compact( $hours, 'nl_NL' );
+			}
+		);
+		$inline  = $this->render_with_switchable_dutch(
+			static function () use ( $hours ) {
+				return Opening_Hours_Formatter::format_inline( $hours, 'nl_NL' );
+			}
+		);
+
+		$this->assertStringContainsString( 'CLOSED[nl_NL]', $compact );
+		$this->assertStringContainsString( 'CLOSED[nl_NL]', $inline );
+	}
+
+	public function test_format_vertical_without_a_locale_keeps_the_site_closed_label(): void {
+		$hours = $this->get_all_closed();
+
+		$result = $this->render_with_switchable_dutch(
+			static function () use ( $hours ) {
+				return Opening_Hours_Formatter::format_vertical( $hours );
+			}
+		);
+
+		$this->assertStringContainsString( 'CLOSED[' . get_locale() . ']', $result );
 	}
 
 	public function test_format_vertical_no_longer_renders_through_date_i18n(): void {

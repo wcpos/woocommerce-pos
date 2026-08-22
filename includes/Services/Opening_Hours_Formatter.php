@@ -17,6 +17,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use WCPOS\WooCommercePOS\i18n;
 
 /**
  * Opening_Hours_Formatter class.
@@ -36,11 +37,12 @@ class Opening_Hours_Formatter {
 	 * @return string Newline-separated string.
 	 */
 	public static function format_vertical( array $hours, string $locale = '' ): string {
-		$lines = array();
+		$closed = self::get_closed_label( $locale );
+		$lines  = array();
 		foreach ( self::DAY_KEYS as $day ) {
 			$day_name  = self::get_day_name( $day, $locale );
 			$slots     = isset( $hours[ (string) $day ] ) ? $hours[ (string) $day ] : array();
-			$formatted = self::format_slots( $slots, $locale );
+			$formatted = self::format_slots( $slots, $locale, $closed );
 			$lines[]   = $day_name . ' ' . $formatted;
 		}
 
@@ -55,7 +57,7 @@ class Opening_Hours_Formatter {
 	 * @return string Newline-separated string.
 	 */
 	public static function format_compact( array $hours, string $locale = '' ): string {
-		$groups = self::group_consecutive_days( $hours, $locale );
+		$groups = self::group_consecutive_days( $hours, $locale, self::get_closed_label( $locale ) );
 		$lines  = array();
 
 		foreach ( $groups as $group ) {
@@ -74,7 +76,7 @@ class Opening_Hours_Formatter {
 	 * @return string Single line string.
 	 */
 	public static function format_inline( array $hours, string $locale = '' ): string {
-		$groups = self::group_consecutive_days( $hours, $locale );
+		$groups = self::group_consecutive_days( $hours, $locale, self::get_closed_label( $locale ) );
 		$parts  = array();
 
 		foreach ( $groups as $group ) {
@@ -90,15 +92,16 @@ class Opening_Hours_Formatter {
 	 *
 	 * @param array  $hours  Structured hours array.
 	 * @param string $locale Receipt locale.
+	 * @param string $closed Closed-day label, already resolved for the receipt locale.
 	 * @return array Array of groups, each with 'start', 'end', 'formatted'.
 	 */
-	private static function group_consecutive_days( array $hours, string $locale ): array {
+	private static function group_consecutive_days( array $hours, string $locale, string $closed ): array {
 		$groups  = array();
 		$current = null;
 
 		foreach ( self::DAY_KEYS as $day ) {
 			$slots     = isset( $hours[ (string) $day ] ) ? $hours[ (string) $day ] : array();
-			$formatted = self::format_slots( $slots, $locale );
+			$formatted = self::format_slots( $slots, $locale, $closed );
 
 			if ( null === $current || $current['formatted'] !== $formatted ) {
 				if ( null !== $current ) {
@@ -143,11 +146,12 @@ class Opening_Hours_Formatter {
 	 *
 	 * @param array  $slots  Flat array of time pairs.
 	 * @param string $locale Receipt locale.
+	 * @param string $closed Closed-day label, already resolved for the receipt locale.
 	 * @return string
 	 */
-	private static function format_slots( array $slots, string $locale ): string {
+	private static function format_slots( array $slots, string $locale, string $closed ): string {
 		if ( empty( $slots ) ) {
-			return /* translators: Short WCPOS UI label; keep concise. */ __( 'Closed', 'woocommerce-pos' );
+			return $closed;
 		}
 
 		// Drop trailing unpaired element to ensure open/close pairs.
@@ -156,7 +160,7 @@ class Opening_Hours_Formatter {
 		}
 
 		if ( empty( $slots ) ) {
-			return /* translators: Short WCPOS UI label; keep concise. */ __( 'Closed', 'woocommerce-pos' );
+			return $closed;
 		}
 
 		$ranges     = array();
@@ -168,6 +172,32 @@ class Opening_Hours_Formatter {
 		}
 
 		return implode( ', ', $ranges );
+	}
+
+	/**
+	 * Resolve the closed-day label in the receipt locale.
+	 *
+	 * The day names and times follow the receipt locale, so this label has to
+	 * as well — otherwise a store whose locale differs from the site's renders
+	 * a mixed-language line ("zo Closed"). Mirrors the locale guard in
+	 * Receipt_I18n_Labels::get_labels(); resolve once per public call, because
+	 * switch_to_locale() reloads the text domain.
+	 *
+	 * @param string $locale Receipt locale, or empty string for the site locale.
+	 * @return string
+	 */
+	private static function get_closed_label( string $locale ): string {
+		if ( '' !== $locale && get_locale() !== $locale && function_exists( 'switch_to_locale' ) && switch_to_locale( $locale ) ) {
+			try {
+				new i18n();
+
+				return self::get_closed_label( '' );
+			} finally {
+				restore_previous_locale();
+			}
+		}
+
+		return /* translators: Short WCPOS UI label; keep concise. */ __( 'Closed', 'woocommerce-pos' );
 	}
 
 	/**

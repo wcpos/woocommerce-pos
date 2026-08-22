@@ -179,6 +179,10 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		try {
 			$data = $store->get_data();
 		} finally {
+			// WCPOS's i18n loader installs the text domain directly, so
+			// restoring the locale does not unload it — without this, later
+			// tests in the process read plugin strings in Dutch.
+			unload_textdomain( 'woocommerce-pos' );
 			delete_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL' );
 			remove_filter( 'gettext', $translation_filter, 10 );
 			$available_languages->setValue( $wp_locale_switcher, $original_languages );
