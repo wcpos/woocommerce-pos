@@ -217,9 +217,11 @@ class Receipt_Store_Resolver {
 		}
 
 		if ( $has_structured_hours ) {
-			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours );
-			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours );
-			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours );
+			// Same locale the order timestamps use, so both render in one convention.
+			$hours_locale                    = $this->resolve_locale();
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours, $hours_locale );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours, $hours_locale );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours, $hours_locale );
 		} elseif ( $has_legacy_hours ) {
 			// Legacy free-text hours have no per-day structure to reformat.
 			$store['opening_hours']          = $opening_hours;

@@ -655,7 +655,9 @@ class Escpos_Thermal_Emitter {
 		$value   = str_replace( $search, '-', $value );
 		$value   = str_replace( array( "\u{2018}", "\u{2019}" ), "'", $value );
 		$value   = str_replace( array( "\u{201C}", "\u{201D}" ), '"', $value );
-		$value   = str_replace( "\u{00A0}", ' ', $value );
+		// CLDR time patterns separate the hour from the day period with a narrow
+		// or thin no-break space; neither survives a printer character table.
+		$value   = str_replace( array( "\u{00A0}", "\u{202F}", "\u{2009}" ), ' ', $value );
 
 		return $value;
 	}

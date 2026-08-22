@@ -7,7 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use DateTimeZone;
 use WCPOS\WooCommercePOS\Services\Opening_Hours_Formatter;
+use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WP_UnitTestCase;
 
 /**
@@ -70,11 +72,11 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 
 		$this->assertCount( 7, $lines );
 		$this->assertStringContainsString( 'Mon', $lines[0] );
-		$this->assertStringContainsString( '9:00 AM', $lines[0] );
-		$this->assertStringContainsString( '5:00 PM', $lines[0] );
+		$this->assertContainsTime( '9:00 AM', $lines[0] );
+		$this->assertContainsTime( '5:00 PM', $lines[0] );
 		$this->assertStringContainsString( 'Sat', $lines[5] );
-		$this->assertStringContainsString( '10:00 AM', $lines[5] );
-		$this->assertStringContainsString( '4:00 PM', $lines[5] );
+		$this->assertContainsTime( '10:00 AM', $lines[5] );
+		$this->assertContainsTime( '4:00 PM', $lines[5] );
 		$this->assertStringContainsString( 'Sun', $lines[6] );
 		$this->assertStringContainsString( 'Closed', $lines[6] );
 	}
@@ -95,10 +97,10 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 		$lines  = explode( "\n", $result );
 
 		// Mon should show two time ranges separated by comma.
-		$this->assertStringContainsString( '9:00 AM', $lines[0] );
-		$this->assertStringContainsString( '12:00 PM', $lines[0] );
-		$this->assertStringContainsString( '1:00 PM', $lines[0] );
-		$this->assertStringContainsString( '5:00 PM', $lines[0] );
+		$this->assertContainsTime( '9:00 AM', $lines[0] );
+		$this->assertContainsTime( '12:00 PM', $lines[0] );
+		$this->assertContainsTime( '1:00 PM', $lines[0] );
+		$this->assertContainsTime( '5:00 PM', $lines[0] );
 	}
 
 	public function test_format_vertical_all_closed(): void {
@@ -119,7 +121,7 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 		$lines  = explode( "\n", $result );
 
 		$this->assertCount( 7, $lines );
-		$this->assertStringContainsString( '9:00 AM', $lines[0] );
+		$this->assertContainsTime( '9:00 AM', $lines[0] );
 		for ( $i = 1; $i <= 6; $i++ ) {
 			$this->assertStringContainsString( 'Closed', $lines[ $i ] );
 		}
@@ -134,7 +136,7 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 
 		$this->assertCount( 3, $lines );
 		$this->assertStringStartsWith( 'Mon–Fri', $lines[0] );
-		$this->assertStringContainsString( '9:00 AM', $lines[0] );
+		$this->assertContainsTime( '9:00 AM', $lines[0] );
 		$this->assertStringStartsWith( 'Sat', $lines[1] );
 		$this->assertStringStartsWith( 'Sun', $lines[2] );
 		$this->assertStringContainsString( 'Closed', $lines[2] );
@@ -184,8 +186,8 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 		$this->assertCount( 3, $lines );
 		$this->assertStringStartsWith( 'Mon–Fri', $lines[0] );
 		// Should contain both time ranges.
-		$this->assertStringContainsString( '12:00 PM', $lines[0] );
-		$this->assertStringContainsString( '1:00 PM', $lines[0] );
+		$this->assertContainsTime( '12:00 PM', $lines[0] );
+		$this->assertContainsTime( '1:00 PM', $lines[0] );
 	}
 
 	// ── format_inline ────────────────────────────────────────────────
@@ -227,5 +229,125 @@ class Test_Opening_Hours_Formatter extends WP_UnitTestCase {
 	public function test_format_inline_empty_array(): void {
 		$result = Opening_Hours_Formatter::format_inline( array() );
 		$this->assertStringContainsString( 'Mon–Sun Closed', $result );
+	}
+
+	/**
+	 * Assert a clock time appears, tolerating the CLDR no-break separator
+	 * between the hour and the day period.
+	 *
+	 * @param string $expected Time as written with a plain space.
+	 * @param string $actual   Formatted opening hours fragment.
+	 */
+	private function assertContainsTime( string $expected, string $actual ): void {
+		$this->assertStringContainsString(
+			$expected,
+			str_replace( array( "\u{00A0}", "\u{202F}", "\u{2009}" ), ' ', $actual )
+		);
+	}
+
+	// ── shared time convention (#1399) ─────────────────
+
+	/**
+	 * Reference wall clock for a stored "HH:MM" opening-hours value.
+	 *
+	 * @param string $time Time in H:i form.
+	 * @return int
+	 */
+	private function reference_timestamp( string $time ): int {
+		return (int) strtotime( '2000-01-01 ' . $time . ' UTC' );
+	}
+
+	/**
+	 * Reference timestamp for an opening-hours day index (0 = Monday).
+	 *
+	 * @param int $day Day index.
+	 * @return int
+	 */
+	private function reference_day_timestamp( int $day ): int {
+		return (int) strtotime( '2024-01-01 +' . $day . ' days UTC' );
+	}
+
+	public function test_format_vertical_renders_times_through_the_shared_receipt_formatter(): void {
+		// date_i18n() renders the WordPress meridiem ("9:00 am") while the
+		// order timestamps render the CLDR day period ("9:00 a.m." in nl_NL);
+		// one receipt must not show both.
+		update_option( 'time_format', 'g:i a' );
+
+		$lines = explode( "\n", Opening_Hours_Formatter::format_vertical( array( '0' => array( '09:00', '17:00' ) ), 'nl_NL' ) );
+		$utc   = new DateTimeZone( 'UTC' );
+
+		$this->assertStringContainsString(
+			Receipt_Date_Formatter::time( $this->reference_timestamp( '09:00' ), $utc, 'nl_NL' ),
+			$lines[0]
+		);
+		$this->assertStringContainsString(
+			Receipt_Date_Formatter::time( $this->reference_timestamp( '17:00' ), $utc, 'nl_NL' ),
+			$lines[0]
+		);
+	}
+
+	public function test_format_vertical_renders_day_names_through_the_shared_receipt_formatter(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$lines = explode( "\n", Opening_Hours_Formatter::format_vertical( $this->get_standard_hours(), 'nl_NL' ) );
+		$utc   = new DateTimeZone( 'UTC' );
+
+		foreach ( $lines as $day => $line ) {
+			$this->assertStringStartsWith(
+				Receipt_Date_Formatter::weekday_short( $this->reference_day_timestamp( $day ), $utc, 'nl_NL' ),
+				$line
+			);
+		}
+	}
+
+	public function test_format_compact_renders_day_ranges_through_the_shared_receipt_formatter(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$lines = explode( "\n", Opening_Hours_Formatter::format_compact( $this->get_standard_hours(), 'nl_NL' ) );
+		$utc   = new DateTimeZone( 'UTC' );
+
+		$monday = Receipt_Date_Formatter::weekday_short( $this->reference_day_timestamp( 0 ), $utc, 'nl_NL' );
+		$friday = Receipt_Date_Formatter::weekday_short( $this->reference_day_timestamp( 4 ), $utc, 'nl_NL' );
+
+		$this->assertStringStartsWith( $monday . "\u{2013}" . $friday, $lines[0] );
+	}
+
+	public function test_format_vertical_no_longer_renders_through_date_i18n(): void {
+		// The two engines are the defect: nothing on an opening-hours line may
+		// still come from date_i18n() once order timestamps use Intl.
+		update_option( 'time_format', 'g:i a' );
+
+		$sentinel = static function () {
+			return 'DATE_I18N_SENTINEL';
+		};
+
+		add_filter( 'date_i18n', $sentinel );
+		try {
+			$result = Opening_Hours_Formatter::format_vertical( $this->get_standard_hours() );
+		} finally {
+			remove_filter( 'date_i18n', $sentinel );
+		}
+
+		$this->assertStringNotContainsString( 'DATE_I18N_SENTINEL', $result );
+	}
+
+	public function test_format_vertical_omits_the_day_period_for_a_24_hour_format(): void {
+		update_option( 'time_format', 'H:i' );
+
+		$lines = explode( "\n", Opening_Hours_Formatter::format_vertical( $this->get_standard_hours(), 'nl_NL' ) );
+
+		$this->assertStringContainsString( '09:00', $lines[0] );
+		$this->assertStringContainsString( '17:00', $lines[0] );
+		$this->assertStringNotContainsString( 'AM', $lines[0] );
+		$this->assertStringNotContainsString( 'a.m.', $lines[0] );
+	}
+
+	public function test_format_vertical_without_a_locale_matches_the_site_locale(): void {
+		update_option( 'time_format', 'g:i A' );
+
+		$default = Opening_Hours_Formatter::format_vertical( $this->get_standard_hours() );
+		$site    = Opening_Hours_Formatter::format_vertical( $this->get_standard_hours(), get_locale() );
+
+		$this->assertSame( $site, $default );
 	}
 }
