@@ -125,35 +125,21 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$target_status = $request->get_param( 'status' );
 		$set_paid      = $request->get_param( 'set_paid' );
-		$request->set_param( 'status', 'pending' );
-		$request->set_param( 'set_paid', false );
 
 		try {
-			$order = parent::save_object( $request, $creating );
-			if ( is_wp_error( $order ) || ! $order instanceof WC_Order ) {
-				return $order;
-			}
+			return $validator->around_paid_create(
+				array(
+					'status'         => $target_status,
+					'set_paid'       => rest_sanitize_boolean( $set_paid ),
+					'transaction_id' => $request->get_param( 'transaction_id' ),
+				),
+				function ( array $neutralised ) use ( $request, $creating ) {
+					$request->set_param( 'status', $neutralised['status'] );
+					$request->set_param( 'set_paid', $neutralised['set_paid'] );
 
-			try {
-				$validation = $validator->validate_checkout( $order );
-			} catch ( \Throwable $exception ) {
-				$order->delete( true );
-				throw $exception;
-			}
-			if ( is_wp_error( $validation ) ) {
-				$order->delete( true );
-				return $validation;
-			}
-
-			if ( rest_sanitize_boolean( $set_paid ) ) {
-				$order->payment_complete( $request->get_param( 'transaction_id' ) );
-			}
-			if ( ! empty( $target_status ) ) {
-				$order->set_status( $target_status );
-				$order->save();
-			}
-
-			return wc_get_order( $order->get_id() );
+					return parent::save_object( $request, $creating );
+				}
+			);
 		} finally {
 			$request->set_param( 'status', $target_status );
 			$request->set_param( 'set_paid', $set_paid );

@@ -186,26 +186,33 @@ class Checkout_Controller extends WC_REST_Controller {
 		try {
 			$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
 			$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
-			if ( 'start' === $action ) {
-				$validation = Stock_Validator::instance()->validate_checkout( $order );
-				if ( is_wp_error( $validation ) ) {
-					Stock_Validator::instance()->release_checkout_stock( $order );
-					return $validation;
-				}
+			// Validate on EVERY action, not just `start`. The action string is
+			// free-form and dispatched to a gateway filter, and the shipped surface
+			// already carries `update` alongside `start`, so a gateway completing
+			// payment on a later action would otherwise take money for stock that
+			// was never checked. validate_checkout() short-circuits when the order
+			// already holds a sufficient reservation, so this costs a lookup rather
+			// than a second hold.
+			$validation = Stock_Validator::instance()->validate_checkout( $order );
+			if ( is_wp_error( $validation ) ) {
+				Stock_Validator::instance()->release_checkout_stock( $order );
+
+				return $validation;
 			}
 			try {
 				$state = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
 			} catch ( \Throwable $exception ) {
-				if ( 'start' === $action ) {
-					Stock_Validator::instance()->release_checkout_stock( $order );
-				}
+				// Every action can now be holding stock, so every action gives it
+				// back when dispatch fails; the normalized cancelled/failed branch
+				// below is never reached on these paths.
+				Stock_Validator::instance()->release_checkout_stock( $order );
+
 				throw $exception;
 			}
 
 			if ( is_wp_error( $state ) ) {
-				if ( 'start' === $action ) {
-					Stock_Validator::instance()->release_checkout_stock( $order );
-				}
+				Stock_Validator::instance()->release_checkout_stock( $order );
+
 				return $state;
 			}
 

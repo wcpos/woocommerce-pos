@@ -354,8 +354,17 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		}
 	}
 
-	/** Failed compensation cannot recreate a reservation claimed by another order. */
-	public function test_failed_revalidation_does_not_restore_an_overbooked_reservation(): void {
+	/**
+	 * Revalidating an order never lets another order take a unit it already holds.
+	 *
+	 * The compensation snapshot deliberately does NOT release this order's holds
+	 * before re-reserving — pruning only what left the order — precisely so there
+	 * is no instant where the unit is unclaimed. This drives another order at the
+	 * stock in the middle of revalidation and pins that it cannot get in: the
+	 * second claim is refused, the first order keeps exactly its hold, and the
+	 * product is never held beyond the stock that exists.
+	 */
+	public function test_revalidation_does_not_surrender_a_held_unit_to_another_order(): void {
 		global $wpdb;
 
 		$this->set_prevent_overselling( true );
@@ -366,10 +375,18 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$order_b->save();
 		wc_reserve_stock_for_order( $order_a );
 
+		$b_claimed  = null;
 		$claim_stock = null;
-		$claim_stock = static function ( string $query ) use ( &$claim_stock, $order_b ): string {
+		$claim_stock = static function ( string $query ) use ( &$claim_stock, &$b_claimed, $order_b ): string {
 			remove_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
-			wc_reserve_stock_for_order( $order_b );
+			try {
+				wc_reserve_stock_for_order( $order_b );
+				$b_claimed = true;
+			} catch ( \Throwable $exception ) {
+				// WooCommerce refuses the claim while order A still holds the unit.
+				$b_claimed = false;
+			}
+
 			return $query;
 		};
 		add_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
@@ -377,7 +394,9 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		try {
 			$result = $this->validate( $order_a, 'processing' );
 
-			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertFalse( $b_claimed, 'a second order must not take a unit this one holds' );
+			$this->assertSame( $order_a, $result, 'the holding order still validates' );
+
 			$held = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT order_id, stock_quantity FROM {$wpdb->wc_reserved_stock} WHERE product_id = %d ORDER BY order_id",
@@ -385,8 +404,8 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 				),
 				ARRAY_A
 			);
-			$this->assertCount( 1, $held );
-			$this->assertSame( $order_b->get_id(), (int) $held[0]['order_id'] );
+			$this->assertCount( 1, $held, 'exactly one order may hold the only unit' );
+			$this->assertSame( $order_a->get_id(), (int) $held[0]['order_id'] );
 			$this->assertEquals( 1.0, (float) $held[0]['stock_quantity'] );
 		} finally {
 			remove_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );

@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\API\V2\Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -92,7 +93,61 @@ class Order_Writer extends Null_Writer {
 
 	/** Forward within the named order hook lifecycle. */
 	public function forward( array $prepared, callable $forward ) {
-		return $this->forward_with_order_lifecycle( $prepared, $forward );
+		return $this->forward_with_reserved_stock( $prepared, $forward );
+	}
+
+	/**
+	 * Wrap the create forward in the shared create-pending -> reserve -> complete
+	 * sequence, so this lane gets the SAME anti-overselling guarantee as wcpos/v1.
+	 *
+	 * Without this the only stock check on this lane is the `pre_insert` filter,
+	 * which runs against an unsaved order (id 0) and so can only compare
+	 * availability — it cannot take a reservation, and two terminals selling the
+	 * last unit concurrently both pass it. See Stock_Validator::around_paid_create().
+	 *
+	 * @param array    $prepared Prepared forward.
+	 * @param callable $forward  Underlying wc/v3 dispatch.
+	 */
+	private function forward_with_reserved_stock( array $prepared, callable $forward ) {
+		$context = $prepared['context'];
+		$payload = $prepared['payload'];
+		$paid    = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
+		$status  = isset( $payload['status'] ) ? (string) $payload['status'] : '';
+		$validator = Stock_Validator::instance();
+
+		if ( 'create' !== $context['operation']
+			|| ! SettingsService::instance()->prevent_overselling_enabled()
+			|| ! $validator->should_validate_create_payload( $status, $paid ) ) {
+			return $this->forward_with_order_lifecycle( $prepared, $forward );
+		}
+
+		$response = null;
+		$order    = $validator->around_paid_create(
+			array(
+				'status'         => $status,
+				'set_paid'       => $paid,
+				'transaction_id' => isset( $payload['transaction_id'] ) ? (string) $payload['transaction_id'] : '',
+			),
+			function ( array $neutralised ) use ( $prepared, $forward, &$response ) {
+				$prepared['payload']['status']   = $neutralised['status'];
+				$prepared['payload']['set_paid'] = $neutralised['set_paid'];
+				$response                        = $this->forward_with_order_lifecycle( $prepared, $forward );
+				$data                            = $response instanceof \WP_REST_Response ? $response->get_data() : null;
+				$id                              = is_array( $data ) && isset( $data['id'] ) ? (int) $data['id'] : 0;
+
+				return $id > 0 ? wc_get_order( $id ) : $response;
+			}
+		);
+
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+
+		// The controller rebuilds its response document from wc_get_order( $id )
+		// (see document()/build_response_document()), so the forwarded body does
+		// not need re-shaping after payment completes — only the id has to be
+		// right, and it is the same order throughout.
+		return $response;
 	}
 
 	/** Persist the order behavior assigned to a controller-owned protocol phase. */
