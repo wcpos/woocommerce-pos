@@ -41,21 +41,19 @@ class Print_Format_Resolver {
 	/**
 	 * Resolve the HTTP content type for a printer when no template is in hand.
 	 *
-	 * Two callers have a printer but no loaded template: the diagnostic builder
-	 * (its payload is hand-built, not rendered from a template) and the reprint
-	 * path (it copies a job's template id without loading the template). Both
-	 * get the provider's declared type.
+	 * Two callers have a printer but no template to resolve against: the
+	 * diagnostic builder (its payload is hand-built, not rendered from a
+	 * template) and the reprint path, when the source job's template has since
+	 * been deleted or can no longer be rendered on the printer. Both get the
+	 * provider's declared type.
 	 *
 	 * PrintNode therefore reports its PDF default here even for a printer in raw
 	 * mode, unlike resolve(), which sees the engine and can honour
-	 * `printnode_format`. Only the reprint path can actually reach that case —
-	 * the diagnostic builder throws for PrintNode before it gets here. The
-	 * asymmetry is pre-existing and, as far as we can tell, harmless: PrintNode
-	 * submissions choose their wire from the job's `pn_kind` (see
-	 * Cloud_Print_Submit_Service), never from this value, so a reprinted
-	 * raw-mode job prints correctly even though its stored content type reads
-	 * `application/pdf` next to `pn_kind` of `escpos`. Collapsing the two
-	 * answers waits on the mediaTypes negotiation work (issue #1351).
+	 * `printnode_format`. Neither caller can act on the difference: the
+	 * diagnostic builder throws for PrintNode before it gets here, and the
+	 * reprint path only consults this method for jobs that carry no `pn_kind`
+	 * to contradict. Prefer resolve() wherever a template is in hand — it
+	 * answers both halves of the pairing at once.
 	 *
 	 * @param array $printer Printer configuration.
 	 *

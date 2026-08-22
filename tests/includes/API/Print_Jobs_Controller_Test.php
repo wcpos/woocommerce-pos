@@ -267,6 +267,123 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It keeps the raw wire pairing when retrying a PrintNode job in raw mode.
+	 */
+	public function test_reprint_printnode_raw_job_keeps_escpos_content_type(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                   => 'bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
+						'printnode_format'     => 'raw',
+					),
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$jobs  = new Print_Job_Service();
+		$id    = $jobs->create(
+			array(
+				'printer_id'   => 'bar',
+				'content_type' => 'application/octet-stream',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $this->create_thermal_template(),
+				'pn_kind'      => 'escpos',
+			)
+		);
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'escpos', $data['pn_kind'] );
+		$this->assertSame( 'application/octet-stream', $data['content_type'] );
+	}
+
+	/**
+	 * It reports PDF on both halves when retrying a PrintNode job in PDF mode.
+	 */
+	public function test_reprint_printnode_pdf_job_keeps_pdf_content_type(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                   => 'bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
+						'printnode_format'     => 'pdf',
+					),
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$jobs  = new Print_Job_Service();
+		$id    = $jobs->create(
+			array(
+				'printer_id'   => 'bar',
+				'content_type' => 'application/pdf',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $this->create_thermal_template(),
+				'pn_kind'      => 'pdf',
+			)
+		);
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'pdf', $data['pn_kind'] );
+		$this->assertSame( 'application/pdf', $data['content_type'] );
+	}
+
+	/**
+	 * It keeps the source pairing when the job's template no longer exists.
+	 */
+	public function test_reprint_printnode_raw_job_with_missing_template_keeps_pairing(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                   => 'bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
+						'printnode_format'     => 'raw',
+					),
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$jobs  = new Print_Job_Service();
+		$id    = $jobs->create(
+			array(
+				'printer_id'   => 'bar',
+				'content_type' => 'application/octet-stream',
+				'order_id'     => $order->get_id(),
+				'template_id'  => '999999',
+				'pn_kind'      => 'escpos',
+			)
+		);
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'escpos', $data['pn_kind'] );
+		$this->assertSame( 'application/octet-stream', $data['content_type'] );
+	}
+
+	/**
 	 * It enqueues an order-based PrintNode job and schedules its submit event.
 	 */
 	public function test_enqueue_order_based_printnode_job_schedules_submit(): void {
@@ -516,6 +633,28 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $response->get_data() ) );
+	}
+
+	/**
+	 * It keeps matching a list of statuses after filter sanitization.
+	 *
+	 * The route declares no arg schema, so status can arrive as a list; the
+	 * service turns one into an IN clause. Sanitizing must not flatten it.
+	 */
+	public function test_list_accepts_a_status_list(): void {
+		$jobs = new Print_Job_Service();
+		$jobs->set_status( $this->jobs_seed( 'printer-A' ), Print_Job_Service::STATUS_FAILED );
+		$jobs->set_status( $this->jobs_seed( 'printer-A' ), Print_Job_Service::STATUS_PRINTED );
+		$jobs->set_status( $this->jobs_seed( 'printer-A' ), Print_Job_Service::STATUS_CANCELLED );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/print-jobs' );
+		$request->set_query_params(
+			array( 'status' => array( Print_Job_Service::STATUS_FAILED, Print_Job_Service::STATUS_PRINTED ) )
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 2, $response->get_data() );
 	}
 
 	/**

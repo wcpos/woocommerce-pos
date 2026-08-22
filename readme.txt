@@ -66,9 +66,9 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 4. Click Activate Plugin to activate it.
 
 = Pro installation =
-If you have purchased a license for [WCPOS Pro](http://wcpos.com/pro) please follow the steps below to install and activate the plugin:
+If you have purchased a license for [WCPOS Pro](https://wcpos.com/pro) please follow the steps below to install and activate the plugin:
 
-1. Go to: http://wcpos.com/my-account/
+1. Go to: https://wcpos.com/my-account/
 2. Under My Downloads, click the download link and save the plugin to your desktop.
 3. Then go to your site, login and go to the Add New Plugin page, eg: http://<yourstore.com>/wp-admin/plugin-install.php?tab=upload
 4. Upload the plugin zip file from your desktop and activate.

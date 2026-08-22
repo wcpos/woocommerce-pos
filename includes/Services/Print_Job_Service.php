@@ -409,7 +409,7 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * Query jobs by printer, status and/or order (newest first).
+	 * Query jobs by printer, status and/or order (oldest first).
 	 *
 	 * @param array $filters printer_id, status, order_id, limit.
 	 *

@@ -390,6 +390,31 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 
 	/**
+	 * Sanitize a job filter that may arrive as a scalar or as a list.
+	 *
+	 * These routes declare no arg schema, so a caller can send `status=failed`
+	 * or `status[]=pending&status[]=failed`. filters_to_meta_query() turns a
+	 * list into an IN clause, so flattening one to a string here would silently
+	 * narrow the query (and warn on the array-to-string cast).
+	 *
+	 * @param mixed $value Raw request parameter.
+	 *
+	 * @return array|string
+	 */
+	private function sanitize_filter( $value ) {
+		if ( \is_array( $value ) ) {
+			return array_map(
+				function ( $item ): string {
+					return sanitize_text_field( \is_scalar( $item ) ? (string) $item : '' );
+				},
+				$value
+			);
+		}
+
+		return sanitize_text_field( \is_scalar( $value ) ? (string) $value : '' );
+	}
+
+	/**
 	 * List print jobs.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -400,8 +425,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		return rest_ensure_response(
 			$this->jobs->query(
 				array(
-					'printer_id' => $request->get_param( 'printer_id' ),
-					'status'     => $request->get_param( 'status' ),
+					'printer_id' => $this->sanitize_filter( $request->get_param( 'printer_id' ) ),
+					'status'     => $this->sanitize_filter( $request->get_param( 'status' ) ),
 				)
 			)
 		);
@@ -468,7 +493,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$per_page = (int) $request->get_param( 'per_page' );
 		$per_page = min( 100, max( 1, 0 === $per_page ? 20 : $per_page ) );
 		$page     = max( 1, (int) $request->get_param( 'page' ) );
-		$status          = $request->get_param( 'status' );
+
+		$status          = $this->sanitize_filter( $request->get_param( 'status' ) );
 		$exclude_retried = 'active' === $status;
 		if ( 'active' === $status ) {
 			// The default queue view: everything not yet terminal-successful.
@@ -479,8 +505,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 		$filters = array(
-			'printer_id'     => $request->get_param( 'printer_id' ),
-			'status'         => $status,
+			'printer_id'      => $this->sanitize_filter( $request->get_param( 'printer_id' ) ),
+			'status'          => $status,
 			'exclude_retried' => $exclude_retried,
 		);
 
@@ -639,10 +665,33 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 		$content_type = $source['content_type'];
+		$pn_kind      = $source['pn_kind'];
 		if ( '' !== $source['template_id'] ) {
 			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
 			if ( null !== $printer ) {
-				$content_type = ( new Print_Format_Resolver() )->content_type_for_printer( $printer );
+				// Refresh both halves of the pairing together. A legacy job can
+				// carry a media type from before the provider declared its own,
+				// but content_type and pn_kind must keep agreeing: reprinting a
+				// raw (escpos) PrintNode job through the printer-only resolver
+				// relabels it application/pdf in the queue view, even though
+				// submit still sends raw bytes off the stored pn_kind.
+				$resolver = new Print_Format_Resolver();
+				$template = Print_Job_Service::load_template( (string) $source['template_id'] );
+				$fmt      = null === $template ? array( 'kind' => '' ) : $resolver->resolve( $printer, $template );
+				if ( '' === (string) $fmt['kind'] ) {
+					// No loadable template, or one this printer can no longer
+					// render. Refresh from the provider's declared type only
+					// when no stored kind can contradict it; otherwise the
+					// source pairing is the best answer left.
+					if ( '' === $pn_kind ) {
+						$content_type = $resolver->content_type_for_printer( $printer );
+					}
+				} else {
+					$content_type = $fmt['content_type'];
+					$pn_kind      = Provider::stores_job_kind( Provider::normalize( (string) ( $printer['provider'] ?? '' ) ) )
+						? $fmt['kind']
+						: '';
+				}
 			}
 		}
 		$new_id = $this->jobs->create(
@@ -656,7 +705,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				// the render metadata must survive the copy or the reprint
 				// renders nothing.
 				'template_id'      => '' !== $source['template_id'] ? $source['template_id'] : null,
-				'pn_kind'          => '' !== $source['pn_kind'] ? $source['pn_kind'] : null,
+				'pn_kind'          => '' !== $pn_kind ? $pn_kind : null,
 				'auto_open_drawer' => $source['auto_open_drawer'],
 				'drawer_connector' => $source['drawer_connector'],
 			)
