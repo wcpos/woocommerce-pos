@@ -173,6 +173,14 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 	/**
 	 * Unmanaged out-of-stock products honor permitted backorder modes.
 	 *
+	 * WooCommerce will not PERSIST backorders on an unmanaged product:
+	 * `WC_Product::validate_props()` forces `backorders` to 'no' whenever
+	 * `manage_stock` is false, so the stored value can never be 'yes'/'notify'
+	 * here. The guard still has to hold, because `get_backorders()` is
+	 * filterable — an extension can report a permitted mode for a product whose
+	 * stored value is 'no'. Filtering the getter is therefore the only way to
+	 * reach this branch, and the only way it is reached in production.
+	 *
 	 * @dataProvider backorder_provider
 	 * @param string $backorders Backorder mode.
 	 */
@@ -182,14 +190,42 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 			array(
 				'manage_stock' => false,
 				'stock_status' => 'outofstock',
-				'backorders'   => $backorders,
+			)
+		);
+		$this->assertSame( 'no', $product->get_backorders(), 'WooCommerce clears backorders on unmanaged stock' );
+
+		$filter = static function () use ( $backorders ) {
+			return $backorders;
+		};
+		add_filter( 'woocommerce_product_get_backorders', $filter );
+
+		try {
+			$order  = $this->create_order( 'processing', array( array( $product, 1 ) ) );
+			$result = $this->validate( $order );
+		} finally {
+			remove_filter( 'woocommerce_product_get_backorders', $filter );
+		}
+
+		$this->assertSame( $order, $result );
+	}
+
+	/** An unmanaged out-of-stock product with no backorders blocks checkout. */
+	public function test_unmanaged_out_of_stock_without_backorders_blocks_checkout(): void {
+		$this->set_prevent_overselling( true );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock' => false,
+				'stock_status' => 'outofstock',
 			)
 		);
 		$order = $this->create_order( 'processing', array( array( $product, 1 ) ) );
 
 		$result = $this->validate( $order );
 
-		$this->assertSame( $order, $result );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$item = $result->get_error_data()['items'][0];
+		$this->assertSame( 'out_of_stock_status', $item['reason'] );
+		$this->assertSame( 'no', $item['backorders'] );
 	}
 
 	/** Variation-level stock is used when the variation manages stock. */
@@ -375,7 +411,9 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 	public function test_deleted_product_line_blocks_checkout(): void {
 		$this->set_prevent_overselling( true );
 		$product = $this->create_stock_product( 1 );
-		$order   = $this->create_order( 'processing', array( array( $product, 1 ) ) );
+		// Capture the id first: WC_Data::delete() resets the object's id to 0.
+		$product_id = $product->get_id();
+		$order      = $this->create_order( 'processing', array( array( $product, 1 ) ) );
 		$order->save();
 		$product->delete( true );
 
@@ -383,8 +421,8 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$item = $result->get_error_data()['items'][0];
-		$this->assertEquals( 'product_not_found', $item['reason'] );
-		$this->assertEquals( $product->get_id(), $item['product_id'] );
+		$this->assertSame( 'product_not_found', $item['reason'] );
+		$this->assertSame( $product_id, $item['product_id'] );
 		$this->assertNull( $item['available'] );
 	}
 
