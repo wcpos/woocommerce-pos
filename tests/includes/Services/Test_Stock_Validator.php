@@ -851,7 +851,14 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 	 * @return WC_Order|WP_Error
 	 */
 	private function validate( WC_Order $order, ?string $status = null ) {
-		$request = new WP_REST_Request( 'POST', '/wcpos/v2/orders' );
+		// No route: this helper does not dispatch, it hands a stub request straight
+		// to the filter, and the code under it reads only `status`/`set_paid`. A
+		// route here would exercise nothing while reading to the lane scanner as
+		// coverage of whichever lane the string named — a claim these service
+		// tests cannot support in either direction. The genuine v2 evidence is
+		// Test_Overselling_V2_Write_Lane and Test_Overselling_V2_Reservations,
+		// which dispatch through the real route.
+		$request = new WP_REST_Request( 'POST' );
 		if ( null !== $status ) {
 			$request->set_param( 'status', $status );
 		}
