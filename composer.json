@@ -56,6 +56,7 @@
     "fix": "php-cs-fixer fix .",
     "phpstan": "phpstan analyse --memory-limit=2G",
     "prefix-dependencies": [
+      "composer --working-dir=php-scoper validate --strict",
       "composer --working-dir=php-scoper install",
       "cd php-scoper && vendor/bin/php-scoper add-prefix --output-dir=../vendor_prefixed --force && cd ..",
       "composer dump-autoload -o",

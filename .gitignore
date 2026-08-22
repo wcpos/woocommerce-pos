@@ -15,6 +15,9 @@ c3.php
 .env
 .codeception.yml
 composer.lock
+# ...except the php-scoper build's lock: vendor_prefixed/ is a committed build
+# artifact, so its inputs have to be pinned for the rebuild to be reproducible.
+!/php-scoper/composer.lock
 .wp-env.override.json
 assets/js/*
 !assets/js/README.md
