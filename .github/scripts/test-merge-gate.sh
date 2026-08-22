@@ -341,7 +341,7 @@ run_case "fix-bot source commit without test fails" fail \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: change behavior" \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -350,7 +350,7 @@ run_case "fix-bot commit with test but no Tested trailer fails" fail \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nmodified\ttests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nmodified\t0\ttests/includes/Sync/Test_Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: change behavior" \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -359,17 +359,17 @@ run_case "fix-bot commit with pinning test and Tested trailer passes" pass \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$mixed_commits" \
-  MOCK_COMMIT_FILES_h1=$'modified\tincludes/API/V1/Orders_Controller.php' \
+  MOCK_COMMIT_FILES_h1=$'modified\t0\tincludes/API/V1/Orders_Controller.php' \
   MOCK_COMMIT_MSG_h1="fix: human commit, exempt" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nmodified\ttests/includes/Sync/Test_Write_Controller.php' \
-  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nmodified\t0\ttests/includes/Sync/Test_Write_Controller.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
 
 run_case "fix-bot docs-only commit is exempt" pass \
   PR_AUTHOR="kilbot" PR_TITLE="docs: something" \
   MOCK_CHANGED_FILES="README.md" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tREADME.md' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tREADME.md' \
   MOCK_COMMIT_MSG_c1="docs: readme tweak"
 
 run_case "fix-bot Tested line outside the trailer block fails" fail \
@@ -377,7 +377,7 @@ run_case "fix-bot Tested line outside the trailer block fails" fail \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nadded\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nadded\t0\ttests/includes/Sync/Test_X.php' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nMentions a\nTested: requirement in prose.\n\nSigned-off-by: bot' \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -386,29 +386,133 @@ run_case "fix-bot deleting a test does not satisfy the pin" fail \
   MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
   MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php\nremoved\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nremoved\t3\ttests/includes/Sync/Test_X.php' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: OK' \
   MOCK_NO_CHECKS_EXPECTED=true
 
 run_case "fix-bot meaningless Tested trailer fails" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/X.php\nadded\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: N/A'
+
+# A trailer whose digits come from lint/PHPStan while the PHP suite is openly
+# skipped is not evidence the PHP suite ran. These are the literal shapes seen
+# on PR #1654, where the old length+digit rule passed all three.
+run_case "fix-bot trailer delegating the php suite to CI fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: composer run lint-report OK (20/20 files, exit=0); composer run phpstan OK (256/256 files, exit=0); php unit suite delegated to CI'
+
+run_case "fix-bot trailer citing an unavailable docker socket fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit not run, local wp-env start exit=1, Docker socket unavailable (20 files linted)'
+
+run_case "fix-bot php change whose trailer never names the php suite fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: lane-coverage OK (15 tests, exit=0); eslint OK (9/9 tasks)'
+
+run_case "fix-bot php change naming the php suite it ran passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (3376 tests, 16736 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot non-php change need not name the php suite" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="packages/settings/src/x.tsx" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tpackages/settings/src/x.tsx\nadded\t0\tpackages/settings/src/__tests__/x.test.tsx' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: jest OK (42 tests, 0 failures)'
+
+# Narrowing an existing test is how a failing assertion becomes a passing one
+# without the behaviour changing. Adding to one is fine.
+run_case "fix-bot removing lines from an existing test fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nmodified\t12\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot adding to an existing test passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nmodified\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+# Review findings on #1655, each pinned.
+run_case "fix-bot test-only commit that narrows a test still fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="tests/includes/Test_X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t12\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'test: drop a data set\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot test-only commit that only adds still passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="test: more coverage" \
+  MOCK_CHANGED_FILES="tests/includes/Test_X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'added\t0\ttests/includes/Test_Y.php' \
+  MOCK_COMMIT_MSG_c1=$'test: add coverage\n\nTested: phpunit OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
+
+run_case "fix-bot trailer hiding the admission on a continuation line fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit (3376 tests)\n  delegated to CI because wp-env could not start'
+
+run_case "fix-bot trailer saying the suite was not run fails" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit not run (exit=1); lint OK (20/20 files)'
+
+# A REAL phpunit result quotes its own skipped count. That must still pass, which is
+# why bare "skipped" is not an admission term.
+run_case "fix-bot trailer quoting phpunit's own skipped count passes" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
+  MOCK_CHANGED_FILES="includes/X.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/X.php\nadded\t0\ttests/includes/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: change behavior\n\nTested: phpunit OK (3376 tests, 16736 assertions, 6 skipped) — wp-env WC 10.4.3'
 
 run_case "fix-bot gate-script edit needs its harness touched" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\t.github/scripts/merge-gate.sh' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 9/9 cases'
 
 run_case "fix-bot gate-script edit with harness passes" pass \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\t.github/scripts/merge-gate.sh\nmodified\t.github/scripts/test-merge-gate.sh' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\t.github/scripts/merge-gate.sh\nmodified\t0\t.github/scripts/test-merge-gate.sh' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: 12/12 cases pass — local harness'
 
-big_files="$(for i in $(seq 1 300); do printf 'modified\tsrc/f%d.ts\n' "$i"; done)"
+big_files="$(for i in $(seq 1 300); do printf 'modified\t0\tsrc/f%d.ts\n' "$i"; done)"
 run_case "fix-bot 300-file commit fails closed (files API truncation)" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
@@ -418,13 +522,13 @@ run_case "fix-bot 300-file commit fails closed (files API truncation)" fail \
 run_case "fix-bot workflow-only commit without trailer fails" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\t.github/workflows/tests.yml' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\t.github/workflows/tests.yml' \
   MOCK_COMMIT_MSG_c1="fix: tweak CI"
 
 run_case "fix-bot config commit with trailer passes without a new test" pass \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tcomposer.json' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tcomposer.json' \
   MOCK_COMMIT_MSG_c1=$'fix: bump dep\n\nTested: OK (79 tests, 334 assertions) — wp-env WC 10.4.3'
 
 # The PHPUnit config decides which tests run at all — a bot narrowing the
@@ -432,13 +536,13 @@ run_case "fix-bot config commit with trailer passes without a new test" pass \
 run_case "fix-bot phpunit-config commit without trailer fails" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\t.phpunit.xml.dist' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\t.phpunit.xml.dist' \
   MOCK_COMMIT_MSG_c1="test: narrow the suite"
 
 run_case "fix-bot phpunit-config commit with trailer passes" pass \
   PR_AUTHOR="kilbot" PR_TITLE="fix: x" MOCK_CHANGED_FILES="x" MOCK_PATCH="" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\t.phpunit.xml.dist' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\t.phpunit.xml.dist' \
   MOCK_COMMIT_MSG_c1=$'test: enroll suffix tests\n\nTested: OK (1919 tests, 9494 assertions) — wp-env'
 
 # --- Lane-promotion PRs (next → main) skip the per-commit fix-bot discipline;
@@ -451,7 +555,7 @@ run_case "lane promotion from next skips fix-bot discipline" pass \
   MOCK_HEAD_REF="next" \
   MOCK_CHECKS_EXPECTED=true \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer"
 if ! grep -Fq "skipping per-commit fix-bot discipline" "$tmpdir/out"; then
   echo "Expected the promotion PR to log the discipline skip" >&2
@@ -465,7 +569,7 @@ run_case "promote/* cut of next also skips discipline" pass \
   MOCK_HEAD_REF="promote/1.10" \
   MOCK_CHECKS_EXPECTED=true \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer"
 
 run_case "fork branch named next does not bypass discipline" fail \
@@ -476,7 +580,7 @@ run_case "fork branch named next does not bypass discipline" fail \
   MOCK_HEAD_OWNER="attacker" \
   MOCK_HEAD_REPOSITORY="attacker/test" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer" \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -487,7 +591,7 @@ run_case "same-owner fork branch named next does not bypass discipline" fail \
   MOCK_HEAD_REF="next" \
   MOCK_HEAD_REPOSITORY="wcpos/fork" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer" \
   MOCK_NO_CHECKS_EXPECTED=true
 
@@ -498,7 +602,7 @@ run_case "promotion to a non-main base does not bypass discipline" fail \
   MOCK_HEAD_REF="next" \
   MOCK_BASE_REF="release/1.9" \
   MOCK_PR_COMMITS="$bot_commits" \
-  MOCK_COMMIT_FILES_c1=$'modified\tincludes/API/V2/Write_Controller.php' \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php' \
   MOCK_COMMIT_MSG_c1="fix: bot commit without trailer" \
   MOCK_NO_CHECKS_EXPECTED=true
 

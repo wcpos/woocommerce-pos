@@ -206,14 +206,15 @@ pr_commits() {
 }
 
 commit_files() {
-  # status<TAB>filename — a REMOVED test must not satisfy the pinning-test
-  # requirement, so callers need the status.
+  # status<TAB>deletions<TAB>filename — a REMOVED test must not satisfy the
+  # pinning-test requirement, so callers need the status; and deletions
+  # separate ADDING to an existing test file from rewriting or narrowing one.
   #
   # --paginate: the Get-a-commit endpoint pages `files` at 30 by default, so a
   # single request hides sources (and tests) in a large commit — and the
   # 300-file guard below could never see 300 rows.
   gh api "repos/${GITHUB_REPOSITORY}/commits/$1" --paginate \
-    --jq '.files[] | [.status, .filename] | @tsv'
+    --jq '.files[] | [.status, (.deletions // 0), .filename] | @tsv'
 }
 
 commit_message() {
@@ -242,15 +243,74 @@ trailer_block_has_tested() {
   # The trailer value must be result-shaped: a real suite result quotes counts,
   # so require at least one digit and a minimally substantive value — bare
   # "Tested:", "Tested: N/A", or a command with no result do not count.
-  printf '%s\n' "$1" | awk '
-    BEGIN { block = "" }
+  #
+  # It must also not ADMIT that the suite was skipped. The digit and length
+  # rules alone are satisfied by a trailer whose PHP-suite entry reads
+  # "delegated to CI (... Docker socket unavailable)" — the counts come from
+  # lint and PHPStan while the only suite that exercises the changed behaviour
+  # never ran. Trailers saying so in words now fail closed, and when the commit
+  # touches PHP the trailer must name the PHP suite itself rather than leaving
+  # another tool's test count to stand in for it.
+  local require_php="${2:-0}"
+  printf '%s\n' "$1" | awk -v require_php="$require_php" '
+    BEGIN {
+      block = ""
+      # Admissions are matched per RESULT SEGMENT, not across the whole trailer.
+      # A trailer is a list of "tool: result" clauses, so scanning the lot rejects
+      # honest lines like "phpunit OK (79 tests); coverage not run" — the required
+      # suite ran, an ancillary check did not. Bare "skipped" is absent for the
+      # same reason in reverse: PHPUnit prints its own "6 skipped" INSIDE a real
+      # result, so it would reject genuine runs.
+      split("delegated|unavailable|not initialized|not initialised|could not start|failed to start|could not run|did not run|not run|not executed|unable to run|n/a", admits_skipped, "|")
+    }
     /^[[:space:]]*$/ { block = ""; next }
     { block = block $0 "\n" }
+    function segment_admits_skip(seg,   k) {
+      for (k in admits_skipped) {
+        if (index(seg, admits_skipped[k]) > 0) { return 1 }
+      }
+      return 0
+    }
     END {
-      if (match(block, /(^|\n)Tested:[^\n]*/) == 0) exit 1
-      value = substr(block, RSTART, RLENGTH)
-      sub(/(^|\n)Tested:[[:space:]]*/, "", value)
-      exit (length(value) >= 8 && value ~ /[0-9]/) ? 0 : 1
+      # Everything from the Tested: line to the END of the trailer block, found by
+      # position rather than by an ERE: BSD awk does not honour /(\n[^\n]*)*/ here,
+      # and a regex that silently matches only the first physical line would leave
+      # an admission on a continuation line outside the scanned value.
+      pos = 0
+      if (substr(block, 1, 7) == "Tested:") {
+        pos = 1
+      } else {
+        p = index(block, "\nTested:")
+        if (p > 0) { pos = p + 1 }
+      }
+      if (pos == 0) exit 1
+      value = substr(block, pos + 7)
+      sub(/^[[:space:]]*/, "", value)
+      if (length(value) < 8 || value !~ /[0-9]/) exit 1
+      lowered = tolower(value)
+      # Fold continuation lines into their clause BEFORE splitting. BSD awk
+      # (version 20200816, the one on macOS) splits on the given separator AND on
+      # newline, so a wrapped trailer would otherwise put "delegated to CI" in a
+      # segment of its own where it no longer belongs to the suite it describes.
+      gsub(/\n/, " ", lowered)
+      n = split(lowered, segments, ";")
+      # A PHP change must show the result of the PHP suite ITSELF, clean. Another
+      # tool test count does not stand in for it.
+      if (require_php == "1") {
+        for (i = 1; i <= n; i++) {
+          if (segments[i] ~ /phpunit|test:unit:php/) {
+            if (segment_admits_skip(segments[i])) { exit 1 }
+            if (segments[i] !~ /[0-9]/) { exit 1 }
+            exit 0
+          }
+        }
+        exit 1
+      }
+      # Otherwise at least one segment must report a result that actually ran.
+      for (i = 1; i <= n; i++) {
+        if (segments[i] ~ /[0-9]/ && !segment_admits_skip(segments[i])) { exit 0 }
+      }
+      exit 1
     }
   '
 }
@@ -299,17 +359,34 @@ enforce_bot_fix_discipline() {
     has_source=false
     has_test=false
     has_config=false
-    while IFS=$'\t' read -r fstatus file; do
+    has_php=false
+    rewritten_tests=""
+    while IFS=$'\t' read -r fstatus fdeletions file; do
       [[ -n "$file" ]] || continue
+      [[ "$file" == *.php ]] && has_php=true
       if is_test_path "$file"; then
         # Deleting a test is not pinning one.
         [[ "$fstatus" != "removed" ]] && has_test=true
+        # Nor is rewriting one. A bot may ADD coverage to an existing test file
+        # (a pure insertion deletes nothing); removing lines from a test it did
+        # not write in this commit is how a failing assertion becomes a passing
+        # one without the behaviour changing. That needs a human.
+        if [[ "$fstatus" != "added" && "${fdeletions:-0}" -gt 0 ]]; then
+          rewritten_tests+="${rewritten_tests:+, }${file}"
+        fi
       elif is_source_path "$file"; then
         has_source=true
       elif is_config_path "$file"; then
         has_config=true
       fi
     done <<< "$files"
+    # Before the source/config exemption, not after: a commit that ONLY narrows an
+    # existing test has neither, so `continue` used to skip this check entirely —
+    # and a test-narrowing follow-up is exactly the shape this rule exists to stop.
+    if [[ -n "$rewritten_tests" ]]; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) removes lines from an existing test: ${rewritten_tests}. Add coverage freely, but narrowing or rewriting a test a human wrote — dropping a data-set, an assertion, a case — is how a claim gets fitted to the evidence instead of the other way round. Split that out for a human to review."
+      failed=1
+    fi
     [[ "$has_source" == "true" || "$has_config" == "true" ]] || continue
     if [[ "$has_source" == "true" && "$has_test" != "true" ]]; then
       log "✗ Fix-bot commit ${sha:0:8} ($author) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
@@ -319,8 +396,10 @@ enforce_bot_fix_discipline() {
       log "Could not read the message for fix-bot commit ${sha:0:8}; failing closed."
       return 1
     fi
-    if ! trailer_block_has_tested "$msg"; then
-      log "✗ Fix-bot commit ${sha:0:8} ($author) has no 'Tested:' trailer. Run the touched suite locally and record the literal result line (e.g. 'Tested: OK (79 tests) — wp-env WC 10.4.3')."
+    local require_php=0
+    [[ "$has_php" == "true" ]] && require_php=1
+    if ! trailer_block_has_tested "$msg" "$require_php"; then
+      log "✗ Fix-bot commit ${sha:0:8} ($author) has no usable 'Tested:' trailer. Record the literal result of the suite you RAN (e.g. 'Tested: phpunit OK (79 tests, 210 assertions) — wp-env WC 10.4.3'). A trailer that says the PHP suite was delegated to CI, was unavailable, or could not start is not evidence it ran, and for a PHP change the trailer must name the PHP suite itself — another tool's test count does not stand in for it."
       failed=1
     fi
   done <<< "$commits"
