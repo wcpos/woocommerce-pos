@@ -426,6 +426,41 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertNull( $item['available'] );
 	}
 
+	/**
+	 * A failed group leaves no reservation behind for the line that succeeded.
+	 *
+	 * The reservations across stock owners are all-or-nothing: product A has
+	 * enough stock and gets reserved, product B does not, so A's hold must be
+	 * gone by the time the WP_Error is returned. Otherwise a rejected checkout
+	 * would keep silently holding stock until the hold-stock window expired.
+	 */
+	public function test_failed_group_releases_the_reservation_made_for_the_passing_line(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$plenty = $this->create_stock_product( 50 );
+		$short  = $this->create_stock_product( 1 );
+		$order  = $this->create_order(
+			'processing',
+			array(
+				array( $plenty, 1 ),
+				array( $short, 5 ),
+			)
+		);
+		$order->save();
+
+		$result = $this->validate( $order );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$held = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+				$order->get_id()
+			)
+		);
+		$this->assertSame( 0, (int) $held, 'a rejected checkout must not leave stock reserved' );
+	}
+
 	/** Every failing line is included in the error response. */
 	public function test_multiple_failing_lines_are_reported(): void {
 		$this->set_prevent_overselling( true );
