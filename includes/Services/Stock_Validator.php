@@ -205,10 +205,17 @@ class Stock_Validator {
 
 		\ksort( $managed_stock );
 		$reserving = 0 < $order->get_id() && ! empty( $managed_stock );
-		if ( $reserving ) {
-			global $wpdb;
-			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		}
+		// Each reserve_stock() call is atomic on its own — a single
+		// INSERT ... SELECT ... FOR UPDATE, the same shape WooCommerce's own
+		// ReserveStock uses. What still has to be all-or-nothing is the set of
+		// reservations across stock owners: reserving line A and then failing on
+		// line B must leave A unreserved. An explicit START TRANSACTION cannot do
+		// that job here, because MySQL does not nest transactions — it would
+		// implicitly COMMIT whatever transaction the caller already had open
+		// (including the one the WP test framework wraps every test in). So the
+		// group is undone by compensation instead: snapshot this order's rows
+		// first, restore them on any failure.
+		$prior_reservations = $reserving ? $this->existing_reservations( $order->get_id() ) : array();
 
 		try {
 			foreach ( $managed_stock as $group ) {
@@ -244,17 +251,13 @@ class Stock_Validator {
 			}
 		} catch ( \Throwable $exception ) {
 			if ( $reserving ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$this->restore_reservations( $order->get_id(), $prior_reservations );
 			}
 			throw $exception;
 		}
 
-		if ( $reserving ) {
-			if ( empty( $failures ) ) {
-				$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			} else {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			}
+		if ( $reserving && ! empty( $failures ) ) {
+			$this->restore_reservations( $order->get_id(), $prior_reservations );
 		}
 
 		if ( empty( $failures ) ) {
@@ -297,6 +300,56 @@ class Stock_Validator {
 		$available   = $stock - (float) wc_get_held_stock_quantity( $owner, $order_id );
 
 		return $this->stock_quantity( $this->stock_units( $available ) );
+	}
+
+	/**
+	 * Snapshot the reserved-stock rows this order already holds.
+	 *
+	 * @param int $order_id Order ID.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function existing_reservations( int $order_id ): array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT product_id, stock_quantity, timestamp, expires FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$order_id
+			),
+			ARRAY_A
+		);
+
+		return \is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Undo this call's reservations by restoring the snapshot taken before it.
+	 *
+	 * @param int                            $order_id Order ID.
+	 * @param array<int,array<string,mixed>> $rows     Snapshot from existing_reservations().
+	 */
+	private function restore_reservations( int $order_id, array $rows ): void {
+		global $wpdb;
+
+		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->wc_reserved_stock,
+			array( 'order_id' => $order_id ),
+			array( '%d' )
+		);
+
+		foreach ( $rows as $row ) {
+			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->wc_reserved_stock,
+				array(
+					'order_id'       => $order_id,
+					'product_id'     => (int) $row['product_id'],
+					'stock_quantity' => $row['stock_quantity'],
+					'timestamp'      => $row['timestamp'],
+					'expires'        => $row['expires'],
+				),
+				array( '%d', '%d', '%s', '%s', '%s' )
+			);
+		}
 	}
 
 	/**
