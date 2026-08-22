@@ -91,7 +91,7 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 - Apply settings filters before `parent::setUp()` because REST routes capture schema during `rest_api_init`.
 - Use Arrange / Act / Assert structure.
 - Name tests `test_[feature]_[scenario]_[expected_result]`.
-- PHPUnit assertions are `assertEquals( expected, actual )`.
+- Assertion arguments go `( expected, actual )` — this is about ARGUMENT ORDER, not about which assertion to call. Prefer the strictest assertion that fits: `assertSame` over `assertEquals`, `assertTrue`/`assertFalse` over equality on booleans, `assertContains`/`assertArrayHasKey` over hand-rolled checks. (`tests/includes/Sync/` uses `assertSame` roughly four times as often as `assertEquals`.)
 
 ## JavaScript / Package Tests
 
