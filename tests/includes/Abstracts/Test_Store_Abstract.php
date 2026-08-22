@@ -4,11 +4,21 @@ namespace WCPOS\WooCommercePOS\Tests\Abstracts;
 
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WP_UnitTestCase;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 
 /**
  * Test double that mirrors Pro's ability to seed Store properties directly.
  */
 class Store_With_Test_Tax_Ids extends Store {
+	/**
+	 * Seed the store locale.
+	 *
+	 * @param string $locale Locale to seed.
+	 */
+	public function set_test_locale( string $locale ): void {
+		$this->set_prop( 'locale', $locale );
+	}
+
 	/**
 	 * Seed structured tax IDs using the Store data property.
 	 *
@@ -128,6 +138,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'policies_and_conditions',
 			'footer_imprint',
 			'tax_ids',
+			'receipt_i18n',
 		);
 	}
 
@@ -137,6 +148,48 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$props               = array_keys( $data );
 		$this->assertEmpty( array_diff( $expected_data_props, $props ), 'These fields were expected but not present in Store: ' . print_r( array_diff( $expected_data_props, $props ), true ) );
 		$this->assertEmpty( array_diff( $props, $expected_data_props ), 'These fields were not expected in Store: ' . print_r( array_diff( $props, $expected_data_props ), true ) );
+	}
+
+	/**
+	 * Store payloads carry the receipt label dictionary resolved for the
+	 * store locale, so the client can render offline/fallback receipts with
+	 * the same translated labels as server-built payloads (mono#1252).
+	 */
+	public function test_store_payload_includes_receipt_i18n_labels(): void {
+		global $wp_locale_switcher;
+
+		$store = new Store_With_Test_Tax_Ids();
+		$store->set_test_locale( 'nl_NL' );
+
+		$available_languages = new \ReflectionProperty( $wp_locale_switcher, 'available_languages' );
+		$available_languages->setAccessible( true );
+		$original_languages = $available_languages->getValue( $wp_locale_switcher );
+		$available_languages->setValue( $wp_locale_switcher, array_merge( $original_languages, array( 'nl_NL' ) ) );
+
+		$translation_filter = static function ( $translation, $text, $domain ) {
+			if ( 'woocommerce-pos' === $domain && 'Order' === $text && 'nl_NL' === get_locale() ) {
+				return 'Bestelling';
+			}
+
+			return $translation;
+		};
+		add_filter( 'gettext', $translation_filter, 10, 3 );
+		set_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL', TRANSLATION_VERSION, DAY_IN_SECONDS );
+
+		try {
+			$data = $store->get_data();
+		} finally {
+			delete_transient( 'wcpos_i18n_woocommerce-pos_missing_nl_NL' );
+			remove_filter( 'gettext', $translation_filter, 10 );
+			$available_languages->setValue( $wp_locale_switcher, $original_languages );
+		}
+
+		$this->assertEquals( 'nl_NL', $store->get_locale() );
+		$this->assertArrayHasKey( 'receipt_i18n', $data );
+		$this->assertIsArray( $data['receipt_i18n'] );
+		$this->assertEquals( 'Bestelling', $data['receipt_i18n']['order'] );
+		// Spot-check a key the stock gallery templates rely on.
+		$this->assertArrayHasKey( 'total_refunded', $data['receipt_i18n'] );
 	}
 
 	/**

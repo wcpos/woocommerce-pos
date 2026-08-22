@@ -86,6 +86,7 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'policies_and_conditions',
 			'footer_imprint',
 			'tax_ids',
+			'receipt_i18n',
 			'_links',
 		);
 	}
