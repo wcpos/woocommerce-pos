@@ -42,7 +42,7 @@ class Stock_Validator {
 	/**
 	 * Register the REST order validation hook.
 	 */
-	public function __construct() {
+	private function __construct() {
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'validate_stock' ), 10, 3 );
 		add_filter( 'woocommerce_query_for_reserved_stock', array( $this, 'include_pos_draft_reservations' ) );
 	}
@@ -218,7 +218,7 @@ class Stock_Validator {
 		// implicitly COMMIT whatever transaction the caller already had open
 		// (including the one the WP test framework wraps every test in). So the
 		// group is undone by compensation instead: snapshot this order's rows
-		// first, restore them on any failure.
+		// first, then reacquire them on failure when stock is still available.
 		$prior_reservations = $persisted ? $this->existing_reservations( $order->get_id() ) : array();
 		if ( $persisted ) {
 			$this->release_checkout_stock( $order );
@@ -233,16 +233,16 @@ class Stock_Validator {
 					continue;
 				}
 
-				$available = $this->available_stock( $owner, $order->get_id() );
 				if ( $reserving && $this->reserve_stock( $order, $owner, $group['requested'] ) ) {
 					continue;
 				}
-				if ( ! $reserving && $group['requested'] <= $this->stock_units( $available ) ) {
-					continue;
-				}
-
 				if ( $reserving ) {
 					$available = $this->available_stock( $owner, $order->get_id() );
+				} else {
+					$available = $this->available_stock( $owner, $order->get_id() );
+					if ( $group['requested'] <= $this->stock_units( $available ) ) {
+						continue;
+					}
 				}
 
 				foreach ( $group['lines'] as $index => $line ) {
@@ -258,13 +258,13 @@ class Stock_Validator {
 			}
 		} catch ( \Throwable $exception ) {
 			if ( $persisted ) {
-				$this->restore_reservations( $order->get_id(), $prior_reservations );
+				$this->restore_reservations( $order, $prior_reservations );
 			}
 			throw $exception;
 		}
 
 		if ( $persisted && ! empty( $failures ) ) {
-			$this->restore_reservations( $order->get_id(), $prior_reservations );
+			$this->restore_reservations( $order, $prior_reservations );
 		}
 
 		if ( empty( $failures ) ) {
@@ -330,32 +330,19 @@ class Stock_Validator {
 	}
 
 	/**
-	 * Undo this call's reservations by restoring the snapshot taken before it.
+	 * Restore prior reservation quantities when stock is still available.
 	 *
-	 * @param int                            $order_id Order ID.
-	 * @param array<int,array<string,mixed>> $rows     Snapshot from existing_reservations().
+	 * @param WC_Order                       $order Order receiving the reservations.
+	 * @param array<int,array<string,mixed>> $rows  Snapshot from existing_reservations().
 	 */
-	private function restore_reservations( int $order_id, array $rows ): void {
-		global $wpdb;
-
-		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->wc_reserved_stock,
-			array( 'order_id' => $order_id ),
-			array( '%d' )
-		);
+	private function restore_reservations( WC_Order $order, array $rows ): void {
+		$this->release_checkout_stock( $order );
 
 		foreach ( $rows as $row ) {
-			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->wc_reserved_stock,
-				array(
-					'order_id'       => $order_id,
-					'product_id'     => (int) $row['product_id'],
-					'stock_quantity' => $row['stock_quantity'],
-					'timestamp'      => $row['timestamp'],
-					'expires'        => $row['expires'],
-				),
-				array( '%d', '%d', '%s', '%s', '%s' )
-			);
+			$owner = wc_get_product( (int) $row['product_id'] );
+			if ( $owner instanceof WC_Product ) {
+				$this->reserve_stock( $order, $owner, $this->stock_units( (float) $row['stock_quantity'] ) );
+			}
 		}
 	}
 

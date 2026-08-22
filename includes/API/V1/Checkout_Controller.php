@@ -189,6 +189,7 @@ class Checkout_Controller extends WC_REST_Controller {
 			if ( 'start' === $action ) {
 				$validation = Stock_Validator::instance()->validate_checkout( $order );
 				if ( is_wp_error( $validation ) ) {
+					Stock_Validator::instance()->release_checkout_stock( $order );
 					return $validation;
 				}
 			}
