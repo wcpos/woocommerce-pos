@@ -173,13 +173,21 @@ class Stock_Validator {
 		// calls payment_complete(). Keeping that sequence is what makes a POS sale
 		// behave identically to the same payload through wp-admin or wc/v3, and
 		// stops the result depending on whether prevent-overselling is enabled.
-		$target_status = isset( $intent['status'] ) ? (string) $intent['status'] : '';
-		if ( '' !== $target_status ) {
-			$order->set_status( $target_status );
-			$order->save();
-		}
-		if ( ! empty( $intent['set_paid'] ) ) {
-			$order->payment_complete( isset( $intent['transaction_id'] ) ? (string) $intent['transaction_id'] : '' );
+		try {
+			$target_status = isset( $intent['status'] ) ? (string) $intent['status'] : '';
+			if ( '' !== $target_status ) {
+				$order->set_status( $target_status );
+				$order->save();
+			}
+			if ( ! empty( $intent['set_paid'] ) ) {
+				$order->payment_complete( isset( $intent['transaction_id'] ) ? (string) $intent['transaction_id'] : '' );
+			}
+		} catch ( \Throwable $exception ) {
+			wc_maybe_increase_stock_levels( $order->get_id() );
+			$this->release_checkout_stock( $order );
+			$order->delete( true );
+
+			throw $exception;
 		}
 
 		return wc_get_order( $order->get_id() );
@@ -309,16 +317,6 @@ class Stock_Validator {
 		// first, then reacquire them on failure when stock is still available.
 		$prior_reservations = $persisted ? $this->existing_reservations( $order->get_id() ) : array();
 
-		// Drop only what left the order. Releasing everything and re-reserving
-		// would leave this order holding nothing in between, which is exactly the
-		// gap another till can take. Gated on $persisted rather than $reserving,
-		// because an order whose LAST stock-managed line was removed has an empty
-		// managed set and still needs its rows dropped — prune_reservations()
-		// treats that as "keep nothing".
-		if ( $persisted ) {
-			$this->prune_reservations( $order->get_id(), array_keys( $managed_stock ) );
-		}
-
 		try {
 			foreach ( $managed_stock as $group ) {
 				$owner      = $group['owner'];
@@ -363,6 +361,10 @@ class Stock_Validator {
 		}
 
 		if ( empty( $failures ) ) {
+			if ( $persisted ) {
+				$this->prune_reservations( $order->get_id(), array_keys( $managed_stock ) );
+			}
+
 			return $order;
 		}
 		\ksort( $failures );
@@ -415,7 +417,7 @@ class Stock_Validator {
 
 		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				"SELECT product_id, stock_quantity, timestamp, expires FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT product_id, stock_quantity, timestamp, expires FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d AND expires > NOW()", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$order_id
 			),
 			ARRAY_A
@@ -457,16 +459,40 @@ class Stock_Validator {
 	 *
 	 * @param WC_Order                       $order Order receiving the reservations.
 	 * @param array<int,array<string,mixed>> $rows  Snapshot from existing_reservations().
+	 * @throws \RuntimeException When a reservation cannot be restored.
 	 */
 	private function restore_reservations( WC_Order $order, array $rows ): void {
-		$this->release_checkout_stock( $order );
+		global $wpdb;
 
 		foreach ( $rows as $row ) {
 			$owner = wc_get_product( (int) $row['product_id'] );
-			if ( $owner instanceof WC_Product ) {
-				$this->reserve_stock( $order, $owner, $this->stock_units( (float) $row['stock_quantity'] ) );
+			if (
+				! $owner instanceof WC_Product
+				|| ! $this->reserve_stock( $order, $owner, $this->stock_units( (float) $row['stock_quantity'] ) )
+			) {
+				throw new \RuntimeException( 'Unable to restore stock reservation.' );
+			}
+
+			$restored = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->wc_reserved_stock,
+				array(
+					'stock_quantity' => $row['stock_quantity'],
+					'timestamp'      => $row['timestamp'],
+					'expires'        => $row['expires'],
+				),
+				array(
+					'order_id'   => $order->get_id(),
+					'product_id' => (int) $row['product_id'],
+				),
+				array( '%s', '%s', '%s' ),
+				array( '%d', '%d' )
+			);
+			if ( false === $restored ) {
+				throw new \RuntimeException( 'Unable to restore stock reservation.' );
 			}
 		}
+
+		$this->prune_reservations( $order->get_id(), array_column( $rows, 'product_id' ) );
 	}
 
 	/**
@@ -623,10 +649,16 @@ class Stock_Validator {
 	 * @return string[]
 	 */
 	private function exempt_statuses(): array {
+		$statuses = apply_filters(
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Backward-compatible public filter.
+			'woocommerce_pos_stock_validation_exempt_statuses',
+			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
+		);
+
 		return apply_filters(
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Intentional public WCPOS hook.
 			'wcpos_stock_validation_exempt_statuses',
-			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
+			$statuses
 		);
 	}
 
