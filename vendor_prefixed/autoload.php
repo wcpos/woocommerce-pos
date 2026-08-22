@@ -5,7 +5,6 @@
 $classMap = [
     'WCPOS\Vendor\Masterminds\HTML5\Serializer\Traverser' => './masterminds/html5/src/HTML5/Serializer/Traverser.php',
     'WCPOS\Vendor\Masterminds\HTML5\Serializer\RulesInterface' => './masterminds/html5/src/HTML5/Serializer/RulesInterface.php',
-    'WCPOS\Vendor\Masterminds\HTML5\Serializer\HTML5Entities' => './masterminds/html5/src/HTML5/Serializer/HTML5Entities.php',
     'WCPOS\Vendor\Masterminds\HTML5\Serializer\OutputRules' => './masterminds/html5/src/HTML5/Serializer/OutputRules.php',
     'WCPOS\Vendor\Masterminds\HTML5\Entities' => './masterminds/html5/src/HTML5/Entities.php',
     'WCPOS\Vendor\Masterminds\HTML5\Parser\CharacterReference' => './masterminds/html5/src/HTML5/Parser/CharacterReference.php',

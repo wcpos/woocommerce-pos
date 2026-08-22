@@ -1,4 +1,8 @@
 {
+  "name": "wcpos/php-scoper-build",
+  "description": "Build-only dependency set that php-scoper prefixes into the plugin's vendor_prefixed directory. Never published, never installed at runtime.",
+  "license": "GPL-3.0-or-later",
+  "type": "project",
   "require-dev": {
     "humbug/php-scoper": "0.16.2"
   },
@@ -10,8 +14,6 @@
     "firebase/php-jwt": "^6.10.0",
     "picqer/php-barcode-generator": "^2.4"
   },
-  "minimum-stability": "dev",
-  "prefer-stable": true,
   "config": {
     "platform": {
       "php": "7.4"
