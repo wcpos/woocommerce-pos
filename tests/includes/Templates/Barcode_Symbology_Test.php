@@ -249,4 +249,35 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 		$this->assertSame( Barcode_Symbology::MAX_DATA_BYTES, \strlen( Barcode_Symbology::escpos_payload( 'code128', $long ) ) );
 		$this->assertSame( Barcode_Symbology::MAX_DATA_BYTES, \strlen( Barcode_Symbology::starprnt_payload( 'code128', $long ) ) );
 	}
+	/**
+	 * Clamping a Code 128 payload can split an escaped `%0` pair. Star reads a
+	 * `%` plus the following byte as an escape, and the byte that follows on the
+	 * wire is the RS terminator — so a lone trailing `%` swallows the terminator
+	 * and the printer consumes the rest of the receipt as barcode data.
+	 *
+	 * @return void
+	 */
+	public function test_starprnt_payload_never_ends_in_a_lone_escape_character(): void {
+		// Arrange.
+		$value = str_repeat( 'A', 254 ) . '%';
+
+		// Act.
+		$payload = Barcode_Symbology::starprnt_payload( 'code128', $value );
+
+		// Assert.
+		$trailing = \strlen( $payload ) - \strlen( rtrim( $payload, '%' ) );
+		$this->assertSame( 0, $trailing % 2 );
+	}
+
+	/**
+	 * Epson's minimum of two bytes for Code 128 counts the `{B` selector that
+	 * escpos_payload() always prepends, so a one-character value is legal.
+	 *
+	 * @return void
+	 */
+	public function test_is_valid_value_accepts_a_single_character_code128_value(): void {
+		// Arrange / Act / Assert.
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', '7', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', '', Barcode_Symbology::LANE_ESCPOS ) );
+	}
 }

@@ -301,4 +301,19 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'type="code128"', $xml );
 		$this->assertStringNotContainsString( 'not-a-symbology', $xml );
 	}
+	/**
+	 * A symbology ePOS-Print supports but WCPOS does not model must reach the
+	 * printer untranslated. Folding it to Code 128 would silently downgrade a
+	 * working GS1-128 to a scannable-but-wrong symbol.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_epos_only_symbology_passes_through_untranslated(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><barcode type="gs1_128" height="60">0103453120000011</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'type="gs1_128"', $xml );
+		$this->assertStringNotContainsString( 'type="code128"', $xml );
+	}
 }

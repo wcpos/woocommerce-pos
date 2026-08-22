@@ -160,6 +160,26 @@ class Barcode_Symbology {
 	);
 
 	/**
+	 * Symbologies ePOS-Print accepts that WCPOS does not model itself.
+	 *
+	 * Source: Epson ePOS-Print XML reference, `<barcode>` element. These are
+	 * accepted by the printer but absent from self::SYMBOLOGIES, so they are
+	 * passed through untranslated instead of being folded to Code 128.
+	 *
+	 * @var array
+	 */
+	private const EPOS_XML_ONLY_TYPES = array(
+		'jan13',
+		'jan8',
+		'code128_auto',
+		'gs1_128',
+		'gs1_databar_omnidirectional',
+		'gs1_databar_truncated',
+		'gs1_databar_limited',
+		'gs1_databar_expanded',
+	);
+
+	/**
 	 * Star Document Markup `[barcode: type ...]` names.
 	 *
 	 * Star markup is alone in calling Codabar "NW-7".
@@ -272,7 +292,10 @@ class Barcode_Symbology {
 				return $length >= 1 && $length <= 255 && self::is_ascii( $value );
 			case 'code128':
 			default:
-				return $length >= 2 && $length <= 255 && self::is_ascii( $value );
+				// Epson's n >= 2 counts the two-byte `{B` code-set selector, which
+				// escpos_payload() always prepends, so a single-character value is
+				// legal on the wire (n = 3).
+				return $length >= 1 && $length <= 255 && self::is_ascii( $value );
 		}
 	}
 
@@ -345,7 +368,19 @@ class Barcode_Symbology {
 			return substr( $value, 0, self::MAX_DATA_BYTES );
 		}
 
-		return substr( str_replace( '%', '%0', $value ), 0, self::MAX_DATA_BYTES );
+		$payload = substr( str_replace( '%', '%0', $value ), 0, self::MAX_DATA_BYTES );
+
+		// Clamping can split an escaped `%0` pair. Star reads `%` plus the byte
+		// after it as an escape, and the next byte on the wire is the RS that
+		// terminates the barcode — so a lone trailing `%` eats the terminator and
+		// the printer keeps consuming the rest of the receipt as barcode data.
+		// Unlike an unprintable symbol, that failure is not self-limiting.
+		$trailing_percents = \strlen( $payload ) - \strlen( rtrim( $payload, '%' ) );
+		if ( 1 === $trailing_percents % 2 ) {
+			$payload = substr( $payload, 0, -1 );
+		}
+
+		return $payload;
 	}
 
 	/**
@@ -369,6 +404,19 @@ class Barcode_Symbology {
 	 * @return string The attribute value.
 	 */
 	public static function epos_xml_name( string $type ): string {
+		$requested = strtolower( trim( $type ) );
+
+		// ePOS-Print accepts symbologies WCPOS does not model, and the `type`
+		// attribute is free-form, so a template may legitimately ask for one.
+		// Folding those to Code 128 would silently downgrade a working GS1-128
+		// to a scannable-but-wrong symbol, so anything ePOS itself accepts is
+		// passed straight through. A name neither we nor ePOS recognise still
+		// falls back to Code 128 rather than being handed to the printer, which
+		// would reject the element and print nothing at all.
+		if ( \in_array( $requested, self::EPOS_XML_ONLY_TYPES, true ) ) {
+			return $requested;
+		}
+
 		$symbology = self::normalize_linear( $type );
 
 		return self::EPOS_XML_NAMES[ $symbology ] ?? $symbology;
