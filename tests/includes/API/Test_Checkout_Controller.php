@@ -20,6 +20,8 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Direct gateway checkout validates stock before dispatch. */
 	public function test_checkout_validates_stock_before_dispatching_gateway(): void {
+		global $wpdb;
+
 		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
 		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
 		// wcpos_request() reads getallheaders()/$_SERVER, not the WP_REST_Request
@@ -35,9 +37,13 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = wc_create_order();
 		$order->set_status( 'pos-open' );
 		$order->set_payment_method( 'pos_cash' );
-		$order->add_product( $product, 2 );
+		$item_id = $order->add_product( $product, 1 );
 		$order->calculate_totals();
 		$order->save();
+		wc_reserve_stock_for_order( $order );
+		$item = $order->get_item( $item_id );
+		$item->set_quantity( 2 );
+		$item->save();
 
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
@@ -56,7 +62,18 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 400, $response->get_status(), wp_json_encode( $data ) );
 			$this->assertSame( 'wcpos_insufficient_stock', $data['code'] );
 			$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				),
+				'a rejected checkout must release its restored reservation'
+			);
 		} finally {
+			wc_release_stock_for_order( $order );
 			unset( $_SERVER['HTTP_X_WCPOS'] );
 			if ( false === $original_settings ) {
 				delete_option( 'woocommerce_pos_settings_checkout' );

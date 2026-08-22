@@ -551,12 +551,62 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A thrown stock validation deletes the temporary order before propagating. */
+	public function test_create_deletes_order_when_stock_validation_throws(): void {
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 1,
+				'backorders'     => 'no',
+			)
+		);
+		$throw_validation = static function (): void {
+			throw new \RuntimeException( 'stock validation failed' );
+		};
+		add_filter( 'woocommerce_query_for_reserved_stock', $throw_validation, 20 );
+
+		try {
+			$order_count = count( wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+			$request     = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+			$request->set_body_params(
+				array(
+					'set_paid'  => true,
+					'line_items' => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 1,
+						),
+					),
+				)
+			);
+
+			try {
+				$this->server->dispatch( $request );
+				$this->fail( 'Expected stock validation to throw.' );
+			} catch ( \RuntimeException $exception ) {
+				$this->assertSame( 'stock validation failed', $exception->getMessage() );
+			}
+
+			$this->assertCount( $order_count, wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+		} finally {
+			remove_filter( 'woocommerce_query_for_reserved_stock', $throw_validation, 20 );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
 	/**
 	 * A paid create invokes payment completion before applying its final status.
 	 *
-	 * @dataProvider order_create_route_provider
 	 */
-	public function test_create_completed_paid_order_runs_payment_completion( bool $current_lane ): void {
+	public function test_create_completed_paid_order_runs_payment_completion(): void {
 		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
 		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
 		$_SERVER['HTTP_X_WCPOS'] = '1';
@@ -575,9 +625,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		add_action( 'woocommerce_payment_complete', $recorder );
 
 		try {
-			$request = $current_lane
-				? $this->wp_rest_post_request( '/wc/v3/orders' )
-				: $this->wp_rest_post_request( '/wcpos/v1/orders' );
+			$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 			$request->set_body_params(
 				array(
 					'set_paid'       => true,

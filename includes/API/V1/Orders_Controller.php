@@ -115,6 +115,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param WP_REST_Request $request  Full request details.
 	 * @param bool            $creating Whether a new order is being created.
 	 * @return WC_Data|WP_Error
+	 * @throws \Throwable If checkout stock validation cannot be completed.
 	 */
 	protected function save_object( $request, $creating = false ) {
 		$validator = Stock_Validator::instance();
@@ -133,7 +134,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				return $order;
 			}
 
-			$validation = $validator->validate_checkout( $order );
+			try {
+				$validation = $validator->validate_checkout( $order );
+			} catch ( \Throwable $exception ) {
+				$order->delete( true );
+				throw $exception;
+			}
 			if ( is_wp_error( $validation ) ) {
 				$order->delete( true );
 				return $validation;

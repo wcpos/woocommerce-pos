@@ -14,6 +14,7 @@ use WC_Product;
 use WP_Error;
 use WP_REST_Request;
 use WC_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 
 /**
  * Test_Stock_Validator class.
@@ -209,25 +210,6 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertSame( $order, $result );
 	}
 
-	/** An unmanaged out-of-stock product with no backorders blocks checkout. */
-	public function test_unmanaged_out_of_stock_without_backorders_blocks_checkout(): void {
-		$this->set_prevent_overselling( true );
-		$product = ProductHelper::create_simple_product(
-			array(
-				'manage_stock' => false,
-				'stock_status' => 'outofstock',
-			)
-		);
-		$order = $this->create_order( 'processing', array( array( $product, 1 ) ) );
-
-		$result = $this->validate( $order );
-
-		$this->assertInstanceOf( WP_Error::class, $result );
-		$item = $result->get_error_data()['items'][0];
-		$this->assertSame( 'out_of_stock_status', $item['reason'] );
-		$this->assertSame( 'no', $item['backorders'] );
-	}
-
 	/** Variation-level stock is used when the variation manages stock. */
 	public function test_variation_managed_stock_is_validated(): void {
 		$this->set_prevent_overselling( true );
@@ -323,7 +305,11 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 			$this->assertInstanceOf( WP_Error::class, $result );
 			$this->assertEquals( 0.001, $result->get_error_data()['items'][0]['available'] );
 		} finally {
-			update_option( 'woocommerce_price_num_decimals', $original_price_decimals );
+			if ( false === $original_price_decimals ) {
+				delete_option( 'woocommerce_price_num_decimals' );
+			} else {
+				update_option( 'woocommerce_price_num_decimals', $original_price_decimals );
+			}
 		}
 	}
 
@@ -363,6 +349,47 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 			$this->assertInstanceOf( WP_Error::class, $result_b );
 			$this->assertEquals( 0.0, $result_b->get_error_data()['items'][0]['available'] );
 		} finally {
+			wc_release_stock_for_order( $order_a );
+			wc_release_stock_for_order( $order_b );
+		}
+	}
+
+	/** Failed compensation cannot recreate a reservation claimed by another order. */
+	public function test_failed_revalidation_does_not_restore_an_overbooked_reservation(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$order_a = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+		$order_b = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+		$order_a->save();
+		$order_b->save();
+		wc_reserve_stock_for_order( $order_a );
+
+		$claim_stock = null;
+		$claim_stock = static function ( string $query ) use ( &$claim_stock, $order_b ): string {
+			remove_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
+			wc_reserve_stock_for_order( $order_b );
+			return $query;
+		};
+		add_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
+
+		try {
+			$result = $this->validate( $order_a, 'processing' );
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$held = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT order_id, stock_quantity FROM {$wpdb->wc_reserved_stock} WHERE product_id = %d ORDER BY order_id",
+					$product->get_id()
+				),
+				ARRAY_A
+			);
+			$this->assertCount( 1, $held );
+			$this->assertSame( $order_b->get_id(), (int) $held[0]['order_id'] );
+			$this->assertEquals( 1.0, (float) $held[0]['stock_quantity'] );
+		} finally {
+			remove_filter( 'woocommerce_query_for_reserved_stock', $claim_stock, 20 );
 			wc_release_stock_for_order( $order_a );
 			wc_release_stock_for_order( $order_b );
 		}
@@ -461,6 +488,14 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$item = $result->get_error_data()['items'][0];
 		$this->assertNull( $item['available'] );
 		$this->assertEquals( 'out_of_stock_status', $item['reason'] );
+		$this->assertSame( 'no', $item['backorders'] );
+	}
+
+	/** The registered validator cannot be instantiated outside its singleton. */
+	public function test_stock_validator_constructor_is_private(): void {
+		$reflection = new \ReflectionClass( Stock_Validator::class );
+
+		$this->assertTrue( $reflection->getConstructor()->isPrivate() );
 	}
 
 	/** Miscellaneous lines without product IDs are skipped. */
