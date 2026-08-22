@@ -145,6 +145,28 @@ Copy `.env.example` to `.env` only when you are also running the separate WCPOS 
 | `pnpm lint:php` | PHPCS with CI-friendly output |
 | `pnpm build:docs` | Generate hook documentation (JSDoc / wp-hookdoc) |
 
+**Prefixed dependencies**
+
+`vendor_prefixed/` is a committed build artifact: `composer prefix-dependencies` installs the
+[`php-scoper/`](./php-scoper) dependency set and rewrites it under the `WCPOS\Vendor` namespace so the
+bundled Dompdf, JWT, QR and barcode libraries can't collide with another plugin's copy. Every CI
+workflow re-runs that script, so the pinned versions in `php-scoper/composer.lock` are what actually
+ships — that lock is the one exception to the repo-wide `composer.lock` gitignore rule, and the build
+runs `composer validate --strict` first so an unsynced lock fails loudly instead of silently
+re-resolving.
+
+To bump a bundled library, land the version change on its own:
+
+```bash
+composer --working-dir=php-scoper update <package>   # or plain `update` for everything
+composer prefix-dependencies                         # rewrites vendor_prefixed/
+git add php-scoper/composer.lock vendor_prefixed
+```
+
+Keep that separate from any `scoper.inc.php` change, so a scoping diff stays reviewable on its own.
+Dependabot watches the `/php-scoper` directory and will open the lock bump for you; `humbug/php-scoper`
+itself is pinned and ignored, since 0.17+ requires PHP 8.1+ while this build targets 7.4.
+
 A distributable plugin zip is produced by the [`release.yml`](./.github/workflows/release.yml) workflow on a version bump in `woocommerce-pos.php`: it installs prod dependencies, builds the admin apps, prunes dev files via `.distignore`, and attaches the zip to a draft GitHub release. Publishing to WordPress.org SVN is handled by [`wporg-deploy.yml`](./.github/workflows/wporg-deploy.yml).
 
 ## 🧪 Testing
