@@ -16,8 +16,10 @@ therefore free to be designed once, and it was:
 - Journal rows carry `deleted: 0|1`. There is **no legacy `type` verb** and the
   server does **not** dual-emit one. A router keyed on a verb string belongs to
   no shipped client.
-- `checkpoint.epoch` is present on every envelope from the first release, so a
-  client either stores an epoch beside its cursor or has never synced.
+- `epoch` is present on every envelope from the first release: `/orders/pull`
+  exposes it at the top level, while `/changes/sequence-log` and `/changes/tick`
+  place it under `checkpoint`. A client therefore either stores an epoch beside
+  its cursor or has never synced.
 - Order tombstones are pruned on the same 90-day retention as catalogue
   tombstones, and the lossy boundary is served as `horizon`. Any client reading
   the order lane MUST consume `horizon`; the 1.10.0 client does.
