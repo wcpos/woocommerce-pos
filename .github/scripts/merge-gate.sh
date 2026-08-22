@@ -255,26 +255,62 @@ trailer_block_has_tested() {
   printf '%s\n' "$1" | awk -v require_php="$require_php" '
     BEGIN {
       block = ""
-      # NOTE: bare "skipped" is deliberately NOT here. PHPUnit prints its own
-      # "Skipped: 6" in a genuine result line, so it would reject real runs. The
-      # entries below name the SUITE being skipped, which a real result never does.
-      split("delegated|unavailable|not initialized|not initialised|could not start|failed to start|could not run|did not run|not run|not executed|unable to run|suite skipped|phpunit skipped|n/a", admits_skipped, "|")
+      # Admissions are matched per RESULT SEGMENT, not across the whole trailer.
+      # A trailer is a list of "tool: result" clauses, so scanning the lot rejects
+      # honest lines like "phpunit OK (79 tests); coverage not run" — the required
+      # suite ran, an ancillary check did not. Bare "skipped" is absent for the
+      # same reason in reverse: PHPUnit prints its own "6 skipped" INSIDE a real
+      # result, so it would reject genuine runs.
+      split("delegated|unavailable|not initialized|not initialised|could not start|failed to start|could not run|did not run|not run|not executed|unable to run|n/a", admits_skipped, "|")
     }
     /^[[:space:]]*$/ { block = ""; next }
     { block = block $0 "\n" }
+    function segment_admits_skip(seg,   k) {
+      for (k in admits_skipped) {
+        if (index(seg, admits_skipped[k]) > 0) { return 1 }
+      }
+      return 0
+    }
     END {
-      # The WHOLE trailer, not just its first physical line: an admission on a
-      # continuation line would otherwise sit outside the scanned value.
-      if (match(block, /(^|\n)Tested:[^\n]*(\n[^\n]*)*/) == 0) exit 1
-      value = substr(block, RSTART, RLENGTH)
-      sub(/(^|\n)Tested:[[:space:]]*/, "", value)
+      # Everything from the Tested: line to the END of the trailer block, found by
+      # position rather than by an ERE: BSD awk does not honour /(\n[^\n]*)*/ here,
+      # and a regex that silently matches only the first physical line would leave
+      # an admission on a continuation line outside the scanned value.
+      pos = 0
+      if (substr(block, 1, 7) == "Tested:") {
+        pos = 1
+      } else {
+        p = index(block, "\nTested:")
+        if (p > 0) { pos = p + 1 }
+      }
+      if (pos == 0) exit 1
+      value = substr(block, pos + 7)
+      sub(/^[[:space:]]*/, "", value)
       if (length(value) < 8 || value !~ /[0-9]/) exit 1
       lowered = tolower(value)
-      for (i in admits_skipped) {
-        if (index(lowered, admits_skipped[i]) > 0) exit 1
+      # Fold continuation lines into their clause BEFORE splitting. BSD awk
+      # (version 20200816, the one on macOS) splits on the given separator AND on
+      # newline, so a wrapped trailer would otherwise put "delegated to CI" in a
+      # segment of its own where it no longer belongs to the suite it describes.
+      gsub(/\n/, " ", lowered)
+      n = split(lowered, segments, ";")
+      # A PHP change must show the result of the PHP suite ITSELF, clean. Another
+      # tool test count does not stand in for it.
+      if (require_php == "1") {
+        for (i = 1; i <= n; i++) {
+          if (segments[i] ~ /phpunit|test:unit:php/) {
+            if (segment_admits_skip(segments[i])) { exit 1 }
+            if (segments[i] !~ /[0-9]/) { exit 1 }
+            exit 0
+          }
+        }
+        exit 1
       }
-      if (require_php == "1" && lowered !~ /phpunit|test:unit:php/) exit 1
-      exit 0
+      # Otherwise at least one segment must report a result that actually ran.
+      for (i = 1; i <= n; i++) {
+        if (segments[i] ~ /[0-9]/ && !segment_admits_skip(segments[i])) { exit 0 }
+      }
+      exit 1
     }
   '
 }
