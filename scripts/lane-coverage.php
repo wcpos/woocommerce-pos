@@ -420,7 +420,21 @@ function build_inventory( $classes, $annotations ) {
 			// current-lane signal. `unresolved` never grants it — calling a case "v1" when the
 			// route was assembled at runtime would put a false statement in the inventory, and an
 			// artifact that misstates one row does not get trusted about the other 435.
-			$on_current  = in_array( 'v2', $lanes, true ) || in_array( 'wc3', $lanes, true );
+			// A CURRENT-lane signal only clears this case if the case itself carries it.
+			// Class lanes are unioned into every method, so one sibling test dispatching
+			// wc/v3 used to mark the whole class as covering current behaviour — on
+			// Test_Orders_Controller that silently cleared ~80 cases whose only route is
+			// `/wcpos/v1/orders/batch`. That is precisely the "already ported" claim this
+			// artifact exists to prevent, so a method that dispatches routes of its own is
+			// judged on those. A method with NO lanes of its own still inherits the class's
+			// (the shared-base-route pattern, where the class genuinely speaks for it).
+			// `unresolved` is the absence of a route, not a lane of its own, so a method
+			// whose only own signal is unresolved has made no positive claim and still
+			// inherits the class's — otherwise a test passing `self::CURRENT_LANE_ROUTE`
+			// would lose the very lane that constant supplies.
+			$own_positive = array_values( array_diff( $own_lanes, array( 'unresolved' ) ) );
+			$judged_lanes = empty( $own_positive ) ? $lanes : $own_lanes;
+			$on_current  = in_array( 'v2', $judged_lanes, true ) || in_array( 'wc3', $judged_lanes, true );
 			$v1_only     = in_array( 'v1', $lanes, true ) && ! $on_current && $has_legacy;
 			// Both categories are "not proven to cover current behaviour", and the ratchet guards
 			// their union — otherwise a new test could slip past the gate simply by building its
@@ -439,7 +453,7 @@ function build_inventory( $classes, $annotations ) {
 			$cases[] = array(
 				'key' => $key, 'file' => $class['file'], 'class' => $class['name'], 'method' => $method['name'],
 				'behavior' => $behavior, 'own_lanes' => $own_lanes, 'class_lanes' => $class_lanes,
-				'lanes' => $lanes, 'v1_only' => $v1_only, 'unresolved' => $unresolved, 'verdict' => $verdict,
+				'lanes' => $lanes, 'judged_lanes' => $judged_lanes, 'v1_only' => $v1_only, 'unresolved' => $unresolved, 'verdict' => $verdict,
 				'note' => isset( $annotation['note'] ) ? $annotation['note'] : null, 'warnings' => $warnings,
 			);
 			$case_keys[ $key ] = true;
@@ -486,7 +500,11 @@ function markdown_table( $cases ) {
 	} );
 	$output = "| Behavior | File:case | Lane | Verdict | Note |\n|---|---|---|---|---|\n";
 	foreach ( $cases as $case ) {
-		$lane = empty( $case['lanes'] ) ? 'unit' : implode( ', ', $case['lanes'] );
+		// Render the lanes the VERDICT was reached on. Showing the class/method union
+		// here would print a row claiming v2 next to a v1-only verdict, and a table
+		// that contradicts its own column is worth less than no table.
+		$judged = isset( $case['judged_lanes'] ) ? $case['judged_lanes'] : $case['lanes'];
+		$lane   = empty( $judged ) ? 'unit' : implode( ', ', $judged );
 		$note = null === $case['note'] ? '—' : $case['note'];
 		$output .= '| ' . markdown_text( $case['behavior'] ) . ' | ' . markdown_text( $case['file'] . ':' . $case['method'] )
 			. ' | ' . $lane . ' | ' . markdown_text( $case['verdict'] ) . ' | ' . markdown_text( $note ) . " |\n";
