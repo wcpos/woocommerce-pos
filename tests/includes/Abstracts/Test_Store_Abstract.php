@@ -128,6 +128,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'policies_and_conditions',
 			'footer_imprint',
 			'tax_ids',
+			'receipt_i18n',
 		);
 	}
 
@@ -137,6 +138,24 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$props               = array_keys( $data );
 		$this->assertEmpty( array_diff( $expected_data_props, $props ), 'These fields were expected but not present in Store: ' . print_r( array_diff( $expected_data_props, $props ), true ) );
 		$this->assertEmpty( array_diff( $props, $expected_data_props ), 'These fields were not expected in Store: ' . print_r( array_diff( $props, $expected_data_props ), true ) );
+	}
+
+	/**
+	 * Store payloads carry the receipt label dictionary resolved for the
+	 * store locale, so the client can render offline/fallback receipts with
+	 * the same translated labels as server-built payloads (mono#1252).
+	 */
+	public function test_store_payload_includes_receipt_i18n_labels(): void {
+		$data = $this->store->get_data();
+
+		$this->assertArrayHasKey( 'receipt_i18n', $data );
+		$this->assertIsArray( $data['receipt_i18n'] );
+		$this->assertSame(
+			\WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels::get_labels( (string) $this->store->get_locale() ),
+			$data['receipt_i18n']
+		);
+		// Spot-check a key the stock gallery templates rely on.
+		$this->assertArrayHasKey( 'total_refunded', $data['receipt_i18n'] );
 	}
 
 	/**
