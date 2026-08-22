@@ -370,5 +370,82 @@ PHP;
 		$this->assertStringContainsString( '3:42 PM CET', $bytes );
 		$this->assertStringNotContainsString( "\u{202F}", $bytes );
 		$this->assertStringNotContainsString( "\u{2009}", $bytes );
+	 * A non-Code-128 symbology selects its own ESC b n1 code.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_ean13_selects_the_ean13_symbology_code(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt><barcode type="ean13" height="40">4006381333931</barcode></receipt>' );
+
+		// Assert. ESC b n1=3 (EAN-13) n2=1 n3=2 n4=40.
+		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x62, 0x03, 0x01, 0x02, 0x28 ) ) );
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62, 0x06 ) ) );
+	}
+
+	/**
+	 * StarPRNT numbers the UPC pair the opposite way round to ESC/POS.
+	 *
+	 * StarPRNT is UPC-E = 0, UPC-A = 1; Epson is UPC-A = 65, UPC-E = 66. Pinning
+	 * both here catches a table transcribed from the wrong vendor.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_upc_pair_uses_star_symbology_numbering(): void {
+		// Arrange / Act.
+		$upca = $this->render( '<receipt><barcode type="upca" height="40">12345678901</barcode></receipt>' );
+		$upce = $this->render( '<receipt><barcode type="upce" height="40">01234500006</barcode></receipt>' );
+
+		// Assert.
+		$this->assertTrue( $this->includes_sequence( $upca, array( 0x1b, 0x62, 0x01, 0x01, 0x02, 0x28 ) ) );
+		$this->assertTrue( $this->includes_sequence( $upce, array( 0x1b, 0x62, 0x00, 0x01, 0x02, 0x28 ) ) );
+	}
+
+	/**
+	 * Code 128 data carries no start code and escapes a literal percent sign.
+	 *
+	 * Omitting the start code is legal on StarPRNT (the printer auto-selects),
+	 * and "%0" is how StarPRNT spells a literal "%" — the ESC/POS "{B" selector
+	 * would be printed as data here.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code128_escapes_percent_without_a_start_code(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt><barcode type="code128" height="40">A%B</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( "\x1b\x62\x06\x01\x02\x28" . 'A%0B' . "\x1e", $bytes );
+		$this->assertStringNotContainsString( '{B', $bytes );
+	}
+
+	/**
+	 * A value the symbology cannot encode prints as text instead of a barcode.
+	 *
+	 * StarPRNT discards an unencodable barcode command up to the RS terminator
+	 * without reporting an error, so the value is printed as plain text.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_invalid_ean13_value_prints_text_and_no_barcode(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt><barcode type="ean13" height="40">NOT-A-NUMBER</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62 ) ) );
+		$this->assertStringContainsString( 'NOT-A-NUMBER', $bytes );
+	}
+
+	/**
+	 * An unsupported symbology name falls back to Code 128, never to text.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_unknown_type_falls_back_to_code128(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt><barcode type="not-a-symbology" height="40">ABCDEF</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( "\x1b\x62\x06\x01\x02\x28" . 'ABCDEF' . "\x1e", $bytes );
 	}
 }

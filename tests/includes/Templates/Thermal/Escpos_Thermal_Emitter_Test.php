@@ -508,5 +508,78 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( '3:42 PM CET', $bytes );
 		$this->assertStringNotContainsString( "\u{202F}", $bytes );
 		$this->assertStringNotContainsString( "\u{2009}", $bytes );
+	 * A non-Code-128 symbology selects its own GS k function-B code.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_ean13_selects_the_ean13_function_code(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="ean13" height="60">4006381333931</barcode></receipt>' );
+
+		// Assert. GS k 67 <len> — EAN-13, 13 data bytes.
+		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1d, 0x6b, 67, 13 ) ) );
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b, 73 ) ) );
+	}
+
+	/**
+	 * Code 128 data opens with the code-set selector the printer requires.
+	 *
+	 * Without a leading "{B" an ESC/POS printer prints nothing and reports no
+	 * error, so the selector is part of the transmitted length.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code128_prefixes_the_code_set_selector(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="code128" height="60">ABC-123</barcode></receipt>' );
+
+		// Assert.
+		$expected = array_merge( array( 0x1d, 0x6b, 73, 9 ), $this->ascii_bytes( '{BABC-123' ) );
+		$this->assertTrue( $this->includes_sequence( $bytes, $expected ) );
+	}
+
+	/**
+	 * A literal brace in a Code 128 value is doubled so it is not read as a selector.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code128_escapes_a_literal_brace(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="code128" height="40">A{B</barcode></receipt>' );
+
+		// Assert.
+		$expected = array_merge( array( 0x1d, 0x6b, 73, 6 ), $this->ascii_bytes( '{BA{{B' ) );
+		$this->assertTrue( $this->includes_sequence( $bytes, $expected ) );
+	}
+
+	/**
+	 * A value the symbology cannot encode prints as text instead of a barcode.
+	 *
+	 * A printer handed unencodable data prints nothing and reports no error, so
+	 * the value is printed as plain text rather than lost.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_invalid_ean13_value_prints_text_and_no_barcode(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="ean13" height="60">NOT-A-NUMBER</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
+		$this->assertStringContainsString( 'NOT-A-NUMBER', $bytes );
+	}
+
+	/**
+	 * An unsupported symbology name falls back to Code 128, never to text.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_unknown_type_falls_back_to_code128(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="not-a-symbology" height="40">ABCDEF</barcode></receipt>' );
+
+		// Assert.
+		$expected = array_merge( array( 0x1d, 0x6b, 73, 8 ), $this->ascii_bytes( '{BABCDEF' ) );
+		$this->assertTrue( $this->includes_sequence( $bytes, $expected ) );
 	}
 }

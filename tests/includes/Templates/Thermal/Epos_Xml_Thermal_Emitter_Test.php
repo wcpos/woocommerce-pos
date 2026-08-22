@@ -267,4 +267,38 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'before', $xml );
 		$this->assertStringContainsString( 'after', $xml );
 	}
+
+	/**
+	 * The UPC pair is emitted with the underscored ePOS-Print enum names.
+	 *
+	 * ePOS-Print accepts "upc_a" / "upc_e" and rejects the unseparated spelling
+	 * the template markup uses.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_upc_pair_uses_underscored_epos_type_names(): void {
+		// Arrange / Act.
+		$upca = $this->render( '<receipt><barcode type="upca" height="60">12345678901</barcode></receipt>' );
+		$upce = $this->render( '<receipt><barcode type="upce" height="60">01234500006</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'type="upc_a"', $upca );
+		$this->assertStringContainsString( 'type="upc_e"', $upce );
+		$this->assertStringNotContainsString( 'type="upca"', $upca );
+		$this->assertStringNotContainsString( 'type="upce"', $upce );
+	}
+
+	/**
+	 * An unsupported symbology name falls back to Code 128.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_unknown_type_falls_back_to_code128(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><barcode type="not-a-symbology" height="60">ABCDEF</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'type="code128"', $xml );
+		$this->assertStringNotContainsString( 'not-a-symbology', $xml );
+	}
 }

@@ -262,7 +262,7 @@ class Barcode_Symbology {
 	 * @return int The `m` parameter byte.
 	 */
 	public static function escpos_id( string $type ): int {
-		return self::ESCPOS_IDS[ self::normalize_linear( $type ) ];
+		return self::ESCPOS_IDS[ self::normalize_linear( $type ) ] ?? self::ESCPOS_IDS[ self::DEFAULT_SYMBOLOGY ];
 	}
 
 	/**
@@ -303,7 +303,7 @@ class Barcode_Symbology {
 	 * @return int The `n1` parameter byte.
 	 */
 	public static function starprnt_id( string $type ): int {
-		return self::STARPRNT_IDS[ self::normalize_linear( $type ) ];
+		return self::STARPRNT_IDS[ self::normalize_linear( $type ) ] ?? self::STARPRNT_IDS[ self::DEFAULT_SYMBOLOGY ];
 	}
 
 	/**
@@ -372,7 +372,7 @@ class Barcode_Symbology {
 			'itf'     => BarcodeGeneratorPNG::TYPE_INTERLEAVED_2_5,
 		);
 
-		return $map[ self::normalize_linear( $type ) ];
+		return $map[ self::normalize_linear( $type ) ] ?? $map[ self::DEFAULT_SYMBOLOGY ];
 	}
 
 	/**
