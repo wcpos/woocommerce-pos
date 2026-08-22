@@ -71,10 +71,6 @@ class API {
 	public function __construct() {
 		$this->register_routes();
 
-		// Allows requests from WCPOS Desktop and Mobile Apps.
-		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
-		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 10, 4 );
-
 		/*
 		 * Adds authentication to for JWT bearer tokens
 		 * - We run determine_current_user at 20 to allow other plugins to run first
@@ -284,45 +280,6 @@ class API {
 	}
 
 	/**
-	 * Add CORS headers to the REST API response.
-	 *
-	 * @param string[] $allow_headers The list of request headers to allow.
-	 *
-	 * @return string[] $allow_headers
-	 */
-	public function rest_allowed_cors_headers( array $allow_headers ): array {
-		$allow_headers[] = 'X-WCPOS';
-		$allow_headers[] = 'X-HTTP-Method-Override';
-
-		// The POS-client headers (store scope, idempotency, write mirror,
-		// conditional polling) live in one shared set — see Sync\Cors for why
-		// both this filter and Init's preflight handler must carry all of them.
-		return \WCPOS\WooCommercePOS\Sync\Cors::allow_headers( $allow_headers );
-	}
-
-	/**
-	 * Add Access Control Allow Headers for POS app.
-	 *
-	 * NOTE: I have seen this filter called with NULL for $served, it should be a boolean.
-	 *
-	 * @param mixed            $served  Whether the request has already been served.
-	 *                                  Default false.
-	 * @param WP_HTTP_Response $result  Result to send to the client. Usually a `WP_REST_Response`.
-	 * @param WP_REST_Request  $request Request used to generate the response.
-	 * @param WP_REST_Server   $server  Server instance.
-	 *
-	 * @return bool $served
-	 */
-	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
-		$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing', 'X-WCPOS-Memory-Peak', 'X-WCPOS-Pressure', 'ETag', 'Date' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
-
-		$server->send_header( 'Access-Control-Allow-Origin', '*' );
-		$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
-
-		return $served;
-	}
-
-	/**
 	 * Check request for any login tokens.
 	 *
 	 * Runs at priority 20, after other plugins (e.g. third-party JWT plugins at
@@ -500,7 +457,7 @@ class API {
 		// CORS preflights carry no credentials (browsers strip Authorization from OPTIONS),
 		// so the permission gate must never answer them with 401 — a non-2xx preflight blocks
 		// every cross-origin standalone client from the entire namespace. WP core serves
-		// OPTIONS with route metadata and Init::rest_pre_serve_request adds the CORS headers.
+		// OPTIONS with route metadata and Rest_Cors::rest_pre_serve_request adds the CORS headers.
 		if ( 'OPTIONS' === $request->get_method() ) {
 			return $result;
 		}

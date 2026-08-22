@@ -16,9 +16,6 @@ use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WCPOS\WooCommercePOS\Services\Extensions;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use WP_HTTP_Response;
-use WP_REST_Request;
-use WP_REST_Server;
 
 /**
  * Init class.
@@ -75,6 +72,7 @@ class Init {
 	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
 	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
 	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
+	 * | 16 | `pre_update_option_woocommerce_pos_pro_settings_license` | `Init::remove_license_transient` | 10 | irrelevant | Default. The reentrancy guard, not the priority, is what makes it safe (f33b8d655). |
 	 * | 17 | `rest_pre_serve_request` | `Init::rest_pre_serve_request` | **5** | unknown | Present at 5 since the initial commit (8f2b9eac); no reason recorded. It runs ahead of core's own `rest_send_cors_headers`, which `rest-api.php` registers on the same hook at the default 10. The only recorded movement is the now-deleted twin in `API.php`, which went 5 -> 10 in 521ccb9a. **This row is what PR #1668 changes**: that PR deletes this registration and the handler, moving both behind `Sync\Rest_Cors::register_hooks()`. The priority and this "unknown" travel with it. |
 	 * | 18 | `send_headers` | `Init::send_headers` | 99 | unknown | Introduced by 62da70551 ("fix WPSEO integration"). The commit records no reason for the number beyond running late. |
 	 * | 19 | `send_headers` | `Init::remove_x_frame_options` | **9999** | **ORDER-CRITICAL** | Must run AFTER security plugins have set `X-Frame-Options`, because it works by `header_remove()` (80ee545a5). A smaller number lets the plugin set the header again afterwards. |
@@ -82,8 +80,6 @@ class Init {
 	 * | 21 | `rest_pre_dispatch` | `Services\Core_Order_Audit_Guard::rest_pre_dispatch` | 10 | irrelevant | Default; reads what row 20 recorded. |
 	 * | 22 | `woocommerce_update_coupon` | `Sync\Coupon_Modified_Date::touch` | 10 | irrelevant | Default. `Sync_Journal::record_coupon_updated` shares the hook and priority (row 10) and is registered first, but the journal timestamps rows with the wall clock, not the coupon's `post_modified`, so neither ordering changes an outcome. |
 	 * | 23 | `determine_current_user` | `Init::determine_current_user_early` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
-	 * | 24 | `admin_init` | `Services\Lifecycle_Events::flush_pending`, `::maybe_schedule_refresh` | 10 | irrelevant | Default. `admin_init` because both need a fully booted admin request: one sends install/upgrade events recorded before the plugin was loaded enough to send them, the other schedules row 25. Both check consent first and cost nothing on a site that opted out. |
-	 * | 25 | `wcpos_analytics_group_refresh` | `Services\Lifecycle_Events::refresh_group_properties` | 10 | irrelevant | Default; sole listener. Unlike row 11, this call does NOT schedule the event — scheduling lives in row 24 so that withdrawing consent unschedules it. |
 	 *
 	 * ## The one pair where statement order is the whole mechanism
 	 *
@@ -162,8 +158,16 @@ class Init {
 		add_action( 'rest_api_init', array( $this, 'init_rest_api' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
-		// Headers for API discoverability.
-		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
+		// Remove this once Pro settings have been moved to the new settings service.
+		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( self::class, 'remove_license_transient' ), 10, 2 );
+
+		// The REST wire contract — CORS and shared-cache defeat — has a single
+		// owner. Registered unconditionally, from here rather than from the
+		// X-WCPOS-gated API class, because preflights carry no marker and the
+		// relay's consent route is served without constructing API.
+		Rest_Cors::register_hooks();
+
+		// Non-REST API discoverability: the HEAD probe against the homepage.
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
 		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
 
@@ -195,12 +199,44 @@ class Init {
 		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
 
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
+	}
 
-		// Install lifecycle reporting. Registered last: it adds no filter that
-		// anything else orders against, and appending keeps the ordering table
-		// above in statement order. Deliberately NOT before the pair above —
-		// rows 20 and 23 are decided by insertion order alone.
-		( new Services\Lifecycle_Events() )->register_hooks();
+	/**
+	 * Clear cached data that depends on the Pro license.
+	 *
+	 * @param mixed $value     The new option value.
+	 * @param mixed $old_value The previous option value (false when unset).
+	 *
+	 * @return mixed
+	 */
+	public static function remove_license_transient( $value, $old_value = false ) {
+		// Pro's updater can react to the update_plugins deletion by reading —
+		// and, when the stored instance id is blank, re-saving — the license
+		// option, which re-enters this filter. Without the guard that cycle is
+		// unbounded and OOMs the first license activation on a fresh install.
+		static $clearing = false;
+		if ( $clearing ) {
+			return $value;
+		}
+		$clearing = true;
+		delete_transient( 'woocommerce_pos_pro_license_status' );
+
+		// The update caches bind to the license key and activation state. A
+		// write that changes neither — e.g. Pro's read-side instance mint —
+		// must not wipe update_plugins: Pro reacts to that deletion by
+		// clearing its own update-data cache, which empties the payload of an
+		// update check that is in flight when the mint occurs.
+		$old = \is_array( $old_value ) ? $old_value : array();
+		$new = \is_array( $value ) ? $value : array();
+		if (
+			(string) ( $old['key'] ?? '' ) !== (string) ( $new['key'] ?? '' )
+			|| ! empty( $old['activated'] ) !== ! empty( $new['activated'] )
+		) {
+			delete_site_transient( 'update_plugins' );
+		}
+		$clearing = false;
+
+		return $value;
 	}
 
 	/**
@@ -339,105 +375,17 @@ class Init {
 	}
 
 	/**
-	 * Allow pre-flight requests from WCPOS Desktop and Mobile Apps
-	 * Note: pre-flight requests cannot have headers, so I can't filter by pos request
-	 * See: https://fetch.spec.whatwg.org/#cors-preflight-fetch.
+	 * Allow HEAD checks for WP API Link URL and server uptime.
 	 *
-	 * @param bool             $served  Whether the request has already been served.
-	 *                                  Default false.
-	 * @param WP_HTTP_Response $result  Result to send to the client. Usually a `WP_REST_Response`.
-	 * @param WP_REST_Request  $request Request used to generate the response.
-	 * @param WP_REST_Server   $server  Server instance.
-	 *
-	 * @return bool $served
-	 */
-	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
-		// WP dispatches REST routes case-insensitively, so this guard must too.
-		// Registered here (not in API) because the relay's consent callback is
-		// served without constructing API — see register_public_relay_routes().
-		if ( preg_match( '#^/wcpos/v[12](?:/|$)#i', $request->get_route() ) ) {
-			$this->send_cache_defeating_headers( $result, $server );
-		}
-
-		if ( 'OPTIONS' == $request->get_method() ) {
-			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing', 'X-WCPOS-Memory-Peak', 'X-WCPOS-Pressure', 'ETag', 'Date' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
-			$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
-
-			$allow_headers = array(
-				'Authorization',            // For user-agent authentication with a server.
-				'X-WP-Nonce',               // WordPress-specific header, used for CSRF protection.
-				'Content-Disposition',      // Informs how to process the response data.
-				'Content-MD5',              // For verifying data integrity.
-				'Content-Type',             // Specifies the media type of the resource.
-				'X-HTTP-Method-Override',   // Used to override the HTTP method.
-				'X-WCPOS',                  // Used to identify WCPOS requests.
-			);
-			// The sync-lane headers live in one shared set: this list and the
-			// rest_allowed_cors_headers filter (API.php) both publish the
-			// allow-list, and a sync header present in only one of them takes
-			// the v2 lane down for cross-origin web clients — see Sync\Cors.
-			$allow_headers = Sync\Cors::allow_headers( $allow_headers );
-
-			$server->send_header( 'Access-Control-Allow-Origin', '*' );
-			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
-			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', $allow_headers ) );
-			// Without this the Fetch spec caches a preflight for only FIVE
-			// seconds, so every cross-origin POS request is two requests.
-			// 7200 is Chromium's cap (Firefox allows 86400).
-			$server->send_header( 'Access-Control-Max-Age', '7200' );
-		}
-
-		return $served;
-	}
-
-	/**
-	 * Defeat shared caching of WCPOS REST responses.
-	 *
-	 * Hosting layers cache authenticated REST GETs and replay them across
-	 * users (LiteSpeed caches REST by default for 7 days with no
-	 * Authorization bypass; WP Engine's edge cache excludes /wp-json/wc but
-	 * not /wp-json/wcpos; Sucuri's default levels ignore Cache-Control).
-	 *
-	 * Vary is defense-in-depth for intermediaries that ignore no-store but
-	 * honor Vary: Authorization keys the cache per bearer token, and
-	 * X-WCPOS-Store per store scope — the same token requesting different
-	 * X-WCPOS-Store values receives store-specific pricing and taxes, so a
-	 * shared cache entry must not span stores either. Existing Vary tokens
-	 * are preserved (deduped case-insensitively); a wildcard Vary stays
-	 * alone, since '*' is grammatically an alternative to a field list.
-	 *
-	 * @param WP_HTTP_Response $result Result to send to the client.
-	 * @param WP_REST_Server   $server Server instance.
-	 */
-	private function send_cache_defeating_headers( WP_HTTP_Response $result, WP_REST_Server $server ): void {
-		$response_headers = array_change_key_case( $result->get_headers(), CASE_LOWER );
-		$existing_vary    = isset( $response_headers['vary'] )
-			? array_values(
-				array_filter(
-					array_map( 'trim', explode( ',', (string) $response_headers['vary'] ) ),
-					static function ( string $token ): bool {
-						return '' !== $token;
-					}
-				)
-			)
-			: array();
-
-		if ( in_array( '*', $existing_vary, true ) ) {
-			$vary = '*';
-		} else {
-			$vary_tokens = array_merge( $existing_vary, array( 'Origin', 'Authorization', 'X-WCPOS-Store' ) );
-			$vary_tokens = array_change_key_case( array_combine( $vary_tokens, $vary_tokens ), CASE_LOWER );
-			$vary        = implode( ', ', $vary_tokens );
-		}
-
-		$server->send_header( 'Cache-Control', 'private, no-store' );
-		$server->send_header( 'Vary', $vary );
-		do_action( 'litespeed_control_set_nocache', 'wcpos rest response' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook
-	}
-
-	/**
-	 * Allow HEAD checks for WP API Link URL and server uptime
-	 * Fires once the requested HTTP headers for caching, content type, etc. have been sent.
+	 * This is the NON-REST lane and is not part of the REST wire contract
+	 * ({@see Rest_Cors}): `send_headers` fires from `WP::main()`, which a REST
+	 * request never reaches — core's `rest_api_loaded()` runs on
+	 * `parse_request` and dies. What it serves is the app's site-discovery
+	 * probe against an ordinary page (originally the homepage, gated on
+	 * `?wcpos=1`, see 521ccb9a): the app reads the `Link:
+	 * <.../wp-json/>; rel="https://api.w.org/"` header cross-origin to find
+	 * the REST root, which needs both headers below. Some servers turn HEAD
+	 * into GET, hence the query param rather than the method.
 	 *
 	 * FIXME: Why is Link header not exposed sometimes on my development machine?
 	 *

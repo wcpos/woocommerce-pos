@@ -59,7 +59,10 @@ class Raw_Response extends WP_REST_Response {
 
 				return true;
 			},
-			10,
+			// AFTER the wire contract at 20 ({@see \WCPOS\WooCommercePOS\Rest_Cors}):
+			// echoing the body sends the headers, and CORS headers written after
+			// that are dropped — a receipt PDF the browser then refuses to read.
+			30,
 			2
 		);
 

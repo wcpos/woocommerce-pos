@@ -22,15 +22,16 @@ namespace WCPOS\WooCommercePOS\Sync;
  * browser refuses the ACTUAL request outright, taking the whole v2 lane
  * down for that client.
  *
- * TWO writers publish the allow-list and both must carry this set:
- * `Init::rest_pre_serve_request()` answers every REST preflight with a
- * self-contained list (the API class only loads for marker/namespace
- * detected requests, which a preflight is not guaranteed to be), and
- * `API::rest_allowed_cors_headers()` feeds WP core's filter. Kept as two
- * hand-maintained lists they drifted apart once — `X-WCPOS-Store` made it
- * into the filter but not the preflight handler, and every engine request
- * from a cross-origin web client failed preflight (pro#425 fallout) —
- * hence this shared merge that both writers call.
+ * ONE writer publishes the allow-list — {@see \WCPOS\WooCommercePOS\Rest_Cors},
+ * which owns both the `rest_allowed_cors_headers` filter and the preflight
+ * response. This class stays as its data collaborator: it is where the sync
+ * lane declares the headers it sends, beside {@see Header_Mirror::HEADERS}
+ * and {@see Store_Scope::HEADER}, rather than a second publisher. Kept as
+ * two hand-maintained lists these headers drifted apart twice — first
+ * `X-WCPOS-Store` (pro#425 fallout, 23bcdb47), then
+ * `X-WCPOS-Idempotency-Key` (118a091f) — each time failing every
+ * cross-origin request that carried them at preflight. That is the split
+ * the single owner exists to make impossible.
  */
 final class Cors {
 	/**

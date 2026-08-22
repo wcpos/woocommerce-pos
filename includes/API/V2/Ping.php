@@ -58,6 +58,10 @@ final class Ping {
 		http_response_code( 200 );
 		header( 'Content-Type: application/json; charset=UTF-8' );
 		header( 'Access-Control-Allow-Origin: *' );
+		// Deliberately just the one header this fast path can emit, not the
+		// full Rest_Cors::EXPOSE_HEADERS set: this short-circuits before the
+		// autoloader and WP REST exist. The OPTIONS preflight for this route
+		// is answered by Rest_Cors on the normal REST lane.
 		header( 'Access-Control-Expose-Headers: X-WCPOS-Pressure' );
 		if ( isset( $data['pressure'] ) ) {
 			header( 'X-WCPOS-Pressure: ' . $data['pressure'] );
