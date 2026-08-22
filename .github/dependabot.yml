@@ -36,3 +36,21 @@ updates:
         dependency-type: "development"
         patterns:
           - "*"
+
+  # Maintain the php-scoper build's dependencies. These are the libraries that
+  # get prefixed into vendor_prefixed/ and shipped, so they need security
+  # visibility; they were invisible to Dependabot until the lockfile landed.
+  # A bumped lock only reaches vendor_prefixed/ once someone re-runs
+  # `composer prefix-dependencies` and commits the result.
+  - package-ecosystem: "composer"
+    directory: "/php-scoper"
+    schedule:
+      interval: "weekly"
+    groups:
+      php-scoper-build:
+        patterns:
+          - "*"
+    ignore:
+      # Pinned exactly: 0.17+ drops the PHP 7.4 platform target this build
+      # resolves against, and the config still uses 0.16's `whitelist` key.
+      - dependency-name: "humbug/php-scoper"
