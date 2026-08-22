@@ -308,6 +308,25 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertSame( $order, $result );
 	}
 
+	/** Stock precision is independent from the store's currency precision. */
+	public function test_fractional_stock_validation_ignores_currency_precision(): void {
+		$original_price_decimals = get_option( 'woocommerce_price_num_decimals' );
+		update_option( 'woocommerce_price_num_decimals', 0 );
+
+		try {
+			$this->set_prevent_overselling( true );
+			$product = $this->create_stock_product( 0.001 );
+			$order   = $this->create_order( 'processing', array( array( $product, 0.002 ) ) );
+
+			$result = $this->validate( $order );
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertEquals( 0.001, $result->get_error_data()['items'][0]['available'] );
+		} finally {
+			update_option( 'woocommerce_price_num_decimals', $original_price_decimals );
+		}
+	}
+
 	/** Active WooCommerce reservations reduce sellable stock. */
 	public function test_held_stock_is_subtracted_from_available_stock(): void {
 		$this->set_prevent_overselling( true );
@@ -346,6 +365,59 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		} finally {
 			wc_release_stock_for_order( $order_a );
 			wc_release_stock_for_order( $order_b );
+		}
+	}
+
+	/** Revalidation replaces reservations for products removed from the order. */
+	public function test_checkout_revalidation_removes_stale_reservations(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product_a = $this->create_stock_product( 5 );
+		$product_b = $this->create_stock_product( 5 );
+		$order     = $this->create_order(
+			'pos-open',
+			array(
+				array( $product_a, 1 ),
+				array( $product_b, 1 ),
+			)
+		);
+		$order->save();
+
+		try {
+			$this->assertSame( $order, $this->validate( $order, 'processing' ) );
+			foreach ( $order->get_items() as $item_id => $item ) {
+				if ( $product_b->get_id() === $item->get_product_id() ) {
+					$order->remove_item( $item_id );
+				}
+			}
+			$order->save();
+
+			$this->assertSame( $order, $this->validate( $order, 'processing' ) );
+			$held_product_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT product_id FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d ORDER BY product_id",
+					$order->get_id()
+				)
+			);
+			$this->assertSame( array( $product_a->get_id() ), array_map( 'intval', $held_product_ids ) );
+
+			foreach ( array_keys( $order->get_items() ) as $item_id ) {
+				$order->remove_item( $item_id );
+			}
+			$order->save();
+			$this->assertSame( $order, $this->validate( $order, 'processing' ) );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				)
+			);
+		} finally {
+			wc_release_stock_for_order( $order );
 		}
 	}
 
@@ -532,7 +604,7 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 	 * @return WC_Order|WP_Error
 	 */
 	private function validate( WC_Order $order, ?string $status = null ) {
-		$request = new WP_REST_Request( 'POST', '/wcpos/v1/orders' );
+		$request = new WP_REST_Request( 'POST', '/wcpos/v2/orders' );
 		if ( null !== $status ) {
 			$request->set_param( 'status', $status );
 		}

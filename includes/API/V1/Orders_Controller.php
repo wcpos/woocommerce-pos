@@ -135,15 +135,16 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 			$validation = $validator->validate_checkout( $order );
 			if ( is_wp_error( $validation ) ) {
+				$order->delete( true );
 				return $validation;
 			}
 
+			if ( rest_sanitize_boolean( $set_paid ) ) {
+				$order->payment_complete( $request->get_param( 'transaction_id' ) );
+			}
 			if ( ! empty( $target_status ) ) {
 				$order->set_status( $target_status );
 				$order->save();
-			}
-			if ( rest_sanitize_boolean( $set_paid ) ) {
-				$order->payment_complete( $request->get_param( 'transaction_id' ) );
 			}
 
 			return wc_get_order( $order->get_id() );
