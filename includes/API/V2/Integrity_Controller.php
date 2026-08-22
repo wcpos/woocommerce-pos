@@ -267,7 +267,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 				);
 			}
 			$bucket = max( 0, (int) $bucket_raw );
-			if ( $this->maybe_schedule_empty_digest_rebuild() ) {
+			if ( $this->maybe_schedule_digest_rebuild() ) {
 				return rest_ensure_response(
 					$this->envelope(
 						array(
@@ -297,7 +297,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$window_start = $first_bucket * $bucket_size;
 		$window_end   = ( $first_bucket + $limit_buckets ) * $bucket_size;
 
-		if ( 'products' === $collection && $this->maybe_schedule_empty_digest_rebuild() ) {
+		if ( 'products' === $collection && $this->maybe_schedule_digest_rebuild() ) {
 			return rest_ensure_response(
 				$this->envelope(
 					array(
@@ -412,10 +412,17 @@ final class Integrity_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Schedule one guarded rebuild when product-space digests are unexpectedly empty.
+	 * Schedule one guarded rebuild when product digests are empty or use an old formula.
 	 */
-	private function maybe_schedule_empty_digest_rebuild(): bool {
-		if ( ! $this->index->needs_product_rebuild() ) {
+	private function maybe_schedule_digest_rebuild(): bool {
+		$needs_rebuild      = $this->index->needs_product_rebuild();
+		$stored_fingerprint = (string) get_option( Digest_Index::FORMULA_FP_OPTION, '' );
+		if ( '' === $stored_fingerprint ) {
+			$stored_fingerprint = Digest_Index::legacy_formula_fingerprint();
+			update_option( Digest_Index::FORMULA_FP_OPTION, $stored_fingerprint, false );
+		}
+
+		if ( ! $needs_rebuild && Digest_Index::digest_formula_fingerprint() === $stored_fingerprint ) {
 			return false;
 		}
 
