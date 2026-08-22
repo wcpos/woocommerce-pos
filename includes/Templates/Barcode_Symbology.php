@@ -29,6 +29,23 @@ use WCPOS\Vendor\Picqer\Barcode\BarcodeGeneratorPNG;
  * Barcode_Symbology class.
  *
  * All-static and stateless: a pure translation table.
+ *
+ * Shape, and when to change it. The per-lane accessors come in pairs named for
+ * the vendor (escpos_*, starprnt_*) rather than hanging off a lane-descriptor
+ * object, because the lanes are not uniform: two want an integer selector, two
+ * want a string name, and one wants a picqer constant. A descriptor would make
+ * that return type a union and hand the XML and markup lanes members they never
+ * use. Revisit when either becomes true: a third vendor needs its own payload
+ * encoder, or the matrix test's provider grows past roughly seven columns.
+ *
+ * Known duplication this class does NOT address: emit_centered_text() is
+ * identical in Escpos_Thermal_Emitter and Starprnt_Thermal_Emitter, alongside
+ * eleven text-metric helpers those two files already duplicated before this
+ * class existed. Extracting one of the twelve into a trait would fragment the
+ * set rather than fix it; they belong together in a shared text-layout module,
+ * which is scoped separately. Do not treat this class as the pattern for that
+ * work — a static lookup owner suits a translation table keyed by lane, not
+ * shared behaviour that needs emitter state.
  */
 class Barcode_Symbology {
 	/**
@@ -209,13 +226,18 @@ class Barcode_Symbology {
 	 * so callers on the byte lanes check this first and print the value as text
 	 * instead of handing the printer a symbol it will silently drop.
 	 *
+	 * The lane is required, not optional. The only symbology whose constraints
+	 * differ between lanes is UPC-E — ESC/POS accepts the 6-8 digit short form,
+	 * StarPRNT requires the full 11-12 digit payload — and defaulting that to
+	 * either vendor would dress one printer's leniency up as a neutral answer.
+	 *
 	 * @param string $type  The barcode type attribute value.
 	 * @param string $value The barcode value.
-	 * @param string $lane  Optional lane discriminator; see the UPC-E note below.
+	 * @param string $lane  Lane discriminator: self::LANE_ESCPOS or self::LANE_STARPRNT.
 	 *
 	 * @return bool True when the value can be encoded.
 	 */
-	public static function is_valid_value( string $type, string $value, string $lane = '' ): bool {
+	public static function is_valid_value( string $type, string $value, string $lane ): bool {
 		$symbology = self::normalize_linear( $type );
 		$length    = \strlen( $value );
 

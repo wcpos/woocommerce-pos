@@ -157,9 +157,9 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	 */
 	public function test_is_valid_value_rejects_odd_length_itf(): void {
 		// Arrange / Act / Assert.
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'itf', '1234' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'itf', '12345' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'itf', '12A4' ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'itf', '1234', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'itf', '12345', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'itf', '12A4', Barcode_Symbology::LANE_ESCPOS ) );
 	}
 
 	/**
@@ -169,13 +169,13 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	 */
 	public function test_is_valid_value_enforces_the_fixed_length_symbologies(): void {
 		// Arrange / Act / Assert.
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean13', '4006381333931' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean13', '40063813339311' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean13', 'NOT-A-NUMBER' ) );
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean8', '96385074' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean8', '963850' ) );
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'upca', '12345678901' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'upca', '1234567890' ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean13', '4006381333931', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean13', '40063813339311', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean13', 'NOT-A-NUMBER', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean8', '96385074', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean8', '963850', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'upca', '12345678901', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'upca', '1234567890', Barcode_Symbology::LANE_ESCPOS ) );
 	}
 
 	/**
@@ -200,11 +200,11 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	 */
 	public function test_is_valid_value_enforces_the_restricted_alphabets(): void {
 		// Arrange / Act / Assert.
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code39', 'ABC-123 $/+%' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', 'abc' ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code39', 'ABC-123 $/+%', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', 'abc', Barcode_Symbology::LANE_ESCPOS ) );
 		// Codabar carries its start/stop characters in the data itself.
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'codabar', 'A12345B' ) );
-		$this->assertFalse( Barcode_Symbology::is_valid_value( 'codabar', '12345' ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'codabar', 'A12345B', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'codabar', '12345', Barcode_Symbology::LANE_ESCPOS ) );
 	}
 
 	/**
