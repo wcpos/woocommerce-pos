@@ -78,15 +78,21 @@ final class Digest_Index {
 	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 
 	/**
-	 * Request-level memo for {@see digested_meta_keys}. The hook write path recomputes the
-	 * digest on every product save, and the barcode key costs an option read to resolve, so
-	 * the set is resolved once per request. Deliberately NOT invalidated mid-request: every
-	 * digest written during one request must use ONE key set, or the stored side of a single
-	 * request disagrees with itself.
+	 * Request-level memo for {@see digested_meta_keys}, KEYED BY BLOG ID. The hook write path
+	 * recomputes the digest on every product save, and the barcode key costs an option read to
+	 * resolve, so the set is resolved once per blog per request. Deliberately NOT invalidated
+	 * when the setting changes mid-request: every digest written during one request must use
+	 * ONE key set, or the stored side of a single request disagrees with itself.
 	 *
-	 * @var string[]|null
+	 * The blog-id key is load-bearing on multisite (the plugin network-activates). `barcode_field`
+	 * is a per-site option and `Abstract_Section::read()` re-reads it uncached, so the SETTING
+	 * follows switch_to_blog() correctly — a process-wide memo would not, and a batch that walks
+	 * sites would then digest site B's products under site A's barcode key: the stored side would
+	 * silently cover the wrong meta key, which is the exact staleness this class exists to catch.
+	 *
+	 * @var array<int, string[]>
 	 */
-	private static ?array $memoized_digested_meta_keys = null;
+	private static array $memoized_digested_meta_keys = array();
 
 	/**
 	 * The postmeta keys the product/variation digest ACTUALLY covers: the legacy baseline plus
@@ -104,13 +110,14 @@ final class Digest_Index {
 	 * @return string[]
 	 */
 	public static function digested_meta_keys(): array {
-		if ( null === self::$memoized_digested_meta_keys ) {
+		$blog_id = get_current_blog_id();
+		if ( ! isset( self::$memoized_digested_meta_keys[ $blog_id ] ) ) {
 			$keys = array_values( array_unique( array_merge( self::DIGESTED_META_KEYS, array( Barcode_Field::meta_key() ) ) ) );
 			sort( $keys );
-			self::$memoized_digested_meta_keys = $keys;
+			self::$memoized_digested_meta_keys[ $blog_id ] = $keys;
 		}
 
-		return self::$memoized_digested_meta_keys;
+		return self::$memoized_digested_meta_keys[ $blog_id ];
 	}
 
 	/**

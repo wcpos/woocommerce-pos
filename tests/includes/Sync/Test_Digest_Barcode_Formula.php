@@ -60,7 +60,7 @@ class Test_Digest_Barcode_Formula extends Sync_REST_Store_Test_Case {
 	private function reset_digested_meta_keys(): void {
 		$property = new ReflectionProperty( Digest_Index::class, 'memoized_digested_meta_keys' );
 		$property->setAccessible( true );
-		$property->setValue( null, null );
+		$property->setValue( null, array() );
 	}
 
 	/**
@@ -229,5 +229,45 @@ class Test_Digest_Barcode_Formula extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertFalse( ( new Digest_Index() )->bucket_aggregates( $range )['buckets'][0]['match'] );
+	}
+
+	/**
+	 * The memo must be per-blog, not process-wide. `barcode_field` is a per-site option and
+	 * the settings layer re-reads it uncached, so the SETTING already follows switch_to_blog();
+	 * a flat memo would pin the first site's key for the whole process.
+	 */
+	public function test_digest_key_memo_is_keyed_by_blog_id(): void {
+		$this->set_barcode_key( '_merchant_barcode' );
+		Digest_Index::digested_meta_keys();
+
+		$property = new ReflectionProperty( Digest_Index::class, 'memoized_digested_meta_keys' );
+		$property->setAccessible( true );
+
+		$this->assertSame( array( get_current_blog_id() ), array_keys( (array) $property->getValue() ) );
+	}
+
+	/**
+	 * The behavioural half of the above: on a network-activated multisite, a batch that walks
+	 * sites must digest each site's products under THAT site's barcode key. Digesting site B
+	 * under site A's key would leave B's real barcode field uncovered — silently reintroducing
+	 * the staleness this class exists to catch.
+	 */
+	public function test_digest_key_set_follows_switch_to_blog(): void {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Multisite is not enabled (WP_TESTS_MULTISITE unset), so switch_to_blog() cannot be exercised.' );
+		}
+
+		$this->set_barcode_key( '_site_one_barcode' );
+		$this->assertContains( '_site_one_barcode', Digest_Index::digested_meta_keys() );
+
+		$blog_id = self::factory()->blog->create();
+		switch_to_blog( $blog_id );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_site_two_barcode' ) );
+		// Deliberately NOT resetting the memo — leaking site one's key is the bug under test.
+		$keys = Digest_Index::digested_meta_keys();
+		restore_current_blog();
+
+		$this->assertContains( '_site_two_barcode', $keys );
+		$this->assertNotContains( '_site_one_barcode', $keys );
 	}
 }
