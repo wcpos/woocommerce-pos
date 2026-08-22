@@ -469,8 +469,8 @@ class API {
 		$route                               = $request->get_route();
 		$has_route_specific_permission_error = is_user_logged_in() && $this->route_classifier->is_permission_error_passthrough( $route );
 		$is_public_auth_route                = $this->route_classifier->is_public( $route );
-		$is_printer_token_route             = $this->route_classifier->is_printer_token( $route );
-		$is_sync_admin_route                = is_user_logged_in() && current_user_can( 'manage_woocommerce' ) && $this->route_classifier->is_admin_op( $route );
+		$is_printer_token_route              = $this->route_classifier->is_printer_token( $route );
+		$is_sync_admin_route                 = is_user_logged_in() && current_user_can( 'manage_woocommerce' ) && $this->route_classifier->is_admin_op( $route );
 
 		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route && ! $is_sync_admin_route ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {

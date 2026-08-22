@@ -170,24 +170,16 @@ final class Rest_Cors {
 			return $served;
 		}
 
-		/**
-		 * Filters the list of response headers that are exposed to REST API CORS requests.
-		 *
-		 * @param string[]        $expose_headers The list of response headers to expose.
-		 * @param WP_REST_Request $request        The request in context.
-		 */
+		// Core's own filter, re-applied here because this write replaces the
+		// one core made in WP_REST_Server::serve_request().
 		$expose_headers = apply_filters( 'rest_exposed_cors_headers', self::EXPOSE_HEADERS, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
 
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
 		$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
 
 		if ( 'OPTIONS' === $request->get_method() ) {
-			/**
-			 * Filters the list of request headers that are allowed for REST API CORS requests.
-			 *
-			 * @param string[]        $allow_headers The list of request headers to allow.
-			 * @param WP_REST_Request $request       The request in context.
-			 */
+			// Same list core built in serve_request(), through the same
+			// filter, so a third party that hooks it reaches both writes.
 			$allow_headers = apply_filters( 'rest_allowed_cors_headers', self::ALLOW_HEADERS_BASE, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
 
 			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
