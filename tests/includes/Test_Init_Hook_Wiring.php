@@ -221,7 +221,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		ksort( $expected );
 
 		// Act.
-		$actual = $this->with_isolated_init( array( $this, 'hook_priority_map' ) );
+		$actual = $this->capture_constructor_hooks();
 
 		// Assert.
 		$this->assertSame(
@@ -238,11 +238,11 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	public function test_constructor_with_the_schema_latch_adds_exactly_the_sync_observer_hooks(): void {
 		// Arrange.
 		delete_option( Sync_Api::SCHEMA_OPTION );
-		$unlatched = $this->with_isolated_init( array( $this, 'hook_priority_map' ) );
+		$unlatched = $this->capture_constructor_hooks();
 		update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, false );
 
 		// Act.
-		$latched = $this->with_isolated_init( array( $this, 'hook_priority_map' ) );
+		$latched = $this->capture_constructor_hooks();
 
 		// Assert.
 		$added = array_values( array_diff( array_keys( $latched ), array_keys( $unlatched ) ) );
@@ -352,11 +352,9 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	/**
 	 * Map every registered hook name to its sorted list of priorities.
 	 *
-	 * Public so it can be handed to `with_isolated_init()` as a callable.
-	 *
 	 * @return array<string, int[]>
 	 */
-	public function hook_priority_map(): array {
+	private function hook_priority_map(): array {
 		global $wp_filter;
 
 		$map = array();
@@ -371,6 +369,53 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * The hook/priority set that constructing Init ADDS, and nothing else.
+	 *
+	 * Measured as a delta rather than as the absolute contents of `$wp_filter`,
+	 * because the process re-arms hooks on its own. WordPress core's
+	 * `wpdb::placeholder_escape()` re-adds `wpdb::remove_placeholder_escape` to
+	 * the `query` hook at priority 0 whenever `has_filter()` reports it missing
+	 * (wp-includes/class-wpdb.php) — and the empty registry below guarantees it
+	 * is missing, so the very first `$wpdb->prepare()` inside the constructor
+	 * puts it back and it looks like something Init registered. It is not: the
+	 * live registry carries `query` at 0 and 10 long before any of this runs.
+	 *
+	 * So: wipe, deliberately trigger a prepared read so everything that re-arms
+	 * itself on a database access does so INTO THE BASELINE, then construct and
+	 * diff. Anything ambient cancels; only Init's own registrations survive.
+	 *
+	 * @return array<string, int[]>
+	 */
+	private function capture_constructor_hooks(): array {
+		global $wp_filter, $wpdb;
+
+		$outer     = $wp_filter;
+		$wp_filter = array();
+
+		try {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT %d', 1 ) );
+			$baseline = $this->hook_priority_map();
+
+			new Init();
+
+			$after = $this->hook_priority_map();
+		} finally {
+			$wp_filter = $outer;
+		}
+
+		$delta = array();
+		foreach ( $after as $hook_name => $priorities ) {
+			$added = array_values( array_diff( $priorities, $baseline[ $hook_name ] ?? array() ) );
+			if ( array() !== $added ) {
+				$delta[ $hook_name ] = $added;
+			}
+		}
+		ksort( $delta );
+
+		return $delta;
+	}
+
+	/**
 	 * Construct Init against an EMPTY filter registry and inspect the result.
 	 *
 	 * The suite already carries a globally constructed Init (tests/bootstrap.php
@@ -379,7 +424,9 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * hook at the same priority is invisible in a hook/priority map. Wiping the
 	 * registry for the duration of the construction is what makes the captured
 	 * set exact. The outer registry is restored in `finally`, and setUp/tearDown
-	 * restore it again from a clone.
+	 * restore it again from a clone. Callers that need a WHOLE-registry snapshot
+	 * must use {@see capture_constructor_hooks()} instead, which also subtracts
+	 * the hooks the process re-arms by itself.
 	 *
 	 * @param callable $inspect Runs while only Init's own registrations exist.
 	 *
