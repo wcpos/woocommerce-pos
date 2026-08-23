@@ -653,3 +653,29 @@ run_case "bare delegation with no named workflow is still rejected" fail \
   MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nadded\t0\ttests/includes/Sync/Test_X.php' \
   MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: composer run lint-report OK (exit=0); pnpm run test:unit:php delegated to CI (Docker socket unavailable)' \
   MOCK_NO_CHECKS_EXPECTED=true
+
+# --- Drift guard: the two lists that decide when the PHP suite may be skipped ---
+# The merge gate reads requires_php_tests to decide whether a SKIPPED smoke test
+# is acceptable; tests-php.yml reads its own paths-filter to decide whether to
+# run the suite at all. If those lists disagree, one direction silently lets
+# untested PHP through and the other makes a PR permanently unmergeable — the
+# suite is skipped, and the gate rejects the skip for a check that can never run.
+# composer.lock was missing from the workflow filter and produced exactly that
+# deadlock for lock-only dependency PRs.
+gate_php_paths() {
+  sed -n '/^requires_php_tests()/,/^}/p' "$MERGE_GATE_SCRIPT" \
+    | grep -oE '\*\.php|composer\.(json|lock)|\.github/[a-zA-Z0-9._/-]+\.(json|sh|yml)' \
+    | sed 's|^\*\.php$|**.php|' | sort -u
+}
+workflow_php_paths() {
+  awk '/^            php:$/{f=1;next} /^[[:space:]]*$/{f=0} f' "$REPO_ROOT/.github/workflows/tests-php.yml" \
+    | grep -oE "'[^']+'" | tr -d "'" | sort -u
+}
+echo "Running paths-filter drift guard"
+if ! diff <(gate_php_paths) <(workflow_php_paths) > /tmp/php-paths-drift.txt; then
+  echo "FAIL: merge-gate requires_php_tests and tests-php.yml paths-filter disagree:"
+  cat /tmp/php-paths-drift.txt
+  echo "Both lists must name the same paths, or a PR can deadlock (suite skipped, gate rejects the skip)."
+  exit 1
+fi
+echo "  OK   both lists name the same paths"
