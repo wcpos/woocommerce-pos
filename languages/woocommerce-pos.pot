@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-23T07:13:46+00:00\n"
+"POT-Creation-Date: 2026-08-23T07:28:26+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -3134,13 +3134,13 @@ msgid "POS fiscal receipt snapshot created (receipt #%d)."
 msgstr ""
 
 #. translators: 1. %s: Settings group id, 2. %s: Settings key.
-#: includes/Services/Settings.php:168
+#: includes/Services/Settings.php:149
 #, php-format
 msgid "Settings with id %1$s and key %2$s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'.
-#: includes/Services/Settings.php:222
+#: includes/Services/Settings.php:203
 #, php-format
 msgid "Settings with id %s not found"
 msgstr ""
