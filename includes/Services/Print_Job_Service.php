@@ -709,9 +709,16 @@ class Print_Job_Service {
 	private function filters_to_meta_query( array $filters ): array {
 		$meta_query = array();
 		if ( ! empty( $filters['printer_id'] ) ) {
+			// Same contract as status below: one printer matches exactly, a
+			// list becomes an IN clause. sanitize_text_field() flattens an
+			// array to '', so without this a printer_id list matched nothing.
+			$printer_id   = \is_array( $filters['printer_id'] )
+				? array_map( 'sanitize_text_field', $filters['printer_id'] )
+				: sanitize_text_field( $filters['printer_id'] );
 			$meta_query[] = array(
-				'key'   => self::META_PRINTER,
-				'value' => sanitize_text_field( $filters['printer_id'] ),
+				'key'     => self::META_PRINTER,
+				'value'   => $printer_id,
+				'compare' => \is_array( $printer_id ) ? 'IN' : '=',
 			);
 		}
 		if ( ! empty( $filters['status'] ) ) {

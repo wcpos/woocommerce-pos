@@ -677,7 +677,20 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				// submit still sends raw bytes off the stored pn_kind.
 				$resolver = new Print_Format_Resolver();
 				$template = Print_Job_Service::load_template( (string) $source['template_id'] );
-				$fmt      = null === $template ? array( 'kind' => '' ) : $resolver->resolve( $printer, $template );
+				if ( null === $template && $source['order_id'] > 0 ) {
+					// render_payload() takes its template branch on
+					// order_id + template_id and returns nothing when the
+					// template is gone — the stored payload is never reached.
+					// Queueing here would 201 a job that can only ever fail,
+					// so refuse for the same reason the stripped-payload guard
+					// above does.
+					return new WP_Error(
+						'wcpos_print_job_source_expired',
+						__( 'This job\'s template no longer exists, so it cannot be re-rendered.', 'woocommerce-pos' ),
+						array( 'status' => 410 )
+					);
+				}
+				$fmt = null === $template ? array( 'kind' => '' ) : $resolver->resolve( $printer, $template );
 				if ( '' === (string) $fmt['kind'] ) {
 					// No loadable template, or one this printer can no longer
 					// render. Refresh from the provider's declared type only
