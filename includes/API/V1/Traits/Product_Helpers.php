@@ -30,7 +30,7 @@ trait Product_Helpers {
 	/**
 	 * Get barcode field from settings.
 	 *
-	 * @deprecated No caller remains in this repository or in Pro. Kept because
+	 * @deprecated No caller remains in this repository. Kept because
 	 *             this trait is aliased as public API in
 	 *             includes/API/class-aliases.php, so callers outside this
 	 *             repository may still use it. Use
