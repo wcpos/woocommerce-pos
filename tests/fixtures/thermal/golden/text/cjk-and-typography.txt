@@ -1,0 +1,22 @@
+# cjk-and-typography :: text
+## paper-width 32
+ICAg44GU5p2l5bqX44GC44KK44GM44Go44GG44GU44GW44GE44G+44GZ
+VG90YWwg77+lMSwyMzQ=
+77+lIOaXpeacrOiqnuODhuOCueODiCDllYblk4HlkI0gICDvv6UxLDIzNA==
+7ZWc6riAIOyDge2SiCAgICAgICAgICAgICAgICAgICAg77+lOQ==
+IlNtYXJ0IHF1b3RlcyIgLSBlbi1kYXNoLCBub24tYnJlYWtpbmcgc3BhY2UsICdzaW5nbGUn
+~
+## paper-width 42
+ICAgICAgICDjgZTmnaXlupfjgYLjgorjgYzjgajjgYbjgZTjgZbjgYTjgb7jgZk=
+VG90YWwg77+lMSwyMzQ=
+77+lIOaXpeacrOiqnuODhuOCueODiCDllYblk4HlkI0gICAgICAgICAgICAg77+lMSwyMzQ=
+7ZWc6riAIOyDge2SiCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIO+/pTk=
+IlNtYXJ0IHF1b3RlcyIgLSBlbi1kYXNoLCBub24tYnJlYWtpbmcgc3BhY2UsICdzaW5nbGUn
+~
+## paper-width 48
+ICAgICAgICAgICDjgZTmnaXlupfjgYLjgorjgYzjgajjgYbjgZTjgZbjgYTjgb7jgZk=
+VG90YWwg77+lMSwyMzQ=
+77+lIOaXpeacrOiqnuODhuOCueODiCDllYblk4HlkI0gICAgICAgICAgICAgICAgICAg77+lMSwyMzQ=
+7ZWc6riAIOyDge2SiCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIO+/pTk=
+IlNtYXJ0IHF1b3RlcyIgLSBlbi1kYXNoLCBub24tYnJlYWtpbmcgc3BhY2UsICdzaW5nbGUn
+~

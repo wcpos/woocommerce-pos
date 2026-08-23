@@ -309,6 +309,60 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It computes Unicode display width when mbstring is unavailable.
+	 *
+	 * The no-mbstring branch of code_point() used to call mb_convert_encoding(),
+	 * which is itself an mbstring function, so a host without the extension took
+	 * an undefined-function fatal the first time a receipt centred CJK text.
+	 *
+	 * @return void
+	 */
+	public function test_emit_aligned_unicode_without_mbstring_succeeds(): void {
+		// Arrange.
+		$script = <<<'PHP'
+<?php
+spl_autoload_register(
+	static function ( $class ) {
+		$prefix = 'WCPOS\\WooCommercePOS\\';
+		if ( 0 !== strpos( $class, $prefix ) ) {
+			return;
+		}
+		$path = getcwd() . '/includes/' . str_replace( '\\', '/', substr( $class, strlen( $prefix ) ) ) . '.php';
+		if ( is_readable( $path ) ) {
+			require $path;
+		}
+	}
+);
+$emitter = new \WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter();
+echo base64_encode(
+	$emitter->emit(
+		array(
+			'paper_width' => 4,
+			'children'    => array(
+				array(
+					'type'     => 'align',
+					'mode'     => 'center',
+					'children' => array(
+						array(
+							'type'     => 'text',
+							'children' => array( array( 'type' => 'raw-text', 'value' => '漢' ) ),
+						),
+					),
+				),
+			),
+		)
+	)
+);
+PHP;
+
+		// Act.
+		$output = $this->run_without_mbstring( $script );
+
+		// Assert.
+		$this->assertStringContainsString( '漢', (string) base64_decode( $output ) );
+	}
+
+	/**
 	 * Bold, underline, and invert emit on/off command pairs.
 	 *
 	 * @return void
@@ -654,5 +708,40 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
 		$this->assertStringContainsString( 'ABC 123', $bytes );
 		$this->assertStringNotContainsString( "ABC\n123", $bytes );
+	}
+	/**
+	 * Run a PHP snippet in a subprocess with the mbstring helpers disabled.
+	 *
+	 * `function_exists()` reports a disabled function as absent, so this is the
+	 * closest reproduction of a host built without ext-mbstring that can be run
+	 * from inside the suite.
+	 *
+	 * @param string $script The PHP source to execute.
+	 *
+	 * @return string The subprocess stdout.
+	 */
+	private function run_without_mbstring( string $script ): string {
+		$process = proc_open(
+			array( PHP_BINARY, '-d', 'disable_functions=mb_ord,mb_convert_encoding' ),
+			array(
+				0 => array( 'pipe', 'r' ),
+				1 => array( 'pipe', 'w' ),
+				2 => array( 'pipe', 'w' ),
+			),
+			$pipes,
+			\dirname( __DIR__, 4 )
+		);
+
+		$this->assertIsResource( $process );
+		fwrite( $pipes[0], $script );
+		fclose( $pipes[0] );
+		$output = stream_get_contents( $pipes[1] );
+		$errors = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+
+		$this->assertSame( 0, proc_close( $process ), $errors );
+
+		return (string) $output;
 	}
 }

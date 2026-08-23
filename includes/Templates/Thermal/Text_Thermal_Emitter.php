@@ -45,8 +45,6 @@ namespace WCPOS\WooCommercePOS\Templates\Thermal;
  */
 class Text_Thermal_Emitter {
 
-	use Thermal_Text_Layout;
-
 	/**
 	 * Render options.
 	 *
@@ -180,7 +178,7 @@ class Text_Thermal_Emitter {
 
 		switch ( $type ) {
 			case 'raw-text':
-				$this->line .= $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
+				$this->line .= Thermal_Text_Layout::normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
 				break;
 			case 'text':
 				$this->emit_text_line( $children );
@@ -232,8 +230,8 @@ class Text_Thermal_Emitter {
 	 */
 	private function emit_text_line( array $children ): void {
 		if ( 'left' !== $this->align ) {
-			$plain = $this->normalize_text( $this->extract_text( $children ) );
-			$pad   = $this->alignment_padding( $this->align, $this->display_width( $plain ), $this->columns );
+			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
+			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns );
 			if ( $pad > 0 ) {
 				$this->line .= str_repeat( ' ', $pad );
 			}
@@ -265,14 +263,14 @@ class Text_Thermal_Emitter {
 	 */
 	private function emit_row( array $node ): void {
 		$cols   = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$widths = $this->resolve_row_widths( $cols, $this->columns );
+		$widths = Thermal_Text_Layout::resolve_row_widths( $cols, $this->columns );
 
 		$row = '';
 		foreach ( $cols as $index => $col ) {
 			$width = isset( $widths[ $index ] ) ? $widths[ $index ] : 1;
-			$text  = $this->normalize_text( $this->extract_text( isset( $col['children'] ) ? $col['children'] : array() ) );
-			$text  = $this->truncate_display( $text, $width );
-			$pad   = max( 0, $width - $this->display_width( $text ) );
+			$text  = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( isset( $col['children'] ) ? $col['children'] : array() ) );
+			$text  = Thermal_Text_Layout::truncate_display( $text, $width );
+			$pad   = max( 0, $width - Thermal_Text_Layout::display_width( $text ) );
 			$align = isset( $col['align'] ) ? (string) $col['align'] : 'left';
 			if ( 'right' === $align ) {
 				$row .= str_repeat( ' ', $pad ) . $text;
@@ -318,12 +316,12 @@ class Text_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_symbol_fallback( array $node ): void {
-		$value = $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
+		$value = Thermal_Text_Layout::normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
 		if ( '' === $value ) {
 			return;
 		}
 
-		$pad = $this->alignment_padding( 'center', $this->display_width( $value ), $this->columns );
+		$pad = Thermal_Text_Layout::alignment_padding( 'center', Thermal_Text_Layout::display_width( $value ), $this->columns );
 		if ( $pad > 0 ) {
 			$this->line .= str_repeat( ' ', $pad );
 		}

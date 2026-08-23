@@ -298,7 +298,7 @@ class Epos_Xml_Thermal_Emitter {
 
 		$this->collect_subtree_styles( $children );
 
-		$content = $this->extract_text( $children );
+		$content = Thermal_Text_Layout::extract_text( $children );
 		$this->emit_text_element( $content );
 
 		$this->em      = $previous_em;
@@ -474,14 +474,14 @@ class Epos_Xml_Thermal_Emitter {
 	 */
 	private function emit_row( array $node ): void {
 		$cols   = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$widths = $this->resolve_row_widths( $cols );
+		$widths = Thermal_Text_Layout::resolve_row_widths( $cols, $this->columns );
 
 		$line = '';
 		foreach ( $cols as $index => $col ) {
 			$width = isset( $widths[ $index ] ) ? $widths[ $index ] : 1;
-			$text  = $this->extract_text( isset( $col['children'] ) ? $col['children'] : array() );
-			$text  = $this->truncate_display( $text, $width );
-			$pad   = max( 0, $width - $this->display_width( $text ) );
+			$text  = Thermal_Text_Layout::extract_text( isset( $col['children'] ) ? $col['children'] : array() );
+			$text  = Thermal_Text_Layout::truncate_display( $text, $width );
+			$pad   = max( 0, $width - Thermal_Text_Layout::display_width( $text ) );
 			$align = isset( $col['align'] ) ? $col['align'] : 'left';
 			if ( 'right' === $align ) {
 				$line .= str_repeat( ' ', $pad ) . $text;
@@ -491,43 +491,6 @@ class Epos_Xml_Thermal_Emitter {
 		}
 
 		$this->buffer .= '<text align="left">' . $this->escape( $line ) . "\n" . '</text>';
-	}
-
-	/**
-	 * Resolve concrete column widths for a row, splitting star columns.
-	 *
-	 * @param array $cols The column AST nodes.
-	 *
-	 * @return array The resolved integer widths, indexed by column.
-	 */
-	private function resolve_row_widths( array $cols ): array {
-		$fixed_total = 0;
-		$star_count  = 0;
-		foreach ( $cols as $col ) {
-			if ( isset( $col['width'] ) && '*' === $col['width'] ) {
-				$star_count++;
-			} else {
-				$fixed_total += isset( $col['width'] ) ? (int) $col['width'] : 0;
-			}
-		}
-
-		$remaining      = max( 0, $this->columns - $fixed_total );
-		$star_width     = $star_count > 0 ? (int) floor( $remaining / $star_count ) : 0;
-		$star_remainder = $star_count > 0 ? $remaining - ( $star_width * $star_count ) : 0;
-
-		$widths     = array();
-		$star_index = 0;
-		foreach ( $cols as $index => $col ) {
-			if ( isset( $col['width'] ) && '*' === $col['width'] ) {
-				$star_index++;
-				$extra            = ( $star_index === $star_count ) ? $star_remainder : 0;
-				$widths[ $index ] = max( 1, $star_width + $extra );
-			} else {
-				$widths[ $index ] = isset( $col['width'] ) ? (int) $col['width'] : 0;
-			}
-		}
-
-		return $widths;
 	}
 
 	/**
@@ -609,131 +572,5 @@ class Epos_Xml_Thermal_Emitter {
 	 */
 	private function escape( string $value ): string {
 		return htmlspecialchars( $value, ENT_XML1 | ENT_COMPAT, 'UTF-8' );
-	}
-
-	/**
-	 * Extract the concatenated raw text of a node subtree.
-	 *
-	 * @param array $nodes The AST nodes.
-	 *
-	 * @return string The concatenated text.
-	 */
-	private function extract_text( array $nodes ): string {
-		$text = '';
-		foreach ( $nodes as $node ) {
-			if ( ! \is_array( $node ) ) {
-				continue;
-			}
-			if ( isset( $node['type'] ) && 'raw-text' === $node['type'] ) {
-				$text .= isset( $node['value'] ) ? (string) $node['value'] : '';
-			} elseif ( isset( $node['children'] ) && \is_array( $node['children'] ) ) {
-				$text .= $this->extract_text( $node['children'] );
-			}
-		}
-
-		return $text;
-	}
-
-	/**
-	 * Compute the display width of a string (full-width chars count as 2).
-	 *
-	 * @param string $value The input text.
-	 *
-	 * @return int The display width.
-	 */
-	private function display_width( string $value ): int {
-		$width = 0;
-		$chars = $this->split_chars( $value );
-		foreach ( $chars as $char ) {
-			$width += $this->is_full_width( $char ) ? 2 : 1;
-		}
-
-		return $width;
-	}
-
-	/**
-	 * Truncate a string to a maximum display width.
-	 *
-	 * @param string $value The input text.
-	 * @param int    $width The maximum display width.
-	 *
-	 * @return string The truncated text.
-	 */
-	private function truncate_display( string $value, int $width ): string {
-		$result = '';
-		$used   = 0;
-		$chars  = $this->split_chars( $value );
-		foreach ( $chars as $char ) {
-			$next = $this->is_full_width( $char ) ? 2 : 1;
-			if ( $used + $next > $width ) {
-				break;
-			}
-			$result .= $char;
-			$used    += $next;
-		}
-
-		return $result;
-	}
-
-	/**
-	 * Split a UTF-8 string into an array of characters.
-	 *
-	 * @param string $value The input text.
-	 *
-	 * @return array The characters.
-	 */
-	private function split_chars( string $value ): array {
-		if ( '' === $value ) {
-			return array();
-		}
-		if ( function_exists( 'mb_str_split' ) ) {
-			return mb_str_split( $value, 1, 'UTF-8' );
-		}
-		$chars = preg_split( '//u', $value, -1, PREG_SPLIT_NO_EMPTY );
-
-		return false === $chars ? array() : $chars;
-	}
-
-	/**
-	 * Whether a single character is full-width / CJK.
-	 *
-	 * @param string $char The single UTF-8 character.
-	 *
-	 * @return bool True when the character is full-width.
-	 */
-	private function is_full_width( string $char ): bool {
-		$code = $this->code_point( $char );
-		if ( $code < 0 ) {
-			return false;
-		}
-
-		return ( $code >= 0x1100 && $code <= 0x115f )
-			|| 0x2329 === $code
-			|| 0x232a === $code
-			|| ( $code >= 0x2e80 && $code <= 0xa4cf )
-			|| ( $code >= 0xac00 && $code <= 0xd7a3 )
-			|| ( $code >= 0xf900 && $code <= 0xfaff )
-			|| ( $code >= 0xfe10 && $code <= 0xfe19 )
-			|| ( $code >= 0xfe30 && $code <= 0xfe6f )
-			|| ( $code >= 0xff00 && $code <= 0xff60 )
-			|| ( $code >= 0xffe0 && $code <= 0xffe6 );
-	}
-
-	/**
-	 * Resolve the Unicode code point of a single character.
-	 *
-	 * @param string $char The single UTF-8 character.
-	 *
-	 * @return int The code point, or -1 when undetermined.
-	 */
-	private function code_point( string $char ): int {
-		if ( function_exists( 'mb_ord' ) ) {
-			// mb_ord() is typed int by stubs; cast guards a theoretical false (invalid
-			// char) to 0, which is_full_width() treats as not full-width.
-			return (int) mb_ord( $char, 'UTF-8' );
-		}
-		$values = unpack( 'N', mb_convert_encoding( $char, 'UCS-4BE', 'UTF-8' ) );
-
-		return false === $values ? -1 : (int) $values[1];
 	}
 }

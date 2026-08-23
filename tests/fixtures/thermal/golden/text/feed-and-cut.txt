@@ -1,0 +1,19 @@
+# feed-and-cut :: text
+## paper-width 32
+QmVmb3JlIHRoZSBjdXQ=
+~
+~
+~
+~
+## paper-width 42
+QmVmb3JlIHRoZSBjdXQ=
+~
+~
+~
+~
+## paper-width 48
+QmVmb3JlIHRoZSBjdXQ=
+~
+~
+~
+~

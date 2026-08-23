@@ -1,0 +1,16 @@
+# explicit-drawer :: starprnt
+## paper-width 32
+Gx0pVQIAMAEbHSlVAgBAAFRvdGFsIDEwLjAw
+Gwc=
+~
+BxtkAw==
+## paper-width 42
+Gx0pVQIAMAEbHSlVAgBAAFRvdGFsIDEwLjAw
+Gwc=
+~
+BxtkAw==
+## paper-width 48
+Gx0pVQIAMAEbHSlVAgBAAFRvdGFsIDEwLjAw
+Gwc=
+~
+BxtkAw==

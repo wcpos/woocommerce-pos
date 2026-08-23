@@ -1,0 +1,7 @@
+# feed-and-cut :: star-markup
+## paper-width 32
+QmVmb3JlIHRoZSBjdXRbZmVlZF1bZmVlZF1bZmVlZF1bY3V0XVtjdXRd
+## paper-width 42
+QmVmb3JlIHRoZSBjdXRbZmVlZF1bZmVlZF1bZmVlZF1bY3V0XVtjdXRd
+## paper-width 48
+QmVmb3JlIHRoZSBjdXRbZmVlZF1bZmVlZF1bZmVlZF1bY3V0XVtjdXRd

@@ -1,0 +1,16 @@
+# plain-text :: text
+## paper-width 32
+V0NQT1MgU3RvcmU=
+MTIzIEV4YW1wbGUgU3RyZWV0
+VGhhbmsgeW91IGZvciBzaG9wcGluZyB3aXRoIHVz
+~
+## paper-width 42
+V0NQT1MgU3RvcmU=
+MTIzIEV4YW1wbGUgU3RyZWV0
+VGhhbmsgeW91IGZvciBzaG9wcGluZyB3aXRoIHVz
+~
+## paper-width 48
+V0NQT1MgU3RvcmU=
+MTIzIEV4YW1wbGUgU3RyZWV0
+VGhhbmsgeW91IGZvciBzaG9wcGluZyB3aXRoIHVz
+~

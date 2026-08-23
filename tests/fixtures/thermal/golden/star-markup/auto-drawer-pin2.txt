@@ -1,0 +1,7 @@
+# auto-drawer-pin2 :: star-markup
+## paper-width 32
+VG90YWwgMTAuMDBbZmVlZF1bZmVlZF1bY3V0XQ==
+## paper-width 42
+VG90YWwgMTAuMDBbZmVlZF1bZmVlZF1bY3V0XQ==
+## paper-width 48
+VG90YWwgMTAuMDBbZmVlZF1bZmVlZF1bY3V0XQ==

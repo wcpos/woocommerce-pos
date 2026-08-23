@@ -1,0 +1,7 @@
+# plain-text :: star-markup
+## paper-width 32
+V0NQT1MgU3RvcmUxMjMgRXhhbXBsZSBTdHJlZXRUaGFuayB5b3UgZm9yIHNob3BwaW5nIHdpdGggdXM=
+## paper-width 42
+V0NQT1MgU3RvcmUxMjMgRXhhbXBsZSBTdHJlZXRUaGFuayB5b3UgZm9yIHNob3BwaW5nIHdpdGggdXM=
+## paper-width 48
+V0NQT1MgU3RvcmUxMjMgRXhhbXBsZSBTdHJlZXRUaGFuayB5b3UgZm9yIHNob3BwaW5nIHdpdGggdXM=

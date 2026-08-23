@@ -47,8 +47,6 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Image;
  */
 class Raster_Thermal_Emitter {
 
-	use Thermal_Text_Layout;
-
 	/**
 	 * Printable dots across 80 mm paper at 203 dpi.
 	 */
@@ -404,7 +402,7 @@ class Raster_Thermal_Emitter {
 
 		switch ( $type ) {
 			case 'raw-text':
-				$this->append_text( $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' ) );
+				$this->append_text( Thermal_Text_Layout::normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' ) );
 				break;
 			case 'text':
 				$this->emit_text_line( $children );
@@ -514,14 +512,14 @@ class Raster_Thermal_Emitter {
 	 */
 	private function emit_row( array $node ): void {
 		$cols   = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$widths = $this->resolve_row_widths( $cols, $this->columns );
+		$widths = Thermal_Text_Layout::resolve_row_widths( $cols, $this->columns );
 
 		$row = '';
 		foreach ( $cols as $index => $col ) {
 			$width = isset( $widths[ $index ] ) ? $widths[ $index ] : 1;
-			$text  = $this->normalize_text( $this->extract_text( isset( $col['children'] ) ? $col['children'] : array() ) );
-			$text  = $this->truncate_display( $text, $width );
-			$pad   = max( 0, $width - $this->display_width( $text ) );
+			$text  = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( isset( $col['children'] ) ? $col['children'] : array() ) );
+			$text  = Thermal_Text_Layout::truncate_display( $text, $width );
+			$pad   = max( 0, $width - Thermal_Text_Layout::display_width( $text ) );
 			$align = isset( $col['align'] ) ? (string) $col['align'] : 'left';
 			$row  .= 'right' === $align ? str_repeat( ' ', $pad ) . $text : $text . str_repeat( ' ', $pad );
 		}
@@ -574,7 +572,7 @@ class Raster_Thermal_Emitter {
 		// generation failed (a non-numeric EAN-13, say), the only trace of the
 		// barcode left on the receipt. Suppressing it with the image would leave a
 		// silent gap where a scannable code should be.
-		$value = $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
+		$value = Thermal_Text_Layout::normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
 		if ( '' !== $value ) {
 			$this->append_text( $value );
 			$this->close_line( 'center' );
@@ -714,7 +712,7 @@ class Raster_Thermal_Emitter {
 
 		foreach ( $runs as $run ) {
 			$pending = '';
-			foreach ( $this->split_chars( $run['text'] ) as $char ) {
+			foreach ( Thermal_Text_Layout::split_chars( $run['text'] ) as $char ) {
 				if ( "\n" === $char ) {
 					$line = $this->close_run( $line, $run, $pending );
 					$this->push_line( $line, $align );
@@ -724,7 +722,7 @@ class Raster_Thermal_Emitter {
 					continue;
 				}
 
-				$cost = ( $this->is_full_width( $char ) ? 2 : 1 ) * max( 1, (int) $run['w'] );
+				$cost = ( Thermal_Text_Layout::is_full_width( $char ) ? 2 : 1 ) * max( 1, (int) $run['w'] );
 				if ( $cells + $cost > $this->columns && ( array() !== $line || '' !== $pending ) ) {
 					$line = $this->close_run( $line, $run, $pending );
 					$this->push_line( $line, $align );
@@ -774,7 +772,7 @@ class Raster_Thermal_Emitter {
 		$cells  = 0;
 		$scale  = 1;
 		foreach ( $line as $run ) {
-			$cells += $this->display_width( $run['text'] ) * max( 1, (int) $run['w'] );
+			$cells += Thermal_Text_Layout::display_width( $run['text'] ) * max( 1, (int) $run['w'] );
 			$scale  = max( $scale, max( 1, (int) $run['h'] ) );
 		}
 
@@ -782,7 +780,7 @@ class Raster_Thermal_Emitter {
 			array(
 				'op'     => 'text',
 				'runs'   => $line,
-				'indent' => 'left' === $align ? 0 : $this->alignment_padding( $align, $cells, $this->columns ),
+				'indent' => 'left' === $align ? 0 : Thermal_Text_Layout::alignment_padding( $align, $cells, $this->columns ),
 				'height' => $scale,
 			)
 		);
@@ -957,10 +955,10 @@ class Raster_Thermal_Emitter {
 	private function draw_run( $canvas, array $run, int $x, int $top, int $box, int $white, int $white_ink, int $black ): int {
 		$scale_x = max( 1, (int) $run['w'] );
 		$scale_y = max( 1, (int) $run['h'] );
-		$chars   = $this->split_chars( (string) $run['text'] );
+		$chars   = Thermal_Text_Layout::split_chars( (string) $run['text'] );
 		$cells   = 0;
 		foreach ( $chars as $char ) {
-			$cells += $this->is_full_width( $char ) ? 2 : 1;
+			$cells += Thermal_Text_Layout::is_full_width( $char ) ? 2 : 1;
 		}
 
 		$span = $cells * $this->cell * $scale_x;
@@ -1039,7 +1037,7 @@ class Raster_Thermal_Emitter {
 				imagettftext( $canvas, $size, 0, $x, $baseline, -$ink, $font, $char );
 			}
 			// A full-width glyph occupies the two cells display_width() counts.
-			$x += $cell * ( $this->is_full_width( $char ) ? 2 : 1 );
+			$x += $cell * ( Thermal_Text_Layout::is_full_width( $char ) ? 2 : 1 );
 		}
 	}
 
