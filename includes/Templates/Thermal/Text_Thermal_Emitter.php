@@ -14,6 +14,20 @@
  * `<cut>` and `<drawer>` nodes and reports them through cut_type() and drawer()
  * so the caller can set those headers.
  *
+ * Two things the command formats can express are simply not expressible here,
+ * and both are limits of the protocol rather than of this code:
+ *
+ * - **Drawer connector.** `X-Star-CashDrawer` takes only `none`/`start`/`end`,
+ *   so a job configured for the second connector (`pin5`) fires the printer's
+ *   default drawer output instead. StarPRNT emits a connector-specific pulse;
+ *   plain text has no way to ask for one.
+ * - **Character encoding.** `Starprnt_Thermal_Emitter` opens every job with the
+ *   `ESC GS ) U` UTF-8 select sequence; a command-free format cannot send it, so
+ *   non-ASCII text is decoded with whatever code page the printer is set to.
+ *   normalize_text() folds the typographic characters receipts actually produce
+ *   (smart quotes, dashes, no-break spaces) down to ASCII, which covers the
+ *   common case; full glyph coverage is what the `image/png` fallback is for.
+ *
  * Styling (`<bold>`, `<underline>`, `<invert>`, `<size>`) has no plain-text
  * expression and is walked through transparently. `<barcode>` and `<qrcode>`
  * cannot be rendered, so their value is printed as a centred text line — a

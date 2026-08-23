@@ -211,6 +211,34 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It reports every renderable format as servable, unfiltered by capabilities.
+	 */
+	public function test_servable_for_job_ignores_the_printers_encodings(): void {
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			$this->media_types->servable_for_job( $this->template_job(), $this->printer )
+		);
+	}
+
+	/**
+	 * It can only serve an uploaded payload as the bytes that were uploaded.
+	 */
+	public function test_servable_for_job_is_the_stored_type_for_an_upload(): void {
+		$job = array(
+			'id'           => 4,
+			'printer_id'   => 'p1',
+			'order_id'     => 0,
+			'template_id'  => '',
+			'content_type' => Cloud_Print_Media_Types::STARPRNT,
+		);
+
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::STARPRNT ),
+			$this->media_types->servable_for_job( $job, $this->printer )
+		);
+	}
+
+	/**
 	 * It maps offered media types onto thermal wire formats.
 	 */
 	public function test_wire_format_maps_the_offered_types(): void {

@@ -174,6 +174,18 @@ class Text_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It measures supplementary-plane CJK as two cells like any other wide glyph.
+	 */
+	public function test_emit_row_measures_supplementary_cjk_as_full_width(): void {
+		// U+20000 is a CJK Extension B ideograph: one character, two cells.
+		$out = $this->render(
+			'<receipt paper-width="10"><row><col width="4">' . "\u{20000}" . '</col><col width="6" align="right">9</col></row></receipt>'
+		);
+
+		$this->assertSame( "\u{20000}" . '  ' . str_repeat( ' ', 5 ) . "9\n", $out );
+	}
+
+	/**
 	 * It resets state between emissions so a reused emitter does not leak.
 	 */
 	public function test_emit_resets_state_between_calls(): void {

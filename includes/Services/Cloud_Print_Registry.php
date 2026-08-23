@@ -34,6 +34,19 @@ class Cloud_Print_Registry {
 	const CAPABILITIES_TTL = 120;
 
 	/**
+	 * Mutex guarding read-modify-write of the shared capabilities option.
+	 */
+	const CAPABILITIES_LOCK = 'wcpos_cloud_print_caps_lock';
+
+	/**
+	 * Seconds after which a capabilities lock is treated as abandoned.
+	 *
+	 * Short on purpose: the critical section is one option write, so a lock
+	 * older than this belongs to a request that died holding it.
+	 */
+	const CAPABILITIES_LOCK_TTL = 10;
+
+	/**
 	 * All registered cloud printers.
 	 *
 	 * @return array<int, array>
@@ -199,7 +212,8 @@ class Cloud_Print_Registry {
 	 * @param array<string, string> $answers     Answers keyed by request name.
 	 * @param string                $status_code The printer's reported status code.
 	 *
-	 * @return bool Whether anything was stored.
+	 * @return bool Whether anything was stored. False also when a concurrent
+	 *              poll held the write lock; see mutate_capabilities().
 	 */
 	public function record_capabilities( string $printer_id, array $answers, string $status_code = '' ): bool {
 		$record  = $this->get_capabilities( $printer_id );
@@ -232,9 +246,8 @@ class Cloud_Print_Registry {
 		}
 
 		$record['updated'] = time();
-		$this->write_capabilities( $printer_id, $record );
 
-		return true;
+		return $this->write_capabilities( $printer_id, $record );
 	}
 
 	/**
@@ -270,14 +283,13 @@ class Cloud_Print_Registry {
 	 * @param array<string> $keep_ids Printer ids to retain.
 	 */
 	public function prune_capabilities( array $keep_ids ): void {
-		$all = get_option( self::CAPABILITIES_OPTION, array() );
-		if ( ! \is_array( $all ) ) {
-			return;
-		}
-		$pruned = array_intersect_key( $all, array_flip( $keep_ids ) );
-		if ( $pruned !== $all ) {
-			update_option( self::CAPABILITIES_OPTION, $pruned, false );
-		}
+		$this->mutate_capabilities(
+			static function ( array $all ) use ( $keep_ids ): ?array {
+				$pruned = array_intersect_key( $all, array_flip( $keep_ids ) );
+
+				return $pruned === $all ? null : $pruned;
+			}
+		);
 	}
 
 	/**
@@ -285,12 +297,88 @@ class Cloud_Print_Registry {
 	 *
 	 * @param string $printer_id Printer id.
 	 * @param array  $record     The record to store.
+	 *
+	 * @return bool Whether the record was written.
 	 */
-	private function write_capabilities( string $printer_id, array $record ): void {
-		$all                = get_option( self::CAPABILITIES_OPTION, array() );
-		$all                = \is_array( $all ) ? $all : array();
-		$all[ $printer_id ] = $record;
-		update_option( self::CAPABILITIES_OPTION, $all, false ); // Autoload no.
+	private function write_capabilities( string $printer_id, array $record ): bool {
+		return $this->mutate_capabilities(
+			static function ( array $all ) use ( $printer_id, $record ): array {
+				$all[ $printer_id ] = $record;
+
+				return $all;
+			}
+		);
+	}
+
+	/**
+	 * Read-modify-write the shared capabilities option under a mutex.
+	 *
+	 * Every registered printer polls into the same option, so an unguarded
+	 * read-modify-write lets one printer's write discard another's: both read
+	 * the same snapshot, each sets its own key, and the second write wins.
+	 * The mutex plus a cache-bypassing read inside it makes the sequence
+	 * atomic across concurrent requests.
+	 *
+	 * A poll that cannot take the lock skips its write rather than queueing.
+	 * The record is a cache with a CAPABILITIES_TTL refresh, so the cost of a
+	 * skipped write is one refresh cycle, never a wrong answer — and blocking
+	 * a printer's poll to persist a cache would be the worse trade.
+	 *
+	 * @param callable $mutate Receives the current map, returns the new map, or
+	 *                         null to write nothing.
+	 *
+	 * @return bool Whether the option was written.
+	 */
+	private function mutate_capabilities( callable $mutate ): bool {
+		if ( ! self::acquire_capabilities_lock() ) {
+			return false;
+		}
+
+		try {
+			// Drop this request's cached copy so the read reflects writes other
+			// requests made while we were waiting for the lock.
+			wp_cache_delete( self::CAPABILITIES_OPTION, 'options' );
+
+			$all = get_option( self::CAPABILITIES_OPTION, array() );
+			$all = \is_array( $all ) ? $all : array();
+
+			$next = $mutate( $all );
+			if ( null === $next ) {
+				return false;
+			}
+
+			update_option( self::CAPABILITIES_OPTION, $next, false ); // Autoload no.
+		} finally {
+			delete_option( self::CAPABILITIES_LOCK );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Take the capabilities mutex.
+	 *
+	 * The atomic primitive is add_option(): the options table's unique index on
+	 * option_name means exactly one concurrent caller can create the row. This
+	 * mirrors Print_Job_Service's lifecycle lock.
+	 *
+	 * @return bool Whether the lock was taken.
+	 */
+	private static function acquire_capabilities_lock(): bool {
+		$now = time();
+
+		if ( add_option( self::CAPABILITIES_LOCK, (string) $now, '', false ) ) {
+			return true;
+		}
+
+		$locked_at = (int) get_option( self::CAPABILITIES_LOCK, 0 );
+		if ( $locked_at > 0 && ( $now - $locked_at ) > self::CAPABILITIES_LOCK_TTL ) {
+			delete_option( self::CAPABILITIES_LOCK );
+
+			return add_option( self::CAPABILITIES_LOCK, (string) $now, '', false );
+		}
+
+		return false;
 	}
 
 	/**

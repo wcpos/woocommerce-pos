@@ -755,9 +755,29 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It refuses a type it never offered, even one it could otherwise render.
+	 * It refuses a type it cannot produce for the job.
 	 */
-	public function test_get_rejects_a_type_that_was_not_offered(): void {
+	public function test_get_rejects_a_type_the_server_cannot_produce(): void {
+		$id = $this->create_template_job();
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => 'image/png',
+			)
+		);
+
+		$this->assertEquals( 415, $response->get_status() );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It serves a type the printer names even when the cached capabilities
+	 * disagree — the printer asking is a stronger signal than our cache, and a
+	 * capability answer landing between poll and fetch must not strand the job.
+	 */
+	public function test_get_trusts_the_printers_choice_over_stale_capabilities(): void {
 		$id = $this->create_template_job();
 		$this->record_encodings( 'application/vnd.star.starprnt' );
 
@@ -769,8 +789,21 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 
-		$this->assertEquals( 415, $response->get_status() );
-		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertStringContainsString( 'Receipt', $response->get_raw_body() );
+		$this->assertSame( 'claimed', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It falls back to the printer-aware offer when the fetch names no type.
+	 */
+	public function test_get_without_a_type_uses_the_best_offer_for_the_printer(): void {
+		$id = $this->create_template_job();
+		$this->record_encodings( 'text/plain,application/vnd.star.line' );
+
+		$response = $this->poll( 'GET', array( 'token' => $id ) );
+
+		$this->assertSame( Cloud_Print_Media_Types::TEXT, $response->get_headers()['Content-Type'] );
 	}
 
 	/**

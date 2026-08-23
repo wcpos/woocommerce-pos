@@ -212,7 +212,11 @@ trait Thermal_Text_Layout {
 			|| ( $code >= 0xfe10 && $code <= 0xfe19 )
 			|| ( $code >= 0xfe30 && $code <= 0xfe6f )
 			|| ( $code >= 0xff00 && $code <= 0xff60 )
-			|| ( $code >= 0xffe0 && $code <= 0xffe6 );
+			|| ( $code >= 0xffe0 && $code <= 0xffe6 )
+			// CJK Extension B and beyond: rare, but a single one of these
+			// mis-measured throws a whole row's column padding out.
+			|| ( $code >= 0x20000 && $code <= 0x2fffd )
+			|| ( $code >= 0x30000 && $code <= 0x3fffd );
 	}
 
 	/**

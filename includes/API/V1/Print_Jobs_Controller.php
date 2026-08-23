@@ -790,26 +790,30 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	private function cloudprnt_fetch( WP_REST_Request $request, string $printer_id, array $job ) {
-		$media_types = $this->media_types_for_job( $job, $printer_id );
-
-		// The fetch GET names the printer's chosen media type. Serving a format
-		// the printer did not choose puts undecodable bytes on the wire, so an
-		// unoffered type is answered with 415 (per the CloudPRNT spec) and the
-		// job is left unclaimed. Firmware that omits the parameter gets our first
-		// preference. The logged value is length-capped: printers poll every few
-		// seconds, so a wedged loop must not flood the log with unbounded input.
+		// The fetch GET names the printer's chosen media type. A type the server
+		// cannot produce is answered with 415 (per the CloudPRNT spec) and the job
+		// is left unclaimed. What is servable is deliberately wider than what the
+		// poll advertised: the printer naming a type is a stronger signal than our
+		// cached capability answer, so a capability update landing between the two
+		// requests must not reject a format we had just offered. Firmware that
+		// omits the parameter gets our best offer for this printer instead. The
+		// logged value is length-capped: printers poll every few seconds, so a
+		// wedged loop must not flood the log with unbounded input.
+		$servable  = ( new Cloud_Print_Media_Types() )->servable_for_job( $job, $this->registry->get_printer( $printer_id ) );
 		$requested = sanitize_text_field( (string) $request->get_param( 'type' ) );
-		$chosen    = '' === $requested ? $media_types[0] : Cloud_Print_Media_Types::match( $requested, $media_types );
+		$chosen    = '' === $requested
+			? $this->media_types_for_job( $job, $printer_id )[0]
+			: Cloud_Print_Media_Types::match( $requested, $servable );
 
 		if ( '' === $chosen ) {
 			Logger::warning(
 				sprintf(
-					'%s: printer "%s" requested media type "%s" for print job %d, which is offered as %s.',
+					'%s: printer "%s" requested media type "%s" for print job %d, which the server can only serve as %s.',
 					$request->get_route(),
 					$printer_id,
 					substr( $requested, 0, 100 ),
 					(int) $job['id'],
-					implode( ', ', $media_types )
+					implode( ', ', $servable )
 				)
 			);
 

@@ -63,25 +63,45 @@ class Cloud_Print_Media_Types {
 	private const HEADER_CONTROLLED = array( self::TEXT );
 
 	/**
-	 * The media types a job can be served in, in the order we prefer them.
+	 * Every media type the server can produce for a job, best first.
 	 *
-	 * @param array      $job        Job array from Print_Job_Service::get().
-	 * @param array|null $printer    Printer row, or null when unregistered.
-	 * @param array      $encodings  The printer's cached `Encodings` answer.
+	 * This is the set the fetch validates against, deliberately unfiltered by
+	 * the printer's cached capabilities. The capability filter shapes what we
+	 * *advertise*; once the printer has named a type, it has told us more
+	 * directly than any cache can that it wants those bytes. Re-applying the
+	 * filter at fetch time would let a capability answer that arrived between
+	 * the poll and the fetch reject a type we had just offered — a 415 for a
+	 * format both ends can handle, leaving the receipt unprinted.
+	 *
+	 * @param array      $job     Job array from Print_Job_Service::get().
+	 * @param array|null $printer Printer row, or null when unregistered.
+	 *
+	 * @return array<int, string> Always at least one entry.
+	 */
+	public function servable_for_job( array $job, ?array $printer ): array {
+		if ( ! $this->is_renderable( $job, $printer ) ) {
+			// Uploaded bytes: the only thing we have is what is in the store.
+			return array(
+				'' !== (string) ( $job['content_type'] ?? '' )
+					? (string) $job['content_type']
+					: self::OCTET_STREAM,
+			);
+		}
+
+		return self::STAR_RENDERABLE;
+	}
+
+	/**
+	 * The media types to advertise for a job, in the order we prefer them.
+	 *
+	 * @param array      $job       Job array from Print_Job_Service::get().
+	 * @param array|null $printer   Printer row, or null when unregistered.
+	 * @param array      $encodings The printer's cached `Encodings` answer.
 	 *
 	 * @return array<int, string> Always at least one entry.
 	 */
 	public function for_job( array $job, ?array $printer, array $encodings = array() ): array {
-		$stored = '' !== (string) ( $job['content_type'] ?? '' )
-			? (string) $job['content_type']
-			: self::OCTET_STREAM;
-
-		if ( ! $this->is_renderable( $job, $printer ) ) {
-			// Uploaded bytes: the only honest offer is what is in the store.
-			return array( $stored );
-		}
-
-		return $this->prefer_decodable( self::STAR_RENDERABLE, $encodings );
+		return $this->prefer_decodable( $this->servable_for_job( $job, $printer ), $encodings );
 	}
 
 	/**

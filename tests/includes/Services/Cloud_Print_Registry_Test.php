@@ -402,6 +402,51 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It leaves another printer's record alone when writing its own.
+	 */
+	public function test_record_capabilities_does_not_clobber_another_printer(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_capabilities( 'front', array( 'Encodings' => 'application/vnd.star.starprnt' ) );
+		$registry->record_capabilities( 'kitchen', array( 'Encodings' => 'text/plain' ) );
+
+		$this->assertSame( array( 'application/vnd.star.starprnt' ), $registry->get_capabilities( 'front' )['encodings'] );
+		$this->assertSame( array( 'text/plain' ), $registry->get_capabilities( 'kitchen' )['encodings'] );
+	}
+
+	/**
+	 * It skips the write rather than clobbering while another poll holds the lock.
+	 */
+	public function test_record_capabilities_skips_the_write_while_locked(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_capabilities( 'front', array( 'Encodings' => 'text/plain' ) );
+
+		add_option( Cloud_Print_Registry::CAPABILITIES_LOCK, (string) time(), '', false );
+
+		$this->assertFalse( $registry->record_capabilities( 'front', array( 'ClientType' => 'TSP100IV' ) ) );
+		$this->assertSame( '', $registry->get_capabilities( 'front' )['client_type'] );
+		// The record that was already there survives the contended write.
+		$this->assertSame( array( 'text/plain' ), $registry->get_capabilities( 'front' )['encodings'] );
+
+		delete_option( Cloud_Print_Registry::CAPABILITIES_LOCK );
+	}
+
+	/**
+	 * It breaks a lock abandoned by a request that died holding it.
+	 */
+	public function test_capabilities_lock_expires(): void {
+		$registry = new Cloud_Print_Registry();
+		add_option(
+			Cloud_Print_Registry::CAPABILITIES_LOCK,
+			(string) ( time() - Cloud_Print_Registry::CAPABILITIES_LOCK_TTL - 1 ),
+			'',
+			false
+		);
+
+		$this->assertTrue( $registry->record_capabilities( 'front', array( 'ClientType' => 'TSP100IV' ) ) );
+		$this->assertSame( 'TSP100IV', $registry->get_capabilities( 'front' )['client_type'] );
+	}
+
+	/**
 	 * It drops cached capabilities for printers that were removed.
 	 */
 	public function test_prune_capabilities_drops_unlisted_ids(): void {
