@@ -394,4 +394,22 @@ class Test_Analytics extends WP_UnitTestCase {
 		$this->assertFalse( $analytics->capture_once( 'upgrade_cta_viewed', array(), 'plugin_row_action' ) );
 		$this->assertSame( array(), $this->captured_requests );
 	}
+	/**
+	 * get_site_id() must not depend on wcpos-functions.php being loaded.
+	 *
+	 * The deactivation hook runs even when Activator::init() bailed on the
+	 * WooCommerce check, and in that request `new Init()` never ran — so
+	 * wcpos_get_site_uuid() does not exist. Reaching for it there fataled the
+	 * deactivation hook outright for a consented admin whose WooCommerce was
+	 * inactive. This pins the option read that replaced it.
+	 */
+	public function test_get_site_id_reads_the_option_without_the_global_helper(): void {
+		$expected = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+		update_option( 'woocommerce_pos_uuid', $expected );
+
+		$this->assertSame( $expected, Analytics::instance()->get_site_id() );
+
+		// And the source of truth is the option, not a freshly minted value.
+		$this->assertSame( $expected, get_option( 'woocommerce_pos_uuid' ) );
+	}
 }

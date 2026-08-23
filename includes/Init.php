@@ -120,6 +120,10 @@ class Init {
 		// upgrader_process_complete) are in place before those actions
 		// fire on a plugin activation or update request.
 		new Consent();
+
+		// Install lifecycle reporting: flushes events recorded before consent was
+		// granted and keeps the analytics site profile refreshed.
+		( new \WCPOS\WooCommercePOS\Services\Lifecycle_Events() )->register_hooks();
 		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
 		add_action( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::REBUILD_HOOK, array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'run_scheduled_rebuild' ) );
 		// Gate on the schema latch, not a live Health probe: the latch is only
