@@ -434,6 +434,12 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( '0', $contended, 'A second connection must not acquire the lock while the mint holds it.' );
-		$this->assertTrue( Pos_Uuid::is_uuid( $item->get_meta( Pos_Uuid::META_KEY ) ) );
+
+		// Read the uuid back out of the datastore rather than off the in-memory
+		// item: $item->get_meta() would return what ensure_order_item_uuid() set
+		// on the object, so a regression that dropped save_meta_data() would still
+		// pass. This test exists because the ORIGINAL lock was ineffective without
+		// a persistent object cache — persistence is the property under test.
+		$this->assertTrue( Pos_Uuid::is_uuid( wc_get_order_item_meta( $item->get_id(), Pos_Uuid::META_KEY, true ) ) );
 	}
 }
