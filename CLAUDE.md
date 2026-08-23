@@ -101,8 +101,8 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 
 ## Branch lanes
 
-This repo has two permanent trunks:
-- **`main`** — the **stable**, released line (1.9.x patches ship from here).
-- **`next`** — the **in-development** major/minor (1.10, then 1.11, 2.0 …).
+**`main` is the only trunk.** 1.10.0 ships from it, and all work branches from and targets it.
 
-Feature work usually targets `next`; patches to the shipped release target `main`. Never commit directly to either trunk — branch off the correct one in a worktree, and target the PR's base at the same lane. **If it isn't clear which lane a task belongs to, ask "main or next?" before branching, pulling (`git pull origin <lane>`), or opening a PR — don't default to `main`.**
+Never commit directly to `main` — branch off it in a worktree and target the PR's base at `main`.
+
+`next` is dead and is being deleted. It was the in-development trunk while `main` carried the 1.9.x stable line, but that split has ended: `main` is now ahead of `next` by a wide margin, and most of what remains on `next` is merge commits pulling `main` into it. Do not branch from it, do not target it, and do not ask "main or next?" — the answer is `main`. This note exists because the previous two-trunk wording kept sending agents to a branch that no longer carries the release.
