@@ -200,6 +200,11 @@ wait_for_checks() {
 
 FIX_BOT_AUTHORS="|${MERGE_GATE_FIX_BOT_AUTHORS:-wcpos-agents[bot]}|"
 
+# The only workflow whose name can stand in for a locally-run PHP suite. A
+# delegated Tested: trailer must name THIS file — naming any other yaml proves
+# nothing about whether the suite runs.
+PHP_SUITE_WORKFLOW="tests-php.yml"
+
 # sha<TAB>author<TAB>committer. Keying on author alone let a whole class of bot
 # work through ungated: the fix worker rebases human commits onto a moving base,
 # and git preserves the AUTHOR while rewriting the COMMITTER. Anything the bot
@@ -257,7 +262,7 @@ trailer_block_has_tested() {
   # touches PHP the trailer must name the PHP suite itself rather than leaving
   # another tool's test count to stand in for it.
   local require_php="${2:-0}"
-  printf '%s\n' "$1" | awk -v require_php="$require_php" '
+  printf '%s\n' "$1" | awk -v require_php="$require_php" -v php_workflow="$PHP_SUITE_WORKFLOW" '
     BEGIN {
       block = ""
       # Admissions are matched per RESULT SEGMENT, not across the whole trailer.
@@ -320,7 +325,13 @@ trailer_block_has_tested() {
               # Narrowing a test to go green is caught separately and
               # unconditionally by the rewritten_tests rule above, so this does
               # not reopen the hole that motivated the trailer check.
-              if (segments[i] ~ /[a-z0-9_-]+\.ya?ml/) { exit 0 }
+              # Both halves are required. A skip admission alone is not a
+              # delegation: "phpunit failed to start (exit=1, see foo.yml)"
+              # admits a skip and names a yaml file while delegating nothing.
+              # And a delegation that names some other workflow is not
+              # accountable either — only the workflow that actually runs the
+              # PHP suite can stand in for it.
+              if (segments[i] ~ /delegat/ && index(segments[i], php_workflow) > 0) { exit 0 }
               exit 1
             }
             if (segments[i] !~ /[0-9]/) { exit 1 }
