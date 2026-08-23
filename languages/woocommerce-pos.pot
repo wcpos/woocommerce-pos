@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-21T14:46:20+00:00\n"
+"POT-Creation-Date: 2026-08-23T00:19:51+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1184,8 +1184,7 @@ msgid "POS audit metadata cannot be modified through this REST route."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Services/Opening_Hours_Formatter.php:137
-#: includes/Services/Opening_Hours_Formatter.php:146
+#: includes/Services/Opening_Hours_Formatter.php:200
 msgid "Closed"
 msgstr ""
 
@@ -1202,7 +1201,7 @@ msgstr ""
 #. translators: %d: Historical POS store ID that no longer exists.
 #: includes/Services/Order_Notes.php:50
 #: includes/Services/Receipt_Data_Builder.php:98
-#: tests/includes/Services/Test_Receipt_Data_Builder.php:1205
+#: tests/includes/Services/Test_Receipt_Data_Builder.php:1264
 #, php-format
 msgid "Store #%d"
 msgstr ""
