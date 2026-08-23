@@ -263,13 +263,6 @@ class Consent {
 			return;
 		}
 
-		// Record the sighting. Queued, not sent — should_render() only returns
-		// true while the answer is undecided, so nothing may leave the site yet.
-		// It reaches PostHog only if this user goes on to allow tracking.
-		( new Lifecycle_Events() )->record_consent_prompt_viewed(
-			false !== get_transient( self::MODAL_TRANSIENT ) ? 'modal' : 'callout'
-		);
-
 		// WP core's common.js hoists any element matching `.notice`
 		// beneath the page H1 and gives it the standard admin-notice
 		// width/margins. The `is-dismissible` class reserves right-hand
@@ -352,10 +345,6 @@ class Consent {
 			return $result;
 		}
 
-		// Read the surface BEFORE the transient is cleared below: its presence
-		// is what decided whether the user saw the modal or the callout.
-		$surface = false !== get_transient( self::MODAL_TRANSIENT ) ? 'modal' : 'callout';
-
 		// Decision recorded — clear any pending auto-open flag and any
 		// lingering "hide for now" user meta so the state is coherent.
 		delete_transient( self::MODAL_TRANSIENT );
@@ -365,8 +354,11 @@ class Consent {
 		}
 
 		// Only a yes is reported. A no is answered by sending nothing at all.
+		// No surface is attached here: the server cannot tell which prompt the
+		// user answered in, and the paired consent_notice_viewed already
+		// carries the surface that was shown.
 		if ( 'allowed' === $choice ) {
-			( new Lifecycle_Events() )->report_consent_granted( $surface );
+			( new Lifecycle_Events() )->report_consent_granted();
 		}
 
 		return new WP_REST_Response( array( 'consent' => $choice ), 200 );
@@ -436,6 +428,16 @@ class Consent {
 			$show_modal = true;
 			delete_transient( self::MODAL_TRANSIENT );
 		}
+
+		// Record the sighting HERE, not at render time: this is the only place
+		// that knows which surface the user actually gets, and it consumes the
+		// transient that decides it. Reading the transient later reports the
+		// opposite surface every time.
+		//
+		// Queued, never sent — maybe_enqueue() only reaches this while the
+		// answer is undecided, so nothing may leave the site yet. It arrives at
+		// PostHog only if this user goes on to allow tracking.
+		( new Lifecycle_Events() )->record_consent_prompt_viewed( $show_modal ? 'modal' : 'callout' );
 
 		// Append the WCPOS request flag so the bundle's REST calls register the
 		// now-gated consent routes (see register_routes / Init::init_rest_api).

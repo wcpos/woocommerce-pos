@@ -479,11 +479,18 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 
-		$lifecycle->report_consent_granted( 'modal' );
+		$lifecycle->report_consent_granted();
 
 		$accepted = $this->find_event( 'consent_notice_accepted' );
 		$this->assertNotNull( $accepted );
-		$this->assertSame( 'modal', $accepted['properties']['surface'] );
+
+		// No surface on the acceptance — the server cannot know which prompt was
+		// answered. It travels on the paired view instead.
+		$this->assertArrayNotHasKey( 'surface', $accepted['properties'] );
+
+		$viewed = $this->find_event( 'consent_notice_viewed' );
+		$this->assertNotNull( $viewed );
+		$this->assertSame( 'modal', $viewed['properties']['surface'] );
 
 		// The queued view went out in the same pass.
 		$this->assertNotNull( $this->find_event( 'consent_notice_viewed' ) );

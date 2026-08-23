@@ -181,9 +181,11 @@ class Lifecycle_Events {
 	 * Reporting that someone refused telemetry, by sending telemetry, is the
 	 * one thing this surface must never do.
 	 *
-	 * @param string $surface Where the prompt was answered: `modal` or `callout`.
+	 * No surface is recorded: the server cannot tell which prompt the user
+	 * answered in — both can be on screen — and the paired
+	 * `consent_notice_viewed` already carries the surface that was shown.
 	 */
-	public function report_consent_granted( string $surface ): void {
+	public function report_consent_granted(): void {
 		$analytics = Analytics::instance();
 
 		// The choice was written in this request; the cached answer predates it.
@@ -194,7 +196,7 @@ class Lifecycle_Events {
 		}
 
 		$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
-		$properties   = array( 'surface' => $surface );
+		$properties   = array();
 
 		if ( $installed_at > 0 ) {
 			$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
