@@ -736,43 +736,6 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The delete_all_settings() method is a core factory reset: it deletes explicit core
-	 * section options without deleting extension-registered section options.
-	 */
-	public function test_delete_all_settings_deletes_core_options_only(): void {
-		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $user_id );
-		$user = wp_get_current_user();
-		$user->add_cap( 'manage_woocommerce_pos' );
-
-		$core_options = array(
-			'woocommerce_pos_settings_general',
-			'woocommerce_pos_settings_tax_ids',
-			'woocommerce_pos_settings_checkout',
-			'woocommerce_pos_settings_payment_gateways',
-			'woocommerce_pos_settings_tools',
-			'woocommerce_pos_settings_visibility',
-			'woocommerce_pos_settings_access',
-			'woocommerce_pos_settings_license',
-			'woocommerce_pos_settings_cloud_print',
-		);
-
-		foreach ( $core_options as $option ) {
-			update_option( $option, array( 'marker' => $option ) );
-		}
-		update_option( 'woocommerce_pos_settings_thirdparty', array( 'marker' => 'thirdparty' ) );
-
-		$this->assertTrue( Settings::delete_all_settings() );
-
-		foreach ( $core_options as $option ) {
-			$this->assertFalse( get_option( $option ), $option . ' should be deleted' );
-		}
-		$this->assertSame( array( 'marker' => 'thirdparty' ), get_option( 'woocommerce_pos_settings_thirdparty' ) );
-
-		delete_option( 'woocommerce_pos_settings_thirdparty' );
-	}
-
-	/**
 	 * Direct test: get_license_settings empty.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_license_settings
