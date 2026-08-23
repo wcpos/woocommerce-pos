@@ -594,6 +594,59 @@ class Test_Term_Controllers_Parity extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Dispatch registers the historical, individually detachable filter callbacks.
+	 *
+	 * These six method names are public API: extensions detach them with
+	 * remove_filter( 'woocommerce_rest_prepare_product_tag', array( $c,
+	 * 'wcpos_product_tags_response' ), 10 ), which matches on the exact string.
+	 * Registering a shared trait method instead would silently break every one
+	 * of those calls.
+	 *
+	 * @dataProvider taxonomy_provider
+	 *
+	 * @param string $controller_class Controller class name.
+	 * @param string $taxonomy         Taxonomy name.
+	 * @param string $rest_base        Route below the namespace.
+	 */
+	public function test_dispatch_registers_the_historical_filter_callbacks( string $controller_class, string $taxonomy, string $rest_base ): void {
+		// Arrange.
+		$this->boot_endpoint( $controller_class, $taxonomy );
+		list( $response_method, $query_method ) = $this->historical_filter_methods( $taxonomy );
+		$route      = '/wcpos/v1/' . $rest_base;
+		$controller = $this->endpoint;
+
+		// Act.
+		$controller->wcpos_dispatch_request( null, $this->wp_rest_get_request( $route ), $route, array() );
+
+		// Assert: registered under the historical names...
+		$this->assertSame( 10, has_filter( 'woocommerce_rest_prepare_' . $taxonomy, array( $controller, $response_method ) ) );
+		$this->assertSame( 10, has_filter( 'woocommerce_rest_' . $taxonomy . '_query', array( $controller, $query_method ) ) );
+
+		// ...and detachable by them.
+		remove_filter( 'woocommerce_rest_prepare_' . $taxonomy, array( $controller, $response_method ), 10 );
+		remove_filter( 'woocommerce_rest_' . $taxonomy . '_query', array( $controller, $query_method ), 10 );
+		$this->assertFalse( has_filter( 'woocommerce_rest_prepare_' . $taxonomy, array( $controller, $response_method ) ) );
+		$this->assertFalse( has_filter( 'woocommerce_rest_' . $taxonomy . '_query', array( $controller, $query_method ) ) );
+	}
+
+	/**
+	 * The public method names each taxonomy has always registered.
+	 *
+	 * @param string $taxonomy Taxonomy name.
+	 *
+	 * @return array{0: string, 1: string}
+	 */
+	private function historical_filter_methods( string $taxonomy ): array {
+		$methods = array(
+			'product_tag'   => array( 'wcpos_product_tags_response', 'wcpos_product_tag_query' ),
+			'product_cat'   => array( 'wcpos_product_categories_response', 'wcpos_product_category_query' ),
+			'product_brand' => array( 'wcpos_product_brands_response', 'wcpos_product_brand_query' ),
+		);
+
+		return $methods[ $taxonomy ];
+	}
+
+	/**
 	 * Boot the controller for one taxonomy, skipping collections this WooCommerce lacks.
 	 *
 	 * @param string $controller_class Controller class name.
