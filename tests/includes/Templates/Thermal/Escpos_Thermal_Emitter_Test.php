@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
 use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Bounds;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
 
@@ -477,6 +478,67 @@ PHP;
 		// Act / Assert.
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x0a, 0x0a ) ) );
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x70, 0x00, 0x19, 0xfa ) ) );
+	}
+
+	/*
+	 * The three tests below are the print side of the preview/print contract.
+	 * Each asserts the same markup and the same number as its twin in
+	 * packages/thermal-utils/src/thermal-renderer.test.ts. A bound that holds in
+	 * only one of the two is the divergence these tests exist to catch.
+	 */
+
+	/**
+	 * A 500-line feed advances the bounded maximum, not 500 lines.
+	 *
+	 * @return void
+	 */
+	public function test_feed_above_the_maximum_emits_the_bounded_line_count(): void {
+		// Arrange.
+		$bytes = $this->render( '<receipt paper-width="48"><feed lines="500"/></receipt>' );
+
+		// Act.
+		$line_feeds = substr_count( $bytes, \chr( 0x0a ) );
+
+		// Assert. The preview and the PDF have always shown 50 lines here; without
+		// the same bound on the wire the printer advanced 500 and wasted the roll.
+		$this->assertSame( Thermal_Bounds::FEED_LINES_MAX, $line_feeds );
+	}
+
+	/**
+	 * An exponent-notation feed advances the bounded maximum, not 10^15 lines.
+	 *
+	 * @return void
+	 */
+	public function test_feed_exponent_notation_lines_emits_the_bounded_maximum(): void {
+		// Arrange. Unbounded, emit_feed() would loop 10^15 times and hang the
+		// print request; this test finishing at all is half of what it asserts.
+		$bytes = $this->render( '<receipt paper-width="48"><feed lines="1e15"/></receipt>' );
+
+		// Act.
+		$line_feeds = substr_count( $bytes, \chr( 0x0a ) );
+
+		// Assert.
+		$this->assertSame( Thermal_Bounds::FEED_LINES_MAX, $line_feeds );
+	}
+
+	/**
+	 * A fixed column wider than the paper pads to the bounded maximum.
+	 *
+	 * @return void
+	 */
+	public function test_row_fixed_column_wider_than_the_paper_pads_to_the_bounded_maximum(): void {
+		// Arrange.
+		$bytes = $this->render(
+			'<receipt paper-width="120"><row><col width="121">Over</col></row></receipt>'
+		);
+
+		// Act. The row is everything up to its terminating line feed.
+		$row = substr( $bytes, 0, strpos( $bytes, \chr( 0x0a ) ) );
+		$row = substr( $row, strpos( $row, 'Over' ) );
+
+		// Assert. At 121 the row overruns the paper and wraps onto a second
+		// physical line, which the preview never shows.
+		$this->assertSame( Thermal_Bounds::COL_WIDTH_MAX, \strlen( $row ) );
 	}
 
 	/**

@@ -95,6 +95,50 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(html).toContain('font-size: 8em');
 	});
 
+	it('bounds an exponent-form feed to the same 50 lines the printer feeds', () => {
+		// 1e15 is a legal decimal numeral, so it survives is_numeric()/DECIMAL_NUMERAL
+		// and reaches the AST as a number. This side already bounded it at render;
+		// the PHP twin is where it was unbounded, and the wire emitters turn `lines`
+		// straight into a loop or a str_repeat(). Asserted here so the two sides are
+		// pinned to one number and cannot drift apart again.
+		const html = renderThermalPreview('<receipt><feed lines="1e15"/></receipt>', {});
+
+		// 50 lines * 1.4em. Paired with
+		// Escpos_Thermal_Emitter_Test::test_feed_exponent_notation_lines_emits_the_bounded_maximum.
+		expect(html).toContain('height: 70em');
+	});
+
+	it('bounds a fixed column to the same 120 characters the row emitter pads to', () => {
+		const html = renderThermalPreview(
+			'<receipt paper-width="120"><row><col width="121">Over</col></row></receipt>',
+			{},
+		);
+
+		// As with feed, the preview already held here and the row emitters did not.
+		// Paired with Escpos_Thermal_Emitter_Test::test_row_fixed_column_wider_than_the_paper_pads_to_the_bounded_maximum.
+		expect(html).toContain('flex: 0 0 120ch');
+		expect(html).not.toContain('flex: 0 0 121ch');
+	});
+
+	it('bounds paper width and qr scale to the ranges every path can render', () => {
+		const narrow = renderThermalPreview('<receipt paper-width="4"></receipt>', {});
+		const wide = renderThermalPreview('<receipt paper-width="900"></receipt>', {});
+
+		// Paired with Thermal_Markup_Parser_Test::test_parse_out_of_range_paper_width_clamps_to_the_printable_range.
+		expect(root(narrow).style.width).toBe('16ch');
+		expect(root(wide).style.width).toBe('120ch');
+
+		const oversized = renderThermalPreview('<receipt><qrcode size="99">WCPOS</qrcode></receipt>', {});
+		const ceiling = renderThermalPreview('<receipt><qrcode size="16">WCPOS</qrcode></receipt>', {});
+		const ordinary = renderThermalPreview('<receipt><qrcode size="4">WCPOS</qrcode></receipt>', {});
+
+		// 16 is the ESC/POS module-size ceiling; an unbounded scale would render a
+		// preview no printer can reproduce. Paired with
+		// Thermal_Markup_Parser_Test::test_parse_out_of_range_qrcode_size_clamps_to_the_module_size_ceiling.
+		expect(oversized).toBe(ceiling);
+		expect(oversized).not.toBe(ordinary);
+	});
+
 	it('renders single, dashed, dotted, and double divider styles', () => {
 		const html = renderThermalPreview(
 			'<receipt><line/><line style="dashed"/><line style="dotted"/><line style="double"/></receipt>',
