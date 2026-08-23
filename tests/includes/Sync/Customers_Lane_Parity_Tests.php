@@ -244,6 +244,7 @@ trait Customers_Lane_Parity_Tests {
 				)
 			),
 		);
+
 		$ascending = $this->assert_lane_parity(
 			array(
 				'orderby' => 'role',
