@@ -30,6 +30,8 @@
 
 - Fixed: thermal templates now handle out-of-range numeric attributes the same way in the live preview and on the server. An attribute outside the supported range is clamped to the nearest bound on both sides instead of one silently substituting the default — `<image width="5000">` renders at the 2000-dot maximum, `<size width="12">` at the 8x printer ceiling, and `<size width="-2">` / `<feed lines="0">` at 1 rather than disappearing from the preview. Fractional values such as `<feed lines="3.5">` now truncate to 3 instead of falling back to 1.
 
+- Fixed: thermal templates now handle out-of-range numeric attributes the same way in the live preview and on the server. An attribute outside the supported range is clamped to the nearest bound on both sides instead of one silently substituting the default — `<image width="5000">` renders at the 2000-dot maximum, `<size width="12">` at the 8x printer ceiling, and `<size width="-2">` / `<feed lines="0">` at 1 rather than disappearing from the preview. Fractional values such as `<feed lines="3.5">` now truncate to 3 instead of falling back to 1. Every bound now also holds on the printer, not just in the preview: `<feed lines="500">` advances the 50-line maximum the preview has always shown rather than 500 lines of blank paper, and a fixed `<col>` wider than the paper no longer wraps onto a second printed line.
+
 ---
 
 ## 🧾 Receipt Templates — Complete Rebuild
