@@ -639,7 +639,15 @@ class Raster_Thermal_Emitter {
 		// zero-width case to guard the division below against.
 		$natural_width  = imagesx( $image );
 		$natural_height = imagesy( $image );
-		imagedestroy( $image );
+
+		// unset() rather than imagedestroy(), here and at the other four GD
+		// handles in this class. imagedestroy() is deprecated as of PHP 8.5 and
+		// has been a no-op since 8.0, where GD started returning GdImage objects
+		// that the collector frees. Dropping the only reference does the same
+		// work on 8.x AND on 7.4, where the handle is still a resource freed by
+		// refcount — so this needs no version branch. Do not reintroduce the
+		// call; the lint gate fails on it once CI moves past PHP 8.1.
+		unset( $image );
 
 		$target = $requested_dots > 0 ? min( $requested_dots, $this->dots ) : min( $natural_width, $this->dots );
 		$scale  = $target / $natural_width;
@@ -903,7 +911,7 @@ class Raster_Thermal_Emitter {
 		ob_start();
 		imagepng( $canvas, null, 9 );
 		$png = (string) ob_get_clean();
-		imagedestroy( $canvas );
+		unset( $canvas );
 
 		return $png;
 	}
@@ -1003,7 +1011,7 @@ class Raster_Thermal_Emitter {
 		);
 
 		$this->composite_thresholded( $canvas, $scratch, $x, $top, $base_span * $scale_x, $base_box * $scale_y, $white, $black );
-		imagedestroy( $scratch );
+		unset( $scratch );
 
 		return $x + $span;
 	}
@@ -1063,7 +1071,7 @@ class Raster_Thermal_Emitter {
 
 		$left = max( 0, (int) floor( ( $this->dots - (int) $op['width'] ) / 2 ) );
 		$this->composite_thresholded( $canvas, $source, $left, $top, (int) $op['width'], (int) $op['height'], $white, $black );
-		imagedestroy( $source );
+		unset( $source );
 	}
 
 	/**
@@ -1121,6 +1129,6 @@ class Raster_Thermal_Emitter {
 			}
 		}
 
-		imagedestroy( $scaled );
+		unset( $scaled );
 	}
 }
