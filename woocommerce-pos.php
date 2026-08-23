@@ -31,7 +31,7 @@ require_once __DIR__ . '/includes/API/V2/Ping.php';
 API\V2\Ping::maybe_serve();
 
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.8.2' );
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.8.3' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
