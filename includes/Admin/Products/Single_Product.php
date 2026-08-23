@@ -90,7 +90,8 @@ class Single_Product {
 			array(
 				'placement' => 'product_edit_price',
 			),
-			'product_edit_price'
+			'product_edit_price',
+			Analytics::AMBIENT_IMPRESSION_TTL
 		);
 
 		woocommerce_wp_checkbox(
@@ -114,7 +115,8 @@ class Single_Product {
 			array(
 				'placement' => 'product_edit_tax',
 			),
-			'product_edit_tax'
+			'product_edit_tax',
+			Analytics::AMBIENT_IMPRESSION_TTL
 		);
 
 		woocommerce_wp_checkbox(

@@ -54,6 +54,28 @@ class Analytics {
 	const CAPTURE_PATH = '/capture/';
 
 	/**
+	 * De-dup window for impressions on AMBIENT upsell placements.
+	 *
+	 * An ambient placement renders as a side effect of unrelated work — the
+	 * product editor, the plugins list — so a merchant re-arms a daily window
+	 * simply by doing their job. Live data made the cost obvious: with a daily
+	 * window `product_edit_price` alone logged 40,362 impressions from 414
+	 * users (~97 each), and `upgrade_cta_viewed` grew to 90% of every event the
+	 * project holds. That does not measure interest, it measures how often
+	 * someone edits products, and it makes view -> click conversion meaningless
+	 * (0.015% on that placement).
+	 *
+	 * A month still answers "was this CTA on screen for this merchant", which
+	 * is the only question the upgrade funnel asks of an impression.
+	 *
+	 * Navigational placements — a settings tab, the landing page — keep the
+	 * shorter default: the merchant chose to go there, so the visit is signal.
+	 *
+	 * @var int
+	 */
+	const AMBIENT_IMPRESSION_TTL = MONTH_IN_SECONDS;
+
+	/**
 	 * HTTP request timeout in seconds.
 	 *
 	 * Kept low because capture is fire-and-forget. We set

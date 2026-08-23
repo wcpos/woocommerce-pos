@@ -8,6 +8,7 @@ import { type TaxId } from '@wcpos/ui';
 import BarcodeSelect from './barcode-select';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
 import { StorefrontReceiptSection } from './storefront-receipt-section';
+import { syncConsent } from '../../lib/analytics';
 import { TaxIdsSection } from './tax-ids-section';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
@@ -206,7 +207,14 @@ function General() {
 						<Toggle
 							checked={data?.tracking_consent === 'allowed'}
 							onChange={(enabled: boolean) => {
-								mutate({ tracking_consent: enabled ? 'allowed' : 'denied' });
+								const choice = enabled ? 'allowed' : 'denied';
+
+								// Apply it to the live client first. The page does not
+								// reload on save, so a client initialised while consent
+								// was allowed would otherwise keep capturing for the
+								// rest of the session after the user opted out.
+								syncConsent(choice);
+								mutate({ tracking_consent: choice });
 							}}
 							label={t('settings.allow_anonymous_usage_data')}
 						/>

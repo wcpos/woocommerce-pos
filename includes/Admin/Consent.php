@@ -15,6 +15,7 @@
 namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -352,6 +353,19 @@ class Consent {
 			delete_user_meta( $user_id, self::CALLOUT_HIDE_META );
 		}
 
+		// Only a yes is reported. A no is answered by sending nothing at all.
+		// No surface is attached here: the server cannot tell which prompt the
+		// user answered in, and the paired consent_notice_viewed already
+		// carries the surface that was shown.
+		if ( 'allowed' === $choice ) {
+			( new Lifecycle_Events() )->report_consent_granted();
+		} else {
+			// Discard the queued prompt view now rather than leaving it in the
+			// options table until some later admin_init notices the refusal.
+			// A no should take effect in the request that records it.
+			( new Lifecycle_Events() )->discard_pending();
+		}
+
 		return new WP_REST_Response( array( 'consent' => $choice ), 200 );
 	}
 
@@ -419,6 +433,16 @@ class Consent {
 			$show_modal = true;
 			delete_transient( self::MODAL_TRANSIENT );
 		}
+
+		// Record the sighting HERE, not at render time: this is the only place
+		// that knows which surface the user actually gets, and it consumes the
+		// transient that decides it. Reading the transient later reports the
+		// opposite surface every time.
+		//
+		// Queued, never sent — maybe_enqueue() only reaches this while the
+		// answer is undecided, so nothing may leave the site yet. It arrives at
+		// PostHog only if this user goes on to allow tracking.
+		( new Lifecycle_Events() )->record_consent_prompt_viewed( $show_modal ? 'modal' : 'callout' );
 
 		// Append the WCPOS request flag so the bundle's REST calls register the
 		// now-gated consent routes (see register_routes / Init::init_rest_api).
