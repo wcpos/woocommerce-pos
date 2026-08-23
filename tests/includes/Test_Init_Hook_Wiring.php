@@ -205,7 +205,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'admin_notices'                                         => array( 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
-			'pre_update_option_woocommerce_pos_pro_settings_license' => array( 10 ),
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
 			'rest_pre_dispatch'                                     => array( 10 ),
