@@ -95,12 +95,17 @@ trait Customers_Lane_Parity_Tests {
 	 * carries no schema, so it has to reproduce `wp_parse_list()` itself.
 	 */
 	public function test_comma_joined_roles_string_narrows_identically_on_both_lanes(): void {
-		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
-		$editor_id  = $this->factory->user->create( array( 'role' => 'editor' ) );
+		$cashier_id    = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$subscriber_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$editor_id     = $this->factory->user->create( array( 'role' => 'editor' ) );
 
 		$ids = $this->assert_lane_parity( array( 'roles' => 'cashier,subscriber' ) );
 
+		// Both requested roles, not just the first: an implementation that parsed
+		// the string and then kept only element [0] would satisfy a cashier-only
+		// assertion while silently dropping half of what was asked for.
 		$this->assertContains( $cashier_id, $ids );
+		$this->assertContains( $subscriber_id, $ids );
 		$this->assertNotContains( $editor_id, $ids );
 	}
 
