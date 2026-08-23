@@ -61,6 +61,19 @@ class Cloud_Print_Poll_Request_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It survives a scalar JSON body, which WordPress hands back unwrapped.
+	 */
+	public function test_from_body_survives_scalar_json_params(): void {
+		foreach ( array( 'status', 42, true, null ) as $scalar ) {
+			$poll = Cloud_Print_Poll_Request::from_body( '"status"', $scalar );
+
+			$this->assertFalse( $poll->printing_in_progress() );
+			$this->assertSame( '', $poll->status_code() );
+			$this->assertSame( array(), $poll->answers() );
+		}
+	}
+
+	/**
 	 * It falls back to decoding the raw body when the params are empty.
 	 */
 	public function test_from_body_decodes_the_raw_body_without_params(): void {

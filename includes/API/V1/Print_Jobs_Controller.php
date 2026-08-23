@@ -864,6 +864,12 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * them off the fetch response instead. Command formats express both in-band
 	 * and must not also be told to cut, or the receipt cuts twice.
 	 *
+	 * Both headers are always sent, `none` included. Omitting them leaves the
+	 * decision to the printer's own defaults, which cut plain-text jobs — so a
+	 * template that deliberately does not cut would cut anyway, and would behave
+	 * differently in text than in StarPRNT. Saying `none` out loud keeps the two
+	 * formats rendering the same receipt.
+	 *
 	 * @param string $media_type The media type being served.
 	 * @param array  $render     Render result from Print_Job_Service::render_job().
 	 *
@@ -874,15 +880,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return array();
 		}
 
-		$headers = array();
-		if ( null !== $render['cut'] ) {
-			$headers['X-Star-Cut'] = (string) $render['cut'];
-		}
-		if ( null !== $render['drawer'] ) {
-			$headers['X-Star-CashDrawer'] = (string) $render['drawer'];
-		}
-
-		return $headers;
+		return array(
+			'X-Star-Cut'        => null === $render['cut'] ? 'none' : (string) $render['cut'],
+			'X-Star-CashDrawer' => null === $render['drawer'] ? 'none' : (string) $render['drawer'],
+		);
 	}
 
 	/**

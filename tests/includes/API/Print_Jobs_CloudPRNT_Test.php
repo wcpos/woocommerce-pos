@@ -692,6 +692,51 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It says `none` out loud so a template that does not cut does not cut.
+	 */
+	public function test_get_sets_none_control_headers_when_nothing_was_asked_for(): void {
+		$order = OrderHelper::create_order();
+		$tid   = wp_insert_post(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'No cut',
+			)
+		);
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => '<receipt paper-width="32"><text>Receipt</text></receipt>' ),
+			array( 'ID' => $tid ),
+			array( '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $tid );
+		update_post_meta( $tid, '_template_engine', 'thermal' );
+		wp_set_object_terms( $tid, 'receipt', 'wcpos_template_type' );
+
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => Cloud_Print_Media_Types::STARPRNT,
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+			)
+		);
+
+		$headers = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::TEXT,
+			)
+		)->get_headers();
+
+		$this->assertSame( 'none', $headers['X-Star-Cut'] );
+		$this->assertSame( 'none', $headers['X-Star-CashDrawer'] );
+	}
+
+	/**
 	 * It leaves control headers off a format that cuts in-band.
 	 */
 	public function test_get_omits_star_control_headers_for_native_jobs(): void {

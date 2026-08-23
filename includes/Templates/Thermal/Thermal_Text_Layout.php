@@ -218,6 +218,9 @@ trait Thermal_Text_Layout {
 	/**
 	 * Resolve the Unicode code point of a single character.
 	 *
+	 * The plugin does not require ext-mbstring, so the fallback decodes the
+	 * UTF-8 byte sequence by hand rather than reaching for another mb_ function.
+	 *
 	 * @param string $char The single UTF-8 character.
 	 *
 	 * @return int The code point, or -1 when undetermined.
@@ -228,8 +231,21 @@ trait Thermal_Text_Layout {
 			// char) to 0, which is_full_width() treats as not full-width.
 			return (int) mb_ord( $char, 'UTF-8' );
 		}
-		$values = unpack( 'N', mb_convert_encoding( $char, 'UCS-4BE', 'UTF-8' ) );
 
-		return false === $values ? -1 : (int) $values[1];
+		$length = \strlen( $char );
+		if ( 1 === $length ) {
+			return \ord( $char );
+		}
+		if ( 2 === $length ) {
+			return ( ( \ord( $char[0] ) & 0x1f ) << 6 ) | ( \ord( $char[1] ) & 0x3f );
+		}
+		if ( 3 === $length ) {
+			return ( ( \ord( $char[0] ) & 0x0f ) << 12 ) | ( ( \ord( $char[1] ) & 0x3f ) << 6 ) | ( \ord( $char[2] ) & 0x3f );
+		}
+		if ( 4 === $length ) {
+			return ( ( \ord( $char[0] ) & 0x07 ) << 18 ) | ( ( \ord( $char[1] ) & 0x3f ) << 12 ) | ( ( \ord( $char[2] ) & 0x3f ) << 6 ) | ( \ord( $char[3] ) & 0x3f );
+		}
+
+		return -1;
 	}
 }

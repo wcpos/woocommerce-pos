@@ -52,14 +52,18 @@ class Cloud_Print_Poll_Request {
 	 * carries a JSON content type; Star firmware is not guaranteed to send one,
 	 * so the raw body is decoded here as a fallback.
 	 *
-	 * @param string     $raw_body    The raw request body.
-	 * @param array|null $json_params Already-decoded JSON params, when available.
+	 * `$json_params` is deliberately untyped. A body of `"status"` is valid JSON,
+	 * so WordPress hands back a string, and a signature of `?array` would turn
+	 * that into a TypeError — a 500 on a route any registered printer can reach.
+	 *
+	 * @param string $raw_body    The raw request body.
+	 * @param mixed  $json_params Already-decoded JSON params, when available.
 	 *
 	 * @return self
 	 */
-	public static function from_body( string $raw_body, ?array $json_params = null ): self {
-		$data = $json_params;
-		if ( ! \is_array( $data ) || array() === $data ) {
+	public static function from_body( string $raw_body, $json_params = null ): self {
+		$data = \is_array( $json_params ) ? $json_params : array();
+		if ( array() === $data ) {
 			$decoded = json_decode( $raw_body, true );
 			$data    = \is_array( $decoded ) ? $decoded : array();
 		}
