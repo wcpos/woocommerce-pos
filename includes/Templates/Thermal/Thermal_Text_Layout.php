@@ -305,5 +305,4 @@ final class Thermal_Text_Layout {
 			Thermal_Bounds::COL_WIDTH_MAX
 		);
 	}
-
 }
