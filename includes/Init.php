@@ -76,7 +76,7 @@ class Init {
 	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
 	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
 	 * | 16 | `pre_update_option_woocommerce_pos_pro_settings_license` | `Init::remove_license_transient` | 10 | irrelevant | Default. The reentrancy guard, not the priority, is what makes it safe (f33b8d655). |
-	 * | 17 | `rest_pre_serve_request` | `Init::rest_pre_serve_request` | **5** | unknown | Present at 5 since the initial commit (8f2b9eac); no reason recorded. It runs ahead of core's own `rest_send_cors_headers` (default 10). The only recorded movement is the now-deleted twin in `API.php`, which went 5 -> 10 in 521ccb9a. **This row is what PR #1668 changes**: that PR deletes this registration and the handler, moving both behind `Sync\Rest_Cors::register_hooks()`. The priority and this "unknown" travel with it. |
+	 * | 17 | `rest_pre_serve_request` | `Init::rest_pre_serve_request` | **5** | unknown | Present at 5 since the initial commit (8f2b9eac); no reason recorded. It runs ahead of core's own `rest_send_cors_headers`, which `rest-api.php` registers on the same hook at the default 10. The only recorded movement is the now-deleted twin in `API.php`, which went 5 -> 10 in 521ccb9a. **This row is what PR #1668 changes**: that PR deletes this registration and the handler, moving both behind `Sync\Rest_Cors::register_hooks()`. The priority and this "unknown" travel with it. |
 	 * | 18 | `send_headers` | `Init::send_headers` | 99 | unknown | Introduced by 62da70551 ("fix WPSEO integration"). The commit records no reason for the number beyond running late. |
 	 * | 19 | `send_headers` | `Init::remove_x_frame_options` | **9999** | **ORDER-CRITICAL** | Must run AFTER security plugins have set `X-Frame-Options`, because it works by `header_remove()` (80ee545a5). A smaller number lets the plugin set the header again afterwards. |
 	 * | 20 | `determine_current_user` | `Services\Core_Order_Audit_Guard::record_prior_authentication` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
@@ -88,8 +88,10 @@ class Init {
 	 *
 	 * Rows 20 and 23 share `determine_current_user` AND priority 20, so insertion
 	 * order — and nothing else — decides which runs first. 20 puts both after
-	 * WordPress core's cookie and application-password handlers, which are added
-	 * from `default-filters.php` before any plugin loads.
+	 * WordPress core's own handlers, which `default-filters.php` registers before
+	 * any plugin loads: `wp_validate_auth_cookie` at 10, then
+	 * `wp_validate_logged_in_cookie` and `wp_validate_application_password`, both
+	 * at 20 and therefore both ahead of these two.
 	 *
 	 * The guard must run FIRST. It records into `pre_wcpos_user_id` whichever user
 	 * some EARLIER filter had already authenticated; a non-zero value means the

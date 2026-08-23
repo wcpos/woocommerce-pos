@@ -375,7 +375,8 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * because the process re-arms hooks on its own. WordPress core's
 	 * `wpdb::placeholder_escape()` re-adds `wpdb::remove_placeholder_escape` to
 	 * the `query` hook at priority 0 whenever `has_filter()` reports it missing
-	 * (wp-includes/class-wpdb.php) — and the empty registry below guarantees it
+	 * (wp-includes/class-wpdb.php, in `placeholder_escape()`) — and the empty
+	 * registry below guarantees it
 	 * is missing, so the very first `$wpdb->prepare()` inside the constructor
 	 * puts it back and it looks like something Init registered. It is not: the
 	 * live registry carries `query` at 0 and 10 long before any of this runs.
