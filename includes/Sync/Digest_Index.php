@@ -311,6 +311,141 @@ final class Digest_Index {
 	}
 
 	/**
+	 * Bulk-read the STORED 64-bit digests for ONE collection's id-space -> `[id => digest string]`.
+	 *
+	 * ONE reader for every id-space. The registry row names the object types the
+	 * collection stores (products carries product+variation; customers and orders
+	 * carry their own), so no id-space can bleed into another's reconcile and a
+	 * fourth id-space needs no fourth body. A collection with no digest group reads
+	 * nothing rather than falling through to the products digests.
+	 *
+	 * The digest is BIGINT UNSIGNED (above PHP_INT_MAX), so it is returned as a
+	 * STRING (ADR 0014 M1). Ids with no stored digest yet (never hooked/rebuilt) are
+	 * simply absent from the result.
+	 *
+	 * @param string $collection Canonical plural collection name.
+	 * @param int[]  $ids        Requested ids in the collection's own id-space.
+	 *
+	 * @return array<int, string>
+	 */
+	public function read_digests( string $collection, array $ids ): array {
+		global $wpdb;
+		$object_types = self::digest_object_types( $collection );
+		if ( array() === $object_types ) {
+			return array();
+		}
+		$ids = array_values(
+			array_unique(
+				array_filter(
+					array_map( 'intval', $ids ),
+					static function ( $id ) {
+						return $id > 0;
+					}
+				)
+			)
+		);
+		if ( array() === $ids ) {
+			return array();
+		}
+		$placeholders = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		$rows         = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT object_id, digest FROM ' . $this->table_name()
+				. ' WHERE ' . self::object_type_predicate_sql( $object_types )
+				. ' AND object_id IN (' . $placeholders . ')',
+				...$ids
+			),
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$out[ (int) $row['object_id'] ] = (string) $row['digest'];
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Narrow a collection's ids to what this store will still serve — the digest
+	 * endpoint's authoritative-absence answer.
+	 *
+	 * FAIL-OPEN, deliberately: on ANY SQL error every requested id comes back
+	 * servable. The caller turns an UNservable id into `deleted: true` and the till
+	 * acts on that by dropping its local record — for orders, order data — so a
+	 * database hiccup must never be able to manufacture a deletion. The same rule
+	 * covers a collection this store cannot answer for at all.
+	 *
+	 * @param string $collection Canonical plural collection name.
+	 * @param int[]  $ids        Requested ids in request order.
+	 *
+	 * @return int[] Servable ids in request order.
+	 */
+	public function servable( string $collection, array $ids ): array {
+		global $wpdb;
+		$ids = array_values( array_map( 'intval', $ids ) );
+		if ( array() === $ids ) {
+			return array();
+		}
+		$row       = Collections::row( $collection );
+		$live_rows = isset( $row['digest']['live_rows'] ) ? (string) $row['digest']['live_rows'] : '';
+		// Products are the one collection whose servability is NARROWER than a live
+		// row: POS visibility and the readable-catalog scope both apply, so the
+		// richer reader owns them. Every other id-space is exactly its live row.
+		$products = 'products' === $collection;
+		if ( ! $products && ( '' === $live_rows || ! method_exists( $this, $live_rows ) ) ) {
+			return $ids;
+		}
+		$wpdb->last_error = '';
+		if ( $products ) {
+			$servable_ids = $this->servable_product_ids( $ids, true );
+		} else {
+			$predicate    = (string) \call_user_func( array( $this, $live_rows ), 'requested.id' );
+			$requested    = implode( ' UNION ALL ', array_fill( 0, \count( $ids ), 'SELECT %d AS id' ) );
+			$servable_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					'SELECT requested.id FROM (' . $requested . ') requested WHERE ' . $predicate,
+					...$ids
+				)
+			);
+		}
+		/** @var string $last_error */
+		$last_error = $wpdb->last_error;
+
+		return '' !== $last_error
+			? $ids
+			: array_values( array_intersect( $ids, array_map( 'intval', (array) $servable_ids ) ) );
+	}
+
+	/**
+	 * The registry's digest object types for a collection; empty when the collection
+	 * owns no digest id-space (fail closed — never a fall-through to products).
+	 *
+	 * @return string[]
+	 */
+	private static function digest_object_types( string $collection ): array {
+		$row = Collections::row( $collection );
+
+		return isset( $row['digest']['object_types'] ) ? (array) $row['digest']['object_types'] : array();
+	}
+
+	/**
+	 * `object_type = 'x'` for a single-type id-space, `object_type IN (...)` for a
+	 * shared one. Values are registry constants, never request data.
+	 *
+	 * @param string[] $object_types Stored object types.
+	 */
+	private static function object_type_predicate_sql( array $object_types ): string {
+		$quoted = array();
+		foreach ( $object_types as $object_type ) {
+			$quoted[] = "'" . $object_type . "'";
+		}
+
+		return 1 === \count( $quoted )
+			? 'object_type = ' . $quoted[0]
+			: 'object_type IN (' . implode( ',', $quoted ) . ')';
+	}
+
+	/**
 	 * Live-row predicate reused by the drill-down's deleted branch and the rebuild's orphan prune.
 	 *
 	 * @internal Engine-internal SQL fragment.

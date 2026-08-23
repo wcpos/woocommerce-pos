@@ -41,6 +41,10 @@ namespace WCPOS\WooCommercePOS\Sync;
  *  - digest       — leg-3 existence digests, present ONLY on the id-space
  *                   OWNER row (products carries product+variation
  *                   object_types; a copy on variations would double-project).
+ *                   Carries the stored object_types AND the live-row predicate
+ *                   name on Digest_Index, so the reader, the proxy stamper and
+ *                   the authoritative-absence answer all read one id-space fact
+ *                   instead of each re-deciding it.
  *  - fingerprint  — config-change detection membership + the barcode flag.
  *  - backfill     — uuid backfill support: the meta-store kind (post, order,
  *                   user, or term) and the SCAN
@@ -76,6 +80,7 @@ final class Collections {
 			'digest'      => array(
 				'id_space' => 'products',
 				'object_types' => array( 'product', 'variation' ),
+				'live_rows' => 'live_row_exists_sql',
 			),
 			'fingerprint' => array( 'barcode' => true ),
 			'backfill'    => array(
@@ -125,6 +130,7 @@ final class Collections {
 			'digest'      => array(
 				'id_space' => 'orders',
 				'object_types' => array( 'order' ),
+				'live_rows' => 'order_live_row_exists_sql',
 			),
 			'fingerprint' => null,
 			'backfill'    => array( 'kind' => 'order' ),
@@ -148,6 +154,7 @@ final class Collections {
 			'digest'      => array(
 				'id_space' => 'customers',
 				'object_types' => array( 'customer' ),
+				'live_rows' => 'customer_live_row_exists_sql',
 			),
 			'fingerprint' => null,
 			'backfill'    => array( 'kind' => 'user' ),

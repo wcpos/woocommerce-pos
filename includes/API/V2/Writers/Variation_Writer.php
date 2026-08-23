@@ -11,7 +11,7 @@ namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WC_Product;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
@@ -83,8 +83,8 @@ class Variation_Writer extends Null_Writer {
 			'parent_id' => (int) $variation->get_parent_id(),
 			'payload' => $payload,
 		);
-		if ( class_exists( Integrity_Digest::class ) ) {
-			$digests = ( new Integrity_Digest() )->read_digests( array( $id ) );
+		if ( class_exists( Digest_Index::class ) ) {
+			$digests = ( new Digest_Index() )->read_digests( 'products', array( $id ) );
 			if ( isset( $digests[ $id ] ) ) {
 				$document['_rxdb_digest'] = $digests[ $id ];
 			}

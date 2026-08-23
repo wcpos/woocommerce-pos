@@ -213,85 +213,20 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Bulk-read the STORED 64-bit digests for the given product/variation ids → `[id => digest string]`.
-	 * The digest is BIGINT UNSIGNED (above PHP_INT_MAX), so it is returned as a STRING (ADR 0014 M1).
-	 * Ids with no stored digest yet (never hooked/rebuilt) are simply absent from the result.
-	 */
-	public function read_digests( array $ids ): array {
-		global $wpdb;
-		$ids = array_values(
-			array_unique(
-				array_filter(
-					array_map( 'intval', $ids ),
-					static function ( $id ) {
-						return $id > 0;
-					}
-				)
-			)
-		);
-		if ( empty( $ids ) ) {
-			return array();
-		}
-		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT object_id, digest FROM ' . $this->table_name()
-				. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL
-				. ' AND object_id IN (' . $placeholders . ')',
-				...$ids
-			),
-			ARRAY_A
-		);
-		$out = array();
-		foreach ( (array) $rows as $row ) {
-			$out[ (int) $row['object_id'] ] = (string) $row['digest'];
-		}
-		return $out;
-	}
-
-	/**
-	 * Bulk-read the STORED customer digests for the given user ids → `[id => digest string]` (ADR 0015,
-	 * Leg-3 phase 7). Customers live in their OWN `'customer'` object-type rows; keeping the read separate
-	 * from {@see read_digests} (products/variations) means neither id-space can bleed into the other's
-	 * reconcile. Ids with no stored digest yet are simply absent.
-	 */
-	public function read_customer_digests( array $ids ): array {
-		global $wpdb;
-		$ids = array_values(
-			array_unique(
-				array_filter(
-					array_map( 'intval', $ids ),
-					static function ( $id ) {
-						return $id > 0;
-					}
-				)
-			)
-		);
-		if ( empty( $ids ) ) {
-			return array();
-		}
-		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT object_id, digest FROM ' . $this->table_name()
-				. " WHERE object_type = 'customer'"
-				. ' AND object_id IN (' . $placeholders . ')',
-				...$ids
-			),
-			ARRAY_A
-		);
-		$out = array();
-		foreach ( (array) $rows as $row ) {
-			$out[ (int) $row['object_id'] ] = (string) $row['digest'];
-		}
-		return $out;
-	}
-
-	/**
-	 * Register one digest stamper per digest-and-proxy registry row (#421
-	 * increment 3): the id-space owner's singular object_type names the
-	 * stamper (product/customer/order → stamp_proxy_{type}_digests). Returns
-	 * the registered collections (the wiring golden pins them).
+	 * Wire THE digest stamper onto both served read lanes (#421 increment 3).
+	 *
+	 * ONE named static serves every digest id-space: it resolves the registry row
+	 * from the lane's resource slug, so a collection that gains a digest group is
+	 * stamped by adding a row and nothing else. The composed callback name this
+	 * used to build (`stamp_proxy_{object_type}_digests`) could name a method that
+	 * did not exist — add_filter() does not validate callables, so the miss only
+	 * surfaced as a fatal at apply_filters() time, on a catalogue proxy read.
+	 *
+	 * Both public filter names stay live and both are registered here, so the order
+	 * pull lane is wired by the same call as the proxy lane instead of by hand in
+	 * Init. Returns the digest-and-proxy collections (the wiring golden pins them).
+	 *
+	 * @return string[] Collections whose served records carry a stored digest.
 	 */
 	public static function register_proxy_digest_stampers(): array {
 		$registered = array();
@@ -299,93 +234,55 @@ final class Integrity_Digest {
 			if ( ! isset( $row['proxy'] ) ) {
 				continue;
 			}
-			add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_' . $row['object_type'] . '_digests' ), 10, 3 );
 			$registered[] = $collection;
 		}
+		add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_digests' ), 10, 3 );
+		add_filter( 'woocommerce_pos_sync_order_pull_payloads', array( __CLASS__, 'stamp_digests' ), 10, 3 );
+
 		return $registered;
 	}
 
 	/**
-	 * `woocommerce_pos_sync_proxy_response` filter (products): attach each served product's stored 64-bit
-	 * digest as a top-level `_rxdb_digest` string, so the client can seed its existence-reconcile
-	 * manifest (ADR 0014 Leg 3) as products flow through the NORMAL pull — no separate fetch. The
-	 * client reads it into the sidecar manifest, it is NOT persisted into the product document. A
-	 * product with no stored digest yet simply carries no `_rxdb_digest`.
+	 * Attach each served record's stored 64-bit digest as a top-level `_rxdb_digest`
+	 * string, so the client seeds its existence-reconcile manifest (ADR 0014 Leg 3)
+	 * as records flow through the NORMAL pull — no separate fetch. The client reads
+	 * it into the sidecar manifest; it is NOT persisted into the document. A record
+	 * with no stored digest yet simply carries no `_rxdb_digest`.
+	 *
+	 * The lane's resource slug picks the id-space (the registry owns the mapping,
+	 * including the slug traps), and a resource with no digest group — or none at
+	 * all — returns the payload untouched.
+	 *
+	 * @param mixed $data     Served list of records.
+	 * @param mixed $resource Lane resource slug.
+	 * @param mixed $request  Request context.
+	 *
+	 * @return mixed
 	 */
-	public static function stamp_proxy_product_digests( $data, $resource = '', $request = null ) {
-		if ( 'products' !== $resource || ! is_array( $data ) ) {
+	public static function stamp_digests( $data, $resource = '', $request = null ) {
+		if ( ! \is_array( $data ) || ! \is_string( $resource ) || '' === $resource ) {
+			return $data;
+		}
+		$row = Collections::by_proxy_slug( $resource );
+		if ( null === $row || ! isset( $row['digest'] ) ) {
 			return $data;
 		}
 		$ids = array();
-		foreach ( $data as $product ) {
-			if ( is_array( $product ) && isset( $product['id'] ) ) {
-				$ids[] = (int) $product['id'];
+		foreach ( $data as $record ) {
+			if ( \is_array( $record ) && isset( $record['id'] ) ) {
+				$ids[] = (int) $record['id'];
 			}
 		}
-		if ( empty( $ids ) ) {
+		if ( array() === $ids ) {
 			return $data;
 		}
-		$digests = ( new self() )->read_digests( $ids );
-		foreach ( $data as $index => $product ) {
-			if ( is_array( $product ) && isset( $product['id'] ) && isset( $digests[ (int) $product['id'] ] ) ) {
-				$data[ $index ]['_rxdb_digest'] = $digests[ (int) $product['id'] ];
+		$digests = ( new Digest_Index() )->read_digests( $row['_collection'], $ids );
+		foreach ( $data as $index => $record ) {
+			if ( \is_array( $record ) && isset( $record['id'] ) && isset( $digests[ (int) $record['id'] ] ) ) {
+				$data[ $index ]['_rxdb_digest'] = $digests[ (int) $record['id'] ];
 			}
 		}
-		return $data;
-	}
 
-	/**
-	 * `woocommerce_pos_sync_proxy_response` filter (customers) — the customer analogue of
-	 * {@see stamp_proxy_product_digests} (ADR 0015, Leg-3 phase 7). Attach each served customer's stored
-	 * 64-bit digest as `_rxdb_digest` so the client seeds its existence manifest for the customer id-space
-	 * from the normal /customers pull. A customer with no stored digest yet simply carries none.
-	 */
-	public static function stamp_proxy_customer_digests( $data, $resource = '', $request = null ) {
-		if ( 'customers' !== $resource || ! is_array( $data ) ) {
-			return $data;
-		}
-		$ids = array();
-		foreach ( $data as $customer ) {
-			if ( is_array( $customer ) && isset( $customer['id'] ) ) {
-				$ids[] = (int) $customer['id'];
-			}
-		}
-		if ( empty( $ids ) ) {
-			return $data;
-		}
-		$digests = ( new self() )->read_customer_digests( $ids );
-		foreach ( $data as $index => $customer ) {
-			if ( is_array( $customer ) && isset( $customer['id'] ) && isset( $digests[ (int) $customer['id'] ] ) ) {
-				$data[ $index ]['_rxdb_digest'] = $digests[ (int) $customer['id'] ];
-			}
-		}
-		return $data;
-	}
-
-	/**
-	 * `woocommerce_pos_sync_order_pull_payloads` filter — the order analogue of {@see stamp_proxy_customer_digests}
-	 * (ADR 0015, Leg-3 phase 7). Attach each served order's stored 64-bit digest as `_rxdb_digest` so the
-	 * client seeds its existence manifest for the order id-space from the normal /orders pull.
-	 */
-	public static function stamp_proxy_order_digests( $data, $resource = '', $request = null ) {
-		if ( 'orders' !== $resource || ! is_array( $data ) ) {
-			return $data;
-		}
-		$ids = array();
-		foreach ( $data as $order ) {
-			if ( is_array( $order ) && isset( $order['id'] ) ) {
-				$ids[] = (int) $order['id'];
-			}
-		}
-		if ( empty( $ids ) ) {
-			return $data;
-		}
-		$digests = ( new self() )->read_order_digests( $ids );
-		foreach ( $data as $index => $order ) {
-			if ( is_array( $order ) && isset( $order['id'] ) && isset( $digests[ (int) $order['id'] ] ) ) {
-				$data[ $index ]['_rxdb_digest'] = $digests[ (int) $order['id'] ];
-			}
-		}
 		return $data;
 	}
 
@@ -396,42 +293,6 @@ final class Integrity_Digest {
 	 */
 	public function customer_digest_select_sql( string $where_sql = '' ): string {
 		return $this->index->customer_digest_select_sql( $where_sql );
-	}
-
-	/**
-	 * Bulk-read stored ORDER digests → `[id => digest string]` (ADR 0015). Orders are their OWN
-	 * `'order'` object-type rows + id-space, kept separate from products/variations/customers.
-	 */
-	public function read_order_digests( array $ids ): array {
-		global $wpdb;
-		$ids = array_values(
-			array_unique(
-				array_filter(
-					array_map( 'intval', $ids ),
-					static function ( $id ) {
-						return $id > 0;
-					}
-				)
-			)
-		);
-		if ( empty( $ids ) ) {
-			return array();
-		}
-		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT object_id, digest FROM ' . $this->table_name()
-				. " WHERE object_type = 'order'"
-				. ' AND object_id IN (' . $placeholders . ')',
-				...$ids
-			),
-			ARRAY_A
-		);
-		$out = array();
-		foreach ( (array) $rows as $row ) {
-			$out[ (int) $row['object_id'] ] = (string) $row['digest'];
-		}
-		return $out;
 	}
 
 	/**
