@@ -52,6 +52,12 @@ class Deactivator {
 	 * Fired when the plugin is deactivated.
 	 */
 	public function single_deactivate(): void {
+		// Report churn before tearing anything down, while settings (and so the
+		// consent state) are still readable.
+		$lifecycle = new \WCPOS\WooCommercePOS\Services\Lifecycle_Events();
+		$lifecycle->report_deactivation();
+		$lifecycle->clear_schedule();
+
 		// remove pos capabilities.
 		$this->remove_pos_capability();
 

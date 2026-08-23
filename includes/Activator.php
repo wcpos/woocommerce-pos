@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Consent;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -154,6 +155,11 @@ class Activator {
 		if ( $install_sync_schema ) {
 			$this->install_sync_schema();
 		}
+
+		// Record the install for analytics. Consent is still `undecided` at this
+		// point, so the event is held until the user answers the pop-up flagged
+		// above; Lifecycle_Events owns that deferral and reports at most once.
+		( new Lifecycle_Events() )->record_install();
 	}
 
 	/**
@@ -314,6 +320,7 @@ class Activator {
 
 		if ( $locked_plugin_needs_upgrade ) {
 			Services\Settings::bump_versions();
+			( new Lifecycle_Events() )->record_upgrade( $locked_old, VERSION );
 		}
 
 		if ( $locked_plugin_needs_upgrade || $locked_role_caps_need_sync ) {

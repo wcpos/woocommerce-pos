@@ -68,6 +68,7 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_integrity_digest_rebuild',
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
+		'wcpos_analytics_group_refresh',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -229,6 +230,95 @@ function woocommerce_pos_uninstall_taxonomy( string $taxonomy ): void {
 }
 
 /**
+ * Report the uninstall to product analytics, if the user opted into tracking.
+ *
+ * The plugin is not loaded during uninstall, so this cannot use the Analytics
+ * service and hardcodes the option names and endpoint instead — the same
+ * doctrine the rest of this file follows. Test_Uninstall pins these against
+ * the class constants they mirror.
+ *
+ * Deliberately narrow: consent is read from the stored settings and anything
+ * other than an explicit "allowed" sends nothing. The payload carries no
+ * store data beyond what the deactivation event already reports.
+ *
+ * Must run BEFORE the option sweep, which deletes the consent setting and the
+ * site UUID this depends on.
+ */
+function woocommerce_pos_uninstall_report(): void {
+	$settings = get_option( 'woocommerce_pos_settings_general', array() );
+	$consent  = \is_array( $settings ) && isset( $settings['tracking_consent'] )
+		? $settings['tracking_consent']
+		: 'undecided';
+
+	if ( 'allowed' !== $consent ) {
+		return;
+	}
+
+	$site_uuid = get_option( 'woocommerce_pos_uuid', '' );
+	if ( ! \is_string( $site_uuid ) || '' === $site_uuid ) {
+		return;
+	}
+
+	// Prefer the acting user's UUID so the event joins the rest of their
+	// history; fall back to the site so an uninstall run by WP-CLI (no current
+	// user) is still counted.
+	$distinct_id = '';
+	if ( \function_exists( 'get_current_user_id' ) ) {
+		$user_id = get_current_user_id();
+		if ( $user_id ) {
+			$distinct_id = (string) get_user_meta( $user_id, '_woocommerce_pos_uuid', true );
+		}
+	}
+	if ( '' === $distinct_id ) {
+		$distinct_id = 'site_' . $site_uuid;
+	}
+
+	$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
+	$properties   = array(
+		'$groups'        => array( 'site' => $site_uuid ),
+		'plugin_version' => \defined( 'WCPOS\WooCommercePOS\VERSION' ) ? constant( 'WCPOS\WooCommercePOS\VERSION' ) : '',
+		'locale'         => get_locale(),
+	);
+
+	if ( $installed_at > 0 ) {
+		$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
+	}
+
+	// The landing profile transient already holds a recent order count; use it
+	// if it is warm rather than running the count query during an uninstall.
+	$profile = get_transient( 'wcpos_landing_profile' );
+	if ( \is_array( $profile ) && isset( $profile['order_count'] ) ) {
+		$properties['total_pos_orders'] = (int) $profile['order_count'];
+	}
+
+	$body = wp_json_encode(
+		array(
+			'api_key'     => \defined( 'WCPOS_POSTHOG_TOKEN' ) ? WCPOS_POSTHOG_TOKEN : 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd',
+			'event'       => 'wcpos_uninstalled',
+			'distinct_id' => $distinct_id,
+			'properties'  => $properties,
+			'timestamp'   => gmdate( 'c' ),
+		)
+	);
+
+	if ( false === $body ) {
+		return;
+	}
+
+	$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? WCPOS_POSTHOG_HOST : 'https://ph.wcpos.com';
+
+	wp_remote_post(
+		untrailingslashit( $host ) . '/capture/',
+		array(
+			'blocking' => false,
+			'timeout'  => 2.0,
+			'headers'  => array( 'Content-Type' => 'application/json' ),
+			'body'     => $body,
+		)
+	);
+}
+
+/**
  * Remove WCPOS data for the current site.
  *
  * User meta and the object-cache flush are handled once at the network
@@ -245,6 +335,10 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	if ( null === $remove_all ) {
 		$remove_all = woocommerce_pos_uninstall_remove_all_data();
 	}
+
+	// Report churn before anything is deleted — this needs the consent setting,
+	// the site UUID and the user meta that the sweep below removes.
+	woocommerce_pos_uninstall_report();
 
 	// 1. Clear scheduled events (all events per hook, regardless of args).
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {

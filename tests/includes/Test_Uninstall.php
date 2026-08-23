@@ -19,6 +19,7 @@ use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -312,6 +313,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->assertContains( Integrity_Digest::REBUILD_HOOK, $hooks );
 		$this->assertContains( Cloud_Print_Trigger_Service::CRON_SUBMIT, $hooks );
 		$this->assertContains( Cloud_Print_Relay_Service::REREGISTER_HOOK, $hooks );
+		$this->assertContains( Lifecycle_Events::REFRESH_HOOK, $hooks );
 		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
 			$this->assertContains( $hook, $hooks );
 		}
