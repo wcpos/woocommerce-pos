@@ -155,6 +155,12 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$request->set_body( http_build_query( $fields ) );
+		// WP_REST_Request::get_parameter_order() skips parse_body_params() when the
+		// method is POST — a served request gets its POST bag from
+		// WP_REST_Server::serve_request(), which copies $_POST in. rest_do_request()
+		// bypasses that, so without this the fields are invisible to get_param() and
+		// every request looks like an untyped poll.
+		$request->set_body_params( $fields );
 
 		return rest_do_request( $request );
 	}
