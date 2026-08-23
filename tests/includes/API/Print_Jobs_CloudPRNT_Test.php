@@ -633,7 +633,7 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 		$data = $this->poll( 'POST', array() )->get_data();
 
 		$this->assertSame(
-			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::TEXT ),
 			$data['mediaTypes']
 		);
 		$this->assertSame( Cloud_Print_Media_Types::STARPRNT, $data['mediaType'] );
@@ -755,6 +755,86 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It serves a rasterized receipt when the printer picks image/png.
+	 */
+	public function test_get_serves_a_png_when_the_printer_chooses_it(): void {
+		$id = $this->create_template_job();
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::PNG,
+			)
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( Cloud_Print_Media_Types::PNG, $response->get_headers()['Content-Type'] );
+		$this->assertSame( "\x89PNG\r\n\x1a\n", substr( $response->get_raw_body(), 0, 8 ) );
+	}
+
+	/**
+	 * It tells the printer not to dither a raster that is already two-colour.
+	 */
+	public function test_get_disables_dithering_for_png_jobs(): void {
+		$id = $this->create_template_job( true );
+
+		$headers = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::PNG,
+			)
+		)->get_headers();
+
+		$this->assertSame( 'none', $headers['X-Star-ImageDitherPattern'] );
+		$this->assertSame( 'partial', $headers['X-Star-Cut'] );
+		$this->assertSame( 'end', $headers['X-Star-CashDrawer'] );
+	}
+
+	/**
+	 * It leaves the dither header off formats that are not images.
+	 */
+	public function test_get_omits_the_dither_header_for_text_jobs(): void {
+		$id = $this->create_template_job();
+
+		$headers = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::TEXT,
+			)
+		)->get_headers();
+
+		$this->assertArrayNotHasKey( 'X-Star-ImageDitherPattern', $headers );
+	}
+
+	/**
+	 * It serves the raster first when the printer asks for a full receipt raster.
+	 */
+	public function test_full_receipt_raster_printer_is_offered_png_first(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                => 'p1',
+						'provider'          => 'star-cloudprnt',
+						'poll_token_hash'   => Cloud_Print_Registry::hash_token( 'tok' ),
+						'fullReceiptRaster' => true,
+					),
+				),
+			)
+		);
+		$this->create_template_job();
+
+		$data = $this->poll( 'POST', array() )->get_data();
+
+		$this->assertSame( Cloud_Print_Media_Types::PNG, $data['mediaTypes'][0] );
+		$this->assertSame( Cloud_Print_Media_Types::PNG, $data['mediaType'] );
+	}
+
+	/**
 	 * It refuses a type it cannot produce for the job.
 	 */
 	public function test_get_rejects_a_type_the_server_cannot_produce(): void {
@@ -764,7 +844,7 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 			'GET',
 			array(
 				'token' => $id,
-				'type'  => 'image/png',
+				'type'  => 'application/vnd.star.line',
 			)
 		);
 

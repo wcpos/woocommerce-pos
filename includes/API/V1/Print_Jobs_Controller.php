@@ -946,10 +946,19 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return array();
 		}
 
-		return array(
+		$headers = array(
 			'X-Star-Cut'        => null === $render['cut'] ? 'none' : (string) $render['cut'],
 			'X-Star-CashDrawer' => null === $render['drawer'] ? 'none' : (string) $render['drawer'],
 		);
+
+		// The raster is already two-colour, so the printer's Floyd-Steinberg
+		// default would dither an image that has nothing left to dither —
+		// softening crisp black-on-white text into stipple.
+		if ( Cloud_Print_Media_Types::PNG === Cloud_Print_Media_Types::normalize( $media_type ) ) {
+			$headers['X-Star-ImageDitherPattern'] = 'none';
+		}
+
+		return $headers;
 	}
 
 	/**
