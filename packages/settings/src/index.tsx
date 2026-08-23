@@ -8,6 +8,7 @@ import { SnackbarProvider } from '@wcpos/ui';
 
 import ErrorFallback from './components/error';
 import { NoticesProvider } from './hooks/use-notices';
+import { captureSettingsSectionViewed } from './lib/analytics';
 import { queryClient } from './query-client';
 import { router } from './router';
 
@@ -27,6 +28,13 @@ function Root() {
 		</ErrorBoundary>
 	);
 }
+
+// One subscription covers every section: the initial load (which redirects to
+// /general) and each later navigation. Hooking the router rather than each
+// screen means a new section is instrumented the moment it gets a route.
+router.subscribe('onResolved', ({ toLocation }) => {
+	captureSettingsSectionViewed(toLocation.pathname.replace(/^\/+/, ''));
+});
 
 const el = document.getElementById('woocommerce-pos-settings');
 if (el) {

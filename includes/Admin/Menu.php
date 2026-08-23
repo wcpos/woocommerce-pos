@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Analytics;
+use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
@@ -249,6 +250,14 @@ class Menu {
 			// creates the group with an empty property set, which is what made
 			// every environment and store-size breakdown unqueryable (#793).
 			( new Lifecycle_Events() )->maybe_refresh_group_properties();
+
+			// The activation funnel's middle step, carrying the feature-adoption
+			// snapshot. One snapshot per view answers "what share of stores
+			// enable X" without an event per settings toggle.
+			$analytics->capture(
+				'admin_landing_viewed',
+				array( 'settings_summary' => ( new Analytics_Profile() )->get_settings_summary() )
+			);
 
 			$is_development = isset( $_ENV['DEVELOPMENT'] )
 			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );

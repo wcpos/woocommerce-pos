@@ -22,6 +22,21 @@ export function captureUpgradeCtaClicked(placement: string, destination: string)
 	captureEvent('pro_link_clicked', { placement, destination });
 }
 
+/**
+ * Record which settings section the user opened.
+ *
+ * The section name is the route path, so it always matches what the app
+ * actually has — the spec's list predates cloud-print, sessions and
+ * extensions. No-ops without consent: window.wcpos.posthog is a stub then.
+ */
+export function captureSettingsSectionViewed(section: string) {
+	if (!section) {
+		return;
+	}
+
+	captureEvent('settings_section_viewed', { section });
+}
+
 export function captureLicenseActivationAttempted() {
 	captureEvent('license_activate_attempted');
 }

@@ -15,6 +15,7 @@
 namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -262,6 +263,13 @@ class Consent {
 			return;
 		}
 
+		// Record the sighting. Queued, not sent — should_render() only returns
+		// true while the answer is undecided, so nothing may leave the site yet.
+		// It reaches PostHog only if this user goes on to allow tracking.
+		( new Lifecycle_Events() )->record_consent_prompt_viewed(
+			false !== get_transient( self::MODAL_TRANSIENT ) ? 'modal' : 'callout'
+		);
+
 		// WP core's common.js hoists any element matching `.notice`
 		// beneath the page H1 and gives it the standard admin-notice
 		// width/margins. The `is-dismissible` class reserves right-hand
@@ -344,12 +352,21 @@ class Consent {
 			return $result;
 		}
 
+		// Read the surface BEFORE the transient is cleared below: its presence
+		// is what decided whether the user saw the modal or the callout.
+		$surface = false !== get_transient( self::MODAL_TRANSIENT ) ? 'modal' : 'callout';
+
 		// Decision recorded — clear any pending auto-open flag and any
 		// lingering "hide for now" user meta so the state is coherent.
 		delete_transient( self::MODAL_TRANSIENT );
 		$user_id = get_current_user_id();
 		if ( $user_id ) {
 			delete_user_meta( $user_id, self::CALLOUT_HIDE_META );
+		}
+
+		// Only a yes is reported. A no is answered by sending nothing at all.
+		if ( 'allowed' === $choice ) {
+			( new Lifecycle_Events() )->report_consent_granted( $surface );
 		}
 
 		return new WP_REST_Response( array( 'consent' => $choice ), 200 );

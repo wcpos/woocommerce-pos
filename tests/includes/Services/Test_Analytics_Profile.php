@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Analytics_Profile;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_UnitTestCase;
 
 /**
@@ -102,6 +103,36 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 		foreach ( array( 'site_domain', 'admin_domain', 'site_uuid', 'user_uuid', 'admin_email', 'site_url' ) as $forbidden ) {
 			$this->assertArrayNotHasKey( $forbidden, $properties, "Identifying field leaked: {$forbidden}" );
 		}
+	}
+
+	/**
+	 * The adoption snapshot reports the documented feature toggles.
+	 */
+	public function test_settings_summary_reports_feature_toggles(): void {
+		$summary = ( new Analytics_Profile() )->get_settings_summary();
+
+		foreach ( array( 'pos_only_products', 'decimal_qty', 'force_ssl', 'generate_username', 'default_customer_is_cashier', 'restore_stock_on_delete', 'storefront_receipt_enabled', 'barcode_field', 'tracking_consent', 'enabled_gateway_count' ) as $key ) {
+			$this->assertArrayHasKey( $key, $summary, "Missing settings_summary key: {$key}" );
+		}
+	}
+
+	/**
+	 * `barcode_field` is a merchant-chosen meta key, so only whether it differs
+	 * from the default is reported — never the value itself.
+	 */
+	public function test_settings_summary_reduces_barcode_field_to_default_or_custom(): void {
+		$settings = (array) woocommerce_pos_get_settings( 'general' );
+
+		$settings['barcode_field'] = '_global_unique_id';
+		Settings::instance()->save_settings( 'general', $settings );
+		$this->assertSame( 'default', ( new Analytics_Profile() )->get_settings_summary()['barcode_field'] );
+
+		$settings['barcode_field'] = '_my_private_supplier_code';
+		Settings::instance()->save_settings( 'general', $settings );
+
+		$summary = ( new Analytics_Profile() )->get_settings_summary();
+		$this->assertSame( 'custom', $summary['barcode_field'] );
+		$this->assertNotContains( '_my_private_supplier_code', $summary, 'The raw barcode meta key must never be reported.' );
 	}
 
 	/**

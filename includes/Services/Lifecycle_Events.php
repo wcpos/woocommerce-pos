@@ -141,6 +141,72 @@ class Lifecycle_Events {
 	}
 
 	/**
+	 * Record that the consent prompt was shown.
+	 *
+	 * This is the one event whose subject has not consented yet — by
+	 * definition, since the prompt only renders while the answer is undecided.
+	 * So it is queued, never sent, and reaches PostHog only if the user goes on
+	 * to say yes. Somebody who declines or ignores the prompt transmits
+	 * nothing, which is the only honest reading of what they were asked.
+	 *
+	 * The consequence, stated plainly because it limits what the data can
+	 * answer: we see views only for people who accepted, so a true acceptance
+	 * RATE is not computable from plugin telemetry and never will be. What this
+	 * does answer is which surface converted and how long the decision took.
+	 * For the rate, compare consenting sites against the public wordpress.org
+	 * active-install count — no extra collection required.
+	 *
+	 * @param string $surface Where the prompt was shown: `modal` or `callout`.
+	 */
+	public function record_consent_prompt_viewed( string $surface ): void {
+		// The prompt re-renders on every allowed admin screen until the user
+		// answers, so record the first sighting only.
+		foreach ( (array) get_option( self::PENDING_OPTION, array() ) as $entry ) {
+			if ( \is_array( $entry ) && 'consent_notice_viewed' === ( $entry['event'] ?? '' ) ) {
+				return;
+			}
+		}
+
+		$this->record( 'consent_notice_viewed', array( 'surface' => $surface ) );
+	}
+
+	/**
+	 * Report that consent was granted.
+	 *
+	 * Sent immediately: the user has just said yes, so the gate is open. Also
+	 * flushes anything queued while they were deciding, rather than leaving it
+	 * for the next admin page load.
+	 *
+	 * There is deliberately no counterpart for "declined" or "dismissed".
+	 * Reporting that someone refused telemetry, by sending telemetry, is the
+	 * one thing this surface must never do.
+	 *
+	 * @param string $surface Where the prompt was answered: `modal` or `callout`.
+	 */
+	public function report_consent_granted( string $surface ): void {
+		$analytics = Analytics::instance();
+
+		// The choice was written in this request; the cached answer predates it.
+		$analytics->clear_consent_cache();
+
+		if ( ! $analytics->is_enabled() ) {
+			return;
+		}
+
+		$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
+		$properties   = array( 'surface' => $surface );
+
+		if ( $installed_at > 0 ) {
+			$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
+		}
+
+		$analytics->capture( 'consent_notice_accepted', $properties );
+
+		// Send what was held back while the answer was pending.
+		$this->flush_pending();
+	}
+
+	/**
 	 * Report the deactivation event. Called from the deactivation hook.
 	 *
 	 * Reported immediately rather than queued: a deactivated plugin never gets

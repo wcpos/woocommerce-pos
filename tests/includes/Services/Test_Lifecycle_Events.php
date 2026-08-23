@@ -428,6 +428,85 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The consent prompt's own view is queued, never sent.
+	 *
+	 * The prompt only renders while the answer is undecided, so transmitting
+	 * anything at that moment would be telemetry from someone who has not
+	 * agreed to any.
+	 */
+	public function test_consent_prompt_view_is_queued_not_sent(): void {
+		$this->set_consent( 'undecided' );
+
+		( new Lifecycle_Events() )->record_consent_prompt_viewed( 'modal' );
+
+		$this->assertSame( array(), $this->captured_event_names() );
+
+		$pending = get_option( Lifecycle_Events::PENDING_OPTION );
+		$this->assertIsArray( $pending );
+		$this->assertSame( 'consent_notice_viewed', $pending[0]['event'] );
+		$this->assertSame( 'modal', $pending[0]['properties']['surface'] );
+	}
+
+	/**
+	 * The prompt re-renders on every admin screen until answered; only the
+	 * first sighting is recorded.
+	 */
+	public function test_consent_prompt_view_is_recorded_once(): void {
+		$this->set_consent( 'undecided' );
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->record_consent_prompt_viewed( 'callout' );
+		$lifecycle->record_consent_prompt_viewed( 'callout' );
+		$lifecycle->record_consent_prompt_viewed( 'callout' );
+
+		$this->assertCount( 1, (array) get_option( Lifecycle_Events::PENDING_OPTION ) );
+	}
+
+	/**
+	 * Granting consent reports the acceptance and releases what was held.
+	 */
+	public function test_granting_consent_reports_and_flushes(): void {
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+
+		$this->set_consent( 'undecided' );
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->record_consent_prompt_viewed( 'modal' );
+
+		// Write the choice the way the REST route does, without clearing the
+		// cached answer — report_consent_granted() must handle that itself.
+		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings['tracking_consent'] = 'allowed';
+		SettingsService::instance()->save_settings( 'general', $settings );
+
+		$lifecycle->report_consent_granted( 'modal' );
+
+		$accepted = $this->find_event( 'consent_notice_accepted' );
+		$this->assertNotNull( $accepted );
+		$this->assertSame( 'modal', $accepted['properties']['surface'] );
+
+		// The queued view went out in the same pass.
+		$this->assertNotNull( $this->find_event( 'consent_notice_viewed' ) );
+		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
+	}
+
+	/**
+	 * Declining sends nothing — not the decline, and not the queued view.
+	 */
+	public function test_declining_consent_transmits_nothing(): void {
+		$this->set_consent( 'undecided' );
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->record_consent_prompt_viewed( 'callout' );
+
+		$this->set_consent( 'denied' );
+		$lifecycle->flush_pending();
+
+		$this->assertSame( array(), $this->captured_event_names() );
+		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
+	}
+
+	/**
 	 * A declined site reports nothing on the way out either.
 	 */
 	public function test_deactivation_is_silent_without_consent(): void {

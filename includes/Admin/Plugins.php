@@ -45,7 +45,8 @@ class Plugins {
 				array(
 					'placement' => 'plugin_row_action',
 				),
-				'plugin_row_action'
+				'plugin_row_action',
+				Analytics::AMBIENT_IMPRESSION_TTL
 			);
 
 			$actions['upgrade'] = '<a href="https://wcpos.com/pro" target="_blank" rel="noopener noreferrer" data-wcpos-upgrade-placement="plugin_row_action" style="color: #d63638; font-weight: 600;">' .

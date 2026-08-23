@@ -1,5 +1,6 @@
 import {
 	captureLicenseActivationFailed,
+	captureSettingsSectionViewed,
 	captureUpgradeCtaClicked,
 	captureUpgradeCtaViewed,
 	normalizeLicenseActivationFailure,
@@ -20,6 +21,20 @@ describe('settings analytics helper', () => {
 		expect(window.wcpos.posthog.capture).toHaveBeenCalledWith('upgrade_cta_viewed', {
 			placement: 'checkout_gateways',
 		});
+	});
+
+	it('captures the settings section that was opened', () => {
+		captureSettingsSectionViewed('checkout');
+
+		expect(window.wcpos.posthog.capture).toHaveBeenCalledWith('settings_section_viewed', {
+			section: 'checkout',
+		});
+	});
+
+	it('ignores an empty section rather than sending a nameless view', () => {
+		captureSettingsSectionViewed('');
+
+		expect(window.wcpos.posthog.capture).not.toHaveBeenCalled();
 	});
 
 	it('captures upgrade CTA click events', () => {

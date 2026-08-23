@@ -129,6 +129,49 @@ class Analytics_Profile {
 	}
 
 	/**
+	 * Build the feature-adoption snapshot sent with `admin_landing_viewed`.
+	 *
+	 * One snapshot per landing view answers "what share of stores enable X"
+	 * without an event per toggle. Booleans and a fixed enum only — the same
+	 * allowlist discipline as the group properties, and for the same reason.
+	 *
+	 * `barcode_field` is deliberately reduced to default-or-custom: the raw
+	 * value is a meta key the merchant chose and can name anything, so it is
+	 * free-text from a store we have no business reading.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function get_settings_summary(): array {
+		$general  = Settings::instance()->get_settings( 'general' );
+		$general  = \is_array( $general ) ? $general : array();
+		$defaults = ( new Settings\General_Section() )->defaults();
+
+		$barcode_field = (string) ( $general['barcode_field'] ?? $defaults['barcode_field'] );
+
+		$summary = array(
+			'pos_only_products'           => (bool) ( $general['pos_only_products'] ?? false ),
+			'decimal_qty'                 => (bool) ( $general['decimal_qty'] ?? false ),
+			'force_ssl'                   => (bool) ( $general['force_ssl'] ?? true ),
+			'generate_username'           => (bool) ( $general['generate_username'] ?? true ),
+			'default_customer_is_cashier' => (bool) ( $general['default_customer_is_cashier'] ?? false ),
+			'restore_stock_on_delete'     => (bool) ( $general['restore_stock_on_delete'] ?? true ),
+			'storefront_receipt_enabled'  => (bool) ( $general['storefront_receipt_enabled'] ?? false ),
+			'barcode_field'               => $defaults['barcode_field'] === $barcode_field ? 'default' : 'custom',
+			'tracking_consent'            => (string) ( $general['tracking_consent'] ?? 'undecided' ),
+			'enabled_gateway_count'       => \count( (array) ( ( new Landing_Profile() )->get_metrics()['active_gateways'] ?? array() ) ),
+		);
+
+		/**
+		 * Filters the feature-adoption snapshot sent with the landing view.
+		 *
+		 * @since 1.10.0
+		 *
+		 * @param array<string, mixed> $summary The settings summary.
+		 */
+		return apply_filters( 'woocommerce_pos_analytics_settings_summary', $summary );
+	}
+
+	/**
 	 * Map a raw count onto its reporting band.
 	 *
 	 * @param int $count The raw count.

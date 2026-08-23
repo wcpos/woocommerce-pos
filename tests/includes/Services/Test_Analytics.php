@@ -412,4 +412,37 @@ class Test_Analytics extends WP_UnitTestCase {
 		// And the source of truth is the option, not a freshly minted value.
 		$this->assertSame( $expected, get_option( 'woocommerce_pos_uuid' ) );
 	}
+	/**
+	 * Ambient placements get a much longer impression window than the default.
+	 *
+	 * A daily window let `product_edit_price` alone log ~97 impressions per
+	 * user, because the placement re-arms every time a merchant opens the
+	 * product editor — which is daily. That drowned the upgrade funnel and made
+	 * view -> click conversion meaningless.
+	 */
+	public function test_ambient_impressions_use_a_window_longer_than_a_day(): void {
+		$this->assertGreaterThan(
+			DAY_IN_SECONDS,
+			Analytics::AMBIENT_IMPRESSION_TTL,
+			'Ambient placements must not re-arm daily.'
+		);
+
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$analytics = $this->enable_consent();
+
+		$this->assertTrue(
+			$analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'product_edit_price' ), 'product_edit_price', Analytics::AMBIENT_IMPRESSION_TTL )
+		);
+
+		// The de-dup marker must outlive a day, or the flood returns.
+		$distinct_id = $analytics->get_distinct_id();
+		$timeout     = (int) get_option( '_transient_timeout_wcpos_imp_' . md5( $distinct_id . '|upgrade_cta_viewed|product_edit_price' ) );
+		$this->assertGreaterThan( time() + DAY_IN_SECONDS, $timeout );
+
+		// And the slot is suppressed while that marker stands.
+		$this->assertFalse(
+			$analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'product_edit_price' ), 'product_edit_price', Analytics::AMBIENT_IMPRESSION_TTL )
+		);
+	}
 }
