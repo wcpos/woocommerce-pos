@@ -86,22 +86,97 @@ class Thermal_Markup_Parser_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Invalid numeric attributes fall back to their defaults.
+	 * Non-numeric attributes fall back to their defaults.
 	 *
 	 * @return void
 	 */
-	public function test_parse_invalid_numeric_attributes_use_fallbacks(): void {
+	public function test_parse_non_numeric_attributes_use_fallbacks(): void {
 		// Arrange.
-		$xml = '<receipt paper-width="12px"><feed lines="3.5"/><col-ignored/></receipt>';
+		$xml = '<receipt paper-width="12px"><feed lines="abc"/><col-ignored/></receipt>';
 
 		// Act.
 		$ast = $this->parser->parse( $xml );
 
 		// Assert.
-		$this->assertEquals( 48, $ast['paper_width'] );
+		$this->assertSame( 48, $ast['paper_width'] );
 		$feed = $ast['children'][0];
-		$this->assertEquals( 'feed', $feed['type'] );
-		$this->assertEquals( 1, $feed['lines'] );
+		$this->assertSame( 'feed', $feed['type'] );
+		$this->assertSame( 1, $feed['lines'] );
+	}
+
+	/*
+	 * The three tests below are paired one-for-one with the preview renderer's
+	 * tests in packages/thermal-utils/src/thermal-renderer.test.ts: same markup,
+	 * same expected numbers. What the merchant previews has to be what prints.
+	 */
+
+	/**
+	 * Below-range numeric attributes clamp up to one instead of using the fallback.
+	 *
+	 * @return void
+	 */
+	public function test_parse_below_range_attributes_clamp_to_one(): void {
+		// Arrange.
+		$xml = '<receipt><size width="-2">Small</size><feed lines="-3"/><feed lines="0"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 1, $ast['children'][0]['width'] );
+		$this->assertSame( 1, $ast['children'][0]['height'] );
+		$this->assertSame( 1, $ast['children'][1]['lines'] );
+		$this->assertSame( 1, $ast['children'][2]['lines'] );
+	}
+
+	/**
+	 * Fractional numeric attributes truncate toward zero instead of using the fallback.
+	 *
+	 * @return void
+	 */
+	public function test_parse_fractional_attributes_truncate_toward_zero(): void {
+		// Arrange.
+		$xml = '<receipt><size width="2.5">Big</size><feed lines="3.5"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 2, $ast['children'][0]['width'] );
+		$this->assertSame( 3, $ast['children'][1]['lines'] );
+	}
+
+	/**
+	 * Numeric literals is_numeric rejects fall back; exponent notation resolves.
+	 *
+	 * @return void
+	 */
+	public function test_parse_non_decimal_numeral_falls_back_but_exponent_resolves(): void {
+		// Arrange.
+		$xml = '<receipt><feed lines="0x2"/><size width="1e1">Exp</size></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 1, $ast['children'][0]['lines'] );
+		$this->assertSame( 10, $ast['children'][1]['width'] );
+	}
+
+	/**
+	 * Above-range numeric attributes clamp to the shared safe-integer ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_parse_above_range_attribute_clamps_to_max_safe_integer(): void {
+		// Arrange.
+		$xml = '<receipt><image src="https://example.test/logo.png" width="99999999999999999999"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 9007199254740991, $ast['children'][0]['width'] );
 	}
 
 	/**

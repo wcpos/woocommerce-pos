@@ -3,15 +3,17 @@
  * ESC/POS Thermal Emitter Class.
  *
  * Emits raw ESC/POS command bytes from a thermal AST (produced by
- * Thermal_Markup_Parser). This is a PHP port of the ESC/POS command path of the
- * JS receipt-renderer `render-escpos.ts`. Parity is defined as matching command
- * sequences and visual text layout, NOT byte-identity with the npm encoder.
+ * Thermal_Markup_Parser). This is the ONLY ESC/POS emitter in the project —
+ * there is no JavaScript counterpart to keep in step with, so this class is the
+ * reference for what a template actually prints. Parity with the npm escpos
+ * encoder is defined as matching command sequences and visual text layout, NOT
+ * byte-identity.
  *
  * This is the template-driven counterpart to
  * `WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter`, which emits a
  * fixed, non-template layout from canonical receipt data.
  *
- * Deliberate deviations from the JS renderer / this class's reference:
+ * Deliberate deviations from the npm escpos encoder:
  *  - Double rules (`<line style="double"/>`) are emitted as ASCII `=` repeated
  *    across the paper width instead of the CP437 box-drawing byte 0xCD. This
  *    keeps the output codepage-independent so it renders correctly regardless of

@@ -43,17 +43,56 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(root(htmlWhitespacePaperWidth).style.width).toBe('48ch');
 	});
 
-	it('clamps negative numeric attributes to non-negative CSS values', () => {
+	// The four tests below are paired one-for-one with the PHP side. Same markup,
+	// same expected numbers: tests/includes/Templates/Thermal/Thermal_Markup_Parser_Test.php
+	// (attribute resolution) and Html_Thermal_Emitter_Test.php (render bounds).
+	it('clamps below-range numeric attributes up to the minimum', () => {
 		const html = renderThermalPreview(
-			'<receipt><size width="-2">Hidden</size><feed lines="-3"/></receipt>',
+			'<receipt><size width="-2">Small</size><feed lines="-3"/><feed lines="0"/></receipt>',
 			{},
 		);
 		const receipt = root(html);
 		const size = receipt.querySelector('span') as HTMLSpanElement;
-		const feed = receipt.querySelector('div') as HTMLDivElement;
+		const feeds = receipt.querySelectorAll('div');
 
-		expect(size.style.fontSize).toBe('0em');
-		expect(feed.style.height).toBe('0em');
+		expect(size.style.fontSize).toBe('1em');
+		expect((feeds[0] as HTMLDivElement).style.height).toBe('1.4em');
+		expect((feeds[1] as HTMLDivElement).style.height).toBe('1.4em');
+	});
+
+	it('clamps above-range numeric attributes down to the maximum', () => {
+		const html = renderThermalPreview(
+			'<receipt paper-width="48"><size width="12">Huge</size>'
+				+ '<image src="https://example.test/logo.png" width="5000"/><feed lines="500"/></receipt>',
+			{},
+		);
+
+		expect(html).toContain('font-size: 8em');
+		// 2000 dots of the 576-dot wide budget across 48 columns.
+		expect(html).toContain('166.67ch');
+		expect(html).toContain('height: 70em');
+	});
+
+	it('truncates fractional numeric attributes toward zero', () => {
+		const html = renderThermalPreview(
+			'<receipt><size width="2.5">Big</size><feed lines="3.5"/></receipt>',
+			{},
+		);
+
+		expect(html).toContain('font-size: 2em');
+		expect(html).toContain('height: 4.2em');
+	});
+
+	it('falls back for numeric literals PHP is_numeric rejects', () => {
+		const html = renderThermalPreview(
+			'<receipt><feed lines="0x2"/><size width="1e1">Exp</size></receipt>',
+			{},
+		);
+
+		// 0x2 is not a decimal numeral, so the default of 1 line applies.
+		expect(html).toContain('height: 1.4em');
+		// 1e1 is, so it resolves to 10 and then clamps to the 8x printer ceiling.
+		expect(html).toContain('font-size: 8em');
 	});
 
 	it('renders single, dashed, dotted, and double divider styles', () => {

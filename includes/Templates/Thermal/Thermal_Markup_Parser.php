@@ -27,6 +27,15 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
 class Thermal_Markup_Parser {
 
 	/**
+	 * Upper bound for numeric attributes.
+	 *
+	 * JavaScript's Number.MAX_SAFE_INTEGER, shared with the preview renderer so
+	 * both sides clamp huge attribute values to the same number instead of one
+	 * side overflowing into a platform-specific result.
+	 */
+	private const MAX_SAFE_INTEGER = 9007199254740991;
+
+	/**
 	 * Parse a thermal XML template string into an AST.
 	 *
 	 * @param string $xml The thermal XML markup.
@@ -251,10 +260,21 @@ class Thermal_Markup_Parser {
 	}
 
 	/**
-	 * Resolve a positive-integer attribute, mirroring the JS intAttr helper.
+	 * Resolve a positive-integer attribute.
 	 *
-	 * An attribute is only valid when it matches /^[1-9]\d*$/ (trimmed) and is a
-	 * safe integer; otherwise the fallback is returned.
+	 * Every attribute routed through here is a physical dimension (paper width,
+	 * size multiplier, barcode height, QR scale, image dots, feed lines, column
+	 * characters), so an out-of-range value is CLAMPED to the nearest bound
+	 * rather than replaced by the fallback. A merchant who writes width="5000"
+	 * gets the widest thing the device can print; substituting the default would
+	 * render something unrelated to what they wrote, with no signal. This is
+	 * already what the print path does — Escpos_Thermal_Emitter clamps every one
+	 * of these with max()/min() — so the parser now agrees with it.
+	 *
+	 * The fallback covers only a missing or non-numeric attribute. Fractions
+	 * truncate toward zero. Keep in step with safeInteger()/intAttr() in
+	 * packages/thermal-utils/src/thermal-renderer.ts, which clamps identically
+	 * over the same [1, MAX_SAFE_INTEGER] range.
 	 *
 	 * @param DOMElement $el       The element to read from.
 	 * @param string     $name     The attribute name.
@@ -268,13 +288,16 @@ class Thermal_Markup_Parser {
 		}
 
 		$raw = trim( $el->getAttribute( $name ) );
-		if ( ! preg_match( '/^[1-9]\d*$/', $raw ) ) {
+		if ( ! is_numeric( $raw ) ) {
 			return $fallback;
 		}
 
-		$value = (int) $raw;
+		$number = (float) $raw;
+		if ( ! is_finite( $number ) ) {
+			return $fallback;
+		}
 
-		return ( (string) $value === $raw && $value <= PHP_INT_MAX ) ? $value : $fallback;
+		return (int) max( 1.0, min( (float) self::MAX_SAFE_INTEGER, $number ) );
 	}
 
 	/**

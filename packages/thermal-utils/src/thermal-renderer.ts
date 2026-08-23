@@ -1,6 +1,15 @@
 /**
  * Thermal rendering utilities shared between template-editor and template-gallery.
- * Originally derived from @wcpos/printer/src/renderer/.
+ *
+ * This renders the merchant-facing PREVIEW of a thermal template. The server
+ * counterparts live in includes/Templates/Thermal/ — Thermal_Markup_Parser (the
+ * same AST), Html_Thermal_Emitter (the PDF receipt) and Escpos_Thermal_Emitter
+ * (what actually prints). What the merchant previews here has to be what prints
+ * there, so attribute handling and layout bounds are kept term-for-term with
+ * those files.
+ *
+ * Historical note: originally derived from @wcpos/printer/src/renderer/, which
+ * no longer exists. Nothing in that path is a live reference.
  */
 import Mustache from 'mustache';
 import { generateBarcodeSvg, isQrBarcodeType } from './generate-barcode-svg';
@@ -107,16 +116,55 @@ interface DrawerNode {
 
 // -- XML Parser --
 
+/**
+ * The grammar PHP's is_numeric() accepts, so a string is a number on both sides
+ * or on neither. Number() would also swallow '0x1A', '0b11' and 'Infinity',
+ * which is_numeric() rejects.
+ */
+const DECIMAL_NUMERAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * Clamp a value into an integer range, falling back when it is not numeric.
+ *
+ * Out-of-range values are clamped to the nearest bound rather than replaced by
+ * the fallback, and the PHP twin, Thermal_Markup_Parser::int_attr(), does the
+ * same. Fractions truncate toward zero.
+ */
 function safeInteger(value: unknown, fallback: number, min: number, max: number): number {
-	if (typeof value === 'string' && value.trim() === '') return fallback;
-	const n = typeof value === 'number' ? value : Number(value);
+	const n =
+		typeof value === 'number'
+			? value
+			: typeof value === 'string' && DECIMAL_NUMERAL.test(value.trim())
+				? Number(value.trim())
+				: NaN;
 	return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
 }
 
+/** Clamp a number into a range without truncating it. */
+function clamp(value: number, min: number, max: number): number {
+	return Math.max(min, Math.min(max, value));
+}
+
+/** Round to 2dp, matching Html_Thermal_Emitter::format_float(). */
+function round2(value: number): number {
+	return Number(value.toFixed(2));
+}
+
+/**
+ * Read a positive-integer attribute.
+ *
+ * Every attribute read through here is a physical dimension, so the floor is 1:
+ * `<size width="-2">` and `<feed lines="0">` are nonsense, and clamping them to
+ * 1 is what the printer does (Escpos_Thermal_Emitter wraps each of these in
+ * max(1, ...)). The previous floor of 0 made the preview render invisible text
+ * and zero-height feeds for values that print at normal size.
+ *
+ * Keep in step with Thermal_Markup_Parser::int_attr() in PHP.
+ */
 function intAttr(el: Element, name: string, fallback: number): number {
 	const raw = el.getAttribute(name);
 	if (raw == null) return fallback;
-	return safeInteger(raw, fallback, 0, Number.MAX_SAFE_INTEGER);
+	return safeInteger(raw, fallback, 1, Number.MAX_SAFE_INTEGER);
 }
 
 function enumAttr<T extends string>(
@@ -347,7 +395,10 @@ function renderNode(node: ThermalNode, columns: number): string {
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children, columns)}</span>`;
 		case 'size': {
-			return `<span style="font-size: ${node.width}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
+			// Bounds mirror Html_Thermal_Emitter::render_node()'s clamp_float call.
+			// 8 is also the printer ceiling: the ESC/POS GS ! size byte only has a
+			// nibble per axis and no thermal printer scales past 8x.
+			return `<span style="font-size: ${clamp(node.width, 0.5, 8)}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
 		}
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children, columns)}</div>`;
@@ -374,13 +425,17 @@ function renderNode(node: ThermalNode, columns: number): string {
 		case 'image': {
 			const safeSrc = safeImageSrc(node.src);
 			if (!safeSrc) return '';
-			const widthCh = dotsToCh(Math.max(1, Math.min(2000, node.width)), columns);
+			// Bounds mirror Html_Thermal_Emitter::render_image().
+			const widthCh = dotsToCh(clamp(node.width, 1, 2000), columns);
 			return `<div style="text-align: center; padding: 8px 0"><img src="${safeSrc}" style="width: min(100%, ${widthCh.toFixed(2)}ch); height: auto" /></div>`;
 		}
 		case 'cut':
 			return '<div style="border-top: 1px dashed #ccc; margin: 12px 0; position: relative"><span style="position: absolute; top: -8px; left: -4px; font-size: 14px">&#9986;</span></div>';
 		case 'feed':
-			return `<div style="height: ${node.lines * 1.4}em"></div>`;
+			// Bounds mirror Html_Thermal_Emitter::render_node()'s clamp_integer call.
+			// Rounded to 2dp so the value matches PHP's format_float(): 3 * 1.4 is
+			// 4.199999999999999 in JS and "4.2" in PHP.
+			return `<div style="height: ${round2(clamp(node.lines, 1, 50) * 1.4)}em"></div>`;
 		case 'drawer':
 			return '';
 		case 'receipt':
@@ -402,9 +457,14 @@ function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): numbe
 		}
 	}
 
-	// Keep this algorithm aligned with @wcpos/receipt-renderer: fixed columns
-	// keep their explicit width, while width="*" columns share the remaining
-	// printable cells for the active receipt CPL. Star columns are clamped to a
+	// Keep this algorithm aligned with Escpos_Thermal_Emitter::resolve_row_widths()
+	// in PHP: the printed output is what this preview has to match, and that is
+	// where the same floor-divide lives. (Html_Thermal_Emitter, the PDF path, has
+	// no star algebra at all — it hands `*` columns to Dompdf; see the note on its
+	// render_row().)
+	//
+	// Fixed columns keep their explicit width, while width="*" columns share the
+	// remaining printable cells for the active receipt CPL. Star columns are clamped to a
 	// one-character minimum on purpose. If fixed columns already consume nearly
 	// all available CPL, a row with multiple star columns is over-constrained;
 	// shrinking a star to 0ch would silently delete a semantic column from the
@@ -426,7 +486,8 @@ function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): numbe
 }
 
 function renderCol(node: ColNode, width: number, columns: number): string {
-	return `<span style="flex: 0 0 ${width}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
+	// Bounds mirror Html_Thermal_Emitter::render_row_cell()'s clamp_integer call.
+	return `<span style="flex: 0 0 ${clamp(width, 1, 120)}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
 }
 
 function renderHtml(ast: ReceiptNode): string {
