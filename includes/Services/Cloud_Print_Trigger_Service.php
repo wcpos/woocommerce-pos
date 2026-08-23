@@ -13,8 +13,6 @@ use WCPOS\WooCommercePOS\Logger;
  * Cloud_Print_Trigger_Service class.
  */
 class Cloud_Print_Trigger_Service {
-	const OPTION = 'woocommerce_pos_settings_cloud_print';
-
 	/**
 	 * Cron hook used to submit a PrintNode job out-of-band (never on checkout).
 	 */
@@ -148,6 +146,11 @@ class Cloud_Print_Trigger_Service {
 				continue;
 			}
 			try {
+				// Not a duplicate of the Settings Section's clamp: this one guards
+				// the output of the woocommerce_pos_cloud_print_assignments filter,
+				// which Pro substitutes rows into (Cloud_Print_Per_Outlet). Rows
+				// that arrive through the filter never passed the section's
+				// sanitizer, so an extension can hand us copies: 999. Keep it.
 				$copies = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
 				// Dedupe per trigger: a created-rule job must not satisfy a
 				// paid rule for the same printer+template (and vice versa).
