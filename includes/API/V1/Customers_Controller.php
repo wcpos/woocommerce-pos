@@ -21,6 +21,7 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -177,20 +178,31 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Add extra fields to WP_REST_Controller::get_collection_params().
 	 * - add new fields to the 'orderby' enum list.
+	 * - default the 'role' filter to every user, matching the proxy Read Lane.
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
+		/*
+		 * The POS customer space is every user on this site, not only the users
+		 * holding the `customer` role. `wcpos_get_all_posts()` has always enumerated
+		 * `wp_users` unfiltered, and the proxy Read Lane defaults `role` to `all`
+		 * (see Customers_Proxy_Behavior); only this paged list inherited wc/v3's
+		 * `role => customer` default, so the same query answered differently on each
+		 * lane and the bulk id set did not match the list it was meant to describe.
+		 * Defaulting here is the parity fix; an explicit `role` still narrows.
+		 */
+		if ( isset( $params['role'] ) ) {
+			$params['role']['default'] = 'all';
+		}
+
 		// Check if 'orderby' is set and is an array before modifying it.
 		if ( isset( $params['orderby'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Add new fields to the 'orderby' enum list.
-			$new_orderby_options = array(
-				'first_name',
-				'last_name',
-				'email',
-				'role',
-				'username',
-			);
+			/*
+			 * A PROJECTION of the customer sort rows, so this schema enum and the proxy
+			 * lane's claim list cannot disagree about which sorts WCPOS implements.
+			 */
+			$new_orderby_options = Collection_Rules::orderby_enum( 'customers' );
 			foreach ( $new_orderby_options as $option ) {
 				if ( ! \in_array( $option, $params['orderby']['enum'], true ) ) {
 					$params['orderby']['enum'][] = $option;
@@ -527,16 +539,28 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 
 		// add modified_after date_modified_gmt.
 		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
-			$timestamp                   = strtotime( $query_params['modified_after'] );
+			$timestamp = strtotime( $query_params['modified_after'] );
+
+			/*
+			 * `last_update` holds a Unix timestamp, but it is stored as usermeta text and
+			 * `WP_Meta_Query` defaults an untyped clause to CHAR — which compares it as a
+			 * string. Timestamps only sort the same way as strings while they are the same
+			 * length, so a cutoff from before 2001-09-09 (nine digits) drops every current
+			 * customer, whose timestamp is ten digits starting with a `1`: `'1787465309' >
+			 * '946684800'` is false, character by character. NUMERIC casts to SIGNED and
+			 * compares the numbers, which is what the bulk-id fast path below has always
+			 * done by binding the same value with `%d`.
+			 */
 			$prepared_args['meta_query'] = $this->wcpos_merge_meta_queries(
 				array(
 					array(
 						'key'     => 'last_update',
 						'value'   => $timestamp ? (string) $timestamp : '',
 						'compare' => '>',
+						'type'    => 'NUMERIC',
 					),
 				),
-				$prepared_args['meta_query']
+				$prepared_args['meta_query'] ?? array()
 			);
 		}
 

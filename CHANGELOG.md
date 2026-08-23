@@ -10,6 +10,8 @@
 - Added: anonymous analytics identifier (`wcpos_anon_id`) for the admin welcome screen — random UUID, no store data, deleted on uninstall, manageable via `wp wcpos anon-id rotate|delete`. Landing data contract `schema_version` bumped to 2.
 - Added: `woocommerce_pos_consent_copy` filter so the tracking-consent prompt copy can be overridden.
 - Added: `woocommerce_pos_get_anon_id()` accessor (used by the Pro licence-activation request).
+- **Changed:** the till's customer list now includes every user on the site, not only those holding the `customer` role. Searching or browsing customers in WCPOS will now turn up administrators, shop managers, cashiers and any other user account. This is how the customer list has always behaved on the `wcpos/v2` sync lane and on the bulk-id pull the client syncs against — the older `wcpos/v1` list endpoint was the one place staff users were hidden, so the same search gave two different answers depending on which lane served it. Pass `role=customer` (or `roles[]=customer`) to narrow the list yourself.
+- Fixed: the `roles` (multi-role) filter and `modified_after` were silently ignored on the `wcpos/v2` customer lane — both were forwarded to WooCommerce's own customer endpoint, which has neither parameter and drops unknown ones without complaint. A narrowed request came back unnarrowed, and a `modified_after` customer pull re-fetched the whole customer list every tick.
 
 ---
 

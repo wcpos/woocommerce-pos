@@ -186,6 +186,10 @@ final class Collection_Rules {
 	 * Closed table, private to the module in spirit — public only so the plan can be
 	 * constructed from it and so pure tests can assert the rows without a bootstrap.
 	 *
+	 * A sort row MAY be bodiless (`array()`) when the collection's clauses live outside
+	 * this module — see the `customers` rows. Such a row still projects into
+	 * `orderby_enum()`, which is the whole point: one list, both lanes.
+	 *
 	 * Sort row shape (per storage):
 	 *   - `hpos`  => `array( 'column' => <wc_orders column> )`
 	 *   - `posts` => `array( 'posts_orderby' => <wp_posts column> )` for a column the
@@ -279,6 +283,32 @@ final class Collection_Rules {
 					'exclude' => array(
 						'id_set' => array( 'operator' => 'NOT IN' ),
 					),
+				),
+			),
+
+			/*
+			 * SORT NAMES ONLY — deliberately no clause bodies.
+			 *
+			 * Customers are a `WP_User_Query` over `wp_users`/`wp_usermeta`, a storage
+			 * this table does not speak: it knows `hpos` and `posts`, and both are ORDER
+			 * storages. The clause bodies therefore stay in each lane's own
+			 * `woocommerce_rest_customer_query` callback, where they are byte-identical.
+			 *
+			 * What DID drift is the LIST. The v1 schema enum and the proxy's claim list
+			 * were hand-kept in two files, so a sort could be advertised on one lane and
+			 * silently forwarded to wc/v3 (which cannot express it) on the other. Both
+			 * lanes now read `orderby_enum( 'customers' )`, which makes that impossible.
+			 *
+			 * Giving these rows real bodies needs a third storage dialect and two clause
+			 * kinds this table has never expressed; that is a later increment.
+			 */
+			'customers' => array(
+				'sorts' => array(
+					'first_name' => array(),
+					'last_name'  => array(),
+					'email'      => array(),
+					'role'       => array(),
+					'username'   => array(),
 				),
 			),
 		);
