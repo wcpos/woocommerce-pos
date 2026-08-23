@@ -98,6 +98,12 @@ class Lifecycle_Events {
 			return;
 		}
 
+		// Stamp the install epoch NOW. Landing_Profile would otherwise create it
+		// the first time the profile is built — which, for a site that leaves
+		// consent undecided for a month, is a month late. Every days_since_install
+		// the site ever reports would be short by that gap.
+		add_option( 'woocommerce_pos_installed_at', time() );
+
 		$this->record( 'wcpos_installed' );
 	}
 
@@ -142,7 +148,23 @@ class Lifecycle_Events {
 			return;
 		}
 
-		Analytics::instance()->capture( 'wcpos_deactivated', $this->get_churn_properties() );
+		$analytics = Analytics::instance();
+
+		// `wp plugin deactivate` runs with no current user, so get_distinct_id()
+		// comes back empty and capture() would drop the event. Fall back to the
+		// site identity, the same way the group refresh and the uninstall
+		// reporter do.
+		$distinct_id = $analytics->get_distinct_id();
+		if ( '' === $distinct_id ) {
+			$site_id = $analytics->get_site_id();
+			if ( '' === $site_id ) {
+				return;
+			}
+
+			$distinct_id = 'site_' . $site_id;
+		}
+
+		$analytics->capture( 'wcpos_deactivated', $this->get_churn_properties(), $distinct_id );
 	}
 
 	/**

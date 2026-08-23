@@ -101,10 +101,16 @@ class Analytics_Profile {
 			'tax_enabled'        => function_exists( 'wc_tax_enabled' ) ? wc_tax_enabled() : false,
 			'multi_currency'     => $this->has_multi_currency(),
 
-			// Store size — banded, never raw.
-			'days_since_install' => (int) ( $metrics['days_since_install'] ?? 0 ),
+			// Catalogue and trading volume — banded, never raw. These are the
+			// numbers that would fingerprint a store.
 			'product_count_band' => self::band( (int) ( $metrics['product_count'] ?? 0 ) ),
 			'order_count_band'   => self::band( (int) ( $metrics['order_count'] ?? 0 ) ),
+
+			// Small-cardinality operational counts, reported exactly. Banding a
+			// staff count into "1-10 / 11-100" would erase the only interesting
+			// thing about it — the difference between a one-person shop and a
+			// six-till store — and neither number identifies a store.
+			'days_since_install' => (int) ( $metrics['days_since_install'] ?? 0 ),
 			'pos_user_count'     => (int) ( $metrics['pos_user_count'] ?? 0 ),
 			'gateway_count'      => \count( (array) ( $metrics['active_gateways'] ?? array() ) ),
 		);
@@ -202,6 +208,9 @@ class Analytics_Profile {
 		$detected = false;
 
 		foreach ( self::MULTI_CURRENCY_CLASSES as $class_name ) {
+			// @phpstan-ignore-next-line -- These are third-party plugin classes.
+			// None of them exist in this codebase, so static analysis reads the
+			// check as impossible; it is answered at runtime, on the merchant's site.
 			if ( class_exists( $class_name ) ) {
 				$detected = true;
 				break;

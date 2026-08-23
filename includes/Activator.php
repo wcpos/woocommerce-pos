@@ -320,7 +320,6 @@ class Activator {
 
 		if ( $locked_plugin_needs_upgrade ) {
 			Services\Settings::bump_versions();
-			( new Lifecycle_Events() )->record_upgrade( $locked_old, VERSION );
 		}
 
 		if ( $locked_plugin_needs_upgrade || $locked_role_caps_need_sync ) {
@@ -356,9 +355,18 @@ class Activator {
 		// into before_delete_post and assume WC()->order_factory is available.
 		add_action(
 			'woocommerce_init',
-			function () use ( $locked_old, $locked_sync_needs_upgrade, $release_lock ) {
+			function () use ( $locked_old, $locked_plugin_needs_upgrade, $locked_sync_needs_upgrade, $release_lock ) {
 				try {
 					$this->db_upgrade( $locked_old, VERSION );
+
+					// Report the upgrade only once the migration has actually
+					// completed — queueing it beside bump_versions() would claim a
+					// finished upgrade even when db_upgrade() threw or never ran.
+					// Still exactly-once: the version was bumped above, so the
+					// upgrade is not re-detected on the next request.
+					if ( $locked_plugin_needs_upgrade ) {
+						( new Lifecycle_Events() )->record_upgrade( $locked_old, VERSION );
+					}
 					if ( $locked_sync_needs_upgrade && Sync_Api::SCHEMA_VERSION === get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
 						( new Sync_Journal() )->register_hooks();
 						( new Integrity_Digest() )->register_hooks();

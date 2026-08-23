@@ -391,6 +391,41 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Deactivation survives a userless context.
+	 *
+	 * `wp plugin deactivate` runs with no current user, so a distinct id derived
+	 * from the logged-in user is empty and capture() would drop the event.
+	 */
+	public function test_deactivation_reports_without_a_logged_in_user(): void {
+		$this->set_consent( 'allowed' );
+		wp_set_current_user( 0 );
+
+		( new Lifecycle_Events() )->report_deactivation();
+
+		$deactivated = $this->find_event( 'wcpos_deactivated' );
+		$this->assertNotNull( $deactivated );
+		$this->assertSame( 'site_' . wcpos_get_site_uuid(), $deactivated['distinct_id'] );
+	}
+
+	/**
+	 * The install epoch is stamped at activation, not at consent time.
+	 *
+	 * Without this, a site that leaves consent undecided for a month has its
+	 * install date created a month late, and under-reports its own age forever.
+	 */
+	public function test_recording_an_install_stamps_the_install_epoch(): void {
+		$this->set_consent( 'undecided' );
+		$this->assertFalse( get_option( 'woocommerce_pos_installed_at' ) );
+
+		$before = time();
+		( new Lifecycle_Events() )->record_install();
+
+		$installed_at = get_option( 'woocommerce_pos_installed_at' );
+		$this->assertNotFalse( $installed_at );
+		$this->assertGreaterThanOrEqual( $before, (int) $installed_at );
+	}
+
+	/**
 	 * A declined site reports nothing on the way out either.
 	 */
 	public function test_deactivation_is_silent_without_consent(): void {

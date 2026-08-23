@@ -298,10 +298,15 @@ function woocommerce_pos_uninstall_report(): void {
 		$distinct_id = 'site_' . $site_uuid;
 	}
 
+	// No plugin code is loaded here, so the VERSION constant is undefined and
+	// reading it would put an empty string on every uninstall event. The stored
+	// db version is the same number, persisted — read it before the sweep.
+	$plugin_version = get_option( 'woocommerce_pos_db_version', '' );
+
 	$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
 	$properties   = array(
 		'$groups'        => array( 'site' => $site_uuid ),
-		'plugin_version' => \defined( 'WCPOS\WooCommercePOS\VERSION' ) ? constant( 'WCPOS\WooCommercePOS\VERSION' ) : '',
+		'plugin_version' => \is_string( $plugin_version ) ? $plugin_version : '',
 		'locale'         => get_locale(),
 	);
 
@@ -317,9 +322,16 @@ function woocommerce_pos_uninstall_report(): void {
 		$properties['order_count_band'] = woocommerce_pos_uninstall_count_band( (int) $profile['order_count'] );
 	}
 
+	// Mirror Analytics::get_token() / get_host(): constant first, then the
+	// filter. The plugin is not loaded, but a mu-plugin or wp-config define can
+	// still point a self-hosted deployment at its own project, and sending its
+	// uninstall events to the default project instead would be wrong twice over.
+	$token = \defined( 'WCPOS_POSTHOG_TOKEN' ) ? (string) WCPOS_POSTHOG_TOKEN : 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd';
+	$token = (string) apply_filters( 'woocommerce_pos_posthog_token', $token );
+
 	$body = wp_json_encode(
 		array(
-			'api_key'     => \defined( 'WCPOS_POSTHOG_TOKEN' ) ? WCPOS_POSTHOG_TOKEN : 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd',
+			'api_key'     => $token,
 			'event'       => 'wcpos_uninstalled',
 			'distinct_id' => $distinct_id,
 			'properties'  => $properties,
@@ -331,7 +343,8 @@ function woocommerce_pos_uninstall_report(): void {
 		return;
 	}
 
-	$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? WCPOS_POSTHOG_HOST : 'https://ph.wcpos.com';
+	$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? (string) WCPOS_POSTHOG_HOST : 'https://ph.wcpos.com';
+	$host = (string) apply_filters( 'woocommerce_pos_posthog_host', $host );
 
 	wp_remote_post(
 		untrailingslashit( $host ) . '/capture/',
