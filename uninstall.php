@@ -310,10 +310,10 @@ function woocommerce_pos_uninstall_report(): void {
 		$distinct_id = 'site_' . $site_uuid;
 	}
 
-	// No plugin code is loaded here, so the VERSION constant is undefined and
-	// reading it would put an empty string on every uninstall event. The stored
-	// db version is the same number, persisted — read it before the sweep.
-	$plugin_version = get_option( 'woocommerce_pos_db_version', '' );
+	// Read the release being deleted from its plugin header. The persisted db
+	// version can be stale when updated files are deleted before version_check().
+	$plugin_data    = get_file_data( __DIR__ . '/woocommerce-pos.php', array( 'version' => 'Version' ), 'plugin' );
+	$plugin_version = $plugin_data['version'] ?? '';
 
 	$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
 	$properties   = array(

@@ -385,6 +385,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'denied';
 		SettingsService::instance()->save_settings( 'general', $settings );
+		$this->assertTrue( Analytics::instance()->is_enabled() );
 
 		( new Lifecycle_Events() )->report_deactivation();
 
@@ -492,6 +493,10 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 				array( \WCPOS\WooCommercePOS\Services\Analytics_Profile::OVERFLOW_BAND )
 			)
 		);
+
+		$group = $this->find_event( '$groupidentify' );
+		$this->assertNotNull( $group );
+		$this->assertSame( $group['properties']['$group_set']['order_count_band'], $band );
 	}
 
 	/**

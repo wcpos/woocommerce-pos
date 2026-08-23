@@ -20,6 +20,7 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		remove_filter( 'woocommerce_pos_analytics_multi_currency', '__return_true' );
 		delete_transient( 'wcpos_landing_profile' );
 
 		parent::tearDown();
@@ -52,6 +53,11 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 
 		$this->assertSame( PHP_VERSION, $properties['php_version'] );
 		$this->assertSame( get_bloginfo( 'version' ), $properties['wp_version'] );
+		if ( class_exists( '\\WCPOS\\WooCommercePOSPro\\WooCommercePOSPro' ) ) {
+			$this->assertSame( 'pro', $properties['wcpos_edition'] );
+
+			return;
+		}
 		$this->assertSame( 'free', $properties['wcpos_edition'] );
 	}
 
