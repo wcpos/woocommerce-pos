@@ -28,7 +28,7 @@ if ( 'cli' !== PHP_SAPI ) {
 	exit( 'This script must be run from the command line.' . PHP_EOL );
 }
 
-$wcpos_plugin_dir = \dirname( __DIR__, 2 );
+$woocommerce_pos_plugin_dir = \dirname( __DIR__, 2 );
 
 /*
  * A deliberately local autoloader: vendor/autoload.php resolves $baseDir to the
@@ -39,10 +39,10 @@ $wcpos_plugin_dir = \dirname( __DIR__, 2 );
  * autoloader rather than switching to vendor/autoload.php.
  */
 spl_autoload_register(
-	static function ( string $class ) use ( $wcpos_plugin_dir ): void {
+	static function ( string $class ) use ( $woocommerce_pos_plugin_dir ): void {
 		$map = array(
-			'WCPOS\\WooCommercePOS\\Tests\\' => $wcpos_plugin_dir . '/tests/includes/',
-			'WCPOS\\WooCommercePOS\\'        => $wcpos_plugin_dir . '/includes/',
+			'WCPOS\\WooCommercePOS\\Tests\\' => $woocommerce_pos_plugin_dir . '/tests/includes/',
+			'WCPOS\\WooCommercePOS\\'        => $woocommerce_pos_plugin_dir . '/includes/',
 		);
 
 		foreach ( $map as $prefix => $dir ) {
@@ -59,6 +59,6 @@ spl_autoload_register(
 	}
 );
 
-$wcpos_written = WCPOS\WooCommercePOS\Tests\Templates\Thermal\Thermal_Golden_Corpus::write_all();
+$woocommerce_pos_written = WCPOS\WooCommercePOS\Tests\Templates\Thermal\Thermal_Golden_Corpus::write_all();
 
-echo 'Wrote ' . \count( $wcpos_written ) . ' thermal golden fixtures.' . PHP_EOL;
+echo 'Wrote ' . \count( $woocommerce_pos_written ) . ' thermal golden fixtures.' . PHP_EOL;

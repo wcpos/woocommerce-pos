@@ -407,5 +407,4 @@ PHP;
 
 		return (string) $output;
 	}
-
 }

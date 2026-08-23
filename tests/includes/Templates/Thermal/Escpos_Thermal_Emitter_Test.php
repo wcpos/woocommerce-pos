@@ -744,5 +744,4 @@ PHP;
 
 		return (string) $output;
 	}
-
 }

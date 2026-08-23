@@ -231,6 +231,7 @@ final class Thermal_Golden_Corpus {
 	public static function render( string $lane, string $case_name, int $paper_width ): string {
 		$cases = self::cases();
 		if ( ! isset( $cases[ $case_name ] ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- CLI/test-harness message, never rendered.
 			throw new InvalidArgumentException( 'Unknown thermal golden case: ' . $case_name );
 		}
 
@@ -255,6 +256,7 @@ final class Thermal_Golden_Corpus {
 				return ( new Text_Thermal_Emitter( $options ) )->emit( $ast );
 		}
 
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- CLI/test-harness message, never rendered.
 		throw new InvalidArgumentException( 'Unknown thermal emitter lane: ' . $lane );
 	}
 

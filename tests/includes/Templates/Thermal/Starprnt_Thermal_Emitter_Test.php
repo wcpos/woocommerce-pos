@@ -560,5 +560,4 @@ PHP;
 
 		return (string) $output;
 	}
-
 }
