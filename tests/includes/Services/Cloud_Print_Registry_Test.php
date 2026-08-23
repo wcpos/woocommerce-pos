@@ -414,6 +414,28 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It reads the record inside the lock, so an overlapping poll for the SAME
+	 * printer cannot write back a snapshot taken before the other poll's write.
+	 */
+	public function test_record_capabilities_reads_inside_the_lock(): void {
+		$registry = new Cloud_Print_Registry();
+
+		// Poll A and poll B both begin here, seeing an empty record.
+		$this->assertSame( array(), $registry->get_capabilities( 'front' )['encodings'] );
+
+		// Poll A lands its answers first.
+		$registry->record_capabilities( 'front', array( 'Encodings' => 'text/plain' ) );
+
+		// Poll B now stamps `asked`. Its record must be re-read from the store,
+		// not rebuilt from the empty snapshot it saw on arrival.
+		$registry->record_capability_request( 'front' );
+
+		$record = $registry->get_capabilities( 'front' );
+		$this->assertSame( array( 'text/plain' ), $record['encodings'] );
+		$this->assertGreaterThan( 0, $record['asked'] );
+	}
+
+	/**
 	 * It skips the write rather than clobbering while another poll holds the lock.
 	 */
 	public function test_record_capabilities_skips_the_write_while_locked(): void {

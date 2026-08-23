@@ -186,10 +186,21 @@ class Cloud_Print_Registry {
 	 * @return array{client_type:string, client_version:string, encodings:array<int, string>, status_code:string, updated:int, asked:int}
 	 */
 	public function get_capabilities( string $printer_id ): array {
-		$all    = get_option( self::CAPABILITIES_OPTION, array() );
-		$stored = ( \is_array( $all ) && isset( $all[ $printer_id ] ) && \is_array( $all[ $printer_id ] ) )
-			? $all[ $printer_id ]
-			: array();
+		$all = get_option( self::CAPABILITIES_OPTION, array() );
+
+		return self::hydrate( \is_array( $all ) ? ( $all[ $printer_id ] ?? array() ) : array() );
+	}
+
+	/**
+	 * Normalize a stored capability entry into the full record shape.
+	 *
+	 * @param mixed $stored The raw stored entry, or anything at all — the option
+	 *                      is hand-editable and predates this shape.
+	 *
+	 * @return array{client_type:string, client_version:string, encodings:array<int, string>, status_code:string, updated:int, asked:int}
+	 */
+	private static function hydrate( $stored ): array {
+		$stored = \is_array( $stored ) ? $stored : array();
 
 		return array(
 			'client_type'    => (string) ( $stored['client_type'] ?? '' ),
@@ -216,38 +227,42 @@ class Cloud_Print_Registry {
 	 *              poll held the write lock; see mutate_capabilities().
 	 */
 	public function record_capabilities( string $printer_id, array $answers, string $status_code = '' ): bool {
-		$record  = $this->get_capabilities( $printer_id );
-		$changed = false;
+		return $this->mutate_printer_record(
+			$printer_id,
+			static function ( array $record ) use ( $answers, $status_code ): ?array {
+				$changed = false;
 
-		foreach ( $answers as $name => $value ) {
-			switch ( $name ) {
-				case 'ClientType':
-					$record['client_type'] = $value;
+				foreach ( $answers as $name => $value ) {
+					switch ( $name ) {
+						case 'ClientType':
+							$record['client_type'] = $value;
+							$changed               = true;
+							break;
+						case 'ClientVersion':
+							$record['client_version'] = $value;
+							$changed                  = true;
+							break;
+						case 'Encodings':
+							$record['encodings'] = self::parse_encodings( $value );
+							$changed             = true;
+							break;
+					}
+				}
+
+				if ( '' !== $status_code && $status_code !== $record['status_code'] ) {
+					$record['status_code'] = $status_code;
 					$changed               = true;
-					break;
-				case 'ClientVersion':
-					$record['client_version'] = $value;
-					$changed                  = true;
-					break;
-				case 'Encodings':
-					$record['encodings'] = self::parse_encodings( $value );
-					$changed             = true;
-					break;
+				}
+
+				if ( ! $changed ) {
+					return null;
+				}
+
+				$record['updated'] = time();
+
+				return $record;
 			}
-		}
-
-		if ( '' !== $status_code && $status_code !== $record['status_code'] ) {
-			$record['status_code'] = $status_code;
-			$changed               = true;
-		}
-
-		if ( ! $changed ) {
-			return false;
-		}
-
-		$record['updated'] = time();
-
-		return $this->write_capabilities( $printer_id, $record );
+		);
 	}
 
 	/**
@@ -272,9 +287,14 @@ class Cloud_Print_Registry {
 	 * @param string $printer_id Printer id.
 	 */
 	public function record_capability_request( string $printer_id ): void {
-		$record          = $this->get_capabilities( $printer_id );
-		$record['asked'] = time();
-		$this->write_capabilities( $printer_id, $record );
+		$this->mutate_printer_record(
+			$printer_id,
+			static function ( array $record ): array {
+				$record['asked'] = time();
+
+				return $record;
+			}
+		);
 	}
 
 	/**
@@ -293,17 +313,30 @@ class Cloud_Print_Registry {
 	}
 
 	/**
-	 * Persist one printer's capability record.
+	 * Read-modify-write one printer's capability record under the mutex.
 	 *
-	 * @param string $printer_id Printer id.
-	 * @param array  $record     The record to store.
+	 * The callback receives the record as it stands *inside* the lock, never a
+	 * snapshot taken before it. Assembling the record first and handing the
+	 * finished thing to a locked setter would leave same-printer polls racing:
+	 * two overlapping polls would each build from the same pre-lock read, and
+	 * the second write would undo the first — restoring a stale `asked` stamp or
+	 * erasing encodings that had just arrived.
+	 *
+	 * @param string   $printer_id Printer id.
+	 * @param callable $mutate     Receives the current record, returns the new
+	 *                             one, or null to write nothing.
 	 *
 	 * @return bool Whether the record was written.
 	 */
-	private function write_capabilities( string $printer_id, array $record ): bool {
+	private function mutate_printer_record( string $printer_id, callable $mutate ): bool {
 		return $this->mutate_capabilities(
-			static function ( array $all ) use ( $printer_id, $record ): array {
-				$all[ $printer_id ] = $record;
+			static function ( array $all ) use ( $printer_id, $mutate ): ?array {
+				$next = $mutate( self::hydrate( $all[ $printer_id ] ?? array() ) );
+				if ( null === $next ) {
+					return null;
+				}
+
+				$all[ $printer_id ] = $next;
 
 				return $all;
 			}
