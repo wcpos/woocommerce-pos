@@ -269,24 +269,43 @@ class Lifecycle_Events {
 			return;
 		}
 
+		// Date the milestone by when the SALE happened, not by when we heard
+		// about it. The POS sells offline and syncs later — WCPOS deliberately
+		// preserves the client's date_created — so a sale made on day 3 and
+		// synced on day 10 would otherwise report ten days to first revenue and
+		// land in the wrong cohort. Worth one order load, once per site ever.
+		$sold_at = null;
+		$subject = $subject instanceof WC_Order ? $subject : wc_get_order( $order_id );
+
+		if ( $subject instanceof WC_Order ) {
+			$created = $subject->get_date_created();
+			if ( $created ) {
+				$sold_at = $created->getTimestamp();
+			}
+		}
+
+		$sold_at = null === $sold_at ? time() : $sold_at;
+
 		$properties   = array();
 		$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
 
 		if ( $installed_at > 0 ) {
 			// Time-to-value: how long from installing to actually selling.
-			$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
+			$properties['days_since_install'] = max( 0, (int) floor( ( $sold_at - $installed_at ) / DAY_IN_SECONDS ) );
 		}
+
+		$timestamp = gmdate( 'c', $sold_at );
 
 		// Send it NOW when consent allows. Unlike install and upgrade, this runs
 		// in a fully booted plugin, and queueing it would strand the north-star
 		// event on POS-only stores whose staff never open wp-admin.
 		if ( Analytics::instance()->is_enabled() ) {
-			Analytics::instance()->capture( 'pos_first_order', $properties );
+			Analytics::instance()->capture( 'pos_first_order', $properties, '', $timestamp );
 
 			return;
 		}
 
-		$this->record( 'pos_first_order', $properties );
+		$this->record( 'pos_first_order', $properties, $timestamp );
 	}
 
 	/**
@@ -563,8 +582,12 @@ class Lifecycle_Events {
 	 *
 	 * @param string $event      Event name.
 	 * @param array  $properties Event properties.
+	 * @param string $timestamp  ISO-8601 time the thing happened. Defaults to
+	 *                           now; pass it when the event describes something
+	 *                           that occurred earlier, such as an offline sale
+	 *                           syncing days after it was rung up.
 	 */
-	private function record( string $event, array $properties = array() ): void {
+	private function record( string $event, array $properties = array(), string $timestamp = '' ): void {
 		// An explicit "no" is an answer, not a delay.
 		if ( 'denied' === Settings::instance()->tracking_consent() ) {
 			return;
@@ -582,7 +605,7 @@ class Lifecycle_Events {
 		$pending[] = array(
 			'event'      => $event,
 			'properties' => $properties,
-			'timestamp'  => gmdate( 'c' ),
+			'timestamp'  => '' !== $timestamp ? $timestamp : gmdate( 'c' ),
 		);
 
 		update_option( self::PENDING_OPTION, $pending, false );

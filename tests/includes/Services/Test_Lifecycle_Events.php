@@ -619,6 +619,37 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An offline sale is dated by when it was rung up, not when it synced.
+	 *
+	 * The POS sells offline and syncs later, and WCPOS preserves the client's
+	 * date_created. Dating the milestone by the sync would report a sale made on
+	 * day 3 as ten days to first revenue, and file it in the wrong cohort.
+	 */
+	public function test_first_pos_order_is_dated_by_the_sale_not_the_sync(): void {
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$this->set_consent( 'allowed' );
+
+		// Installed 10 days ago; the sale happened 7 days ago and is syncing now.
+		update_option( 'woocommerce_pos_installed_at', time() - ( 10 * DAY_IN_SECONDS ) );
+		$sold_at = time() - ( 7 * DAY_IN_SECONDS );
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_date_created( $sold_at );
+		$order->save();
+
+		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id(), $order );
+
+		$event = $this->find_event( 'pos_first_order' );
+		$this->assertNotNull( $event );
+
+		// 3 days from install to first sale — not the 10 that "now" would give.
+		$this->assertSame( 3, $event['properties']['days_since_install'] );
+		$this->assertSame( gmdate( 'c', $sold_at ), $event['timestamp'] );
+	}
+
+	/**
 	 * A sale that did not come from the POS is not an activation.
 	 */
 	public function test_non_pos_orders_do_not_report_activation(): void {
