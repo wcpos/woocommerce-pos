@@ -1,0 +1,10 @@
+# explicit-drawer :: escpos
+## paper-width 32
+G0BUb3RhbCAxMC4wMA==
+G3AAGfodVkI=
+## paper-width 42
+G0BUb3RhbCAxMC4wMA==
+G3AAGfodVkI=
+## paper-width 48
+G0BUb3RhbCAxMC4wMA==
+G3AAGfodVkI=

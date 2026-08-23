@@ -1,0 +1,7 @@
+# align :: star-markup
+## paper-width 32
+W2FsaWduOiBtaWRkbGVdQ0VOVEVSRURbYWxpZ246IGxlZnRdW2FsaWduOiByaWdodF1SSUdIVFthbGlnbjogbGVmdF1bYWxpZ246IGxlZnRdTEVGVFthbGlnbjogbGVmdF0=
+## paper-width 42
+W2FsaWduOiBtaWRkbGVdQ0VOVEVSRURbYWxpZ246IGxlZnRdW2FsaWduOiByaWdodF1SSUdIVFthbGlnbjogbGVmdF1bYWxpZ246IGxlZnRdTEVGVFthbGlnbjogbGVmdF0=
+## paper-width 48
+W2FsaWduOiBtaWRkbGVdQ0VOVEVSRURbYWxpZ246IGxlZnRdW2FsaWduOiByaWdodF1SSUdIVFthbGlnbjogbGVmdF1bYWxpZ246IGxlZnRdTEVGVFthbGlnbjogbGVmdF0=

@@ -1,0 +1,16 @@
+# plain-text :: starprnt
+## paper-width 32
+Gx0pVQIAMAEbHSlVAgBAAFdDUE9TIFN0b3Jl
+MTIzIEV4YW1wbGUgU3RyZWV0
+VGhhbmsgeW91IGZvciBzaG9wcGluZyB3aXRoIHVz
+~
+## paper-width 42
+Gx0pVQIAMAEbHSlVAgBAAFdDUE9TIFN0b3Jl
+MTIzIEV4YW1wbGUgU3RyZWV0
+VGhhbmsgeW91IGZvciBzaG9wcGluZyB3aXRoIHVz
+~
+## paper-width 48
+Gx0pVQIAMAEbHSlVAgBAAFdDUE9TIFN0b3Jl
+MTIzIEV4YW1wbGUgU3RyZWV0
+VGhhbmsgeW91IGZvciBzaG9wcGluZyB3aXRoIHVz
+~

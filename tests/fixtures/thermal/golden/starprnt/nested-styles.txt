@@ -1,0 +1,13 @@
+# nested-styles :: starprnt
+## paper-width 32
+Gx0pVQIAMAEbHSlVAgBAABtFQm9sZCAbLQFwbHVzIHVuZGVybGluZSAbNHBsdXMgaW52ZXJ0GzUbLQAbRiBwbGFpbg==
+Gy0BG0VSZW9yZGVyZWQgd3JhcHBlcnMbRhstAA==
+~
+## paper-width 42
+Gx0pVQIAMAEbHSlVAgBAABtFQm9sZCAbLQFwbHVzIHVuZGVybGluZSAbNHBsdXMgaW52ZXJ0GzUbLQAbRiBwbGFpbg==
+Gy0BG0VSZW9yZGVyZWQgd3JhcHBlcnMbRhstAA==
+~
+## paper-width 48
+Gx0pVQIAMAEbHSlVAgBAABtFQm9sZCAbLQFwbHVzIHVuZGVybGluZSAbNHBsdXMgaW52ZXJ0GzUbLQAbRiBwbGFpbg==
+Gy0BG0VSZW9yZGVyZWQgd3JhcHBlcnMbRhstAA==
+~

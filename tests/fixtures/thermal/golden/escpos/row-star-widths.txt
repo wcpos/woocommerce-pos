@@ -1,0 +1,13 @@
+# row-star-widths :: escpos
+## paper-width 32
+G0BBIGxvbmcgcHJvZHVjdCBuYW1lICAgMiAgICAxMi4zNA==
+YWxwaGEgICAgIGJldGEgICAgICBnYW1tYSAgICAgICA=
+~
+## paper-width 42
+G0BBIGxvbmcgcHJvZHVjdCBuYW1lIHRoYXQgd2lsbCAgIDIgICAgMTIuMzQ=
+YWxwaGEgICAgICAgICBiZXRhICAgICAgICAgIGdhbW1hICAgICAgICAg
+~
+## paper-width 48
+G0BBIGxvbmcgcHJvZHVjdCBuYW1lIHRoYXQgd2lsbCBub3QgZiAgIDIgICAgMTIuMzQ=
+YWxwaGEgICAgICAgICAgIGJldGEgICAgICAgICAgICBnYW1tYSAgICAgICAgICAg
+~

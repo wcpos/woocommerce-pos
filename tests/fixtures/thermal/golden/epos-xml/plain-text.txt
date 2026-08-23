@@ -1,0 +1,16 @@
+# plain-text :: epos-xml
+## paper-width 32
+PGVwb3MtcHJpbnQgeG1sbnM9Imh0dHA6Ly93d3cuZXBzb24tcG9zLmNvbS9zY2hlbWFzLzIwMTEvMDMvZXBvcy1wcmludCI+PHRleHQ+V0NQT1MgU3RvcmU=
+PC90ZXh0Pjx0ZXh0PjEyMyBFeGFtcGxlIFN0cmVldA==
+PC90ZXh0Pjx0ZXh0PlRoYW5rIHlvdSBmb3Igc2hvcHBpbmcgd2l0aCB1cw==
+PC90ZXh0PjwvZXBvcy1wcmludD4=
+## paper-width 42
+PGVwb3MtcHJpbnQgeG1sbnM9Imh0dHA6Ly93d3cuZXBzb24tcG9zLmNvbS9zY2hlbWFzLzIwMTEvMDMvZXBvcy1wcmludCI+PHRleHQ+V0NQT1MgU3RvcmU=
+PC90ZXh0Pjx0ZXh0PjEyMyBFeGFtcGxlIFN0cmVldA==
+PC90ZXh0Pjx0ZXh0PlRoYW5rIHlvdSBmb3Igc2hvcHBpbmcgd2l0aCB1cw==
+PC90ZXh0PjwvZXBvcy1wcmludD4=
+## paper-width 48
+PGVwb3MtcHJpbnQgeG1sbnM9Imh0dHA6Ly93d3cuZXBzb24tcG9zLmNvbS9zY2hlbWFzLzIwMTEvMDMvZXBvcy1wcmludCI+PHRleHQ+V0NQT1MgU3RvcmU=
+PC90ZXh0Pjx0ZXh0PjEyMyBFeGFtcGxlIFN0cmVldA==
+PC90ZXh0Pjx0ZXh0PlRoYW5rIHlvdSBmb3Igc2hvcHBpbmcgd2l0aCB1cw==
+PC90ZXh0PjwvZXBvcy1wcmludD4=
