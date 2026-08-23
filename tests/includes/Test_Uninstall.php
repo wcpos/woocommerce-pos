@@ -19,6 +19,7 @@ use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
+use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -317,6 +318,25 @@ class Test_Uninstall extends WP_UnitTestCase {
 		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
 			$this->assertContains( $hook, $hooks );
 		}
+	}
+
+	/**
+	 * uninstall.php cannot load plugin code, so it mirrors the analytics count
+	 * bands by hand. Pin the copy against the constant it mirrors.
+	 */
+	public function test_uninstall_count_bands_match_the_analytics_profile(): void {
+		foreach ( Analytics_Profile::COUNT_BANDS as $label => $upper_bound ) {
+			// PHP casts the numeric '0' key to an integer, so compare as strings —
+			// both band functions declare a string return and coerce on the way out.
+			$this->assertSame(
+				(string) $label,
+				woocommerce_pos_uninstall_count_band( $upper_bound ),
+				"uninstall.php band table drifted from Analytics_Profile at {$label}"
+			);
+		}
+
+		$largest = max( Analytics_Profile::COUNT_BANDS );
+		$this->assertSame( Analytics_Profile::OVERFLOW_BAND, woocommerce_pos_uninstall_count_band( $largest + 1 ) );
 	}
 
 	/**

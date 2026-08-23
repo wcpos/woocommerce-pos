@@ -131,6 +131,11 @@ class Lifecycle_Events {
 	 * sit in the queue until the user reactivates, by which point it is a lie.
 	 */
 	public function report_deactivation(): void {
+		// A network-wide deactivation walks every blog in one request, and
+		// Analytics caches the consent answer for the request. Without this the
+		// first blog's "yes" would be reused for blogs that said no.
+		Analytics::instance()->clear_consent_cache();
+
 		// Check consent before gathering anything: the churn properties run
 		// store queries, and a site that opted out should not pay for them.
 		if ( ! Analytics::instance()->is_enabled() ) {
@@ -258,6 +263,11 @@ class Lifecycle_Events {
 	/**
 	 * Properties describing how much the site had invested when it churned.
 	 *
+	 * The order count is banded like every other count we report. Churn
+	 * analysis only asks whether they left with nothing or left with a real
+	 * trading history, and a band answers that without carrying an exact
+	 * figure out of the store.
+	 *
 	 * @return array<string, mixed>
 	 */
 	private function get_churn_properties(): array {
@@ -265,7 +275,7 @@ class Lifecycle_Events {
 
 		return array(
 			'days_since_install' => (int) ( $metrics['days_since_install'] ?? 0 ),
-			'total_pos_orders'   => (int) ( $metrics['order_count'] ?? 0 ),
+			'order_count_band'   => Analytics_Profile::band( (int) ( $metrics['order_count'] ?? 0 ) ),
 		);
 	}
 

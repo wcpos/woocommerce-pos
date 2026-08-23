@@ -230,6 +230,31 @@ function woocommerce_pos_uninstall_taxonomy( string $taxonomy ): void {
 }
 
 /**
+ * Map a raw count onto its reporting band.
+ *
+ * Mirrors Analytics_Profile::COUNT_BANDS, which cannot be used here because no
+ * plugin code is loaded during uninstall. Test_Uninstall pins the two together.
+ *
+ * @param int $count The raw count.
+ *
+ * @return string The band label.
+ */
+function woocommerce_pos_uninstall_count_band( int $count ): string {
+	foreach ( array(
+		'0'        => 0,
+		'1-10'     => 10,
+		'11-100'   => 100,
+		'101-1000' => 1000,
+	) as $label => $upper_bound ) {
+		if ( $count <= $upper_bound ) {
+			return $label;
+		}
+	}
+
+	return '1000+';
+}
+
+/**
  * Report the uninstall to product analytics, if the user opted into tracking.
  *
  * The plugin is not loaded during uninstall, so this cannot use the Analytics
@@ -286,9 +311,10 @@ function woocommerce_pos_uninstall_report(): void {
 
 	// The landing profile transient already holds a recent order count; use it
 	// if it is warm rather than running the count query during an uninstall.
+	// Banded, matching Analytics_Profile — an exact order count never leaves.
 	$profile = get_transient( 'wcpos_landing_profile' );
 	if ( \is_array( $profile ) && isset( $profile['order_count'] ) ) {
-		$properties['total_pos_orders'] = (int) $profile['order_count'];
+		$properties['order_count_band'] = woocommerce_pos_uninstall_count_band( (int) $profile['order_count'] );
 	}
 
 	$body = wp_json_encode(
@@ -335,10 +361,6 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	if ( null === $remove_all ) {
 		$remove_all = woocommerce_pos_uninstall_remove_all_data();
 	}
-
-	// Report churn before anything is deleted — this needs the consent setting,
-	// the site UUID and the user meta that the sweep below removes.
-	woocommerce_pos_uninstall_report();
 
 	// 1. Clear scheduled events (all events per hook, regardless of args).
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
@@ -478,6 +500,12 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 
 // Run the sweep only when WordPress is actually uninstalling the plugin.
 if ( \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+	// Report churn ONCE, before anything is deleted: the report needs the
+	// consent setting, the site UUID and the user meta that the sweep removes,
+	// and firing it per site would put a network request in front of every blog
+	// of a large multisite uninstall.
+	woocommerce_pos_uninstall_report();
+
 	if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
 		// number => 0 removes WP_Site_Query's default 100-site cap.
 		$woocommerce_pos_sites = get_sites(

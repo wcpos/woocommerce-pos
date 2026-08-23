@@ -357,7 +357,37 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$deactivated = $this->find_event( 'wcpos_deactivated' );
 		$this->assertNotNull( $deactivated );
 		$this->assertArrayHasKey( 'days_since_install', $deactivated['properties'] );
-		$this->assertArrayHasKey( 'total_pos_orders', $deactivated['properties'] );
+
+		// Banded, not raw — an exact order count never leaves the store.
+		$this->assertArrayHasKey( 'order_count_band', $deactivated['properties'] );
+		$this->assertArrayNotHasKey( 'total_pos_orders', $deactivated['properties'] );
+	}
+
+	/**
+	 * Deactivation re-reads consent instead of trusting a cached answer.
+	 *
+	 * A network-wide deactivation walks every blog inside one request. Analytics
+	 * caches the consent answer per request, so without an explicit clear the
+	 * first blog's "yes" would be reused for blogs that said no.
+	 */
+	public function test_deactivation_rereads_consent_rather_than_trusting_the_cache(): void {
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+
+		// Prime the request cache with an allowed answer, the way the first blog
+		// of a network deactivation would.
+		$this->set_consent( 'allowed' );
+		$this->assertTrue( Analytics::instance()->is_enabled() );
+
+		// Now change the stored answer WITHOUT clearing the cache — this is what
+		// switch_to_blog() effectively does.
+		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings['tracking_consent'] = 'denied';
+		SettingsService::instance()->save_settings( 'general', $settings );
+
+		( new Lifecycle_Events() )->report_deactivation();
+
+		$this->assertSame( array(), $this->captured_event_names() );
 	}
 
 	/**
