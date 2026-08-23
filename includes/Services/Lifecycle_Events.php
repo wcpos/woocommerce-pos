@@ -63,6 +63,27 @@ class Lifecycle_Events {
 	const LAST_ORDER_BAND_OPTION = 'woocommerce_pos_analytics_order_band';
 
 	/**
+	 * Option latching the site's first POS order.
+	 *
+	 * Written whether or not tracking is allowed — it is a local timestamp and
+	 * nothing leaves the site. A store that sells for a month before consenting
+	 * would otherwise have some later sale reported as its first, which is
+	 * worse than not knowing.
+	 *
+	 * @var string
+	 */
+	const FIRST_ORDER_OPTION = 'woocommerce_pos_first_order_at';
+
+	/**
+	 * Option latching the site's first POS app open.
+	 *
+	 * Written regardless of consent, for the same reason as FIRST_ORDER_OPTION.
+	 *
+	 * @var string
+	 */
+	const FIRST_OPEN_OPTION = 'woocommerce_pos_first_opened_at';
+
+	/**
 	 * Maximum queued events.
 	 *
 	 * The queue only ever holds one install plus a handful of upgrades, so this
@@ -79,6 +100,9 @@ class Lifecycle_Events {
 		add_action( 'admin_init', array( $this, 'flush_pending' ) );
 		add_action( 'admin_init', array( $this, 'maybe_schedule_refresh' ) );
 		add_action( self::REFRESH_HOOK, array( $this, 'refresh_group_properties' ) );
+
+		// Not admin-only: POS sales arrive over REST, where admin_init never runs.
+		add_action( 'woocommerce_new_order', array( $this, 'maybe_record_first_pos_order' ), 10, 1 );
 	}
 
 	/**
@@ -138,6 +162,97 @@ class Lifecycle_Events {
 				'to_version'   => $to_version,
 			)
 		);
+	}
+
+	/**
+	 * Report that the POS app was opened.
+	 *
+	 * The activation step no admin-side signal can see. Recorded from the POS
+	 * template render rather than by tracking the menu link, so a bookmark, a
+	 * direct URL or a till that never visits wp-admin all count — and so it
+	 * counts opens rather than clicks that may never arrive.
+	 *
+	 * De-duplicated per user per day. A till is reloaded constantly; without a
+	 * window this would repeat the mistake that made `upgrade_cta_viewed` 90% of
+	 * the dataset. A day is also the useful unit: it makes this a daily-active
+	 * signal rather than a page-load counter.
+	 *
+	 * The site's first open is flagged rather than given its own event name, so
+	 * activation and engagement come off one series.
+	 */
+	public function report_app_opened(): void {
+		// Latch the first open BEFORE the consent check, and never transmit it
+		// from here — it is a local option, nothing leaves the site. Latching
+		// only for consenting sites would mean a store that used the POS for a
+		// month and then said yes would have its next open reported as its
+		// first, which is untrue. This way an unknown first open stays unknown
+		// rather than becoming a wrong one.
+		//
+		// add_option() returns false when the option already exists, making it an
+		// atomic first-writer-wins latch — no read-then-write race between two
+		// tills opening at once.
+		$is_first_open = add_option( self::FIRST_OPEN_OPTION, time(), '', false );
+
+		$analytics = Analytics::instance();
+
+		if ( ! $analytics->is_enabled() ) {
+			return;
+		}
+
+		$analytics->capture_once(
+			'pos_app_opened',
+			array( 'is_first_open' => $is_first_open ),
+			'pos_app_opened'
+		);
+	}
+
+	/**
+	 * Record the site's first POS order.
+	 *
+	 * This is the event the north-star metric rests on — a site that has sold
+	 * something through the POS has actually activated, which no admin-side
+	 * signal can establish. Fires exactly once per site, ever.
+	 *
+	 * Gated on the ORDER's origin, not on the request: `wcpos_is_pos_order()`
+	 * reads `created_via`, so an order still counts when it is created by a
+	 * webhook, a cron replay or an offline sale syncing later.
+	 *
+	 * Queued rather than sent when consent is undecided. It happens once, so
+	 * dropping it would lose the milestone permanently.
+	 *
+	 * @param int $order_id The new order's ID.
+	 */
+	public function maybe_record_first_pos_order( $order_id ): void {
+		$order_id = (int) $order_id;
+		if ( $order_id <= 0 ) {
+			return;
+		}
+
+		// Cheap latch first: after the first sale this is one option read on a
+		// hook that fires for EVERY order the store takes, POS or not.
+		if ( false !== get_option( self::FIRST_ORDER_OPTION, false ) ) {
+			return;
+		}
+
+		if ( ! \function_exists( 'wcpos_is_pos_order' ) || ! wcpos_is_pos_order( $order_id ) ) {
+			return;
+		}
+
+		// add_option() is the atomic claim: whichever concurrent sale wins it is
+		// the one that reports, and the loser returns.
+		if ( ! add_option( self::FIRST_ORDER_OPTION, time(), '', false ) ) {
+			return;
+		}
+
+		$properties   = array();
+		$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
+
+		if ( $installed_at > 0 ) {
+			// Time-to-value: how long from installing to actually selling.
+			$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
+		}
+
+		$this->record( 'pos_first_order', $properties );
 	}
 
 	/**

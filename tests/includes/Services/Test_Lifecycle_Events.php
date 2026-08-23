@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WP_UnitTestCase;
 
 /**
@@ -38,6 +39,8 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		delete_option( Lifecycle_Events::INSTALL_RECORDED_OPTION );
 		delete_option( 'woocommerce_pos_installed_at' );
 		delete_option( 'woocommerce_pos_db_version' );
+		delete_option( Lifecycle_Events::FIRST_ORDER_OPTION );
+		delete_option( Lifecycle_Events::FIRST_OPEN_OPTION );
 		delete_transient( 'wcpos_landing_profile' );
 		delete_transient( Lifecycle_Events::REFRESH_THROTTLE_TRANSIENT );
 
@@ -55,6 +58,8 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		delete_option( 'woocommerce_pos_installed_at' );
 		delete_transient( Lifecycle_Events::REFRESH_THROTTLE_TRANSIENT );
 		delete_option( Lifecycle_Events::LAST_ORDER_BAND_OPTION );
+		delete_option( Lifecycle_Events::FIRST_ORDER_OPTION );
+		delete_option( Lifecycle_Events::FIRST_OPEN_OPTION );
 		wp_clear_scheduled_hook( Lifecycle_Events::REFRESH_HOOK );
 
 		Analytics::reset_instance();
@@ -530,6 +535,123 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 
 		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
 		$this->assertSame( array(), $this->captured_event_names() );
+	}
+
+	/**
+	 * Opening the POS is reported once per user per day, not per page load.
+	 *
+	 * A till is reloaded constantly. Without the window this would repeat the
+	 * flood that made `upgrade_cta_viewed` 90% of the dataset.
+	 */
+	public function test_app_open_is_reported_once_per_day(): void {
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$this->set_consent( 'allowed' );
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->report_app_opened();
+		$lifecycle->report_app_opened();
+		$lifecycle->report_app_opened();
+
+		$opens = array_filter( $this->captured_event_names(), static fn ( $name ) => 'pos_app_opened' === $name );
+		$this->assertCount( 1, $opens );
+
+		$event = $this->find_event( 'pos_app_opened' );
+		$this->assertTrue( $event['properties']['is_first_open'] );
+	}
+
+	/**
+	 * The first-open latch is written even without consent, so a site that
+	 * consents later does not have a later open mislabelled as its first.
+	 */
+	public function test_first_open_latch_is_written_without_consent(): void {
+		$this->set_consent( 'undecided' );
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->report_app_opened();
+
+		$this->assertSame( array(), $this->captured_event_names() );
+		$this->assertNotFalse( get_option( Lifecycle_Events::FIRST_OPEN_OPTION ) );
+
+		// Now they consent. The next open is NOT their first, and must not claim to be.
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$this->set_consent( 'allowed' );
+
+		$lifecycle->report_app_opened();
+
+		$event = $this->find_event( 'pos_app_opened' );
+		$this->assertNotNull( $event );
+		$this->assertFalse( $event['properties']['is_first_open'] );
+	}
+
+	/**
+	 * The first POS sale is the activation milestone the north-star metric
+	 * rests on, so it must be reported exactly once.
+	 */
+	public function test_first_pos_order_is_reported_once(): void {
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$this->set_consent( 'allowed' );
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->maybe_record_first_pos_order( $order->get_id() );
+		$lifecycle->flush_pending();
+
+		$first = $this->find_event( 'pos_first_order' );
+		$this->assertNotNull( $first );
+
+		// A second sale must not report a second "first".
+		$second = OrderHelper::create_order();
+		$second->set_created_via( 'woocommerce-pos' );
+		$second->save();
+
+		$before = \count( $this->captured_event_names() );
+		$lifecycle->maybe_record_first_pos_order( $second->get_id() );
+		$lifecycle->flush_pending();
+
+		$this->assertSame( $before, \count( $this->captured_event_names() ) );
+	}
+
+	/**
+	 * A sale that did not come from the POS is not an activation.
+	 */
+	public function test_non_pos_orders_do_not_report_activation(): void {
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$this->set_consent( 'allowed' );
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'checkout' );
+		$order->save();
+
+		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id() );
+
+		$this->assertNotContains( 'pos_first_order', $this->captured_event_names() );
+		$this->assertFalse( get_option( Lifecycle_Events::FIRST_ORDER_OPTION ) );
+	}
+
+	/**
+	 * The milestone happens once, so an undecided answer must not lose it.
+	 */
+	public function test_first_pos_order_is_queued_while_consent_is_undecided(): void {
+		$this->set_consent( 'undecided' );
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id() );
+
+		$this->assertSame( array(), $this->captured_event_names() );
+
+		$pending = get_option( Lifecycle_Events::PENDING_OPTION );
+		$this->assertIsArray( $pending );
+		$this->assertSame( 'pos_first_order', $pending[0]['event'] );
 	}
 
 	/**
