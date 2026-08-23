@@ -333,8 +333,12 @@ echo "merge-gate tests passed"
 
 # --- Fix-bot pinning-test discipline ---
 
-bot_commits=$'c1\twcpos-agents[bot]'
-mixed_commits=$'h1\tkilbot\nc1\twcpos-agents[bot]'
+bot_commits=$'c1\twcpos-agents[bot]\twcpos-agents[bot]'
+mixed_commits=$'h1\tkilbot\tkilbot\nc1\twcpos-agents[bot]\twcpos-agents[bot]'
+# The worker rebases human commits onto a moving base: git preserves the AUTHOR
+# and rewrites the COMMITTER. Keyed on author alone, such a commit skips fix-bot
+# discipline entirely — so anything folded into it ships ungated.
+rebased_commits=$'h2\tkilbot\twcpos-agents[bot]'
 
 run_case "fix-bot source commit without test fails" fail \
   PR_AUTHOR="kilbot" PR_TITLE="fix: something" \
@@ -607,3 +611,45 @@ run_case "promotion to a non-main base does not bypass discipline" fail \
   MOCK_NO_CHECKS_EXPECTED=true
 
 echo "All merge-gate tests passed."
+
+# --- Rebase committer keying (the author-only gate skipped these entirely) ---
+
+run_case "fix-bot discipline applies to a rebased human commit (committer is the bot)" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$rebased_commits" \
+  MOCK_COMMIT_FILES_h2=$'modified\t0\tincludes/API/V2/Write_Controller.php\nmodified\t4\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_h2="fix: narrow the test so it passes" \
+  MOCK_NO_CHECKS_EXPECTED=true
+
+run_case "a genuine human commit (human author AND committer) stays exempt" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS=$'h3\tkilbot\tkilbot' \
+  MOCK_COMMIT_FILES_h3=$'modified\t0\tincludes/API/V2/Write_Controller.php\nmodified\t9\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_h3="fix: human work, no trailer needed"
+
+# --- CI-delegation carve-out must not deadlock against the trailer rule ---
+# wcpos-openclaw shared/pr-fix-sidecar.ts INSTRUCTS the worker to write exactly
+# this trailer for wp-env repos (the worker has a docker CLI but no daemon, so
+# the PHP suite can never run there). Rejecting it leaves the bot no honest way
+# to pass — the only escape would be fabricating a phpunit result line.
+
+run_case "carve-out trailer naming the authoritative CI workflow is accepted" pass \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nadded\t0\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: composer run lint-report OK (exit=0), composer run phpstan OK (exit=0); pnpm run test:unit:php delegated to CI (tests-php.yml)'
+
+run_case "bare delegation with no named workflow is still rejected" fail \
+  PR_AUTHOR="kilbot" PR_TITLE="fix: x" \
+  MOCK_CHANGED_FILES="includes/API/V2/Write_Controller.php" \
+  MOCK_PATCH="" \
+  MOCK_PR_COMMITS="$bot_commits" \
+  MOCK_COMMIT_FILES_c1=$'modified\t0\tincludes/API/V2/Write_Controller.php\nadded\t0\ttests/includes/Sync/Test_X.php' \
+  MOCK_COMMIT_MSG_c1=$'fix: x\n\nTested: composer run lint-report OK (exit=0); pnpm run test:unit:php delegated to CI (Docker socket unavailable)' \
+  MOCK_NO_CHECKS_EXPECTED=true

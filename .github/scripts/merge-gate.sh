@@ -200,9 +200,14 @@ wait_for_checks() {
 
 FIX_BOT_AUTHORS="|${MERGE_GATE_FIX_BOT_AUTHORS:-wcpos-agents[bot]}|"
 
+# sha<TAB>author<TAB>committer. Keying on author alone let a whole class of bot
+# work through ungated: the fix worker rebases human commits onto a moving base,
+# and git preserves the AUTHOR while rewriting the COMMITTER. Anything the bot
+# folded into a rebased human commit therefore skipped fix-bot discipline
+# entirely. Both identities are checked now.
 pr_commits() {
   gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate \
-    --jq '.[] | [.sha, (.author.login // .commit.author.name // "unknown")] | @tsv'
+    --jq '.[] | [.sha, (.author.login // .commit.author.name // "unknown"), (.committer.login // .commit.committer.name // "unknown")] | @tsv'
 }
 
 commit_files() {
@@ -299,7 +304,25 @@ trailer_block_has_tested() {
       if (require_php == "1") {
         for (i = 1; i <= n; i++) {
           if (segments[i] ~ /phpunit|test:unit:php/) {
-            if (segment_admits_skip(segments[i])) { exit 1 }
+            if (segment_admits_skip(segments[i])) {
+              # An ACCOUNTABLE delegation is not the same as an excuse. wp-env
+              # spawns docker containers and the fix worker has a docker CLI but
+              # no daemon, so for those repos the PHP suite genuinely cannot run
+              # there — the wcpos-openclaw pr-fix contract instructs the worker to
+              # delegate it and name the authoritative workflow. Rejecting that
+              # outright left the bot no honest way to pass a PHP commit, and the
+              # only escape would have been fabricating a phpunit result line.
+              # So: delegation passes only when it names the workflow that will
+              # actually run the suite. A bare "delegated to CI (Docker socket
+              # unavailable)" names nothing and still fails, which is the shape
+              # this rule was written to stop.
+              #
+              # Narrowing a test to go green is caught separately and
+              # unconditionally by the rewritten_tests rule above, so this does
+              # not reopen the hole that motivated the trailer check.
+              if (segments[i] ~ /[a-z0-9_-]+\.ya?ml/) { exit 0 }
+              exit 1
+            }
             if (segments[i] !~ /[0-9]/) { exit 1 }
             exit 0
           }
@@ -335,14 +358,23 @@ is_config_path() {
 # mechanical backstop for the fleet's Pinning-Test Discipline
 # (wcpos-openclaw sidecar AGENTS.md); humans are unaffected.
 enforce_bot_fix_discipline() {
-  local commits sha author files msg has_source has_test failed=0
+  local commits sha author committer actor files msg has_source has_test failed=0
   if ! commits="$(pr_commits)"; then
     log "Could not list PR commits for the fix-bot discipline check; failing closed."
     return 1
   fi
-  while IFS=$'\t' read -r sha author; do
+  while IFS=$'\t' read -r sha author committer; do
     [[ -n "$sha" ]] || continue
-    [[ "$FIX_BOT_AUTHORS" == *"|${author}|"* ]] || continue
+    # Either identity being the bot pulls the commit into discipline. `actor` is
+    # what the messages report, so a rebased commit names the bot that rewrote
+    # it rather than the human who originally wrote it.
+    if [[ "$FIX_BOT_AUTHORS" == *"|${author}|"* ]]; then
+      actor="$author"
+    elif [[ "$FIX_BOT_AUTHORS" == *"|${committer}|"* ]]; then
+      actor="${committer} (committer; authored by ${author})"
+    else
+      continue
+    fi
     if ! files="$(commit_files "$sha")"; then
       log "Could not read files for fix-bot commit ${sha:0:8}; failing closed."
       return 1
@@ -352,7 +384,7 @@ enforce_bot_fix_discipline() {
     # commit that large violates the small-directed-fix contract regardless,
     # so fail closed rather than judge a partial list.
     if [[ "$(wc -l <<< "$files" | tr -d ' ')" -ge 300 ]]; then
-      log "✗ Fix-bot commit ${sha:0:8} ($author) touches 300+ files — too large to verify (the files API truncates at 300) and far beyond a small, directed fix. Split it."
+      log "✗ Fix-bot commit ${sha:0:8} ($actor) touches 300+ files — too large to verify (the files API truncates at 300) and far beyond a small, directed fix. Split it."
       failed=1
       continue
     fi
@@ -384,12 +416,12 @@ enforce_bot_fix_discipline() {
     # existing test has neither, so `continue` used to skip this check entirely —
     # and a test-narrowing follow-up is exactly the shape this rule exists to stop.
     if [[ -n "$rewritten_tests" ]]; then
-      log "✗ Fix-bot commit ${sha:0:8} ($author) removes lines from an existing test: ${rewritten_tests}. Add coverage freely, but narrowing or rewriting a test a human wrote — dropping a data-set, an assertion, a case — is how a claim gets fitted to the evidence instead of the other way round. Split that out for a human to review."
+      log "✗ Fix-bot commit ${sha:0:8} ($actor) removes lines from an existing test: ${rewritten_tests}. Add coverage freely, but narrowing or rewriting a test a human wrote — dropping a data-set, an assertion, a case — is how a claim gets fitted to the evidence instead of the other way round. Split that out for a human to review."
       failed=1
     fi
     [[ "$has_source" == "true" || "$has_config" == "true" ]] || continue
     if [[ "$has_source" == "true" && "$has_test" != "true" ]]; then
-      log "✗ Fix-bot commit ${sha:0:8} ($author) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
+      log "✗ Fix-bot commit ${sha:0:8} ($actor) changes source without touching any test. A fix is not a fix until a test pins it — ship the pinning test in the same commit."
       failed=1
     fi
     if ! msg="$(commit_message "$sha")"; then
@@ -399,7 +431,7 @@ enforce_bot_fix_discipline() {
     local require_php=0
     [[ "$has_php" == "true" ]] && require_php=1
     if ! trailer_block_has_tested "$msg" "$require_php"; then
-      log "✗ Fix-bot commit ${sha:0:8} ($author) has no usable 'Tested:' trailer. Record the literal result of the suite you RAN (e.g. 'Tested: phpunit OK (79 tests, 210 assertions) — wp-env WC 10.4.3'). A trailer that says the PHP suite was delegated to CI, was unavailable, or could not start is not evidence it ran, and for a PHP change the trailer must name the PHP suite itself — another tool's test count does not stand in for it."
+      log "✗ Fix-bot commit ${sha:0:8} ($actor) has no usable 'Tested:' trailer. Record the literal result of the suite you RAN (e.g. 'Tested: phpunit OK (79 tests, 210 assertions) — wp-env WC 10.4.3'). For a PHP change the trailer must name the PHP suite itself — another tool's test count does not stand in for it. If the suite genuinely cannot run in this worker (wp-env needs a docker daemon), delegating is allowed but must be accountable: name the workflow that will run it, e.g. 'delegated to CI (tests-php.yml)'. A bare 'delegated to CI' or 'unavailable' with no named workflow is not evidence of anything."
       failed=1
     fi
   done <<< "$commits"
