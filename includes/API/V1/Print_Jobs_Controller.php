@@ -1072,15 +1072,39 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		$this->jobs->release_stale_claims( $printer_id );
 
-		if ( false !== strpos( $raw_body, 'success=' ) ) {
+		// Server Direct Print multiplexes three different request types onto the
+		// one configured URL, as URL-encoded form data distinguished by
+		// ConnectionType (User's Manual Rev.K, ch.3 and the Test_print.php
+		// reference implementation):
+		//
+		// GetRequest  — poll for a job
+		// SetResponse — printing result; the XML rides in the ResponseFile field
+		// SetStatus   — status notification; the XML rides in the Status field
+		//
+		// Answering a status notification with print data hands the job to a
+		// request that discards it, so the printer never prints and the job stays
+		// claimed. Dispatching on ConnectionType is what keeps the job on the
+		// GetRequest that is actually asking for one.
+		$connection_type = (string) $request->get_param( 'ConnectionType' );
+
+		// Result XML is a form field, so in the raw body it is percent-encoded
+		// (`success="true"` arrives as `success%3D%22true%22`) and a raw-body
+		// substring test can never match it. The raw-body branch is kept only for
+		// a caller that posts the bare XML, which the printer never does.
+		$result_xml = (string) $request->get_param( 'ResponseFile' );
+		if ( '' === $result_xml && false !== strpos( $raw_body, 'success=' ) ) {
+			$result_xml = $raw_body;
+		}
+
+		if ( 'SetResponse' === $connection_type || '' !== $result_xml ) {
 			$claim = $this->jobs->find_active_claim( $printer_id );
 			if ( null !== $claim ) {
-				$ok = false !== strpos( $raw_body, 'success="true"' );
+				$ok = false !== strpos( $result_xml, 'success="true"' );
 				$this->jobs->set_status( (int) $claim['id'], $ok ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED );
 
 				if ( ! $ok ) {
 					$code = 'unknown';
-					if ( 1 === preg_match( '/\bcode="([^"]*)"/', $raw_body, $matches ) ) {
+					if ( 1 === preg_match( '/\bcode="([^"]*)"/', $result_xml, $matches ) ) {
 						$code = sanitize_text_field( $matches[1] );
 					}
 
@@ -1088,6 +1112,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				}
 			}
 
+			return $this->serve_raw( $ack, $soap );
+		}
+
+		// A status notification is not asking for work.
+		if ( 'SetStatus' === $connection_type ) {
 			return $this->serve_raw( $ack, $soap );
 		}
 
