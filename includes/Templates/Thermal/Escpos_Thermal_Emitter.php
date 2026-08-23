@@ -36,8 +36,6 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
  */
 class Escpos_Thermal_Emitter {
 
-	use Thermal_Text_Layout;
-
 	/**
 	 * Render options.
 	 *
@@ -298,7 +296,7 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_inline_text( string $value ): void {
-		$this->raw_string( $this->normalize_text( $value ) );
+		$this->raw_string( Thermal_Text_Layout::normalize_text( $value ) );
 	}
 
 	/**
@@ -310,8 +308,8 @@ class Escpos_Thermal_Emitter {
 	 */
 	private function emit_text_line( array $children ): void {
 		if ( 'left' !== $this->align ) {
-			$plain = $this->normalize_text( $this->extract_text( $children ) );
-			$pad   = $this->alignment_padding( $this->align, $this->display_width( $plain ), $this->columns );
+			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
+			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns );
 			if ( $pad > 0 ) {
 				$this->raw_string( str_repeat( ' ', $pad ) );
 			}
@@ -455,14 +453,14 @@ class Escpos_Thermal_Emitter {
 	 */
 	private function emit_row( array $node ): void {
 		$cols   = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$widths = $this->resolve_row_widths( $cols, $this->columns );
+		$widths = Thermal_Text_Layout::resolve_row_widths( $cols, $this->columns );
 
 		$line = '';
 		foreach ( $cols as $index => $col ) {
 			$width = isset( $widths[ $index ] ) ? $widths[ $index ] : 1;
-			$text  = $this->normalize_text( $this->extract_text( isset( $col['children'] ) ? $col['children'] : array() ) );
-			$text  = $this->truncate_display( $text, $width );
-			$pad   = max( 0, $width - $this->display_width( $text ) );
+			$text  = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( isset( $col['children'] ) ? $col['children'] : array() ) );
+			$text  = Thermal_Text_Layout::truncate_display( $text, $width );
+			$pad   = max( 0, $width - Thermal_Text_Layout::display_width( $text ) );
 			$align = isset( $col['align'] ) ? $col['align'] : 'left';
 			if ( 'right' === $align ) {
 				$line .= str_repeat( ' ', $pad ) . $text;
@@ -556,8 +554,8 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_centered_text( string $value ): void {
-		$text = $this->normalize_text( $this->strip_control_bytes( $value ) );
-		$pad  = (int) floor( max( 0, $this->columns - $this->display_width( $text ) ) / 2 );
+		$text = Thermal_Text_Layout::normalize_text( $this->strip_control_bytes( $value ) );
+		$pad  = (int) floor( max( 0, $this->columns - Thermal_Text_Layout::display_width( $text ) ) / 2 );
 		if ( $pad > 0 ) {
 			$this->raw_string( str_repeat( ' ', $pad ) );
 		}
