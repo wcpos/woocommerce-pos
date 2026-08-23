@@ -14,6 +14,20 @@ use WCPOS\WooCommercePOS\Logger;
  */
 class Cloud_Print_Trigger_Service {
 	/**
+	 * The Cloud Print settings option key.
+	 *
+	 * Read directly rather than through Cloud_Print_Section: the section's
+	 * read() decorates rows with live printer status, which means outbound
+	 * HTTP, and this class runs on woocommerce_new_order and
+	 * woocommerce_order_status_changed. Network calls do not belong on the
+	 * checkout path. It also redacts secrets, which the printer-poll and
+	 * PrintNode paths need intact.
+	 *
+	 * @var string
+	 */
+	const OPTION = 'woocommerce_pos_settings_cloud_print';
+
+	/**
 	 * Cron hook used to submit a PrintNode job out-of-band (never on checkout).
 	 */
 	const CRON_SUBMIT = 'wcpos_cloud_print_submit';
