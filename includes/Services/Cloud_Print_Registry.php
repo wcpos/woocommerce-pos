@@ -18,6 +18,35 @@ class Cloud_Print_Registry {
 	const PN_STATUS_TTL  = 60;  // Seconds; PrintNode live-status cache window.
 
 	/**
+	 * Per-printer CloudPRNT client capabilities, keyed by printer id.
+	 *
+	 * Separate from RUNTIME_OPTION, whose values are bare last-seen timestamps.
+	 */
+	const CAPABILITIES_OPTION = 'woocommerce_pos_cloud_print_capabilities';
+
+	/**
+	 * Seconds before a printer's capability answers are asked for again.
+	 *
+	 * Star's own WooCommerce plugin re-asks every 120 seconds; matching it keeps
+	 * a swapped-out printer on a reused id from serving formats the new hardware
+	 * cannot decode for longer than a couple of minutes.
+	 */
+	const CAPABILITIES_TTL = 120;
+
+	/**
+	 * Mutex guarding read-modify-write of the shared capabilities option.
+	 */
+	const CAPABILITIES_LOCK = 'wcpos_cloud_print_caps_lock';
+
+	/**
+	 * Seconds after which a capabilities lock is treated as abandoned.
+	 *
+	 * Short on purpose: the critical section is one option write, so a lock
+	 * older than this belongs to a request that died holding it.
+	 */
+	const CAPABILITIES_LOCK_TTL = 10;
+
+	/**
 	 * All registered cloud printers.
 	 *
 	 * @return array<int, array>
@@ -142,6 +171,276 @@ class Cloud_Print_Registry {
 		if ( $pruned !== $runtime ) {
 			update_option( self::RUNTIME_OPTION, $pruned, false );
 		}
+	}
+
+	/**
+	 * A printer's cached CloudPRNT client capabilities.
+	 *
+	 * Answers are returned however stale they are: a printer's decodable format
+	 * list does not change while it sits on a shelf, and serving the last known
+	 * answer beats falling back to "offer everything" on every cold cache. The
+	 * TTL governs how often we ask again, not how long an answer is believed.
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return array{client_type:string, client_version:string, encodings:array<int, string>, status_code:string, updated:int, asked:int}
+	 */
+	public function get_capabilities( string $printer_id ): array {
+		$all = get_option( self::CAPABILITIES_OPTION, array() );
+
+		return self::hydrate( \is_array( $all ) ? ( $all[ $printer_id ] ?? array() ) : array() );
+	}
+
+	/**
+	 * Normalize a stored capability entry into the full record shape.
+	 *
+	 * @param mixed $stored The raw stored entry, or anything at all — the option
+	 *                      is hand-editable and predates this shape.
+	 *
+	 * @return array{client_type:string, client_version:string, encodings:array<int, string>, status_code:string, updated:int, asked:int}
+	 */
+	private static function hydrate( $stored ): array {
+		$stored = \is_array( $stored ) ? $stored : array();
+
+		return array(
+			'client_type'    => (string) ( $stored['client_type'] ?? '' ),
+			'client_version' => (string) ( $stored['client_version'] ?? '' ),
+			'encodings'      => \is_array( $stored['encodings'] ?? null ) ? array_values( array_map( 'strval', $stored['encodings'] ) ) : array(),
+			'status_code'    => (string) ( $stored['status_code'] ?? '' ),
+			'updated'        => (int) ( $stored['updated'] ?? 0 ),
+			'asked'          => (int) ( $stored['asked'] ?? 0 ),
+		);
+	}
+
+	/**
+	 * Store the answers a printer gave to our `clientAction` questions.
+	 *
+	 * Only the fields the printer actually answered are overwritten — a poll
+	 * that carries `ClientType` but not `Encodings` must not wipe an encodings
+	 * list we already know.
+	 *
+	 * @param string                $printer_id  Printer id.
+	 * @param array<string, string> $answers     Answers keyed by request name.
+	 * @param string                $status_code The printer's reported status code.
+	 *
+	 * @return bool Whether anything was stored. False also when a concurrent
+	 *              poll held the write lock; see mutate_capabilities().
+	 */
+	public function record_capabilities( string $printer_id, array $answers, string $status_code = '' ): bool {
+		return $this->mutate_printer_record(
+			$printer_id,
+			static function ( array $record ) use ( $answers, $status_code ): ?array {
+				$changed = false;
+
+				foreach ( $answers as $name => $value ) {
+					switch ( $name ) {
+						case 'ClientType':
+							$record['client_type'] = $value;
+							$changed               = true;
+							break;
+						case 'ClientVersion':
+							$record['client_version'] = $value;
+							$changed                  = true;
+							break;
+						case 'Encodings':
+							$record['encodings'] = self::parse_encodings( $value );
+							$changed             = true;
+							break;
+					}
+				}
+
+				if ( '' !== $status_code && $status_code !== $record['status_code'] ) {
+					$record['status_code'] = $status_code;
+					$changed               = true;
+				}
+
+				if ( ! $changed ) {
+					return null;
+				}
+
+				$record['updated'] = time();
+
+				return $record;
+			}
+		);
+	}
+
+	/**
+	 * Whether the printer should be asked for its capabilities on this poll.
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return bool
+	 */
+	public function should_request_capabilities( string $printer_id ): bool {
+		$record = $this->get_capabilities( $printer_id );
+
+		return ( time() - $record['asked'] ) >= self::CAPABILITIES_TTL;
+	}
+
+	/**
+	 * Record that this poll response carried capability questions.
+	 *
+	 * Written even when the printer never answers, so firmware that ignores
+	 * `clientAction` is asked once per TTL rather than on every poll.
+	 *
+	 * @param string $printer_id Printer id.
+	 */
+	public function record_capability_request( string $printer_id ): void {
+		$this->mutate_printer_record(
+			$printer_id,
+			static function ( array $record ): array {
+				$record['asked'] = time();
+
+				return $record;
+			}
+		);
+	}
+
+	/**
+	 * Drop cached capabilities for printer ids that no longer exist.
+	 *
+	 * @param array<string> $keep_ids Printer ids to retain.
+	 */
+	public function prune_capabilities( array $keep_ids ): void {
+		$this->mutate_capabilities(
+			static function ( array $all ) use ( $keep_ids ): ?array {
+				$pruned = array_intersect_key( $all, array_flip( $keep_ids ) );
+
+				return $pruned === $all ? null : $pruned;
+			}
+		);
+	}
+
+	/**
+	 * Read-modify-write one printer's capability record under the mutex.
+	 *
+	 * The callback receives the record as it stands *inside* the lock, never a
+	 * snapshot taken before it. Assembling the record first and handing the
+	 * finished thing to a locked setter would leave same-printer polls racing:
+	 * two overlapping polls would each build from the same pre-lock read, and
+	 * the second write would undo the first — restoring a stale `asked` stamp or
+	 * erasing encodings that had just arrived.
+	 *
+	 * @param string   $printer_id Printer id.
+	 * @param callable $mutate     Receives the current record, returns the new
+	 *                             one, or null to write nothing.
+	 *
+	 * @return bool Whether the record was written.
+	 */
+	private function mutate_printer_record( string $printer_id, callable $mutate ): bool {
+		return $this->mutate_capabilities(
+			static function ( array $all ) use ( $printer_id, $mutate ): ?array {
+				$next = $mutate( self::hydrate( $all[ $printer_id ] ?? array() ) );
+				if ( null === $next ) {
+					return null;
+				}
+
+				$all[ $printer_id ] = $next;
+
+				return $all;
+			}
+		);
+	}
+
+	/**
+	 * Read-modify-write the shared capabilities option under a mutex.
+	 *
+	 * Every registered printer polls into the same option, so an unguarded
+	 * read-modify-write lets one printer's write discard another's: both read
+	 * the same snapshot, each sets its own key, and the second write wins.
+	 * The mutex plus a cache-bypassing read inside it makes the sequence
+	 * atomic across concurrent requests.
+	 *
+	 * A poll that cannot take the lock skips its write rather than queueing.
+	 * The record is a cache with a CAPABILITIES_TTL refresh, so the cost of a
+	 * skipped write is one refresh cycle, never a wrong answer — and blocking
+	 * a printer's poll to persist a cache would be the worse trade.
+	 *
+	 * @param callable $mutate Receives the current map, returns the new map, or
+	 *                         null to write nothing.
+	 *
+	 * @return bool Whether the option was written.
+	 */
+	private function mutate_capabilities( callable $mutate ): bool {
+		if ( ! self::acquire_capabilities_lock() ) {
+			return false;
+		}
+
+		try {
+			// Drop this request's cached copy so the read reflects writes other
+			// requests made while we were waiting for the lock.
+			wp_cache_delete( self::CAPABILITIES_OPTION, 'options' );
+
+			$all = get_option( self::CAPABILITIES_OPTION, array() );
+			$all = \is_array( $all ) ? $all : array();
+
+			$next = $mutate( $all );
+			if ( null === $next ) {
+				return false;
+			}
+
+			update_option( self::CAPABILITIES_OPTION, $next, false ); // Autoload no.
+		} finally {
+			delete_option( self::CAPABILITIES_LOCK );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Take the capabilities mutex.
+	 *
+	 * The atomic primitive is add_option(): the options table's unique index on
+	 * option_name means exactly one concurrent caller can create the row. This
+	 * mirrors Print_Job_Service's lifecycle lock.
+	 *
+	 * @return bool Whether the lock was taken.
+	 */
+	private static function acquire_capabilities_lock(): bool {
+		$now = time();
+
+		if ( add_option( self::CAPABILITIES_LOCK, (string) $now, '', false ) ) {
+			return true;
+		}
+
+		$locked_at = (int) get_option( self::CAPABILITIES_LOCK, 0 );
+		if ( $locked_at > 0 && ( $now - $locked_at ) > self::CAPABILITIES_LOCK_TTL ) {
+			delete_option( self::CAPABILITIES_LOCK );
+
+			return add_option( self::CAPABILITIES_LOCK, (string) $now, '', false );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Read a printer's `Encodings` answer into a list of media types.
+	 *
+	 * The answer is a delimited string of the media types the client can decode
+	 * (Star's own plugin substring-matches it). Splitting on both `,` and `;`
+	 * and then keeping only `type/subtype` tokens drops MIME parameters such as
+	 * `charset=utf-8` without needing to know which delimiter the firmware used.
+	 *
+	 * @param string $value The raw `Encodings` answer.
+	 *
+	 * @return array<int, string> Lower-cased media types, in the printer's order.
+	 */
+	private static function parse_encodings( string $value ): array {
+		$tokens = preg_split( '/[,;\r\n\t ]+/', strtolower( $value ) );
+		if ( false === $tokens ) {
+			return array();
+		}
+
+		$types = array();
+		foreach ( $tokens as $token ) {
+			$token = trim( $token );
+			if ( 1 === preg_match( '#^[a-z0-9][a-z0-9!\#$&^_.+-]*/[a-z0-9][a-z0-9!\#$&^_.+-]*$#', $token ) ) {
+				$types[] = $token;
+			}
+		}
+
+		return array_values( array_unique( $types ) );
 	}
 
 	/**

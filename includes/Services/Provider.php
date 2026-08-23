@@ -46,7 +46,10 @@ class Provider {
 			'thermal_wire_format'        => 'starprnt',
 			'template_engines'           => 'thermal',
 			'stores_job_kind'            => false,
-			'supports_drawer'            => false,
+			// The StarPRNT emitter emits a native drawer pulse (and inserts one
+			// before the trailing cut when a job asks for it), so drawer metadata
+			// has to survive to render time.
+			'supports_drawer'            => true,
 		),
 		'epson-sdp'      => array(
 			'polling'                    => true,

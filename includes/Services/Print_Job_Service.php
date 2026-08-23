@@ -228,37 +228,60 @@ class Print_Job_Service {
 	/**
 	 * Render the bytes a printer should fetch for a job.
 	 *
-	 * @param array $job Job array returned by get().
+	 * @param array  $job        Job array returned by get().
+	 * @param string $media_type Negotiated media type, when the transport chose one.
 	 *
 	 * @return string
 	 */
-	public function render_payload( array $job ): string {
+	public function render_payload( array $job, string $media_type = '' ): string {
+		return $this->render_job( $job, $media_type )['body'];
+	}
+
+	/**
+	 * Render a job, reporting peripherals its payload cannot carry.
+	 *
+	 * `$media_type` is the format a CloudPRNT printer picked out of the poll
+	 * response's offer. When it names a format the thermal pipeline can produce,
+	 * it overrides the provider's default wire format — this is what makes the
+	 * offer real rather than decorative. An empty string keeps the provider
+	 * default, which is what every non-negotiating caller passes.
+	 *
+	 * The `cut` and `drawer` keys are non-null only for command-free formats,
+	 * where the peripherals have to be requested out-of-band; see
+	 * Thermal_Renderer::render_with_control().
+	 *
+	 * @param array  $job        Job array returned by get().
+	 * @param string $media_type Negotiated media type, when the transport chose one.
+	 *
+	 * @return array{body:string, cut:string|null, drawer:string|null}
+	 */
+	public function render_job( array $job, string $media_type = '' ): array {
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) && ! empty( $job['pn_kind'] ) ) {
 			$template = self::load_template( (string) $job['template_id'] );
 			if ( null === $template ) {
-				return '';
+				return self::nothing_to_print();
 			}
 
 			$order = wc_get_order( (int) $job['order_id'] );
 			if ( ! $order ) {
-				return '';
+				return self::nothing_to_print();
 			}
 
 			if ( 'pdf' === $job['pn_kind'] ) {
 				try {
-					return ( new Template_Pdf_Service() )->render( $template, $order );
+					return self::in_band( ( new Template_Pdf_Service() )->render( $template, $order ) );
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
 						sprintf( 'Cloud print: PrintNode PDF render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
 					);
 
-					return '';
+					return self::nothing_to_print();
 				}
 			}
 
 			if ( 'escpos' === $job['pn_kind'] ) {
 				try {
-					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render(
+					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control(
 						$template,
 						$order,
 						'escpos',
@@ -269,33 +292,38 @@ class Print_Job_Service {
 						sprintf( 'Cloud print: PrintNode ESC/POS render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
 					);
 
-					return '';
+					return self::nothing_to_print();
 				}
 			}
 
-			return '';
+			return self::nothing_to_print();
 		}
 
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) ) {
 			$template = self::load_template( (string) $job['template_id'] );
 			if ( null === $template ) {
-				return '';
+				return self::nothing_to_print();
 			}
 
 			$printer  = ( new Cloud_Print_Registry() )->get_printer( (string) $job['printer_id'] );
 			$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 			$wire     = Provider::wire_format( $provider, (string) ( $template['engine'] ?? '' ) );
 			if ( null === $wire ) {
-				return '';
+				return self::nothing_to_print();
+			}
+
+			$negotiated = '' === $media_type ? '' : Cloud_Print_Media_Types::wire_format( $media_type );
+			if ( '' !== $negotiated ) {
+				$wire = $negotiated;
 			}
 
 			$order = wc_get_order( (int) $job['order_id'] );
 			if ( ! $order ) {
-				return '';
+				return self::nothing_to_print();
 			}
 
 			try {
-				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render(
+				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control(
 					$template,
 					$order,
 					$wire,
@@ -309,21 +337,21 @@ class Print_Job_Service {
 					sprintf( 'Cloud print: thermal render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
 				);
 
-				return '';
+				return self::nothing_to_print();
 			}
 		}
 
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['format'] ) ) {
 			$order = wc_get_order( (int) $job['order_id'] );
 			if ( ! $order ) {
-				return '';
+				return self::nothing_to_print();
 			}
 
 			try {
 				$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 				$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
 
-				return $adapter->transform( $data );
+				return self::in_band( $adapter->transform( $data ) );
 			} catch ( \Throwable $e ) {
 				// A stored job can carry a format the factory no longer supports
 				// (e.g. the removed fixed-layout starprnt placeholder). Fail closed
@@ -333,13 +361,37 @@ class Print_Job_Service {
 					sprintf( 'Cloud print: fixed-layout render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
 				);
 
-				return '';
+				return self::nothing_to_print();
 			}
 		}
 
 		$payload = base64_decode( (string) $job['payload'], true );
 
-		return false === $payload ? '' : $payload;
+		return self::in_band( false === $payload ? '' : $payload );
+	}
+
+	/**
+	 * A render result whose payload carries its own cut and drawer commands.
+	 *
+	 * @param string $body The rendered payload.
+	 *
+	 * @return array{body:string, cut:string|null, drawer:string|null}
+	 */
+	private static function in_band( string $body ): array {
+		return array(
+			'body'   => $body,
+			'cut'    => null,
+			'drawer' => null,
+		);
+	}
+
+	/**
+	 * The render result for a job that produced nothing.
+	 *
+	 * @return array{body:string, cut:string|null, drawer:string|null}
+	 */
+	private static function nothing_to_print(): array {
+		return self::in_band( '' );
 	}
 
 	/**

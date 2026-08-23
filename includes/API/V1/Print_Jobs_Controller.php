@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\API\V1;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Media_Types;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Poll_Request;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
@@ -705,29 +707,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$this->jobs->release_stale_claims( $printer_id );
 
 		if ( 'POST' === $request->get_method() ) {
-			if ( $this->jobs->find_active_claim( $printer_id ) ) {
-				return rest_ensure_response( array( 'jobReady' => false ) );
-			}
-
-			$job = $this->jobs->next_pending( $printer_id );
-			if ( null === $job ) {
-				return rest_ensure_response( array( 'jobReady' => false ) );
-			}
-
-			$content_type = $job['content_type'] ? $job['content_type'] : 'application/octet-stream';
-
-			// The CloudPRNT spec negotiates via the `mediaTypes` list: the
-			// printer compares it against its decodable set and fetches with
-			// its pick (or rejects pre-fetch with 510 when nothing matches).
-			// The singular `mediaType` is kept for older firmware.
-			return rest_ensure_response(
-				array(
-					'jobReady'   => true,
-					'jobToken'   => (string) $job['id'],
-					'mediaType'  => $content_type,
-					'mediaTypes' => array( $content_type ),
-				)
-			);
+			return $this->cloudprnt_poll( $request, $printer_id );
 		}
 
 		$job = $this->get_cloud_job_for_request( $request, $printer_id );
@@ -747,24 +727,93 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
 
-		$content_type = $job['content_type'] ? $job['content_type'] : 'application/octet-stream';
+		return $this->cloudprnt_fetch( $request, $printer_id, $job );
+	}
 
-		// The fetch GET names the printer's chosen media type. Serving a
-		// different format than requested puts undecodable bytes on the wire,
-		// so answer 415 (per the CloudPRNT spec) and leave the job unclaimed.
-		// Media types are compared case-insensitively (RFC 2045) and the
-		// logged value is length-capped: printers poll every few seconds, so
-		// a wedged loop must not flood the log with unbounded input.
-		$requested_type = sanitize_text_field( (string) $request->get_param( 'type' ) );
-		if ( '' !== $requested_type && strtolower( $requested_type ) !== strtolower( $content_type ) ) {
+	/**
+	 * Answer a CloudPRNT poll: offer a job, and ask what the printer can decode.
+	 *
+	 * The poll body is the printer's half of the conversation. `printingInProgress`
+	 * says a job is still on the paper, and the spec is explicit that the server
+	 * must not offer another one until it clears — doing so risks the printer
+	 * dropping the second job. `clientAction` carries the printer's answers to
+	 * questions asked in an earlier poll response, which is the only way the
+	 * protocol exposes what formats the hardware can decode.
+	 *
+	 * @param WP_REST_Request $request    Request.
+	 * @param string          $printer_id Printer ID.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function cloudprnt_poll( WP_REST_Request $request, string $printer_id ) {
+		$poll = Cloud_Print_Poll_Request::from_body( (string) $request->get_body(), $request->get_json_params() );
+		$this->registry->record_capabilities( $printer_id, $poll->answers(), $poll->status_code() );
+
+		$response = array( 'jobReady' => false );
+
+		if ( ! $poll->printing_in_progress() && ! $this->jobs->find_active_claim( $printer_id ) ) {
+			$job = $this->jobs->next_pending( $printer_id );
+			if ( null !== $job ) {
+				// The offer is a list: the printer picks its preferred decodable
+				// entry and names it in the fetch's `?type`. Nothing decodable in
+				// the list means no GET at all, just a 510 confirmation — so the
+				// list is filtered by what this printer said it can decode.
+				// `mediaType` (singular) is kept for older firmware.
+				$media_types = $this->media_types_for_job( $job, $printer_id );
+				$response    = array(
+					'jobReady'   => true,
+					'jobToken'   => (string) $job['id'],
+					'mediaType'  => $media_types[0],
+					'mediaTypes' => array_values( $media_types ),
+				);
+			}
+		}
+
+		if ( $this->registry->should_request_capabilities( $printer_id ) ) {
+			$response['clientAction'] = array(
+				array( 'request' => 'ClientType' ),
+				array( 'request' => 'Encodings' ),
+			);
+			$this->registry->record_capability_request( $printer_id );
+		}
+
+		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Serve a CloudPRNT job in the media type the printer asked for.
+	 *
+	 * @param WP_REST_Request $request    Request.
+	 * @param string          $printer_id Printer ID.
+	 * @param array           $job        Job array.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	private function cloudprnt_fetch( WP_REST_Request $request, string $printer_id, array $job ) {
+		// The fetch GET names the printer's chosen media type. A type the server
+		// cannot produce is answered with 415 (per the CloudPRNT spec) and the job
+		// is left unclaimed. What is servable is deliberately wider than what the
+		// poll advertised: the printer naming a type is a stronger signal than our
+		// cached capability answer, so a capability update landing between the two
+		// requests must not reject a format we had just offered. Firmware that
+		// omits the parameter gets our best offer for this printer instead. The
+		// logged value is length-capped: printers poll every few seconds, so a
+		// wedged loop must not flood the log with unbounded input.
+		$servable  = ( new Cloud_Print_Media_Types() )->servable_for_job( $job, $this->registry->get_printer( $printer_id ) );
+		$requested = sanitize_text_field( (string) $request->get_param( 'type' ) );
+		$chosen    = '' === $requested
+			? $this->media_types_for_job( $job, $printer_id )[0]
+			: Cloud_Print_Media_Types::match( $requested, $servable );
+
+		if ( '' === $chosen ) {
 			Logger::warning(
 				sprintf(
-					'%s: printer "%s" requested media type "%s" for print job %d but the job is "%s".',
+					'%s: printer "%s" requested media type "%s" for print job %d, which the server can only serve as %s.',
 					$request->get_route(),
 					$printer_id,
-					substr( $requested_type, 0, 100 ),
+					substr( $requested, 0, 100 ),
 					(int) $job['id'],
-					$content_type
+					implode( ', ', $servable )
 				)
 			);
 
@@ -779,8 +828,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'jobReady' => false ) );
 		}
 
-		$payload = $this->jobs->render_payload( $job );
-		if ( '' === $payload ) {
+		$render = $this->jobs->render_job( $job, $chosen );
+		if ( '' === $render['body'] ) {
 			Logger::error(
 				sprintf(
 					'%s: print job %d rendered an empty payload for printer "%s".',
@@ -791,7 +840,54 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		return $this->serve_raw( $payload, $content_type );
+		return $this->serve_raw( $render['body'], $chosen, self::control_headers( $chosen, $render ) );
+	}
+
+	/**
+	 * The media types a CloudPRNT job can be served in, best first.
+	 *
+	 * @param array  $job        Job array.
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return array<int, string>
+	 */
+	private function media_types_for_job( array $job, string $printer_id ): array {
+		$capabilities = $this->registry->get_capabilities( $printer_id );
+
+		return ( new Cloud_Print_Media_Types() )->for_job(
+			$job,
+			$this->registry->get_printer( $printer_id ),
+			$capabilities['encodings']
+		);
+	}
+
+	/**
+	 * Peripheral-control headers for a job served in a command-free format.
+	 *
+	 * `text/plain` and images carry no cut or drawer commands, so CloudPRNT reads
+	 * them off the fetch response instead. Command formats express both in-band
+	 * and must not also be told to cut, or the receipt cuts twice.
+	 *
+	 * Both headers are always sent, `none` included. Omitting them leaves the
+	 * decision to the printer's own defaults, which cut plain-text jobs — so a
+	 * template that deliberately does not cut would cut anyway, and would behave
+	 * differently in text than in StarPRNT. Saying `none` out loud keeps the two
+	 * formats rendering the same receipt.
+	 *
+	 * @param string $media_type The media type being served.
+	 * @param array  $render     Render result from Print_Job_Service::render_job().
+	 *
+	 * @return array<string, string>
+	 */
+	private static function control_headers( string $media_type, array $render ): array {
+		if ( ! Cloud_Print_Media_Types::is_header_controlled( $media_type ) ) {
+			return array();
+		}
+
+		return array(
+			'X-Star-Cut'        => null === $render['cut'] ? 'none' : (string) $render['cut'],
+			'X-Star-CashDrawer' => null === $render['drawer'] ? 'none' : (string) $render['drawer'],
+		);
 	}
 
 	/**
@@ -878,13 +974,14 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	/**
 	 * Serve raw bytes from a REST callback.
 	 *
-	 * @param string $body         Response body.
-	 * @param string $content_type Content type.
+	 * @param string                $body         Response body.
+	 * @param string                $content_type Content type.
+	 * @param array<string, string> $headers      Extra response headers.
 	 *
 	 * @return \WP_REST_Response
 	 */
-	private function serve_raw( string $body, string $content_type ) {
-		return Raw_Response::serve( $body, $content_type );
+	private function serve_raw( string $body, string $content_type, array $headers = array() ) {
+		return Raw_Response::serve( $body, $content_type, $headers );
 	}
 
 

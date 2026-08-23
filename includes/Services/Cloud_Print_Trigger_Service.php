@@ -317,10 +317,12 @@ class Cloud_Print_Trigger_Service {
 	}
 
 	/**
-	 * Keep drawer metadata scoped to providers implemented by this server change.
+	 * Keep drawer metadata scoped to providers that can act on it.
 	 *
-	 * Star providers use Star-specific drawer commands and are intentionally not
-	 * changed by the Epson/PrintNode implementation.
+	 * Zeroing it elsewhere is not cosmetic: a job that carries drawer metadata a
+	 * renderer never reads would promise the cashier a drawer kick that never
+	 * fires. Star Online is the remaining opt-out — stario.online renders our
+	 * markup and the markup has no drawer verb.
 	 *
 	 * @param string $provider       Provider key.
 	 * @param array  $drawer_options Drawer options.

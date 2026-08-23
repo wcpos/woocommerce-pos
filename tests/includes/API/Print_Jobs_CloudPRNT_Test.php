@@ -7,7 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Media_Types;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
@@ -472,5 +474,356 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 			)->get_status()
 		);
 		$this->assertEquals( 'printed', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * Poll the CloudPRNT route with a JSON body, as the printer does.
+	 *
+	 * @param array $body The poll body.
+	 */
+	private function poll_with_body( array $body ) {
+		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/print-jobs/cloudprnt' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_query_params(
+			array(
+				'printer_id' => 'p1',
+				'pt'         => 'tok',
+			)
+		);
+		$request->set_body( (string) wp_json_encode( $body ) );
+
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Create a published thermal receipt template.
+	 *
+	 * @return int The template post ID.
+	 */
+	private function create_thermal_template(): int {
+		$tid = wp_insert_post(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'T',
+			)
+		);
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => '<receipt paper-width="32"><text>Receipt</text><cut type="partial" /></receipt>' ),
+			array( 'ID' => $tid ),
+			array( '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $tid );
+		update_post_meta( $tid, '_template_engine', 'thermal' );
+		wp_set_object_terms( $tid, 'receipt', 'wcpos_template_type' );
+
+		return (int) $tid;
+	}
+
+	/**
+	 * Create a template-backed job for the registered Star printer.
+	 *
+	 * @param bool $auto_open_drawer Whether the job asks for a drawer kick.
+	 *
+	 * @return int The job ID.
+	 */
+	private function create_template_job( bool $auto_open_drawer = false ): int {
+		$order = OrderHelper::create_order();
+
+		return $this->jobs->create(
+			array(
+				'printer_id'       => 'p1',
+				'content_type'     => Cloud_Print_Media_Types::STARPRNT,
+				'order_id'         => $order->get_id(),
+				'template_id'      => (string) $this->create_thermal_template(),
+				'auto_open_drawer' => $auto_open_drawer,
+				'drawer_connector' => 'pin2',
+			)
+		);
+	}
+
+	/**
+	 * Record an Encodings answer for the registered printer.
+	 *
+	 * @param string $encodings The Encodings answer.
+	 */
+	private function record_encodings( string $encodings ): void {
+		( new Cloud_Print_Registry() )->record_capabilities( 'p1', array( 'Encodings' => $encodings ) );
+	}
+
+	/**
+	 * It asks a printer what it is and what it can decode.
+	 */
+	public function test_poll_requests_client_capabilities(): void {
+		$data = $this->poll( 'POST', array() )->get_data();
+
+		$this->assertSame(
+			array(
+				array( 'request' => 'ClientType' ),
+				array( 'request' => 'Encodings' ),
+			),
+			$data['clientAction']
+		);
+	}
+
+	/**
+	 * It caches the answers a printer sends back.
+	 */
+	public function test_poll_caches_the_printers_capability_answers(): void {
+		$this->poll_with_body(
+			array(
+				'statusCode'   => '200 OK',
+				'clientAction' => array(
+					array(
+						'request' => 'ClientType',
+						'result'  => 'Star CloudPRNT TSP100IV',
+					),
+					array(
+						'request' => 'Encodings',
+						'result'  => 'application/vnd.star.starprnt,text/plain',
+					),
+				),
+			)
+		);
+
+		$record = ( new Cloud_Print_Registry() )->get_capabilities( 'p1' );
+		$this->assertSame( 'Star CloudPRNT TSP100IV', $record['client_type'] );
+		$this->assertSame( array( 'application/vnd.star.starprnt', 'text/plain' ), $record['encodings'] );
+		$this->assertSame( '200 OK', $record['status_code'] );
+	}
+
+	/**
+	 * It stops asking once the printer has answered, until the TTL lapses.
+	 */
+	public function test_poll_does_not_re_ask_within_the_ttl(): void {
+		$this->poll( 'POST', array() );
+
+		$this->assertArrayNotHasKey( 'clientAction', $this->poll( 'POST', array() )->get_data() );
+	}
+
+	/**
+	 * It withholds a job while the printer reports one still printing.
+	 */
+	public function test_poll_withholds_a_job_while_printing_is_in_progress(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => Cloud_Print_Media_Types::STARPRNT,
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+
+		$data = $this->poll_with_body( array( 'printingInProgress' => true ) )->get_data();
+
+		$this->assertFalse( $data['jobReady'] );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It offers every format it can render a template-backed job in.
+	 */
+	public function test_poll_offers_multiple_media_types_for_a_template_job(): void {
+		$this->create_template_job();
+
+		$data = $this->poll( 'POST', array() )->get_data();
+
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			$data['mediaTypes']
+		);
+		$this->assertSame( Cloud_Print_Media_Types::STARPRNT, $data['mediaType'] );
+	}
+
+	/**
+	 * It offers a Line Mode-only printer only what that printer can decode.
+	 */
+	public function test_poll_offers_only_decodable_types_to_a_line_mode_printer(): void {
+		$this->create_template_job();
+		$this->record_encodings( 'text/plain,application/vnd.star.line' );
+
+		$data = $this->poll( 'POST', array() )->get_data();
+
+		$this->assertSame( array( Cloud_Print_Media_Types::TEXT ), $data['mediaTypes'] );
+		$this->assertSame( Cloud_Print_Media_Types::TEXT, $data['mediaType'] );
+	}
+
+	/**
+	 * It renders the job in the format the printer chose.
+	 */
+	public function test_get_renders_the_job_in_the_requested_media_type(): void {
+		$id = $this->create_template_job();
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::TEXT,
+			)
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( Cloud_Print_Media_Types::TEXT, $response->get_headers()['Content-Type'] );
+		$this->assertStringContainsString( 'Receipt', $response->get_raw_body() );
+		// Plain text carries no command bytes, cut included.
+		$this->assertStringNotContainsString( "\x1b", $response->get_raw_body() );
+	}
+
+	/**
+	 * It moves cut and drawer to headers for a command-free format.
+	 */
+	public function test_get_sets_star_control_headers_for_text_jobs(): void {
+		$id = $this->create_template_job( true );
+
+		$headers = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::TEXT,
+			)
+		)->get_headers();
+
+		$this->assertSame( 'partial', $headers['X-Star-Cut'] );
+		$this->assertSame( 'end', $headers['X-Star-CashDrawer'] );
+	}
+
+	/**
+	 * It says `none` out loud so a template that does not cut does not cut.
+	 */
+	public function test_get_sets_none_control_headers_when_nothing_was_asked_for(): void {
+		$order = OrderHelper::create_order();
+		$tid   = wp_insert_post(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'No cut',
+			)
+		);
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => '<receipt paper-width="32"><text>Receipt</text></receipt>' ),
+			array( 'ID' => $tid ),
+			array( '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $tid );
+		update_post_meta( $tid, '_template_engine', 'thermal' );
+		wp_set_object_terms( $tid, 'receipt', 'wcpos_template_type' );
+
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => Cloud_Print_Media_Types::STARPRNT,
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+			)
+		);
+
+		$headers = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::TEXT,
+			)
+		)->get_headers();
+
+		$this->assertSame( 'none', $headers['X-Star-Cut'] );
+		$this->assertSame( 'none', $headers['X-Star-CashDrawer'] );
+	}
+
+	/**
+	 * It leaves control headers off a format that cuts in-band.
+	 */
+	public function test_get_omits_star_control_headers_for_native_jobs(): void {
+		$id = $this->create_template_job( true );
+
+		$headers = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::STARPRNT,
+			)
+		)->get_headers();
+
+		$this->assertArrayNotHasKey( 'X-Star-Cut', $headers );
+		$this->assertArrayNotHasKey( 'X-Star-CashDrawer', $headers );
+	}
+
+	/**
+	 * It refuses a type it cannot produce for the job.
+	 */
+	public function test_get_rejects_a_type_the_server_cannot_produce(): void {
+		$id = $this->create_template_job();
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => 'image/png',
+			)
+		);
+
+		$this->assertEquals( 415, $response->get_status() );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It serves a type the printer names even when the cached capabilities
+	 * disagree — the printer asking is a stronger signal than our cache, and a
+	 * capability answer landing between poll and fetch must not strand the job.
+	 */
+	public function test_get_trusts_the_printers_choice_over_stale_capabilities(): void {
+		$id = $this->create_template_job();
+		$this->record_encodings( 'application/vnd.star.starprnt' );
+
+		$response = $this->poll(
+			'GET',
+			array(
+				'token' => $id,
+				'type'  => Cloud_Print_Media_Types::TEXT,
+			)
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertStringContainsString( 'Receipt', $response->get_raw_body() );
+		$this->assertSame( 'claimed', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It falls back to the printer-aware offer when the fetch names no type.
+	 */
+	public function test_get_without_a_type_uses_the_best_offer_for_the_printer(): void {
+		$id = $this->create_template_job();
+		$this->record_encodings( 'text/plain,application/vnd.star.line' );
+
+		$response = $this->poll( 'GET', array( 'token' => $id ) );
+
+		$this->assertSame( Cloud_Print_Media_Types::TEXT, $response->get_headers()['Content-Type'] );
+	}
+
+	/**
+	 * It still serves an app-uploaded payload as the bytes that were uploaded.
+	 */
+	public function test_uploaded_payloads_keep_their_stored_type(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => Cloud_Print_Media_Types::STARPRNT,
+				'payload'      => base64_encode( 'RAW' ),
+			)
+		);
+
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::STARPRNT ),
+			$this->poll( 'POST', array() )->get_data()['mediaTypes']
+		);
+
+		$response = $this->poll( 'GET', array( 'token' => $id ) );
+		$this->assertSame( 'RAW', $response->get_raw_body() );
 	}
 }
