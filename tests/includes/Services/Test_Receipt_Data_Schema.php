@@ -21,19 +21,162 @@ use WP_UnitTestCase;
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	/**
-	 * Test MONEY_FIELDS constant contains expected line item fields.
+	 * MONEY_FIELDS is a hand-typed copy of every `money` leaf in the field tree,
+	 * declared ~130 lines away from the tree it mirrors, so the two drift in
+	 * silence. This test is the ratchet that makes drift impossible.
+	 *
+	 * The constant is deliberately NOT derived at runtime: it is an implicitly
+	 * public class constant, and `format_money_fields()` sits on the thermal
+	 * print path, where walking the field tree (hundreds of leaves, each one
+	 * calling `__()`) on every render would be a real cost.
 	 */
-	public function test_money_fields_contains_line_item_fields(): void {
-		$fields = Receipt_Data_Schema::MONEY_FIELDS;
+	public function test_money_fields_constant_matches_every_money_typed_tree_leaf(): void {
+		$money_leaves = $this->money_leaf_names( Receipt_Data_Schema::get_field_tree() );
 
-		$this->assertContains( 'unit_price_incl', $fields );
-		$this->assertContains( 'unit_price_excl', $fields );
-		$this->assertContains( 'line_total_incl', $fields );
-		$this->assertContains( 'line_total_excl', $fields );
-		$this->assertContains( 'line_subtotal_incl', $fields );
-		$this->assertContains( 'line_subtotal_excl', $fields );
-		$this->assertContains( 'discounts_incl', $fields );
-		$this->assertContains( 'discounts_excl', $fields );
+		$missing_from_constant = array_values( array_diff( $money_leaves, Receipt_Data_Schema::MONEY_FIELDS ) );
+		$stale_in_constant     = array_values( array_diff( Receipt_Data_Schema::MONEY_FIELDS, $money_leaves ) );
+
+		$this->assertSame(
+			array(),
+			$missing_from_constant,
+			'Field tree declares money leaves that MONEY_FIELDS does not list, so they render unformatted (29.99 instead of $29.99): ' . implode( ', ', $missing_from_constant )
+		);
+		$this->assertSame(
+			array(),
+			$stale_in_constant,
+			'MONEY_FIELDS lists names the field tree no longer declares as money, so a rename left a dead entry behind: ' . implode( ', ', $stale_in_constant )
+		);
+	}
+
+	/**
+	 * TOTAL_MONEY_KEYS is the same hand-typed mirror, scoped to the totals
+	 * section, and drifts the same way.
+	 */
+	public function test_total_money_keys_constant_matches_totals_section_money_leaves(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		$money_leaves = $this->money_leaf_names( $tree['totals']['fields'] );
+
+		$missing_from_constant = array_values( array_diff( $money_leaves, Receipt_Data_Schema::TOTAL_MONEY_KEYS ) );
+		$stale_in_constant     = array_values( array_diff( Receipt_Data_Schema::TOTAL_MONEY_KEYS, $money_leaves ) );
+
+		$this->assertSame(
+			array(),
+			$missing_from_constant,
+			'The totals section declares money leaves that TOTAL_MONEY_KEYS does not list: ' . implode( ', ', $missing_from_constant )
+		);
+		$this->assertSame(
+			array(),
+			$stale_in_constant,
+			'TOTAL_MONEY_KEYS lists names the totals section no longer declares as money: ' . implode( ', ', $stale_in_constant )
+		);
+	}
+
+	/**
+	 * ZERO_FALSY_MONEY_FIELDS carries knowledge the field tree does not: which
+	 * money fields keep a numeric 0 so Mustache section guards stay falsy. It
+	 * is therefore NOT derivable and must stay hand-maintained — but every
+	 * entry still has to be a money field, or the zero-falsy rule never fires.
+	 */
+	public function test_zero_falsy_money_fields_are_all_known_money_fields(): void {
+		$unknown = array_values( array_diff( Receipt_Data_Schema::ZERO_FALSY_MONEY_FIELDS, Receipt_Data_Schema::MONEY_FIELDS ) );
+
+		$this->assertSame(
+			array(),
+			$unknown,
+			'ZERO_FALSY_MONEY_FIELDS names fields that are not in MONEY_FIELDS, so their zero-falsy handling is dead: ' . implode( ', ', $unknown )
+		);
+	}
+
+	/**
+	 * The walk backing the two ratchets above has to visit root-level scalar
+	 * leaves, not just the leaves nested under a section's `fields`. The field
+	 * tree mixes both shapes at the root: most entries are sections carrying a
+	 * `fields` map, but `has_tax_summary` is a bare scalar that declares its own
+	 * `type` alongside an empty `fields` array.
+	 *
+	 * An earlier version of the walk only recursed into entries whose `fields`
+	 * was non-empty, so it never looked at a root-level scalar's own `type`. A
+	 * money field added at the root would have been missing from MONEY_FIELDS
+	 * with both ratchets still green — a hole in the very coverage they claim.
+	 */
+	public function test_money_leaf_walk_collects_a_root_level_scalar_money_leaf(): void {
+		// Arrange: a nested money leaf, a root-level scalar money leaf, and a
+		// root-level scalar non-money leaf (the real `has_tax_summary` shape).
+		$tree = array(
+			'totals'              => array(
+				'label'  => 'Totals',
+				'fields' => array(
+					'total_incl' => array(
+						'type'  => 'money',
+						'label' => 'Total',
+					),
+				),
+			),
+			'rounding_adjustment' => array(
+				'type'   => 'money',
+				'label'  => 'Rounding Adjustment',
+				'fields' => array(),
+			),
+			'has_tax_summary'     => array(
+				'type'   => 'boolean',
+				'label'  => 'Has Tax Summary',
+				'fields' => array(),
+			),
+		);
+
+		// Act.
+		$money_leaves = $this->money_leaf_names( $tree );
+
+		// Assert: the root-level money leaf is collected, the root-level
+		// boolean is not.
+		$this->assertSame( array( 'total_incl', 'rounding_adjustment' ), $money_leaves );
+	}
+
+	/**
+	 * Every `money`-typed leaf name in a field tree, or in any `fields` branch
+	 * of one.
+	 *
+	 * Both shapes are handled by the same recursion: an entry with a non-empty
+	 * `fields` map is a section to descend into, anything else is a leaf whose
+	 * own `type` decides. That is what lets the whole tree be passed in
+	 * directly, root-level scalars included.
+	 *
+	 * @param array<string,mixed> $fields Field tree, or a field-tree `fields` map.
+	 *
+	 * @return array<int,string> Unique money leaf names, in tree order.
+	 */
+	private function money_leaf_names( array $fields ): array {
+		$names = array();
+		$this->collect_money_leaf_names( $fields, $names );
+
+		return array_keys( $names );
+	}
+
+	/**
+	 * Collect the names of every `money`-typed leaf in a field-tree branch.
+	 *
+	 * Keys are collected into `$names` so repeated leaf names (the same key
+	 * appears in several sections) are de-duplicated.
+	 *
+	 * @param array<string,mixed> $fields Field-tree `fields` map.
+	 * @param array<string,bool>  $names  Collected leaf names, by reference.
+	 */
+	private function collect_money_leaf_names( array $fields, array &$names ): void {
+		foreach ( $fields as $name => $field ) {
+			if ( ! is_array( $field ) ) {
+				continue;
+			}
+
+			if ( ! empty( $field['fields'] ) && is_array( $field['fields'] ) ) {
+				$this->collect_money_leaf_names( $field['fields'], $names );
+				continue;
+			}
+
+			if ( isset( $field['type'] ) && 'money' === $field['type'] ) {
+				$names[ $name ] = true;
+			}
+		}
 	}
 
 	/**
@@ -110,37 +253,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$json_fields = Receipt_Data_Schema::get_json_schema()['properties']['totals']['properties'];
 		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['total_saved']['type'] );
 		$this->assertSame( 'boolean', $json_fields['total_saved_complete']['type'] );
-	}
-
-	/**
-	 * Test MONEY_FIELDS constant contains totals fields.
-	 */
-	public function test_money_fields_contains_totals_fields(): void {
-		$fields = Receipt_Data_Schema::MONEY_FIELDS;
-
-		$this->assertContains( 'subtotal_incl', $fields );
-		$this->assertContains( 'subtotal_excl', $fields );
-		$this->assertContains( 'total_incl', $fields );
-		$this->assertContains( 'total_excl', $fields );
-		$this->assertContains( 'tax_total', $fields );
-		$this->assertContains( 'paid_total', $fields );
-		$this->assertContains( 'change_total', $fields );
-	}
-
-	/**
-	 * Test MONEY_FIELDS constant contains payment and tax fields.
-	 */
-	public function test_money_fields_contains_payment_and_tax_fields(): void {
-		$fields = Receipt_Data_Schema::MONEY_FIELDS;
-
-		$this->assertContains( 'amount', $fields );
-		$this->assertContains( 'tendered', $fields );
-		$this->assertContains( 'change', $fields );
-		$this->assertContains( 'tax_amount', $fields );
-		$this->assertContains( 'taxable_amount_excl', $fields );
-		$this->assertContains( 'taxable_amount_incl', $fields );
-		$this->assertContains( 'total_incl', $fields );
-		$this->assertContains( 'total_excl', $fields );
 	}
 
 	/**
