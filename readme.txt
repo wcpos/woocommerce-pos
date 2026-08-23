@@ -122,7 +122,7 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 == Changelog ==
 
 = 1.10.0 - 2026/XX/XX =
-**A new sync engine.** The biggest update since we rebuilt WooCommerce POS in React Native back in 2023. Your store now syncs through a change log -- the POS asks what changed since it last checked, instead of re-downloading your catalogue every time. Nearly everything below follows from that.
+**A new sync engine.** The biggest update since we rebuilt WCPOS in React Native back in 2023. Your store now syncs through a change log -- the POS asks what changed since it last checked, instead of re-downloading your catalogue every time. Nearly everything below follows from that.
 - **Faster to open, and it stays fast.** Categories, tags, brands and coupons load on demand instead of before you can sell. Products and customers fill in quietly in the background. Once your catalogue is local, product search doesn't touch the server at all.
 - **Your server does less work.** When nothing has changed, the POS gets a tiny "nothing new" reply instead of a full page of data -- and when your server is busy, the POS notices and eases off.
 - **No more invisible walls.** Product lists stopped at 1,000 items and order lists at 200, with no message -- rows simply stopped arriving. Both now scroll as far as you like.
@@ -136,7 +136,7 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 - **Printing.** Star cloud printers negotiate their format properly, receipts can be rendered server-side as an image for printers that need it, and auto-print rules can fire on order creation or only once paid. Offline receipts print in the right language.
 - Also: Settings redesigned; cashiers can create and edit products by default; dropdowns fixed on iPad; language switching fixed throughout; deleted items now disappear from the POS.
 
-**Note for developers:** the sync API has moved from `wcpos/v1/sync/*` to `wcpos/v2/*`. See the full release notes for the complete list of breaking changes.
+**Note for developers:** 1.10.0 introduces the `wcpos/v2` REST namespace. The POS now uses it for syncing and for the shared POS services that were previously served from `wcpos/v1`. The `wcpos/v1` routes still register but are frozen, and some legacy `API\Settings` controller methods have been removed. See the full release notes for the complete list of breaking changes.
 
 **Please don't update lightly.** This is a major update -- update when your store is quiet and you have time to check everything over.
 
