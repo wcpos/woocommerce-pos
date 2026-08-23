@@ -357,6 +357,140 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It wraps text past the paper edge instead of silently clipping it.
+	 *
+	 * A thermal printer wraps an over-long line; nothing wraps a raster, so a
+	 * long product name would otherwise lose its tail at the paper edge.
+	 */
+	public function test_emit_wraps_text_longer_than_the_paper(): void {
+		$one  = $this->render_image( '<receipt paper-width="32"><text>A</text></receipt>' );
+		$long = $this->render_image( '<receipt paper-width="32"><text>' . str_repeat( 'A', 70 ) . '</text></receipt>' );
+
+		// 70 characters over 32 columns is three physical lines.
+		$this->assertSame( imagesy( $one ) * 3, imagesy( $long ) );
+
+		imagedestroy( $one );
+		imagedestroy( $long );
+	}
+
+	/**
+	 * It breaks a line on an embedded newline.
+	 */
+	public function test_emit_breaks_on_embedded_newlines(): void {
+		$one = $this->render_image( '<receipt paper-width="32"><text>A</text></receipt>' );
+		$two = $this->render_image( "<receipt paper-width=\"32\"><text>A\nB</text></receipt>" );
+
+		$this->assertSame( imagesy( $one ) * 2, imagesy( $two ) );
+
+		imagedestroy( $one );
+		imagedestroy( $two );
+	}
+
+	/**
+	 * It keeps a bold span bold without bolding the rest of the line.
+	 */
+	public function test_emit_preserves_inline_style_runs(): void {
+		$plain     = $this->render_image( '<receipt paper-width="32"><text>aaaa bbbb</text></receipt>' );
+		$all_bold  = $this->render_image( '<receipt paper-width="32"><bold><text>aaaa bbbb</text></bold></receipt>' );
+		$half_bold = $this->render_image( '<receipt paper-width="32"><text>aaaa <bold>bbbb</bold></text></receipt>' );
+
+		$plain_ink = $this->ink_pixels( $plain );
+		$bold_ink  = $this->ink_pixels( $all_bold );
+		$half_ink  = $this->ink_pixels( $half_bold );
+
+		// Bold puts down more ink; a half-bold line must land strictly between the
+		// two, which it cannot do if the whole line took one style.
+		$this->assertGreaterThan( $plain_ink, $bold_ink );
+		$this->assertGreaterThan( $plain_ink, $half_ink );
+		$this->assertLessThan( $bold_ink, $half_ink );
+
+		imagedestroy( $plain );
+		imagedestroy( $all_bold );
+		imagedestroy( $half_bold );
+	}
+
+	/**
+	 * It scales height without also stretching glyphs across their neighbours.
+	 *
+	 * `<size height="2">` with width left at 1 is what the bundled narrow
+	 * templates use for headings. Doubling the font size alone would double the
+	 * glyph width too while the cell advance stayed put, overlapping every
+	 * character with the next.
+	 */
+	public function test_emit_scales_height_without_widening_the_run(): void {
+		$normal = $this->render_image( '<receipt paper-width="32"><text>MMMM</text></receipt>' );
+		$tall   = $this->render_image( '<receipt paper-width="32"><size height="2"><text>MMMM</text></size></receipt>' );
+
+		$this->assertSame( imagesy( $normal ) * 2, imagesy( $tall ) );
+		$this->assertSame( $this->ink_span( $normal ), $this->ink_span( $tall ), 'A height-only scale must not widen the run.' );
+
+		imagedestroy( $normal );
+		imagedestroy( $tall );
+	}
+
+	/**
+	 * It widens the run when the width multiplier asks for it.
+	 *
+	 * `height` has to be given explicitly: the parser defaults it to `width`, so
+	 * a bare `<size width="2">` means double in both axes, not double-wide.
+	 */
+	public function test_emit_scales_width_independently(): void {
+		$normal = $this->render_image( '<receipt paper-width="32"><text>MM</text></receipt>' );
+		$wide   = $this->render_image( '<receipt paper-width="32"><size width="2" height="1"><text>MM</text></size></receipt>' );
+
+		$this->assertSame( imagesy( $normal ), imagesy( $wide ) );
+		$this->assertGreaterThan( $this->ink_span( $normal ), $this->ink_span( $wide ) );
+
+		imagedestroy( $normal );
+		imagedestroy( $wide );
+	}
+
+	/**
+	 * The horizontal extent of the inked pixels.
+	 *
+	 * @param \GdImage|resource $image The image.
+	 *
+	 * @return int
+	 */
+	private function ink_span( $image ): int {
+		$min    = imagesx( $image );
+		$max    = -1;
+		$width  = imagesx( $image );
+		$height = imagesy( $image );
+		for ( $y = 0; $y < $height; $y++ ) {
+			for ( $x = 0; $x < $width; $x++ ) {
+				if ( $this->is_ink( $image, $x, $y ) ) {
+					$min = min( $min, $x );
+					$max = max( $max, $x );
+				}
+			}
+		}
+
+		return $max < 0 ? 0 : ( $max - $min + 1 );
+	}
+
+	/**
+	 * It reads a store logo from a local WordPress URL, not just a data URI.
+	 */
+	public function test_emit_composites_a_local_url_image(): void {
+		$uploads = wp_upload_dir();
+		$file    = trailingslashit( $uploads['path'] ) . 'wcpos-raster-logo.png';
+
+		$logo = imagecreatetruecolor( 40, 20 );
+		imagefilledrectangle( $logo, 0, 0, 39, 19, imagecolorallocate( $logo, 0, 0, 0 ) );
+		imagepng( $logo, $file );
+		imagedestroy( $logo );
+
+		$url   = trailingslashit( $uploads['url'] ) . 'wcpos-raster-logo.png';
+		$image = $this->render_image( '<receipt paper-width="48"><image src="' . esc_attr( $url ) . '" width="40"/></receipt>' );
+
+		$this->assertGreaterThan( 0, $this->ink_pixels( $image ), 'A configured store logo must reach the raster.' );
+
+		imagedestroy( $image );
+		wp_delete_file( $file );
+	}
+
+	/**
 	 * It reports the AST's cut instead of drawing it.
 	 */
 	public function test_emit_reports_cut_out_of_band(): void {

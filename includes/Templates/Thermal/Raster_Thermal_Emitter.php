@@ -27,11 +27,19 @@
  * point `woocommerce_pos_receipt_raster_font` at a face that has them — see
  * issue #1682.
  *
+ * Complex scripts are a harder limit than coverage. Placing glyphs in cells
+ * means drawing them in logical order, left to right, with no contextual
+ * shaping — so Arabic and Persian come out as unjoined, unreversed letterforms
+ * even though the font has the glyphs. GD has no HarfBuzz binding, so shaping
+ * cannot be done here at all; an RTL store is better served by native StarPRNT,
+ * which leads the offer anyway. Tracked with the font question on #1682.
+ *
  * @package WCPOS\WooCommercePOS\Templates\Thermal
  */
 
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Services\Local_Image_Resolver;
 use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 
 /**
@@ -94,11 +102,17 @@ class Raster_Thermal_Emitter {
 	private $ops = array();
 
 	/**
-	 * Text buffered for the line currently being built.
+	 * Styled runs buffered for the line currently being built.
 	 *
-	 * @var string
+	 * A line is a list of runs rather than one string because styling nests
+	 * inside `<text>`: `<text>plain <bold>bold</bold></text>` is one printed line
+	 * carrying two different inks, and collapsing it to a single style would
+	 * render the whole line in whichever style happened to be current when the
+	 * line closed.
+	 *
+	 * @var array<int, array{text:string, bold:bool, invert:bool, w:int, h:int}>
 	 */
-	private $line = '';
+	private $runs = array();
 
 	/**
 	 * The paper width in character columns.
@@ -223,7 +237,7 @@ class Raster_Thermal_Emitter {
 		}
 
 		$this->ops      = array();
-		$this->line     = '';
+		$this->runs     = array();
 		$this->align    = 'left';
 		$this->width    = 1;
 		$this->height   = 1;
@@ -390,7 +404,7 @@ class Raster_Thermal_Emitter {
 
 		switch ( $type ) {
 			case 'raw-text':
-				$this->line .= $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
+				$this->append_text( $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' ) );
 				break;
 			case 'text':
 				$this->emit_text_line( $children );
@@ -487,14 +501,8 @@ class Raster_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_text_line( array $children ): void {
-		$indent = 0;
-		if ( 'left' !== $this->align ) {
-			$plain  = $this->normalize_text( $this->extract_text( $children ) );
-			$indent = $this->alignment_padding( $this->align, $this->display_width( $plain ) * $this->width, $this->columns );
-		}
-
 		$this->walk_nodes( $children );
-		$this->close_line( $indent );
+		$this->close_line( $this->align );
 	}
 
 	/**
@@ -518,8 +526,8 @@ class Raster_Thermal_Emitter {
 			$row  .= 'right' === $align ? str_repeat( ' ', $pad ) . $text : $text . str_repeat( ' ', $pad );
 		}
 
-		$this->line .= $row;
-		$this->close_line( 0 );
+		$this->append_text( $row );
+		$this->close_line( 'left' );
 	}
 
 	/**
@@ -542,8 +550,8 @@ class Raster_Thermal_Emitter {
 			$text = str_repeat( '-', $this->columns );
 		}
 
-		$this->line .= $text;
-		$this->close_line( 0 );
+		$this->append_text( $text );
+		$this->close_line( 'left' );
 	}
 
 	/**
@@ -565,8 +573,8 @@ class Raster_Thermal_Emitter {
 		// The human-readable value, as the HTML and PDF paths render it.
 		$value = $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
 		if ( '' !== $png && '' !== $value ) {
-			$this->line .= $value;
-			$this->close_line( $this->alignment_padding( 'center', $this->display_width( $value ), $this->columns ) );
+			$this->append_text( $value );
+			$this->close_line( 'center' );
 		}
 	}
 
@@ -589,24 +597,20 @@ class Raster_Thermal_Emitter {
 	/**
 	 * Composite a template `<image>` (typically the store logo).
 	 *
+	 * Templates carry the logo as an ordinary WordPress URL, not a data URI, so
+	 * dropping everything that is not inline would drop every real store logo —
+	 * the main thing this format exists to carry. Local URLs are read from disk;
+	 * remote ones are left out rather than fetched, because this runs inside the
+	 * printer's job fetch and an outbound request there would stall the print.
+	 *
 	 * @param array $node The image AST node.
 	 *
 	 * @return void
 	 */
 	private function emit_image( array $node ): void {
-		$src = isset( $node['src'] ) ? (string) $node['src'] : '';
-		if ( 1 !== preg_match( '#^data:image/[a-z.+-]+;base64,#i', $src ) ) {
-			// Only inline data is available at render time; a remote URL would mean
-			// an HTTP fetch on the printer's fetch request.
-			return;
-		}
+		$bytes = ( new Local_Image_Resolver() )->bytes( isset( $node['src'] ) ? (string) $node['src'] : '' );
 
-		$decoded = base64_decode( (string) substr( $src, (int) strpos( $src, ',' ) + 1 ), true );
-		if ( false === $decoded || '' === $decoded ) {
-			return;
-		}
-
-		$this->push_image( $decoded, isset( $node['width'] ) ? (int) $node['width'] : 0 );
+		$this->push_image( $bytes, isset( $node['width'] ) ? (int) $node['width'] : 0 );
 	}
 
 	/**
@@ -648,25 +652,157 @@ class Raster_Thermal_Emitter {
 	}
 
 	/**
-	 * Close the buffered line into a display-list entry.
+	 * Append text to the buffered line under the current style.
 	 *
-	 * @param int $indent Leading cells before the text.
+	 * @param string $text The text.
 	 *
 	 * @return void
 	 */
-	private function close_line( int $indent ): void {
+	private function append_text( string $text ): void {
+		if ( '' === $text ) {
+			return;
+		}
+
+		$last = \count( $this->runs ) - 1;
+		if ( $last >= 0
+			&& $this->runs[ $last ]['bold'] === $this->bold
+			&& $this->runs[ $last ]['invert'] === $this->invert
+			&& $this->runs[ $last ]['w'] === $this->width
+			&& $this->runs[ $last ]['h'] === $this->height
+		) {
+			$this->runs[ $last ]['text'] .= $text;
+
+			return;
+		}
+
+		$this->runs[] = array(
+			'text'   => $text,
+			'bold'   => $this->bold,
+			'invert' => $this->invert,
+			'w'      => $this->width,
+			'h'      => $this->height,
+		);
+	}
+
+	/**
+	 * Close the buffered runs into one display-list entry per physical line.
+	 *
+	 * A thermal printer wraps a line that runs past the paper; nothing wraps a
+	 * raster, so the wrapping happens here. Without it an over-long product name
+	 * would simply be cut off at the paper edge — text the other emitters print
+	 * in full on the next line.
+	 *
+	 * @param string $align Alignment for the closed lines.
+	 *
+	 * @return void
+	 */
+	private function close_line( string $align ): void {
+		$runs       = $this->runs;
+		$this->runs = array();
+
+		if ( array() === $runs ) {
+			$this->push_line( array(), $align );
+
+			return;
+		}
+
+		$line  = array();
+		$cells = 0;
+
+		foreach ( $runs as $run ) {
+			$pending = '';
+			foreach ( $this->split_chars( $run['text'] ) as $char ) {
+				if ( "\n" === $char ) {
+					$line = $this->close_run( $line, $run, $pending );
+					$this->push_line( $line, $align );
+					$line    = array();
+					$cells   = 0;
+					$pending = '';
+					continue;
+				}
+
+				$cost = ( $this->is_full_width( $char ) ? 2 : 1 ) * max( 1, (int) $run['w'] );
+				if ( $cells + $cost > $this->columns && ( array() !== $line || '' !== $pending ) ) {
+					$line = $this->close_run( $line, $run, $pending );
+					$this->push_line( $line, $align );
+					$line    = array();
+					$cells   = 0;
+					$pending = '';
+				}
+
+				$pending .= $char;
+				$cells   += $cost;
+			}
+
+			$line = $this->close_run( $line, $run, $pending );
+		}
+
+		$this->push_line( $line, $align );
+	}
+
+	/**
+	 * Append a run's accumulated characters to the line being assembled.
+	 *
+	 * @param array  $line    The line so far.
+	 * @param array  $run     The run supplying the style.
+	 * @param string $pending The characters accumulated for this run.
+	 *
+	 * @return array The line.
+	 */
+	private function close_run( array $line, array $run, string $pending ): array {
+		if ( '' !== $pending ) {
+			$line[] = array_merge( $run, array( 'text' => $pending ) );
+		}
+
+		return $line;
+	}
+
+	/**
+	 * Push one physical line onto the display list.
+	 *
+	 * @param array  $line  Runs making up the line.
+	 * @param string $align Alignment mode.
+	 *
+	 * @return void
+	 */
+	private function push_line( array $line, string $align ): void {
+		$line = $this->rtrim_line( $line );
+
+		$cells  = 0;
+		$scale  = 1;
+		foreach ( $line as $run ) {
+			$cells += $this->display_width( $run['text'] ) * max( 1, (int) $run['w'] );
+			$scale  = max( $scale, max( 1, (int) $run['h'] ) );
+		}
+
 		$this->push(
 			array(
 				'op'     => 'text',
-				'text'   => rtrim( $this->line, " \t" ),
-				'indent' => max( 0, $indent ),
-				'bold'   => $this->bold,
-				'invert' => $this->invert,
-				'width'  => $this->width,
-				'height' => $this->height,
+				'runs'   => $line,
+				'indent' => 'left' === $align ? 0 : $this->alignment_padding( $align, $cells, $this->columns ),
+				'height' => $scale,
 			)
 		);
-		$this->line = '';
+	}
+
+	/**
+	 * Drop trailing whitespace from a line's last run.
+	 *
+	 * @param array $line Runs making up the line.
+	 *
+	 * @return array
+	 */
+	private function rtrim_line( array $line ): array {
+		for ( $index = \count( $line ) - 1; $index >= 0; $index-- ) {
+			$trimmed = rtrim( $line[ $index ]['text'], " \t" );
+			if ( '' !== $trimmed ) {
+				$line[ $index ]['text'] = $trimmed;
+				break;
+			}
+			unset( $line[ $index ] );
+		}
+
+		return array_values( $line );
 	}
 
 	/**
@@ -675,8 +811,8 @@ class Raster_Thermal_Emitter {
 	 * @return void
 	 */
 	private function flush_line(): void {
-		if ( '' !== $this->line ) {
-			$this->close_line( 0 );
+		if ( array() !== $this->runs ) {
+			$this->close_line( $this->align );
 		}
 	}
 
@@ -752,8 +888,8 @@ class Raster_Thermal_Emitter {
 				break;
 			}
 
-			if ( 'text' === $op['op'] && '' !== $op['text'] ) {
-				$this->draw_text( $canvas, $op, $y, $white_ink, $black );
+			if ( 'text' === $op['op'] && array() !== $op['runs'] ) {
+				$this->draw_text( $canvas, $op, $y, $white, $white_ink, $black );
 			} elseif ( 'image' === $op['op'] ) {
 				$this->draw_image( $canvas, $op, $y, $white, $black );
 			}
@@ -770,35 +906,127 @@ class Raster_Thermal_Emitter {
 	}
 
 	/**
-	 * Draw one text line, cell by cell.
+	 * Draw one physical line, run by run and cell by cell.
 	 *
-	 * @param resource|object $canvas    The target canvas (GD resource on PHP 7.4, GdImage on 8+).
-	 * @param array             $op        The display-list entry.
-	 * @param int               $top       Top of the line box, in dots.
-	 * @param int               $white_ink Negatable white index, for inverted text.
-	 * @param int               $black     Foreground colour index.
+	 * @param resource|object $canvas    The target canvas.
+	 * @param array           $op        The display-list entry.
+	 * @param int             $top       Top of the line box, in dots.
+	 * @param int             $white     Background colour index.
+	 * @param int             $white_ink Negatable white index, for inverted text.
+	 * @param int             $black     Foreground colour index.
 	 *
 	 * @return void
 	 */
-	private function draw_text( $canvas, array $op, int $top, int $white_ink, int $black ): void {
-		$scale    = (int) $op['height'];
-		$advance  = $this->cell * (int) $op['width'];
-		$size     = $this->font_size * $scale;
-		$box      = (int) round( $this->cell * self::LINE_HEIGHT_RATIO ) * $scale;
-		$baseline = $top + (int) round( $box * self::BASELINE_RATIO );
-		$font     = $op['bold'] ? self::bold_font_path() : self::font_path();
+	private function draw_text( $canvas, array $op, int $top, int $white, int $white_ink, int $black ): void {
+		$box = (int) round( $this->cell * self::LINE_HEIGHT_RATIO ) * max( 1, (int) $op['height'] );
+		$x   = $this->margin + ( (int) $op['indent'] * $this->cell );
 
-		$x     = $this->margin + ( (int) $op['indent'] * $advance );
-		$chars = $this->split_chars( (string) $op['text'] );
+		foreach ( $op['runs'] as $run ) {
+			$x = $this->draw_run( $canvas, $run, $x, $top, $box, $white, $white_ink, $black );
+			if ( $x >= $this->dots ) {
+				break;
+			}
+		}
+	}
 
-		if ( $op['invert'] ) {
-			$span = \count( $chars ) * $advance;
-			imagefilledrectangle( $canvas, $x, $top, min( $this->dots - 1, $x + $span ), $top + $box - 1, $black );
+	/**
+	 * Draw one styled run, returning the x it ends at.
+	 *
+	 * Unscaled runs are painted straight onto the canvas. Scaled ones are drawn
+	 * at base size into a scratch canvas and copied across at integer factors,
+	 * because GD cannot scale a glyph's axes independently: doubling the font
+	 * size for `<size height="2">` would also double the glyph's width while the
+	 * cell advance stayed put, overlapping every character with its neighbour.
+	 * Nearest-neighbour scaling of a two-colour bitmap stays two-colour, so this
+	 * costs no crispness.
+	 *
+	 * @param resource|object $canvas    The target canvas.
+	 * @param array           $run       The run.
+	 * @param int             $x         Left edge, in dots.
+	 * @param int             $top       Top of the line box, in dots.
+	 * @param int             $box       Line box height, in dots.
+	 * @param int             $white     Background colour index.
+	 * @param int             $white_ink Negatable white index.
+	 * @param int             $black     Foreground colour index.
+	 *
+	 * @return int The x after the run.
+	 */
+	private function draw_run( $canvas, array $run, int $x, int $top, int $box, int $white, int $white_ink, int $black ): int {
+		$scale_x = max( 1, (int) $run['w'] );
+		$scale_y = max( 1, (int) $run['h'] );
+		$chars   = $this->split_chars( (string) $run['text'] );
+		$cells   = 0;
+		foreach ( $chars as $char ) {
+			$cells += $this->is_full_width( $char ) ? 2 : 1;
 		}
 
-		$ink = $op['invert'] ? $white_ink : $black;
+		$span = $cells * $this->cell * $scale_x;
+		if ( $run['invert'] ) {
+			imagefilledrectangle( $canvas, $x, $top, min( $this->dots - 1, $x + $span - 1 ), $top + $box - 1, $black );
+		}
+
+		if ( 1 === $scale_x && 1 === $scale_y ) {
+			$this->draw_cells( $canvas, $chars, $x, $top + (int) round( $box * self::BASELINE_RATIO ), $this->cell, $this->font_size, $run, $white_ink, $black );
+
+			return $x + $span;
+		}
+
+		// Scratch is one line box at base scale; the copy below stretches it.
+		$base_box   = (int) round( $this->cell * self::LINE_HEIGHT_RATIO );
+		$base_span  = max( 1, $cells * $this->cell );
+		$scratch    = imagecreatetruecolor( $base_span, $base_box );
+		if ( false === $scratch ) {
+			return $x + $span;
+		}
+
+		$scratch_bg  = imagecolorallocate( $scratch, 255, 255, 255 );
+		$scratch_ink = imagecolorallocate( $scratch, 0, 0, 0 );
+		if ( $run['invert'] ) {
+			$swap        = $scratch_bg;
+			$scratch_bg  = $scratch_ink;
+			$scratch_ink = $swap;
+		}
+		imagefilledrectangle( $scratch, 0, 0, $base_span - 1, $base_box - 1, $scratch_bg );
+		$this->draw_cells(
+			$scratch,
+			$chars,
+			0,
+			(int) round( $base_box * self::BASELINE_RATIO ),
+			$this->cell,
+			$this->font_size,
+			$run,
+			$scratch_ink,
+			$scratch_ink
+		);
+
+		$this->composite_thresholded( $canvas, $scratch, $x, $top, $base_span * $scale_x, $base_box * $scale_y, $white, $black );
+		imagedestroy( $scratch );
+
+		return $x + $span;
+	}
+
+	/**
+	 * Paint a run's glyphs at fixed cell positions.
+	 *
+	 * @param resource|object $canvas    The target canvas.
+	 * @param array           $chars     The characters.
+	 * @param int             $x         Left edge, in dots.
+	 * @param int             $baseline  Text baseline, in dots.
+	 * @param int             $cell      Cell width, in dots.
+	 * @param int             $size      Font size.
+	 * @param array           $run       The run, for its bold flag.
+	 * @param int             $white_ink Negatable white index.
+	 * @param int             $black     Foreground colour index.
+	 *
+	 * @return void
+	 */
+	private function draw_cells( $canvas, array $chars, int $x, int $baseline, int $cell, int $size, array $run, int $white_ink, int $black ): void {
+		$font  = $run['bold'] ? self::bold_font_path() : self::font_path();
+		$ink   = $run['invert'] ? $white_ink : $black;
+		$limit = imagesx( $canvas );
+
 		foreach ( $chars as $char ) {
-			if ( $x >= $this->dots ) {
+			if ( $x >= $limit ) {
 				break;
 			}
 			if ( ' ' !== $char ) {
@@ -808,7 +1036,7 @@ class Raster_Thermal_Emitter {
 				imagettftext( $canvas, $size, 0, $x, $baseline, -$ink, $font, $char );
 			}
 			// A full-width glyph occupies the two cells display_width() counts.
-			$x += $advance * ( $this->is_full_width( $char ) ? 2 : 1 );
+			$x += $cell * ( $this->is_full_width( $char ) ? 2 : 1 );
 		}
 	}
 
@@ -816,10 +1044,10 @@ class Raster_Thermal_Emitter {
 	 * Composite an image block, centred on the paper.
 	 *
 	 * @param resource|object $canvas The target canvas (GD resource on PHP 7.4, GdImage on 8+).
-	 * @param array             $op     The display-list entry.
-	 * @param int               $top    Top of the block, in dots.
-	 * @param int               $white  Background colour index.
-	 * @param int               $black  Foreground colour index.
+	 * @param array           $op     The display-list entry.
+	 * @param int             $top    Top of the block, in dots.
+	 * @param int             $white  Background colour index.
+	 * @param int             $black  Foreground colour index.
 	 *
 	 * @return void
 	 */
@@ -830,32 +1058,63 @@ class Raster_Thermal_Emitter {
 			return;
 		}
 
-		$width  = (int) $op['width'];
-		$height = (int) $op['height'];
+		$left = max( 0, (int) floor( ( $this->dots - (int) $op['width'] ) / 2 ) );
+		$this->composite_thresholded( $canvas, $source, $left, $top, (int) $op['width'], (int) $op['height'], $white, $black );
+		imagedestroy( $source );
+	}
 
-		// Resample into a scratch truecolour image first — a straight copy onto the
-		// palette canvas would allocate grey entries for every interpolated pixel,
-		// leaving the printer to dither a receipt we want crisp.
+	/**
+	 * Scale a source image onto the canvas as pure black and white.
+	 *
+	 * Copying straight onto the palette canvas would allocate a grey entry for
+	 * every interpolated pixel, leaving the printer to dither a receipt we want
+	 * crisp — so the resample lands in a scratch buffer and each pixel is
+	 * thresholded on its way across.
+	 *
+	 * @param resource|object $canvas The target canvas.
+	 * @param resource|object $source The source image.
+	 * @param int             $left   Destination left, in dots.
+	 * @param int             $top    Destination top, in dots.
+	 * @param int             $width  Destination width, in dots.
+	 * @param int             $height Destination height, in dots.
+	 * @param int             $white  Background colour index.
+	 * @param int             $black  Foreground colour index.
+	 *
+	 * @return void
+	 */
+	private function composite_thresholded( $canvas, $source, int $left, int $top, int $width, int $height, int $white, int $black ): void {
+		$width  = max( 1, $width );
+		$height = max( 1, $height );
+
 		$scaled = imagecreatetruecolor( $width, $height );
 		if ( false === $scaled ) {
-			imagedestroy( $source );
-
 			return;
 		}
+
 		imagefilledrectangle( $scaled, 0, 0, $width - 1, $height - 1, imagecolorallocate( $scaled, 255, 255, 255 ) );
 		imagecopyresampled( $scaled, $source, 0, 0, 0, 0, $width, $height, imagesx( $source ), imagesy( $source ) );
-		imagedestroy( $source );
 
-		$left = max( 0, (int) floor( ( $this->dots - $width ) / 2 ) );
+		$canvas_width  = imagesx( $canvas );
+		$canvas_height = imagesy( $canvas );
+
 		for ( $row = 0; $row < $height; $row++ ) {
+			$y = $top + $row;
+			if ( $y < 0 || $y >= $canvas_height ) {
+				continue;
+			}
 			for ( $column = 0; $column < $width; $column++ ) {
+				$x = $left + $column;
+				if ( $x < 0 || $x >= $canvas_width ) {
+					continue;
+				}
+
 				$rgb = imagecolorat( $scaled, $column, $row );
 				// Rec. 601 luma, the standard grey weighting, thresholded at mid-grey.
 				$luma = ( 0.299 * ( ( $rgb >> 16 ) & 0xFF ) )
 					+ ( 0.587 * ( ( $rgb >> 8 ) & 0xFF ) )
 					+ ( 0.114 * ( $rgb & 0xFF ) );
 
-				imagesetpixel( $canvas, $left + $column, $top + $row, $luma < 128 ? $black : $white );
+				imagesetpixel( $canvas, $x, $y, $luma < 128 ? $black : $white );
 			}
 		}
 
