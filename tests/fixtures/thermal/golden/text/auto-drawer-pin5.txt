@@ -1,0 +1,16 @@
+# auto-drawer-pin5 :: text
+## paper-width 32
+VG90YWwgMTAuMDA=
+~
+~
+~
+## paper-width 42
+VG90YWwgMTAuMDA=
+~
+~
+~
+## paper-width 48
+VG90YWwgMTAuMDA=
+~
+~
+~

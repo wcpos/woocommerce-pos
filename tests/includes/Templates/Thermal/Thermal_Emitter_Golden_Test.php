@@ -1,6 +1,6 @@
 <?php
 /**
- * Golden (characterisation) tests for the four PHP thermal emitters.
+ * Golden (characterisation) tests for the PHP thermal emitters.
  *
  * These do not assert that the output is correct — they assert that it has not
  * changed. Their job is to make a text-layout refactor provably byte-neutral on
@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Templates\Thermal\Epos_Xml_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Star_Markup_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Starprnt_Thermal_Emitter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Text_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
 
@@ -170,7 +171,7 @@ class Thermal_Emitter_Golden_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It packs a starred row into identical columns on all four emitters.
+	 * It packs a starred row into identical columns on every emitter.
 	 *
 	 * The star split itself is arithmetic and already agreed; what differed was
 	 * the display width fed into it, so the row content is full-width text long
@@ -178,7 +179,7 @@ class Thermal_Emitter_Golden_Test extends WP_UnitTestCase {
 	 *
 	 * @return void
 	 */
-	public function test_row_column_widths_are_identical_across_all_four_emitters(): void {
+	public function test_row_column_widths_are_identical_across_every_emitter(): void {
 		// Arrange: the starred cell resolves to 22 columns and its content is 32
 		// columns wide, so the packed line exposes the truncation point, the pad
 		// width, and the right-aligned cell's own measurement.
@@ -221,6 +222,8 @@ class Thermal_Emitter_Golden_Test extends WP_UnitTestCase {
 				return ( new Starprnt_Thermal_Emitter() )->emit( $ast );
 			case 'epos-xml':
 				return ( new Epos_Xml_Thermal_Emitter() )->emit( $ast );
+			case 'text':
+				return ( new Text_Thermal_Emitter() )->emit( $ast );
 		}
 
 		return ( new Star_Markup_Thermal_Emitter() )->emit( $ast );

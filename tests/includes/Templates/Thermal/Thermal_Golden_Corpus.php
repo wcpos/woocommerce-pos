@@ -1,6 +1,6 @@
 <?php
 /**
- * Golden-fixture corpus for the four PHP thermal emitters.
+ * Golden-fixture corpus for the PHP thermal emitters.
  *
  * This is a characterisation harness, not a correctness oracle: it pins the
  * exact bytes each emitter produces for a fixed set of markup documents at a
@@ -34,6 +34,7 @@ use WCPOS\WooCommercePOS\Templates\Thermal\Epos_Xml_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Star_Markup_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Starprnt_Thermal_Emitter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Text_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 
 /**
@@ -63,7 +64,7 @@ final class Thermal_Golden_Corpus {
 	 * @return array<int, string>
 	 */
 	public static function lanes(): array {
-		return array( 'escpos', 'starprnt', 'epos-xml', 'star-markup' );
+		return array( 'escpos', 'starprnt', 'epos-xml', 'star-markup', 'text' );
 	}
 
 	/**
@@ -248,6 +249,10 @@ final class Thermal_Golden_Corpus {
 				// The Star Markup emitter has no options constructor; the Star Online
 				// provider drives the drawer out of band.
 				return ( new Star_Markup_Thermal_Emitter() )->emit( $ast );
+			case 'text':
+				// Peripherals move to the CloudPRNT response headers on this lane, so
+				// the drawer options change cut_type()/drawer() rather than the bytes.
+				return ( new Text_Thermal_Emitter( $options ) )->emit( $ast );
 		}
 
 		throw new InvalidArgumentException( 'Unknown thermal emitter lane: ' . $lane );

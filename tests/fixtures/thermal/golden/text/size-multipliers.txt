@@ -1,0 +1,19 @@
+# size-multipliers :: text
+## paper-width 32
+RE9VQkxF
+VFJJUExF
+V0lERSBPTkxZ
+VEFMTCBPTkxZ
+~
+## paper-width 42
+RE9VQkxF
+VFJJUExF
+V0lERSBPTkxZ
+VEFMTCBPTkxZ
+~
+## paper-width 48
+RE9VQkxF
+VFJJUExF
+V0lERSBPTkxZ
+VEFMTCBPTkxZ
+~

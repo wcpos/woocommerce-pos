@@ -1,0 +1,13 @@
+# row-star-widths :: text
+## paper-width 32
+QSBsb25nIHByb2R1Y3QgbmFtZSAgIDIgICAgMTIuMzQ=
+YWxwaGEgICAgIGJldGEgICAgICBnYW1tYQ==
+~
+## paper-width 42
+QSBsb25nIHByb2R1Y3QgbmFtZSB0aGF0IHdpbGwgICAyICAgIDEyLjM0
+YWxwaGEgICAgICAgICBiZXRhICAgICAgICAgIGdhbW1h
+~
+## paper-width 48
+QSBsb25nIHByb2R1Y3QgbmFtZSB0aGF0IHdpbGwgbm90IGYgICAyICAgIDEyLjM0
+YWxwaGEgICAgICAgICAgIGJldGEgICAgICAgICAgICBnYW1tYQ==
+~

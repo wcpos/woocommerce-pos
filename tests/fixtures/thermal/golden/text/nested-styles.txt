@@ -1,0 +1,13 @@
+# nested-styles :: text
+## paper-width 32
+Qm9sZCBwbHVzIHVuZGVybGluZSBwbHVzIGludmVydCBwbGFpbg==
+UmVvcmRlcmVkIHdyYXBwZXJz
+~
+## paper-width 42
+Qm9sZCBwbHVzIHVuZGVybGluZSBwbHVzIGludmVydCBwbGFpbg==
+UmVvcmRlcmVkIHdyYXBwZXJz
+~
+## paper-width 48
+Qm9sZCBwbHVzIHVuZGVybGluZSBwbHVzIGludmVydCBwbGFpbg==
+UmVvcmRlcmVkIHdyYXBwZXJz
+~
