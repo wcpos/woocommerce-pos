@@ -57,6 +57,9 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		// it after the rollback or the rollback restores the committed row.
 		delete_option( Api::SCHEMA_OPTION );
 		remove_all_filters( 'woocommerce_pos_sync_proxy_response' );
+		// setUp's digest registrar now also wires the order pull lane, so this
+		// class's hook state stops at its own boundary as it always has.
+		remove_all_filters( 'woocommerce_pos_sync_order_pull_payloads' );
 		remove_all_filters( 'woocommerce_pos_sync_serialized_product' );
 		remove_all_filters( 'woocommerce_pos_sync_serialized_order' );
 		remove_action( 'woocommerce_before_product_object_save', array( Pos_Uuid::class, 'stamp_on_save' ), 10 );
