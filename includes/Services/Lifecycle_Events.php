@@ -63,6 +63,35 @@ class Lifecycle_Events {
 	const LAST_ORDER_BAND_OPTION = 'woocommerce_pos_analytics_order_band';
 
 	/**
+	 * Option latching that the site's first POS app open has been recorded.
+	 *
+	 * Written regardless of consent: it is a local flag and nothing leaves the
+	 * site. Latching only for consenting sites would mean a store that used the
+	 * POS for a month before saying yes has its next open reported as its first.
+	 *
+	 * @var string
+	 */
+	const FIRST_OPEN_OPTION = 'woocommerce_pos_first_open_recorded';
+
+	/**
+	 * The value the first-open latch stores.
+	 *
+	 * DO NOT make this a timestamp. `add_option()` is not the atomic claim it
+	 * looks like: it does a get_option() check and then an
+	 * `INSERT ... ON DUPLICATE KEY UPDATE`. Two racing callers can both pass the
+	 * check, and if their values DIFFER the loser's upsert changes the row, so
+	 * MySQL reports affected rows and add_option() returns true for both — two
+	 * "firsts" for one event. With an identical value the loser's upsert changes
+	 * nothing, affects 0 rows, and add_option() correctly returns false.
+	 *
+	 * The constant is what makes the latch safe. The timestamp people will want
+	 * to store here is already on the event itself.
+	 *
+	 * @var string
+	 */
+	const LATCH_VALUE = '1';
+
+	/**
 	 * Maximum queued events.
 	 *
 	 * The queue only ever holds one install plus a handful of upgrades, so this
@@ -138,6 +167,53 @@ class Lifecycle_Events {
 				'to_version'   => $to_version,
 			)
 		);
+	}
+
+	/**
+	 * Report that the POS app was opened.
+	 *
+	 * The activation step no admin-side signal can see. Recorded from the POS
+	 * template render rather than by tracking the menu link, so a bookmark, a
+	 * direct URL or a till that never visits wp-admin all count — and so it
+	 * counts opens rather than clicks that may never arrive.
+	 *
+	 * De-duplicated per user per day. A till is reloaded constantly; without a
+	 * window this would repeat the mistake that made `upgrade_cta_viewed` 90% of
+	 * the dataset. A day is also the useful unit: it makes this a daily-active
+	 * signal rather than a page-load counter.
+	 *
+	 * The site's first open is flagged rather than given its own event name, so
+	 * activation and engagement come off one series.
+	 */
+	public function report_app_opened(): void {
+		// Latch the first open BEFORE the consent check, and never transmit it
+		// from here — it is a local option, nothing leaves the site. Latching
+		// only for consenting sites would mean a store that used the POS for a
+		// month and then said yes would have its next open reported as its
+		// first, which is untrue. This way an unknown first open stays unknown
+		// rather than becoming a wrong one.
+		//
+		// See LATCH_VALUE: the constant is what makes this a safe claim.
+		// Autoloaded because it is read on every POS open, and it is one byte.
+		$is_first_open = add_option( self::FIRST_OPEN_OPTION, self::LATCH_VALUE, '', true );
+
+		$analytics = Analytics::instance();
+
+		if ( ! $analytics->is_enabled() ) {
+			return;
+		}
+
+		$analytics->capture_once(
+			'pos_app_opened',
+			array( 'is_first_open' => $is_first_open ),
+			'pos_app_opened'
+		);
+
+		// A POS-only store may never load a wp-admin page, and admin_init is
+		// where the queue is normally drained. Without this, events recorded
+		// before consent — the install, the first sale — would sit unsent
+		// forever on exactly the stores that use the product most.
+		$this->flush_pending();
 	}
 
 	/**

@@ -253,4 +253,19 @@ if ( array() !== $wcpos_legacy_by_user && \function_exists( 'wc_get_logger' ) ) 
 	}
 }
 
+
+/*
+ * Seed the activation latches for stores that already exist.
+ *
+ * `pos_app_opened` (#793 Phase 4) reports the site's first open once, guarded
+ * by an option that only new installs are supposed to be missing. Every store
+ * upgrading to 1.10.0 is missing it by definition, so without this their next
+ * POS open would be reported as first-ever, inventing an activation spike out
+ * of the existing user base.
+ *
+ * Seeded unconditionally: this site predates the latch, so its true first open
+ * is unknowable, and an unknown first is better than a wrong one.
+ */
+add_option( Services\Lifecycle_Events::FIRST_OPEN_OPTION, Services\Lifecycle_Events::LATCH_VALUE, '', true );
+
 // phpcs:enable

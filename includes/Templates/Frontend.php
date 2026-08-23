@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Template_Router;
@@ -82,6 +83,15 @@ class Frontend {
 		$user                 = wp_get_current_user();
 		$auth_service         = Auth::instance();
 		$this->wp_credentials = $auth_service->get_user_data( $user, true );
+
+		// The activation funnel's step the admin side cannot see: the POS itself
+		// being opened. Recorded here rather than by tracking the menu link, so
+		// a bookmark, a direct URL or a till that never touches wp-admin all
+		// count — and so it counts opens, not clicks that may never arrive.
+		//
+		// Everything above has already established that this is a logged-in user
+		// with `access_woocommerce_pos`, past the SSL redirect.
+		( new Lifecycle_Events() )->report_app_opened();
 
 		include woocommerce_pos_locate_template( 'pos.php' );
 		exit;

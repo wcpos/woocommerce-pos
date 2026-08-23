@@ -241,6 +241,12 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 
 		$this->assertCount( 1, $snapshot_notes );
 
+		// Re-read the order: handle_payment_complete() wrote the sequence to its
+		// OWN instance, so the one created above never saw it and reports 0.
+		// This assertion only ever passed because the sequence happened to be 0
+		// too — the moment any earlier test consumed a sequence number, the note
+		// and the "expected" value drifted apart.
+		$order         = wc_get_order( $order->get_id() );
 		$note          = reset( $snapshot_notes );
 		$sequence      = (int) $order->get_meta( Receipt_Snapshot_Store::META_KEY_SEQUENCE, true );
 		$expected_note = sprintf(

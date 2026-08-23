@@ -12,6 +12,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Updates;
 
 use WP_UnitTestCase;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 
 /**
  * Tests for update-1.10.0.php legacy uuid promotion.
@@ -187,6 +188,22 @@ class Test_Update_1_10_0 extends WP_UnitTestCase {
 	 * Test running the migration twice is safe (idempotent) — the second run
 	 * finds no legacy rows and changes nothing.
 	 */
+	/**
+	 * An existing store must not have its next POS open reported as its first.
+	 *
+	 * Every site upgrading to 1.10.0 is missing the Phase 4 activation latches
+	 * by definition. Without seeding, their next open and next sale would both
+	 * be reported as first-ever, inventing an activation spike out of the
+	 * existing user base.
+	 */
+	public function test_migration_seeds_the_first_open_latch(): void {
+		delete_option( Lifecycle_Events::FIRST_OPEN_OPTION );
+
+		$this->run_migration();
+
+		$this->assertSame( Lifecycle_Events::LATCH_VALUE, get_option( Lifecycle_Events::FIRST_OPEN_OPTION ) );
+	}
+
 	public function test_migration_is_idempotent(): void {
 		$user_id     = $this->factory()->user->create();
 		$legacy_uuid = wp_generate_uuid4();
