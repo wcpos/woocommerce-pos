@@ -90,6 +90,57 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * One numeric id can be live in EVERY digest id-space at once. Reading a
+	 * collection must answer from that collection's own object types and never
+	 * another's — the separation the three hand-written readers existed to keep,
+	 * and the one thing folding them into a registry-driven reader could break.
+	 */
+	public function test_read_digests_customer_ids_do_not_leak_into_product_id_space_result(): void {
+		global $wpdb;
+
+		// Arrange: ONE id stored in three id-spaces with three different digests,
+		// plus a variation id proving the products space still spans both types.
+		$shared_id    = 4242;
+		$variation_id = 4243;
+		$stored       = array(
+			array( 'product', $shared_id, '111111111111111111' ),
+			array( 'customer', $shared_id, '222222222222222222' ),
+			array( 'order', $shared_id, '333333333333333333' ),
+			array( 'variation', $variation_id, '444444444444444444' ),
+		);
+		foreach ( $stored as $row ) {
+			$wpdb->replace(
+				$this->index->table_name(),
+				array(
+					'object_type' => $row[0],
+					'object_id' => $row[1],
+					'digest' => $row[2],
+					'updated_gmt' => current_time( 'mysql', true ),
+				)
+			);
+		}
+
+		// Act.
+		$products  = $this->index->read_digests( 'products', array( $shared_id, $variation_id ) );
+		$customers = $this->index->read_digests( 'customers', array( $shared_id, $variation_id ) );
+		$orders    = $this->index->read_digests( 'orders', array( $shared_id, $variation_id ) );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				$shared_id => '111111111111111111',
+				$variation_id => '444444444444444444',
+			),
+			$products
+		);
+		$this->assertSame( array( $shared_id => '222222222222222222' ), $customers );
+		$this->assertSame( array( $shared_id => '333333333333333333' ), $orders );
+		// A collection with no digest id-space reads nothing rather than falling
+		// through to the products digests.
+		$this->assertSame( array(), $this->index->read_digests( 'categories', array( $shared_id ) ) );
+	}
+
+	/**
 	 * The listing carries the live digest and the object_type that routes a pull.
 	 */
 	public function test_bucket_listing_products_returns_live_rows_with_typed_digests(): void {

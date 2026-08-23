@@ -12,6 +12,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
@@ -364,6 +365,62 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '', $data['document']['regular_price'] );
 		$this->assertSame( '', $data['document']['sale_price'] );
 		$this->assertSame( $catalog_product['_rxdb_revision'], $data['currentRevision'] );
+	}
+
+	/**
+	 * ONE named stamper serves every digest collection, on both served read lanes.
+	 *
+	 * The registrar used to COMPOSE a callback name per row
+	 * (`stamp_proxy_{object_type}_digests`). add_filter() never validates a
+	 * callable, so a row whose twin was missing registered silently and fataled at
+	 * apply_filters() time. There is one callback now, and each registered row is
+	 * reachable from the slug the lane actually passes it.
+	 */
+	public function test_digest_stamper_registers_one_callback_for_every_digest_collection_result(): void {
+		// Arrange: setUp already ran the real registrar; run it again for its return.
+		$expected = array();
+		foreach ( Collections::with( 'digest' ) as $collection => $row ) {
+			if ( isset( $row['proxy'] ) ) {
+				$expected[] = $collection;
+			}
+		}
+
+		// Act.
+		$registered = Integrity_Digest::register_proxy_digest_stampers();
+
+		// Assert.
+		$this->assertSame( array( 'products', 'orders', 'customers' ), $registered );
+		$this->assertSame( $expected, $registered );
+		$this->assertTrue( \is_callable( array( Integrity_Digest::class, 'stamp_digests' ) ) );
+		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
+		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ) ) );
+		foreach ( $registered as $collection ) {
+			$row = Collections::row( $collection );
+			$this->assertSame(
+				$collection,
+				Collections::by_proxy_slug( $row['proxy']['slug'] )['_collection'],
+				$collection . ' must be reachable from the slug its lane passes the stamper.'
+			);
+		}
+	}
+
+	/**
+	 * A lane resource with no digest id-space hands its payload back untouched.
+	 */
+	public function test_digest_stamper_unknown_resource_returns_payload_unchanged_result(): void {
+		// Arrange.
+		$payload = array(
+			array( 'id' => 1, 'name' => 'Standard' ),
+			array( 'id' => 2, 'name' => 'Reduced' ),
+		);
+
+		// Act + Assert: `taxes` is a real proxy slug with no digest group, and the
+		// remaining cases are the shapes a lane can hand a filter.
+		$this->assertSame( $payload, Integrity_Digest::stamp_digests( $payload, 'taxes' ) );
+		$this->assertSame( $payload, Integrity_Digest::stamp_digests( $payload, 'categories' ) );
+		$this->assertSame( $payload, Integrity_Digest::stamp_digests( $payload, 'not-a-resource' ) );
+		$this->assertSame( $payload, Integrity_Digest::stamp_digests( $payload, '' ) );
+		$this->assertSame( 'not-an-array', Integrity_Digest::stamp_digests( 'not-an-array', 'products' ) );
 	}
 
 	/**

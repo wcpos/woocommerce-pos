@@ -58,6 +58,30 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Dispatch a digests request that asks for authoritative absence.
+	 *
+	 * @param int[]  $ids        Requested ids.
+	 * @param string $collection Digest collection.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function digests_with_absence( array $ids, string $collection ): array {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/digests' );
+		$request->set_query_params(
+			array(
+				'include'    => implode( ',', $ids ),
+				'collection' => $collection,
+				'absence'    => 'explicit',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+
+		return $response->get_data()['digests'];
+	}
+
+	/**
 	 * Dispatch a single-id integrity bucket request.
 	 *
 	 * @param int         $id     Record id.
@@ -135,6 +159,52 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 			$this->digests( array( $product->get_id() ), 'products', ' publish ' )
 		);
 		$this->assertSame( $this->bucket_rows( $product->get_id() ), $this->bucket_rows( $product->get_id(), ' publish ' ) );
+	}
+
+	/**
+	 * A failed servable query must never manufacture an authoritative deletion.
+	 *
+	 * `deleted: true` tells the till to drop its local record — for the orders
+	 * id-space that is order data — so the membership query fails OPEN: on any SQL
+	 * error every requested id comes back servable and the response simply carries
+	 * no digest for it. This guard predates the reader unification and moved into
+	 * Digest_Index::servable() unchanged.
+	 */
+	public function test_servable_ids_sql_error_treats_all_ids_as_servable_result(): void {
+		global $wpdb;
+
+		// Arrange: an id with no stored digest and no live row, so absence is real.
+		$missing_id = 987654;
+		$this->assertFalse( get_userdata( $missing_id ), 'The fixture id must not name a live user.' );
+		$break_servable = static function ( $query ) {
+			if ( \is_string( $query ) && false !== strpos( $query, 'SELECT requested.id FROM (' ) ) {
+				return 'SELECT wcpos_no_such_column FROM wcpos_no_such_table';
+			}
+			return $query;
+		};
+
+		// Act: once with a working query, once with the membership query broken.
+		$reported                 = $this->digests_with_absence( array( $missing_id ), 'customers' );
+		$previous_suppress_errors = $wpdb->suppress_errors();
+		add_filter( 'query', $break_servable );
+		try {
+			$failed_open = $this->digests_with_absence( array( $missing_id ), 'customers' );
+		} finally {
+			remove_filter( 'query', $break_servable );
+			$wpdb->suppress_errors( $previous_suppress_errors );
+		}
+
+		// Assert.
+		$this->assertSame(
+			array(
+				array(
+					'id' => $missing_id,
+					'deleted' => true,
+				),
+			),
+			$reported
+		);
+		$this->assertSame( array(), $failed_open, 'A database error must never reach the till as a deletion.' );
 	}
 
 	/**
