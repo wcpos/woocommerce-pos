@@ -4,6 +4,9 @@ type CaptureProperties = Record<string, unknown>;
 
 type PostHogLike = {
 	capture?: (event: string, properties?: CaptureProperties) => void;
+	opt_in_capturing?: () => void;
+	opt_out_capturing?: () => void;
+	reset?: () => void;
 };
 
 function getPostHog(): PostHogLike | undefined {
@@ -12,6 +15,35 @@ function getPostHog(): PostHogLike | undefined {
 
 function captureEvent(event: string, properties: CaptureProperties = {}) {
 	getPostHog()?.capture?.(event, properties);
+}
+
+/**
+ * Make the running PostHog client obey a consent answer given in this page.
+ *
+ * The client is initialised once, at page load, from the consent state at that
+ * moment. Turning the privacy toggle off saves `denied` through the SPA without
+ * reloading, so without this the live client keeps capturing for the rest of
+ * the session — every route change, every CTA — after the user has explicitly
+ * said no. An opt-out has to take effect when it is given, not at next reload.
+ *
+ * `reset()` on opt-out also drops the stored distinct id, so nothing further is
+ * attributed to them.
+ */
+export function syncConsent(choice: 'allowed' | 'denied') {
+	const posthog = getPostHog();
+
+	if (!posthog) {
+		return;
+	}
+
+	if (choice === 'allowed') {
+		posthog.opt_in_capturing?.();
+
+		return;
+	}
+
+	posthog.opt_out_capturing?.();
+	posthog.reset?.();
 }
 
 export function captureUpgradeCtaViewed(placement: string) {

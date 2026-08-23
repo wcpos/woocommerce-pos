@@ -359,6 +359,11 @@ class Consent {
 		// carries the surface that was shown.
 		if ( 'allowed' === $choice ) {
 			( new Lifecycle_Events() )->report_consent_granted();
+		} else {
+			// Discard the queued prompt view now rather than leaving it in the
+			// options table until some later admin_init notices the refusal.
+			// A no should take effect in the request that records it.
+			( new Lifecycle_Events() )->discard_pending();
 		}
 
 		return new WP_REST_Response( array( 'consent' => $choice ), 200 );

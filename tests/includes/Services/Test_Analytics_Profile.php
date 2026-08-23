@@ -136,6 +136,25 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Legacy string booleans are read the way the plugin reads them.
+	 *
+	 * `force_ssl` can still hold the string "false" on upgraded stores — which
+	 * is why its accessor, alone among the booleans, normalizes with
+	 * wp_validate_boolean(). A raw (bool) cast would report true and invert the
+	 * adoption number for exactly those stores.
+	 */
+	public function test_settings_summary_normalizes_legacy_string_booleans(): void {
+		$settings              = (array) woocommerce_pos_get_settings( 'general' );
+		$settings['force_ssl'] = 'false';
+		Settings::instance()->save_settings( 'general', $settings );
+
+		$summary = ( new Analytics_Profile() )->get_settings_summary();
+
+		$this->assertFalse( $summary['force_ssl'] );
+		$this->assertSame( Settings::instance()->force_ssl_enabled(), $summary['force_ssl'] );
+	}
+
+	/**
 	 * Integrations can correct the multi-currency signal.
 	 */
 	public function test_multi_currency_is_filterable(): void {

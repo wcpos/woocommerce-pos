@@ -142,22 +142,26 @@ class Analytics_Profile {
 	 * @return array<string, mixed>
 	 */
 	public function get_settings_summary(): array {
-		$general  = Settings::instance()->get_settings( 'general' );
-		$general  = \is_array( $general ) ? $general : array();
+		// Read through the typed accessors rather than the raw option. They are
+		// what the plugin itself acts on, so the snapshot reports the behaviour
+		// the merchant actually gets. It matters: `force_ssl` can still hold the
+		// legacy string "false" on upgraded stores, which is why its accessor —
+		// alone among the booleans — normalizes with wp_validate_boolean(). A
+		// raw (bool) cast on that value yields true and reports the opposite of
+		// what the store does.
+		$settings = Settings::instance();
 		$defaults = ( new Settings\General_Section() )->defaults();
 
-		$barcode_field = (string) ( $general['barcode_field'] ?? $defaults['barcode_field'] );
-
 		$summary = array(
-			'pos_only_products'           => (bool) ( $general['pos_only_products'] ?? false ),
-			'decimal_qty'                 => (bool) ( $general['decimal_qty'] ?? false ),
-			'force_ssl'                   => (bool) ( $general['force_ssl'] ?? true ),
-			'generate_username'           => (bool) ( $general['generate_username'] ?? true ),
-			'default_customer_is_cashier' => (bool) ( $general['default_customer_is_cashier'] ?? false ),
-			'restore_stock_on_delete'     => (bool) ( $general['restore_stock_on_delete'] ?? true ),
-			'storefront_receipt_enabled'  => (bool) ( $general['storefront_receipt_enabled'] ?? false ),
-			'barcode_field'               => $defaults['barcode_field'] === $barcode_field ? 'default' : 'custom',
-			'tracking_consent'            => (string) ( $general['tracking_consent'] ?? 'undecided' ),
+			'pos_only_products'           => $settings->pos_only_products_enabled(),
+			'decimal_qty'                 => $settings->decimal_qty_enabled(),
+			'force_ssl'                   => $settings->force_ssl_enabled(),
+			'generate_username'           => $settings->generate_username_enabled(),
+			'default_customer_is_cashier' => $settings->default_customer_is_cashier(),
+			'restore_stock_on_delete'     => $settings->restore_stock_on_delete_enabled(),
+			'storefront_receipt_enabled'  => wp_validate_boolean( $settings->get_settings( 'general', 'storefront_receipt_enabled' ) ),
+			'barcode_field'               => $defaults['barcode_field'] === $settings->barcode_field() ? 'default' : 'custom',
+			'tracking_consent'            => $settings->tracking_consent(),
 			'enabled_gateway_count'       => \count( (array) ( ( new Landing_Profile() )->get_metrics()['active_gateways'] ?? array() ) ),
 		);
 

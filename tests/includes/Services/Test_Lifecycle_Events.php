@@ -514,6 +514,25 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A refusal empties the queue in the request that records it.
+	 *
+	 * Waiting for the next admin_init would leave the events the user just
+	 * declined sitting in wp_options in the meantime.
+	 */
+	public function test_discarding_pending_empties_the_queue(): void {
+		$this->set_consent( 'undecided' );
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->record_consent_prompt_viewed( 'callout' );
+		$this->assertNotEmpty( get_option( Lifecycle_Events::PENDING_OPTION ) );
+
+		$lifecycle->discard_pending();
+
+		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
+		$this->assertSame( array(), $this->captured_event_names() );
+	}
+
+	/**
 	 * A declined site reports nothing on the way out either.
 	 */
 	public function test_deactivation_is_silent_without_consent(): void {

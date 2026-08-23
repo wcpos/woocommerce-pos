@@ -247,6 +247,16 @@ class Lifecycle_Events {
 	}
 
 	/**
+	 * Throw away anything queued while the answer was pending.
+	 *
+	 * Called when the user declines, so the refusal takes effect in the request
+	 * that records it rather than whenever an admin page next happens to load.
+	 */
+	public function discard_pending(): void {
+		delete_option( self::PENDING_OPTION );
+	}
+
+	/**
 	 * Send any events recorded before consent was decided.
 	 *
 	 * Gated on consent first so that a site which has not opted in never pays
