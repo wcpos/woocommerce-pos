@@ -16,6 +16,7 @@ use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\V1\Product_Brands_Controller;
 use WCPOS\WooCommercePOS\API\V1\Product_Categories_Controller;
 use WCPOS\WooCommercePOS\API\V1\Product_Tags_Controller;
+use WCPOS\WooCommercePOS\API\V1\Traits\Term_Controller as Shared_Term_Controller;
 
 /**
  * @internal
@@ -306,6 +307,27 @@ class Test_Term_Controllers_Parity extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertContains( $first, $ids );
 		$this->assertContains( $last, $ids );
+	}
+
+	/**
+	 * The bulk-ID fast path returns its normal fetch error when a taxonomy is unavailable.
+	 */
+	public function test_bulk_id_fast_path_with_missing_taxonomy_returns_fetch_error(): void {
+		// Arrange.
+		$controller = new class() {
+			use Shared_Term_Controller;
+
+			protected const WCPOS_TAXONOMY       = 'missing_product_brand';
+			protected const WCPOS_ID_ERROR_LABEL = 'product brand';
+		};
+
+		// Act.
+		$response = $controller->wcpos_get_all_posts( $this->wp_rest_get_request() );
+
+		// Assert.
+		$this->assertWPError( $response );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_fetch', $response->get_error_code() );
+		$this->assertSame( 'Error fetching product brand IDs.', $response->get_error_message() );
 	}
 
 	/**

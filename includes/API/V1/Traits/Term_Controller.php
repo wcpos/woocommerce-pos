@@ -202,7 +202,11 @@ trait Term_Controller {
 			 * - ideally WooCommerce would provide a modified_after filter for terms
 			 * - for now we'll just return empty for modified terms
 			 */
-			$ids     = $modified_after ? array() : get_terms( $args );
+			$ids = $modified_after ? array() : get_terms( $args );
+			if ( $ids instanceof WP_Error ) {
+				return Bulk_ID_Fast_Path::fetch_error( "Error fetching {$label} IDs: " . $ids->get_error_message(), "Error fetching {$label} IDs." );
+			}
+
 			$results = Bulk_ID_Fast_Path::rows_from_ids( $ids );
 
 			return Bulk_ID_Fast_Path::response( $this, $results, $start_time );
