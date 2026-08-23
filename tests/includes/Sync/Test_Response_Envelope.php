@@ -231,6 +231,63 @@ class Test_Response_Envelope extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A header-stripping proxy (wcpos-infra#72 Tier 3) deletes X-WCPOS in
+	 * transit, so the client publishes the marker as the `wcpos` query var too.
+	 * The envelope must honour that carrier: the same proxy strips X-WP-Total
+	 * from the response, so a non-namespace route that ignored the query var
+	 * would lose the header AND its body fallback together, and no total could
+	 * reach the client at all.
+	 */
+	public function test_query_var_marker_opts_a_core_route_in_when_the_header_is_stripped(): void {
+		// Arrange: the marker survives ONLY as the query var, as it does behind a
+		// header-stripping proxy.
+		global $wp;
+		$previous            = $wp->query_vars;
+		$wp->query_vars['wcpos'] = '1';
+		$body                = array( array( 'id' => 1 ) );
+		$request             = new WP_REST_Request( 'GET', '/wc/v3/products' );
+		$request->set_param( '_wcpos_envelope', 1 );
+		$response = new WP_REST_Response( $body );
+		$response->header( 'X-WP-Total', '17' );
+
+		// Act.
+		try {
+			Response_Envelope::filter_response( $response, null, $request );
+		} finally {
+			$wp->query_vars = $previous;
+		}
+
+		// Assert: wrapped, and the total the stripped header would have carried is
+		// mirrored into the body.
+		$this->assertEquals( $body, $response->get_data()['data'] );
+		$this->assertEquals( 17, $response->get_data()['_wcpos']['total'] );
+	}
+
+	/**
+	 * The envelope stays double opt-in: the marker alone never wraps a core
+	 * route, `_wcpos_envelope=1` is still required.
+	 */
+	public function test_query_var_marker_without_the_envelope_param_is_not_wrapped(): void {
+		// Arrange.
+		global $wp;
+		$previous                = $wp->query_vars;
+		$wp->query_vars['wcpos'] = '1';
+		$body                    = array( array( 'id' => 1 ) );
+		$request                 = new WP_REST_Request( 'GET', '/wc/v3/products' );
+		$response                = new WP_REST_Response( $body );
+
+		// Act.
+		try {
+			Response_Envelope::filter_response( $response, null, $request );
+		} finally {
+			$wp->query_vars = $previous;
+		}
+
+		// Assert.
+		$this->assertEquals( $body, $response->get_data() );
+	}
+
+	/**
 	 * Build an opted-in, WCPOS-marked request.
 	 *
 	 * @param string $method HTTP method.

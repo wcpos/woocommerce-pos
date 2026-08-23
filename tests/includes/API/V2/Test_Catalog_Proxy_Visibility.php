@@ -86,6 +86,30 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The census probe: page 1, per_page 1, read for its `X-WP-Total` alone.
+	 *
+	 * @param array $params Query parameters.
+	 */
+	private function census_total( array $params = array() ): ?int {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_query_params(
+			array_merge(
+				array(
+					'page' => 1,
+					'per_page' => 1,
+				),
+				$params
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$headers = array_change_key_case( $response->get_headers(), CASE_LOWER );
+
+		return isset( $headers['x-wp-total'] ) ? (int) $headers['x-wp-total'] : null;
+	}
+
+	/**
 	 * Return a variation from the standard WooCommerce fixture.
 	 */
 	private function create_variation(): WC_Product_Variation {
@@ -151,5 +175,30 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertContains( $visible->get_id(), $ids );
 		$this->assertNotContains( $hidden->get_id(), $ids );
+	}
+
+	/**
+	 * The COUNT obeys visibility too, not just the rows.
+	 *
+	 * Every other test in this class asserts row membership — "is the hidden
+	 * product in the list?" — and none of them ever read `X-WP-Total`. That gap
+	 * is how the client's census came to probe `wc/v3/products` for years
+	 * (monorepo#1520): the proxy was correct and covered, but nothing asserted
+	 * the total was a visibility-aware number, so nothing noticed the client was
+	 * reading a different one. A total that counts records the POS may not be
+	 * served is not a smaller bug than a row that leaks — it is the denominator
+	 * the coverage bar and the serve-local gate divide by.
+	 */
+	public function test_census_total_excludes_online_only_products(): void {
+		ProductHelper::create_simple_product();
+		ProductHelper::create_simple_product();
+		$hidden = ProductHelper::create_simple_product();
+
+		$before = $this->census_total();
+		$this->hide_product( $hidden->get_id() );
+		$after = $this->census_total();
+
+		$this->assertSame( 3, $before, 'Baseline total should count every published product.' );
+		$this->assertSame( 2, $after, 'The hidden product must leave the total, not just the rows.' );
 	}
 }

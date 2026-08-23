@@ -121,6 +121,22 @@ final class Response_Envelope {
 	/**
 	 * Whether this is a WCPOS namespace route or explicitly marked request.
 	 *
+	 * The marker is read from BOTH carriers, exactly as `wcpos_request()` reads
+	 * it, and for the reason that helper has two: a proxy or WAF that strips
+	 * request headers deletes `X-WCPOS` in transit, which is why the client
+	 * publishes the same marker as the `wcpos` query var and sends it
+	 * unconditionally. Checking only the header made the body mirror die on
+	 * precisely the hostile condition it exists to survive — a stripping proxy
+	 * removes `X-WP-Total` from the response AND `X-WCPOS` from the request, so
+	 * a non-namespace route lost the header and its fallback together and no
+	 * total could reach the client at all.
+	 *
+	 * `Init::init_rest_api()` already treats the query var as sufficient to load
+	 * the whole POS API; a request that reached a route that way must be able to
+	 * reach its envelope too, or the two disagree about what a POS request is.
+	 * This does not widen the opt-in: `_wcpos_envelope=1` is still required, and
+	 * route registration is untouched.
+	 *
 	 * @param WP_REST_Request $request REST request.
 	 * @param string          $route   Normalized REST route.
 	 */
@@ -131,6 +147,10 @@ final class Response_Envelope {
 			}
 		}
 
-		return '1' === trim( (string) $request->get_header( 'X-WCPOS' ) );
+		if ( '1' === trim( (string) $request->get_header( 'X-WCPOS' ) ) ) {
+			return true;
+		}
+
+		return \wcpos_request( 'query_var' );
 	}
 }
