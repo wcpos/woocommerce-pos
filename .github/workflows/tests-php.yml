@@ -8,6 +8,7 @@ on:
     paths:
       - "**.php"
       - "composer.json"
+      - "composer.lock"
       - ".github/test-matrix.json"
       - ".github/scripts/generate-matrix.sh"
       - ".github/scripts/get-woocommerce-stable-version.sh"
@@ -50,8 +51,15 @@ jobs:
         with:
           filters: |
             php:
+              # composer.lock belongs here even though composer.json is listed:
+              # a transitive update can refresh the lock alone, changing the code
+              # that actually gets installed. The merge gate's requires_php_tests
+              # already counts composer.lock, so omitting it here made a
+              # lock-only PR unmergeable — the suite was skipped, and the gate
+              # read that skip as a failure for a check that could never run.
               - '**.php'
               - 'composer.json'
+              - 'composer.lock'
               - '.github/test-matrix.json'
               - '.github/scripts/generate-matrix.sh'
               - '.github/scripts/get-woocommerce-stable-version.sh'
