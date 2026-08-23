@@ -967,6 +967,10 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$customer2->save_meta_data();
 
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		// The POS customer space now defaults to every user (see
+		// Customers_Lane_Parity_Tests); pin the role so this stays a test about
+		// uuid rekeying rather than about which users exist on the site.
+		$request->set_query_params( array( 'role' => 'customer' ) );
 
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
