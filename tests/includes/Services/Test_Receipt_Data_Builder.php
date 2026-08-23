@@ -721,6 +721,65 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A receipt must not mix time conventions: the opening hours and the order
+	 * timestamps are rendered by the same helper, in the same store locale.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/1399
+	 */
+	public function test_build_renders_opening_hours_in_the_same_convention_as_order_dates(): void {
+		update_option( 'time_format', 'g:i a' );
+
+		$order = wc_create_order();
+		$order->set_date_created( strtotime( '2026-07-29 09:00:00 UTC' ) );
+		$order->save();
+
+		$pos_store = new class() {
+			/**
+			 * Store locale.
+			 */
+			public function get_locale(): string {
+				return 'nl_NL';
+			}
+
+			/**
+			 * Store timezone.
+			 */
+			public function get_timezone(): string {
+				return 'UTC';
+			}
+
+			/**
+			 * Structured opening hours.
+			 *
+			 * @return array<string, array<int, string>>
+			 */
+			public function get_opening_hours(): array {
+				return array( '0' => array( '09:00', '17:00' ) );
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+
+		$utc   = new \DateTimeZone( 'UTC' );
+		$hours = (string) $payload['store']['opening_hours_vertical'];
+
+		// Both halves of the line come from the renderer the order timestamps
+		// use, in the store locale — not from date_i18n() and the site locale.
+		$this->assertStringStartsWith(
+			Receipt_Date_Formatter::weekday_short( (int) strtotime( '2024-01-01 UTC' ), $utc, 'nl_NL' ),
+			$hours
+		);
+		$this->assertStringContainsString(
+			Receipt_Date_Formatter::time( (int) strtotime( '2000-01-01 09:00 UTC' ), $utc, 'nl_NL' ),
+			$hours
+		);
+		$this->assertStringContainsString(
+			Receipt_Date_Formatter::time( (int) strtotime( '2000-01-01 17:00 UTC' ), $utc, 'nl_NL' ),
+			$hours
+		);
+	}
+
+	/**
 	 * Order date fields should respect the WordPress time_format setting even
 	 * when the store locale would default to 12-hour AM/PM output.
 	 */

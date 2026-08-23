@@ -93,15 +93,7 @@ class Receipt_Date_Formatter {
 	 * @return array<string, string>
 	 */
 	public static function from_timestamp( int $timestamp, ?DateTimeZone $timezone = null, ?string $locale = null ): array {
-		$timezone = $timezone ? $timezone : self::get_default_timezone();
-		$locale   = $locale ? $locale : self::get_default_locale();
-		$date     = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( $timezone );
-
-		// The WordPress time_format setting controls the clock convention
-		// (12 vs 24-hour); the locale keeps controlling localized date text.
-		$time_format   = self::get_time_format_option();
-		$hour_token    = self::get_icu_hour_token( $time_format );
-		$fallback_time = '' !== $time_format ? $time_format : 'g:i A';
+		list( $date, $timezone, $locale, $hour_token, $fallback_time ) = self::resolve_context( $timestamp, $timezone, $locale );
 
 		return array(
 			'datetime'       => self::format_style( $date, $timezone, $locale, self::INTL_MEDIUM, self::INTL_SHORT, 'M j, Y ' . $fallback_time, $hour_token ),
@@ -127,12 +119,77 @@ class Receipt_Date_Formatter {
 	}
 
 	/**
+	 * Format the time of day on its own.
+	 *
+	 * Returns exactly the value `from_timestamp()` puts in its `time` key, so
+	 * every clock rendered on a receipt — order timestamps, opening hours —
+	 * comes from one convention source.
+	 *
+	 * @param int               $timestamp Unix timestamp.
+	 * @param DateTimeZone|null $timezone  Optional timezone override.
+	 * @param string|null       $locale    Optional locale override.
+	 *
+	 * @return string
+	 */
+	public static function time( int $timestamp, ?DateTimeZone $timezone = null, ?string $locale = null ): string {
+		list( $date, $timezone, $locale, $hour_token, $fallback_time ) = self::resolve_context( $timestamp, $timezone, $locale );
+
+		return self::format_style( $date, $timezone, $locale, self::INTL_NONE, self::INTL_SHORT, $fallback_time, $hour_token );
+	}
+
+	/**
+	 * Format the short weekday name on its own.
+	 *
+	 * Returns exactly the value `from_timestamp()` puts in its `weekday_short`
+	 * key, so day labels match wherever a receipt names a weekday.
+	 *
+	 * @param int               $timestamp Unix timestamp.
+	 * @param DateTimeZone|null $timezone  Optional timezone override.
+	 * @param string|null       $locale    Optional locale override.
+	 *
+	 * @return string
+	 */
+	public static function weekday_short( int $timestamp, ?DateTimeZone $timezone = null, ?string $locale = null ): string {
+		list( $date, $timezone, $locale ) = self::resolve_context( $timestamp, $timezone, $locale );
+
+		return self::format_pattern( $date, $timezone, $locale, 'EEE', 'D' );
+	}
+
+	/**
 	 * Build an empty date structure.
 	 *
 	 * @return array<string, string>
 	 */
 	public static function empty(): array {
 		return array_fill_keys( self::DATE_FIELDS, '' );
+	}
+
+	/**
+	 * Resolve the shared inputs every formatting method needs.
+	 *
+	 * The WordPress time_format setting controls the clock convention (12 vs
+	 * 24-hour); the locale keeps controlling localized date text.
+	 *
+	 * @param int               $timestamp Unix timestamp.
+	 * @param DateTimeZone|null $timezone  Optional timezone override.
+	 * @param string|null       $locale    Optional locale override.
+	 *
+	 * @return array{0: DateTimeImmutable, 1: DateTimeZone, 2: string, 3: string|null, 4: string}
+	 */
+	private static function resolve_context( int $timestamp, ?DateTimeZone $timezone, ?string $locale ): array {
+		$timezone = $timezone ? $timezone : self::get_default_timezone();
+		$locale   = $locale ? $locale : self::get_default_locale();
+		$date     = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( $timezone );
+
+		$time_format = self::get_time_format_option();
+
+		return array(
+			$date,
+			$timezone,
+			$locale,
+			self::get_icu_hour_token( $time_format ),
+			'' !== $time_format ? $time_format : 'g:i A',
+		);
 	}
 
 	/**

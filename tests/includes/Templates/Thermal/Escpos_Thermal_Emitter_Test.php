@@ -490,4 +490,23 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Before', $printable );
 		$this->assertStringContainsString( 'After', $printable );
 	}
+
+	/**
+	 * CLDR clock times separate the hour from the day period with a narrow
+	 * no-break space, which no printer character table can render.
+	 *
+	 * @return void
+	 */
+	public function test_narrow_no_break_spaces_are_normalized_to_ascii(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><text>3:42' . "\u{202F}" . 'PM' . "\u{2009}" . 'CET</text></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '3:42 PM CET', $bytes );
+		$this->assertStringNotContainsString( "\u{202F}", $bytes );
+		$this->assertStringNotContainsString( "\u{2009}", $bytes );
+	}
 }
