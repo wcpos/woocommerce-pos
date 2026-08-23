@@ -370,6 +370,9 @@ PHP;
 		$this->assertStringContainsString( '3:42 PM CET', $bytes );
 		$this->assertStringNotContainsString( "\u{202F}", $bytes );
 		$this->assertStringNotContainsString( "\u{2009}", $bytes );
+	}
+
+	/**
 	 * A non-Code-128 symbology selects its own ESC b n1 code.
 	 *
 	 * @return void

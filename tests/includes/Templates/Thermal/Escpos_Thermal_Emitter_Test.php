@@ -508,6 +508,9 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( '3:42 PM CET', $bytes );
 		$this->assertStringNotContainsString( "\u{202F}", $bytes );
 		$this->assertStringNotContainsString( "\u{2009}", $bytes );
+	}
+
+	/**
 	 * A non-Code-128 symbology selects its own GS k function-B code.
 	 *
 	 * @return void
