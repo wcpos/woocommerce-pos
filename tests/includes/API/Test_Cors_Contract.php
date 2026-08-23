@@ -126,7 +126,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 
 			// Assert.
 			$this->assertSame( '*', $server->sent_headers['Access-Control-Allow-Origin'] ?? null, "{$route} preflight must answer with the WCPOS origin." );
-			$this->assertSame( 'GET, POST, PUT, PATCH, DELETE', $server->sent_headers['Access-Control-Allow-Methods'] ?? null, "{$route} preflight is missing the allowed methods." );
+			$this->assertSame( 'OPTIONS, GET, POST, PUT, PATCH, DELETE', $server->sent_headers['Access-Control-Allow-Methods'] ?? null, "{$route} preflight is missing the allowed methods." );
 			// Without Max-Age the Fetch spec caches a preflight for only 5s,
 			// doubling every cross-origin request. 7200 is Chromium's cap.
 			$this->assertSame( '7200', $server->sent_headers['Access-Control-Max-Age'] ?? null, "{$route} preflight is missing Max-Age." );
