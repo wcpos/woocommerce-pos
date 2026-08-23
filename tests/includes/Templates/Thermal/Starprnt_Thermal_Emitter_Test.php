@@ -451,4 +451,52 @@ PHP;
 		// Assert.
 		$this->assertStringContainsString( "\x1b\x62\x06\x01\x02\x28" . 'ABCDEF' . "\x1e", $bytes );
 	}
+
+	/**
+	 * A wrong EAN-13 check digit prints as text rather than as a wrong symbol.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_wrong_ean13_check_digit_prints_text_and_no_barcode(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt><barcode type="ean13" height="40">4006381333932</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62 ) ) );
+		$this->assertStringContainsString( '4006381333932', $bytes );
+	}
+
+	/**
+	 * A Code 128 value that only overflows once escaped prints as text.
+	 *
+	 * Every `%` doubles to `%0` on StarPRNT, so 200 of them encode to 400 bytes
+	 * and the clamp would print a barcode scanning as a much shorter value.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code128_value_that_overflows_once_escaped_prints_text(): void {
+		// Arrange.
+		$value = str_repeat( '%', 200 );
+
+		// Act.
+		$bytes = $this->render( '<receipt><barcode type="code128" height="40">' . $value . '</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62 ) ) );
+		$this->assertStringContainsString( $value, $bytes );
+	}
+
+	/**
+	 * An interior Code 39 asterisk prints as text rather than a truncated symbol.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code39_interior_asterisk_prints_text_and_no_barcode(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt><barcode type="code39" height="40">AB*CD</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62 ) ) );
+		$this->assertStringContainsString( 'AB*CD', $bytes );
+	}
 }

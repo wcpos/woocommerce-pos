@@ -249,6 +249,7 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 		$this->assertSame( Barcode_Symbology::MAX_DATA_BYTES, \strlen( Barcode_Symbology::escpos_payload( 'code128', $long ) ) );
 		$this->assertSame( Barcode_Symbology::MAX_DATA_BYTES, \strlen( Barcode_Symbology::starprnt_payload( 'code128', $long ) ) );
 	}
+
 	/**
 	 * Clamping a Code 128 payload can split an escaped `%0` pair. Star reads a
 	 * `%` plus the following byte as an escape, and the byte that follows on the
@@ -279,5 +280,114 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 		// Arrange / Act / Assert.
 		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', '7', Barcode_Symbology::LANE_ESCPOS ) );
 		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', '', Barcode_Symbology::LANE_ESCPOS ) );
+	}
+
+	/**
+	 * Code 128 is measured on the encoded bytes, not the merchant's value.
+	 *
+	 * ESC/POS spends two bytes on the `{B` selector before the value starts, so
+	 * 254 characters no longer fit even though the value itself is under the
+	 * 255-byte limit. Accepting it would clamp the payload and print a shorter
+	 * barcode that still scans — as a different value.
+	 *
+	 * @return void
+	 */
+	public function test_is_valid_value_rejects_a_code128_value_that_overflows_the_escpos_selector(): void {
+		// Arrange.
+		$fits      = str_repeat( 'A', 253 );
+		$overflows = str_repeat( 'A', 254 );
+
+		// Act / Assert.
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', $fits, Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertSame( Barcode_Symbology::MAX_DATA_BYTES, \strlen( Barcode_Symbology::escpos_payload( 'code128', $fits ) ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', $overflows, Barcode_Symbology::LANE_ESCPOS ) );
+	}
+
+	/**
+	 * Escaping expansion counts toward the Code 128 limit on both lanes.
+	 *
+	 * Every `{` doubles on ESC/POS and every `%` doubles on StarPRNT, so a value
+	 * that fits before escaping can overflow after it.
+	 *
+	 * @return void
+	 */
+	public function test_is_valid_value_rejects_a_code128_value_that_overflows_once_escaped(): void {
+		// Arrange. Both are well inside 255 characters before escaping.
+		$braces   = str_repeat( '{', 200 );
+		$percents = str_repeat( '%', 200 );
+
+		// Act / Assert.
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', $braces, Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', $percents, Barcode_Symbology::LANE_STARPRNT ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', str_repeat( '%', 127 ), Barcode_Symbology::LANE_STARPRNT ) );
+	}
+
+	/**
+	 * A wrong check digit is rejected on the full-length GTIN forms.
+	 *
+	 * The shorter forms carry no check digit — the printer computes one — so
+	 * they stay valid.
+	 *
+	 * @return void
+	 */
+	public function test_is_valid_value_rejects_a_wrong_gtin_check_digit(): void {
+		// Arrange / Act / Assert.
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean13', '4006381333931', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean13', '4006381333932', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean13', '400638133393', Barcode_Symbology::LANE_ESCPOS ) );
+
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean8', '96385074', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'ean8', '96385075', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'ean8', '9638507', Barcode_Symbology::LANE_ESCPOS ) );
+
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'upca', '036000291452', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'upca', '036000291453', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'upca', '12345678901', Barcode_Symbology::LANE_ESCPOS ) );
+
+		// UPC-E's full form is a UPC-A payload, so it uses the UPC-A check digit.
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'upce', '036000291452', Barcode_Symbology::LANE_STARPRNT ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'upce', '036000291453', Barcode_Symbology::LANE_STARPRNT ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'upce', '01234500006', Barcode_Symbology::LANE_STARPRNT ) );
+	}
+
+	/**
+	 * ESC/POS Code 128 accepts only what code set B can encode.
+	 *
+	 * The ESC/POS payload builder always selects set B, which covers printable
+	 * ASCII only. StarPRNT auto-selects its code set, so it keeps the wider
+	 * 7-bit range.
+	 *
+	 * @return void
+	 */
+	public function test_is_valid_value_rejects_code_set_b_unencodable_bytes_on_the_escpos_lane(): void {
+		// Arrange.
+		$with_line_feed = "ABC\n123";
+
+		// Act / Assert.
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', $with_line_feed, Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', "ABC\t123", Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', "ABC\r123", Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', 'ABC-123', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', $with_line_feed, Barcode_Symbology::LANE_STARPRNT ) );
+	}
+
+	/**
+	 * Code 39 treats `*` as the start/stop sentinel, not as data.
+	 *
+	 * A printer ends the symbol at an interior `*`, so `AB*CD` scans back as
+	 * `AB`. A matching leading and trailing pair is how a value copied off
+	 * another system is often written, so that form is still accepted.
+	 *
+	 * @return void
+	 */
+	public function test_is_valid_value_rejects_a_code39_asterisk_outside_the_sentinel_pair(): void {
+		// Arrange / Act / Assert.
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', 'AB*CD', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', '*ABC', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', 'ABC*', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', '*', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code39', '**', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code39', '*ABC*', Barcode_Symbology::LANE_ESCPOS ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code39', 'ABC-123', Barcode_Symbology::LANE_ESCPOS ) );
 	}
 }

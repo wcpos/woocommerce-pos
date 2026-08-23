@@ -17,7 +17,7 @@
 - **Fixed:** the ePOS-Print XML lane emitted `upca` / `upce`, which Epson's `<barcode>` element rejects. It now emits `upc_a` / `upc_e`.
 - **Fixed:** the ePOS-Print XML lane now passes through symbologies Epson supports but WCPOS does not model itself — `jan13`, `jan8`, `code128_auto`, `gs1_128` and the `gs1_databar_*` family. A template asking for one of those previously reached the printer untouched; it must keep doing so rather than being folded to Code 128.
 - **Fixed:** a `<barcode type="qr">` rendered noticeably smaller in the on-screen template preview than it printed. Preview and print now agree.
-- **Changed:** if a barcode value does not satisfy the rules of the symbology it declares (for example a non-numeric EAN-13, or an odd-length ITF), thermal lanes now print the value as plain text instead of silently substituting a scannable Code 128. Merchants relying on the old fallback will see text where they previously got a barcode — the template's symbology or its value needs correcting.
+- **Changed:** if a barcode value does not satisfy the rules of the symbology it declares, thermal lanes now print the value as plain text instead of silently substituting a scannable Code 128. Merchants relying on the old fallback will see text where they previously got a barcode — the template's symbology or its value needs correcting. Values rejected include a non-numeric EAN-13, an odd-length ITF, an EAN/UPC value whose final check digit does not match the digits before it, a Code 39 value containing a `*` anywhere but as a matching first-and-last pair, and a Code 128 value too long to transmit once the printer's escaping has been applied.
 
 ---
 

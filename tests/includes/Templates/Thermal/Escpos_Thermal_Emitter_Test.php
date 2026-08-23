@@ -585,4 +585,74 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$expected = array_merge( array( 0x1d, 0x6b, 73, 8 ), $this->ascii_bytes( '{BABCDEF' ) );
 		$this->assertTrue( $this->includes_sequence( $bytes, $expected ) );
 	}
+
+	/**
+	 * A wrong EAN-13 check digit prints as text rather than as a wrong symbol.
+	 *
+	 * The digits and the length are right, so only the check digit separates
+	 * this from the value pinned above.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_wrong_ean13_check_digit_prints_text_and_no_barcode(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="ean13" height="60">4006381333932</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
+		$this->assertStringContainsString( '4006381333932', $bytes );
+	}
+
+	/**
+	 * A Code 128 value that only overflows once escaped prints as text.
+	 *
+	 * The `{B` selector escpos_payload() prepends counts toward the 255-byte
+	 * limit, so emitting this would clamp the data and print a barcode that
+	 * scans cleanly as a shortened value.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code128_value_that_overflows_the_selector_prints_text(): void {
+		// Arrange.
+		$value = str_repeat( 'A', 254 );
+
+		// Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="code128" height="40">' . $value . '</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
+		$this->assertStringContainsString( $value, $bytes );
+	}
+
+	/**
+	 * An interior Code 39 asterisk prints as text rather than a truncated symbol.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code39_interior_asterisk_prints_text_and_no_barcode(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="code39" height="40">AB*CD</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
+		$this->assertStringContainsString( 'AB*CD', $bytes );
+	}
+
+	/**
+	 * A control byte in a Code 128 value never reaches the print stream.
+	 *
+	 * Code set B cannot encode a line feed, so the value takes the text rescue;
+	 * emitted raw the line feed would break the line the rescue is centering.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_code128_line_feed_prints_text_without_the_control_byte(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="code128" height="40">ABC&#10;123</barcode></receipt>' );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
+		$this->assertStringContainsString( 'ABC 123', $bytes );
+		$this->assertStringNotContainsString( "ABC\n123", $bytes );
+	}
 }
