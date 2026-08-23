@@ -12,6 +12,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -37,12 +38,15 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		( new Activator() )->install_sync_schema();
 		add_filter( 'woocommerce_pos_sync_serialized_product', array( Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-		add_filter( 'woocommerce_pos_sync_serialized_product', array( Variable_Prices::class, 'stamp_serialized_variable_prices' ), 10, 3 );
 		add_filter( 'woocommerce_pos_sync_serialized_order', array( Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
 		Revision::register_proxy_stamps();
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		Integrity_Digest::register_proxy_digest_stampers();
-		add_filter( 'woocommerce_pos_sync_proxy_response', array( Variable_Prices::class, 'stamp_proxy_variable_prices' ), 10, 3 );
+		// The variable-price augmentation is declared ONCE on the pipeline and
+		// projected onto both read lanes, exactly as Init.php wires it.
+		Augmentation_Pipeline::reset();
+		Augmentation_Pipeline::add_record_augmenter( array( Variable_Prices::class, 'augment_record' ), 10 );
+		Augmentation_Pipeline::wire();
 		Pos_Uuid::register_hooks();
 
 		parent::setUp();
@@ -56,6 +60,7 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		// setUp committed the schema latch before the transaction started; delete
 		// it after the rollback or the rollback restores the committed row.
 		delete_option( Api::SCHEMA_OPTION );
+		Augmentation_Pipeline::reset();
 		remove_all_filters( 'woocommerce_pos_sync_proxy_response' );
 		// setUp's digest registrar now also wires the order pull lane, so this
 		// class's hook state stops at its own boundary as it always has.
@@ -427,12 +432,31 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Revision stamping stays ahead of UUID/digest augmentation.
+	 * Revision stamping stays ahead of UUID/digest/variable-price augmentation.
 	 */
 	public function test_proxy_stamp_priority_keeps_revision_first(): void {
+		// Arrange.
+		$product = ProductHelper::create_variation_product();
+		$record  = array(
+			'id'            => $product->get_id(),
+			'type'          => 'variable',
+			'price'         => '102',
+			'regular_price' => '102',
+			'meta_data'     => array(),
+		);
+
+		// Act: one full pass of the batch lane over the raw record.
+		$stamped = apply_filters( 'woocommerce_pos_sync_proxy_response', array( $record ), 'products', null );
+
+		// Assert.
 		$this->assertSame( 9, has_filter( 'woocommerce_pos_sync_proxy_response', array( Revision::class, 'stamp_proxy_revisions' ) ) );
 		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
-		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Variable_Prices::class, 'stamp_proxy_variable_prices' ) ) );
 		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_serialized_product', array( Pos_Uuid::class, 'stamp_serialized_record' ) ) );
+		// The variable-price augmentation reaches this lane as an Augmentation_Pipeline
+		// projection closure, so pin the ordering by effect rather than by callback
+		// identity: the revision hash is of the BARE record, and the augmentation that
+		// clears the stale parent price ran after it.
+		$this->assertSame( Revision::compute( $record ), $stamped[0]['_rxdb_revision'] );
+		$this->assertSame( '', $stamped[0]['regular_price'] );
 	}
 }

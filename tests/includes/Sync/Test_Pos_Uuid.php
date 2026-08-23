@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use WC_Customer;
@@ -385,5 +386,60 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 		$this->assertCount( 1, $rows, 'duplicate uuid rows must collapse to one' );
 		$this->assertSame( $resolved, $rows[0] );
 		$this->assertNotSame( $owned, $resolved );
+	}
+
+	/**
+	 * The order-item UUID mint holds its lock on the DATABASE, not in the object
+	 * cache.
+	 *
+	 * The original lock was a `wp_cache_add` sentinel, which is silently
+	 * ineffective on the many installs with no persistent object cache: two
+	 * concurrent requests both "won" and both minted. This pins the replacement
+	 * by observing the live mint from a SECOND database connection — the lock is
+	 * unavailable there for as long as the mint holds it.
+	 *
+	 * Probing from inside the critical section keeps the test instant: contending
+	 * from the outside would sit out the production 10-second GET_LOCK timeout.
+	 */
+	public function test_ensure_order_item_uuid_holds_the_lock_on_the_datastore(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->delete_meta_data( Pos_Uuid::META_KEY );
+		$item->save_meta_data();
+
+		$lock_key  = 'wc_pos_uuid_order_item_' . $item->get_id();
+		$observer  = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$contended = null;
+		// wc_get_order_item_meta() runs inside the critical section, so its
+		// short-circuit filter is a probe point reached only while the lock is held.
+		$probe = function ( $value, $object_id, $meta_key ) use ( $observer, $lock_key, &$contended ) {
+			if ( null === $contended && Pos_Uuid::META_KEY === $meta_key ) {
+				$contended = (string) $observer->get_var( $observer->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, 0 ) );
+			}
+
+			return $value;
+		};
+		add_filter( 'get_order_item_metadata', $probe, 10, 3 );
+
+		// Act.
+		try {
+			Pos_Uuid::ensure_order_item_uuid( $item );
+		} finally {
+			remove_filter( 'get_order_item_metadata', $probe, 10 );
+			$observer->get_var( $observer->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
+			$observer->close();
+		}
+
+		// Assert.
+		$this->assertSame( '0', $contended, 'A second connection must not acquire the lock while the mint holds it.' );
+
+		// Read the uuid back out of the datastore rather than off the in-memory
+		// item: $item->get_meta() would return what ensure_order_item_uuid() set
+		// on the object, so a regression that dropped save_meta_data() would still
+		// pass. This test exists because the ORIGINAL lock was ineffective without
+		// a persistent object cache — persistence is the property under test.
+		$this->assertTrue( Pos_Uuid::is_uuid( wc_get_order_item_meta( $item->get_id(), Pos_Uuid::META_KEY, true ) ) );
 	}
 }

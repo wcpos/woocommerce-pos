@@ -62,16 +62,6 @@ class Test_Uuid_Handler_Class {
 	public function test_maybe_add_order_item_uuid( $item ): void {
 		$this->maybe_add_order_item_uuid( $item );
 	}
-
-	/** Expose the order-item lock for a real datastore contention test. */
-	public function test_acquire_order_item_uuid_lock( string $lock_key, int $timeout ): bool {
-		return $this->acquire_order_item_uuid_lock( $lock_key, $timeout );
-	}
-
-	/** Release a lock acquired by the contention test. */
-	public function test_release_order_item_uuid_lock( string $lock_key ): void {
-		$this->release_order_item_uuid_lock( $lock_key );
-	}
 }
 
 /**
@@ -479,28 +469,5 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 
 		$this->assertSame( 'SKU-123', $item->get_meta( '_sku' ) );
 		$this->assertSame( 'SKU-123', ( new \WC_Order_Item_Product( $item->get_id() ) )->get_meta( '_sku' ) );
-	}
-
-	/**
-	 * The order-item UUID lock is shared across database connections.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::acquire_order_item_uuid_lock
-	 */
-	public function test_order_item_uuid_lock_is_datastore_backed(): void {
-		$lock_key = 'wc_pos_uuid_order_item_test';
-		$locker   = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
-		$this->assertSame( '1', (string) $locker->get_var( $locker->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, 0 ) ) );
-		$acquired = false;
-
-		try {
-			$acquired = $this->handler->test_acquire_order_item_uuid_lock( $lock_key, 1 );
-			$this->assertFalse( $acquired );
-		} finally {
-			if ( $acquired ) {
-				$this->handler->test_release_order_item_uuid_lock( $lock_key );
-			}
-			$locker->get_var( $locker->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
-			$locker->close();
-		}
 	}
 }

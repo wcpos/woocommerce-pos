@@ -52,40 +52,6 @@ final class Variable_Prices {
 	}
 
 	/**
-	 * Backward-compatible batch-lane entry point.
-	 *
-	 * Kept for third-party code hooked to `woocommerce_pos_sync_proxy_response`
-	 * with this callback; the pipeline no longer registers it.
-	 *
-	 * @param mixed      $data     Response data.
-	 * @param mixed      $resource Resource name.
-	 * @param null|mixed $request  Request context.
-	 */
-	public static function stamp_proxy_variable_prices( $data, $resource = '', $request = null ) {
-		if ( 'products' !== $resource || ! \is_array( $data ) ) {
-			return $data;
-		}
-		foreach ( $data as $index => $product ) {
-			if ( \is_array( $product ) ) {
-				$data[ $index ] = self::augment_record( $product, null, $request );
-			}
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Backward-compatible per-object-lane entry point.
-	 *
-	 * @param mixed      $payload Response payload.
-	 * @param null|mixed $object  Product object.
-	 * @param null|mixed $request Request context.
-	 */
-	public static function stamp_serialized_variable_prices( $payload, $object = null, $request = null ) {
-		return self::augment_record( $payload, $object, $request );
-	}
-
-	/**
 	 * Shared per-product stamp: if `$product` is a `type: 'variable'` array backed by a
 	 * variable product object, inject the freshly-recomputed
 	 * `_woocommerce_pos_variable_prices` range. Otherwise pass through untouched.

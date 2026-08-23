@@ -30,8 +30,12 @@ trait Product_Helpers {
 	/**
 	 * Get barcode field from settings.
 	 *
-	 * Thin delegate to {@see Barcode_Field}. Kept as a public trait method
-	 * because Pro subclasses inherit it.
+	 * @deprecated No caller remains in this repository. Kept because
+	 *             this trait is aliased as public API in
+	 *             includes/API/class-aliases.php, so callers outside this
+	 *             repository may still use it. Use
+	 *             {@see \WCPOS\WooCommercePOS\Services\Barcode_Field::meta_key()}
+	 *             instead.
 	 *
 	 * @return string
 	 */

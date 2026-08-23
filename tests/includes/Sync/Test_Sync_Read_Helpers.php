@@ -33,6 +33,7 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	 * Remove options written outside the per-test assertions.
 	 */
 	public function tearDown(): void {
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
 		delete_option( Config_Fingerprint::CLEANUP_VERSION_OPTION );
@@ -99,24 +100,31 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Product proxy reinjects protected UUID meta from its bulk read.
+	 * The registered product stamper reinjects protected UUID meta from its bulk read.
 	 */
-	public function test_product_proxy_reinjects_existing_uuid(): void {
+	public function test_registered_product_proxy_stamper_reinjects_existing_uuid(): void {
+		// Arrange.
 		$product = ProductHelper::create_simple_product();
 		$uuid    = wp_generate_uuid4();
 		$product->update_meta_data( Api::UUID_META_KEY, $uuid );
 		$product->save_meta_data();
+		Proxy_Uuid_Stamper::register_proxy_stampers();
 
-		$data = Proxy_Uuid_Stamper::stamp_proxy_products(
+		// Act: the production drive point is the public catalog-proxy filter the
+		// registry-built stamper closures are hooked to.
+		$data = apply_filters(
+			'woocommerce_pos_sync_proxy_response',
 			array(
 				array(
 					'id' => $product->get_id(),
 					'name' => 'Product',
 				),
 			),
-			'products'
+			'products',
+			null
 		);
 
+		// Assert.
 		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $data[0]['meta_data'] ) );
 		$this->assertSame( 'Product', $data[0]['name'] );
 	}
@@ -136,17 +144,14 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 		$second->set_price( '25.00' );
 		$second->save();
 
-		$data = Variable_Prices::stamp_proxy_variable_prices(
+		$record = Variable_Prices::augment_record(
 			array(
-				array(
-					'id' => $product->get_id(),
-					'type' => 'variable',
-				),
-			),
-			'products'
+				'id' => $product->get_id(),
+				'type' => 'variable',
+			)
 		);
 		$range = null;
-		foreach ( $data[0]['meta_data'] as $meta ) {
+		foreach ( $record['meta_data'] as $meta ) {
 			if ( Variable_Prices::META_KEY === $meta['key'] ) {
 				$range = $meta['value']['price'];
 			}
@@ -176,23 +181,21 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 			$variation->save();
 		}
 
-		$data = Variable_Prices::stamp_proxy_variable_prices(
+		$record = Variable_Prices::augment_record(
 			array(
-				array(
-					'id'            => $product->get_id(),
-					'type'          => 'variable',
-					'price'         => '102',
-					'regular_price' => '102',
-					'sale_price'    => '90',
-				),
+				'id'            => $product->get_id(),
+				'type'          => 'variable',
+				'price'         => '102',
+				'regular_price' => '102',
+				'sale_price'    => '90',
 			),
-			'products',
+			null,
 			new WP_REST_Request( 'GET', '/wcpos/v2/products' )
 		);
 
-		$this->assertSame( '114.00', $data[0]['price'] );
-		$this->assertSame( '', $data[0]['regular_price'] );
-		$this->assertSame( '', $data[0]['sale_price'] );
+		$this->assertSame( '114.00', $record['price'] );
+		$this->assertSame( '', $record['regular_price'] );
+		$this->assertSame( '', $record['sale_price'] );
 	}
 
 	/**
@@ -209,30 +212,27 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 			$variation->save();
 		}
 
-		$data = Variable_Prices::stamp_proxy_variable_prices(
+		$record = Variable_Prices::augment_record(
 			array(
-				array(
-					'id'            => $product->get_id(),
-					'type'          => 'variable',
-					'price'         => '102.00',
-					'regular_price' => '102.00',
-					'sale_price'    => '90.00',
-					'meta_data'     => array(
-						array(
-							'key'   => Variable_Prices::META_KEY,
-							'value' => array( 'price' => array( 'min' => '102', 'max' => '102' ) ),
-						),
-						array( 'key' => 'keep_me', 'value' => 'yes' ),
+				'id'            => $product->get_id(),
+				'type'          => 'variable',
+				'price'         => '102.00',
+				'regular_price' => '102.00',
+				'sale_price'    => '90.00',
+				'meta_data'     => array(
+					array(
+						'key'   => Variable_Prices::META_KEY,
+						'value' => array( 'price' => array( 'min' => '102', 'max' => '102' ) ),
 					),
+					array( 'key' => 'keep_me', 'value' => 'yes' ),
 				),
-			),
-			'products'
+			)
 		);
 
-		$this->assertSame( '', $data[0]['price'] );
-		$this->assertSame( '', $data[0]['regular_price'] );
-		$this->assertSame( '', $data[0]['sale_price'] );
-		$this->assertSame( array( array( 'key' => 'keep_me', 'value' => 'yes' ) ), $data[0]['meta_data'] );
+		$this->assertSame( '', $record['price'] );
+		$this->assertSame( '', $record['regular_price'] );
+		$this->assertSame( '', $record['sale_price'] );
+		$this->assertSame( array( array( 'key' => 'keep_me', 'value' => 'yes' ) ), $record['meta_data'] );
 	}
 
 	/**
@@ -263,17 +263,14 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 			)
 		);
 
-		$data = Variable_Prices::stamp_proxy_variable_prices(
+		$record = Variable_Prices::augment_record(
 			array(
-				array(
-					'id' => $product->get_id(),
-					'type' => 'variable',
-				),
-			),
-			'products'
+				'id' => $product->get_id(),
+				'type' => 'variable',
+			)
 		);
 		$range = null;
-		foreach ( $data[0]['meta_data'] as $meta ) {
+		foreach ( $record['meta_data'] as $meta ) {
 			if ( Variable_Prices::META_KEY === $meta['key'] ) {
 				$range = $meta['value']['price'];
 			}
