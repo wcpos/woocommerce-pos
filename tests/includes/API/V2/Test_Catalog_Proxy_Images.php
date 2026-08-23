@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
+use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Product_Images;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 
@@ -20,10 +21,12 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 	 * Enable the v2 routes before REST initialization.
 	 */
 	public function setUp(): void {
-		// Init.php registrations do not run in the test bootstrap, so attach the
-		// image stampers here, mirroring Test_Sync_Hook_Isolation.
-		add_filter( 'woocommerce_pos_sync_proxy_response', array( Product_Images::class, 'stamp_proxy_product_images' ), 10, 3 );
-		add_filter( 'woocommerce_pos_sync_serialized_product', array( Product_Images::class, 'stamp_serialized_product_images' ), 10, 3 );
+		// Init.php registrations do not run in the test bootstrap, so declare the
+		// image augmentation on the pipeline here, exactly as
+		// Augmentation_Pipeline::install() does — one declaration, both read lanes.
+		Augmentation_Pipeline::reset();
+		Augmentation_Pipeline::add_record_augmenter( array( Product_Images::class, 'augment_record' ), 10 );
+		Augmentation_Pipeline::wire();
 		parent::setUp();
 	}
 
@@ -32,8 +35,7 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( Product_Images::class, 'stamp_proxy_product_images' ), 10 );
-		remove_filter( 'woocommerce_pos_sync_serialized_product', array( Product_Images::class, 'stamp_serialized_product_images' ), 10 );
+		Augmentation_Pipeline::reset();
 	}
 
 	/**
