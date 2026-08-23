@@ -228,8 +228,11 @@ class Cloud_Print_Section extends Abstract_Section {
 		);
 		update_option( $this->option_name(), $clean );
 
-		// Drop runtime last-seen entries for printers that were removed.
-		( new Cloud_Print_Registry() )->prune_seen( array_keys( $seen_ids ) );
+		// Drop per-printer runtime state for printers that were removed, so a
+		// reused id cannot inherit a deleted printer's status or capabilities.
+		$registry = new Cloud_Print_Registry();
+		$registry->prune_seen( array_keys( $seen_ids ) );
+		$registry->prune_capabilities( array_keys( $seen_ids ) );
 
 		$response_printers = array_map(
 			function ( $printer ) {

@@ -308,4 +308,110 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 
 		$this->assertEquals( 'unknown', ( new Cloud_Print_Registry() )->status_for( 'star' ) );
 	}
+
+	/**
+	 * It stores the answers a printer gave to our capability questions.
+	 */
+	public function test_record_capabilities_stores_the_printers_answers(): void {
+		$registry = new Cloud_Print_Registry();
+
+		$this->assertTrue(
+			$registry->record_capabilities(
+				'p1',
+				array(
+					'ClientType'    => 'Star CloudPRNT',
+					'ClientVersion' => '4.0',
+					'Encodings'     => 'application/vnd.star.starprnt, text/plain',
+				),
+				'200 OK'
+			)
+		);
+
+		$record = $registry->get_capabilities( 'p1' );
+		$this->assertSame( 'Star CloudPRNT', $record['client_type'] );
+		$this->assertSame( '4.0', $record['client_version'] );
+		$this->assertSame( array( 'application/vnd.star.starprnt', 'text/plain' ), $record['encodings'] );
+		$this->assertSame( '200 OK', $record['status_code'] );
+		$this->assertGreaterThan( 0, $record['updated'] );
+	}
+
+	/**
+	 * It drops MIME parameters and duplicates from an Encodings answer.
+	 */
+	public function test_record_capabilities_normalizes_the_encodings_answer(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_capabilities( 'p1', array( 'Encodings' => 'TEXT/PLAIN; charset=utf-8;image/png;text/plain' ) );
+
+		$this->assertSame(
+			array( 'text/plain', 'image/png' ),
+			$registry->get_capabilities( 'p1' )['encodings']
+		);
+	}
+
+	/**
+	 * It keeps an encodings list a later poll did not re-answer.
+	 */
+	public function test_record_capabilities_does_not_wipe_unanswered_fields(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_capabilities( 'p1', array( 'Encodings' => 'text/plain' ) );
+		$registry->record_capabilities( 'p1', array( 'ClientType' => 'TSP100IV' ) );
+
+		$record = $registry->get_capabilities( 'p1' );
+		$this->assertSame( array( 'text/plain' ), $record['encodings'] );
+		$this->assertSame( 'TSP100IV', $record['client_type'] );
+	}
+
+	/**
+	 * It reports nothing stored for a printer that never answered.
+	 */
+	public function test_get_capabilities_defaults_for_an_unknown_printer(): void {
+		$record = ( new Cloud_Print_Registry() )->get_capabilities( 'never-seen' );
+
+		$this->assertSame( '', $record['client_type'] );
+		$this->assertSame( array(), $record['encodings'] );
+		$this->assertSame( 0, $record['updated'] );
+		$this->assertSame( 0, $record['asked'] );
+	}
+
+	/**
+	 * It writes nothing when a poll carried no answers and no status change.
+	 */
+	public function test_record_capabilities_is_a_no_op_without_answers(): void {
+		$registry = new Cloud_Print_Registry();
+
+		$this->assertFalse( $registry->record_capabilities( 'p1', array() ) );
+		$this->assertSame( 0, $registry->get_capabilities( 'p1' )['updated'] );
+	}
+
+	/**
+	 * It asks a printer for its capabilities once per TTL, not on every poll.
+	 */
+	public function test_capability_requests_are_rate_limited_by_the_ttl(): void {
+		$registry = new Cloud_Print_Registry();
+
+		$this->assertTrue( $registry->should_request_capabilities( 'p1' ) );
+		$registry->record_capability_request( 'p1' );
+		$this->assertFalse( $registry->should_request_capabilities( 'p1' ) );
+
+		// Age the record past the TTL.
+		$all                  = get_option( Cloud_Print_Registry::CAPABILITIES_OPTION );
+		$all['p1']['asked']   = time() - Cloud_Print_Registry::CAPABILITIES_TTL - 1;
+		update_option( Cloud_Print_Registry::CAPABILITIES_OPTION, $all, false );
+
+		$this->assertTrue( $registry->should_request_capabilities( 'p1' ) );
+	}
+
+	/**
+	 * It drops cached capabilities for printers that were removed.
+	 */
+	public function test_prune_capabilities_drops_unlisted_ids(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_capabilities( 'kitchen', array( 'ClientType' => 'A' ) );
+		$registry->record_capabilities( 'gone', array( 'ClientType' => 'B' ) );
+
+		$registry->prune_capabilities( array( 'kitchen' ) );
+
+		$this->assertSame( 'A', $registry->get_capabilities( 'kitchen' )['client_type'] );
+		$this->assertSame( '', $registry->get_capabilities( 'gone' )['client_type'] );
+	}
 }

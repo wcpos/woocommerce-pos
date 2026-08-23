@@ -348,9 +348,10 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It ignores drawer options for Star CloudPRNT order jobs; Star remains client-rendered/out of scope.
+	 * It keeps drawer options on Star CloudPRNT order jobs so the StarPRNT
+	 * emitter can pulse the drawer at fetch time.
 	 */
-	public function test_create_order_job_ignores_drawer_options_for_star_cloudprnt(): void {
+	public function test_create_order_job_keeps_drawer_options_for_star_cloudprnt(): void {
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
 			array(
@@ -382,8 +383,8 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertEquals( 201, $response->get_status() );
-		$this->assertFalse( $data['auto_open_drawer'] );
-		$this->assertEquals( 'pin2', $data['drawer_connector'] );
+		$this->assertTrue( $data['auto_open_drawer'] );
+		$this->assertSame( 'pin5', $data['drawer_connector'] );
 	}
 
 	/**
