@@ -151,6 +151,34 @@ final class Response_Envelope {
 			return true;
 		}
 
-		return \wcpos_request( 'query_var' );
+		// The query-var marker is ambient — it belongs to the request WordPress is
+		// SERVING, not to every request dispatched while serving it. Core re-applies
+		// `rest_post_dispatch` to sub-requests in two places: `_embed` expansion
+		// (class-wp-rest-server.php) and the batch endpoint. Without this check a
+		// marked `?_embed=1` read would wrap each embedded sub-response too, and the
+		// client would find `{data,_wcpos}` where it expects an embedded record.
+		// The header carrier has no such problem — a sub-request is constructed fresh
+		// and carries no headers — which is why only this branch is gated.
+		return self::is_served_route( $route ) && \wcpos_request( 'query_var' );
+	}
+
+	/**
+	 * Whether this route is the one WordPress is actually serving.
+	 *
+	 * `rest_route` holds the OUTER route for the whole request and, as
+	 * `wcpos_request()` documents, keeps that value during internal re-dispatches —
+	 * which is exactly what makes it usable to tell an outer request from a
+	 * sub-request. Anything that is not the served route is a sub-request.
+	 *
+	 * @param string $route Normalized REST route.
+	 */
+	private static function is_served_route( string $route ): bool {
+		global $wp;
+		$outer = isset( $wp->query_vars['rest_route'] ) ? (string) $wp->query_vars['rest_route'] : '';
+		if ( '' === $outer ) {
+			return false;
+		}
+
+		return strtolower( '/' . ltrim( $outer, '/' ) ) === $route;
 	}
 }
