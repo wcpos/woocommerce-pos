@@ -31,15 +31,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	 * calling `__()`) on every render would be a real cost.
 	 */
 	public function test_money_fields_constant_matches_every_money_typed_tree_leaf(): void {
-		$tree = Receipt_Data_Schema::get_field_tree();
-
-		$money_leaves = array();
-		foreach ( $tree as $section ) {
-			if ( ! empty( $section['fields'] ) && is_array( $section['fields'] ) ) {
-				$this->collect_money_leaf_names( $section['fields'], $money_leaves );
-			}
-		}
-		$money_leaves = array_keys( $money_leaves );
+		$money_leaves = $this->money_leaf_names( Receipt_Data_Schema::get_field_tree() );
 
 		$missing_from_constant = array_values( array_diff( $money_leaves, Receipt_Data_Schema::MONEY_FIELDS ) );
 		$stale_in_constant     = array_values( array_diff( Receipt_Data_Schema::MONEY_FIELDS, $money_leaves ) );
@@ -63,9 +55,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_total_money_keys_constant_matches_totals_section_money_leaves(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$money_leaves = array();
-		$this->collect_money_leaf_names( $tree['totals']['fields'], $money_leaves );
-		$money_leaves = array_keys( $money_leaves );
+		$money_leaves = $this->money_leaf_names( $tree['totals']['fields'] );
 
 		$missing_from_constant = array_values( array_diff( $money_leaves, Receipt_Data_Schema::TOTAL_MONEY_KEYS ) );
 		$stale_in_constant     = array_values( array_diff( Receipt_Data_Schema::TOTAL_MONEY_KEYS, $money_leaves ) );
@@ -96,6 +86,71 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$unknown,
 			'ZERO_FALSY_MONEY_FIELDS names fields that are not in MONEY_FIELDS, so their zero-falsy handling is dead: ' . implode( ', ', $unknown )
 		);
+	}
+
+	/**
+	 * The walk backing the two ratchets above has to visit root-level scalar
+	 * leaves, not just the leaves nested under a section's `fields`. The field
+	 * tree mixes both shapes at the root: most entries are sections carrying a
+	 * `fields` map, but `has_tax_summary` is a bare scalar that declares its own
+	 * `type` alongside an empty `fields` array.
+	 *
+	 * An earlier version of the walk only recursed into entries whose `fields`
+	 * was non-empty, so it never looked at a root-level scalar's own `type`. A
+	 * money field added at the root would have been missing from MONEY_FIELDS
+	 * with both ratchets still green — a hole in the very coverage they claim.
+	 */
+	public function test_money_leaf_walk_collects_a_root_level_scalar_money_leaf(): void {
+		// Arrange: a nested money leaf, a root-level scalar money leaf, and a
+		// root-level scalar non-money leaf (the real `has_tax_summary` shape).
+		$tree = array(
+			'totals'              => array(
+				'label'  => 'Totals',
+				'fields' => array(
+					'total_incl' => array(
+						'type'  => 'money',
+						'label' => 'Total',
+					),
+				),
+			),
+			'rounding_adjustment' => array(
+				'type'   => 'money',
+				'label'  => 'Rounding Adjustment',
+				'fields' => array(),
+			),
+			'has_tax_summary'     => array(
+				'type'   => 'boolean',
+				'label'  => 'Has Tax Summary',
+				'fields' => array(),
+			),
+		);
+
+		// Act.
+		$money_leaves = $this->money_leaf_names( $tree );
+
+		// Assert: the root-level money leaf is collected, the root-level
+		// boolean is not.
+		$this->assertSame( array( 'total_incl', 'rounding_adjustment' ), $money_leaves );
+	}
+
+	/**
+	 * Every `money`-typed leaf name in a field tree, or in any `fields` branch
+	 * of one.
+	 *
+	 * Both shapes are handled by the same recursion: an entry with a non-empty
+	 * `fields` map is a section to descend into, anything else is a leaf whose
+	 * own `type` decides. That is what lets the whole tree be passed in
+	 * directly, root-level scalars included.
+	 *
+	 * @param array<string,mixed> $fields Field tree, or a field-tree `fields` map.
+	 *
+	 * @return array<int,string> Unique money leaf names, in tree order.
+	 */
+	private function money_leaf_names( array $fields ): array {
+		$names = array();
+		$this->collect_money_leaf_names( $fields, $names );
+
+		return array_keys( $names );
 	}
 
 	/**
