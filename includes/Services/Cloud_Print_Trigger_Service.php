@@ -13,6 +13,18 @@ use WCPOS\WooCommercePOS\Logger;
  * Cloud_Print_Trigger_Service class.
  */
 class Cloud_Print_Trigger_Service {
+	/**
+	 * The Cloud Print settings option key.
+	 *
+	 * Read directly rather than through Cloud_Print_Section: the section's
+	 * read() decorates rows with live printer status, which means outbound
+	 * HTTP, and this class runs on woocommerce_new_order and
+	 * woocommerce_order_status_changed. Network calls do not belong on the
+	 * checkout path. It also redacts secrets, which the printer-poll and
+	 * PrintNode paths need intact.
+	 *
+	 * @var string
+	 */
 	const OPTION = 'woocommerce_pos_settings_cloud_print';
 
 	/**
@@ -148,6 +160,11 @@ class Cloud_Print_Trigger_Service {
 				continue;
 			}
 			try {
+				// Not a duplicate of the Settings Section's clamp: this one guards
+				// the output of the woocommerce_pos_cloud_print_assignments filter,
+				// which Pro substitutes rows into (Cloud_Print_Per_Outlet). Rows
+				// that arrive through the filter never passed the section's
+				// sanitizer, so an extension can hand us copies: 999. Keep it.
 				$copies = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
 				// Dedupe per trigger: a created-rule job must not satisfy a
 				// paid rule for the same printer+template (and vice versa).
