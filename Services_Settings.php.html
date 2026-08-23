@@ -73,25 +73,6 @@ class Settings {
 	private static $instance = null;
 
 	/**
-	 * Core options deleted by delete_all_settings(). This is the explicit
-	 * factory-reset scope for the free plugin; extension-registered sections are
-	 * not included implicitly just because they participate in the registry.
-	 *
-	 * @var string[]
-	 */
-	private const CORE_RESET_SECTION_IDS = array(
-		'general',
-		'tax_ids',
-		'checkout',
-		'payment_gateways',
-		'tools',
-		'visibility',
-		'access',
-		'license',
-		'cloud_print',
-	);
-
-	/**
 	 * The Section Registry. Built lazily on first access so registrants can
 	 * hook `woocommerce_pos_register_settings_sections` during plugins_loaded.
 	 *
@@ -552,23 +533,6 @@ class Settings {
 		}
 
 		return delete_option( self::$db_prefix . $id );
-	}
-
-	/**
-	 * Delete all settings in WP options table.
-	 *
-	 * @return bool|WP_Error
-	 */
-	public static function delete_all_settings() {
-		if ( ! is_super_admin() &amp;&amp; ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
-		}
-
-		foreach ( self::CORE_RESET_SECTION_IDS as $id ) {
-			delete_option( self::$db_prefix . $id );
-		}
-
-		return true;
 	}
 
 	/**
