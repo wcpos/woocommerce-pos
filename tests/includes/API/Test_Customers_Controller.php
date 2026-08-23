@@ -127,6 +127,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( 1, $this->user, $customer->get_id() ), $ids );
 	}
 
+	/**
+	 * The bulk id path honours an include filter.
+	 */
 	public function test_customer_api_get_all_ids_with_include_filter(): void {
 		$customer1 = CustomerHelper::create_customer();
 		$customer2 = CustomerHelper::create_customer();
@@ -144,6 +147,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotContains( $customer2->get_id(), $ids );
 	}
 
+	/**
+	 * Exclude wins over include on the bulk id path.
+	 */
 	public function test_customer_api_get_all_ids_with_include_and_exclude_filter(): void {
 		$customer1 = CustomerHelper::create_customer();
 		$customer2 = CustomerHelper::create_customer();
@@ -162,6 +168,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotContains( $customer2->get_id(), $ids );
 	}
 
+	/**
+	 * The bulk id path honours an exclude filter.
+	 */
 	public function test_customer_api_get_all_ids_with_exclude_filter(): void {
 		$customer1 = CustomerHelper::create_customer();
 		$customer2 = CustomerHelper::create_customer();
@@ -179,6 +188,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $customer2->get_id(), $ids );
 	}
 
+	/**
+	 * The bulk id path honours modified_after without serving the date field.
+	 */
 	public function test_customer_api_get_all_ids_with_modified_after_returns_updated_ids_without_date_field(): void {
 		$customer = CustomerHelper::create_customer();
 		update_user_meta( $customer->get_id(), 'last_update', time() );
@@ -286,6 +298,10 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
+				// The POS customer space now defaults to every user (see
+				// Customers_Lane_Parity_Tests); pin the role so this sort assertion
+				// stays about the sort and not about which users exist.
+				'role'    => 'customer',
 				'orderby' => 'first_name',
 				'order'   => 'asc',
 			)
@@ -299,6 +315,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Reverse order.
 		$request->set_query_params(
 			array(
+				'role'    => 'customer',
 				'orderby' => 'first_name',
 				'order'   => 'desc',
 			)
@@ -323,6 +340,10 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
+				// The POS customer space now defaults to every user (see
+				// Customers_Lane_Parity_Tests); pin the role so this sort assertion
+				// stays about the sort and not about which users exist.
+				'role'    => 'customer',
 				'orderby' => 'last_name',
 				'order'   => 'asc',
 			)
@@ -336,6 +357,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Reverse order.
 		$request->set_query_params(
 			array(
+				'role'    => 'customer',
 				'orderby' => 'last_name',
 				'order'   => 'desc',
 			)
@@ -360,6 +382,10 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
+				// The POS customer space now defaults to every user (see
+				// Customers_Lane_Parity_Tests); pin the role so this sort assertion
+				// stays about the sort and not about which users exist.
+				'role'    => 'customer',
 				'orderby' => 'email',
 				'order'   => 'asc',
 			)
@@ -373,6 +399,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Reverse order.
 		$request->set_query_params(
 			array(
+				'role'    => 'customer',
 				'orderby' => 'email',
 				'order'   => 'desc',
 			)
@@ -460,6 +487,10 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
+				// The POS customer space now defaults to every user (see
+				// Customers_Lane_Parity_Tests); pin the role so this sort assertion
+				// stays about the sort and not about which users exist.
+				'role'    => 'customer',
 				'orderby' => 'username',
 				'order'   => 'asc',
 			)
@@ -476,6 +507,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Reverse order.
 		$request->set_query_params(
 			array(
+				'role'    => 'customer',
 				'orderby' => 'username',
 				'order'   => 'desc',
 			)
@@ -515,10 +547,15 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$customer9 = CustomerHelper::create_customer( array( 'billing_phone' => $random_billing_phone ) );
 
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
-		$request->set_query_params( array( 'role' => 'all' ) );
 
-		// Empty search.
-		$request->set_query_params( array( 'search' => '' ) );
+		// Empty search. Pinned to the `customer` role: this block counts the nine
+		// fixtures, and the default role is now `all` (every user on the site).
+		$request->set_query_params(
+			array(
+				'role'   => 'customer',
+				'search' => '',
+			)
+		);
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );

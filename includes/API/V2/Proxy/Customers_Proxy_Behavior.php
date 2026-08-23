@@ -47,6 +47,7 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 			$this->delegated['orderby'] = (string) $params['orderby'];
 			unset( $params['orderby'] );
 		}
+
 		/*
 		 * `roles` (plural) is WCPOS's multi-role filter, and `modified_after` is how the
 		 * client asks for the customers touched since its last pull. Neither exists in
@@ -136,6 +137,7 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 				'value'   => $timestamp ? (string) $timestamp : '',
 				'compare' => '>',
 			);
+
 			/*
 			 * AND our row onto whatever is already there rather than replacing it, so a
 			 * third party filtering the same query keeps its clauses. `wcpos/v1` flattens
@@ -144,7 +146,11 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 			 */
 			$args['meta_query'] = empty( $args['meta_query'] ) // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Mirrors the v1 lane's `last_update` filter; the direct lane is the frozen authority.
 				? array( $last_update )
-				: array( 'relation' => 'AND', array( $last_update ), $args['meta_query'] );
+				: array(
+					'relation' => 'AND',
+					array( $last_update ),
+					$args['meta_query'],
+				);
 		}
 		if ( isset( $this->delegated['roles'] ) ) {
 			// `role__in` and `role` are mutually exclusive in WP_User_Query; v1 drops
