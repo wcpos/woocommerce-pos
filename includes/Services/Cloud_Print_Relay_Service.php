@@ -198,7 +198,10 @@ class Cloud_Print_Relay_Service {
 			'enabled'   => false,
 			'available' => true,
 		);
-		if ( 1 === preg_match( '/^[a-f0-9]{32}$/', (string) ( $relay['site_key'] ?? '' ) ) ) {
+		// Case-insensitive to match valid_credentials(): registration lowercases
+		// on write, but a legacy uppercase key still signs hints and status
+		// calls fine, so it must not report itself disabled to the settings app.
+		if ( 1 === preg_match( '/^[a-f0-9]{32}$/i', (string) ( $relay['site_key'] ?? '' ) ) ) {
 			$state['enabled']          = true;
 			$state['printer_base_url'] = self::printer_base_url( (string) $relay['site_key'] );
 		}

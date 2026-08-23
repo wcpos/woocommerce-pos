@@ -562,6 +562,44 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It reports a legacy uppercase site key as registered.
+	 */
+	public function test_settings_relay_reports_enabled_for_uppercase_site_key(): void {
+		// Arrange: a key stored before registration lowercased on write. It
+		// still signs hints and status calls, so the settings app must not be
+		// told the relay is unregistered.
+		update_option(
+			Cloud_Print_Relay_Service::OPTION,
+			array(
+				'enabled'       => true,
+				'site_key'      => '0123456789ABCDEF0123456789ABCDEF',
+				'hint_secret'   => '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+				'registered_at' => time(),
+			)
+		);
+		$this->mock_http(
+			function () {
+				return new WP_Error( 'offline', 'offline' );
+			}
+		);
+
+		// Act.
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+		$current_data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v2/settings/cloud-print' ) )->get_data();
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'enabled'          => true,
+				'available'        => true,
+				'printer_base_url' => 'https://cloudprint.wcpos.com/p/0123456789ABCDEF0123456789ABCDEF',
+			),
+			$data['relay']
+		);
+		$this->assertSame( $data['relay'], $current_data['relay'] );
+	}
+
+	/**
 	 * It hides the relay everywhere when the opt-out filter is in place.
 	 */
 	public function test_relay_filter_opt_out_hides_relay_everywhere(): void {
