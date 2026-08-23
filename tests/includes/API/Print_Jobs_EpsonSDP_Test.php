@@ -109,6 +109,36 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It wraps the print data in the Server Direct Print response envelope.
+	 *
+	 * The printer discards a response it cannot recognise without printing or
+	 * posting a result, so the wire format is the whole contract here: asserting
+	 * only the status code and the job state passes against a payload no printer
+	 * will ever print.
+	 */
+	public function test_poll_wraps_print_data_in_the_sdp_envelope(): void {
+		$this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+
+		$body = $this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' )->get_raw_body();
+
+		$this->assertSame(
+			'<?xml version="1.0" encoding="utf-8"?>'
+				. '<PrintRequestInfo Version="1.00"><ePOSPrint>'
+				. '<Parameter><devid>local_printer</devid><timeout>10000</timeout></Parameter>'
+				. '<PrintData><epos-print/></PrintData>'
+				. '</ePOSPrint></PrintRequestInfo>',
+			$body
+		);
+		$this->assertStringNotContainsString( 'Envelope', $body );
+	}
+
+	/**
 	 * It confirms the single in-flight claim on result posts.
 	 */
 	public function test_result_post_confirms_the_in_flight_claim(): void {

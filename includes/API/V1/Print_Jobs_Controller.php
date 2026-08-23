@@ -1105,10 +1105,19 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 		$epos = $this->jobs->render_payload( $job );
 
+		// Server Direct Print expects the print data wrapped in
+		// PrintRequestInfo > ePOSPrint > PrintData — NOT the SOAP envelope used
+		// by the direct ePOS-Print web service, which is a different protocol.
+		// A printer that receives an unrecognised wrapper discards it silently:
+		// it neither prints nor posts a result, so the job sits claimed forever.
+		// Version 1.00 is the only version every SDP printer family supports
+		// (Server Direct Print User's Manual Rev.K, "Response (Print request)");
+		// 2.00+ adds printjobid but is limited to TM-i/TM-DT/TM-T88VI.
 		$envelope  = '<?xml version="1.0" encoding="utf-8"?>';
-		$envelope .= '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>';
-		$envelope .= $epos;
-		$envelope .= '</s:Body></s:Envelope>';
+		$envelope .= '<PrintRequestInfo Version="1.00"><ePOSPrint>';
+		$envelope .= '<Parameter><devid>local_printer</devid><timeout>10000</timeout></Parameter>';
+		$envelope .= '<PrintData>' . $epos . '</PrintData>';
+		$envelope .= '</ePOSPrint></PrintRequestInfo>';
 
 		return $this->serve_raw( $envelope, $soap );
 	}
