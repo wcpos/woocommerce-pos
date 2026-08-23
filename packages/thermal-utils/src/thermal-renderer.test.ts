@@ -145,11 +145,11 @@ describe('renderThermalPreview canonical parity', () => {
 
 		const asBarcodeElement = renderThermalPreview(
 			`<receipt paper-width="48"><barcode type="qr" height="40">${value}</barcode></receipt>`,
-			{},
+			{}
 		);
 		const asQrcodeElement = renderThermalPreview(
 			`<receipt paper-width="48"><qrcode size="4">${value}</qrcode></receipt>`,
-			{},
+			{}
 		);
 
 		// The printer sizes both at module scale 4 (Thermal_Markup_Parser folds
@@ -164,13 +164,22 @@ describe('renderThermalPreview canonical parity', () => {
 
 		const tall = renderThermalPreview(
 			`<receipt paper-width="48"><barcode type="qrcode" height="60">${value}</barcode></receipt>`,
-			{},
+			{}
 		);
 		const equivalent = renderThermalPreview(
 			`<receipt paper-width="48"><qrcode size="6">${value}</qrcode></receipt>`,
-			{},
+			{}
+		);
+		const huge = renderThermalPreview(
+			`<receipt paper-width="48"><barcode type="qrcode" height="900">${value}</barcode></receipt>`,
+			{}
+		);
+		const starMaximum = renderThermalPreview(
+			`<receipt paper-width="48"><qrcode size="8">${value}</qrcode></receipt>`,
+			{}
 		);
 
 		expect(tall).toBe(equivalent);
+		expect(huge).toBe(starMaximum);
 	});
 });

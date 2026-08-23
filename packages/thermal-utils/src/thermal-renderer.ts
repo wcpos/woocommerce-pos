@@ -142,7 +142,7 @@ function enumAttr<T extends string>(
  */
 function heightToQrSize(height: number): number {
 	if (height <= 0) return 4;
-	return Math.max(2, Math.min(10, Math.round(height / 10)));
+	return Math.max(2, Math.min(8, Math.round(height / 10)));
 }
 
 function parseChildren(parent: Element): ThermalNode[] {

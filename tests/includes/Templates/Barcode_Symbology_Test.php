@@ -351,15 +351,15 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * ESC/POS Code 128 accepts only what code set B can encode.
+	 * Control bytes that a byte lane cannot carry are rejected.
 	 *
 	 * The ESC/POS payload builder always selects set B, which covers printable
-	 * ASCII only. StarPRNT auto-selects its code set, so it keeps the wider
-	 * 7-bit range.
+	 * ASCII only. StarPRNT terminates barcode data with RS, so control bytes in
+	 * Code 93 or Code 128 could terminate the command or affect the receipt.
 	 *
 	 * @return void
 	 */
-	public function test_is_valid_value_rejects_code_set_b_unencodable_bytes_on_the_escpos_lane(): void {
+	public function test_is_valid_value_rejects_control_bytes_unsupported_by_the_lane(): void {
 		// Arrange.
 		$with_line_feed = "ABC\n123";
 
@@ -368,7 +368,14 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', "ABC\t123", Barcode_Symbology::LANE_ESCPOS ) );
 		$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', "ABC\r123", Barcode_Symbology::LANE_ESCPOS ) );
 		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', 'ABC-123', Barcode_Symbology::LANE_ESCPOS ) );
-		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', $with_line_feed, Barcode_Symbology::LANE_STARPRNT ) );
+
+		foreach ( array_merge( range( 0, 31 ), array( 127 ) ) as $ordinal ) {
+			$control = chr( $ordinal );
+			$this->assertFalse( Barcode_Symbology::is_valid_value( 'code93', 'ABC' . $control . '123', Barcode_Symbology::LANE_STARPRNT ) );
+			$this->assertFalse( Barcode_Symbology::is_valid_value( 'code128', 'ABC' . $control . '123', Barcode_Symbology::LANE_STARPRNT ) );
+		}
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code93', 'ABC-123', Barcode_Symbology::LANE_STARPRNT ) );
+		$this->assertTrue( Barcode_Symbology::is_valid_value( 'code128', 'ABC-123', Barcode_Symbology::LANE_STARPRNT ) );
 	}
 
 	/**

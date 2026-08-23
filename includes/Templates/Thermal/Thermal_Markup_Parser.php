@@ -288,7 +288,7 @@ class Thermal_Markup_Parser {
 	 *
 	 * @param int $height The barcode height.
 	 *
-	 * @return int The QR code size clamped between 2 and 10, or 4 by default.
+	 * @return int The QR code size clamped between 2 and 8, or 4 by default.
 	 */
 	private function height_to_qr_size( int $height ): int {
 		if ( $height <= 0 ) {
@@ -297,6 +297,6 @@ class Thermal_Markup_Parser {
 
 		$size = (int) round( $height / 10 );
 
-		return max( 2, min( 10, $size ) );
+		return max( 2, min( 8, $size ) );
 	}
 }

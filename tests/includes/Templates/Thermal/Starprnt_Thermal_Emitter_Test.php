@@ -499,4 +499,28 @@ PHP;
 		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62 ) ) );
 		$this->assertStringContainsString( 'AB*CD', $bytes );
 	}
+
+	/**
+	 * StarPRNT control bytes fall back to safe text instead of printer commands.
+	 *
+	 * @return void
+	 */
+	public function test_emit_barcode_control_bytes_print_safe_text_and_no_barcode(): void {
+		// Arrange.
+		$ast = array(
+			'children' => array(
+				array( 'type' => 'barcode', 'barcode_type' => 'code93', 'value' => "ABC\x1f123" ),
+				array( 'type' => 'barcode', 'barcode_type' => 'code128', 'value' => "ABC\x1e123" ),
+			),
+		);
+
+		// Act.
+		$bytes = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62 ) ) );
+		$this->assertStringContainsString( 'ABC 123', $bytes );
+		$this->assertStringNotContainsString( "\x1f", $bytes );
+		$this->assertStringNotContainsString( "\x1e", $bytes );
+	}
 }

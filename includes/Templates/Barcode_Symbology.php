@@ -314,7 +314,8 @@ class Barcode_Symbology {
 				// The start and stop characters travel in the data itself.
 				return $length >= 2 && $length <= 255 && 1 === preg_match( '/\A[A-Da-d][0-9\$\+\-\.\/:]*[A-Da-d]\z/', $value );
 			case 'code93':
-				return $length >= 1 && $length <= 255 && self::is_ascii( $value );
+				return $length >= 1 && $length <= 255 && self::is_ascii( $value )
+					&& ( self::LANE_STARPRNT !== $lane || 0 === preg_match( '/[\x00-\x1f\x7f]/', $value ) );
 			case 'code128':
 			default:
 				return self::is_valid_code128( $value, $lane );
@@ -501,8 +502,8 @@ class Barcode_Symbology {
 	 *
 	 * - Alphabet. escpos_payload() always selects code set B, which encodes
 	 *   ASCII 32-126 only; a tab, LF or CR needs set A, so an ESC/POS printer
-	 *   drops the symbol. StarPRNT auto-selects its code set and so accepts the
-	 *   wider 7-bit range.
+	 *   drops the symbol. StarPRNT auto-selects its code set, but its barcode
+	 *   data is RS-terminated, so control bytes cannot safely travel in it.
 	 * - Length. The limit applies to the encoded bytes, not the merchant's
 	 *   value: ESC/POS adds a two-byte selector and doubles every `{`, StarPRNT
 	 *   doubles every `%`. A value that only overflows once escaped would be
@@ -526,7 +527,7 @@ class Barcode_Symbology {
 			return \strlen( self::escpos_code128_data( $value ) ) <= self::MAX_DATA_BYTES;
 		}
 
-		if ( '' === $value || ! self::is_ascii( $value ) ) {
+		if ( '' === $value || ! self::is_ascii( $value ) || 1 === preg_match( '/[\x00-\x1f\x7f]/', $value ) ) {
 			return false;
 		}
 

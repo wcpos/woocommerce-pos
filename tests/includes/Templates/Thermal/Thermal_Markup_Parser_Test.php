@@ -171,7 +171,7 @@ class Thermal_Markup_Parser_Test extends WP_UnitTestCase {
 		$this->assertSame( 6, $node_tall['size'] );
 		$this->assertSame( 4, $node_default['size'] );
 		$this->assertSame( 2, $node_tiny['size'] );
-		$this->assertSame( 10, $node_huge['size'] );
+		$this->assertSame( 8, $node_huge['size'] );
 	}
 
 	/**
