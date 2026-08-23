@@ -311,7 +311,11 @@ function parseChildren(parent: Element): ThermalNode[] {
 				if (isQrBarcodeType(barcodeType)) {
 					nodes.push({
 						type: 'qrcode',
-						size: heightToQrSize(intAttr(el, 'height', 40)),
+						// Same `height` attribute as the barcode branch below, so it
+						// takes the same bound before heightToQrSize folds it into a
+						// module scale — an unbounded read here would let a hand-built
+						// AST route around the table every other attribute goes through.
+						size: heightToQrSize(intAttr(el, 'height', 40, THERMAL_BOUNDS.barcodeHeight)),
 						value: (el.textContent ?? '').trim(),
 					});
 					break;
