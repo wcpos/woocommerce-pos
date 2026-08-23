@@ -27,15 +27,6 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
 class Thermal_Markup_Parser {
 
 	/**
-	 * Upper bound for numeric attributes.
-	 *
-	 * JavaScript's Number.MAX_SAFE_INTEGER, shared with the preview renderer so
-	 * both sides clamp huge attribute values to the same number instead of one
-	 * side overflowing into a platform-specific result.
-	 */
-	private const MAX_SAFE_INTEGER = 9007199254740991;
-
-	/**
 	 * Parse a thermal XML template string into an AST.
 	 *
 	 * @param string $xml The thermal XML markup.
@@ -54,7 +45,7 @@ class Thermal_Markup_Parser {
 
 		return array(
 			'type'        => 'receipt',
-			'paper_width' => $this->int_attr( $root, 'paper-width', 48 ),
+			'paper_width' => $this->int_attr( $root, 'paper-width', 48, Thermal_Bounds::PAPER_WIDTH_MIN, Thermal_Bounds::PAPER_WIDTH_MAX ),
 			'children'    => $this->parse_children( $root ),
 		);
 	}
@@ -126,11 +117,11 @@ class Thermal_Markup_Parser {
 					);
 					break;
 				case 'size':
-					$width   = $this->int_attr( $child, 'width', 1 );
+					$width   = $this->int_attr( $child, 'width', 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
 					$nodes[] = array(
 						'type'     => 'size',
 						'width'    => $width,
-						'height'   => $this->int_attr( $child, 'height', $width ),
+						'height'   => $this->int_attr( $child, 'height', $width, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX ),
 						'children' => $this->parse_children( $child ),
 					);
 					break;
@@ -160,14 +151,14 @@ class Thermal_Markup_Parser {
 					if ( Barcode_Symbology::is_qr( $type ) ) {
 						$nodes[] = array(
 							'type'  => 'qrcode',
-							'size'  => $this->height_to_qr_size( $this->int_attr( $child, 'height', 40 ) ),
+							'size'  => $this->height_to_qr_size( $this->int_attr( $child, 'height', 40, Thermal_Bounds::BARCODE_HEIGHT_MIN, Thermal_Bounds::BARCODE_HEIGHT_MAX ) ),
 							'value' => trim( $child->textContent ),
 						);
 					} else {
 						$nodes[] = array(
 							'type'         => 'barcode',
 							'barcode_type' => $type,
-							'height'       => $this->int_attr( $child, 'height', 40 ),
+							'height'       => $this->int_attr( $child, 'height', 40, Thermal_Bounds::BARCODE_HEIGHT_MIN, Thermal_Bounds::BARCODE_HEIGHT_MAX ),
 							'value'        => trim( $child->textContent ),
 						);
 					}
@@ -175,7 +166,7 @@ class Thermal_Markup_Parser {
 				case 'qrcode':
 					$nodes[] = array(
 						'type'  => 'qrcode',
-						'size'  => $this->int_attr( $child, 'size', 4 ),
+						'size'  => $this->int_attr( $child, 'size', 4, Thermal_Bounds::QRCODE_SIZE_MIN, Thermal_Bounds::QRCODE_SIZE_MAX ),
 						'value' => trim( $child->textContent ),
 					);
 					break;
@@ -183,7 +174,7 @@ class Thermal_Markup_Parser {
 					$nodes[] = array(
 						'type'  => 'image',
 						'src'   => $child->hasAttribute( 'src' ) ? $child->getAttribute( 'src' ) : '',
-						'width' => $this->int_attr( $child, 'width', 200 ),
+						'width' => $this->int_attr( $child, 'width', 200, Thermal_Bounds::IMAGE_WIDTH_DOTS_MIN, Thermal_Bounds::IMAGE_WIDTH_DOTS_MAX ),
 					);
 					break;
 				case 'cut':
@@ -195,7 +186,7 @@ class Thermal_Markup_Parser {
 				case 'feed':
 					$nodes[] = array(
 						'type'  => 'feed',
-						'lines' => $this->int_attr( $child, 'lines', 1 ),
+						'lines' => $this->int_attr( $child, 'lines', 1, Thermal_Bounds::FEED_LINES_MIN, Thermal_Bounds::FEED_LINES_MAX ),
 					);
 					break;
 				case 'drawer':
@@ -230,7 +221,7 @@ class Thermal_Markup_Parser {
 			}
 
 			$raw_width = $child->hasAttribute( 'width' ) ? $child->getAttribute( 'width' ) : null;
-			$width     = ( '*' === $raw_width ) ? '*' : $this->int_attr( $child, 'width', 12 );
+			$width     = ( '*' === $raw_width ) ? '*' : $this->int_attr( $child, 'width', 12, Thermal_Bounds::COL_WIDTH_MIN, Thermal_Bounds::COL_WIDTH_MAX );
 
 			$cols[] = array(
 				'type'     => 'col',
@@ -260,29 +251,36 @@ class Thermal_Markup_Parser {
 	}
 
 	/**
-	 * Resolve a positive-integer attribute.
+	 * Resolve a numeric attribute into its legal integer range.
 	 *
 	 * Every attribute routed through here is a physical dimension (paper width,
 	 * size multiplier, barcode height, QR scale, image dots, feed lines, column
 	 * characters), so an out-of-range value is CLAMPED to the nearest bound
 	 * rather than replaced by the fallback. A merchant who writes width="5000"
 	 * gets the widest thing the device can print; substituting the default would
-	 * render something unrelated to what they wrote, with no signal. This is
-	 * already what the print path does — Escpos_Thermal_Emitter clamps every one
-	 * of these with max()/min() — so the parser now agrees with it.
+	 * render something unrelated to what they wrote, with no signal.
+	 *
+	 * The bounds are per-attribute and come from Thermal_Bounds, so the AST can
+	 * only ever carry values every downstream path can render. One shared
+	 * ceiling is not enough: `<feed lines="1e15">` is a legal-looking numeral,
+	 * and every wire emitter turns `lines` straight into a loop or a
+	 * str_repeat(), so an unbounded feed hangs the print request instead of
+	 * printing something merely odd.
 	 *
 	 * The fallback covers only a missing or non-numeric attribute. Fractions
 	 * truncate toward zero. Keep in step with safeInteger()/intAttr() in
 	 * packages/thermal-utils/src/thermal-renderer.ts, which clamps identically
-	 * over the same [1, MAX_SAFE_INTEGER] range.
+	 * against the same table.
 	 *
 	 * @param DOMElement $el       The element to read from.
 	 * @param string     $name     The attribute name.
-	 * @param int        $fallback The fallback value.
+	 * @param int        $fallback The fallback for missing/non-numeric values.
+	 * @param int        $min      The lowest legal value for this attribute.
+	 * @param int        $max      The highest legal value for this attribute.
 	 *
-	 * @return int The resolved integer.
+	 * @return int The clamped integer.
 	 */
-	private function int_attr( DOMElement $el, string $name, int $fallback ): int {
+	private function int_attr( DOMElement $el, string $name, int $fallback, int $min, int $max ): int {
 		if ( ! $el->hasAttribute( $name ) ) {
 			return $fallback;
 		}
@@ -297,7 +295,7 @@ class Thermal_Markup_Parser {
 			return $fallback;
 		}
 
-		return (int) max( 1.0, min( (float) self::MAX_SAFE_INTEGER, $number ) );
+		return (int) max( (float) $min, min( (float) $max, $number ) );
 	}
 
 	/**

@@ -559,7 +559,12 @@ class Epos_Xml_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_feed( array $node ): void {
-		$lines         = isset( $node['lines'] ) ? max( 1, (int) $node['lines'] ) : 1;
+		$lines         = Thermal_Bounds::clamp_int(
+			isset( $node['lines'] ) ? $node['lines'] : null,
+			Thermal_Bounds::FEED_LINES_MIN,
+			Thermal_Bounds::FEED_LINES_MIN,
+			Thermal_Bounds::FEED_LINES_MAX
+		);
 		$this->buffer .= '<feed line="' . $lines . '"/>';
 	}
 

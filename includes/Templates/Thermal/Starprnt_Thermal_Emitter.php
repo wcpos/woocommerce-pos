@@ -379,8 +379,8 @@ class Starprnt_Thermal_Emitter {
 	private function emit_size( array $node ): void {
 		$previous_width  = $this->width;
 		$previous_height = $this->height;
-		$width           = isset( $node['width'] ) ? max( 1, (int) $node['width'] ) : 1;
-		$height          = isset( $node['height'] ) ? max( 1, (int) $node['height'] ) : 1;
+		$width           = Thermal_Bounds::clamp_int( isset( $node['width'] ) ? $node['width'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
+		$height          = Thermal_Bounds::clamp_int( isset( $node['height'] ) ? $node['height'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
 
 		$this->raw( array( 0x1b, 0x69, $this->magnification_byte( $height ), $this->magnification_byte( $width ) ) );
 		$this->width  = $width;
@@ -521,7 +521,10 @@ class Starprnt_Thermal_Emitter {
 
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
-		$height = max( 8, min( 255, $height ) );
+		// The 8-dot floor is Star's, not the markup's: Thermal_Bounds allows a
+		// 1-dot barcode and ESC/POS prints one, but ESC b rejects anything
+		// shorter than 8. A device-specific bound, so it stays here.
+		$height = max( 8, min( Thermal_Bounds::BARCODE_HEIGHT_MAX, $height ) );
 
 		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_STARPRNT ) ) {
 			$this->emit_centered_text( $value );
@@ -583,7 +586,9 @@ class Starprnt_Thermal_Emitter {
 	private function emit_qrcode( array $node ): void {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
 		$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
-		$size  = max( 1, min( 8, $size ) );
+		// Star's QR module size tops out at 8, half the ESC/POS ceiling in
+		// Thermal_Bounds::QRCODE_SIZE_MAX. Device-specific, so it stays here.
+		$size  = max( Thermal_Bounds::QRCODE_SIZE_MIN, min( 8, $size ) );
 
 		// Select model 2.
 		$this->raw( array( 0x1b, 0x1d, 0x79, 0x53, 0x30, 0x02 ) );
@@ -623,7 +628,12 @@ class Starprnt_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_feed( array $node ): void {
-		$lines = isset( $node['lines'] ) ? max( 1, (int) $node['lines'] ) : 1;
+		$lines = Thermal_Bounds::clamp_int(
+			isset( $node['lines'] ) ? $node['lines'] : null,
+			Thermal_Bounds::FEED_LINES_MIN,
+			Thermal_Bounds::FEED_LINES_MIN,
+			Thermal_Bounds::FEED_LINES_MAX
+		);
 		for ( $index = 0; $index < $lines; $index++ ) {
 			$this->raw( array( 0x0a ) );
 		}

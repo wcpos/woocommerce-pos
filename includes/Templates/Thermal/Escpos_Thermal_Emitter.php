@@ -378,8 +378,8 @@ class Escpos_Thermal_Emitter {
 	private function emit_size( array $node ): void {
 		$previous_width  = $this->width;
 		$previous_height = $this->height;
-		$width           = isset( $node['width'] ) ? max( 1, (int) $node['width'] ) : 1;
-		$height          = isset( $node['height'] ) ? max( 1, (int) $node['height'] ) : 1;
+		$width           = Thermal_Bounds::clamp_int( isset( $node['width'] ) ? $node['width'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
+		$height          = Thermal_Bounds::clamp_int( isset( $node['height'] ) ? $node['height'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
 
 		if ( $height > 1 ) {
 			$this->active_scaled_spacing = max( $this->active_scaled_spacing, $height );
@@ -521,7 +521,7 @@ class Escpos_Thermal_Emitter {
 
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
-		$height = max( 1, min( 255, $height ) );
+		$height = max( Thermal_Bounds::BARCODE_HEIGHT_MIN, min( Thermal_Bounds::BARCODE_HEIGHT_MAX, $height ) );
 
 		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_ESCPOS ) ) {
 			$this->emit_centered_text( $value );
@@ -588,7 +588,7 @@ class Escpos_Thermal_Emitter {
 	private function emit_qrcode( array $node ): void {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
 		$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
-		$size  = max( 1, min( 16, $size ) );
+		$size  = max( Thermal_Bounds::QRCODE_SIZE_MIN, min( Thermal_Bounds::QRCODE_SIZE_MAX, $size ) );
 
 		// Select model 2.
 		$this->raw( array( 0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00 ) );
@@ -629,7 +629,12 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_feed( array $node ): void {
-		$lines = isset( $node['lines'] ) ? max( 1, (int) $node['lines'] ) : 1;
+		$lines = Thermal_Bounds::clamp_int(
+			isset( $node['lines'] ) ? $node['lines'] : null,
+			Thermal_Bounds::FEED_LINES_MIN,
+			Thermal_Bounds::FEED_LINES_MIN,
+			Thermal_Bounds::FEED_LINES_MAX
+		);
 		for ( $index = 0; $index < $lines; $index++ ) {
 			$this->raw( array( 0x0a ) );
 		}

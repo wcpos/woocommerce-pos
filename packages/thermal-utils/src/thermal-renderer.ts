@@ -124,6 +124,41 @@ interface DrawerNode {
 const DECIMAL_NUMERAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /**
+ * The legal range of every numeric attribute in thermal markup.
+ *
+ * Mirrors includes/Templates/Thermal/Thermal_Bounds.php exactly. A template is
+ * authored once and rendered down six paths — this preview, the PDF receipt and
+ * the four wire emitters — so a bound that holds in only some of them is not a
+ * safety net, it is a divergence: the merchant previews 50 blank lines and the
+ * printer spools 500. Change a number here and change it there in the same
+ * commit.
+ */
+const THERMAL_BOUNDS = {
+	/** Narrowest and widest thermal roll, in character columns. */
+	paperWidth: { min: 16, max: 120 },
+	/**
+	 * Text size multiplier. 8 is the hardware ceiling: the ESC/POS `GS ! n` size
+	 * byte carries one nibble per axis, and Star's magnification stops lower.
+	 */
+	sizeMultiplier: { min: 1, max: 8 },
+	/** 1D barcode height in dots; `GS h n` is a single byte. */
+	barcodeHeight: { min: 1, max: 255 },
+	/** QR module size; the ESC/POS `GS ( k` module-size function accepts 1-16. */
+	qrcodeSize: { min: 1, max: 16 },
+	/** Image width in printer dots, past the 576-dot budget of an 80mm head. */
+	imageWidthDots: { min: 1, max: 2000 },
+	/**
+	 * Lines a `<feed>` advances. At ~3.5mm per line the ceiling is ~17cm of
+	 * blank paper, already more than any tear-off gap a template wants. It is
+	 * also a hazard bound: every wire emitter turns `lines` straight into a loop
+	 * or a str_repeat(), so an unbounded feed hangs the print request.
+	 */
+	feedLines: { min: 1, max: 50 },
+	/** Fixed column width in characters; a column cannot outgrow the paper. */
+	colWidth: { min: 1, max: 120 },
+} as const;
+
+/**
  * Clamp a value into an integer range, falling back when it is not numeric.
  *
  * Out-of-range values are clamped to the nearest bound rather than replaced by
@@ -140,6 +175,17 @@ function safeInteger(value: unknown, fallback: number, min: number, max: number)
 	return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
 }
 
+/**
+ * Smallest `<size>` rendering, in em.
+ *
+ * Preview- and PDF-only, deliberately: CSS can express a half-size run where
+ * the printers cannot, because the ESC/POS and Star size bytes have no
+ * multiplier below 1. Parsed markup never reaches it (intAttr floors `<size>`
+ * at THERMAL_BOUNDS.sizeMultiplier.min); it only applies to a hand-built AST.
+ * Matches Html_Thermal_Emitter::MIN_SIZE_EM.
+ */
+const MIN_SIZE_EM = 0.5;
+
 /** Clamp a number into a range without truncating it. */
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
@@ -151,20 +197,26 @@ function round2(value: number): number {
 }
 
 /**
- * Read a positive-integer attribute.
+ * Read a numeric attribute into its legal range.
  *
- * Every attribute read through here is a physical dimension, so the floor is 1:
- * `<size width="-2">` and `<feed lines="0">` are nonsense, and clamping them to
- * 1 is what the printer does (Escpos_Thermal_Emitter wraps each of these in
- * max(1, ...)). The previous floor of 0 made the preview render invisible text
- * and zero-height feeds for values that print at normal size.
+ * Every attribute read through here is a physical dimension, so the floor is at
+ * least 1: `<size width="-2">` and `<feed lines="0">` are nonsense, and clamping
+ * them up is what the printer does. The ceiling is per-attribute rather than
+ * shared, because `<feed lines="1e15">` is a legal-looking numeral that the
+ * wire emitters would turn into 10^15 line feeds.
  *
- * Keep in step with Thermal_Markup_Parser::int_attr() in PHP.
+ * Keep in step with Thermal_Markup_Parser::int_attr() in PHP, which clamps
+ * against the same table.
  */
-function intAttr(el: Element, name: string, fallback: number): number {
+function intAttr(
+	el: Element,
+	name: string,
+	fallback: number,
+	bounds: { readonly min: number; readonly max: number },
+): number {
 	const raw = el.getAttribute(name);
 	if (raw == null) return fallback;
-	return safeInteger(raw, fallback, 1, Number.MAX_SAFE_INTEGER);
+	return safeInteger(raw, fallback, bounds.min, bounds.max);
 }
 
 function enumAttr<T extends string>(
@@ -222,11 +274,11 @@ function parseChildren(parent: Element): ThermalNode[] {
 				nodes.push({ type: 'invert', children: parseChildren(el) });
 				break;
 			case 'size': {
-				const w = intAttr(el, 'width', 1);
+				const w = intAttr(el, 'width', 1, THERMAL_BOUNDS.sizeMultiplier);
 				nodes.push({
 					type: 'size',
 					width: w,
-					height: intAttr(el, 'height', w),
+					height: intAttr(el, 'height', w, THERMAL_BOUNDS.sizeMultiplier),
 					children: parseChildren(el),
 				});
 				break;
@@ -267,7 +319,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 				nodes.push({
 					type: 'barcode',
 					barcodeType,
-					height: intAttr(el, 'height', 40),
+					height: intAttr(el, 'height', 40, THERMAL_BOUNDS.barcodeHeight),
 					value: (el.textContent ?? '').trim(),
 				});
 				break;
@@ -275,7 +327,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 			case 'qrcode':
 				nodes.push({
 					type: 'qrcode',
-					size: intAttr(el, 'size', 4),
+					size: intAttr(el, 'size', 4, THERMAL_BOUNDS.qrcodeSize),
 					value: (el.textContent ?? '').trim(),
 				});
 				break;
@@ -283,7 +335,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 				nodes.push({
 					type: 'image',
 					src: el.getAttribute('src') ?? '',
-					width: intAttr(el, 'width', 200),
+					width: intAttr(el, 'width', 200, THERMAL_BOUNDS.imageWidthDots),
 				});
 				break;
 			case 'cut':
@@ -293,7 +345,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 				});
 				break;
 			case 'feed':
-				nodes.push({ type: 'feed', lines: intAttr(el, 'lines', 1) });
+				nodes.push({ type: 'feed', lines: intAttr(el, 'lines', 1, THERMAL_BOUNDS.feedLines) });
 				break;
 			case 'drawer':
 				nodes.push({ type: 'drawer' });
@@ -317,7 +369,7 @@ function parseRowChildren(row: Element): ColNode[] {
 				// whatever CPL remains after fixed columns. Do not collapse it to the
 				// numeric fallback; doing so recreates the 12ch preview bug that made
 				// 42/48-CPL thermal templates diverge between preview and ESC/POS output.
-				width: rawWidth === '*' ? '*' : intAttr(child, 'width', 12),
+				width: rawWidth === '*' ? '*' : intAttr(child, 'width', 12, THERMAL_BOUNDS.colWidth),
 				align: enumAttr(child, 'align', ['left', 'right'] as const, 'left'),
 				children: parseChildren(child),
 			});
@@ -341,7 +393,7 @@ function parseXml(xml: string): ReceiptNode {
 
 	return {
 		type: 'receipt',
-		paperWidth: intAttr(root, 'paper-width', 48),
+		paperWidth: intAttr(root, 'paper-width', 48, THERMAL_BOUNDS.paperWidth),
 		children: parseChildren(root),
 	};
 }
@@ -395,10 +447,9 @@ function renderNode(node: ThermalNode, columns: number): string {
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children, columns)}</span>`;
 		case 'size': {
-			// Bounds mirror Html_Thermal_Emitter::render_node()'s clamp_float call.
-			// 8 is also the printer ceiling: the ESC/POS GS ! size byte only has a
-			// nibble per axis and no thermal printer scales past 8x.
-			return `<span style="font-size: ${clamp(node.width, 0.5, 8)}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
+			// The parser already bounded this; re-clamping keeps the render honest
+			// for a hand-built AST, as Html_Thermal_Emitter::render_node() does.
+			return `<span style="font-size: ${clamp(node.width, MIN_SIZE_EM, THERMAL_BOUNDS.sizeMultiplier.max)}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
 		}
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children, columns)}</div>`;
@@ -426,7 +477,10 @@ function renderNode(node: ThermalNode, columns: number): string {
 			const safeSrc = safeImageSrc(node.src);
 			if (!safeSrc) return '';
 			// Bounds mirror Html_Thermal_Emitter::render_image().
-			const widthCh = dotsToCh(clamp(node.width, 1, 2000), columns);
+			const widthCh = dotsToCh(
+				clamp(node.width, THERMAL_BOUNDS.imageWidthDots.min, THERMAL_BOUNDS.imageWidthDots.max),
+				columns,
+			);
 			return `<div style="text-align: center; padding: 8px 0"><img src="${safeSrc}" style="width: min(100%, ${widthCh.toFixed(2)}ch); height: auto" /></div>`;
 		}
 		case 'cut':
@@ -435,7 +489,7 @@ function renderNode(node: ThermalNode, columns: number): string {
 			// Bounds mirror Html_Thermal_Emitter::render_node()'s clamp_integer call.
 			// Rounded to 2dp so the value matches PHP's format_float(): 3 * 1.4 is
 			// 4.199999999999999 in JS and "4.2" in PHP.
-			return `<div style="height: ${round2(clamp(node.lines, 1, 50) * 1.4)}em"></div>`;
+			return `<div style="height: ${round2(clamp(node.lines, THERMAL_BOUNDS.feedLines.min, THERMAL_BOUNDS.feedLines.max) * 1.4)}em"></div>`;
 		case 'drawer':
 			return '';
 		case 'receipt':
@@ -486,8 +540,11 @@ function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): numbe
 }
 
 function renderCol(node: ColNode, width: number, columns: number): string {
-	// Bounds mirror Html_Thermal_Emitter::render_row_cell()'s clamp_integer call.
-	return `<span style="flex: 0 0 ${clamp(width, 1, 120)}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
+	// Bounds mirror Html_Thermal_Emitter::render_row_cell()'s clamp_integer call,
+	// and the ESC/POS and Star row emitters bound their fixed columns the same
+	// way, so a 121ch column does not wrap onto a second physical line there
+	// while the preview shows one.
+	return `<span style="flex: 0 0 ${clamp(width, THERMAL_BOUNDS.colWidth.min, THERMAL_BOUNDS.colWidth.max)}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
 }
 
 function renderHtml(ast: ReceiptNode): string {
