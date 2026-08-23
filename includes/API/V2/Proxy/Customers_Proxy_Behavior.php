@@ -8,16 +8,14 @@
 namespace WCPOS\WooCommercePOS\API\V2\Proxy;
 
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_REST_Request;
 use WP_User_Query;
 
 /**
- * Applies the customer search and extended sorts without a v1 controller.
+ * Applies the customer search, filters and extended sorts without a v1 controller.
  */
 final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
-	/** Customer orderby values WCPOS implements outside wc/v3. */
-	private const WCPOS_ORDERBY = array( 'first_name', 'last_name', 'email', 'role', 'username' );
-
 	/**
 	 * Params this behavior claims and handles itself, rather than forwarding.
 	 *
@@ -45,10 +43,35 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 				$this->delegated['search'] = $search;
 			}
 		}
-		if ( isset( $params['orderby'] ) && \in_array( (string) $params['orderby'], self::WCPOS_ORDERBY, true ) ) {
+		if ( isset( $params['orderby'] ) && \in_array( (string) $params['orderby'], Collection_Rules::orderby_enum( 'customers' ), true ) ) {
 			$this->delegated['orderby'] = (string) $params['orderby'];
 			unset( $params['orderby'] );
 		}
+		/*
+		 * `roles` (plural) is WCPOS's multi-role filter, and `modified_after` is how the
+		 * client asks for the customers touched since its last pull. Neither exists in
+		 * wc/v3, which drops an unregistered param in silence — so before this claim the
+		 * proxy lane answered a narrowed request with the UNNARROWED list, and a
+		 * `modified_after` sync pull re-fetched the whole customer space every tick.
+		 * `wcpos/v1` is the frozen authority for both, so the reads below reproduce its
+		 * gates verbatim (`roles` must be a non-empty array; a blank date is no filter).
+		 */
+		$roles = $params['roles'] ?? null;
+		if ( null !== $roles && ! \is_array( $roles ) ) {
+			// v1 gets this for free: its `roles` schema row is `type => array`, and WP's
+			// own arg sanitizer runs `wp_parse_list()` on a comma-joined string. The proxy
+			// route carries no schema, so a `roles=a,b` request would otherwise be an
+			// array on one lane and an ignored string on the other.
+			$roles = wp_parse_list( $roles );
+		}
+		if ( ! empty( $roles ) ) {
+			$this->delegated['roles'] = array_map( 'sanitize_text_field', $roles );
+		}
+		unset( $params['roles'] );
+		if ( isset( $params['modified_after'] ) && '' !== $params['modified_after'] ) {
+			$this->delegated['modified_after'] = (string) $params['modified_after'];
+		}
+		unset( $params['modified_after'] );
 
 		return $params;
 	}
@@ -105,6 +128,29 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		if ( isset( $this->delegated['search'] ) ) {
 			unset( $args['search'] );
 			$args['_wcpos_search'] = $this->delegated['search'];
+		}
+		if ( isset( $this->delegated['modified_after'] ) ) {
+			$timestamp   = strtotime( $this->delegated['modified_after'] );
+			$last_update = array(
+				'key'     => 'last_update',
+				'value'   => $timestamp ? (string) $timestamp : '',
+				'compare' => '>',
+			);
+			/*
+			 * AND our row onto whatever is already there rather than replacing it, so a
+			 * third party filtering the same query keeps its clauses. `wcpos/v1` flattens
+			 * two AND-related sets into one level where it can; the nesting differs, the
+			 * SQL WP_Meta_Query builds from it does not.
+			 */
+			$args['meta_query'] = empty( $args['meta_query'] ) // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Mirrors the v1 lane's `last_update` filter; the direct lane is the frozen authority.
+				? array( $last_update )
+				: array( 'relation' => 'AND', array( $last_update ), $args['meta_query'] );
+		}
+		if ( isset( $this->delegated['roles'] ) ) {
+			// `role__in` and `role` are mutually exclusive in WP_User_Query; v1 drops
+			// `role` for the same reason, so an explicit `role` cannot re-narrow the set.
+			$args['role__in'] = $this->delegated['roles'];
+			unset( $args['role'] );
 		}
 
 		return $args;
