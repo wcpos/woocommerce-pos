@@ -477,6 +477,46 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It backs off for the re-registration window on an unknown relay site.
+	 *
+	 * The 404 cannot clear inside the 30s status window — the stored site_key
+	 * simply is not in the relay's registry, and re-registration is itself
+	 * rate-limited to once per REREGISTER_GUARD. Retrying on the short window
+	 * replays the identical 404 twice a minute indefinitely for any site that
+	 * cannot re-register.
+	 */
+	public function test_unknown_site_status_backs_off_for_the_reregistration_window(): void {
+		// Arrange.
+		$this->store_relay();
+		$calls = 0;
+		$this->mock_http(
+			function () use ( &$calls ) {
+				++$calls;
+
+				return $this->http_response( 404, array( 'error' => 'unknown site' ) );
+			}
+		);
+		$registry = new Cloud_Print_Registry();
+
+		// Act.
+		$registry->status_for( 'front' );
+
+		// Assert: backed off well past the short status window.
+		$expiry = (int) get_option( '_transient_timeout_' . Cloud_Print_Relay_Service::DOWN_TRANSIENT );
+		$this->assertGreaterThan(
+			time() + Cloud_Print_Relay_Service::STATUS_CACHE_TTL,
+			$expiry,
+			'unknown site must not retry on the 30s status window'
+		);
+
+		// Act: a second call inside the window must not reach the relay again.
+		$registry->status_for( 'front' );
+
+		// Assert.
+		$this->assertSame( 1, $calls, 'a futile unknown-site 404 must not be replayed while backed off' );
+	}
+
+	/**
 	 * It keeps the relay disabled when the admin disables it mid re-registration.
 	 */
 	public function test_reregister_preserves_disable_that_lands_mid_flight(): void {

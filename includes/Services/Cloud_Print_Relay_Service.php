@@ -290,6 +290,21 @@ class Cloud_Print_Relay_Service {
 		// same deterministic site key.
 		if ( 404 === $code && \is_array( $data ) && 'unknown site' === ( $data['error'] ?? '' ) ) {
 			self::schedule_reregistration();
+
+			// Back off for the re-registration window, not the cache window.
+			// This 404 is not a transient relay hiccup: the stored site_key is
+			// not in the relay's registry, and nothing about that changes until
+			// a re-registration succeeds — which is itself rate-limited to once
+			// per REREGISTER_GUARD. Falling through to the 30s failure window
+			// would replay the identical 404 twice a minute forever whenever a
+			// site cannot re-register (the relay cannot reach its verification
+			// endpoint, say), which is exactly what one site was doing: ~2,000
+			// pointless requests a day. A successful registration deletes
+			// DOWN_TRANSIENT, so this self-heals the moment re-registration
+			// works rather than pinning the site down for the full hour.
+			self::note_status_failure( $key, self::REREGISTER_GUARD );
+
+			return null;
 		}
 		if ( 200 !== $code || ! \is_array( $data ) ) {
 			self::note_status_failure( $key );
@@ -409,11 +424,15 @@ class Cloud_Print_Relay_Service {
 	 * Record a failed status call: per-printer negative cache plus the
 	 * site-wide down marker so other printers skip their calls entirely.
 	 *
-	 * @param string $transient_key Per-printer status transient key.
+	 * @param string   $transient_key Per-printer status transient key.
+	 * @param int|null $ttl           Backoff seconds; defaults to STATUS_CACHE_TTL.
+	 *                                Callers pass a longer window when the
+	 *                                failure cannot clear on its own within it.
 	 */
-	private static function note_status_failure( string $transient_key ): void {
-		set_transient( $transient_key, array( 'failed' => true ), self::STATUS_CACHE_TTL );
-		set_transient( self::DOWN_TRANSIENT, true, self::STATUS_CACHE_TTL );
+	private static function note_status_failure( string $transient_key, ?int $ttl = null ): void {
+		$ttl = null === $ttl ? self::STATUS_CACHE_TTL : max( 1, $ttl );
+		set_transient( $transient_key, array( 'failed' => true ), $ttl );
+		set_transient( self::DOWN_TRANSIENT, true, $ttl );
 	}
 
 	/**
