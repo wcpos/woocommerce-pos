@@ -10,8 +10,8 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
@@ -105,10 +105,12 @@ class Variations_Controller extends WP_REST_Controller {
 		// seeds its existence-reconcile manifest from this pull too (products get theirs via the proxy
 		// filter). Bulk-read once for the whole include set. A string — the digest exceeds int range.
 		// ::class, never the bare string: from inside this namespace
-		// class_exists( 'Integrity_Digest' ) probes the GLOBAL namespace and is
+		// class_exists( 'Digest_Index' ) probes the GLOBAL namespace and is
 		// forever false, so variation digests would never emit (review finding 3).
-		$digests = class_exists( Integrity_Digest::class )
-			? ( new Integrity_Digest() )->read_digests( $ids )
+		// Variations read the PRODUCTS id-space — one registry row owns both
+		// object types, so this lane cannot drift from the proxy lane's answer.
+		$digests = class_exists( Digest_Index::class )
+			? ( new Digest_Index() )->read_digests( 'products', $ids )
 			: array();
 
 		$serialization_request = new WP_REST_Request( 'GET', '/' );

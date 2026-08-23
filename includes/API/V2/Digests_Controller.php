@@ -11,7 +11,6 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -103,17 +102,13 @@ final class Digests_Controller extends WP_REST_Controller {
 		if ( 'products' === $collection && 'publish' === $request->get_param( 'status' ) ) {
 			$read_ids = $this->index->published_product_ids( $ids );
 		}
-		$reader = new Integrity_Digest();
-		if ( 'customers' === $collection ) {
-			$digests = $reader->read_customer_digests( $read_ids );
-		} elseif ( 'orders' === $collection ) {
-			$digests = $reader->read_order_digests( $read_ids );
-		} else {
-			$digests = $reader->read_digests( $read_ids );
-		}
+		$digests          = $this->index->read_digests( $collection, $read_ids );
 		$explicit_absence = 'explicit' === $request->get_param( 'absence' );
 		$absent_ids       = $explicit_absence ? array_values( array_diff( $ids, array_keys( $digests ) ) ) : array();
-		$servable = array_fill_keys( $this->servable_ids( $collection, $absent_ids ), true );
+		// Authoritative absence is the store's answer, not this endpoint's: the
+		// id-space, its live-row rule and the fail-open guard all live in
+		// Digest_Index, so this controller never learns the table shape.
+		$servable = array_fill_keys( $this->index->servable( $collection, $absent_ids ), true );
 		$out      = array();
 		// Preserve request order; servable ids with no stored digest remain absent.
 		foreach ( $ids as $id ) {
@@ -134,45 +129,8 @@ final class Digests_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Resolve the absent-id set against the integrity scan's canonical membership in one query.
-	 *
-	 * @param int[] $ids Absent ids in request order.
-	 *
-	 * @return int[] Servable ids in request order.
-	 */
-	private function servable_ids( string $collection, array $ids ): array {
-		global $wpdb;
-		if ( array() === $ids ) {
-			return array();
-		}
-		$wpdb->last_error = '';
-		if ( 'products' === $collection ) {
-			$servable_ids = $this->index->servable_product_ids( $ids, true );
-		} else {
-			$predicate    = 'customers' === $collection
-				? $this->index->customer_live_row_exists_sql( 'requested.id' )
-				: $this->index->order_live_row_exists_sql( 'requested.id' );
-			$requested    = implode( ' UNION ALL ', array_fill( 0, \count( $ids ), 'SELECT %d AS id' ) );
-			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Predicates come from Digest_Index; requested ids use placeholders.
-			$servable_ids = $wpdb->get_col(
-				$wpdb->prepare(
-					'SELECT requested.id FROM (' . $requested . ') requested WHERE ' . $predicate,
-					...$ids
-				)
-			);
-			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
-		}
-		/** @var string $last_error */
-		$last_error = $wpdb->last_error;
-
-		return '' !== $last_error
-			? $ids
-			: array_values( array_intersect( $ids, array_map( 'intval', (array) $servable_ids ) ) );
-	}
-
-	/**
 	 * Accept `include` as a comma-separated string (?include=1,2,3) or an array; coerce to UNIQUE
-	 * positive ints in request order. `read_digests` re-sanitizes, but bounding here keeps a malformed
+	 * positive ints in request order. `Digest_Index::read_digests` re-sanitizes, but bounding here keeps a malformed
 	 * query cheap and lets the response echo the caller's id ordering.
 	 *
 	 * @param mixed $include

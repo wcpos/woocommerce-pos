@@ -110,6 +110,8 @@ final class Augmentation_Pipeline {
 		// registrars are also the seams the tests and the ops endpoints drive.
 		// Revision runs at 9 — BEFORE uuid/digest augmentation — so the stamped
 		// bytes equal what the write path recomputes from a bare wc/v3 re-read.
+		// The digest registrar also owns the ORDER pull lane's stamper, so every
+		// served-record augmentation is wired from here and nowhere else.
 		Revision::register_proxy_stamps();
 		Proxy_Uuid_Stamper::register_proxy_stampers();
 		Integrity_Digest::register_proxy_digest_stampers();

@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -149,7 +150,7 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 		$product_id = $product->get_id();
 		$digest     = new Integrity_Digest();
 		$digest->upsert_digest( $product_id );
-		$stored_digest = $digest->read_digests( array( $product_id ) )[ $product_id ];
+		$stored_digest = ( new Digest_Index() )->read_digests( 'products', array( $product_id ) )[ $product_id ];
 		$bucket        = (int) floor( $product_id / 1000 );
 
 		$data = $this->dispatch_aggregate_scan( $product_id );
