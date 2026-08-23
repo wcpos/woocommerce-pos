@@ -25,7 +25,87 @@ use WP_REST_Server;
  */
 class Init {
 	/**
-	 * Constructor.
+	 * Constructor — the plugin's entire `plugins_loaded` hook wiring.
+	 *
+	 * Reached from {@see Activator::init()}, which runs on `plugins_loaded` at the
+	 * default priority 10. Everything that must exist before `init` fires — most
+	 * importantly the `determine_current_user` pair — has to be registered here.
+	 *
+	 * NOT PURE WIRING. Constructing this class also, in statement order:
+	 * `require_once`s `wcpos-functions.php` and `wcpos-store-functions.php`;
+	 * registers the `wc_pos_user_uuid_locks` global cache group; READS the sync
+	 * schema-latch option; WRITES options through
+	 * `Config_Fingerprint::maybe_cleanup_legacy_options()` (one-time, latched on
+	 * its own version option); and SCHEDULES a daily cron event through
+	 * `Sync_Journal_Purge::register_hooks()`. Anything that constructs `Init` —
+	 * a test included — inherits all of that.
+	 *
+	 * ## How to read the ordering table
+	 *
+	 * A priority number decides ordering on its own, wherever in this method it
+	 * happens to be written. Statement order is load-bearing ONLY when two
+	 * callbacks share a hook AND a priority: WordPress then runs them in
+	 * registration order. Exactly one such pair exists here, and it is marked
+	 * ORDER-CRITICAL (STATEMENT ORDER) below — do not move it.
+	 *
+	 * Priorities that live in the callee (`Meta_Normalizer` at 5, `Revision` at 9,
+	 * the proxy stampers at 10) are listed at the value they actually register,
+	 * not at the position of the call in this method. Reordering those statements
+	 * changes nothing; changing those numbers changes everything.
+	 *
+	 * "Why" is recovered from `git log -S` / `git blame` where a reason was
+	 * recorded. Where none was, the entry says **unknown** rather than guessing.
+	 *
+	 * ## Ordering table
+	 *
+	 * | # | Hook | Callback | Pri | Order | Why that priority |
+	 * |---|------|----------|-----|-------|-------------------|
+	 * | 1 | `activated_plugin`, `upgrader_process_complete`, `admin_enqueue_scripts`, `admin_notices`, `rest_api_init` | `Admin\Consent` (5 callbacks) | 10 | irrelevant | Default. What matters is that `Consent` is built during `plugins_loaded`, so its lifecycle hooks exist before an activation/update request fires them. |
+	 * | 2 | `woocommerce_pos_rest_api_controllers` | `Sync\Api::register_controllers` | 10 | irrelevant | Default; sole callback. |
+	 * | 3 | `wcpos_integrity_digest_rebuild` | `Sync\Integrity_Digest::run_scheduled_rebuild` | 10 | irrelevant | Default; sole callback. Registered OUTSIDE the schema latch, so an already-scheduled rebuild still has a callback while the latch is down. |
+	 * | 4 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product`, `..._serialized_order` | `Sync\Meta_Normalizer::normalize` | **5** | **ORDER-CRITICAL** | Must precede `Revision` at 9 so the stamped revision bytes equal what the write path recomputes from a bare `wc/v3` re-read. See `Sync\Augmentation_Pipeline` class docblock and `Sync\Meta_Normalizer::register_hooks()`. Kept out of the pipeline because it also serves the ORDER lane. |
+	 * | 5 | `woocommerce_pos_sync_serialized_order` | `Sync\Pos_Uuid::stamp_serialized_record` | 10 | order-critical (by number) | After `Meta_Normalizer` at 5, in step with the product lane's stampers. |
+	 * | 6 | `woocommerce_pos_sync_order_pull_payloads` | `Sync\Integrity_Digest::stamp_proxy_order_digests` | 10 | irrelevant | Default; sole callback on that filter. |
+	 * | 7 | `woocommerce_pos_sync_proxy_response` | `Sync\Revision::stamp_proxy_revisions` (via `Augmentation_Pipeline::install()`) | **9** | **ORDER-CRITICAL** | Between `Meta_Normalizer` (5) and the uuid/digest stampers (10). Revision must hash the normalized-but-not-yet-augmented payload. |
+	 * | 8 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product` | `Proxy_Uuid_Stamper`, `Integrity_Digest` digest stampers, pipeline projections | 10 | order-critical (by number) | Preserved verbatim from the hand-wiring the pipeline replaced, so third-party code hooking either public filter still runs where it always did. |
+	 * | 9 | `woocommerce_before_product_object_save`, `woocommerce_before_product_variation_object_save` | `Sync\Pos_Uuid::stamp_on_save` | 10 | irrelevant | Default. The HOOK is the design (before the data store writes, so the uuid lands in the same save); the number is not. Registered unconditionally — identity is core, not an observer. |
+	 * | 10 | 32 catalogue/customer/order hooks | `Sync\Sync_Journal` (33 callbacks) | 10 | irrelevant | Default throughout. |
+	 * | 11 | `wcpos_sync_journal_purge` | `Sync\Sync_Journal_Purge::run_purge` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the daily event. |
+	 * | 12 | 21 catalogue/customer/order hooks (a subset of row 10's) | `Sync\Integrity_Digest` | 10 | unknown | Default. Shares every one of its hooks with `Sync_Journal` at the same priority, so the journal always runs first — no code found that depends on that, but nothing pins it either. |
+	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
+	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
+	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
+	 * | 16 | `pre_update_option_woocommerce_pos_pro_settings_license` | `Init::remove_license_transient` | 10 | irrelevant | Default. The reentrancy guard, not the priority, is what makes it safe (f33b8d655). |
+	 * | 17 | `rest_pre_serve_request` | `Init::rest_pre_serve_request` | **5** | unknown | Present at 5 since the initial commit (8f2b9eac); no reason recorded. It runs ahead of core's own `rest_send_cors_headers` (default 10). The only recorded movement is the now-deleted twin in `API.php`, which went 5 -> 10 in 521ccb9a. **This row is what PR #1668 changes**: that PR deletes this registration and the handler, moving both behind `Sync\Rest_Cors::register_hooks()`. The priority and this "unknown" travel with it. |
+	 * | 18 | `send_headers` | `Init::send_headers` | 99 | unknown | Introduced by 62da70551 ("fix WPSEO integration"). The commit records no reason for the number beyond running late. |
+	 * | 19 | `send_headers` | `Init::remove_x_frame_options` | **9999** | **ORDER-CRITICAL** | Must run AFTER security plugins have set `X-Frame-Options`, because it works by `header_remove()` (80ee545a5). A smaller number lets the plugin set the header again afterwards. |
+	 * | 20 | `determine_current_user` | `Services\Core_Order_Audit_Guard::record_prior_authentication` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
+	 * | 21 | `rest_pre_dispatch` | `Services\Core_Order_Audit_Guard::rest_pre_dispatch` | 10 | irrelevant | Default; reads what row 20 recorded. |
+	 * | 22 | `woocommerce_update_coupon` | `Sync\Coupon_Modified_Date::touch` | 10 | irrelevant | Default. `Sync_Journal::record_coupon_updated` shares the hook and priority (row 10) and is registered first, but the journal timestamps rows with the wall clock, not the coupon's `post_modified`, so neither ordering changes an outcome. |
+	 * | 23 | `determine_current_user` | `Init::determine_current_user_early` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
+	 *
+	 * ## The one pair where statement order is the whole mechanism
+	 *
+	 * Rows 20 and 23 share `determine_current_user` AND priority 20, so insertion
+	 * order — and nothing else — decides which runs first. 20 puts both after
+	 * WordPress core's cookie and application-password handlers, which are added
+	 * from `default-filters.php` before any plugin loads.
+	 *
+	 * The guard must run FIRST. It records into `pre_wcpos_user_id` whichever user
+	 * some EARLIER filter had already authenticated; a non-zero value means the
+	 * request proved itself with a cookie or application password, so
+	 * `Core_Order_Audit_Guard::is_wcpos_jwt_authenticated()` returns false and the
+	 * request keeps its normal power over order meta.
+	 *
+	 * Swap the two statements and the guard records the user WCPOS's own JWT filter
+	 * just authenticated. `pre_wcpos_user_id` is then non-zero on every
+	 * token-authenticated request, `is_wcpos_jwt_authenticated()` returns false for
+	 * all of them, and forged `_pos_*` audit meta on `/wc/v3/orders` is accepted.
+	 * It fails OPEN, silently, on a route no smoke test touches.
+	 *
+	 * Pinned by `tests/includes/Test_Init_Hook_Wiring.php`, which asserts the two
+	 * callbacks' ARRAY POSITIONS inside `callbacks[20]` — asserting priorities
+	 * would pass on the broken order.
 	 */
 	public function __construct() {
 		// global helper functions.
