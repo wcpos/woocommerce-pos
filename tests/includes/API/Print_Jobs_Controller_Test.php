@@ -387,6 +387,37 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It refuses the same unrenderable reprint after its printer is removed.
+	 */
+	public function test_reprint_order_job_with_missing_template_and_printer_returns_410(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$jobs  = new Print_Job_Service();
+		$id    = $jobs->create(
+			array(
+				'printer_id'   => 'bar',
+				'content_type' => 'application/octet-stream',
+				'order_id'     => $order->get_id(),
+				'template_id'  => '999999',
+				'pn_kind'      => 'escpos',
+			)
+		);
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+		$before = \count( $jobs->query( array( 'printer_id' => 'bar' ) ) );
+
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/' . $id . '/reprint' ) );
+
+		$this->assertSame( 410, $response->get_status() );
+		$this->assertSame( 'wcpos_print_job_source_expired', $response->as_error()->get_error_code() );
+		$this->assertCount( $before, $jobs->query( array( 'printer_id' => 'bar' ) ) );
+	}
+
+	/**
 	 * It still reprints a template-backed job whose template is gone when the
 	 * job has no order to re-render against.
 	 *
