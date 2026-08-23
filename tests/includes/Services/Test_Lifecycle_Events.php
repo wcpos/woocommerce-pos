@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WP_UnitTestCase;
 
 /**
@@ -39,7 +38,6 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		delete_option( Lifecycle_Events::INSTALL_RECORDED_OPTION );
 		delete_option( 'woocommerce_pos_installed_at' );
 		delete_option( 'woocommerce_pos_db_version' );
-		delete_option( Lifecycle_Events::FIRST_ORDER_OPTION );
 		delete_option( Lifecycle_Events::FIRST_OPEN_OPTION );
 		delete_transient( 'wcpos_landing_profile' );
 		delete_transient( Lifecycle_Events::REFRESH_THROTTLE_TRANSIENT );
@@ -58,7 +56,6 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		delete_option( 'woocommerce_pos_installed_at' );
 		delete_transient( Lifecycle_Events::REFRESH_THROTTLE_TRANSIENT );
 		delete_option( Lifecycle_Events::LAST_ORDER_BAND_OPTION );
-		delete_option( Lifecycle_Events::FIRST_ORDER_OPTION );
 		delete_option( Lifecycle_Events::FIRST_OPEN_OPTION );
 		wp_clear_scheduled_hook( Lifecycle_Events::REFRESH_HOOK );
 
@@ -583,125 +580,6 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$event = $this->find_event( 'pos_app_opened' );
 		$this->assertNotNull( $event );
 		$this->assertFalse( $event['properties']['is_first_open'] );
-	}
-
-	/**
-	 * The first POS sale is the activation milestone the north-star metric
-	 * rests on, so it must be reported exactly once.
-	 */
-	public function test_first_pos_order_is_reported_once(): void {
-		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $user_id );
-		$this->set_consent( 'allowed' );
-
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		$order->save();
-
-		$lifecycle = new Lifecycle_Events();
-		$lifecycle->maybe_record_first_pos_order( $order->get_id(), $order );
-
-		// Sent immediately, NOT queued: a POS-only store may never load a
-		// wp-admin page, and the queue is drained on admin_init.
-		$first = $this->find_event( 'pos_first_order' );
-		$this->assertNotNull( $first );
-		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
-
-		// A second sale must not report a second "first".
-		$second = OrderHelper::create_order();
-		$second->set_created_via( 'woocommerce-pos' );
-		$second->save();
-
-		$before = \count( $this->captured_event_names() );
-		$lifecycle->maybe_record_first_pos_order( $second->get_id(), $second );
-
-		$this->assertSame( $before, \count( $this->captured_event_names() ) );
-	}
-
-	/**
-	 * An offline sale is dated by when it was rung up, not when it synced.
-	 *
-	 * The POS sells offline and syncs later, and WCPOS preserves the client's
-	 * date_created. Dating the milestone by the sync would report a sale made on
-	 * day 3 as ten days to first revenue, and file it in the wrong cohort.
-	 */
-	public function test_first_pos_order_is_dated_by_the_sale_not_the_sync(): void {
-		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $user_id );
-		$this->set_consent( 'allowed' );
-
-		// Installed 10 days ago; the sale happened 7 days ago and is syncing now.
-		update_option( 'woocommerce_pos_installed_at', time() - ( 10 * DAY_IN_SECONDS ) );
-		$sold_at = time() - ( 7 * DAY_IN_SECONDS );
-
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		$order->set_date_created( $sold_at );
-		$order->save();
-
-		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id(), $order );
-
-		$event = $this->find_event( 'pos_first_order' );
-		$this->assertNotNull( $event );
-
-		// 3 days from install to first sale — not the 10 that "now" would give.
-		$this->assertSame( 3, $event['properties']['days_since_install'] );
-		$this->assertSame( gmdate( 'c', $sold_at ), $event['timestamp'] );
-	}
-
-	/**
-	 * A sale that did not come from the POS is not an activation.
-	 */
-	public function test_non_pos_orders_do_not_report_activation(): void {
-		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $user_id );
-		$this->set_consent( 'allowed' );
-
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'checkout' );
-		$order->save();
-
-		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id(), $order );
-
-		$this->assertNotContains( 'pos_first_order', $this->captured_event_names() );
-		$this->assertFalse( get_option( Lifecycle_Events::FIRST_ORDER_OPTION ) );
-	}
-
-	/**
-	 * The milestone happens once, so an undecided answer must not lose it.
-	 */
-	public function test_first_pos_order_is_queued_while_consent_is_undecided(): void {
-		$this->set_consent( 'undecided' );
-
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		$order->save();
-
-		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id(), $order );
-
-		$this->assertSame( array(), $this->captured_event_names() );
-
-		$pending = get_option( Lifecycle_Events::PENDING_OPTION );
-		$this->assertIsArray( $pending );
-		$this->assertSame( 'pos_first_order', $pending[0]['event'] );
-	}
-
-	/**
-	 * The latch stores a CONSTANT, which is the whole reason it is safe.
-	 *
-	 * add_option() does a read then an INSERT ... ON DUPLICATE KEY UPDATE. With
-	 * differing values a racing loser's upsert changes the row, so add_option()
-	 * returns true for both callers and the "first" event fires twice. With an
-	 * identical value the loser changes nothing and correctly gets false. If
-	 * someone turns these latches back into timestamps, this test should fail.
-	 */
-	public function test_latch_is_a_real_claim_not_a_timestamp(): void {
-		$this->assertSame( '1', Lifecycle_Events::LATCH_VALUE );
-
-		$this->assertTrue( add_option( Lifecycle_Events::FIRST_ORDER_OPTION, Lifecycle_Events::LATCH_VALUE, '', true ) );
-
-		// The second claim of the same latch must lose.
-		$this->assertFalse( add_option( Lifecycle_Events::FIRST_ORDER_OPTION, Lifecycle_Events::LATCH_VALUE, '', true ) );
 	}
 
 	/**

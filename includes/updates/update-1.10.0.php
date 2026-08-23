@@ -257,50 +257,15 @@ if ( array() !== $wcpos_legacy_by_user && \function_exists( 'wc_get_logger' ) ) 
 /*
  * Seed the activation latches for stores that already exist.
  *
- * `pos_app_opened` and `pos_first_order` (#793 Phase 4) each fire once per
- * site, guarded by an option that only new installs are supposed to be
- * missing. Every store upgrading to 1.10.0 is missing it by definition, so
- * without this their next POS open and next POS sale would both be reported
- * as first-ever — inventing an activation spike out of the existing user base
- * and corrupting the cohorts the metric exists to measure.
+ * `pos_app_opened` (#793 Phase 4) reports the site's first open once, guarded
+ * by an option that only new installs are supposed to be missing. Every store
+ * upgrading to 1.10.0 is missing it by definition, so without this their next
+ * POS open would be reported as first-ever, inventing an activation spike out
+ * of the existing user base.
  *
- * The open latch is seeded unconditionally: this site predates the latch, so
- * its true first open is unknowable, and an unknown first is better than a
- * wrong one. The order latch is seeded ONLY when the store has already sold
- * through the POS — a store that has never taken a POS sale still has a
- * genuine first sale ahead of it, and that one should be reported.
+ * Seeded unconditionally: this site predates the latch, so its true first open
+ * is unknowable, and an unknown first is better than a wrong one.
  */
 add_option( Services\Lifecycle_Events::FIRST_OPEN_OPTION, Services\Lifecycle_Events::LATCH_VALUE, '', true );
-
-// EXISTS rather than COUNT: this runs during an upgrade and only the presence
-// of any POS order matters. Mirrors Landing_Profile::get_pos_order_count()'s
-// HPOS/legacy split.
-if ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
-	$wcpos_has_pos_order = (int) $wpdb->get_var(
-		$wpdb->prepare(
-			"SELECT EXISTS (
-				SELECT 1 FROM {$wpdb->prefix}wc_orders o
-				INNER JOIN {$wpdb->prefix}wc_order_operational_data op ON op.order_id = o.id
-				WHERE o.type = 'shop_order' AND op.created_via = %s LIMIT 1
-			)",
-			'woocommerce-pos'
-		)
-	);
-} else {
-	$wcpos_has_pos_order = (int) $wpdb->get_var(
-		$wpdb->prepare(
-			"SELECT EXISTS (
-				SELECT 1 FROM {$wpdb->posts} p
-				INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-				WHERE p.post_type = 'shop_order' AND pm.meta_key = '_created_via' AND pm.meta_value = %s LIMIT 1
-			)",
-			'woocommerce-pos'
-		)
-	);
-}
-
-if ( $wcpos_has_pos_order > 0 ) {
-	add_option( Services\Lifecycle_Events::FIRST_ORDER_OPTION, Services\Lifecycle_Events::LATCH_VALUE, '', true );
-}
 
 // phpcs:enable
