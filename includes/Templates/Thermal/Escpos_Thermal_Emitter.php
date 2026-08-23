@@ -599,18 +599,37 @@ class Escpos_Thermal_Emitter {
 	 * Mirrors the rescue in Html_Thermal_Emitter::render_barcode_fallback(): when
 	 * the symbol cannot be produced, the value itself is still readable.
 	 *
+	 * Control bytes are folded to spaces first. This is the one path that routes
+	 * a barcode value into the text stream, and a barcode value is exactly where
+	 * a stray tab, LF or CR turns up — Code 128 validation rejects them on the
+	 * ESC/POS lane precisely because code set B cannot encode them, which sends
+	 * them here. Emitted raw they would break the line the rescue is centering.
+	 *
 	 * @param string $value The value to print.
 	 *
 	 * @return void
 	 */
 	private function emit_centered_text( string $value ): void {
-		$text = $this->normalize_text( $value );
+		$text = $this->normalize_text( $this->strip_control_bytes( $value ) );
 		$pad  = (int) floor( max( 0, $this->columns - $this->display_width( $text ) ) / 2 );
 		if ( $pad > 0 ) {
 			$this->raw_string( str_repeat( ' ', $pad ) );
 		}
 		$this->raw_string( $text );
 		$this->newline();
+	}
+
+	/**
+	 * Replace control bytes with spaces so they cannot reach the print stream.
+	 *
+	 * @param string $value The value to clean.
+	 *
+	 * @return string The value with control bytes folded to spaces.
+	 */
+	private function strip_control_bytes( string $value ): string {
+		$cleaned = preg_replace( '/[\x00-\x1f\x7f]/', ' ', $value );
+
+		return null === $cleaned ? $value : $cleaned;
 	}
 
 	/**

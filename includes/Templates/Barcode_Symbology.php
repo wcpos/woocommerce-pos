@@ -244,12 +244,17 @@ class Barcode_Symbology {
 	 *
 	 * A printer given data it cannot encode prints nothing and reports no error,
 	 * so callers on the byte lanes check this first and print the value as text
-	 * instead of handing the printer a symbol it will silently drop.
+	 * instead of handing the printer a symbol it will silently drop. The same
+	 * rule governs the constraints below: where a value would print as a symbol
+	 * that scans back as something other than the value asked for, it is
+	 * rejected here, because a silently wrong barcode is worse than no barcode.
 	 *
-	 * The lane is required, not optional. The only symbology whose constraints
-	 * differ between lanes is UPC-E — ESC/POS accepts the 6-8 digit short form,
-	 * StarPRNT requires the full 11-12 digit payload — and defaulting that to
-	 * either vendor would dress one printer's leniency up as a neutral answer.
+	 * The lane is required, not optional. Two symbologies differ between lanes:
+	 * UPC-E (ESC/POS accepts the 6-8 digit short form, StarPRNT requires the
+	 * full 11-12 digit payload) and Code 128 (the lanes escape and select code
+	 * sets differently, so both the alphabet and the encoded length differ).
+	 * Defaulting either to one vendor would dress that printer's rules up as a
+	 * neutral answer.
 	 *
 	 * @param string $type  The barcode type attribute value.
 	 * @param string $value The barcode value.
@@ -263,24 +268,44 @@ class Barcode_Symbology {
 
 		switch ( $symbology ) {
 			case 'upca':
-				return self::is_digits( $value ) && ( 11 === $length || 12 === $length );
-			case 'upce':
-				// ESC/POS accepts the 6-8 digit short form as well as the full
-				// 11-12 digit form; StarPRNT accepts only the full form.
 				if ( ! self::is_digits( $value ) ) {
 					return false;
 				}
-				if ( self::LANE_STARPRNT === $lane ) {
-					return 11 === $length || 12 === $length;
+				// 11 digits: the printer computes the check digit. 12: the last
+				// digit is the check digit and must already be right.
+				return 11 === $length || ( 12 === $length && self::has_valid_gtin_check_digit( $value ) );
+			case 'upce':
+				// ESC/POS accepts the 6-8 digit short form as well as the full
+				// 11-12 digit form; StarPRNT accepts only the full form. The full
+				// form is a UPC-A payload the printer compresses, so its check
+				// digit is the UPC-A one. The short form's check digit is derived
+				// from an expansion only the printer performs, so it is left to
+				// the printer rather than half-checked here.
+				if ( ! self::is_digits( $value ) ) {
+					return false;
+				}
+				if ( 12 === $length ) {
+					return self::has_valid_gtin_check_digit( $value );
+				}
+				if ( 11 === $length ) {
+					return true;
 				}
 
-				return ( $length >= 6 && $length <= 8 ) || 11 === $length || 12 === $length;
+				return self::LANE_ESCPOS === $lane && $length >= 6 && $length <= 8;
 			case 'ean13':
-				return self::is_digits( $value ) && ( 12 === $length || 13 === $length );
+				if ( ! self::is_digits( $value ) ) {
+					return false;
+				}
+
+				return 12 === $length || ( 13 === $length && self::has_valid_gtin_check_digit( $value ) );
 			case 'ean8':
-				return self::is_digits( $value ) && ( 7 === $length || 8 === $length );
+				if ( ! self::is_digits( $value ) ) {
+					return false;
+				}
+
+				return 7 === $length || ( 8 === $length && self::has_valid_gtin_check_digit( $value ) );
 			case 'code39':
-				return $length >= 1 && $length <= 255 && 1 === preg_match( '/\A[0-9A-Z \$%\*\+\-\.\/]+\z/', $value );
+				return self::is_valid_code39( $value );
 			case 'itf':
 				// Interleaved 2 of 5 encodes digits in pairs, so an odd-length
 				// value cannot be encoded at all.
@@ -292,10 +317,7 @@ class Barcode_Symbology {
 				return $length >= 1 && $length <= 255 && self::is_ascii( $value );
 			case 'code128':
 			default:
-				// Epson's n >= 2 counts the two-byte `{B` code-set selector, which
-				// escpos_payload() always prepends, so a single-character value is
-				// legal on the wire (n = 3).
-				return $length >= 1 && $length <= 255 && self::is_ascii( $value );
+				return self::is_valid_code128( $value, $lane );
 		}
 	}
 
@@ -327,8 +349,7 @@ class Barcode_Symbology {
 			return substr( $value, 0, self::MAX_DATA_BYTES );
 		}
 
-		$payload = self::ESCPOS_CODE128_SELECTOR . str_replace( '{', '{{', $value );
-		$payload = substr( $payload, 0, self::MAX_DATA_BYTES );
+		$payload = substr( self::escpos_code128_data( $value ), 0, self::MAX_DATA_BYTES );
 
 		// Clamping can split an escaped `{{` pair; a lone trailing `{` would be
 		// read as the start of a code-set selector, so drop it.
@@ -368,7 +389,7 @@ class Barcode_Symbology {
 			return substr( $value, 0, self::MAX_DATA_BYTES );
 		}
 
-		$payload = substr( str_replace( '%', '%0', $value ), 0, self::MAX_DATA_BYTES );
+		$payload = substr( self::starprnt_code128_data( $value ), 0, self::MAX_DATA_BYTES );
 
 		// Clamping can split an escaped `%0` pair. Star reads `%` plus the byte
 		// after it as an escape, and the next byte on the wire is the RS that
@@ -443,6 +464,131 @@ class Barcode_Symbology {
 		);
 
 		return $map[ self::normalize_linear( $type ) ] ?? $map[ self::DEFAULT_SYMBOLOGY ];
+	}
+
+	/**
+	 * Build the unclamped ESC/POS Code 128 data bytes for a value.
+	 *
+	 * Split out from escpos_payload() so is_valid_value() can measure the
+	 * *encoded* length. The selector and the doubled braces both count toward
+	 * the 255-byte limit, so a value that fits before escaping can overflow
+	 * after it — and the clamp would then print a shortened barcode that scans
+	 * cleanly as the wrong value.
+	 *
+	 * @param string $value The barcode value.
+	 *
+	 * @return string The encoded data, before any length clamp.
+	 */
+	private static function escpos_code128_data( string $value ): string {
+		return self::ESCPOS_CODE128_SELECTOR . str_replace( '{', '{{', $value );
+	}
+
+	/**
+	 * Build the unclamped StarPRNT Code 128 data bytes for a value.
+	 *
+	 * @param string $value The barcode value.
+	 *
+	 * @return string The encoded data, before any length clamp.
+	 */
+	private static function starprnt_code128_data( string $value ): string {
+		return str_replace( '%', '%0', $value );
+	}
+
+	/**
+	 * Whether a value can be encoded as Code 128 on a given lane.
+	 *
+	 * Two lane-specific constraints, both of which fail silently on the printer:
+	 *
+	 * - Alphabet. escpos_payload() always selects code set B, which encodes
+	 *   ASCII 32-126 only; a tab, LF or CR needs set A, so an ESC/POS printer
+	 *   drops the symbol. StarPRNT auto-selects its code set and so accepts the
+	 *   wider 7-bit range.
+	 * - Length. The limit applies to the encoded bytes, not the merchant's
+	 *   value: ESC/POS adds a two-byte selector and doubles every `{`, StarPRNT
+	 *   doubles every `%`. A value that only overflows once escaped would be
+	 *   clamped into a shorter barcode that still scans — as the wrong value —
+	 *   so it is rejected here and printed as text instead.
+	 *
+	 * Epson's minimum of n >= 2 counts the `{B` selector, so a one-character
+	 * value is legal on the wire (n = 3).
+	 *
+	 * @param string $value The barcode value.
+	 * @param string $lane  Lane discriminator: self::LANE_ESCPOS or self::LANE_STARPRNT.
+	 *
+	 * @return bool True when the value can be encoded.
+	 */
+	private static function is_valid_code128( string $value, string $lane ): bool {
+		if ( self::LANE_ESCPOS === $lane ) {
+			if ( 1 !== preg_match( '/\A[\x20-\x7e]+\z/', $value ) ) {
+				return false;
+			}
+
+			return \strlen( self::escpos_code128_data( $value ) ) <= self::MAX_DATA_BYTES;
+		}
+
+		if ( '' === $value || ! self::is_ascii( $value ) ) {
+			return false;
+		}
+
+		return \strlen( self::starprnt_code128_data( $value ) ) <= self::MAX_DATA_BYTES;
+	}
+
+	/**
+	 * Whether a value can be encoded as Code 39.
+	 *
+	 * `*` is the start/stop sentinel, not data. A printer that finds one in the
+	 * middle of the value ends the symbol there, so `AB*CD` scans back as `AB`.
+	 * A matching leading and trailing pair is accepted because that is how a
+	 * value copied off another system's barcode is usually written; anything
+	 * else is rejected and printed as text.
+	 *
+	 * @param string $value The barcode value.
+	 *
+	 * @return bool True when the value can be encoded.
+	 */
+	private static function is_valid_code39( string $value ): bool {
+		$length = \strlen( $value );
+		if ( $length < 1 || $length > 255 ) {
+			return false;
+		}
+
+		$body = $value;
+		if ( $length >= 2 && '*' === $value[0] && '*' === $value[ $length - 1 ] ) {
+			$body = substr( $value, 1, -1 );
+		}
+
+		return 1 === preg_match( '/\A[0-9A-Z \$%\+\-\.\/]+\z/', $body );
+	}
+
+	/**
+	 * Whether a GTIN's trailing digit is the correct mod-10 check digit.
+	 *
+	 * EAN-13, EAN-8 and UPC-A share one rule: weight the digits 3 and 1
+	 * alternately from the one immediately left of the check digit, then the
+	 * check digit is whatever brings the total to a multiple of ten. UPC-E's
+	 * full 12-digit form is a UPC-A payload, so it uses the same rule.
+	 *
+	 * A wrong check digit is not a harmless typo. The printer either drops the
+	 * symbol or prints one encoding a different number from the human-readable
+	 * value beside it, and both outcomes are worse than the text fallback.
+	 *
+	 * @param string $digits An all-digit value whose last character is the check digit.
+	 *
+	 * @return bool True when the check digit is correct.
+	 */
+	private static function has_valid_gtin_check_digit( string $digits ): bool {
+		$length = \strlen( $digits );
+		if ( $length < 2 ) {
+			return false;
+		}
+
+		$sum = 0;
+		for ( $index = $length - 2; $index >= 0; $index-- ) {
+			$weight = 0 === ( $length - 2 - $index ) % 2 ? 3 : 1;
+			$sum   += (int) $digits[ $index ] * $weight;
+		}
+
+		return ( ( 10 - ( $sum % 10 ) ) % 10 ) === (int) $digits[ $length - 1 ];
 	}
 
 	/**
