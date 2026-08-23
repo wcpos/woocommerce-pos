@@ -5,7 +5,8 @@
  * Ties together the thermal pipeline shipped in earlier phases: it Mustache-renders
  * a thermal template against canonical receipt data, parses the resulting markup
  * into an AST, and emits the requested wire format — ESC/POS or StarPRNT command
- * bytes, Epson ePOS-Print XML, Star Document Markup, or plain text.
+ * bytes, Epson ePOS-Print XML, Star Document Markup, plain text, or a PNG raster
+ * of the whole receipt.
  *
  * The Mustache engine configuration mirrors Logicless_Renderer so that data values
  * containing XML-significant characters (`&`, `<`, `>`, quotes) are escaped to valid
@@ -35,7 +36,7 @@ class Thermal_Renderer {
 	 *
 	 * @param array             $template    Template metadata/content.
 	 * @param WC_Abstract_Order $order       The order to render.
-	 * @param string            $wire_format The target wire format ('escpos', 'starprnt', 'epos-xml', 'star-markup' or 'text').
+	 * @param string            $wire_format The target wire format ('escpos', 'starprnt', 'epos-xml', 'star-markup', 'text' or 'png').
 	 * @param array             $options     Render options.
 	 *
 	 * @throws InvalidArgumentException When the wire format is not supported.
@@ -50,8 +51,8 @@ class Thermal_Renderer {
 	 * Render a thermal template, reporting peripherals the payload cannot carry.
 	 *
 	 * Command formats (ESC/POS, StarPRNT, ePOS-XML) express cut and cash-drawer
-	 * in-band, so they report null for both. Command-free formats — `text` today,
-	 * raster tomorrow — cannot, and the transport has to ask for them instead:
+	 * in-band, so they report null for both. Command-free formats — `text` and
+	 * `png` — cannot, and the transport has to ask for them instead:
 	 * on Star CloudPRNT that means the `X-Star-Cut` / `X-Star-CashDrawer` headers
 	 * on the job fetch. Callers serving those formats must forward what comes
 	 * back here or the receipt will neither cut nor open the drawer.
@@ -79,6 +80,15 @@ class Thermal_Renderer {
 				return self::in_band( ( new Star_Markup_Thermal_Emitter() )->emit( $ast ) );
 			case 'text':
 				$emitter = new Text_Thermal_Emitter( $options );
+				$body    = $emitter->emit( $ast );
+
+				return array(
+					'body'   => $body,
+					'cut'    => $emitter->cut_type(),
+					'drawer' => $emitter->drawer(),
+				);
+			case 'png':
+				$emitter = new Raster_Thermal_Emitter( $options );
 				$body    = $emitter->emit( $ast );
 
 				return array(

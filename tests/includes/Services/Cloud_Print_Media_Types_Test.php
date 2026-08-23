@@ -95,8 +95,47 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 		$offer = $this->media_types->for_job( $this->template_job(), $this->printer );
 
 		$this->assertSame(
-			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::TEXT ),
 			$offer
+		);
+	}
+
+	/**
+	 * It offers the raster between native StarPRNT and the plain-text floor.
+	 */
+	public function test_for_job_offers_png_after_starprnt(): void {
+		$offer = $this->media_types->for_job( $this->template_job(), $this->printer );
+
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::TEXT ),
+			$offer
+		);
+	}
+
+	/**
+	 * It promotes the raster when the printer is configured for a full receipt
+	 * raster — the merchant asking for pixel fidelity over the printer's fonts.
+	 */
+	public function test_for_job_puts_png_first_when_full_receipt_raster_is_on(): void {
+		$printer                      = $this->printer;
+		$printer['fullReceiptRaster'] = true;
+
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			$this->media_types->for_job( $this->template_job(), $printer )
+		);
+	}
+
+	/**
+	 * It still narrows the promoted offer to what the printer can decode.
+	 */
+	public function test_full_receipt_raster_still_respects_the_printers_encodings(): void {
+		$printer                      = $this->printer;
+		$printer['fullReceiptRaster'] = true;
+
+		$this->assertSame(
+			array( Cloud_Print_Media_Types::PNG ),
+			$this->media_types->for_job( $this->template_job(), $printer, array( 'image/png', 'text/vnd.star.markup' ) )
 		);
 	}
 
@@ -162,7 +201,7 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 		);
 
 		$this->assertSame(
-			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::TEXT ),
 			$offer
 		);
 	}
@@ -215,7 +254,7 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 	 */
 	public function test_servable_for_job_ignores_the_printers_encodings(): void {
 		$this->assertSame(
-			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::TEXT ),
+			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::TEXT ),
 			$this->media_types->servable_for_job( $this->template_job(), $this->printer )
 		);
 	}
@@ -244,6 +283,7 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 	public function test_wire_format_maps_the_offered_types(): void {
 		$this->assertSame( 'starprnt', Cloud_Print_Media_Types::wire_format( Cloud_Print_Media_Types::STARPRNT ) );
 		$this->assertSame( 'text', Cloud_Print_Media_Types::wire_format( 'TEXT/PLAIN; charset=utf-8' ) );
+		$this->assertSame( 'png', Cloud_Print_Media_Types::wire_format( 'IMAGE/PNG' ) );
 		$this->assertSame( '', Cloud_Print_Media_Types::wire_format( Cloud_Print_Media_Types::OCTET_STREAM ) );
 	}
 
@@ -252,6 +292,7 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 	 */
 	public function test_is_header_controlled_only_for_command_free_formats(): void {
 		$this->assertTrue( Cloud_Print_Media_Types::is_header_controlled( 'text/plain' ) );
+		$this->assertTrue( Cloud_Print_Media_Types::is_header_controlled( 'image/png' ) );
 		$this->assertFalse( Cloud_Print_Media_Types::is_header_controlled( Cloud_Print_Media_Types::STARPRNT ) );
 	}
 

@@ -39,6 +39,29 @@ class Barcode_Image {
 	 * @return string The `<img>` tag, or '' when the value is empty or generation fails.
 	 */
 	public static function barcode_img( string $type, string $value, int $height = 40 ): string {
+		$png = self::barcode_png( $type, $value, $height );
+		if ( '' === $png ) {
+			return '';
+		}
+
+		// bwip-js renders the human-readable value under the bars in the
+		// client-side previews; mirror it so the PDF matches on-screen.
+		return self::img_from_png( $png ) . self::barcode_text( trim( $value ) );
+	}
+
+	/**
+	 * Rasterize a barcode to opaque PNG bytes.
+	 *
+	 * The receipt raster emitter composites these straight onto its canvas, so it
+	 * needs the bytes rather than the `<img>` wrapper the HTML/PDF path uses.
+	 *
+	 * @param string $type   The barcode symbology (e.g. code128, ean13).
+	 * @param string $value  The barcode value.
+	 * @param int    $height The barcode height in pixels.
+	 *
+	 * @return string The PNG bytes, or '' when the value is empty or generation fails.
+	 */
+	public static function barcode_png( string $type, string $value, int $height = 40 ): string {
 		$text = trim( $value );
 		if ( '' === $text ) {
 			return '';
@@ -61,9 +84,7 @@ class Barcode_Image {
 				}
 			);
 
-			// bwip-js renders the human-readable value under the bars in the
-			// client-side previews; mirror it so the PDF matches on-screen.
-			return self::img_from_png( $png ) . self::barcode_text( $text );
+			return self::flatten_png( $png );
 		} catch ( Throwable $error ) {
 			return '';
 		}
@@ -91,6 +112,20 @@ class Barcode_Image {
 	 * @return string The `<img>` tag, or '' when the value is empty or generation fails.
 	 */
 	public static function qrcode_img( string $value, int $size = 4 ): string {
+		$png = self::qrcode_png( $value, $size );
+
+		return '' === $png ? '' : self::img_from_png( $png );
+	}
+
+	/**
+	 * Rasterize a QR code to opaque PNG bytes.
+	 *
+	 * @param string $value The QR code value.
+	 * @param int    $size  The QR module scale (pixels per module).
+	 *
+	 * @return string The PNG bytes, or '' when the value is empty or generation fails.
+	 */
+	public static function qrcode_png( string $value, int $size = 4 ): string {
 		$text = trim( $value );
 		if ( '' === $text ) {
 			return '';
@@ -113,7 +148,7 @@ class Barcode_Image {
 				}
 			);
 
-			return self::img_from_png( $png );
+			return self::flatten_png( $png );
 		} catch ( Throwable $error ) {
 			return '';
 		}
@@ -208,6 +243,8 @@ class Barcode_Image {
 	 * @return string The `<img>` tag.
 	 */
 	private static function img_from_png( string $png ): string {
+		// Callers hand over already-flattened bytes; flatten_png() is idempotent, so
+		// the second pass is a no-op that keeps this safe for any future caller.
 		return '<img src="data:image/png;base64,' . base64_encode( self::flatten_png( $png ) ) . '" '
 			. 'style="max-width: 100%; height: auto" alt="" />';
 	}

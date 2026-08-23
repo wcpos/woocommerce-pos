@@ -22,6 +22,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Templates\Thermal\Raster_Thermal_Emitter;
+
 /**
  * Cloud_Print_Media_Types class.
  */
@@ -37,6 +39,12 @@ class Cloud_Print_Media_Types {
 	const TEXT = 'text/plain';
 
 	/**
+	 * A raster of the whole receipt — also decodable by every Star model, and the
+	 * only format that carries a logo or barcode to Line Mode-only hardware.
+	 */
+	const PNG = 'image/png';
+
+	/**
 	 * Fallback for a stored payload with no recorded content type.
 	 */
 	const OCTET_STREAM = 'application/octet-stream';
@@ -45,11 +53,13 @@ class Cloud_Print_Media_Types {
 	 * Formats the server can render a Star template job into, best first.
 	 *
 	 * StarPRNT leads because it is native: crisp printer fonts, in-band cut and
-	 * drawer, and no raster weight. `text/plain` follows as the universal floor.
+	 * drawer, and no raster weight. `image/png` follows — heavier and softer, but
+	 * it carries logos, barcodes and any glyph the render font has to hardware
+	 * that cannot decode StarPRNT. `text/plain` is the floor beneath both.
 	 *
 	 * @var array<int, string>
 	 */
-	private const STAR_RENDERABLE = array( self::STARPRNT, self::TEXT );
+	private const STAR_RENDERABLE = array( self::STARPRNT, self::PNG, self::TEXT );
 
 	/**
 	 * Media types whose peripherals are requested with response headers.
@@ -60,7 +70,7 @@ class Cloud_Print_Media_Types {
 	 *
 	 * @var array<int, string>
 	 */
-	private const HEADER_CONTROLLED = array( self::TEXT );
+	private const HEADER_CONTROLLED = array( self::TEXT, self::PNG );
 
 	/**
 	 * Every media type the server can produce for a job, best first.
@@ -88,7 +98,36 @@ class Cloud_Print_Media_Types {
 			);
 		}
 
-		return self::STAR_RENDERABLE;
+		return $this->preferred_order( $printer );
+	}
+
+	/**
+	 * The renderable formats, ordered for this printer's configuration.
+	 *
+	 * `image/png` is dropped on a build without GD/FreeType — offering a format
+	 * we cannot produce would earn a 415 on the fetch, which is worse than never
+	 * having offered it. When the printer is configured for a full-receipt
+	 * raster it moves to the front instead, ahead of native StarPRNT: that is the
+	 * merchant asking for pixel fidelity — logo, template fonts, exact layout —
+	 * in place of the printer's own font bank.
+	 *
+	 * @param array|null $printer Printer row.
+	 *
+	 * @return array<int, string>
+	 */
+	private function preferred_order( ?array $printer ): array {
+		$formats = self::STAR_RENDERABLE;
+
+		if ( ! Raster_Thermal_Emitter::is_supported() ) {
+			$formats = array_values( array_diff( $formats, array( self::PNG ) ) );
+		} elseif ( ! empty( $printer['fullReceiptRaster'] ) ) {
+			$formats = array_merge(
+				array( self::PNG ),
+				array_values( array_diff( $formats, array( self::PNG ) ) )
+			);
+		}
+
+		return $formats;
 	}
 
 	/**
@@ -117,6 +156,8 @@ class Cloud_Print_Media_Types {
 				return 'starprnt';
 			case self::TEXT:
 				return 'text';
+			case self::PNG:
+				return 'png';
 			default:
 				return '';
 		}
