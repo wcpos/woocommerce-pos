@@ -95,7 +95,7 @@ No. If you have a WooCommerce store, install WCPOS and you're taking orders in u
 Any modern browser, plus native desktop apps (Windows, macOS) and iOS & Android apps (mobile in beta). One login, everything stays in sync.
 
 = Does it work offline? =
-Yes. Products are stored locally for instant search, so you can keep browsing products and building carts during a connection drop. Reconnect before completing checkout so the order can be created in WooCommerce.
+Yes. Products are stored locally for instant search, so you can keep browsing, building carts and saving orders during a connection drop, and your changes sync automatically when you reconnect. Taking payment is the one step that still needs a connection -- offline checkout is coming in a future release.
 
 = What hardware do I need? =
 Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
@@ -128,7 +128,7 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 - **No more invisible walls.** Product lists stopped at 1,000 items and order lists at 200, with no message -- rows simply stopped arriving. Both now scroll as far as you like.
 - **Sorting and filtering that cover your whole store.** Sort by SKU, stock, price or date and get a real answer, not just the part already on the device. Filter orders by cashier, store, customer or date.
 - **Search that finds what WooCommerce finds.** Product search now matches inside words, so compound words work (searching "saippua" finds "Kuorintasaippua"). Customer search matches full names.
-- **Keeps selling when the connection drops.** Sales, customer edits and receipt emails queue and send themselves when you reconnect. Anything the server rejects is listed with the reason so you can fix and resend it -- nothing is silently lost.
+- **Built to survive a dropped connection.** Browsing, cart building and saving orders keep working offline, and the new sync engine now queues the changes you make and replays them when you reconnect -- receipt emails, and customer, coupon and stock edits on Pro. Anything the server rejects is listed with the reason so you can fix and resend it, instead of disappearing silently. Taking payment is the one step that still needs a connection -- offline checkout, starting with cash, is the focus of 1.11.
 - **Prevent overselling (new, optional).** Turn it on in Checkout settings: the POS stops you adding more than you have, and the server refuses the order too, so a stale device can't oversell either. Backorders are respected.
 - **Barcode scanning, rebuilt.** Scan with the device camera on any platform. Support for USB, serial, Bluetooth and Bluetooth LE scanners alongside keyboard-wedge. A setup wizard and a test panel that measures your scanner and tells you what to fix. Optional scan sounds.
 - **Store Health.** New screens showing what's on the device versus the server, real storage usage, sync performance over time, and a searchable log where every warning links to an explanation.
