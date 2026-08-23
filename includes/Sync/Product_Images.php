@@ -29,40 +29,6 @@ final class Product_Images {
 	}
 
 	/**
-	 * Backward-compatible batch-lane entry point.
-	 *
-	 * Kept for third-party code hooked to `woocommerce_pos_sync_proxy_response`
-	 * with this callback; the pipeline no longer registers it.
-	 *
-	 * @param mixed      $data     Response data.
-	 * @param mixed      $resource Resource name.
-	 * @param null|mixed $request  Request context.
-	 */
-	public static function stamp_proxy_product_images( $data, $resource = '', $request = null ) {
-		if ( 'products' !== $resource || ! \is_array( $data ) ) {
-			return $data;
-		}
-		foreach ( $data as $index => $record ) {
-			if ( \is_array( $record ) ) {
-				$data[ $index ] = self::augment_record( $record, null, $request );
-			}
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Backward-compatible per-object-lane entry point.
-	 *
-	 * @param mixed      $payload Response payload.
-	 * @param null|mixed $object  Product object.
-	 * @param null|mixed $request Request context.
-	 */
-	public static function stamp_serialized_product_images( $payload, $object = null, $request = null ) {
-		return self::augment_record( $payload, $object, $request );
-	}
-
-	/**
 	 * Replace each image source with its medium URL when available.
 	 *
 	 * @param array $record Product response record.

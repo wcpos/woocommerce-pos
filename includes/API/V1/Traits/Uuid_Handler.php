@@ -21,32 +21,6 @@ use WP_User;
  */
 trait Uuid_Handler {
 	/**
-	 * Acquire the order-item UUID datastore lock.
-	 *
-	 * @param string $lock_key Unique key for the lock.
-	 * @param int    $timeout  Timeout in seconds.
-	 * @return bool True if lock acquired, false otherwise.
-	 */
-	private function acquire_order_item_uuid_lock( string $lock_key, int $timeout = 10 ): bool {
-		global $wpdb;
-
-		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_key, $timeout ) );
-		return '1' === (string) $acquired;
-	}
-
-	/**
-	 * Release the order-item UUID datastore lock.
-	 *
-	 * @param string $lock_key Unique key for the lock.
-	 * @return void
-	 */
-	private function release_order_item_uuid_lock( string $lock_key ): void {
-		global $wpdb;
-
-		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_key ) );
-	}
-
-	/**
 	 * Make sure the WC Data Object has a UUID.
 	 *
 	 * @param WC_Data $object The WooCommerce data object.
