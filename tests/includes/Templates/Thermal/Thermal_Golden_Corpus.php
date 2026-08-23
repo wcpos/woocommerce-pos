@@ -14,8 +14,12 @@
  *
  * Regenerate with either of:
  *
- *   php tests/bin/regenerate-thermal-goldens.php
- *   WCPOS_UPDATE_GOLDEN=1 <phpunit invocation for Thermal_Emitter_Golden_Test>
+ *   pnpm run goldens:thermal
+ *   WCPOS_UPDATE_GOLDEN=1 <wp-env phpunit invocation for Thermal_Emitter_Golden_Test>
+ *
+ * Both run inside wp-env, which is the point: these fixtures are committed bytes
+ * asserted by a suite that runs in that container, so generating them under a host
+ * PHP would make the host's mbstring build an input to a file in git.
  *
  * Never enable WCPOS_UPDATE_GOLDEN in CI — a self-regenerating golden asserts
  * nothing.

@@ -66,19 +66,76 @@ class Thermal_Emitter_Golden_Test extends WP_UnitTestCase {
 		}
 
 		// Assert.
-		$this->assertFileExists( $path, 'Missing golden fixture; run php tests/bin/regenerate-thermal-goldens.php' );
+		$this->assertFileExists( $path, 'Missing golden fixture; run pnpm run goldens:thermal' );
 
 		$expected = (string) file_get_contents( $path );
 		$this->assertSame(
 			$expected,
 			$actual,
 			sprintf(
-				"Thermal output drifted for %s / %s.\nExpected:\n%s\nActual:\n%s\nIf the change is intended, run php tests/bin/regenerate-thermal-goldens.php and review the diff.",
+				"Thermal output drifted for %s / %s.\nExpected:\n%s\nActual:\n%s\nIf the change is intended, run pnpm run goldens:thermal and review the diff.",
 				$lane,
 				$case_name,
 				$this->readable( $expected ),
 				$this->readable( $actual )
 			)
+		);
+	}
+
+	/**
+	 * It never tells anyone to regenerate the goldens under a host PHP.
+	 *
+	 * The fixtures under tests/fixtures/thermal/golden/ are committed bytes, and this
+	 * class asserts them byte-for-byte from inside wp-env. Generating them anywhere
+	 * else makes the generating machine's PHP an input to a file in git — the text
+	 * metrics reach mbstring through mb_str_split() and mb_ord() — so the two must
+	 * share one runtime. AGENTS.md states the rule for the repo: PHP tests run through
+	 * Docker/wp-env, with no local fallback.
+	 *
+	 * The regression this guards is a documentation one, which is exactly why it needs
+	 * a test: the generator ran happily under a bare `php`, so nothing except the
+	 * instructions ever pointed at the container.
+	 *
+	 * @return void
+	 */
+	public function test_golden_regeneration_is_only_ever_documented_as_a_wp_env_run(): void {
+		// Arrange: assembled from parts so this file cannot match its own needle.
+		$generator   = 'tests/bin/regenerate-thermal-goldens.php';
+		$bare_run    = 'php ' . $generator;
+		$wp_env_run  = 'tests-cli -- ' . $bare_run;
+		$plugin_root = \dirname( __DIR__, 4 );
+		$documents   = array(
+			'package.json',
+			$generator,
+			'tests/includes/Templates/Thermal/Thermal_Golden_Corpus.php',
+			'tests/includes/Templates/Thermal/Thermal_Emitter_Golden_Test.php',
+		);
+
+		// Act: collect every invocation that is not handed to the wp-env container.
+		$bare_invocations = array();
+		foreach ( $documents as $document ) {
+			$path = $plugin_root . '/' . $document;
+			$this->assertFileExists( $path );
+
+			$lines = explode( "\n", (string) file_get_contents( $path ) );
+			foreach ( $lines as $offset => $line ) {
+				if ( false === strpos( $line, $bare_run ) ) {
+					continue;
+				}
+				if ( false !== strpos( $line, $wp_env_run ) ) {
+					continue;
+				}
+				$bare_invocations[] = $document . ':' . ( $offset + 1 );
+			}
+		}
+
+		// Assert.
+		$this->assertSame(
+			array(),
+			$bare_invocations,
+			'The golden generator is documented as a host-PHP run, which would let the '
+				. 'generating machine bake its own PHP build into committed fixtures. Route it '
+				. 'through wp-env (pnpm run goldens:thermal) at: ' . implode( ', ', $bare_invocations )
 		);
 	}
 

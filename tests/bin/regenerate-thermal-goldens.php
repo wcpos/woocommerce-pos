@@ -2,11 +2,18 @@
 /**
  * Regenerate the thermal emitter golden fixtures.
  *
- * Run from the plugin root with a plain PHP CLI — no WordPress, no Docker and
- * no PHPUnit are required, because the emitters, the markup parser and
- * Print_Job_Service::normalize_drawer_connector() are all pure PHP:
+ * Run it through wp-env, from the plugin root:
  *
- *   php tests/bin/regenerate-thermal-goldens.php
+ *   pnpm run goldens:thermal
+ *
+ * The emitters, the markup parser and Print_Job_Service::normalize_drawer_connector()
+ * are all pure PHP, so nothing here needs WordPress — but the goldens are committed
+ * artefacts, and the suite that asserts them byte-for-byte runs inside wp-env. Generate
+ * them anywhere else and the host's PHP build becomes an input to a file in git: the
+ * text metrics reach mbstring through mb_str_split() and mb_ord(), so a different
+ * mbstring could bake a local layout into the fixture and hand the next person a
+ * phantom diff. Same runtime for generating and asserting, per the repo rule in
+ * AGENTS.md that PHP tests run through Docker/wp-env with no local fallback.
  *
  * Review the resulting `git diff` under tests/fixtures/thermal/golden/ before
  * committing: an intentional behaviour change should show up there, and a
@@ -26,7 +33,10 @@ $wcpos_plugin_dir = \dirname( __DIR__, 2 );
 /*
  * A deliberately local autoloader: vendor/autoload.php resolves $baseDir to the
  * checkout composer was installed in, which is the wrong tree when this script
- * is run from a git worktree.
+ * is run from a git worktree, and the wrong path again inside the wp-env
+ * container, where the plugin is bind-mounted under wp-content/plugins/. Both
+ * are handled by deriving every path from __DIR__ instead, so keep this
+ * autoloader rather than switching to vendor/autoload.php.
  */
 spl_autoload_register(
 	static function ( string $class ) use ( $wcpos_plugin_dir ): void {
