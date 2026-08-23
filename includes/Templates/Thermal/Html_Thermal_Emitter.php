@@ -44,6 +44,17 @@ class Html_Thermal_Emitter {
 	private const CHAR_WIDTH_EM = 0.6;
 
 	/**
+	 * Smallest `<size>` rendering, in em.
+	 *
+	 * PDF-only, deliberately: this path renders sizes as CSS em and can express
+	 * a half-size run, where the printers cannot — the ESC/POS and Star size
+	 * bytes have no multiplier below 1. Parsed markup never reaches it either
+	 * (Thermal_Markup_Parser floors `<size>` at Thermal_Bounds::SIZE_MULTIPLIER_MIN),
+	 * so it only applies to a hand-built AST asking for a fractional size.
+	 */
+	private const MIN_SIZE_EM = 0.5;
+
+	/**
 	 * Printer dot budgets for image sizing: wide (80mm, ≥40 columns) printers
 	 * are 576 dots across, narrow (58mm) 384. The client preview carries the same
 	 * two numbers as DOT_BUDGET_WIDE / DOT_BUDGET_NARROW in
@@ -87,7 +98,7 @@ class Html_Thermal_Emitter {
 	 * @return string The receipt HTML.
 	 */
 	public function emit( array $ast, array $opts = array() ): string {
-		$width_chars = $this->safe_integer( isset( $ast['paper_width'] ) ? $ast['paper_width'] : null, 48, 16, 120 );
+		$width_chars = $this->clamp_integer( isset( $ast['paper_width'] ) ? $ast['paper_width'] : null, 48, Thermal_Bounds::PAPER_WIDTH_PDF_MIN, Thermal_Bounds::PAPER_WIDTH_MAX );
 
 		// 13px matches the JS preview renderer's base font; with a known paper
 		// width the font scales so the grid fills the printable width instead.
@@ -153,7 +164,7 @@ class Html_Thermal_Emitter {
 			case 'invert':
 				return '<span style="background: #000; color: #fff; padding: 0 4px">' . $this->render_nodes( $children, $width_chars ) . '</span>';
 			case 'size':
-				$em = $this->safe_float( isset( $node['width'] ) ? $node['width'] : null, 1, 0.5, 8 );
+				$em = $this->clamp_float( isset( $node['width'] ) ? $node['width'] : null, 1, self::MIN_SIZE_EM, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
 				return '<span style="font-size: ' . $this->format_float( $em ) . 'em; line-height: 1.2">' . $this->render_nodes( $children, $width_chars ) . '</span>';
 			case 'align':
 				$mode = $this->safe_align( isset( $node['mode'] ) ? $node['mode'] : null );
@@ -178,7 +189,7 @@ class Html_Thermal_Emitter {
 				$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
 				return $this->render_qrcode( $value, $size );
 			case 'feed':
-				$lines = $this->safe_integer( isset( $node['lines'] ) ? $node['lines'] : null, 1, 1, 50 );
+				$lines = $this->clamp_integer( isset( $node['lines'] ) ? $node['lines'] : null, Thermal_Bounds::FEED_LINES_MIN, Thermal_Bounds::FEED_LINES_MIN, Thermal_Bounds::FEED_LINES_MAX );
 				return '<div style="height: ' . $this->format_float( $lines * 1.4 ) . 'em"></div>';
 			case 'cut':
 				// The scissors glyph is missing from the monospace core fonts, so
@@ -201,6 +212,15 @@ class Html_Thermal_Emitter {
 	 * Dompdf has no flexbox engine and no `ch` unit, so the JS renderer's flex
 	 * rows are expressed as a fixed-layout table: fixed columns get em widths
 	 * (chars × 0.6em) and `*` columns share the remaining width.
+	 *
+	 * Known divergence, not yet reconciled: there is no star-width algebra here.
+	 * `*` columns are emitted as `<td>` without a width and Dompdf distributes
+	 * whatever the fixed columns leave, whereas the preview and the ESC/POS
+	 * emitter floor-divide the remaining characters between star columns and give
+	 * the remainder to the last one. The two agree on ordinary receipts and can
+	 * differ by a character or two on rows with several star columns. Fixing it
+	 * means porting resolve_row_widths() here and verifying the result against a
+	 * real Dompdf render; do that before assuming the layouts match.
 	 *
 	 * @param array $node        The row AST node.
 	 * @param int   $width_chars The receipt character width.
@@ -231,7 +251,7 @@ class Html_Thermal_Emitter {
 		$width       = isset( $node['width'] ) ? $node['width'] : 12;
 		$width_style = '';
 		if ( '*' !== $width ) {
-			$chars       = $this->safe_integer( $width, 12, 1, 120 );
+			$chars       = $this->clamp_integer( $width, 12, Thermal_Bounds::COL_WIDTH_MIN, Thermal_Bounds::COL_WIDTH_MAX );
 			$width_style = 'width: ' . $this->format_float( $chars * self::CHAR_WIDTH_EM ) . 'em; ';
 		}
 
@@ -263,7 +283,7 @@ class Html_Thermal_Emitter {
 			return '';
 		}
 
-		$width_dots = $this->safe_integer( isset( $node['width'] ) ? $node['width'] : null, 200, 1, 2000 );
+		$width_dots = $this->clamp_integer( isset( $node['width'] ) ? $node['width'] : null, 200, Thermal_Bounds::IMAGE_WIDTH_DOTS_MIN, Thermal_Bounds::IMAGE_WIDTH_DOTS_MAX );
 		$dot_budget = $width_chars >= self::NARROW_PAPER_THRESHOLD_CHARS ? self::DOT_BUDGET_WIDE : self::DOT_BUDGET_NARROW;
 		$width_em   = $width_dots * $width_chars / $dot_budget * self::CHAR_WIDTH_EM;
 
@@ -373,43 +393,54 @@ class Html_Thermal_Emitter {
 	}
 
 	/**
-	 * Resolve a bounded integer with a fallback, mirroring the JS safeInteger.
+	 * Clamp a value into an integer range, falling back when it is not numeric.
+	 *
+	 * Out-of-range values are clamped to the nearest bound, never replaced by
+	 * the fallback: a template asking for a 5000-dot logo on a 576-dot roll
+	 * should render as wide as the roll allows, not silently snap back to the
+	 * 200-dot default with no signal. The fallback covers only missing and
+	 * non-numeric values. Fractions truncate toward zero.
+	 *
+	 * Counterpart to safeInteger() in
+	 * packages/thermal-utils/src/thermal-renderer.ts, which clamps the same way.
+	 * The preview has no safeFloat: it applies each bound inline at the node it
+	 * renders, so the bounds passed here must match the ones written there.
 	 *
 	 * @param mixed $value    The candidate value.
-	 * @param int   $fallback The fallback value.
+	 * @param int   $fallback The fallback for missing/non-numeric values.
 	 * @param int   $min      The minimum allowed value.
 	 * @param int   $max      The maximum allowed value.
 	 *
-	 * @return int The resolved integer.
+	 * @return int The clamped integer.
 	 */
-	private function safe_integer( $value, int $fallback, int $min, int $max ): int {
+	private function clamp_integer( $value, int $fallback, int $min, int $max ): int {
 		if ( ! is_numeric( $value ) ) {
 			return $fallback;
 		}
 
-		$number = (int) $value;
-
-		return ( $number >= $min && $number <= $max ) ? $number : $fallback;
+		return max( $min, min( $max, (int) $value ) );
 	}
 
 	/**
-	 * Resolve a bounded float with a fallback, mirroring the JS safeFloat.
+	 * Clamp a value into a float range, falling back when it is not numeric.
+	 *
+	 * PHP-only: the preview renderer has no safeFloat helper, it inlines the
+	 * equivalent clamp where it writes the CSS. See clamp_integer() above for
+	 * why out-of-range clamps instead of falling back.
 	 *
 	 * @param mixed $value    The candidate value.
-	 * @param float $fallback The fallback value.
+	 * @param float $fallback The fallback for missing/non-numeric values.
 	 * @param float $min      The minimum allowed value.
 	 * @param float $max      The maximum allowed value.
 	 *
-	 * @return float The resolved float.
+	 * @return float The clamped float.
 	 */
-	private function safe_float( $value, float $fallback, float $min, float $max ): float {
+	private function clamp_float( $value, float $fallback, float $min, float $max ): float {
 		if ( ! is_numeric( $value ) ) {
 			return $fallback;
 		}
 
-		$number = (float) $value;
-
-		return ( $number >= $min && $number <= $max ) ? $number : $fallback;
+		return max( $min, min( $max, (float) $value ) );
 	}
 
 	/**

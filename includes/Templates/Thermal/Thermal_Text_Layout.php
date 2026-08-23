@@ -233,7 +233,7 @@ final class Thermal_Text_Layout {
 			if ( isset( $col['width'] ) && '*' === $col['width'] ) {
 				++$star_count;
 			} else {
-				$fixed_total += isset( $col['width'] ) ? (int) $col['width'] : 0;
+				$fixed_total += self::fixed_col_width( $col );
 			}
 		}
 
@@ -249,7 +249,7 @@ final class Thermal_Text_Layout {
 				$extra            = ( $star_index === $star_count ) ? $star_remainder : 0;
 				$widths[ $index ] = max( 1, $star_width + $extra );
 			} else {
-				$widths[ $index ] = isset( $col['width'] ) ? (int) $col['width'] : 0;
+				$widths[ $index ] = self::fixed_col_width( $col );
 			}
 		}
 
@@ -278,5 +278,31 @@ final class Thermal_Text_Layout {
 		}
 
 		return 0;
+	}
+
+	/**
+	 * A fixed column's width, bounded to what a printer can actually lay out.
+	 *
+	 * Both the parser and the preview bound `<col width>`; without the same bound
+	 * here a hand-built AST -- or a column wider than the paper -- would pad past
+	 * the row and wrap onto another physical line, which is the preview/print
+	 * divergence this bound exists to close. Star columns are resolved from the
+	 * remaining space and never come through here.
+	 *
+	 * @param array $col The column AST node.
+	 *
+	 * @return int The bounded width, or 0 when the column declares none.
+	 */
+	private static function fixed_col_width( array $col ): int {
+		if ( ! isset( $col['width'] ) ) {
+			return 0;
+		}
+
+		return Thermal_Bounds::clamp_int(
+			$col['width'],
+			0,
+			Thermal_Bounds::COL_WIDTH_MIN,
+			Thermal_Bounds::COL_WIDTH_MAX
+		);
 	}
 }

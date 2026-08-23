@@ -1,6 +1,15 @@
 /**
  * Thermal rendering utilities shared between template-editor and template-gallery.
- * Originally derived from @wcpos/printer/src/renderer/.
+ *
+ * This renders the merchant-facing PREVIEW of a thermal template. The server
+ * counterparts live in includes/Templates/Thermal/ — Thermal_Markup_Parser (the
+ * same AST), Html_Thermal_Emitter (the PDF receipt) and Escpos_Thermal_Emitter
+ * (what actually prints). What the merchant previews here has to be what prints
+ * there, so attribute handling and layout bounds are kept term-for-term with
+ * those files.
+ *
+ * Historical note: originally derived from @wcpos/printer/src/renderer/, which
+ * no longer exists. Nothing in that path is a live reference.
  */
 import Mustache from 'mustache';
 import { generateBarcodeSvg, isQrBarcodeType } from './generate-barcode-svg';
@@ -107,16 +116,110 @@ interface DrawerNode {
 
 // -- XML Parser --
 
+/**
+ * The grammar PHP's is_numeric() accepts, so a string is a number on both sides
+ * or on neither. Number() would also swallow '0x1A', '0b11' and 'Infinity',
+ * which is_numeric() rejects.
+ */
+const DECIMAL_NUMERAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * The legal range of every numeric attribute in thermal markup.
+ *
+ * Mirrors includes/Templates/Thermal/Thermal_Bounds.php exactly. A template is
+ * authored once and rendered down six paths — this preview, the PDF receipt and
+ * the four wire emitters — so a bound that holds in only some of them is not a
+ * safety net, it is a divergence: the merchant previews 50 blank lines and the
+ * printer spools 500. Change a number here and change it there in the same
+ * commit.
+ */
+const THERMAL_BOUNDS = {
+	/** Narrowest and widest thermal roll, in character columns. */
+	// Floor of 1, not the PDF page's 16: this bound is applied when parsing, so
+	// it reaches every render path, and the plain-text lane legitimately renders
+	// widths below 16. The ceiling is the part that matters here.
+	paperWidth: { min: 1, max: 120 },
+	/**
+	 * Text size multiplier. 8 is the hardware ceiling: the ESC/POS `GS ! n` size
+	 * byte carries one nibble per axis, and Star's magnification stops lower.
+	 */
+	sizeMultiplier: { min: 1, max: 8 },
+	/** 1D barcode height in dots; `GS h n` is a single byte. */
+	barcodeHeight: { min: 1, max: 255 },
+	/** QR module size; the ESC/POS `GS ( k` module-size function accepts 1-16. */
+	qrcodeSize: { min: 1, max: 16 },
+	/** Image width in printer dots, past the 576-dot budget of an 80mm head. */
+	imageWidthDots: { min: 1, max: 2000 },
+	/**
+	 * Lines a `<feed>` advances. At ~3.5mm per line the ceiling is ~17cm of
+	 * blank paper, already more than any tear-off gap a template wants. It is
+	 * also a hazard bound: every wire emitter turns `lines` straight into a loop
+	 * or a str_repeat(), so an unbounded feed hangs the print request.
+	 */
+	feedLines: { min: 1, max: 50 },
+	/** Fixed column width in characters; a column cannot outgrow the paper. */
+	colWidth: { min: 1, max: 120 },
+} as const;
+
+/**
+ * Clamp a value into an integer range, falling back when it is not numeric.
+ *
+ * Out-of-range values are clamped to the nearest bound rather than replaced by
+ * the fallback, and the PHP twin, Thermal_Markup_Parser::int_attr(), does the
+ * same. Fractions truncate toward zero.
+ */
 function safeInteger(value: unknown, fallback: number, min: number, max: number): number {
-	if (typeof value === 'string' && value.trim() === '') return fallback;
-	const n = typeof value === 'number' ? value : Number(value);
+	const n =
+		typeof value === 'number'
+			? value
+			: typeof value === 'string' && DECIMAL_NUMERAL.test(value.trim())
+				? Number(value.trim())
+				: NaN;
 	return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
 }
 
-function intAttr(el: Element, name: string, fallback: number): number {
+/**
+ * Smallest `<size>` rendering, in em.
+ *
+ * Preview- and PDF-only, deliberately: CSS can express a half-size run where
+ * the printers cannot, because the ESC/POS and Star size bytes have no
+ * multiplier below 1. Parsed markup never reaches it (intAttr floors `<size>`
+ * at THERMAL_BOUNDS.sizeMultiplier.min); it only applies to a hand-built AST.
+ * Matches Html_Thermal_Emitter::MIN_SIZE_EM.
+ */
+const MIN_SIZE_EM = 0.5;
+
+/** Clamp a number into a range without truncating it. */
+function clamp(value: number, min: number, max: number): number {
+	return Math.max(min, Math.min(max, value));
+}
+
+/** Round to 2dp, matching Html_Thermal_Emitter::format_float(). */
+function round2(value: number): number {
+	return Number(value.toFixed(2));
+}
+
+/**
+ * Read a numeric attribute into its legal range.
+ *
+ * Every attribute read through here is a physical dimension, so the floor is at
+ * least 1: `<size width="-2">` and `<feed lines="0">` are nonsense, and clamping
+ * them up is what the printer does. The ceiling is per-attribute rather than
+ * shared, because `<feed lines="1e15">` is a legal-looking numeral that the
+ * wire emitters would turn into 10^15 line feeds.
+ *
+ * Keep in step with Thermal_Markup_Parser::int_attr() in PHP, which clamps
+ * against the same table.
+ */
+function intAttr(
+	el: Element,
+	name: string,
+	fallback: number,
+	bounds: { readonly min: number; readonly max: number },
+): number {
 	const raw = el.getAttribute(name);
 	if (raw == null) return fallback;
-	return safeInteger(raw, fallback, 0, Number.MAX_SAFE_INTEGER);
+	return safeInteger(raw, fallback, bounds.min, bounds.max);
 }
 
 function enumAttr<T extends string>(
@@ -174,11 +277,11 @@ function parseChildren(parent: Element): ThermalNode[] {
 				nodes.push({ type: 'invert', children: parseChildren(el) });
 				break;
 			case 'size': {
-				const w = intAttr(el, 'width', 1);
+				const w = intAttr(el, 'width', 1, THERMAL_BOUNDS.sizeMultiplier);
 				nodes.push({
 					type: 'size',
 					width: w,
-					height: intAttr(el, 'height', w),
+					height: intAttr(el, 'height', w, THERMAL_BOUNDS.sizeMultiplier),
 					children: parseChildren(el),
 				});
 				break;
@@ -211,7 +314,11 @@ function parseChildren(parent: Element): ThermalNode[] {
 				if (isQrBarcodeType(barcodeType)) {
 					nodes.push({
 						type: 'qrcode',
-						size: heightToQrSize(intAttr(el, 'height', 40)),
+						// Same `height` attribute as the barcode branch below, so it
+						// takes the same bound before heightToQrSize folds it into a
+						// module scale — an unbounded read here would let a hand-built
+						// AST route around the table every other attribute goes through.
+						size: heightToQrSize(intAttr(el, 'height', 40, THERMAL_BOUNDS.barcodeHeight)),
 						value: (el.textContent ?? '').trim(),
 					});
 					break;
@@ -219,7 +326,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 				nodes.push({
 					type: 'barcode',
 					barcodeType,
-					height: intAttr(el, 'height', 40),
+					height: intAttr(el, 'height', 40, THERMAL_BOUNDS.barcodeHeight),
 					value: (el.textContent ?? '').trim(),
 				});
 				break;
@@ -227,7 +334,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 			case 'qrcode':
 				nodes.push({
 					type: 'qrcode',
-					size: intAttr(el, 'size', 4),
+					size: intAttr(el, 'size', 4, THERMAL_BOUNDS.qrcodeSize),
 					value: (el.textContent ?? '').trim(),
 				});
 				break;
@@ -235,7 +342,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 				nodes.push({
 					type: 'image',
 					src: el.getAttribute('src') ?? '',
-					width: intAttr(el, 'width', 200),
+					width: intAttr(el, 'width', 200, THERMAL_BOUNDS.imageWidthDots),
 				});
 				break;
 			case 'cut':
@@ -245,7 +352,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 				});
 				break;
 			case 'feed':
-				nodes.push({ type: 'feed', lines: intAttr(el, 'lines', 1) });
+				nodes.push({ type: 'feed', lines: intAttr(el, 'lines', 1, THERMAL_BOUNDS.feedLines) });
 				break;
 			case 'drawer':
 				nodes.push({ type: 'drawer' });
@@ -269,7 +376,7 @@ function parseRowChildren(row: Element): ColNode[] {
 				// whatever CPL remains after fixed columns. Do not collapse it to the
 				// numeric fallback; doing so recreates the 12ch preview bug that made
 				// 42/48-CPL thermal templates diverge between preview and ESC/POS output.
-				width: rawWidth === '*' ? '*' : intAttr(child, 'width', 12),
+				width: rawWidth === '*' ? '*' : intAttr(child, 'width', 12, THERMAL_BOUNDS.colWidth),
 				align: enumAttr(child, 'align', ['left', 'right'] as const, 'left'),
 				children: parseChildren(child),
 			});
@@ -293,7 +400,7 @@ function parseXml(xml: string): ReceiptNode {
 
 	return {
 		type: 'receipt',
-		paperWidth: intAttr(root, 'paper-width', 48),
+		paperWidth: intAttr(root, 'paper-width', 48, THERMAL_BOUNDS.paperWidth),
 		children: parseChildren(root),
 	};
 }
@@ -347,7 +454,9 @@ function renderNode(node: ThermalNode, columns: number): string {
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children, columns)}</span>`;
 		case 'size': {
-			return `<span style="font-size: ${node.width}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
+			// The parser already bounded this; re-clamping keeps the render honest
+			// for a hand-built AST, as Html_Thermal_Emitter::render_node() does.
+			return `<span style="font-size: ${clamp(node.width, MIN_SIZE_EM, THERMAL_BOUNDS.sizeMultiplier.max)}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
 		}
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children, columns)}</div>`;
@@ -374,13 +483,20 @@ function renderNode(node: ThermalNode, columns: number): string {
 		case 'image': {
 			const safeSrc = safeImageSrc(node.src);
 			if (!safeSrc) return '';
-			const widthCh = dotsToCh(Math.max(1, Math.min(2000, node.width)), columns);
+			// Bounds mirror Html_Thermal_Emitter::render_image().
+			const widthCh = dotsToCh(
+				clamp(node.width, THERMAL_BOUNDS.imageWidthDots.min, THERMAL_BOUNDS.imageWidthDots.max),
+				columns,
+			);
 			return `<div style="text-align: center; padding: 8px 0"><img src="${safeSrc}" style="width: min(100%, ${widthCh.toFixed(2)}ch); height: auto" /></div>`;
 		}
 		case 'cut':
 			return '<div style="border-top: 1px dashed #ccc; margin: 12px 0; position: relative"><span style="position: absolute; top: -8px; left: -4px; font-size: 14px">&#9986;</span></div>';
 		case 'feed':
-			return `<div style="height: ${node.lines * 1.4}em"></div>`;
+			// Bounds mirror Html_Thermal_Emitter::render_node()'s clamp_integer call.
+			// Rounded to 2dp so the value matches PHP's format_float(): 3 * 1.4 is
+			// 4.199999999999999 in JS and "4.2" in PHP.
+			return `<div style="height: ${round2(clamp(node.lines, THERMAL_BOUNDS.feedLines.min, THERMAL_BOUNDS.feedLines.max) * 1.4)}em"></div>`;
 		case 'drawer':
 			return '';
 		case 'receipt':
@@ -402,9 +518,14 @@ function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): numbe
 		}
 	}
 
-	// Keep this algorithm aligned with @wcpos/receipt-renderer: fixed columns
-	// keep their explicit width, while width="*" columns share the remaining
-	// printable cells for the active receipt CPL. Star columns are clamped to a
+	// Keep this algorithm aligned with Escpos_Thermal_Emitter::resolve_row_widths()
+	// in PHP: the printed output is what this preview has to match, and that is
+	// where the same floor-divide lives. (Html_Thermal_Emitter, the PDF path, has
+	// no star algebra at all — it hands `*` columns to Dompdf; see the note on its
+	// render_row().)
+	//
+	// Fixed columns keep their explicit width, while width="*" columns share the
+	// remaining printable cells for the active receipt CPL. Star columns are clamped to a
 	// one-character minimum on purpose. If fixed columns already consume nearly
 	// all available CPL, a row with multiple star columns is over-constrained;
 	// shrinking a star to 0ch would silently delete a semantic column from the
@@ -426,7 +547,11 @@ function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): numbe
 }
 
 function renderCol(node: ColNode, width: number, columns: number): string {
-	return `<span style="flex: 0 0 ${width}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
+	// Bounds mirror Html_Thermal_Emitter::render_row_cell()'s clamp_integer call,
+	// and the ESC/POS and Star row emitters bound their fixed columns the same
+	// way, so a 121ch column does not wrap onto a second physical line there
+	// while the preview shows one.
+	return `<span style="flex: 0 0 ${clamp(width, THERMAL_BOUNDS.colWidth.min, THERMAL_BOUNDS.colWidth.max)}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
 }
 
 function renderHtml(ast: ReceiptNode): string {

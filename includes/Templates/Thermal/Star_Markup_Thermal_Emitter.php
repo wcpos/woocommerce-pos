@@ -119,7 +119,12 @@ class Star_Markup_Thermal_Emitter {
 				$this->buffer .= '[cut]';
 				break;
 			case 'feed':
-				$lines = isset( $node['lines'] ) ? max( 1, (int) $node['lines'] ) : 1;
+				$lines = Thermal_Bounds::clamp_int(
+					isset( $node['lines'] ) ? $node['lines'] : null,
+					Thermal_Bounds::FEED_LINES_MIN,
+					Thermal_Bounds::FEED_LINES_MIN,
+					Thermal_Bounds::FEED_LINES_MAX
+				);
 				$this->buffer .= str_repeat( '[feed]', $lines );
 				break;
 			case 'drawer':

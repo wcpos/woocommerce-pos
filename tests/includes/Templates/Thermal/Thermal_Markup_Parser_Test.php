@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Bounds;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
 
@@ -86,22 +87,191 @@ class Thermal_Markup_Parser_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Invalid numeric attributes fall back to their defaults.
+	 * Non-numeric attributes fall back to their defaults.
 	 *
 	 * @return void
 	 */
-	public function test_parse_invalid_numeric_attributes_use_fallbacks(): void {
+	public function test_parse_non_numeric_attributes_use_fallbacks(): void {
 		// Arrange.
-		$xml = '<receipt paper-width="12px"><feed lines="3.5"/><col-ignored/></receipt>';
+		$xml = '<receipt paper-width="12px"><feed lines="abc"/><col-ignored/></receipt>';
 
 		// Act.
 		$ast = $this->parser->parse( $xml );
 
 		// Assert.
-		$this->assertEquals( 48, $ast['paper_width'] );
+		$this->assertSame( 48, $ast['paper_width'] );
 		$feed = $ast['children'][0];
-		$this->assertEquals( 'feed', $feed['type'] );
-		$this->assertEquals( 1, $feed['lines'] );
+		$this->assertSame( 'feed', $feed['type'] );
+		$this->assertSame( 1, $feed['lines'] );
+	}
+
+	/*
+	 * The tests below are paired one-for-one with the preview renderer's tests in
+	 * packages/thermal-utils/src/thermal-renderer.test.ts: same markup, same
+	 * expected numbers. What the merchant previews has to be what prints.
+	 */
+
+	/**
+	 * Below-range numeric attributes clamp up to one instead of using the fallback.
+	 *
+	 * @return void
+	 */
+	public function test_parse_below_range_attributes_clamp_to_one(): void {
+		// Arrange.
+		$xml = '<receipt><size width="-2">Small</size><feed lines="-3"/><feed lines="0"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 1, $ast['children'][0]['width'] );
+		$this->assertSame( 1, $ast['children'][0]['height'] );
+		$this->assertSame( 1, $ast['children'][1]['lines'] );
+		$this->assertSame( 1, $ast['children'][2]['lines'] );
+	}
+
+	/**
+	 * Fractional numeric attributes truncate toward zero instead of using the fallback.
+	 *
+	 * @return void
+	 */
+	public function test_parse_fractional_attributes_truncate_toward_zero(): void {
+		// Arrange.
+		$xml = '<receipt><size width="2.5">Big</size><feed lines="3.5"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 2, $ast['children'][0]['width'] );
+		$this->assertSame( 3, $ast['children'][1]['lines'] );
+	}
+
+	/**
+	 * Numeric literals is_numeric rejects fall back; exponent notation resolves.
+	 *
+	 * @return void
+	 */
+	public function test_parse_non_decimal_numeral_falls_back_but_exponent_resolves(): void {
+		// Arrange.
+		$xml = '<receipt><feed lines="0x2"/><size width="1e1">Exp</size></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 1, $ast['children'][0]['lines'] );
+		// 1e1 is a decimal numeral, so it resolves to 10 and then clamps to the
+		// 8x size ceiling every printer and the preview share.
+		$this->assertSame( Thermal_Bounds::SIZE_MULTIPLIER_MAX, $ast['children'][1]['width'] );
+	}
+
+	/**
+	 * Above-range numeric attributes clamp to that attribute's own ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_parse_above_range_attribute_clamps_to_its_own_ceiling(): void {
+		// Arrange.
+		$xml = '<receipt><image src="https://example.test/logo.png" width="99999999999999999999"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert. A shared safe-integer ceiling would leave 9007199254740991 here,
+		// which no path can render; the bound is the image's own dot maximum.
+		$this->assertSame( Thermal_Bounds::IMAGE_WIDTH_DOTS_MAX, $ast['children'][0]['width'] );
+	}
+
+	/**
+	 * An exponent-form feed clamps to the shared maximum instead of 10^15 lines.
+	 *
+	 * @return void
+	 */
+	public function test_parse_exponent_notation_feed_clamps_to_the_shared_maximum(): void {
+		// Arrange. 1e15 passes is_numeric(), so nothing but a real bound stops it;
+		// every wire emitter turns lines into a loop or a str_repeat().
+		$xml = '<receipt><feed lines="1e15"/><feed lines="500"/></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( Thermal_Bounds::FEED_LINES_MAX, $ast['children'][0]['lines'] );
+		$this->assertSame( Thermal_Bounds::FEED_LINES_MAX, $ast['children'][1]['lines'] );
+	}
+
+	/**
+	 * Out-of-range paper widths clamp to the printable range, not to the default.
+	 *
+	 * @return void
+	 */
+	public function test_parse_out_of_range_paper_width_clamps_to_the_printable_range(): void {
+		// Arrange.
+		$narrow_xml = '<receipt paper-width="0"></receipt>';
+		$wide_xml   = '<receipt paper-width="900"></receipt>';
+
+		// Act.
+		$narrow = $this->parser->parse( $narrow_xml );
+		$wide   = $this->parser->parse( $wide_xml );
+
+		// Assert.
+		$this->assertSame( Thermal_Bounds::PAPER_WIDTH_MIN, $narrow['paper_width'] );
+		$this->assertSame( Thermal_Bounds::PAPER_WIDTH_MAX, $wide['paper_width'] );
+	}
+
+	/**
+	 * Narrow paper widths survive the parser untouched.
+	 *
+	 * The shared floor is 1, not the 16 the PDF page lays out at, because this
+	 * bound is applied once here and every emitter inherits it. Text_Thermal_Emitter
+	 * has always rendered widths in the single and low double digits, and a floor
+	 * of 16 silently re-centred that output instead of rejecting it. A bound that
+	 * belongs to one medium stays in that emitter.
+	 *
+	 * @return void
+	 */
+	public function test_parse_narrow_paper_width_is_not_clamped_to_the_pdf_minimum(): void {
+		// Arrange.
+		$xml = '<receipt paper-width="10"></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 10, $ast['paper_width'] );
+	}
+
+	/**
+	 * Out-of-range QR sizes clamp to the module-size ceiling every path can render.
+	 *
+	 * @return void
+	 */
+	public function test_parse_out_of_range_qrcode_size_clamps_to_the_module_size_ceiling(): void {
+		// Arrange.
+		$xml = '<receipt><qrcode size="99">WCPOS</qrcode></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( Thermal_Bounds::QRCODE_SIZE_MAX, $ast['children'][0]['size'] );
+	}
+
+	/**
+	 * An over-wide fixed column clamps to the widest a receipt can hold.
+	 *
+	 * @return void
+	 */
+	public function test_parse_over_wide_fixed_column_clamps_to_the_column_maximum(): void {
+		// Arrange.
+		$xml = '<receipt paper-width="120"><row><col width="121">Over</col></row></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( Thermal_Bounds::COL_WIDTH_MAX, $ast['children'][0]['children'][0]['width'] );
 	}
 
 	/**

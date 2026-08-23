@@ -43,17 +43,108 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(root(htmlWhitespacePaperWidth).style.width).toBe('48ch');
 	});
 
-	it('clamps negative numeric attributes to non-negative CSS values', () => {
+	// The four tests below are paired one-for-one with the PHP side. Same markup,
+	// same expected numbers: tests/includes/Templates/Thermal/Thermal_Markup_Parser_Test.php
+	// (attribute resolution) and Html_Thermal_Emitter_Test.php (render bounds).
+	it('clamps below-range numeric attributes up to the minimum', () => {
 		const html = renderThermalPreview(
-			'<receipt><size width="-2">Hidden</size><feed lines="-3"/></receipt>',
+			'<receipt><size width="-2">Small</size><feed lines="-3"/><feed lines="0"/></receipt>',
 			{},
 		);
 		const receipt = root(html);
 		const size = receipt.querySelector('span') as HTMLSpanElement;
-		const feed = receipt.querySelector('div') as HTMLDivElement;
+		const feeds = receipt.querySelectorAll('div');
 
-		expect(size.style.fontSize).toBe('0em');
-		expect(feed.style.height).toBe('0em');
+		expect(size.style.fontSize).toBe('1em');
+		expect((feeds[0] as HTMLDivElement).style.height).toBe('1.4em');
+		expect((feeds[1] as HTMLDivElement).style.height).toBe('1.4em');
+	});
+
+	it('clamps above-range numeric attributes down to the maximum', () => {
+		const html = renderThermalPreview(
+			'<receipt paper-width="48"><size width="12">Huge</size>'
+				+ '<image src="https://example.test/logo.png" width="5000"/><feed lines="500"/></receipt>',
+			{},
+		);
+
+		expect(html).toContain('font-size: 8em');
+		// 2000 dots of the 576-dot wide budget across 48 columns.
+		expect(html).toContain('166.67ch');
+		expect(html).toContain('height: 70em');
+	});
+
+	it('truncates fractional numeric attributes toward zero', () => {
+		const html = renderThermalPreview(
+			'<receipt><size width="2.5">Big</size><feed lines="3.5"/></receipt>',
+			{},
+		);
+
+		expect(html).toContain('font-size: 2em');
+		expect(html).toContain('height: 4.2em');
+	});
+
+	it('falls back for numeric literals PHP is_numeric rejects', () => {
+		const html = renderThermalPreview(
+			'<receipt><feed lines="0x2"/><size width="1e1">Exp</size></receipt>',
+			{},
+		);
+
+		// 0x2 is not a decimal numeral, so the default of 1 line applies.
+		expect(html).toContain('height: 1.4em');
+		// 1e1 is, so it resolves to 10 and then clamps to the 8x printer ceiling.
+		expect(html).toContain('font-size: 8em');
+	});
+
+	it('bounds an exponent-form feed to the same 50 lines the printer feeds', () => {
+		// 1e15 is a legal decimal numeral, so it survives is_numeric()/DECIMAL_NUMERAL
+		// and reaches the AST as a number. This side already bounded it at render;
+		// the PHP twin is where it was unbounded, and the wire emitters turn `lines`
+		// straight into a loop or a str_repeat(). Asserted here so the two sides are
+		// pinned to one number and cannot drift apart again.
+		const html = renderThermalPreview('<receipt><feed lines="1e15"/></receipt>', {});
+
+		// 50 lines * 1.4em. Paired with
+		// Escpos_Thermal_Emitter_Test::test_feed_exponent_notation_lines_emits_the_bounded_maximum.
+		expect(html).toContain('height: 70em');
+	});
+
+	it('bounds a fixed column to the same 120 characters the row emitter pads to', () => {
+		const html = renderThermalPreview(
+			'<receipt paper-width="120"><row><col width="121">Over</col></row></receipt>',
+			{},
+		);
+
+		// As with feed, the preview already held here and the row emitters did not.
+		// Paired with Escpos_Thermal_Emitter_Test::test_row_fixed_column_wider_than_the_paper_pads_to_the_bounded_maximum.
+		expect(html).toContain('flex: 0 0 120ch');
+		expect(html).not.toContain('flex: 0 0 121ch');
+	});
+
+	it('bounds paper width and qr scale to the ranges every path can render', () => {
+		const narrow = renderThermalPreview('<receipt paper-width="0"></receipt>', {});
+		const wide = renderThermalPreview('<receipt paper-width="900"></receipt>', {});
+
+		// Paired with Thermal_Markup_Parser_Test::test_parse_out_of_range_paper_width_clamps_to_the_printable_range.
+		expect(root(narrow).style.width).toBe('1ch');
+		expect(root(wide).style.width).toBe('120ch');
+
+		// The shared floor is 1, not the PDF page's 16. This bound is applied when
+		// parsing, so every path inherits it, and the plain-text lane renders widths
+		// in the single and low double digits — a floor of 16 silently re-centred
+		// that output. Paired with
+		// Thermal_Markup_Parser_Test::test_parse_narrow_paper_width_is_not_clamped_to_the_pdf_minimum.
+		const tenColumns = renderThermalPreview('<receipt paper-width="10"></receipt>', {});
+		expect(root(tenColumns).style.width).toBe('10ch');
+
+		const oversized = renderThermalPreview('<receipt><qrcode size="99">WCPOS</qrcode></receipt>', {});
+		const ceiling = renderThermalPreview('<receipt><qrcode size="16">WCPOS</qrcode></receipt>', {});
+		const ordinary = renderThermalPreview('<receipt><qrcode size="4">WCPOS</qrcode></receipt>', {});
+
+		// 16 is the ESC/POS module-size ceiling; an unbounded scale would render a
+		// preview no printer can reproduce. Paired with
+		// Thermal_Markup_Parser_Test::test_parse_out_of_range_qrcode_size_clamps_to_the_module_size_ceiling.
+		expect(oversized).toBe(ceiling);
+		expect(oversized).not.toBe(ordinary);
 	});
 
 	it('renders single, dashed, dotted, and double divider styles', () => {

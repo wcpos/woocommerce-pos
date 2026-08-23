@@ -405,6 +405,120 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'height: 2.8em', $html );
 	}
 
+	/*
+	 * The three tests below are paired one-for-one with the preview renderer's
+	 * tests in packages/thermal-utils/src/thermal-renderer.test.ts: same values,
+	 * same expected CSS. An out-of-range value is clamped to the nearest bound on
+	 * both sides so the merchant sees the size that prints, not the default.
+	 */
+
+	/**
+	 * An above-range size clamps to the eight-times printer ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_size_above_range_clamps_to_maximum_em(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type'     => 'size',
+					'width'    => 12,
+					'height'   => 12,
+					'children' => array(
+						array(
+							'type'  => 'raw-text',
+							'value' => 'Huge',
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertStringContainsString( 'font-size: 8em', $html );
+	}
+
+	/**
+	 * An above-range image width clamps to the two-thousand-dot maximum.
+	 *
+	 * @return void
+	 */
+	public function test_image_above_range_clamps_to_maximum_dots(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type'  => 'image',
+					'src'   => 'https://example.test/logo.png',
+					'width' => 5000,
+				),
+			)
+		);
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert. 2000 dots of the 576-dot wide budget across 48 columns, in 0.6em cells.
+		$this->assertStringContainsString( 'width: 100em', $html );
+	}
+
+	/**
+	 * An above-range feed clamps to the fifty-line maximum.
+	 *
+	 * @return void
+	 */
+	public function test_feed_above_range_clamps_to_maximum_lines(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type'  => 'feed',
+					'lines' => 500,
+				),
+			)
+		);
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertStringContainsString( 'height: 70em', $html );
+	}
+
+	/**
+	 * A non-numeric size falls back to the default em.
+	 *
+	 * @return void
+	 */
+	public function test_size_non_numeric_width_uses_fallback_em(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type'     => 'size',
+					'width'    => 'wide',
+					'height'   => 'tall',
+					'children' => array(
+						array(
+							'type'  => 'raw-text',
+							'value' => 'S',
+						),
+					),
+				),
+			)
+		);
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertStringContainsString( 'font-size: 1em', $html );
+	}
+
 	/**
 	 * Cut renders a scissors glyph.
 	 *
@@ -666,8 +780,8 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	/**
 	 * 1D barcodes carry the human-readable value beneath the bars.
 	 *
-	 * bwip-js renders the value under the bars in the client-side previews, so
-	 * the PDF mirrors it.
+	 * The bwip-js client-side preview renders the value under the bars, so the
+	 * PDF mirrors it.
 	 *
 	 * @return void
 	 */
