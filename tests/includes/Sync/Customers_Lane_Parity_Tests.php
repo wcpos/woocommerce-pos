@@ -127,6 +127,34 @@ trait Customers_Lane_Parity_Tests {
 	}
 
 	/**
+	 * A `modified_after` cutoff from before 2001 must not hide every current customer.
+	 *
+	 * `last_update` is a Unix timestamp living in a text usermeta column, so an untyped
+	 * `WP_Meta_Query` clause compares it as a string. Two timestamps of equal length sort
+	 * the same either way, which is why the test above — a cutoff an hour old, ten digits
+	 * against ten digits — cannot see the difference. Cross the 2001-09-09 boundary where
+	 * timestamps grew from nine digits to ten and the two orderings part company:
+	 * `'1787465309' > '946684800'` is false as text, because `'1'` sorts before `'9'`.
+	 *
+	 * The result was a `modified_after` that silently matched nothing — the worst shape
+	 * for a sync pull, which reads an empty page as "nothing changed" rather than as an
+	 * error. Both lanes had it, so this is a shared defect and not a divergence: the
+	 * parity assertion inside `assert_lane_parity()` passed all along, agreeing on the
+	 * wrong answer.
+	 */
+	public function test_modified_after_before_the_ten_digit_epoch_still_returns_current_customers_on_both_lanes(): void {
+		// Arrange: one customer touched now, so `last_update` is a ten-digit timestamp.
+		$customer_id = CustomerHelper::create_customer()->get_id();
+		update_user_meta( $customer_id, 'last_update', time() );
+
+		// Act: cut off at 2000-01-01T00:00:00Z, which is 946684800 — nine digits.
+		$ids = $this->assert_lane_parity( array( 'modified_after' => '2000-01-01T00:00:00' ) );
+
+		// Assert: a cutoff twenty-six years in the past excludes nobody.
+		$this->assertContains( $customer_id, $ids );
+	}
+
+	/**
 	 * A blank `modified_after` is no filter at all, on both lanes.
 	 */
 	public function test_blank_modified_after_is_not_a_filter_on_both_lanes(): void {

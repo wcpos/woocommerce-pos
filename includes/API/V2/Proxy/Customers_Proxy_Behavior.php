@@ -131,11 +131,23 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 			$args['_wcpos_search'] = $this->delegated['search'];
 		}
 		if ( isset( $this->delegated['modified_after'] ) ) {
-			$timestamp   = strtotime( $this->delegated['modified_after'] );
+			$timestamp = strtotime( $this->delegated['modified_after'] );
+
+			/*
+			 * `last_update` holds a Unix timestamp, but it is stored as usermeta text and
+			 * `WP_Meta_Query` defaults an untyped clause to CHAR — which compares it as a
+			 * string. Timestamps only sort the same way as strings while they are the same
+			 * length, so a cutoff from before 2001-09-09 (nine digits) drops every current
+			 * customer, whose timestamp is ten digits starting with a `1`: `'1787465309' >
+			 * '946684800'` is false, character by character. NUMERIC casts to SIGNED and
+			 * compares the numbers. The same controller's bulk-id fast path already binds
+			 * this value with `%d`, so this makes the two agree.
+			 */
 			$last_update = array(
 				'key'     => 'last_update',
 				'value'   => $timestamp ? (string) $timestamp : '',
 				'compare' => '>',
+				'type'    => 'NUMERIC',
 			);
 
 			/*
