@@ -381,13 +381,20 @@ class Init {
 	 * ({@see Rest_Cors}): `send_headers` fires from `WP::main()`, which a REST
 	 * request never reaches — core's `rest_api_loaded()` runs on
 	 * `parse_request` and dies. What it serves is the app's site-discovery
-	 * probe against an ordinary page (originally the homepage, gated on
-	 * `?wcpos=1`, see 521ccb9a): the app reads the `Link:
+	 * probe against an ordinary page: the app reads the `Link:
 	 * <.../wp-json/>; rel="https://api.w.org/"` header cross-origin to find
 	 * the REST root, which needs both headers below. Some servers turn HEAD
-	 * into GET, hence the query param rather than the method.
+	 * into GET, hence the `?_method=head` query param rather than the method.
 	 *
-	 * FIXME: Why is Link header not exposed sometimes on my development machine?
+	 * This is live, not legacy. The client calls it on every Connect:
+	 * `packages/core/src/screens/auth/hooks/use-url-discovery.ts` issues
+	 * `http.head()` against the site root, and
+	 * `packages/hooks/src/use-http-client/use-http-client.tsx` sets
+	 * `params._method = 'HEAD'` on every HEAD request (both in the client
+	 * monorepo). That same client code deliberately omits the `X-WCPOS`
+	 * marker for HEAD, so this handler cannot be marker-gated and must stay
+	 * unconditional. 521ccb9a added it; the `?wcpos=1` gate it originally
+	 * carried is long gone.
 	 *
 	 * @return void
 	 */

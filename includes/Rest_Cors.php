@@ -80,6 +80,23 @@ final class Rest_Cors {
 	 * on its own: the handler publishes it directly and core's copy is
 	 * overwritten. The sync-lane additions are merged in from Sync\Cors.
 	 *
+	 * Known duplication, recorded rather than fixed here: the first six entries
+	 * restate WordPress core's own defaults from WP_REST_Server::serve_request(),
+	 * and the contract test restates them a third time. If core ever adds a
+	 * seventh, both copies drift and no test fails — the same class of bug this
+	 * module exists to remove, one level up. The real fix is to stop republishing
+	 * the allow-list here at all and hook `rest_allowed_cors_headers` instead,
+	 * since core already writes it unconditionally before any
+	 * `rest_pre_serve_request` filter runs; that shrinks this module to what
+	 * genuinely needs last-writer-wins (Allow-Origin, Max-Age, cache contract).
+	 * That is a behaviour-shaped change and does not belong in a release-week
+	 * refactor of a High-tier path.
+	 *
+	 * Also unchanged from the code this replaces: Access-Control-Allow-Methods
+	 * omits OPTIONS where core includes it. Harmless — a preflight never asks to
+	 * preflight — and preserved deliberately so this refactor stays behaviour-
+	 * identical.
+	 *
 	 * @var string[]
 	 */
 	public const ALLOW_HEADERS_BASE = array(
