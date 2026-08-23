@@ -200,6 +200,21 @@ class Analytics_Profile {
 	}
 
 	/**
+	 * The class names checked to detect a multi-currency plugin.
+	 *
+	 * Exists as a method rather than reading the constant inline so the list is
+	 * typed as plain strings. Read straight from the constant, static analysis
+	 * knows the exact literals, sees that none of these third-party classes
+	 * exist anywhere in this codebase, and reports the runtime check as
+	 * impossible — which it is not: it is answered on the merchant's site.
+	 *
+	 * @return string[]
+	 */
+	private function multi_currency_classes(): array {
+		return self::MULTI_CURRENCY_CLASSES;
+	}
+
+	/**
 	 * Whether a known multi-currency plugin is active.
 	 *
 	 * @return bool
@@ -207,10 +222,7 @@ class Analytics_Profile {
 	private function has_multi_currency(): bool {
 		$detected = false;
 
-		foreach ( self::MULTI_CURRENCY_CLASSES as $class_name ) {
-			// @phpstan-ignore-next-line -- These are third-party plugin classes.
-			// None of them exist in this codebase, so static analysis reads the
-			// check as impossible; it is answered at runtime, on the merchant's site.
+		foreach ( $this->multi_currency_classes() as $class_name ) {
 			if ( class_exists( $class_name ) ) {
 				$detected = true;
 				break;
