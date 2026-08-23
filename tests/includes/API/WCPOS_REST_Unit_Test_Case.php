@@ -23,6 +23,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	protected $user;
 
 	public function setUp(): void {
+		$this->drop_stale_rest_api_init_callbacks();
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) ); // add hook before parent::setUp()
 
 		parent::setUp();
@@ -40,6 +41,48 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 
 	public function rest_api_init(): void {
 		new API();
+	}
+
+	/**
+	 * Drop rest_api_init callbacks left behind by an earlier test case.
+	 *
+	 * WP_UnitTestCase_Base::set_up() snapshots $wp_filter on the FIRST test of
+	 * the whole run and restores that snapshot after every test. This class has
+	 * to hook rest_api_init BEFORE parent::setUp(), because the WC REST base
+	 * fires rest_api_init from its own setUp — so when a run opens on a WCPOS
+	 * REST test, that first test case's callback is baked into the snapshot and
+	 * comes back for every later test in the run.
+	 *
+	 * Every subsequent test then boots TWO WCPOS API objects: two full sets of
+	 * controllers, both hooked on rest_dispatch_request. One request is
+	 * dispatched through two controller instances, so every request-scoped
+	 * filter they install lands twice — a wcpos_include read, for instance,
+	 * gets its WHERE clause appended twice. WordPress boots exactly one API
+	 * object per PHP request in production, so the second instance is pure
+	 * harness noise, and it makes results depend on which file the run opened
+	 * with: green in a full-suite run, red when a REST file is run on its own.
+	 */
+	private function drop_stale_rest_api_init_callbacks(): void {
+		global $wp_filter;
+
+		if ( ! isset( $wp_filter['rest_api_init'] ) ) {
+			return;
+		}
+
+		// Collect first: remove_action() rewrites the array being walked.
+		$stale = array();
+		foreach ( $wp_filter['rest_api_init']->callbacks as $priority => $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				$function = $callback['function'];
+				if ( \is_array( $function ) && isset( $function[0] ) && $function[0] instanceof self && $function[0] !== $this ) {
+					$stale[] = array( $function, $priority );
+				}
+			}
+		}
+
+		foreach ( $stale as $entry ) {
+			remove_action( 'rest_api_init', $entry[0], $entry[1] );
+		}
 	}
 
 	public function wp_rest_get_request( $path = '' ): WP_REST_Request {
