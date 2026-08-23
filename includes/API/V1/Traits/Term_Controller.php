@@ -35,9 +35,16 @@ trait Term_Controller {
 	/**
 	 * Store the request object for use in lifecycle methods.
 	 *
-	 * @var WP_REST_Request
+	 * @var WP_REST_Request|null
 	 */
 	protected $wcpos_request;
+
+	/**
+	 * Requests currently using this controller's temporary filters.
+	 *
+	 * @var WP_REST_Request[]
+	 */
+	protected $wcpos_request_stack = array();
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.
@@ -50,8 +57,9 @@ trait Term_Controller {
 	 * @return mixed
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-		$taxonomy            = static::WCPOS_TAXONOMY;
+		$this->wcpos_request_stack[] = $request;
+		$this->wcpos_request         = $request;
+		$taxonomy                    = static::WCPOS_TAXONOMY;
 
 		add_filter( "woocommerce_rest_prepare_{$taxonomy}", array( $this, static::WCPOS_RESPONSE_FILTER ), 10, 3 );
 		add_filter( "woocommerce_rest_{$taxonomy}_query", array( $this, static::WCPOS_QUERY_FILTER ), 10, 2 );
@@ -94,6 +102,15 @@ trait Term_Controller {
 		if ( $request !== $this->wcpos_request ) {
 			return $response;
 		}
+
+		array_pop( $this->wcpos_request_stack );
+		if ( ! empty( $this->wcpos_request_stack ) ) {
+			$this->wcpos_request = end( $this->wcpos_request_stack );
+
+			return $response;
+		}
+
+		$this->wcpos_request = null;
 
 		$taxonomy = static::WCPOS_TAXONOMY;
 

@@ -541,6 +541,62 @@ class Test_Term_Controllers_Parity extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A nested read must not tear down the outer read's request-scoped filters.
+	 *
+	 * @dataProvider taxonomy_provider
+	 *
+	 * @param string $controller_class Controller class name.
+	 * @param string $taxonomy         Taxonomy name.
+	 * @param string $rest_base        Route below the namespace.
+	 */
+	public function test_nested_request_preserves_outer_term_filters( string $controller_class, string $taxonomy, string $rest_base ): void {
+		// Arrange.
+		$this->boot_endpoint( $controller_class, $taxonomy );
+		$outer_id = $this->create_term( 'Nested Outer' );
+		$inner_id = $this->create_term( 'Nested Inner' );
+		$this->create_term( 'Nested Other' );
+		$nested_response             = null;
+		$nested_dispatched           = false;
+		$outer_callbacks_after_inner = -1;
+		$dispatch_nested_request     = function ( $query_args ) use ( &$nested_response, &$nested_dispatched, &$outer_callbacks_after_inner, $inner_id, $rest_base ) {
+			if ( $nested_dispatched ) {
+				return $query_args;
+			}
+
+			$nested_dispatched = true;
+			$nested_request    = $this->wp_rest_get_request( '/wcpos/v1/' . $rest_base );
+			$nested_request->set_param( 'wcpos_include', array( $inner_id ) );
+			$nested_response             = $this->server->dispatch( $nested_request );
+			$outer_callbacks_after_inner = $this->count_wcpos_callbacks( 'rest_request_after_callbacks', 'wcpos_remove_term_filters' );
+
+			return $query_args;
+		};
+		add_filter( 'woocommerce_rest_' . $taxonomy . '_query', $dispatch_nested_request, 11 );
+
+		// Act.
+		$outer_request = $this->wp_rest_get_request( '/wcpos/v1/' . $rest_base );
+		$outer_request->set_param( 'wcpos_include', array( $outer_id ) );
+		try {
+			$outer_response = $this->server->dispatch( $outer_request );
+		} finally {
+			remove_filter( 'woocommerce_rest_' . $taxonomy . '_query', $dispatch_nested_request, 11 );
+		}
+
+		// Assert.
+		$this->assertTrue( $nested_dispatched );
+		$this->assertSame( 200, $nested_response->get_status(), wp_json_encode( $nested_response->get_data() ) );
+		$this->assertSame( array( $inner_id ), array_map( 'intval', wp_list_pluck( $nested_response->get_data(), 'id' ) ) );
+		$this->assertSame( 200, $outer_response->get_status(), wp_json_encode( $outer_response->get_data() ) );
+		$this->assertSame(
+			array( $outer_id ),
+			array_map( 'intval', wp_list_pluck( $outer_response->get_data(), 'id' ) ),
+			'the nested request wiped the outer read\'s wcpos_include clause'
+		);
+		$this->assertSame( 1, $outer_callbacks_after_inner, 'the nested request removed the outer cleanup callback' );
+		$this->assertSame( 0, $this->count_wcpos_callbacks( 'rest_request_after_callbacks', 'wcpos_remove_term_filters' ) );
+	}
+
+	/**
 	 * The response and query filters do not outlive the request that added them.
 	 *
 	 * @dataProvider taxonomy_provider
