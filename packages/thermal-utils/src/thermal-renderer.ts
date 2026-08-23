@@ -135,7 +135,10 @@ const DECIMAL_NUMERAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
  */
 const THERMAL_BOUNDS = {
 	/** Narrowest and widest thermal roll, in character columns. */
-	paperWidth: { min: 16, max: 120 },
+	// Floor of 1, not the PDF page's 16: this bound is applied when parsing, so
+	// it reaches every render path, and the plain-text lane legitimately renders
+	// widths below 16. The ceiling is the part that matters here.
+	paperWidth: { min: 1, max: 120 },
 	/**
 	 * Text size multiplier. 8 is the hardware ceiling: the ESC/POS `GS ! n` size
 	 * byte carries one nibble per axis, and Star's magnification stops lower.

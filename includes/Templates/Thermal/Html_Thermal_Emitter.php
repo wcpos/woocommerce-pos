@@ -98,7 +98,7 @@ class Html_Thermal_Emitter {
 	 * @return string The receipt HTML.
 	 */
 	public function emit( array $ast, array $opts = array() ): string {
-		$width_chars = $this->clamp_integer( isset( $ast['paper_width'] ) ? $ast['paper_width'] : null, 48, Thermal_Bounds::PAPER_WIDTH_MIN, Thermal_Bounds::PAPER_WIDTH_MAX );
+		$width_chars = $this->clamp_integer( isset( $ast['paper_width'] ) ? $ast['paper_width'] : null, 48, Thermal_Bounds::PAPER_WIDTH_PDF_MIN, Thermal_Bounds::PAPER_WIDTH_MAX );
 
 		// 13px matches the JS preview renderer's base font; with a known paper
 		// width the font scales so the grid fills the printable width instead.

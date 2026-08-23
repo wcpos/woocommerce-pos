@@ -34,12 +34,28 @@ namespace WCPOS\WooCommercePOS\Templates\Thermal;
 final class Thermal_Bounds {
 
 	/**
-	 * Narrowest receipt in character columns.
+	 * Narrowest receipt in character columns, for every lane.
 	 *
-	 * No thermal roll prints fewer; below this the row algebra has nothing to
-	 * divide.
+	 * Deliberately 1, not the 16 the PDF page uses. This bound is applied by the
+	 * PARSER, so it reaches every emitter — including Text_Thermal_Emitter, which
+	 * renders plain text with no physical roll behind it and has always accepted
+	 * narrow widths (`paper-width="10"` is pinned by its own tests). Raising the
+	 * shared floor to 16 silently re-centred that output.
+	 *
+	 * The rule this PR is built on is that a bound holds on every lane or none.
+	 * A floor of 16 is real, but it belongs to the medium that has a page, not to
+	 * the markup — so it stays where it already was ({@see self::PAPER_WIDTH_PDF_MIN}).
+	 * The hazard this PR exists to close is the top end, not the bottom.
 	 */
-	public const PAPER_WIDTH_MIN = 16;
+	public const PAPER_WIDTH_MIN = 1;
+
+	/**
+	 * Narrowest receipt the PDF/preview page will lay out.
+	 *
+	 * Pre-existing behaviour of Html_Thermal_Emitter, preserved rather than
+	 * generalised: below this its character-cell arithmetic has nothing to divide.
+	 */
+	public const PAPER_WIDTH_PDF_MIN = 16;
 
 	/**
 	 * Widest receipt in character columns.

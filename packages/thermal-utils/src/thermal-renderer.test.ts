@@ -121,12 +121,20 @@ describe('renderThermalPreview canonical parity', () => {
 	});
 
 	it('bounds paper width and qr scale to the ranges every path can render', () => {
-		const narrow = renderThermalPreview('<receipt paper-width="4"></receipt>', {});
+		const narrow = renderThermalPreview('<receipt paper-width="0"></receipt>', {});
 		const wide = renderThermalPreview('<receipt paper-width="900"></receipt>', {});
 
 		// Paired with Thermal_Markup_Parser_Test::test_parse_out_of_range_paper_width_clamps_to_the_printable_range.
-		expect(root(narrow).style.width).toBe('16ch');
+		expect(root(narrow).style.width).toBe('1ch');
 		expect(root(wide).style.width).toBe('120ch');
+
+		// The shared floor is 1, not the PDF page's 16. This bound is applied when
+		// parsing, so every path inherits it, and the plain-text lane renders widths
+		// in the single and low double digits — a floor of 16 silently re-centred
+		// that output. Paired with
+		// Thermal_Markup_Parser_Test::test_parse_narrow_paper_width_is_not_clamped_to_the_pdf_minimum.
+		const tenColumns = renderThermalPreview('<receipt paper-width="10"></receipt>', {});
+		expect(root(tenColumns).style.width).toBe('10ch');
 
 		const oversized = renderThermalPreview('<receipt><qrcode size="99">WCPOS</qrcode></receipt>', {});
 		const ceiling = renderThermalPreview('<receipt><qrcode size="16">WCPOS</qrcode></receipt>', {});

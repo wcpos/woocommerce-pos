@@ -208,7 +208,7 @@ class Thermal_Markup_Parser_Test extends WP_UnitTestCase {
 	 */
 	public function test_parse_out_of_range_paper_width_clamps_to_the_printable_range(): void {
 		// Arrange.
-		$narrow_xml = '<receipt paper-width="4"></receipt>';
+		$narrow_xml = '<receipt paper-width="0"></receipt>';
 		$wide_xml   = '<receipt paper-width="900"></receipt>';
 
 		// Act.
@@ -218,6 +218,28 @@ class Thermal_Markup_Parser_Test extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( Thermal_Bounds::PAPER_WIDTH_MIN, $narrow['paper_width'] );
 		$this->assertSame( Thermal_Bounds::PAPER_WIDTH_MAX, $wide['paper_width'] );
+	}
+
+	/**
+	 * Narrow paper widths survive the parser untouched.
+	 *
+	 * The shared floor is 1, not the 16 the PDF page lays out at, because this
+	 * bound is applied once here and every emitter inherits it. Text_Thermal_Emitter
+	 * has always rendered widths in the single and low double digits, and a floor
+	 * of 16 silently re-centred that output instead of rejecting it. A bound that
+	 * belongs to one medium stays in that emitter.
+	 *
+	 * @return void
+	 */
+	public function test_parse_narrow_paper_width_is_not_clamped_to_the_pdf_minimum(): void {
+		// Arrange.
+		$xml = '<receipt paper-width="10"></receipt>';
+
+		// Act.
+		$ast = $this->parser->parse( $xml );
+
+		// Assert.
+		$this->assertSame( 10, $ast['paper_width'] );
 	}
 
 	/**
