@@ -145,6 +145,12 @@ class Local_Image_Resolver {
 				return 'image/gif';
 			case 'webp':
 				return 'image/webp';
+			case 'svg':
+				// Dompdf renders SVG, so PDF receipts with a vector logo depend on
+				// this. GD cannot decode it, so the raster emitter simply skips such
+				// an image rather than drawing a broken one — bytes() hands over the
+				// file either way and the caller decides.
+				return 'image/svg+xml';
 			default:
 				return null;
 		}

@@ -570,9 +570,12 @@ class Raster_Thermal_Emitter {
 
 		$this->push_image( $png );
 
-		// The human-readable value, as the HTML and PDF paths render it.
+		// The human-readable value, as the HTML and PDF paths render it — and, when
+		// generation failed (a non-numeric EAN-13, say), the only trace of the
+		// barcode left on the receipt. Suppressing it with the image would leave a
+		// silent gap where a scannable code should be.
 		$value = $this->normalize_text( isset( $node['value'] ) ? (string) $node['value'] : '' );
-		if ( '' !== $png && '' !== $value ) {
+		if ( '' !== $value ) {
 			$this->append_text( $value );
 			$this->close_line( 'center' );
 		}

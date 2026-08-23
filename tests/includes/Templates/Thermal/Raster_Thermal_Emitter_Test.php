@@ -491,6 +491,24 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It still prints the barcode value when the symbol cannot be generated.
+	 *
+	 * An EAN-13 node carrying a non-numeric value fails to rasterize; suppressing
+	 * the human-readable text along with it would leave a silent gap where a
+	 * scannable code should be. The HTML and PDF paths fall back the same way.
+	 */
+	public function test_emit_keeps_barcode_text_when_generation_fails(): void {
+		$blank = $this->render_image( '<receipt paper-width="48"><feed lines="1"/></receipt>' );
+		$image = $this->render_image( '<receipt paper-width="48"><barcode type="ean13">NOT-NUMERIC</barcode></receipt>' );
+
+		$this->assertGreaterThan( 0, $this->ink_pixels( $image ), 'The value must still be printed as text.' );
+		$this->assertSame( 0, $this->ink_pixels( $blank ) );
+
+		imagedestroy( $blank );
+		imagedestroy( $image );
+	}
+
+	/**
 	 * It reports the AST's cut instead of drawing it.
 	 */
 	public function test_emit_reports_cut_out_of_band(): void {
