@@ -118,7 +118,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 			$server  = $this->new_spy_server();
 			$request = new WP_REST_Request( 'OPTIONS', $route );
 			if ( self::NON_WCPOS_ROUTE === $route ) {
-				$request->set_header( 'Access-Control-Request-Headers', 'authorization,content-type,x-wcpos' );
+				$request->set_header( 'Access-Control-Request-Headers', 'authorization, content-type, x-wcpos' );
 			}
 
 			// Act.
@@ -275,6 +275,27 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertArrayNotHasKey( 'Cache-Control', $server->sent_headers );
 		$this->assertArrayNotHasKey( 'Vary', $server->sent_headers );
+	}
+
+	/**
+	 * Some proxies and WAFs strip unrecognised request headers, which takes the
+	 * X-WCPOS marker with them. The query-var fallback is the only thing that
+	 * keeps those clients working, so it needs a test of its own — without one,
+	 * the whole branch can be deleted and nothing goes red.
+	 *
+	 * @return void
+	 */
+	public function test_marker_stripped_request_is_claimed_via_the_query_var_fallback(): void {
+		// Arrange.
+		$server  = $this->new_spy_server();
+		$request = new WP_REST_Request( 'GET', self::NON_WCPOS_ROUTE );
+		$request->set_query_params( array( 'wcpos' => '1' ) );
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		// Assert.
+		$this->assertSame( '*', $server->sent_headers['Access-Control-Allow-Origin'] ?? null );
 	}
 
 	/**

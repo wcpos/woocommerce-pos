@@ -92,10 +92,11 @@ final class Rest_Cors {
 	 * That is a behaviour-shaped change and does not belong in a release-week
 	 * refactor of a High-tier path.
 	 *
-	 * Also unchanged from the code this replaces: Access-Control-Allow-Methods
-	 * omits OPTIONS where core includes it. Harmless — a preflight never asks to
-	 * preflight — and preserved deliberately so this refactor stays behaviour-
-	 * identical.
+	 * Access-Control-Allow-Methods matches core's list exactly, OPTIONS included.
+	 * The handler this replaces omitted OPTIONS, but it wrote at priority 5 and
+	 * core overwrote it at 10 whenever an Origin was present — so the value that
+	 * actually reached the wire was core's. Winning at 20 without OPTIONS would
+	 * have changed the wire for the first time in that header's life.
 	 *
 	 * @var string[]
 	 */
@@ -212,7 +213,7 @@ final class Rest_Cors {
 			// filter, so a third party that hooks it reaches both writes.
 			$allow_headers = apply_filters( 'rest_allowed_cors_headers', self::ALLOW_HEADERS_BASE, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
 
-			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
+			$server->send_header( 'Access-Control-Allow-Methods', 'OPTIONS, GET, POST, PUT, PATCH, DELETE' );
 			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', array_unique( $allow_headers ) ) );
 			$server->send_header( 'Access-Control-Max-Age', self::MAX_AGE );
 		}
