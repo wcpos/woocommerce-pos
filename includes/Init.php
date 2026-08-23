@@ -75,7 +75,6 @@ class Init {
 	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
 	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
 	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
-	 * | 16 | `pre_update_option_woocommerce_pos_pro_settings_license` | `Init::remove_license_transient` | 10 | irrelevant | Default. The reentrancy guard, not the priority, is what makes it safe (f33b8d655). |
 	 * | 17 | `rest_pre_serve_request` | `Init::rest_pre_serve_request` | **5** | unknown | Present at 5 since the initial commit (8f2b9eac); no reason recorded. It runs ahead of core's own `rest_send_cors_headers`, which `rest-api.php` registers on the same hook at the default 10. The only recorded movement is the now-deleted twin in `API.php`, which went 5 -> 10 in 521ccb9a. **This row is what PR #1668 changes**: that PR deletes this registration and the handler, moving both behind `Sync\Rest_Cors::register_hooks()`. The priority and this "unknown" travel with it. |
 	 * | 18 | `send_headers` | `Init::send_headers` | 99 | unknown | Introduced by 62da70551 ("fix WPSEO integration"). The commit records no reason for the number beyond running late. |
 	 * | 19 | `send_headers` | `Init::remove_x_frame_options` | **9999** | **ORDER-CRITICAL** | Must run AFTER security plugins have set `X-Frame-Options`, because it works by `header_remove()` (80ee545a5). A smaller number lets the plugin set the header again afterwards. |
@@ -161,9 +160,6 @@ class Init {
 		add_action( 'rest_api_init', array( $this, 'init_rest_api' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
-		// Remove this once Pro settings have been moved to the new settings service.
-		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( self::class, 'remove_license_transient' ), 10, 2 );
-
 		// Headers for API discoverability.
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
@@ -197,44 +193,6 @@ class Init {
 		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
 
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
-	}
-
-	/**
-	 * Clear cached data that depends on the Pro license.
-	 *
-	 * @param mixed $value     The new option value.
-	 * @param mixed $old_value The previous option value (false when unset).
-	 *
-	 * @return mixed
-	 */
-	public static function remove_license_transient( $value, $old_value = false ) {
-		// Pro's updater can react to the update_plugins deletion by reading —
-		// and, when the stored instance id is blank, re-saving — the license
-		// option, which re-enters this filter. Without the guard that cycle is
-		// unbounded and OOMs the first license activation on a fresh install.
-		static $clearing = false;
-		if ( $clearing ) {
-			return $value;
-		}
-		$clearing = true;
-		delete_transient( 'woocommerce_pos_pro_license_status' );
-
-		// The update caches bind to the license key and activation state. A
-		// write that changes neither — e.g. Pro's read-side instance mint —
-		// must not wipe update_plugins: Pro reacts to that deletion by
-		// clearing its own update-data cache, which empties the payload of an
-		// update check that is in flight when the mint occurs.
-		$old = \is_array( $old_value ) ? $old_value : array();
-		$new = \is_array( $value ) ? $value : array();
-		if (
-			(string) ( $old['key'] ?? '' ) !== (string) ( $new['key'] ?? '' )
-			|| ! empty( $old['activated'] ) !== ! empty( $new['activated'] )
-		) {
-			delete_site_transient( 'update_plugins' );
-		}
-		$clearing = false;
-
-		return $value;
 	}
 
 	/**

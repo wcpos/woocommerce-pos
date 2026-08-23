@@ -11,7 +11,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
@@ -166,9 +165,6 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		delete_option( 'woocommerce_pos_settings_tax_ids' );
 		delete_option( 'woocommerce_pos_settings_payment_gateways' );
 		delete_option( 'woocommerce_pos_settings_visibility' );
-		delete_option( 'woocommerce_pos_pro_settings_license' );
-		delete_transient( 'woocommerce_pos_pro_license_status' );
-		delete_site_transient( 'update_plugins' );
 
 		parent::tearDown();
 	}
@@ -482,136 +478,6 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	// ──────────────────────────────────────────────
 	// Write parity
 	// ──────────────────────────────────────────────
-
-	/**
-	 * Updating Pro license settings should invalidate all license-dependent caches.
-	 */
-	public function test_updating_pro_license_settings_clears_license_dependent_caches(): void {
-		// Arrange.
-		$this->assertNotFalse(
-			has_filter(
-				'pre_update_option_woocommerce_pos_pro_settings_license',
-				array( Init::class, 'remove_license_transient' )
-			)
-		);
-		set_transient( 'woocommerce_pos_pro_license_status', array( 'activated' => false ) );
-		set_site_transient(
-			'update_plugins',
-			(object) array(
-				'response' => array(
-					'woocommerce-pos-pro/woocommerce-pos-pro.php' => (object) array(
-						'package' => 'https://updates.wcpos.com/pro/download/1.9.16?key=old-key',
-					),
-				),
-			)
-		);
-
-		// Act.
-		update_option( 'woocommerce_pos_pro_settings_license', array( 'key' => 'new-key' ) );
-
-		// Assert.
-		$this->assertFalse( get_transient( 'woocommerce_pos_pro_license_status' ) );
-		$this->assertFalse( get_site_transient( 'update_plugins' ) );
-	}
-
-	/**
-	 * The license cache-clear handler is registered exactly once, by Init.
-	 *
-	 * The v1 Settings controller used to add its own copy in its constructor;
-	 * the #1444 merge past #1447's file move resurrected it once already, so
-	 * pin the count after the controller has been constructed via a dispatch.
-	 */
-	public function test_license_cache_clear_handler_registered_exactly_once(): void {
-		// Arrange: dispatch a settings request so the v1 controller (whose
-		// constructor used to register a duplicate) has been constructed.
-		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/settings/general' ) );
-
-		// Act.
-		global $wp_filter;
-		$hook      = $wp_filter['pre_update_option_woocommerce_pos_pro_settings_license'] ?? null;
-		$callbacks = 0;
-		foreach ( null === $hook ? array() : $hook->callbacks as $priority_callbacks ) {
-			$callbacks += \count( $priority_callbacks );
-		}
-
-		// Assert.
-		$this->assertSame( 1, $callbacks );
-	}
-
-	/**
-	 * Pro's updater can react to the update_plugins deletion by reading — and,
-	 * when the stored instance is blank, re-saving — the license option, which
-	 * re-enters remove_license_transient and recursed unbounded (OOM on first
-	 * license activation). The guard must break the cycle: the write-back's
-	 * nested update happens without re-clearing, so the reaction fires once.
-	 */
-	public function test_license_option_write_back_during_transient_clear_does_not_recurse(): void {
-		// Arrange: simulate Pro's clear-update reaction writing the option back.
-		$write_backs = 0;
-		$write_back  = function () use ( &$write_backs ): void {
-			++$write_backs;
-			if ( $write_backs > 3 ) {
-				// Circuit breaker: let the assertion below fail instead of OOM.
-				return;
-			}
-			update_option(
-				'woocommerce_pos_pro_settings_license',
-				array(
-					'key' => 'k',
-					'instance' => (string) $write_backs,
-				)
-			);
-		};
-		add_action( 'delete_site_transient_update_plugins', $write_back );
-
-		// Act.
-		update_option(
-			'woocommerce_pos_pro_settings_license',
-			array(
-				'key' => 'k',
-				'instance' => '',
-			)
-		);
-
-		remove_action( 'delete_site_transient_update_plugins', $write_back );
-
-		// Assert.
-		$this->assertSame( 1, $write_backs );
-	}
-
-	/**
-	 * A license write that changes neither the key nor the activation state —
-	 * Pro's read-side instance mint — must clear the license-status transient
-	 * but leave update_plugins alone: Pro reacts to that deletion by clearing
-	 * its update-data cache, which empties an in-flight update check.
-	 */
-	public function test_license_write_without_key_or_activation_change_keeps_update_plugins(): void {
-		// Arrange.
-		update_option(
-			'woocommerce_pos_pro_settings_license',
-			array(
-				'key'       => 'same-key',
-				'activated' => true,
-				'instance'  => '',
-			)
-		);
-		set_transient( 'woocommerce_pos_pro_license_status', array( 'activated' => true ) );
-		set_site_transient( 'update_plugins', (object) array( 'response' => array() ) );
-
-		// Act: the shape of Pro's mint — same key, same activation, new instance.
-		update_option(
-			'woocommerce_pos_pro_settings_license',
-			array(
-				'key'       => 'same-key',
-				'activated' => true,
-				'instance'  => 'minted-instance',
-			)
-		);
-
-		// Assert.
-		$this->assertFalse( get_transient( 'woocommerce_pos_pro_license_status' ) );
-		$this->assertNotFalse( get_site_transient( 'update_plugins' ) );
-	}
 
 	/**
 	 * Test updating general settings.
