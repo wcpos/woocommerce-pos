@@ -54,6 +54,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		delete_option( Lifecycle_Events::INSTALL_RECORDED_OPTION );
 		delete_option( 'woocommerce_pos_installed_at' );
 		delete_transient( Lifecycle_Events::REFRESH_THROTTLE_TRANSIENT );
+		delete_option( Lifecycle_Events::LAST_ORDER_BAND_OPTION );
 		wp_clear_scheduled_hook( Lifecycle_Events::REFRESH_HOOK );
 
 		Analytics::reset_instance();
@@ -467,6 +468,30 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$group = $this->find_event( '$groupidentify' );
 		$this->assertNotNull( $group );
 		$this->assertSame( 'site_' . wcpos_get_site_uuid(), $group['distinct_id'] );
+	}
+
+	/**
+	 * The refresh persists the churn band for uninstall.php to read.
+	 *
+	 * uninstall.php runs with no plugin code and no warm cache, so without this
+	 * the churn metric would be present or absent depending on how recently the
+	 * site happened to load an admin page.
+	 */
+	public function test_group_refresh_persists_the_order_band(): void {
+		$this->set_consent( 'allowed' );
+		delete_option( Lifecycle_Events::LAST_ORDER_BAND_OPTION );
+
+		( new Lifecycle_Events() )->refresh_group_properties();
+
+		$band = get_option( Lifecycle_Events::LAST_ORDER_BAND_OPTION );
+		$this->assertNotFalse( $band );
+		$this->assertContains(
+			$band,
+			array_merge(
+				array_map( 'strval', array_keys( \WCPOS\WooCommercePOS\Services\Analytics_Profile::COUNT_BANDS ) ),
+				array( \WCPOS\WooCommercePOS\Services\Analytics_Profile::OVERFLOW_BAND )
+			)
+		);
 	}
 
 	/**

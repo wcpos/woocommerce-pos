@@ -52,6 +52,17 @@ class Lifecycle_Events {
 	const REFRESH_HOOK = 'wcpos_analytics_group_refresh';
 
 	/**
+	 * Option holding the most recently reported order-count band.
+	 *
+	 * The uninstaller runs with no plugin code loaded and no warm cache to rely
+	 * on. Persisting the band each refresh means the churn metric survives an
+	 * uninstall that happens hours after the last page load.
+	 *
+	 * @var string
+	 */
+	const LAST_ORDER_BAND_OPTION = 'woocommerce_pos_analytics_order_band';
+
+	/**
 	 * Maximum queued events.
 	 *
 	 * The queue only ever holds one install plus a handful of upgrades, so this
@@ -279,7 +290,14 @@ class Lifecycle_Events {
 			return;
 		}
 
-		$analytics->group( 'site', $site_id, ( new Analytics_Profile() )->get_group_properties() );
+		$properties = ( new Analytics_Profile() )->get_group_properties();
+
+		// Leave the band somewhere uninstall.php can read it without the plugin.
+		if ( isset( $properties['order_count_band'] ) ) {
+			update_option( self::LAST_ORDER_BAND_OPTION, $properties['order_count_band'], false );
+		}
+
+		$analytics->group( 'site', $site_id, $properties );
 	}
 
 	/**

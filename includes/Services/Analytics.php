@@ -362,6 +362,18 @@ class Analytics {
 	 * still have a stable site identifier for grouping.
 	 */
 	public function get_site_id(): string {
+		// The deactivation hook runs even when Activator::init() bailed on the
+		// WooCommerce check — in that request `new Init()` never ran, so
+		// wcpos-functions.php is not loaded and the helper does not exist.
+		// Read the option directly rather than fataling; an install that has
+		// ever run properly already has one, and a site that has not is not
+		// worth provisioning an identity for on its way out.
+		if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
+			$uuid = get_option( 'woocommerce_pos_uuid', '' );
+
+			return \is_string( $uuid ) ? $uuid : '';
+		}
+
 		return wcpos_get_site_uuid();
 	}
 

@@ -273,7 +273,19 @@ function woocommerce_pos_uninstall_report(): void {
 	$settings = get_option( 'woocommerce_pos_settings_general', array() );
 	$consent  = \is_array( $settings ) && isset( $settings['tracking_consent'] )
 		? $settings['tracking_consent']
-		: 'undecided';
+		: null;
+
+	// Sites that answered before the setting moved to `general` still hold it in
+	// the legacy `tools` option. General_Section::migrate() resolves that in
+	// memory and deliberately never writes it back, so reading `general` alone
+	// would treat an explicitly opted-in legacy site as undecided and silently
+	// drop its event. Mirror the same fallback, same precedence.
+	if ( null === $consent ) {
+		$legacy_tools = get_option( 'woocommerce_pos_settings_tools', array() );
+		$consent      = \is_array( $legacy_tools ) && isset( $legacy_tools['tracking_consent'] )
+			? $legacy_tools['tracking_consent']
+			: 'undecided';
+	}
 
 	if ( 'allowed' !== $consent ) {
 		return;
@@ -314,12 +326,19 @@ function woocommerce_pos_uninstall_report(): void {
 		$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
 	}
 
-	// The landing profile transient already holds a recent order count; use it
-	// if it is warm rather than running the count query during an uninstall.
 	// Banded, matching Analytics_Profile — an exact order count never leaves.
-	$profile = get_transient( 'wcpos_landing_profile' );
-	if ( \is_array( $profile ) && isset( $profile['order_count'] ) ) {
-		$properties['order_count_band'] = woocommerce_pos_uninstall_count_band( (int) $profile['order_count'] );
+	// The group refresh persists the band precisely so this does not depend on a
+	// warm cache; the hourly landing-profile transient is only a fallback for
+	// sites that have not refreshed since this shipped. Neither is present on a
+	// site that never consented, which never reaches this line anyway.
+	$band = get_option( 'woocommerce_pos_analytics_order_band', '' );
+	if ( \is_string( $band ) && '' !== $band ) {
+		$properties['order_count_band'] = $band;
+	} else {
+		$profile = get_transient( 'wcpos_landing_profile' );
+		if ( \is_array( $profile ) && isset( $profile['order_count'] ) ) {
+			$properties['order_count_band'] = woocommerce_pos_uninstall_count_band( (int) $profile['order_count'] );
+		}
 	}
 
 	// Mirror Analytics::get_token() / get_host(): constant first, then the
