@@ -599,11 +599,13 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$order->save();
 
 		$lifecycle = new Lifecycle_Events();
-		$lifecycle->maybe_record_first_pos_order( $order->get_id() );
-		$lifecycle->flush_pending();
+		$lifecycle->maybe_record_first_pos_order( $order->get_id(), $order );
 
+		// Sent immediately, NOT queued: a POS-only store may never load a
+		// wp-admin page, and the queue is drained on admin_init.
 		$first = $this->find_event( 'pos_first_order' );
 		$this->assertNotNull( $first );
+		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
 
 		// A second sale must not report a second "first".
 		$second = OrderHelper::create_order();
@@ -611,8 +613,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$second->save();
 
 		$before = \count( $this->captured_event_names() );
-		$lifecycle->maybe_record_first_pos_order( $second->get_id() );
-		$lifecycle->flush_pending();
+		$lifecycle->maybe_record_first_pos_order( $second->get_id(), $second );
 
 		$this->assertSame( $before, \count( $this->captured_event_names() ) );
 	}
@@ -629,7 +630,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$order->set_created_via( 'checkout' );
 		$order->save();
 
-		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id() );
+		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id(), $order );
 
 		$this->assertNotContains( 'pos_first_order', $this->captured_event_names() );
 		$this->assertFalse( get_option( Lifecycle_Events::FIRST_ORDER_OPTION ) );
@@ -645,13 +646,55 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
 
-		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id() );
+		( new Lifecycle_Events() )->maybe_record_first_pos_order( $order->get_id(), $order );
 
 		$this->assertSame( array(), $this->captured_event_names() );
 
 		$pending = get_option( Lifecycle_Events::PENDING_OPTION );
 		$this->assertIsArray( $pending );
 		$this->assertSame( 'pos_first_order', $pending[0]['event'] );
+	}
+
+	/**
+	 * The latch stores a CONSTANT, which is the whole reason it is safe.
+	 *
+	 * add_option() does a read then an INSERT ... ON DUPLICATE KEY UPDATE. With
+	 * differing values a racing loser's upsert changes the row, so add_option()
+	 * returns true for both callers and the "first" event fires twice. With an
+	 * identical value the loser changes nothing and correctly gets false. If
+	 * someone turns these latches back into timestamps, this test should fail.
+	 */
+	public function test_latch_is_a_real_claim_not_a_timestamp(): void {
+		$this->assertSame( '1', Lifecycle_Events::LATCH_VALUE );
+
+		$this->assertTrue( add_option( Lifecycle_Events::FIRST_ORDER_OPTION, Lifecycle_Events::LATCH_VALUE, '', true ) );
+
+		// The second claim of the same latch must lose.
+		$this->assertFalse( add_option( Lifecycle_Events::FIRST_ORDER_OPTION, Lifecycle_Events::LATCH_VALUE, '', true ) );
+	}
+
+	/**
+	 * Opening the POS drains the queue.
+	 *
+	 * A POS-only store may never load a wp-admin page, and admin_init is where
+	 * the queue is normally drained — so without this the install and first-sale
+	 * events would sit unsent forever on the stores that use the product most.
+	 */
+	public function test_opening_the_pos_flushes_queued_events(): void {
+		$this->set_consent( 'undecided' );
+
+		$lifecycle = new Lifecycle_Events();
+		$lifecycle->record_install();
+		$this->assertNotEmpty( get_option( Lifecycle_Events::PENDING_OPTION ) );
+
+		$user_id = $this->factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		$this->set_consent( 'allowed' );
+
+		$lifecycle->report_app_opened();
+
+		$this->assertNotNull( $this->find_event( 'wcpos_installed' ) );
+		$this->assertFalse( get_option( Lifecycle_Events::PENDING_OPTION ) );
 	}
 
 	/**

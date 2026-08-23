@@ -23,6 +23,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WC_Order;
+
 /**
  * Lifecycle_Events service class.
  */
@@ -63,25 +65,43 @@ class Lifecycle_Events {
 	const LAST_ORDER_BAND_OPTION = 'woocommerce_pos_analytics_order_band';
 
 	/**
-	 * Option latching the site's first POS order.
+	 * Option latching that the site's first POS order has been recorded.
 	 *
-	 * Written whether or not tracking is allowed — it is a local timestamp and
+	 * Written whether or not tracking is allowed — it is a local flag and
 	 * nothing leaves the site. A store that sells for a month before consenting
 	 * would otherwise have some later sale reported as its first, which is
 	 * worse than not knowing.
 	 *
 	 * @var string
 	 */
-	const FIRST_ORDER_OPTION = 'woocommerce_pos_first_order_at';
+	const FIRST_ORDER_OPTION = 'woocommerce_pos_first_order_recorded';
 
 	/**
-	 * Option latching the site's first POS app open.
+	 * Option latching that the site's first POS app open has been recorded.
 	 *
 	 * Written regardless of consent, for the same reason as FIRST_ORDER_OPTION.
 	 *
 	 * @var string
 	 */
-	const FIRST_OPEN_OPTION = 'woocommerce_pos_first_opened_at';
+	const FIRST_OPEN_OPTION = 'woocommerce_pos_first_open_recorded';
+
+	/**
+	 * The value both latches store.
+	 *
+	 * DO NOT make this a timestamp. `add_option()` is not the atomic claim it
+	 * looks like: it does a get_option() check and then an
+	 * `INSERT ... ON DUPLICATE KEY UPDATE`. Two racing callers can both pass the
+	 * check, and if their values DIFFER the loser's upsert changes the row, so
+	 * MySQL reports affected rows and add_option() returns true for both — two
+	 * "firsts" for one event. With an identical value the loser's upsert changes
+	 * nothing, affects 0 rows, and add_option() correctly returns false.
+	 *
+	 * The constant is what makes the latch safe. The timestamp people will want
+	 * to store here is already on the event itself.
+	 *
+	 * @var string
+	 */
+	const LATCH_VALUE = '1';
 
 	/**
 	 * Maximum queued events.
@@ -102,7 +122,7 @@ class Lifecycle_Events {
 		add_action( self::REFRESH_HOOK, array( $this, 'refresh_group_properties' ) );
 
 		// Not admin-only: POS sales arrive over REST, where admin_init never runs.
-		add_action( 'woocommerce_new_order', array( $this, 'maybe_record_first_pos_order' ), 10, 1 );
+		add_action( 'woocommerce_new_order', array( $this, 'maybe_record_first_pos_order' ), 10, 2 );
 	}
 
 	/**
@@ -188,10 +208,9 @@ class Lifecycle_Events {
 		// first, which is untrue. This way an unknown first open stays unknown
 		// rather than becoming a wrong one.
 		//
-		// add_option() returns false when the option already exists, making it an
-		// atomic first-writer-wins latch — no read-then-write race between two
-		// tills opening at once.
-		$is_first_open = add_option( self::FIRST_OPEN_OPTION, time(), '', false );
+		// See LATCH_VALUE: the constant is what makes this a safe claim.
+		// Autoloaded because it is read on every POS open, and it is one byte.
+		$is_first_open = add_option( self::FIRST_OPEN_OPTION, self::LATCH_VALUE, '', true );
 
 		$analytics = Analytics::instance();
 
@@ -204,6 +223,12 @@ class Lifecycle_Events {
 			array( 'is_first_open' => $is_first_open ),
 			'pos_app_opened'
 		);
+
+		// A POS-only store may never load a wp-admin page, and admin_init is
+		// where the queue is normally drained. Without this, events recorded
+		// before consent — the install, the first sale — would sit unsent
+		// forever on exactly the stores that use the product most.
+		$this->flush_pending();
 	}
 
 	/**
@@ -220,27 +245,27 @@ class Lifecycle_Events {
 	 * Queued rather than sent when consent is undecided. It happens once, so
 	 * dropping it would lose the milestone permanently.
 	 *
-	 * @param int $order_id The new order's ID.
+	 * @param int            $order_id The new order's ID.
+	 * @param null|\WC_Order $order    The order object, when WooCommerce passes one.
 	 */
-	public function maybe_record_first_pos_order( $order_id ): void {
-		$order_id = (int) $order_id;
-		if ( $order_id <= 0 ) {
-			return;
-		}
-
-		// Cheap latch first: after the first sale this is one option read on a
-		// hook that fires for EVERY order the store takes, POS or not.
+	public function maybe_record_first_pos_order( $order_id, $order = null ): void {
+		// Latch first: after the first sale this is the whole cost of a hook
+		// that fires for EVERY order the store takes, POS or not. Autoloaded,
+		// so it is already in the options WordPress fetched for this request.
 		if ( false !== get_option( self::FIRST_ORDER_OPTION, false ) ) {
 			return;
 		}
 
-		if ( ! \function_exists( 'wcpos_is_pos_order' ) || ! wcpos_is_pos_order( $order_id ) ) {
+		// WooCommerce passes the live order as the second argument; use it
+		// rather than making wcpos_is_pos_order() load the order again.
+		$subject = $order instanceof WC_Order ? $order : (int) $order_id;
+
+		if ( ! $subject || ! \function_exists( 'wcpos_is_pos_order' ) || ! wcpos_is_pos_order( $subject ) ) {
 			return;
 		}
 
-		// add_option() is the atomic claim: whichever concurrent sale wins it is
-		// the one that reports, and the loser returns.
-		if ( ! add_option( self::FIRST_ORDER_OPTION, time(), '', false ) ) {
+		// See LATCH_VALUE: the constant is what makes this a safe claim.
+		if ( ! add_option( self::FIRST_ORDER_OPTION, self::LATCH_VALUE, '', true ) ) {
 			return;
 		}
 
@@ -250,6 +275,15 @@ class Lifecycle_Events {
 		if ( $installed_at > 0 ) {
 			// Time-to-value: how long from installing to actually selling.
 			$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
+		}
+
+		// Send it NOW when consent allows. Unlike install and upgrade, this runs
+		// in a fully booted plugin, and queueing it would strand the north-star
+		// event on POS-only stores whose staff never open wp-admin.
+		if ( Analytics::instance()->is_enabled() ) {
+			Analytics::instance()->capture( 'pos_first_order', $properties );
+
+			return;
 		}
 
 		$this->record( 'pos_first_order', $properties );
