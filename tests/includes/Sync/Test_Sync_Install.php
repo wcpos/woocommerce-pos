@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
@@ -314,7 +315,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 			$product_id = ProductHelper::create_simple_product()->get_id();
 
 			$this->assertGreaterThan( 0, ( new Sync_Journal() )->head_sequence( array( 'product' ) ) );
-			$this->assertArrayHasKey( $product_id, ( new Integrity_Digest() )->read_digests( array( $product_id ) ) );
+			$this->assertArrayHasKey( $product_id, ( new Digest_Index() )->read_digests( 'products', array( $product_id ) ) );
 		} finally {
 			$this->detach_sync_observers();
 			foreach ( $original_observers as $observer ) {

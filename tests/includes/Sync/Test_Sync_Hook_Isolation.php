@@ -371,7 +371,7 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_proxy_stamp_priority_keeps_revision_first(): void {
 		$this->assertSame( 9, has_filter( 'woocommerce_pos_sync_proxy_response', array( Revision::class, 'stamp_proxy_revisions' ) ) );
-		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_proxy_product_digests' ) ) );
+		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
 		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Variable_Prices::class, 'stamp_proxy_variable_prices' ) ) );
 		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_serialized_product', array( Pos_Uuid::class, 'stamp_serialized_record' ) ) );
 	}

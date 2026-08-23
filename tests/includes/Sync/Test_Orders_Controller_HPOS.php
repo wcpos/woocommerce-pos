@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -37,7 +38,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 	 * Restore posts storage and sync schema state.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_proxy_order_digests' ), 10 );
+		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -62,7 +63,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 			$digest->upsert_order_digest( $order->get_id() );
 			$index->record_order_change( $order->get_id(), 'test:digest-pull', false );
 		}
-		$stored         = $digest->read_order_digests( $order_ids );
+		$stored         = ( new Digest_Index() )->read_digests( 'orders', $order_ids );
 		$digest_queries = 0;
 		$digest_table   = $digest->table_name();
 		$count_digests  = static function ( string $query ) use ( &$digest_queries, $digest_table ): string {

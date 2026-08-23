@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -33,6 +34,13 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 	private $integrity_digest;
 
 	/**
+	 * The digest store's read half.
+	 *
+	 * @var Digest_Index
+	 */
+	private $digest_index;
+
+	/**
 	 * Enable the sync surface and COT storage; wire the digest observer.
 	 */
 	public function setUp(): void {
@@ -44,6 +52,7 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 
 		$this->integrity_digest = new Integrity_Digest();
 		$this->integrity_digest->register_hooks();
+		$this->digest_index = new Digest_Index();
 	}
 
 	/**
@@ -67,10 +76,10 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		$order_id = $order->get_id();
 
 		$this->assertSame( 'shop_order_placehold', get_post_type( $order_id ), 'This class must run under COT storage.' );
-		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ), 'Creating a COT order must record its digest.' );
+		$this->assertArrayHasKey( $order_id, $this->digest_index->read_digests( 'orders', array( $order_id ) ), 'Creating a COT order must record its digest.' );
 
 		$order->delete( false );
-		$this->assertArrayNotHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ), 'Trashing must remove the digest.' );
+		$this->assertArrayNotHasKey( $order_id, $this->digest_index->read_digests( 'orders', array( $order_id ) ), 'Trashing must remove the digest.' );
 
 		// Bypass the order cache so the reloaded instance carries trash status.
 		wp_cache_flush();
@@ -94,6 +103,6 @@ class Test_Integrity_Digest_HPOS_Untrash extends Sync_REST_Store_Test_Case {
 		}
 
 		$this->assertGreaterThan( 0, did_action( 'woocommerce_untrash_order' ), 'The HPOS untrash hook must fire.' );
-		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ), 'Untrash must recreate the digest (woocommerce_untrash_order).' );
+		$this->assertArrayHasKey( $order_id, $this->digest_index->read_digests( 'orders', array( $order_id ) ), 'Untrash must recreate the digest (woocommerce_untrash_order).' );
 	}
 }

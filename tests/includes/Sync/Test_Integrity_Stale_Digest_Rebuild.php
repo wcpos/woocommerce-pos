@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -265,11 +266,12 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		$customer_id = $this->factory->user->create( array( 'role' => 'customer' ) );
 		$order_id    = OrderHelper::create_order()->get_id();
 		$digest      = new Integrity_Digest();
+		$index       = new Digest_Index();
 		$digest->upsert_customer_digest( $customer_id );
 		$digest->upsert_order_digest( $order_id );
 
-		$customer_digest = $digest->read_customer_digests( array( $customer_id ) )[ $customer_id ];
-		$order_digest    = $digest->read_order_digests( array( $order_id ) )[ $order_id ];
+		$customer_digest = $index->read_digests( 'customers', array( $customer_id ) )[ $customer_id ];
+		$order_digest    = $index->read_digests( 'orders', array( $order_id ) )[ $order_id ];
 		$stale_customer  = '1' === $customer_digest ? '2' : '1';
 		$stale_order     = '1' === $order_digest ? '2' : '1';
 		$wpdb->update(
@@ -288,13 +290,13 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		}
 		do_action( Integrity_Digest::REBUILD_HOOK );
 
-		$this->assertSame( $stale_customer, $digest->read_customer_digests( array( $customer_id ) )[ $customer_id ] );
-		$this->assertSame( $stale_order, $digest->read_order_digests( array( $order_id ) )[ $order_id ] );
+		$this->assertSame( $stale_customer, $index->read_digests( 'customers', array( $customer_id ) )[ $customer_id ] );
+		$this->assertSame( $stale_order, $index->read_digests( 'orders', array( $order_id ) )[ $order_id ] );
 
 		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/integrity/rebuild' ) );
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		$this->assertSame( $customer_digest, $digest->read_customer_digests( array( $customer_id ) )[ $customer_id ] );
-		$this->assertSame( $order_digest, $digest->read_order_digests( array( $order_id ) )[ $order_id ] );
+		$this->assertSame( $customer_digest, $index->read_digests( 'customers', array( $customer_id ) )[ $customer_id ] );
+		$this->assertSame( $order_digest, $index->read_digests( 'orders', array( $order_id ) )[ $order_id ] );
 	}
 
 	/**

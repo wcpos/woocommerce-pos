@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
@@ -24,11 +25,15 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	/** @var Integrity_Digest */
 	private $integrity_digest;
 
+	/** @var Digest_Index */
+	private $digest_index;
+
 	public function setUp(): void {
 		parent::setUp();
 		$this->install_sync_tables_directly();
 		$this->integrity_digest = new Integrity_Digest();
 		$this->integrity_digest->register_hooks();
+		$this->digest_index = new Digest_Index();
 	}
 
 	public function tearDown(): void {
@@ -137,7 +142,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			)
 		);
 
-		$this->assertArrayHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+		$this->assertArrayHasKey( $user_id, $this->digest_index->read_digests( 'customers', array( $user_id ) ) );
 	}
 
 	public function test_customer_digest_includes_site_capabilities_meta(): void {
@@ -145,7 +150,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$this->integrity_digest->upsert_customer_digest( $user_id );
-		$stored_digest = $this->integrity_digest->read_customer_digests( array( $user_id ) )[ $user_id ];
+		$stored_digest = $this->digest_index->read_digests( 'customers', array( $user_id ) )[ $user_id ];
 		update_user_meta( $user_id, $wpdb->prefix . 'capabilities', array( 'editor' => true ) );
 		$current_digest = (string) $wpdb->get_var(
 			$wpdb->prepare(
@@ -154,7 +159,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			)
 		);
 
-		$this->assertSame( $stored_digest, $this->integrity_digest->read_customer_digests( array( $user_id ) )[ $user_id ] );
+		$this->assertSame( $stored_digest, $this->digest_index->read_digests( 'customers', array( $user_id ) )[ $user_id ] );
 		$this->assertNotSame( $stored_digest, $current_digest );
 	}
 
@@ -162,14 +167,14 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
 		get_user_by( 'id', $user_id )->remove_role( 'customer' );
 
-		$this->assertArrayHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+		$this->assertArrayHasKey( $user_id, $this->digest_index->read_digests( 'customers', array( $user_id ) ) );
 	}
 
 	public function test_delete_user_removes_digest(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->assertArrayHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+		$this->assertArrayHasKey( $user_id, $this->digest_index->read_digests( 'customers', array( $user_id ) ) );
 		wp_delete_user( $user_id );
-		$this->assertArrayNotHasKey( $user_id, $this->integrity_digest->read_customer_digests( array( $user_id ) ) );
+		$this->assertArrayNotHasKey( $user_id, $this->digest_index->read_digests( 'customers', array( $user_id ) ) );
 	}
 
 	public function test_new_customer_lifecycle_hook_refreshes_the_customer_digest(): void {
@@ -184,7 +189,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 				$user_id
 			)
 		);
-		$stored_digests = $this->integrity_digest->read_customer_digests( array( $user_id ) );
+		$stored_digests = $this->digest_index->read_digests( 'customers', array( $user_id ) );
 
 		$this->assertArrayHasKey( $user_id, $stored_digests );
 		$this->assertSame( $current_digest, $stored_digests[ $user_id ] );
@@ -194,11 +199,11 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$order    = wc_create_order();
 		$order_id = $order->get_id();
 		$this->assertSame( 'shop_order', get_post_type( $order_id ) );
-		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
+		$this->assertArrayHasKey( $order_id, $this->digest_index->read_digests( 'orders', array( $order_id ) ) );
 
 		$order->delete( false );
-		$this->assertArrayNotHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
+		$this->assertArrayNotHasKey( $order_id, $this->digest_index->read_digests( 'orders', array( $order_id ) ) );
 		wp_untrash_post( $order_id );
-		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
+		$this->assertArrayHasKey( $order_id, $this->digest_index->read_digests( 'orders', array( $order_id ) ) );
 	}
 }
