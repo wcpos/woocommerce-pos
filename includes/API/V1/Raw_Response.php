@@ -51,7 +51,14 @@ class Raw_Response extends WP_REST_Response {
 		add_filter(
 			'rest_pre_serve_request',
 			static function ( $served_result, $result ) use ( $response, &$served ) {
-				if ( $served || $result !== $response ) {
+				// `true === $served_result` means an earlier handler already wrote
+				// the body. Echoing again would append to it and corrupt the file —
+				// a receipt PDF the browser then refuses to open. The own-flag check
+				// below cannot see that: it only knows about THIS closure. Moving to
+				// priority 30 widened the window by putting more handlers ahead of
+				// us, so the guard has to look at what WordPress reports, not just
+				// at what we remember doing.
+				if ( true === $served_result || $served || $result !== $response ) {
 					return $served_result;
 				}
 				$served = true;
@@ -59,7 +66,10 @@ class Raw_Response extends WP_REST_Response {
 
 				return true;
 			},
-			10,
+			// AFTER the wire contract at 20 ({@see \WCPOS\WooCommercePOS\Rest_Cors}):
+			// echoing the body sends the headers, and CORS headers written after
+			// that are dropped — a receipt PDF the browser then refuses to read.
+			30,
 			2
 		);
 

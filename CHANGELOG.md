@@ -13,6 +13,12 @@
 - **Changed:** the till's customer list now includes every user on the site, not only those holding the `customer` role. Searching or browsing customers in WCPOS will now turn up administrators, shop managers, cashiers and any other user account. This is how the customer list has always behaved on the `wcpos/v2` sync lane and on the bulk-id pull the client syncs against — the older `wcpos/v1` list endpoint was the one place staff users were hidden, so the same search gave two different answers depending on which lane served it. Pass `role=customer` (or `roles[]=customer`) to narrow the list yourself.
 - Fixed: the `roles` (multi-role) filter and `modified_after` were silently ignored on the `wcpos/v2` customer lane — both were forwarded to WooCommerce's own customer endpoint, which has neither parameter and drops unknown ones without complaint. A narrowed request came back unnarrowed, and a `modified_after` customer pull re-fetched the whole customer list every tick.
 
+### 🌐 REST CORS contract
+
+- **Breaking (developers):** `API::rest_allowed_cors_headers()` and `API::rest_pre_serve_request()` are removed, along with `Init::rest_pre_serve_request()`. The WCPOS REST wire contract — CORS allow-list, expose-list, preflight and cache-defeating `Vary` — now has a single owner, `WCPOS\WooCommercePOS\Rest_Cors`, registered unconditionally. The `rest_exposed_cors_headers` and `rest_allowed_cors_headers` filters are unchanged and still the supported extension points; `Sync\Cors` keeps its method names and signatures.
+- **Fixed:** the allow-list and expose-list were published by two independent handlers that had to be kept in step by hand, which had already caused three regressions (a missing `X-WCPOS-Store`, then `X-WCPOS-Idempotency-Key`). One writer now publishes both, so a header cannot be present on one path and absent from the other.
+- **Changed:** WCPOS no longer stamps its CORS headers on preflight requests that are not destined for it. A cross-origin `OPTIONS` to another plugin's REST route now keeps WordPress core's own answer, where previously WCPOS claimed every preflight on the site.
+
 ---
 
 ## 🧾 Receipt Templates — Complete Rebuild

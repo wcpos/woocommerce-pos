@@ -206,10 +206,17 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'admin_notices'                                         => array( 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
+			'pre_update_option_woocommerce_pos_pro_settings_license' => array( 10 ),
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
+			'rest_allowed_cors_headers'                             => array( 10 ),
 			'rest_pre_dispatch'                                     => array( 10 ),
-			'rest_pre_serve_request'                                => array( 5 ),
+			// Both of these now come from Rest_Cors::register_hooks(), which the
+			// constructor calls. They are still registered during construction, so
+			// they belong in this set — but the wire contract is no longer Init's:
+			// the allow-list filter is new here, and the serve handler moved 5 -> 20
+			// so WCPOS writes after core's rest_send_cors_headers at 10.
+			'rest_pre_serve_request'                                => array( 20 ),
 			'send_headers'                                          => array( 99, 9999 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),

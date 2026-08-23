@@ -9,8 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab tests retain compact contract-focused documentation.
 
-use WCPOS\WooCommercePOS\API as WCPOS_API;
-use WCPOS\WooCommercePOS\Init;
+use WCPOS\WooCommercePOS\Rest_Cors;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
@@ -42,29 +41,22 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		return array_map( 'trim', explode( ',', $sent_headers['Access-Control-Expose-Headers'] ) );
 	}
 
-	public function test_production_api_cors_allow_list_includes_mirror_headers(): void {
-		$reflection = new \ReflectionClass( WCPOS_API::class );
-		$api        = $reflection->newInstanceWithoutConstructor();
-		$headers    = $api->rest_allowed_cors_headers( array( 'Authorization' ) );
-
-		$this->assertContains( 'Idempotency-Key', $headers );
-		$this->assertContains( 'If-Match', $headers );
-		$this->assertSame( count( $headers ), count( array_unique( $headers ) ) );
-	}
-
-	public function test_production_api_exposes_response_telemetry_headers(): void {
-		$reflection = new \ReflectionClass( WCPOS_API::class );
-		$api        = $reflection->newInstanceWithoutConstructor();
-		$server     = new class() extends WP_REST_Server {
+	/**
+	 * A marked WCPOS request receives the telemetry expose list. Before the
+	 * single owner this was API's job and Init deliberately stayed out of it;
+	 * now one writer answers both this and the preflight below.
+	 */
+	public function test_production_wcpos_route_exposes_response_telemetry_headers(): void {
+		$server = new class() extends WP_REST_Server {
 			public array $sent_headers = array();
 
 			public function send_header( $key, $value ) {
 				$this->sent_headers[ $key ] = $value;
 			}
 		};
-		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/status' );
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/status' );
 
-		$api->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
 		$this->assertArrayHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
 		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
@@ -76,9 +68,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 	}
 
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
-		$reflection = new \ReflectionClass( Init::class );
-		$init       = $reflection->newInstanceWithoutConstructor();
-		$server     = new class() extends WP_REST_Server {
+		$server = new class() extends WP_REST_Server {
 			public array $sent_headers = array();
 
 			public function send_header( $key, $value ) {
@@ -87,7 +77,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		};
 		$request = new WP_REST_Request( 'OPTIONS', '/' . Api::ROUTE_NAMESPACE . '/push/products' );
 
-		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
 		$this->assertStringContainsString( 'Idempotency-Key', $server->sent_headers['Access-Control-Allow-Headers'] );
 		$this->assertStringContainsString( 'If-Match', $server->sent_headers['Access-Control-Allow-Headers'] );
@@ -98,23 +88,6 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertContains( 'X-WCPOS-Memory-Peak', $this->exposed_headers( $server->sent_headers ) );
 		$this->assertContains( 'X-WCPOS-Pressure', $this->exposed_headers( $server->sent_headers ) );
 		$this->assertContains( 'Date', $this->exposed_headers( $server->sent_headers ) );
-	}
-
-	public function test_init_does_not_expose_telemetry_headers_on_non_preflight_requests(): void {
-		$reflection = new \ReflectionClass( Init::class );
-		$init       = $reflection->newInstanceWithoutConstructor();
-		$server     = new class() extends WP_REST_Server {
-			public array $sent_headers = array();
-
-			public function send_header( $key, $value ) {
-				$this->sent_headers[ $key ] = $value;
-			}
-		};
-		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/status' );
-
-		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
-
-		$this->assertArrayNotHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
 	}
 
 	public function test_non_string_base_revision_is_treated_as_empty_not_cast(): void {

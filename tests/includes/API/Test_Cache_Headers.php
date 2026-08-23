@@ -9,15 +9,14 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact contract-focused documentation.
 
-use ReflectionClass;
 use WCPOS\WooCommercePOS\API;
-use WCPOS\WooCommercePOS\Init;
+use WCPOS\WooCommercePOS\Rest_Cors;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 
 /**
- * @covers \WCPOS\WooCommercePOS\Init::rest_pre_serve_request
+ * @covers \WCPOS\WooCommercePOS\Rest_Cors::rest_pre_serve_request
  */
 class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	/**
@@ -30,7 +29,7 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * The relay's consent callback is served WITHOUT constructing API (see
 	 * Init::register_public_relay_routes()), which is why the cache contract
-	 * lives on Init's unconditional rest_pre_serve_request hook.
+	 * lives on Rest_Cors's unconditionally registered hook.
 	 */
 	private const UNMARKED_RELAY_ROUTE = '/wcpos/v1/print-jobs/relay-verification';
 
@@ -39,7 +38,6 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_all_registered_wcpos_routes_send_cache_defeating_headers(): void {
 		// Arrange.
-		$init    = $this->new_init();
 		$server  = $this->new_spy_server();
 		$visited = array();
 
@@ -51,7 +49,7 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 				foreach ( $this->allowed_methods( $handlers ) as $method ) {
 					// Act.
 					$server->sent_headers = array();
-					$init->rest_pre_serve_request(
+					Rest_Cors::rest_pre_serve_request(
 						false,
 						new WP_REST_Response( null, 200, array( 'Vary' => 'Accept-Encoding, origin' ) ),
 						new WP_REST_Request( $method, $route ),
@@ -92,12 +90,11 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_cache_contract_is_isolated_to_wcpos_routes(): void {
 		// Arrange.
-		$init   = $this->new_init();
 		$server = $this->new_spy_server();
 		$before = did_action( 'litespeed_control_set_nocache' );
 
 		// Act: a non-WCPOS route.
-		$init->rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', '/wp/v2/types' ), $server );
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', '/wp/v2/types' ), $server );
 
 		// Assert.
 		$this->assertArrayNotHasKey( 'Cache-Control', $server->sent_headers );
@@ -105,7 +102,7 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $before, did_action( 'litespeed_control_set_nocache' ) );
 
 		// Act: a current-lane WCPOS route.
-		$init->rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', self::CURRENT_LANE_ROUTE ), $server );
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', self::CURRENT_LANE_ROUTE ), $server );
 
 		// Assert.
 		$this->assertEquals( $before + 1, did_action( 'litespeed_control_set_nocache' ) );
@@ -119,11 +116,10 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_unmarked_relay_verification_route_receives_cache_contract(): void {
 		// Arrange.
-		$init   = $this->new_init();
 		$server = $this->new_spy_server();
 
 		// Act.
-		$init->rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', self::UNMARKED_RELAY_ROUTE ), $server );
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', self::UNMARKED_RELAY_ROUTE ), $server );
 
 		// Assert.
 		$this->assertEquals( 'private, no-store', $server->sent_headers['Cache-Control'] ?? null );
@@ -135,11 +131,10 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_mixed_case_wcpos_route_receives_cache_contract(): void {
 		// Arrange.
-		$init   = $this->new_init();
 		$server = $this->new_spy_server();
 
 		// Act.
-		$init->rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', '/WCPOS/V2/products' ), $server );
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', '/WCPOS/V2/products' ), $server );
 
 		// Assert.
 		$this->assertEquals( 'private, no-store', $server->sent_headers['Cache-Control'] ?? null );
@@ -153,11 +148,10 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_vary_merge_edge_cases(): void {
 		// Arrange.
-		$init   = $this->new_init();
 		$server = $this->new_spy_server();
 
 		// Act: an empty existing Vary value.
-		$init->rest_pre_serve_request(
+		Rest_Cors::rest_pre_serve_request(
 			false,
 			new WP_REST_Response( null, 200, array( 'Vary' => '' ) ),
 			new WP_REST_Request( 'GET', self::CURRENT_LANE_ROUTE ),
@@ -169,7 +163,7 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 
 		// Act: a wildcard existing Vary value.
 		$server->sent_headers = array();
-		$init->rest_pre_serve_request(
+		Rest_Cors::rest_pre_serve_request(
 			false,
 			new WP_REST_Response( null, 200, array( 'Vary' => '*' ) ),
 			new WP_REST_Request( 'GET', self::CURRENT_LANE_ROUTE ),
@@ -178,17 +172,6 @@ class Test_Cache_Headers extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert: the wildcard stays alone.
 		$this->assertEquals( '*', $server->sent_headers['Vary'] ?? null );
-	}
-
-	/**
-	 * Instantiate Init without running its constructor (hook registration).
-	 *
-	 * @return Init
-	 */
-	private function new_init(): Init {
-		$reflection = new ReflectionClass( Init::class );
-
-		return $reflection->newInstanceWithoutConstructor();
 	}
 
 	/**
