@@ -68,6 +68,7 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_integrity_digest_rebuild',
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
+		'wcpos_analytics_group_refresh',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -229,6 +230,153 @@ function woocommerce_pos_uninstall_taxonomy( string $taxonomy ): void {
 }
 
 /**
+ * Map a raw count onto its reporting band.
+ *
+ * Mirrors Analytics_Profile::COUNT_BANDS, which cannot be used here because no
+ * plugin code is loaded during uninstall. Test_Uninstall pins the two together.
+ *
+ * @param int $count The raw count.
+ *
+ * @return string The band label.
+ */
+function woocommerce_pos_uninstall_count_band( int $count ): string {
+	foreach ( array(
+		'0'        => 0,
+		'1-10'     => 10,
+		'11-100'   => 100,
+		'101-1000' => 1000,
+	) as $label => $upper_bound ) {
+		if ( $count <= $upper_bound ) {
+			return $label;
+		}
+	}
+
+	return '1000+';
+}
+
+/**
+ * Report the uninstall to product analytics, if the user opted into tracking.
+ *
+ * The plugin is not loaded during uninstall, so this cannot use the Analytics
+ * service and hardcodes the option names and endpoint instead — the same
+ * doctrine the rest of this file follows. Test_Uninstall pins these against
+ * the class constants they mirror.
+ *
+ * Deliberately narrow: consent is read from the stored settings and anything
+ * other than an explicit "allowed" sends nothing. The payload carries no
+ * store data beyond what the deactivation event already reports.
+ *
+ * Must run BEFORE the option sweep, which deletes the consent setting and the
+ * site UUID this depends on.
+ */
+function woocommerce_pos_uninstall_report(): void {
+	$settings = get_option( 'woocommerce_pos_settings_general', array() );
+	$consent  = \is_array( $settings ) && isset( $settings['tracking_consent'] )
+		? $settings['tracking_consent']
+		: null;
+
+	// Sites that answered before the setting moved to `general` still hold it in
+	// the legacy `tools` option. General_Section::migrate() resolves that in
+	// memory and deliberately never writes it back, so reading `general` alone
+	// would treat an explicitly opted-in legacy site as undecided and silently
+	// drop its event. Mirror the same fallback, same precedence.
+	if ( null === $consent ) {
+		$legacy_tools = get_option( 'woocommerce_pos_settings_tools', array() );
+		$consent      = \is_array( $legacy_tools ) && isset( $legacy_tools['tracking_consent'] )
+			? $legacy_tools['tracking_consent']
+			: 'undecided';
+	}
+
+	if ( 'allowed' !== $consent ) {
+		return;
+	}
+
+	$site_uuid = get_option( 'woocommerce_pos_uuid', '' );
+	if ( ! \is_string( $site_uuid ) || '' === $site_uuid ) {
+		return;
+	}
+
+	// Prefer the acting user's UUID so the event joins the rest of their
+	// history; fall back to the site so an uninstall run by WP-CLI (no current
+	// user) is still counted.
+	$distinct_id = '';
+	if ( \function_exists( 'get_current_user_id' ) ) {
+		$user_id = get_current_user_id();
+		if ( $user_id ) {
+			$distinct_id = (string) get_user_meta( $user_id, '_woocommerce_pos_uuid', true );
+		}
+	}
+	if ( '' === $distinct_id ) {
+		$distinct_id = 'site_' . $site_uuid;
+	}
+
+	// Read the release being deleted from its plugin header. The persisted db
+	// version can be stale when updated files are deleted before version_check().
+	$plugin_data    = get_file_data( __DIR__ . '/woocommerce-pos.php', array( 'version' => 'Version' ), 'plugin' );
+	$plugin_version = $plugin_data['version'] ?? '';
+
+	$installed_at = (int) get_option( 'woocommerce_pos_installed_at', 0 );
+	$properties   = array(
+		'$groups'        => array( 'site' => $site_uuid ),
+		'plugin_version' => \is_string( $plugin_version ) ? $plugin_version : '',
+		'locale'         => get_locale(),
+	);
+
+	if ( $installed_at > 0 ) {
+		$properties['days_since_install'] = max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) );
+	}
+
+	// Banded, matching Analytics_Profile — an exact order count never leaves.
+	// The group refresh persists the band precisely so this does not depend on a
+	// warm cache; the hourly landing-profile transient is only a fallback for
+	// sites that have not refreshed since this shipped. Neither is present on a
+	// site that never consented, which never reaches this line anyway.
+	$band = get_option( 'woocommerce_pos_analytics_order_band', '' );
+	if ( \is_string( $band ) && '' !== $band ) {
+		$properties['order_count_band'] = $band;
+	} else {
+		$profile = get_transient( 'wcpos_landing_profile' );
+		if ( \is_array( $profile ) && isset( $profile['order_count'] ) ) {
+			$properties['order_count_band'] = woocommerce_pos_uninstall_count_band( (int) $profile['order_count'] );
+		}
+	}
+
+	// Mirror Analytics::get_token() / get_host(): constant first, then the
+	// filter. The plugin is not loaded, but a mu-plugin or wp-config define can
+	// still point a self-hosted deployment at its own project, and sending its
+	// uninstall events to the default project instead would be wrong twice over.
+	$token = \defined( 'WCPOS_POSTHOG_TOKEN' ) ? (string) WCPOS_POSTHOG_TOKEN : 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd';
+	$token = (string) apply_filters( 'woocommerce_pos_posthog_token', $token );
+
+	$body = wp_json_encode(
+		array(
+			'api_key'     => $token,
+			'event'       => 'wcpos_uninstalled',
+			'distinct_id' => $distinct_id,
+			'properties'  => $properties,
+			'timestamp'   => gmdate( 'c' ),
+		)
+	);
+
+	if ( false === $body ) {
+		return;
+	}
+
+	$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? (string) WCPOS_POSTHOG_HOST : 'https://ph.wcpos.com';
+	$host = (string) apply_filters( 'woocommerce_pos_posthog_host', $host );
+
+	wp_remote_post(
+		untrailingslashit( $host ) . '/capture/',
+		array(
+			'blocking' => false,
+			'timeout'  => 2.0,
+			'headers'  => array( 'Content-Type' => 'application/json' ),
+			'body'     => $body,
+		)
+	);
+}
+
+/**
  * Remove WCPOS data for the current site.
  *
  * User meta and the object-cache flush are handled once at the network
@@ -384,6 +532,12 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 
 // Run the sweep only when WordPress is actually uninstalling the plugin.
 if ( \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+	// Report churn ONCE, before anything is deleted: the report needs the
+	// consent setting, the site UUID and the user meta that the sweep removes,
+	// and firing it per site would put a network request in front of every blog
+	// of a large multisite uninstall.
+	woocommerce_pos_uninstall_report();
+
 	if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
 		// number => 0 removes WP_Site_Query's default 100-site cap.
 		$woocommerce_pos_sites = get_sites(

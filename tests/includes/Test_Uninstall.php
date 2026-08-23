@@ -19,6 +19,8 @@ use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
+use WCPOS\WooCommercePOS\Services\Analytics_Profile;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -312,9 +314,73 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->assertContains( Integrity_Digest::REBUILD_HOOK, $hooks );
 		$this->assertContains( Cloud_Print_Trigger_Service::CRON_SUBMIT, $hooks );
 		$this->assertContains( Cloud_Print_Relay_Service::REREGISTER_HOOK, $hooks );
+		$this->assertContains( Lifecycle_Events::REFRESH_HOOK, $hooks );
 		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
 			$this->assertContains( $hook, $hooks );
 		}
+	}
+
+	/**
+	 * uninstall.php cannot load plugin code, so it mirrors the analytics count
+	 * bands by hand. Pin the copy against the constant it mirrors.
+	 */
+	public function test_uninstall_count_bands_match_the_analytics_profile(): void {
+		foreach ( Analytics_Profile::COUNT_BANDS as $label => $upper_bound ) {
+			// PHP casts the numeric '0' key to an integer, so compare as strings —
+			// both band functions declare a string return and coerce on the way out.
+			$this->assertSame(
+				(string) $label,
+				woocommerce_pos_uninstall_count_band( $upper_bound ),
+				"uninstall.php band table drifted from Analytics_Profile at {$label}"
+			);
+			$this->assertSame(
+				Analytics_Profile::band( $upper_bound + 1 ),
+				woocommerce_pos_uninstall_count_band( $upper_bound + 1 ),
+				"uninstall.php band table drifted from Analytics_Profile above {$label}"
+			);
+		}
+
+		$largest = max( Analytics_Profile::COUNT_BANDS );
+		$this->assertSame( Analytics_Profile::OVERFLOW_BAND, woocommerce_pos_uninstall_count_band( $largest + 1 ) );
+	}
+
+	/**
+	 * Uninstall reports the release being deleted, not a stale db version.
+	 */
+	public function test_uninstall_report_reads_installed_plugin_version_from_header(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'tracking_consent' => 'allowed' ) );
+		update_option( 'woocommerce_pos_uuid', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' );
+		update_option( 'woocommerce_pos_db_version', '0.0.1' );
+		wp_set_current_user( 0 );
+
+		$requests  = array();
+		$intercept = static function ( $preempt, $args, $url ) use ( &$requests ) {
+			$requests[] = array(
+				'args' => $args,
+				'url'  => $url,
+			);
+
+			return array(
+				'headers'  => array(),
+				'body'     => '',
+				'response' => array(
+					'code'    => 200,
+					'message' => 'OK',
+				),
+				'cookies'  => array(),
+			);
+		};
+
+		add_filter( 'pre_http_request', $intercept, 10, 3 );
+		try {
+			woocommerce_pos_uninstall_report();
+		} finally {
+			remove_filter( 'pre_http_request', $intercept, 10 );
+		}
+
+		$this->assertCount( 1, $requests );
+		$payload = json_decode( $requests[0]['args']['body'], true );
+		$this->assertSame( \WCPOS\WooCommercePOS\VERSION, $payload['properties']['plugin_version'] );
 	}
 
 	/**

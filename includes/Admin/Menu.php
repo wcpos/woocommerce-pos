@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
+use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
@@ -234,7 +235,6 @@ class Menu {
 	public function enqueue_landing_scripts_and_styles( $hook_suffix ): void {
 		if ( $hook_suffix === $this->toplevel_screen_id ) {
 			$analytics = Analytics::instance();
-			$site_id   = $analytics->get_site_id();
 
 			$analytics->capture_once(
 				'upgrade_cta_viewed',
@@ -244,9 +244,11 @@ class Menu {
 				'admin_landing_banner'
 			);
 
-			if ( '' !== $site_id ) {
-				$analytics->group( 'site', $site_id, array() );
-			}
+			// Bind this install to its `site` group and refresh the profile that
+			// hangs off it. Sending the properties matters: a bare group() call
+			// creates the group with an empty property set, which is what made
+			// every environment and store-size breakdown unqueryable (#793).
+			( new Lifecycle_Events() )->maybe_refresh_group_properties();
 
 			$is_development = isset( $_ENV['DEVELOPMENT'] )
 			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );

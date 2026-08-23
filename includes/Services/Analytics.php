@@ -130,13 +130,24 @@ class Analytics {
 	 * current user's UUID as `distinct_id`, groups the event under the
 	 * site UUID, and merges in a small set of default context properties.
 	 *
-	 * @param string $event      Event name, e.g. `pro_link_clicked`.
-	 * @param array  $properties Event properties. Caller-supplied values
-	 *                           take precedence over defaults.
+	 * @param string $event               Event name, e.g. `pro_link_clicked`.
+	 * @param array  $properties          Event properties. Caller-supplied values
+	 *                                    take precedence over defaults.
+	 * @param string $distinct_id_override Identity to attribute the event to.
+	 *                                    Defaults to the current user's UUID.
+	 *                                    Used by group identification and by
+	 *                                    scheduled events, which run without a
+	 *                                    logged-in user.
+	 * @param string $timestamp           ISO-8601 event time. Defaults to now.
+	 *                                    Set it when reporting something that
+	 *                                    happened earlier — an install event
+	 *                                    held back until consent was granted
+	 *                                    must keep its real install date or the
+	 *                                    retention cohorts are wrong.
 	 *
 	 * @return bool True when a request was dispatched, false otherwise.
 	 */
-	public function capture( string $event, array $properties = array() ): bool {
+	public function capture( string $event, array $properties = array(), string $distinct_id_override = '', string $timestamp = '' ): bool {
 		if ( ! $this->is_enabled() ) {
 			return false;
 		}
@@ -145,7 +156,7 @@ class Analytics {
 			return false;
 		}
 
-		$distinct_id = $this->get_distinct_id();
+		$distinct_id = '' !== $distinct_id_override ? $distinct_id_override : $this->get_distinct_id();
 		if ( '' === $distinct_id ) {
 			return false;
 		}
@@ -169,7 +180,7 @@ class Analytics {
 			'event'       => $event,
 			'distinct_id' => $distinct_id,
 			'properties'  => $merged_properties,
-			'timestamp'   => gmdate( 'c' ),
+			'timestamp'   => '' !== $timestamp ? $timestamp : gmdate( 'c' ),
 		);
 
 		return $this->send( self::CAPTURE_PATH, $payload );
@@ -266,13 +277,23 @@ class Analytics {
 			return false;
 		}
 
+		// A group identification describes the site, not a person. When no user
+		// is logged in — the scheduled property refresh runs from cron — fall
+		// back to PostHog's own convention of keying the event by the group
+		// itself, so the refresh is not silently dropped for want of an identity.
+		$distinct_id = $this->get_distinct_id();
+		if ( '' === $distinct_id ) {
+			$distinct_id = $group_type . '_' . $group_key;
+		}
+
 		return $this->capture(
 			'$groupidentify',
 			array(
 				'$group_type' => $group_type,
 				'$group_key'  => $group_key,
 				'$group_set'  => $properties,
-			)
+			),
+			$distinct_id
 		);
 	}
 
@@ -341,6 +362,18 @@ class Analytics {
 	 * still have a stable site identifier for grouping.
 	 */
 	public function get_site_id(): string {
+		// The deactivation hook runs even when Activator::init() bailed on the
+		// WooCommerce check — in that request `new Init()` never ran, so
+		// wcpos-functions.php is not loaded and the helper does not exist.
+		// Read the option directly rather than fataling; an install that has
+		// ever run properly already has one, and a site that has not is not
+		// worth provisioning an identity for on its way out.
+		if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
+			$uuid = get_option( 'woocommerce_pos_uuid', '' );
+
+			return \is_string( $uuid ) ? $uuid : '';
+		}
+
 		return wcpos_get_site_uuid();
 	}
 

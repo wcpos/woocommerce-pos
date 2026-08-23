@@ -82,6 +82,8 @@ class Init {
 	 * | 21 | `rest_pre_dispatch` | `Services\Core_Order_Audit_Guard::rest_pre_dispatch` | 10 | irrelevant | Default; reads what row 20 recorded. |
 	 * | 22 | `woocommerce_update_coupon` | `Sync\Coupon_Modified_Date::touch` | 10 | irrelevant | Default. `Sync_Journal::record_coupon_updated` shares the hook and priority (row 10) and is registered first, but the journal timestamps rows with the wall clock, not the coupon's `post_modified`, so neither ordering changes an outcome. |
 	 * | 23 | `determine_current_user` | `Init::determine_current_user_early` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
+	 * | 24 | `admin_init` | `Services\Lifecycle_Events::flush_pending`, `::maybe_schedule_refresh` | 10 | irrelevant | Default. `admin_init` because both need a fully booted admin request: one sends install/upgrade events recorded before the plugin was loaded enough to send them, the other schedules row 25. Both check consent first and cost nothing on a site that opted out. |
+	 * | 25 | `wcpos_analytics_group_refresh` | `Services\Lifecycle_Events::refresh_group_properties` | 10 | irrelevant | Default; sole listener. Unlike row 11, this call does NOT schedule the event — scheduling lives in row 24 so that withdrawing consent unschedules it. |
 	 *
 	 * ## The one pair where statement order is the whole mechanism
 	 *
@@ -193,6 +195,12 @@ class Init {
 		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
 
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
+
+		// Install lifecycle reporting. Registered last: it adds no filter that
+		// anything else orders against, and appending keeps the ordering table
+		// above in statement order. Deliberately NOT before the pair above —
+		// rows 20 and 23 are decided by insertion order alone.
+		( new Services\Lifecycle_Events() )->register_hooks();
 	}
 
 	/**

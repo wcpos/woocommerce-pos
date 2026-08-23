@@ -202,6 +202,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		$expected = array(
 			'activated_plugin'                                      => array( 10 ),
 			'admin_enqueue_scripts'                                 => array( 10 ),
+			'admin_init'                                            => array( 10 ),
 			'admin_notices'                                         => array( 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
@@ -211,6 +212,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'rest_pre_serve_request'                                => array( 5 ),
 			'send_headers'                                          => array( 99, 9999 ),
 			'upgrader_process_complete'                             => array( 10 ),
+			'wcpos_analytics_group_refresh'                         => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
