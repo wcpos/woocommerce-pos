@@ -209,7 +209,9 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
 			'rest_pre_dispatch'                                     => array( 10 ),
-			'rest_pre_serve_request'                                => array( 5 ),
+			// No rest_pre_serve_request row: this PR moved that registration out of
+			// Init and behind Rest_Cors::register_hooks(), which registers it at 20
+			// rather than 5. Init no longer publishes any part of the wire contract.
 			'send_headers'                                          => array( 99, 9999 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
