@@ -29,6 +29,8 @@
 
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
+
 /**
  * Escpos_Thermal_Emitter class.
  */
@@ -499,24 +501,81 @@ class Escpos_Thermal_Emitter {
 	}
 
 	/**
-	 * Emit a CODE128 (function-B) barcode using native commands.
+	 * Emit a 1D barcode using the native `GS k` function-B command.
+	 *
+	 * The symbology selector and the data encoding both come from
+	 * Barcode_Symbology (Epson ESC/POS Command Reference, `GS k`). An ESC/POS
+	 * printer handed data its symbology cannot encode prints nothing and reports
+	 * no error, so an unencodable value is printed as text instead — never as an
+	 * error string, which a cashier would have to read off the receipt.
 	 *
 	 * @param array $node The barcode AST node.
 	 *
 	 * @return void
 	 */
 	private function emit_barcode( array $node ): void {
-		$value  = isset( $node['value'] ) ? (string) $node['value'] : '';
+		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
+		if ( '' === trim( $value ) ) {
+			return;
+		}
+
+		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		$height = max( 1, min( 255, $height ) );
+
+		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_ESCPOS ) ) {
+			$this->emit_centered_text( $value );
+
+			return;
+		}
 
 		$this->raw( array( 0x1d, 0x68, $height ) ); // GS h — barcode height.
 		$this->raw( array( 0x1d, 0x77, 0x02 ) );    // GS w — module width.
 		$this->raw( array( 0x1d, 0x48, 0x00 ) );    // GS H — HRI off.
 
-		$data = substr( $value, 0, 255 );
-		$this->raw( array( 0x1d, 0x6b, 0x49, \strlen( $data ) ) ); // GS k 73 <len>.
+		$data = Barcode_Symbology::escpos_payload( $type, $value );
+		// GS k m n d1..dn — function B, length-prefixed.
+		$this->raw( array( 0x1d, 0x6b, Barcode_Symbology::escpos_id( $type ), \strlen( $data ) ) );
 		$this->raw_string( $data );
+	}
+
+	/**
+	 * Print a value as a centered plain-text line.
+	 *
+	 * Mirrors the rescue in Html_Thermal_Emitter::render_barcode_fallback(): when
+	 * the symbol cannot be produced, the value itself is still readable.
+	 *
+	 * Control bytes are folded to spaces first. This is the one path that routes
+	 * a barcode value into the text stream, and a barcode value is exactly where
+	 * a stray tab, LF or CR turns up — Code 128 validation rejects them on the
+	 * ESC/POS lane precisely because code set B cannot encode them, which sends
+	 * them here. Emitted raw they would break the line the rescue is centering.
+	 *
+	 * @param string $value The value to print.
+	 *
+	 * @return void
+	 */
+	private function emit_centered_text( string $value ): void {
+		$text = $this->normalize_text( $this->strip_control_bytes( $value ) );
+		$pad  = (int) floor( max( 0, $this->columns - $this->display_width( $text ) ) / 2 );
+		if ( $pad > 0 ) {
+			$this->raw_string( str_repeat( ' ', $pad ) );
+		}
+		$this->raw_string( $text );
+		$this->newline();
+	}
+
+	/**
+	 * Replace control bytes with spaces so they cannot reach the print stream.
+	 *
+	 * @param string $value The value to clean.
+	 *
+	 * @return string The value with control bytes folded to spaces.
+	 */
+	private function strip_control_bytes( string $value ): string {
+		$cleaned = preg_replace( '/[\x00-\x1f\x7f]/', ' ', $value );
+
+		return null === $cleaned ? $value : $cleaned;
 	}
 
 	/**

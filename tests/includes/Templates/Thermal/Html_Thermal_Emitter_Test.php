@@ -558,6 +558,42 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A legacy QR barcode uses the same maximum module scale as a qrcode node.
+	 *
+	 * @return void
+	 */
+	public function test_legacy_qr_barcode_height_is_capped_at_star_maximum(): void {
+		// Arrange.
+		$value = 'https://wcpos.com';
+		$ast   = $this->receipt(
+			array(
+				array(
+					'type'         => 'barcode',
+					'barcode_type' => 'qr',
+					'height'       => 90,
+					'value'        => $value,
+				),
+			)
+		);
+		$maximum = $this->receipt(
+			array(
+				array(
+					'type'  => 'qrcode',
+					'size'  => 8,
+					'value' => $value,
+				),
+			)
+		);
+
+		// Act.
+		$html         = $this->emitter->emit( $ast );
+		$maximum_html = $this->emitter->emit( $maximum );
+
+		// Assert.
+		$this->assertSame( $maximum_html, $html );
+	}
+
+	/**
 	 * An invalid barcode value falls back to escaped monospace text without throwing.
 	 *
 	 * @return void

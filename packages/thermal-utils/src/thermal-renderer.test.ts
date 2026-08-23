@@ -139,4 +139,47 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(html).not.toContain('_woocommerce_pos_data');
 		expect(html).not.toContain('_woocommerce_pos_uuid');
 	});
+
+	it('sizes and labels a <barcode type="qr"> exactly like the <qrcode> it prints as', () => {
+		const value = 'https://example.test';
+
+		const asBarcodeElement = renderThermalPreview(
+			`<receipt paper-width="48"><barcode type="qr" height="40">${value}</barcode></receipt>`,
+			{}
+		);
+		const asQrcodeElement = renderThermalPreview(
+			`<receipt paper-width="48"><qrcode size="4">${value}</qrcode></receipt>`,
+			{}
+		);
+
+		// The printer sizes both at module scale 4 (Thermal_Markup_Parser folds
+		// height 40 into size 4), so the preview must not draw one smaller.
+		expect(asBarcodeElement).toContain('data-barcode-kind="qrcode"');
+		expect(asBarcodeElement).not.toContain('data-barcode-kind="barcode"');
+		expect(asBarcodeElement).toBe(asQrcodeElement);
+	});
+
+	it('folds a <barcode type="qrcode"> height into the printed module scale', () => {
+		const value = 'https://example.test';
+
+		const tall = renderThermalPreview(
+			`<receipt paper-width="48"><barcode type="qrcode" height="60">${value}</barcode></receipt>`,
+			{}
+		);
+		const equivalent = renderThermalPreview(
+			`<receipt paper-width="48"><qrcode size="6">${value}</qrcode></receipt>`,
+			{}
+		);
+		const huge = renderThermalPreview(
+			`<receipt paper-width="48"><barcode type="qrcode" height="900">${value}</barcode></receipt>`,
+			{}
+		);
+		const starMaximum = renderThermalPreview(
+			`<receipt paper-width="48"><qrcode size="8">${value}</qrcode></receipt>`,
+			{}
+		);
+
+		expect(tall).toBe(equivalent);
+		expect(huge).toBe(starMaximum);
+	});
 });

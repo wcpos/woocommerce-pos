@@ -146,6 +146,35 @@ class Thermal_Markup_Parser_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A QR barcode's height folds into the QR module size, not a pixel height.
+	 *
+	 * The client preview mirrors this in heightToQrSize()
+	 * (packages/thermal-utils/src/thermal-renderer.ts); if the two disagree the
+	 * merchant previews a QR at a different size than the printer produces.
+	 *
+	 * @return void
+	 */
+	public function test_parse_qr_barcode_folds_height_into_the_qr_module_size(): void {
+		// Arrange.
+		$tall    = '<receipt><barcode type="qr" height="60">X</barcode></receipt>';
+		$default = '<receipt><barcode type="qr">X</barcode></receipt>';
+		$tiny    = '<receipt><barcode type="qr" height="1">X</barcode></receipt>';
+		$huge    = '<receipt><barcode type="qr" height="900">X</barcode></receipt>';
+
+		// Act.
+		$node_tall    = $this->parser->parse( $tall )['children'][0];
+		$node_default = $this->parser->parse( $default )['children'][0];
+		$node_tiny    = $this->parser->parse( $tiny )['children'][0];
+		$node_huge    = $this->parser->parse( $huge )['children'][0];
+
+		// Assert.
+		$this->assertSame( 6, $node_tall['size'] );
+		$this->assertSame( 4, $node_default['size'] );
+		$this->assertSame( 2, $node_tiny['size'] );
+		$this->assertSame( 8, $node_huge['size'] );
+	}
+
+	/**
 	 * Whitespace-only text is skipped while leading spaces are preserved.
 	 *
 	 * @return void

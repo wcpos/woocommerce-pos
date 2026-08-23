@@ -19,6 +19,15 @@
 - **Fixed:** the allow-list and expose-list were published by two independent handlers that had to be kept in step by hand, which had already caused three regressions (a missing `X-WCPOS-Store`, then `X-WCPOS-Idempotency-Key`). One writer now publishes both, so a header cannot be present on one path and absent from the other.
 - **Changed:** WCPOS no longer stamps its CORS headers on preflight requests that are not destined for it. A cross-origin `OPTIONS` to another plugin's REST route now keeps WordPress core's own answer, where previously WCPOS claimed every preflight on the site.
 
+### 🖨️ Barcode printing fixes
+
+- **Fixed:** thermal receipts now print the barcode symbology the template asks for. The ESC/POS and StarPRNT lanes ignored `<barcode type="…">` entirely and printed everything as Code 128 — so a template specifying EAN-13, UPC-A, ITF or Codabar produced a Code 128 barcode instead.
+- **Fixed:** ESC/POS Code 128 barcodes were sent without the code-set selector Epson's `GS k` command requires. Genuine Epson hardware prints nothing at all in that case and reports no error; many clones auto-select, which is why this went unnoticed. Code 128 barcodes now carry the selector.
+- **Fixed:** the ePOS-Print XML lane emitted `upca` / `upce`, which Epson's `<barcode>` element rejects. It now emits `upc_a` / `upc_e`.
+- **Fixed:** the ePOS-Print XML lane now passes through symbologies Epson supports but WCPOS does not model itself — `jan13`, `jan8`, `code128_auto`, `gs1_128` and the `gs1_databar_*` family. A template asking for one of those previously reached the printer untouched; it must keep doing so rather than being folded to Code 128.
+- **Fixed:** a `<barcode type="qr">` rendered noticeably smaller in the on-screen template preview than it printed. Preview and print now agree.
+- **Changed:** if a barcode value does not satisfy the rules of the symbology it declares, thermal lanes now print the value as plain text instead of silently substituting a scannable Code 128. Merchants relying on the old fallback will see text where they previously got a barcode — the template's symbology or its value needs correcting. Values rejected include a non-numeric EAN-13, an odd-length ITF, an EAN/UPC value whose final check digit does not match the digits before it, a Code 39 value containing a `*` anywhere but as a matching first-and-last pair, and a Code 128 value too long to transmit once the printer's escaping has been applied.
+
 ---
 
 ## 🧾 Receipt Templates — Complete Rebuild

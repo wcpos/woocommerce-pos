@@ -3,10 +3,11 @@
  * HTML Thermal Emitter Class.
  *
  * Renders an HTML receipt string from a thermal AST (produced by
- * Thermal_Markup_Parser). This is a PHP port of the JS receipt-renderer
- * `render-html.ts`, used for the thermal -> PDF path (Dompdf). The output mirrors
- * the JS renderer's CONTENT; bwip-js is swapped for the vendor-prefixed picqer
- * barcode generator (1D barcodes) and chillerlan QR code generator (QR codes).
+ * Thermal_Markup_Parser). This is a PHP port of `renderNodes()` / `renderNode()`
+ * in packages/thermal-utils/src/thermal-renderer.ts, used for the thermal -> PDF
+ * path (Dompdf). The output mirrors the JS renderer's CONTENT; bwip-js is
+ * swapped for the vendor-prefixed picqer barcode generator (1D barcodes) and
+ * chillerlan QR code generator (QR codes).
  *
  * Deliberate deviations from the JS renderer (Dompdf has no flexbox engine and
  * no `ch` unit, so the JS renderer's flex rows would collapse):
@@ -30,6 +31,7 @@
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
 use WCPOS\WooCommercePOS\Templates\Barcode_Image;
+use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
 
 /**
  * Html_Thermal_Emitter class.
@@ -43,9 +45,11 @@ class Html_Thermal_Emitter {
 
 	/**
 	 * Printer dot budgets for image sizing: wide (80mm, ≥40 columns) printers
-	 * are 576 dots across, narrow (58mm) 384. Mirrors the JS preview renderer —
-	 * keep in sync with packages/receipt-renderer/src/render-html.ts in the
-	 * wcpos monorepo, or PDF/preview parity silently drifts.
+	 * are 576 dots across, narrow (58mm) 384. The client preview carries the same
+	 * two numbers as DOT_BUDGET_WIDE / DOT_BUDGET_NARROW in
+	 * packages/thermal-utils/src/generate-barcode-svg.ts, and inline in
+	 * dotsToCh() in packages/thermal-utils/src/thermal-renderer.ts. All three
+	 * must agree or PDF/preview parity silently drifts.
 	 */
 	private const DOT_BUDGET_WIDE = 576;
 
@@ -60,8 +64,9 @@ class Html_Thermal_Emitter {
 	private const NARROW_PAPER_THRESHOLD_CHARS = 40;
 
 	/**
-	 * Wrapper side padding in px. Mirrors the JS preview renderer's receipt
-	 * frame (render-html.ts, see DOT_BUDGET_WIDE sync note); in the PDF path
+	 * Wrapper side padding in px. Mirrors the `padding: 16px 12px` on the receipt
+	 * wrapper that renderThermalPreview() emits in
+	 * packages/thermal-utils/src/thermal-renderer.ts; in the PDF path
 	 * Pdf_Layout_Preprocessor lifts this padding into the @page margins.
 	 */
 	private const PADDING_X_PX = 12.0;
@@ -164,7 +169,7 @@ class Html_Thermal_Emitter {
 			case 'barcode':
 				$barcode_type = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 				$value        = isset( $node['value'] ) ? (string) $node['value'] : '';
-				if ( $this->is_qr_barcode_type( $barcode_type ) ) {
+				if ( Barcode_Symbology::is_qr( $barcode_type ) ) {
 					return $this->render_qrcode( $value, $this->height_to_qr_size( isset( $node['height'] ) ? (int) $node['height'] : 40 ) );
 				}
 				return $this->render_barcode( $barcode_type, $value, isset( $node['height'] ) ? (int) $node['height'] : 40 );
@@ -345,24 +350,17 @@ class Html_Thermal_Emitter {
 	}
 
 	/**
-	 * Determine whether a barcode type should be rendered as a QR code.
+	 * Convert a barcode height into a QR code size.
 	 *
-	 * @param string $type The barcode type string.
-	 *
-	 * @return bool True when the type is a QR variant.
-	 */
-	private function is_qr_barcode_type( string $type ): bool {
-		$normalized = strtolower( trim( $type ) );
-
-		return 'qrcode' === $normalized || 'qr' === $normalized;
-	}
-
-	/**
-	 * Convert a barcode height into a QR code size, mirroring heightToQrSize.
+	 * A QR written as `<barcode type="qr" height="40">` carries a pixel height
+	 * where a QR wants a module scale, so the height is folded into the scale the
+	 * `<qrcode size="...">` element would have used. Mirrored by heightToQrSize()
+	 * in packages/thermal-utils/src/thermal-renderer.ts; the two must agree or a
+	 * QR previews at a different size than it prints.
 	 *
 	 * @param int $height The barcode height.
 	 *
-	 * @return int The QR code size clamped between 2 and 10, or 4 by default.
+	 * @return int The QR code size clamped between 2 and 8, or 4 by default.
 	 */
 	private function height_to_qr_size( int $height ): int {
 		if ( $height <= 0 ) {
@@ -371,7 +369,7 @@ class Html_Thermal_Emitter {
 
 		$size = (int) round( $height / 10 );
 
-		return max( 2, min( 10, $size ) );
+		return max( 2, min( 8, $size ) );
 	}
 
 	/**

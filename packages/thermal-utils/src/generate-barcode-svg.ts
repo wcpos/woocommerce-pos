@@ -52,6 +52,18 @@ const BARCODE_SPECS: Record<string, BarcodeSpec> = {
 	qrcode: { bcid: 'qrcode', encode: (opts) => qrcode(opts, drawingSVG()) },
 };
 
+/**
+ * Whether a template's barcode `type` names the QR symbology rather than a 1D one.
+ *
+ * `<barcode type="qr">` is a QR code wearing a barcode element's attributes, and
+ * every lane has to recognise that before it sizes or labels the symbol. Mirrors
+ * `Barcode_Symbology::is_qr()` on the PHP side.
+ */
+export function isQrBarcodeType(type: string): boolean {
+	const normalized = type.trim().toLowerCase();
+	return normalized === 'qr' || normalized === 'qrcode';
+}
+
 interface BarcodeOptions {
 	type?: string;
 	scale?: number;
@@ -112,9 +124,7 @@ function renderBarcodeError(kind: 'barcode' | 'qrcode', barcodeType: string, tex
 export function generateBarcodeSvg(value: string, options: BarcodeOptions = {}): string {
 	const { type = 'qr', scale = 3, height = 10, kind: requestedKind, paperWidthChars } = options;
 	const normalizedType = type.trim().toLowerCase();
-	const kind =
-		requestedKind ??
-		(normalizedType === 'qr' || normalizedType === 'qrcode' ? 'qrcode' : 'barcode');
+	const kind = requestedKind ?? (isQrBarcodeType(normalizedType) ? 'qrcode' : 'barcode');
 	const text = value.trim();
 	if (!text) return '';
 
