@@ -503,6 +503,114 @@ class Test_Term_Controllers_Parity extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Both lanes walk a tie-prone collection to the same rows in the same order.
+	 *
+	 * This is the Collection Rule the refactor exists to carry: the wcpos/v2
+	 * proxy already pinned the term_id tiebreak in Terms_Proxy_Behavior, the
+	 * direct wcpos/v1 lane did not, and the client walks whichever lane it is
+	 * pointed at. Asserting only that v1 is now correct would not catch the two
+	 * lanes drifting apart again, so the walks are compared ACROSS the lanes.
+	 *
+	 * A tie straddling a page boundary can otherwise repeat on two pages or fall
+	 * out of the walk entirely (mono#1372). Six terms in three tied pairs, walked
+	 * two at a time, puts a tie on every boundary of the window. Both directions
+	 * are walked because the client renders ties id-ascending whichever way the
+	 * name sort runs, so a descending sort must not flip the tie with it.
+	 *
+	 * @dataProvider taxonomy_provider
+	 *
+	 * @param string $controller_class Controller class name.
+	 * @param string $taxonomy         Taxonomy name.
+	 * @param string $rest_base        Route below the namespace.
+	 */
+	public function test_both_lanes_walk_a_tie_prone_collection_identically( string $controller_class, string $taxonomy, string $rest_base ): void {
+		// Arrange: names tie in pairs, term_ids ascend in creation order.
+		$this->boot_endpoint( $controller_class, $taxonomy );
+		$expected = array();
+		foreach ( array( 'Walk Alpha', 'Walk Beta', 'Walk Gamma' ) as $index => $name ) {
+			$expected[] = $this->create_term( $name, array( 'slug' => 'walk-' . $index . '-one' ) );
+			$expected[] = $this->create_term( $name, array( 'slug' => 'walk-' . $index . '-two' ) );
+		}
+
+		foreach ( array( 'asc', 'desc' ) as $order ) {
+			// Act: walk both lanes two rows at a time, a tie on every boundary.
+			$walked = array(
+				'/wcpos/v1/' . $rest_base => array(),
+				'/wcpos/v2/' . $rest_base => array(),
+			);
+			foreach ( array_keys( $walked ) as $route ) {
+				for ( $page = 1; $page <= 3; $page++ ) {
+					$walked[ $route ] = array_merge(
+						$walked[ $route ],
+						$this->lane_term_ids(
+							$route,
+							array(
+								'include'  => $expected,
+								'orderby'  => 'name',
+								'order'    => $order,
+								'per_page' => 2,
+								'page'     => $page,
+							)
+						)
+					);
+				}
+			}
+
+			// Assert: tied pairs stay id-ascending, only the groups reverse.
+			$want    = 'asc' === $order ? $expected : array_merge( ...array_reverse( array_chunk( $expected, 2 ) ) );
+			$legacy  = $walked[ '/wcpos/v1/' . $rest_base ];
+			$current = $walked[ '/wcpos/v2/' . $rest_base ];
+			$this->assertSame( $want, $current, "the wcpos/v2 walk must visit each tied term exactly once, term_id-ascending ({$order})" );
+			$this->assertSame( $legacy, $current, "the wcpos/v1 and wcpos/v2 lanes walk a tied collection differently ({$order})" );
+		}
+	}
+
+	/**
+	 * Both lanes carry the same term_id tiebreak into the SQL they run.
+	 *
+	 * The row-level cases above prove the lanes agree on this data set; this one
+	 * proves they agree because they run the same ORDER BY, not by coincidence
+	 * of MySQL returning tied rows in insertion order.
+	 *
+	 * @dataProvider taxonomy_provider
+	 *
+	 * @param string $controller_class Controller class name.
+	 * @param string $taxonomy         Taxonomy name.
+	 * @param string $rest_base        Route below the namespace.
+	 */
+	public function test_both_lanes_order_by_name_with_the_same_sql_tiebreak( string $controller_class, string $taxonomy, string $rest_base ): void {
+		// Arrange.
+		$this->boot_endpoint( $controller_class, $taxonomy );
+		$this->create_term( 'Cross Lane Clause' );
+		$captured = array();
+		$capture  = function ( $clauses, $taxonomies ) use ( &$captured, $taxonomy ) {
+			if ( \in_array( $taxonomy, (array) $taxonomies, true ) && '' !== (string) ( $clauses['orderby'] ?? '' ) ) {
+				$captured[] = array( $clauses['orderby'], $clauses['order'] );
+			}
+
+			return $clauses;
+		};
+		add_filter( 'terms_clauses', $capture, 99, 2 );
+
+		// Act.
+		try {
+			$this->lane_term_ids( '/wcpos/v1/' . $rest_base, array( 'orderby' => 'name' ) );
+			$legacy_clauses = $captured;
+			$captured       = array();
+			$this->lane_term_ids( '/wcpos/v2/' . $rest_base, array( 'orderby' => 'name' ) );
+			$current_clauses = $captured;
+		} finally {
+			remove_filter( 'terms_clauses', $capture, 99 );
+		}
+
+		// Assert.
+		$this->assertNotEmpty( $legacy_clauses, 'No ordered wcpos/v1 term query ran for ' . $taxonomy . '.' );
+		$this->assertNotEmpty( $current_clauses, 'No ordered wcpos/v2 term query ran for ' . $taxonomy . '.' );
+		$this->assertSame( array( 'ORDER BY t.name ASC, t.term_id', 'ASC' ), $current_clauses[0] );
+		$this->assertSame( $legacy_clauses[0], $current_clauses[0], 'the two lanes order the term query differently' );
+	}
+
+	/**
 	 * The include/exclude clauses filter does not outlive the request that added it.
 	 *
 	 * Left installed it re-writes any later get_terms() in the same PHP request —
@@ -778,6 +886,29 @@ class Test_Term_Controllers_Parity extends WCPOS_REST_Unit_Test_Case {
 				$params
 			)
 		);
+	}
+
+	/**
+	 * Dispatch a collection read on one lane and return its term ids, in order.
+	 *
+	 * Takes the full route rather than a rest base, because the point of the
+	 * cross-lane cases is to send the SAME query to wcpos/v1 and wcpos/v2.
+	 *
+	 * @param string $route  Full REST route, namespace included.
+	 * @param array  $params Query parameters.
+	 *
+	 * @return array<int, int>
+	 */
+	private function lane_term_ids( string $route, array $params = array() ): array {
+		$request = $this->wp_rest_get_request( $route );
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), $route . ': ' . wp_json_encode( $response->get_data() ) );
+
+		return array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
 	}
 
 	/**
