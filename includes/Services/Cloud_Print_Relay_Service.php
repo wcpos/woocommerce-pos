@@ -137,6 +137,12 @@ class Cloud_Print_Relay_Service {
 			)
 		);
 		delete_transient( self::DOWN_TRANSIENT );
+		// status() consults the per-printer negative cache before DOWN_TRANSIENT,
+		// so clearing the site-wide marker alone is not enough: a printer that hit
+		// an "unknown site" 404 backed off for REREGISTER_GUARD, and without this
+		// it would keep returning null for the full hour even though the site_key
+		// is valid again. Dropping those entries lets status resume on the next call.
+		self::clear_status_cache();
 
 		// The printer URL is always rebuilt from the validated site_key —
 		// never from the relay response — so a compromised relay cannot
@@ -433,6 +439,24 @@ class Cloud_Print_Relay_Service {
 		$ttl = null === $ttl ? self::STATUS_CACHE_TTL : max( 1, $ttl );
 		set_transient( $transient_key, array( 'failed' => true ), $ttl );
 		set_transient( self::DOWN_TRANSIENT, true, $ttl );
+	}
+
+	/**
+	 * Drop every per-printer status cache.
+	 *
+	 * Because status() checks the per-printer negative cache before DOWN_TRANSIENT,
+	 * a successful (re-)registration must clear these entries too — otherwise a
+	 * printer that backed off on an "unknown site" 404 keeps returning null for
+	 * the full REREGISTER_GUARD window despite the site_key being valid again.
+	 * Dropping any live positive caches is harmless: the next call re-polls.
+	 */
+	private static function clear_status_cache(): void {
+		foreach ( ( new Cloud_Print_Registry() )->get_printers() as $printer ) {
+			$printer_id = (string) ( $printer['id'] ?? '' );
+			if ( '' !== $printer_id ) {
+				delete_transient( self::STATUS_TRANSIENT_PREFIX . $printer_id );
+			}
+		}
 	}
 
 	/**
