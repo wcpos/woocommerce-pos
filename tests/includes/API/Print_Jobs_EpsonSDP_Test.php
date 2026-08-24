@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use WCPOS\WooCommercePOS\API\V1\Print_Jobs_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
@@ -130,7 +131,7 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame(
 			'<?xml version="1.0" encoding="utf-8"?>'
 				. '<PrintRequestInfo Version="1.00"><ePOSPrint>'
-				. '<Parameter><devid>local_printer</devid><timeout>10000</timeout></Parameter>'
+				. '<Parameter><devid>local_printer</devid><timeout>' . Print_Jobs_Controller::EPSON_SDP_PRINT_TIMEOUT_MS . '</timeout></Parameter>'
 				. '<PrintData><epos-print/></PrintData>'
 				. '</ePOSPrint></PrintRequestInfo>',
 			$body

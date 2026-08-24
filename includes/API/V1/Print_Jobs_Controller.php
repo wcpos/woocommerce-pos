@@ -32,6 +32,19 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
  */
 class Print_Jobs_Controller extends WP_REST_Controller {
 	/**
+	 * Milliseconds an Epson Server Direct Print printer waits for the local
+	 * print device to become printable before it gives up and reports
+	 * EX_TIMEOUT.
+	 *
+	 * Epson allows 5000–300000. The previous 10000 (near the floor) was
+	 * unforgiving for printers that briefly go not-ready — a paper change, a
+	 * sleep/wake, or a momentary network blip — declaring the job failed
+	 * before the printer could recover. 60000 gives those transient states
+	 * room to clear without letting a genuinely offline printer hang for long.
+	 */
+	const EPSON_SDP_PRINT_TIMEOUT_MS = 60000;
+
+	/**
 	 * Endpoint namespace.
 	 *
 	 * @var string
@@ -1144,7 +1157,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// 2.00+ adds printjobid but is limited to TM-i/TM-DT/TM-T88VI.
 		$envelope  = '<?xml version="1.0" encoding="utf-8"?>';
 		$envelope .= '<PrintRequestInfo Version="1.00"><ePOSPrint>';
-		$envelope .= '<Parameter><devid>local_printer</devid><timeout>10000</timeout></Parameter>';
+		$envelope .= '<Parameter><devid>local_printer</devid><timeout>' . self::EPSON_SDP_PRINT_TIMEOUT_MS . '</timeout></Parameter>';
 		$envelope .= '<PrintData>' . $epos . '</PrintData>';
 		$envelope .= '</ePOSPrint></PrintRequestInfo>';
 
