@@ -139,6 +139,14 @@ final class Config_Fingerprint {
 	 *
 	 * @var array<string, int>
 	 */
+	/**
+	 * The contract version every collection starts at, and the value that must NOT appear in a
+	 * fingerprint — see representation_settings().
+	 *
+	 * @var int
+	 */
+	private const BASELINE_CONTRACT_VERSION = 1;
+
 	private const PAYLOAD_CONTRACT_VERSION = array(
 		// 2 (1.10.1): variations are serialized through WC_REST_Product_Variations_Controller
 		// instead of the products controller — singular `image`, `wc_get_formatted_variation()`
@@ -166,10 +174,23 @@ final class Config_Fingerprint {
 			$settings = array();
 		}
 
-		// The served SHAPE is as much a part of the representation as the settings that fill it —
-		// see PAYLOAD_CONTRACT_VERSION. Every fingerprinted collection carries one, so a future
-		// shape change anywhere is a one-line bump rather than a new mechanism.
-		$settings['payload_contract'] = self::payload_contract_version( $collection );
+		/*
+		 * The served SHAPE is as much a part of the representation as the settings that fill it —
+		 * see PAYLOAD_CONTRACT_VERSION.
+		 *
+		 * Added ONLY above the baseline. Adding it unconditionally would change the serialization
+		 * of every collection still at version 1 — `{"barcode_field":"_sku"}` becomes
+		 * `{"barcode_field":"_sku","payload_contract":1}`, and tax_rates' `[]` becomes an object —
+		 * so their fingerprints would move too. A fingerprint move marks the collection stale, so
+		 * upgrading would trigger a full PRODUCTS catalogue re-fetch and a tax-rate refresh on every
+		 * active till, for a shape that did not change. Omitting the key at the baseline keeps
+		 * version-1 serialization byte-identical, so only a collection whose contract actually moved
+		 * is re-pulled. A future bump anywhere makes the key appear, which is itself the change.
+		 */
+		$contract = self::payload_contract_version( $collection );
+		if ( self::BASELINE_CONTRACT_VERSION < $contract ) {
+			$settings['payload_contract'] = $contract;
+		}
 
 		ksort( $settings );
 
@@ -184,7 +205,7 @@ final class Config_Fingerprint {
 	 * @param string $collection Collection name.
 	 */
 	public static function payload_contract_version( string $collection ): int {
-		return self::PAYLOAD_CONTRACT_VERSION[ $collection ] ?? 1;
+		return self::PAYLOAD_CONTRACT_VERSION[ $collection ] ?? self::BASELINE_CONTRACT_VERSION;
 	}
 
 	/**

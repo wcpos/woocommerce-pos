@@ -891,6 +891,39 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A collection still at the baseline contract must NOT have its fingerprint moved.
+	 *
+	 * Every fingerprint move marks that collection stale, and a stale `products` collection means a
+	 * FULL CATALOGUE re-fetch on every active till. Adding the contract key unconditionally would
+	 * have changed the serialization of every unbumped collection — `{"barcode_field":"_sku"}` to
+	 * `{"barcode_field":"_sku","payload_contract":1}`, and tax_rates' `[]` to an object — so
+	 * upgrading to 1.10.1 would have re-pulled the entire product catalogue and refreshed tax rates
+	 * for a shape that did not change.
+	 */
+	public function test_baseline_contract_collections_keep_their_fingerprint(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$fingerprint = new Config_Fingerprint();
+
+		foreach ( array( 'products', 'tax_rates' ) as $collection ) {
+			$this->assertSame(
+				1,
+				Config_Fingerprint::payload_contract_version( $collection ),
+				$collection . ' is expected to still be at the baseline for this assertion to mean anything.'
+			);
+			$this->assertArrayNotHasKey(
+				'payload_contract',
+				$fingerprint->representation_settings( $collection ),
+				$collection . ' is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+			);
+		}
+
+		// The exact pre-existing serializations, spelled out: this is the byte-for-byte property,
+		// not merely "the key is absent".
+		$this->assertSame( array( 'barcode_field' => '_sku' ), $fingerprint->representation_settings( 'products' ) );
+		$this->assertSame( array(), $fingerprint->representation_settings( 'tax_rates' ) );
+	}
+
+	/**
 	 * An unregistered collection reports the baseline, never zero.
 	 */
 	public function test_unknown_collection_reports_the_baseline_contract_version(): void {
