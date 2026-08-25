@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_Product;
+use WC_Product_Variation;
+use WC_REST_Product_Variations_Controller;
 use WC_REST_Products_Controller;
 use WP_REST_Request;
 
@@ -45,6 +47,21 @@ final class Product_Serializer {
 	private $controller = null;
 
 	/**
+	 * The WooCommerce product VARIATIONS controller, created on first use.
+	 *
+	 * A variation is not a product. WooCommerce serves it from its own controller, whose
+	 * response carries `image` (singular), `wc_get_formatted_variation()` as the name, and
+	 * none of the ~25 product-only fields (`categories`, `related_ids`, `price_html`, …)
+	 * that mean nothing on a variation. 1.9.x served exactly that shape from
+	 * `API\V1\Product_Variations_Controller`; hydrating variations through the PRODUCTS
+	 * controller instead is what dropped `image` and blanked every variation thumbnail in
+	 * the POS on 1.10.0 (#1710).
+	 *
+	 * @var null|WC_REST_Product_Variations_Controller
+	 */
+	private $variations_controller = null;
+
+	/**
 	 * The request used when a caller does not supply one.
 	 *
 	 * @var null|WP_REST_Request
@@ -79,9 +96,20 @@ final class Product_Serializer {
 		Store_Scope::stamp( $request );
 		// Ours for the duration of the serialization — this runs outside any
 		// dispatch, so the lane marker is the only signal a response filter has.
-		$response = Store_Scope::in_v2_lane(
-			function () use ( $object, $request ) {
-				return rest_ensure_response( $this->controller()->prepare_object_for_response( $object, $request ) );
+		$is_variation = $object instanceof WC_Product_Variation;
+		if ( $is_variation ) {
+			// `prepare_links()` reads `$request['product_id']` to build the nested
+			// `products/<parent>/variations/<id>` route. The lanes that hydrate here build a
+			// bare `GET /`, so without this the links would claim parent 0.
+			$request->set_param( 'product_id', $object->get_parent_id() );
+		}
+		// Store scope is carried by the request + lane marker above, both controller-agnostic,
+		// and Pro registers `bake_store_prices` on the product AND variation prepare filters —
+		// so store-scoped prices ride either controller (pro#425).
+		$controller = $is_variation ? $this->variations_controller() : $this->controller();
+		$response   = Store_Scope::in_v2_lane(
+			function () use ( $controller, $object, $request ) {
+				return rest_ensure_response( $controller->prepare_object_for_response( $object, $request ) );
 			}
 		);
 		/**
@@ -138,6 +166,17 @@ final class Product_Serializer {
 		}
 
 		return $this->controller;
+	}
+
+	/**
+	 * The memoized WooCommerce product variations controller.
+	 */
+	private function variations_controller(): WC_REST_Product_Variations_Controller {
+		if ( null === $this->variations_controller ) {
+			$this->variations_controller = new WC_REST_Product_Variations_Controller();
+		}
+
+		return $this->variations_controller;
 	}
 
 	/**

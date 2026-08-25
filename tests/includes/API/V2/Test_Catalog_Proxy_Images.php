@@ -154,6 +154,11 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * Variation reads serve the medium image URL when it exists.
+	 *
+	 * On the SINGULAR key: a variation is served by WooCommerce's variations controller, whose
+	 * response carries `image`, not the products controller's `images[]`. This assertion used to
+	 * read `images[0]['src']` — it pinned the products-controller shape as correct and so stayed
+	 * green while every variation thumbnail in the POS went blank (#1710).
 	 */
 	public function test_variation_read_serves_medium_image_url(): void {
 		$attachment_id = $this->create_attachment( true );
@@ -164,6 +169,68 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 
 		$document = $this->read_variation( $variation->get_id() );
 
-		$this->assertSame( $medium_url, $document['payload']['images'][0]['src'] );
+		$this->assertSame( $medium_url, $document['payload']['image']['src'] );
+	}
+
+	/**
+	 * Variation reads preserve the original image URL when medium is unavailable.
+	 *
+	 * The singular twin of the product case above: without the `image` branch in
+	 * Product_Images::downsize_images() a variation is served the FULL SIZE original, which is
+	 * the silent bandwidth regression the controller switch would otherwise introduce.
+	 */
+	public function test_variation_read_preserves_original_url_without_medium_image(): void {
+		$attachment_id = $this->create_attachment( false );
+		$variation     = $this->create_variation();
+		$variation->set_image_id( $attachment_id );
+		$variation->save();
+		$original_url = wp_get_attachment_url( $attachment_id );
+
+		$document = $this->read_variation( $variation->get_id() );
+
+		$this->assertSame( $original_url, $document['payload']['image']['src'] );
+	}
+
+	/**
+	 * A variation document is served in the VARIATION shape, not the product shape.
+	 *
+	 * The contract this file exists to hold, stated once: 1.9.x served variations from
+	 * WooCommerce's variations controller and the client was built against that shape (its RxDB
+	 * schema declares `image`; `variation-image.tsx` reads `payload.image.src`). Serializing a
+	 * variation through the PRODUCTS controller silently swapped `image` for `images[]` and
+	 * bolted ~25 product-only fields onto every variation. Nothing compared the two lanes, so
+	 * both sides stayed green while the POS rendered blank thumbnails (#1710).
+	 */
+	public function test_variation_read_uses_the_variation_shape(): void {
+		$variation = $this->create_variation();
+
+		$payload = $this->read_variation( $variation->get_id() )['payload'];
+
+		$this->assertArrayHasKey( 'image', $payload, 'a variation carries the singular image key' );
+		$this->assertArrayNotHasKey( 'images', $payload, 'a variation is not a product' );
+
+		// Product-only fields that mean nothing on a variation and rode the wire on every one of
+		// them. Not an exhaustive list of the difference — a representative sample, so a
+		// re-introduction of the products controller fails here rather than in a merchant's POS.
+		foreach ( array( 'categories', 'tags', 'related_ids', 'price_html', 'default_attributes', 'variations' ) as $product_only ) {
+			$this->assertArrayNotHasKey( $product_only, $payload, "a variation must not carry the product field {$product_only}" );
+		}
+
+		// What the client actually reads off a variation, all still present.
+		foreach ( array( 'id', 'parent_id', 'name', 'sku', 'price', 'regular_price', 'stock_status', 'attributes', 'meta_data', 'type', 'date_modified_gmt' ) as $required ) {
+			$this->assertArrayHasKey( $required, $payload, "the client reads {$required} off a variation" );
+		}
+
+		// The revision the client stores for a variation IS `date_modified_gmt` (Write_Controller
+		// carves variations out of the payload hash), so this key is load-bearing for change
+		// detection, not decoration.
+		$this->assertSame( 'variation', $payload['type'] );
+
+		// Attributes keep the singular-`option` shape on both controllers; the client's promoted
+		// `attributes[]` column and its variation filter are built on it.
+		if ( ! empty( $payload['attributes'] ) ) {
+			$this->assertArrayHasKey( 'option', $payload['attributes'][0] );
+			$this->assertArrayNotHasKey( 'options', $payload['attributes'][0] );
+		}
 	}
 }
