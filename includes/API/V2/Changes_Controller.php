@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
 use WP_REST_Controller;
@@ -31,6 +32,16 @@ use WP_REST_Server;
 final class Changes_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
 	use Request_Int_Param;
+
+	/**
+	 * The journal object types that name a `wp_posts` row, and so share the id-space
+	 * {@see Pos_Visibility} excludes on. Every OTHER journalled type — customers, tax rates,
+	 * coupons, terms — numbers its rows in its own space, where the same integer means an
+	 * unrelated record. The visibility drop below is gated on this list for that reason.
+	 *
+	 * @var string[]
+	 */
+	private const CATALOG_POST_OBJECT_TYPES = array( 'product', 'variation' );
 
 	private const PRODUCT_POST_TYPES_SQL     = "('product','product_variation')";
 	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
@@ -193,6 +204,11 @@ final class Changes_Controller extends WP_REST_Controller {
 		$page = $this->journal->page( $stream_types, $since, $limit );
 		$rows = $page['rows'];
 
+		// The POS servable set, resolved ONCE per request. A hidden record is FOREIGN to this
+		// stream in the way an order row is: the catalog lane will never serve it, so its update
+		// rows are dropped below.
+		$hidden_ids = array_fill_keys( ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG ), true );
+
 		$changes          = array();
 		$checkpoint_since = $since;
 		foreach ( $rows as $row ) {
@@ -206,6 +222,25 @@ final class Changes_Controller extends WP_REST_Controller {
 				'revision'     => (string) ( $row['revision'] ?? '' ),
 				'modified_gmt' => (string) ( $row['modified_gmt'] ?? '' ),
 			);
+			// POS-HIDDEN RECORDS. An update row for a record the catalog lane will never serve
+			// tells every till to pull an id that comes back empty, counts toward the backlog that
+			// trips the client's re-baseline guard, and moves a head no till can act on. Drop it —
+			// the checkpoint above already advanced past this sequence, so the cursor still reaches
+			// head and the idle 304 path stays alive.
+			//
+			// TOMBSTONES ARE NEVER DROPPED. A record that just became hidden is still resident on
+			// every till, and `deleted` is the one message about a hidden id a client must still
+			// receive; `Sync\Visibility_Observer` appends exactly that row when a record leaves the
+			// servable set. Filtering it here would strand the record on the till until an expensive
+			// tier 2 sweep noticed. A tombstone for a record the client never held is a no-op.
+			if (
+				0 === $change['deleted']
+				&& \in_array( $object_type, self::CATALOG_POST_OBJECT_TYPES, true )
+				&& isset( $hidden_ids[ $change['id'] ] )
+			) {
+				continue;
+			}
+
 			// Tag per-row collection ONLY for the unified `all` stream — that is
 			// the only consumer (the engine) that needs to disambiguate rows.
 			// The single-collection `products` / `tax_rates` endpoints keep their
@@ -323,14 +358,15 @@ final class Changes_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$rows = $wpdb->get_results(
+		$hidden = $this->pos_hidden_ids();
+		$rows   = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}"
 				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. self::hidden_ids_sql( $hidden )
 				. ' AND ID > %d ORDER BY ID ASC LIMIT %d',
-				$since_id,
-				$limit
+				array_merge( $hidden, array( $since_id, $limit ) )
 			),
 			ARRAY_A
 		);
@@ -418,14 +454,15 @@ final class Changes_Controller extends WP_REST_Controller {
 				);
 			}
 
-			$rows = $wpdb->get_results(
+			$hidden = $this->pos_hidden_ids();
+			$rows   = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT ID, post_modified_gmt FROM {$wpdb->posts}"
 					. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 					. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+					. self::hidden_ids_sql( $hidden )
 					. ' AND ID >= %d AND ID < %d ORDER BY ID ASC',
-					$range_start,
-					$range_end
+					array_merge( $hidden, array( $range_start, $range_end ) )
 				),
 				ARRAY_A
 			);
@@ -447,6 +484,7 @@ final class Changes_Controller extends WP_REST_Controller {
 		// concat and corrupts checksums; raise it for this session first.
 		$wpdb->query( 'SET SESSION group_concat_max_len = 1048576' );
 
+		$sql_args = array( $bucket_size );
 		if ( 'tax_rates' === $collection ) {
 			$sql = 'SELECT FLOOR(r.tax_rate_id/%d) AS bucket, COUNT(*) AS record_count,'
 				. " MD5(GROUP_CONCAT(CONCAT_WS('|',r.tax_rate_id,r.tax_rate_country,r.tax_rate_state,r.tax_rate,r.tax_rate_name,r.tax_rate_priority,r.tax_rate_compound,r.tax_rate_shipping,r.tax_rate_order,r.tax_rate_class,"
@@ -456,16 +494,19 @@ final class Changes_Controller extends WP_REST_Controller {
 				. ' GROUP BY bucket ORDER BY bucket';
 			$note = 'checksum covers every tax-rate column AND its postcode/city locations (F12), so any rate edit — including a location-only change that does not fire woocommerce_tax_rate_updated — moves the checksum; tax rates have no timestamps.';
 		} else {
-			$sql = 'SELECT FLOOR(ID/%d) AS bucket, COUNT(*) AS record_count,'
+			$hidden = $this->pos_hidden_ids();
+			$sql    = 'SELECT FLOOR(ID/%d) AS bucket, COUNT(*) AS record_count,'
 				. " MD5(GROUP_CONCAT(CONCAT(ID,'|',post_modified_gmt) ORDER BY ID SEPARATOR ',')) AS checksum"
 				. " FROM {$wpdb->posts}"
 				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. self::hidden_ids_sql( $hidden )
 				. ' GROUP BY bucket ORDER BY bucket';
-			$note = 'built on (id, post_modified_gmt) — inherits date_modified blindness by design; hash-backed variant deferred.';
+			$sql_args = array_merge( $sql_args, $hidden );
+			$note     = 'built on (id, post_modified_gmt) — inherits date_modified blindness by design; hash-backed variant deferred.';
 		}
 
-		$rows    = $wpdb->get_results( $wpdb->prepare( $sql, $bucket_size ), ARRAY_A );
+		$rows    = $wpdb->get_results( $wpdb->prepare( $sql, $sql_args ), ARRAY_A );
 		$rows    = \is_array( $rows ) ? $rows : array();
 		$changes = array_map(
 			static function ( array $row ): array {
@@ -648,6 +689,39 @@ final class Changes_Controller extends WP_REST_Controller {
 			'complete'   => $complete,
 			'meta'       => $meta,
 		);
+	}
+
+	/**
+	 * The product-space ids the POS may NOT be served, products and variations unioned.
+	 *
+	 * The repair tiers must walk exactly the set the catalog lane serves. Walking a wider set makes
+	 * them report drift no pull can resolve: tier 3 hands the client ids it can never receive, and
+	 * tier 2's bucket checksum can never agree with the client's, so the bucket never converges.
+	 * Products and variations share ONE bucket id-space here ({@see Sync\Collections} folds the
+	 * variations digest into the products id-space), so the exclusion covers both types — the same
+	 * union {@see Sync\Digest_Index} applies to the digest store this lane is compared against.
+	 *
+	 * @return int[]
+	 */
+	private function pos_hidden_ids(): array {
+		return ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG );
+	}
+
+	/**
+	 * The hidden-id exclusion as a `%d` placeholder list, empty when nothing is hidden.
+	 *
+	 * These lanes assemble placeholders and defer `prepare()` to the end, so the ids ride the same
+	 * placeholder list rather than going through {@see Pos_Visibility::apply_to_sql_where()}, which
+	 * returns an already-prepared fragment its own docblock forbids re-preparing.
+	 *
+	 * @param int[] $hidden Hidden ids, as returned by {@see pos_hidden_ids()}.
+	 */
+	private static function hidden_ids_sql( array $hidden ): string {
+		if ( array() === $hidden ) {
+			return '';
+		}
+
+		return ' AND ID NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
 	}
 
 	private function collection_for_request( WP_REST_Request $request ): string {

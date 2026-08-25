@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\API\V2\Digests_Controller;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
 use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
@@ -688,6 +689,136 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( $product->get_id(), $data['changes'][0]['id'] );
 		$this->assertMatchesRegularExpression( '/^[0-9a-f]{32}$/', $data['changes'][0]['revision'] );
+	}
+
+	/**
+	 * Hide product-space ids from the POS for the default scope.
+	 *
+	 * @param int[] $product_ids   Product ids to hide.
+	 * @param int[] $variation_ids Variation ids to hide.
+	 */
+	private function hide_from_pos( array $product_ids, array $variation_ids ): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products'   => array(
+					'default' => array( 'online_only' => array( 'ids' => array_values( $product_ids ) ) ),
+				),
+				'variations' => array(
+					'default' => array( 'online_only' => array( 'ids' => array_values( $variation_ids ) ) ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Revision hash lists only ids the catalog lane will serve.
+	 *
+	 * The repair tiers exist to detect drift between server and client; walking a WIDER set than the
+	 * catalog lane serves reports drift no pull can ever resolve, because the client pushes each id as
+	 * a pull target and gets nothing back for the hidden ones.
+	 */
+	public function test_revision_hash_excludes_online_only_products_and_variations(): void {
+		// Arrange.
+		$variable       = ProductHelper::create_variation_product();
+		$variation_ids  = array_map( 'intval', $variable->get_children() );
+		$hidden_product = ProductHelper::create_simple_product();
+		$visible        = ProductHelper::create_simple_product();
+		$this->hide_from_pos( array( $hidden_product->get_id() ), array( $variation_ids[0] ) );
+
+		// Act.
+		$response = ( new Changes_Controller() )->revision_hash(
+			$this->request(
+				array(
+					'collection' => 'products',
+					'since_id'   => $variable->get_id() - 1,
+					'limit'      => 200,
+				)
+			)
+		);
+		$ids = array_column( $response->get_data()['changes'], 'id' );
+
+		// Assert.
+		$this->assertNotContains( $hidden_product->get_id(), $ids );
+		$this->assertNotContains( $variation_ids[0], $ids );
+		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertContains( $variation_ids[1], $ids );
+	}
+
+	/**
+	 * The range-checksum drill-down lists only ids the catalog lane will serve.
+	 */
+	public function test_range_checksum_bucket_excludes_online_only_products_and_variations(): void {
+		// Arrange.
+		$variable       = ProductHelper::create_variation_product();
+		$variation_ids  = array_map( 'intval', $variable->get_children() );
+		$hidden_product = ProductHelper::create_simple_product();
+		$visible        = ProductHelper::create_simple_product();
+		$this->hide_from_pos( array( $hidden_product->get_id() ), array( $variation_ids[0] ) );
+		$bucket_size = 10000;
+		$bucket      = intdiv( $visible->get_id(), $bucket_size );
+
+		// Act.
+		$response = ( new Changes_Controller() )->range_checksum(
+			$this->request(
+				array(
+					'collection'  => 'products',
+					'bucket_size' => $bucket_size,
+					'bucket'      => $bucket,
+				)
+			)
+		);
+		$ids = array_column( $response->get_data()['changes'], 'id' );
+
+		// Assert.
+		$this->assertNotContains( $hidden_product->get_id(), $ids );
+		$this->assertNotContains( $variation_ids[0], $ids );
+		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertContains( $variation_ids[1], $ids );
+	}
+
+	/**
+	 * The bucket aggregate counts exactly the records the digest store holds for the same bucket.
+	 *
+	 * A single hidden record inside a bucket makes the checksum permanently disagree with the client's,
+	 * and the bucket never converges — so the two lanes must answer "what may the POS see" identically.
+	 */
+	public function test_range_checksum_aggregate_matches_digest_lane_membership(): void {
+		// Arrange.
+		$variable      = ProductHelper::create_variation_product();
+		$variation_ids = array_map( 'intval', $variable->get_children() );
+		$hidden        = ProductHelper::create_simple_product();
+		ProductHelper::create_simple_product();
+		$this->hide_from_pos( array( $hidden->get_id() ), array( $variation_ids[0] ) );
+		$bucket_size = 10000;
+		$bucket      = intdiv( $variable->get_id(), $bucket_size );
+
+		// Act.
+		$response = ( new Changes_Controller() )->range_checksum(
+			$this->request(
+				array(
+					'collection'  => 'products',
+					'bucket_size' => $bucket_size,
+				)
+			)
+		);
+		$aggregates = array_column( $response->get_data()['changes'], null, 'bucket' );
+		$digest_ids = array_column(
+			( new Digest_Index() )->bucket_listing(
+				'products',
+				array(
+					'start' => $bucket * $bucket_size,
+					'end'   => ( $bucket + 1 ) * $bucket_size,
+				)
+			),
+			'id'
+		);
+
+		// Assert.
+		$this->assertArrayHasKey( $bucket, $aggregates );
+		$this->assertNotContains( $hidden->get_id(), array_map( 'intval', $digest_ids ) );
+		$this->assertSame( \count( $digest_ids ), $aggregates[ $bucket ]['record_count'] );
 	}
 
 	/**

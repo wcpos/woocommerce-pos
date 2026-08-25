@@ -34,6 +34,8 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * Every hook name the constructor registers ONLY when the sync schema latch
 	 * is set. Derived from `Sync_Journal::register_hooks()` (32 names),
 	 * `Integrity_Digest::register_hooks()` (21, all a subset of the journal's),
+	 * `Visibility_Observer::register_hooks()` (9: four per watched option plus the
+	 * shared generic `delete_option`),
 	 * `Sync_Journal_Purge::register_hooks()` and the four sync lane filters.
 	 *
 	 * `woocommerce_update_coupon` is deliberately absent: `Coupon_Modified_Date`
@@ -43,18 +45,27 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * @var string[]
 	 */
 	private const LATCHED_ONLY_HOOKS = array(
+		'add_option_woocommerce_pos_settings_general',
+		'add_option_woocommerce_pos_settings_visibility',
 		'add_user_role',
 		'added_term_meta',
 		'before_delete_post',
 		'created_term',
+		'delete_option',
+		'delete_option_woocommerce_pos_settings_general',
+		'delete_option_woocommerce_pos_settings_visibility',
 		'delete_term',
 		'delete_user',
 		'deleted_term_meta',
 		'edited_term',
+		'pre_update_option_woocommerce_pos_settings_general',
+		'pre_update_option_woocommerce_pos_settings_visibility',
 		'profile_update',
 		'remove_user_role',
 		'set_user_role',
 		'untrashed_post',
+		'update_option_woocommerce_pos_settings_general',
+		'update_option_woocommerce_pos_settings_visibility',
 		'updated_term_meta',
 		'user_register',
 		'wcpos_sync_journal_purge',

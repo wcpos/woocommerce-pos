@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
 
 /**
  * POS visibility contract (ADR 0014 phase 3, WP-M5) — the SOLE authority for "which products and
@@ -91,6 +92,22 @@ final class Pos_Visibility {
 	 * @var string
 	 */
 	public const DEFAULT_SCOPE = 'default';
+
+	/**
+	 * Every wp_option whose value can move the hidden set.
+	 *
+	 * The stored id lists are only half of it: `pos_only_products` gates the whole feature from the
+	 * General section, so flipping that one boolean hides or reveals every configured id without
+	 * touching the visibility option. An observer that watched only the id lists would miss it.
+	 *
+	 * @return string[]
+	 */
+	public static function source_options(): array {
+		return array(
+			self::OPTION,
+			Abstract_Section::DB_PREFIX . 'general',
+		);
+	}
 
 	/**
 	 * The ids hidden from the POS for one type and scope — the servable-set exclusion list.

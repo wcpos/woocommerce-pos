@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
+use WC_REST_Customers_Controller;
+use WCPOS\WooCommercePOS\Services\Customer_Meta_Parity;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_REST_Response;
 
@@ -24,9 +26,19 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Create the customer fixture after REST initialization.
+	 *
+	 * `Customer_Meta_Parity` is part of the customer read contract on every POS
+	 * surface — `Init::init_common()` registers it in production — but the
+	 * phpunit bootstrap does not run Init, so it has to be wired here. Without
+	 * it this class served a shape no deployed client ever sees, and the field-set
+	 * pin below ratified that shape (#1712). The header is what the filter gates
+	 * on: `wcpos_request()` reads the real request headers, not the
+	 * `WP_REST_Request` object the dispatch helpers build.
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		new Customer_Meta_Parity();
+		$_SERVER['HTTP_X_WCPOS'] = '1';
 
 		$this->customer = CustomerHelper::create_customer(
 			array(
@@ -42,6 +54,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	 * Restore database state after each test.
 	 */
 	public function tearDown(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 	}
 
@@ -208,9 +221,16 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Customer rows expose the complete v2 field set.
+	 * A customer row carries WooCommerce's CUSTOMER shape plus the v1-parity fields.
+	 *
+	 * This pin used to assert a hand-copied field list WITHOUT `tax_ids` — the
+	 * shape wc/v3 serves when nobody has registered `Customer_Meta_Parity`. The
+	 * repair for #1309 was therefore unprotected in the inverted way that gives
+	 * this whole class of bug away: the test would have gone red *because* the
+	 * fix was wired in (#1712). The service is registered in `setUp()` now, so
+	 * the assertion describes the shape a deployed client actually receives.
 	 */
-	public function test_customer_row_has_full_v2_field_set(): void {
+	public function test_customer_row_is_the_woocommerce_customer_shape_with_pos_parity(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
 		$request->set_query_params( array( 'include' => array( $this->customer->get_id() ) ) );
 
@@ -219,24 +239,19 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $rows );
+		/*
+		 * `tax_ids` is the one key WCPOS adds: v1 built it from the customer's meta via
+		 * `Services\Tax_Id_Reader` and stock wc/v3 has no such field, so without the
+		 * parity service it vanishes for every POS client. `meta_data` is declared by
+		 * WooCommerce but withheld from non-administrators, and the same service re-adds
+		 * it for cashiers — covered by Test_Catalog_Proxy_Customer_Meta_Parity, which
+		 * pins the per-role behaviour this shape assertion cannot see. `_links` is
+		 * appended by `rest_get_server()->response_to_data()`, not by the schema.
+		 */
 		$this->assertEqualsCanonicalizing(
-			array(
-				'id',
-				'date_created',
-				'date_created_gmt',
-				'date_modified',
-				'date_modified_gmt',
-				'email',
-				'first_name',
-				'last_name',
-				'role',
-				'username',
-				'billing',
-				'shipping',
-				'is_paying_customer',
-				'avatar_url',
-				'meta_data',
-				'_links',
+			array_merge(
+				$this->view_context_fields( ( new WC_REST_Customers_Controller() )->get_public_item_schema()['properties'] ),
+				array( 'tax_ids', '_links' )
 			),
 			array_keys( $rows[0] )
 		);

@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Ramsey\Uuid\Uuid;
+use WC_REST_Product_Brands_Controller;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -84,6 +85,41 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $included_id ), $include_ids );
 		$this->assertNotContains( $included_id, $exclude_ids );
 		$this->assertContains( $other_id, $exclude_ids );
+	}
+
+	/**
+	 * A brand row carries WooCommerce's BRAND shape plus the POS identity meta.
+	 *
+	 * Brands had no field-set pin at all (#1712): the only `array_keys` in this
+	 * file walks ids, not fields, so the payload could have changed shape with
+	 * the whole suite green — which is exactly how the v2 variation payload
+	 * changed under us (#1710).
+	 *
+	 * The expectation is DERIVED from WooCommerce's own brands schema rather
+	 * than copied out of a response; see
+	 * {@see WCPOS_REST_Unit_Test_Case::view_context_fields()} for why a copied
+	 * list can only ever ratify whatever we happened to emit that day.
+	 */
+	public function test_brand_row_is_the_woocommerce_brand_shape(): void {
+		$brand = wp_insert_term( 'V2 Brand Field Set', 'product_brand' );
+
+		$rows = $this->read( array( 'include' => array( (int) $brand['term_id'] ) ) );
+
+		$this->assertCount( 1, $rows );
+		/*
+		 * `meta_data` is the one key WCPOS adds, and it is load-bearing rather than
+		 * cosmetic: wc/v3 serves no meta on a term at all, so `Sync\Proxy_Uuid_Stamper`
+		 * injects the record's `_woocommerce_pos_uuid` here. Without it the uuid-native
+		 * client has no primary key for the row and throws. `_links` is appended by
+		 * `rest_get_server()->response_to_data()`, not by the schema.
+		 */
+		$this->assertEqualsCanonicalizing(
+			array_merge(
+				$this->view_context_fields( ( new WC_REST_Product_Brands_Controller() )->get_public_item_schema()['properties'] ),
+				array( 'meta_data', '_links' )
+			),
+			array_keys( $rows[0] )
+		);
 	}
 
 	/**

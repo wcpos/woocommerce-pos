@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Ramsey\Uuid\Uuid;
+use WC_REST_Product_Categories_Controller;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -124,26 +125,33 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Category rows expose the complete v2 field set.
+	 * A category row carries WooCommerce's CATEGORY shape plus the POS identity meta.
+	 *
+	 * The expectation is DERIVED from WooCommerce's own product-categories schema
+	 * rather than copied out of a response; see
+	 * {@see WCPOS_REST_Unit_Test_Case::view_context_fields()} for why a copied
+	 * list can only ever ratify whatever we happened to emit that day — which is
+	 * exactly how the v2 variation payload changed shape under us with the whole
+	 * suite green (#1710, #1712).
 	 */
-	public function test_category_row_has_full_v2_field_set(): void {
+	public function test_category_row_is_the_woocommerce_category_shape(): void {
 		$category = wp_insert_term( 'V2 Category Field Set', 'product_cat' );
 
 		$rows = $this->read( array( 'include' => array( (int) $category['term_id'] ) ) );
 
+		$this->assertCount( 1, $rows );
+		/*
+		 * `meta_data` is the one key WCPOS adds, and it is load-bearing rather than
+		 * cosmetic: wc/v3 serves no meta on a term at all, so `Sync\Proxy_Uuid_Stamper`
+		 * injects the record's `_woocommerce_pos_uuid` here. Without it the uuid-native
+		 * client has no primary key for the row and throws — the same addition, for the
+		 * same reason, that the brands lane makes. `_links` is appended by
+		 * `rest_get_server()->response_to_data()`, not by the schema.
+		 */
 		$this->assertEqualsCanonicalizing(
-			array(
-				'id',
-				'name',
-				'slug',
-				'parent',
-				'description',
-				'display',
-				'image',
-				'menu_order',
-				'count',
-				'meta_data',
-				'_links',
+			array_merge(
+				$this->view_context_fields( ( new WC_REST_Product_Categories_Controller() )->get_public_item_schema()['properties'] ),
+				array( 'meta_data', '_links' )
 			),
 			array_keys( $rows[0] )
 		);

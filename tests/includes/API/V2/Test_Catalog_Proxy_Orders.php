@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  * V2 order-search probes using posts storage.
  */
 class Test_Catalog_Proxy_Orders extends WCPOS_REST_Unit_Test_Case {
+	use Catalog_Proxy_Order_Payload_Tests;
 	use Catalog_Proxy_Order_Search_Tests;
 
 	/**
