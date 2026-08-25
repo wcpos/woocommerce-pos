@@ -14,7 +14,7 @@ import {
 	TableRow,
 } from '@wcpos/ui';
 
-import { Combobox, type ComboboxOption } from '../../components/ui';
+import { Checkbox, Combobox, type ComboboxOption } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -54,6 +54,8 @@ const PLUGIN_LABELS: Record<string, string> = {
 
 interface TaxIdsSettings {
 	write_map: Record<string, string>;
+	/** Allow-list of types offered at the till. Empty means "offer them all". */
+	enabled_types: string[];
 }
 
 interface TaxIdsDetection {
@@ -183,6 +185,85 @@ function DetectionBanner({ plugins, overrideCount }: DetectionBannerProps) {
 	);
 }
 
+interface EnabledTypesProps {
+	types: string[];
+	enabled: string[];
+	onChange: (next: string[]) => void;
+}
+
+/**
+ * Allow-list of the tax-ID types offered in the till's "Type" dropdown.
+ *
+ * A store that only ever issues one kind of tax ID shouldn't make its cashiers
+ * scroll past thirteen others to reach it. Stored empty when everything is
+ * ticked, so types added by a later WCPOS version arrive switched on.
+ */
+export function EnabledTypes({ types, enabled, onChange }: EnabledTypesProps) {
+	const restricted = enabled.length > 0;
+	const isChecked = React.useCallback(
+		(type: string) => !restricted || enabled.includes(type),
+		[enabled, restricted]
+	);
+	const checked = types.filter(isChecked);
+
+	const handleToggle = React.useCallback(
+		(type: string, next: boolean) => {
+			const current = types.filter(isChecked);
+			const nextSet = new Set(current);
+			if (next) {
+				nextSet.add(type);
+			} else {
+				nextSet.delete(type);
+			}
+			// Keep canonical order, and collapse "everything ticked" back to the
+			// empty no-restriction value.
+			const ordered = types.filter((candidate) => nextSet.has(candidate));
+			onChange(ordered.length === types.length ? [] : ordered);
+		},
+		[isChecked, onChange, types]
+	);
+
+	return (
+		<div className="wcpos:mb-3">
+			<div className="wcpos:flex wcpos:items-baseline wcpos:justify-between wcpos:gap-2">
+				<strong className="wcpos:text-sm wcpos:text-gray-900">{t('tax_ids.types_title')}</strong>
+				{restricted && (
+					<button
+						type="button"
+						onClick={() => onChange([])}
+						className="wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:underline"
+					>
+						{t('tax_ids.types_show_all')}
+					</button>
+				)}
+			</div>
+			<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:mt-1 wcpos:mb-2">
+				{t('tax_ids.types_intro')}
+			</p>
+			<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-x-4 wcpos:gap-y-1.5 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:px-3 wcpos:py-3">
+				{types.map((type) => {
+					const typeChecked = isChecked(type);
+					return (
+						<Checkbox
+							key={type}
+							label={TAX_ID_TYPE_LABELS[type] ?? type}
+							checked={typeChecked}
+							// The till needs something to offer — the last one stays.
+							disabled={typeChecked && checked.length === 1}
+							onChange={(event) => handleToggle(type, event.target.checked)}
+						/>
+					);
+				})}
+			</div>
+			<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:mt-1.5">
+				{restricted
+					? t('tax_ids.types_restricted_hint', { count: checked.length, total: types.length })
+					: t('tax_ids.types_all_hint')}
+			</p>
+		</div>
+	);
+}
+
 interface OverrideRowProps {
 	type: string;
 	composed: string;
@@ -233,6 +314,7 @@ export function TaxIdsSection() {
 		mutate: (next: Partial<TaxIdsSettings>) => void;
 	};
 	const writeMap = data?.write_map ?? {};
+	const enabledTypes = data?.enabled_types ?? [];
 
 	const { data: detection } = useSuspenseQuery({
 		queryKey: ['tax_ids_detection'],
@@ -281,6 +363,12 @@ export function TaxIdsSection() {
 			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-3">
 				{t('tax_ids.section_intro')} <DocsLink />
 			</p>
+
+			<EnabledTypes
+				types={detection.types}
+				enabled={enabledTypes}
+				onChange={(next) => mutate({ enabled_types: next })}
+			/>
 
 			<DetectionBanner plugins={detection.plugins} overrideCount={overrideCount} />
 

@@ -281,6 +281,15 @@ interface StoreInterface {
 	public function get_default_customer_is_cashier( $context = 'view' );
 
 	/**
+	 * Get customer tax-ID types offered by the POS.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 *
+	 * @return array
+	 */
+	public function get_customer_tax_id_types( $context = 'view' ): array;
+
+	/**
 	 * Get Store URL.
 	 *
 	 * @param string $context What the value is for. Valid values are view and edit.

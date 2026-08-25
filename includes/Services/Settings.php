@@ -670,4 +670,16 @@ class Settings {
 	public function tax_id_write_map(): array {
 		return (array) $this->section_value( 'tax_ids', 'write_map' );
 	}
+
+	/**
+	 * The customer tax-ID types enabled in the POS.
+	 *
+	 * Raw stored value — an empty array means "no restriction". Callers should
+	 * go through Tax_Id_Settings::get_enabled_types() for the resolved list.
+	 *
+	 * @return array<int,string>
+	 */
+	public function tax_id_enabled_types(): array {
+		return (array) $this->section_value( 'tax_ids', 'enabled_types' );
+	}
 }
