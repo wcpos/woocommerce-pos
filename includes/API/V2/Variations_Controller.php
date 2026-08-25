@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
+use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
@@ -109,7 +110,8 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 					}
 				)
 			);
-			$request->set_param( 'sku', implode( ',', $terms ) );
+			$sku = implode( ',', $terms );
+			$request->set_param( 'sku', $sku );
 		}
 
 		$args = parent::prepare_objects_query( $request );
@@ -145,6 +147,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		}
 		if ( '' !== $search && '' === $sku ) {
 			unset( $args['s'] );
+			$args['wcpos_variation_search'] = true;
 			$carriers = array( 'relation' => 'OR' );
 			foreach ( (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY ) as $term ) {
 				foreach ( Barcode_Field::search_keys() as $key ) {
@@ -319,17 +322,18 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 * @return true|WP_Error
 	 */
 	private function validate_search_request( WP_REST_Request $request ) {
-		if ( $request->has_param( 'sku' ) ) {
-			$sku = (string) $request->get_param( 'sku' );
+		$sku  = (string) ( $request->get_param( 'sku' ) ?? '' );
+		$skus = array_filter(
+			array_map( 'trim', explode( ',', $sku ) ),
+			static function ( string $term ): bool {
+				return '' !== $term;
+			}
+		);
+		if ( array() !== $skus ) {
+			$sku = implode( ',', $skus );
 			if ( self::MAX_SKU_LENGTH < \strlen( $sku ) ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not exceed 4096 bytes', array( 'status' => 400 ) );
 			}
-			$skus = array_filter(
-				array_map( 'trim', explode( ',', $sku ) ),
-				static function ( string $term ): bool {
-					return '' !== $term;
-				}
-			);
 			if ( self::MAX_SKU_TERMS < \count( $skus ) ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not contain more than 100 comma-separated terms', array( 'status' => 400 ) );
 			}
@@ -373,6 +377,18 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		}
 
 		return $params;
+	}
+
+	/**
+	 * De-duplicate variation searches joined through matching meta rows.
+	 *
+	 * @param string   $groupby Existing GROUP BY clause.
+	 * @param WP_Query $query   Query being filtered.
+	 */
+	public function group_search_results( string $groupby, WP_Query $query ): string {
+		global $wpdb;
+
+		return ! empty( $query->query_vars['wcpos_variation_search'] ) ? "{$wpdb->posts}.ID" : $groupby;
 	}
 
 	/**
@@ -428,7 +444,12 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			);
 		}
 
-		$results = $this->get_objects( $query_args );
+		add_filter( 'posts_groupby', array( $this, 'group_search_results' ), 10, 2 );
+		try {
+			$results = $this->get_objects( $query_args );
+		} finally {
+			remove_filter( 'posts_groupby', array( $this, 'group_search_results' ), 10 );
+		}
 
 		$ids = array();
 		foreach ( $results['objects'] as $object ) {

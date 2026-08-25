@@ -252,6 +252,26 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Duplicate matching postmeta rows return one variation and count it once.
+	 *
+	 * Importers can leave multiple rows for one carrier. The meta-query join emits one result row
+	 * per match unless the variation id is grouped, inflating both documents and pagination totals.
+	 */
+	public function test_duplicate_matching_postmeta_rows_return_one_row(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_custom_barcode' ) );
+		$variation = $this->create_variation( 'NO-DUPLICATE-SKU-MATCH' );
+		add_post_meta( $variation->get_id(), '_custom_barcode', 'DUPLICATE-NEEDLE' );
+		add_post_meta( $variation->get_id(), '_custom_barcode', 'DUPLICATE-NEEDLE' );
+
+		$response = $this->variations_request( array( 'search' => 'DUPLICATE-NEEDLE' ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
+		$this->assertSame( 1, $data['meta']['total'] );
+	}
+
+	/**
 	 * A term matching two carriers on one variation returns it once, and counts it once.
 	 *
 	 * The replaced SQL used `SELECT DISTINCT` / `COUNT(DISTINCT …)` because an OR join over
@@ -275,6 +295,30 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
 		$this->assertSame( 1, $data['meta']['total'] );
+	}
+
+	/**
+	 * Legacy controller responses retain fields required by the client.
+	 */
+	public function test_serializer_backfills_pre_wc83_variation_fields(): void {
+		$variation = $this->create_variation( 'LEGACY-FIELD-BACKFILL' );
+		$strip      = static function ( $response ) {
+			$data = $response->get_data();
+			unset( $data['name'], $data['parent_id'] );
+			$response->set_data( $data );
+
+			return $response;
+		};
+		add_filter( 'woocommerce_rest_prepare_product_variation_object', $strip, PHP_INT_MAX );
+		try {
+			$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $strip, PHP_INT_MAX );
+		}
+		$payload = $response->get_data()['documents'][0]['payload'];
+
+		$this->assertSame( $variation->get_parent_id(), $payload['parent_id'] );
+		$this->assertSame( wc_get_formatted_variation( $variation, true, false, false ), $payload['name'] );
 	}
 
 	/**
@@ -369,6 +413,24 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $exact->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+	}
+
+	/**
+	 * A SKU value that normalizes away does not suppress the search term.
+	 */
+	public function test_empty_normalized_sku_falls_back_to_search(): void {
+		$match = $this->create_variation( 'NORMALIZED-SKU-SEARCH-MATCH' );
+		$this->create_variation( 'NORMALIZED-SKU-OTHER' );
+
+		$response = $this->variations_request(
+			array(
+				'sku'    => ', ',
+				'search' => 'SEARCH-MATCH',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $match->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
 	}
 
 	/**
@@ -477,6 +539,18 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
+			'empty sku search length' => array(
+				array(
+					'sku'    => ', ',
+					'search' => str_repeat( 'S', 257 ),
+				),
+			),
+			'empty sku search terms'  => array(
+				array(
+					'sku'    => ', ',
+					'search' => implode( ' ', array_fill( 0, 11, 'term' ) ),
+				),
+			),
 			'page'              => array(
 				array(
 					'search' => 'boundary',
