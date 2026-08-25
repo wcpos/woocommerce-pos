@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.9.17
+Stable tag: 1.10.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -121,7 +121,7 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 
 == Changelog ==
 
-= 1.10.0 - 2026/XX/XX =
+= 1.10.0 - 2026/08/25 =
 **A new sync engine.** The biggest update since we rebuilt WCPOS in React Native back in 2023. Your store now syncs through a change log -- the POS asks what changed since it last checked, instead of re-downloading your catalogue every time. Nearly everything below follows from that.
 - **Faster to open, and it stays fast.** Categories, tags, brands and coupons load on demand instead of before you can sell. Products and customers fill in quietly in the background. Once your catalogue is local, product search doesn't touch the server at all.
 - **Your server does less work.** When nothing has changed, the POS gets a tiny "nothing new" reply instead of a full page of data -- and when your server is busy, the POS notices and eases off.
