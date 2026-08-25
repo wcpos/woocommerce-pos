@@ -182,6 +182,15 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $variation->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+		/*
+		 * The COUNT matters as much as the rows. Dropping a product from the served documents is
+		 * easy — the hydration loop only keeps WC_Product_Variation instances. But if the QUERY
+		 * still counted it, the total and page count would describe a set the client can never
+		 * receive, and the pager would chase a page that is always short. This assertion is what
+		 * makes the post_type narrowing load-bearing rather than decorative.
+		 */
+		$this->assertSame( 1, $response->get_data()['meta']['total'] );
+		$this->assertSame( '1', (string) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
