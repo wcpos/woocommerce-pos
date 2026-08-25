@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
 use WP_REST_Controller;
@@ -323,14 +324,15 @@ final class Changes_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$rows = $wpdb->get_results(
+		$hidden = $this->pos_hidden_ids();
+		$rows   = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}"
 				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. self::hidden_ids_sql( $hidden )
 				. ' AND ID > %d ORDER BY ID ASC LIMIT %d',
-				$since_id,
-				$limit
+				array_merge( $hidden, array( $since_id, $limit ) )
 			),
 			ARRAY_A
 		);
@@ -418,14 +420,15 @@ final class Changes_Controller extends WP_REST_Controller {
 				);
 			}
 
-			$rows = $wpdb->get_results(
+			$hidden = $this->pos_hidden_ids();
+			$rows   = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT ID, post_modified_gmt FROM {$wpdb->posts}"
 					. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 					. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+					. self::hidden_ids_sql( $hidden )
 					. ' AND ID >= %d AND ID < %d ORDER BY ID ASC',
-					$range_start,
-					$range_end
+					array_merge( $hidden, array( $range_start, $range_end ) )
 				),
 				ARRAY_A
 			);
@@ -447,6 +450,7 @@ final class Changes_Controller extends WP_REST_Controller {
 		// concat and corrupts checksums; raise it for this session first.
 		$wpdb->query( 'SET SESSION group_concat_max_len = 1048576' );
 
+		$sql_args = array( $bucket_size );
 		if ( 'tax_rates' === $collection ) {
 			$sql = 'SELECT FLOOR(r.tax_rate_id/%d) AS bucket, COUNT(*) AS record_count,'
 				. " MD5(GROUP_CONCAT(CONCAT_WS('|',r.tax_rate_id,r.tax_rate_country,r.tax_rate_state,r.tax_rate,r.tax_rate_name,r.tax_rate_priority,r.tax_rate_compound,r.tax_rate_shipping,r.tax_rate_order,r.tax_rate_class,"
@@ -456,16 +460,19 @@ final class Changes_Controller extends WP_REST_Controller {
 				. ' GROUP BY bucket ORDER BY bucket';
 			$note = 'checksum covers every tax-rate column AND its postcode/city locations (F12), so any rate edit — including a location-only change that does not fire woocommerce_tax_rate_updated — moves the checksum; tax rates have no timestamps.';
 		} else {
-			$sql = 'SELECT FLOOR(ID/%d) AS bucket, COUNT(*) AS record_count,'
+			$hidden = $this->pos_hidden_ids();
+			$sql    = 'SELECT FLOOR(ID/%d) AS bucket, COUNT(*) AS record_count,'
 				. " MD5(GROUP_CONCAT(CONCAT(ID,'|',post_modified_gmt) ORDER BY ID SEPARATOR ',')) AS checksum"
 				. " FROM {$wpdb->posts}"
 				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. self::hidden_ids_sql( $hidden )
 				. ' GROUP BY bucket ORDER BY bucket';
-			$note = 'built on (id, post_modified_gmt) — inherits date_modified blindness by design; hash-backed variant deferred.';
+			$sql_args = array_merge( $sql_args, $hidden );
+			$note     = 'built on (id, post_modified_gmt) — inherits date_modified blindness by design; hash-backed variant deferred.';
 		}
 
-		$rows    = $wpdb->get_results( $wpdb->prepare( $sql, $bucket_size ), ARRAY_A );
+		$rows    = $wpdb->get_results( $wpdb->prepare( $sql, $sql_args ), ARRAY_A );
 		$rows    = \is_array( $rows ) ? $rows : array();
 		$changes = array_map(
 			static function ( array $row ): array {
@@ -648,6 +655,39 @@ final class Changes_Controller extends WP_REST_Controller {
 			'complete'   => $complete,
 			'meta'       => $meta,
 		);
+	}
+
+	/**
+	 * The product-space ids the POS may NOT be served, products and variations unioned.
+	 *
+	 * The repair tiers must walk exactly the set the catalog lane serves. Walking a wider set makes
+	 * them report drift no pull can resolve: tier 3 hands the client ids it can never receive, and
+	 * tier 2's bucket checksum can never agree with the client's, so the bucket never converges.
+	 * Products and variations share ONE bucket id-space here ({@see Sync\Collections} folds the
+	 * variations digest into the products id-space), so the exclusion covers both types — the same
+	 * union {@see Sync\Digest_Index} applies to the digest store this lane is compared against.
+	 *
+	 * @return int[]
+	 */
+	private function pos_hidden_ids(): array {
+		return ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG );
+	}
+
+	/**
+	 * The hidden-id exclusion as a `%d` placeholder list, empty when nothing is hidden.
+	 *
+	 * These lanes assemble placeholders and defer `prepare()` to the end, so the ids ride the same
+	 * placeholder list rather than going through {@see Pos_Visibility::apply_to_sql_where()}, which
+	 * returns an already-prepared fragment its own docblock forbids re-preparing.
+	 *
+	 * @param int[] $hidden Hidden ids, as returned by {@see pos_hidden_ids()}.
+	 */
+	private static function hidden_ids_sql( array $hidden ): string {
+		if ( array() === $hidden ) {
+			return '';
+		}
+
+		return ' AND ID NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
 	}
 
 	private function collection_for_request( WP_REST_Request $request ): string {
