@@ -163,11 +163,26 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			}
 		}
 
-		// A discovery search only ever offers what is for sale. (The `include` lane hydrates by id
-		// and deliberately does not apply this — the client asks for those ids by name.)
-		if ( '' !== $search || '' !== $sku ) {
-			$args['post_status'] = 'publish';
-		}
+		/*
+		 * This route only ever offers what the store owner has for sale — on EVERY lane, including
+		 * `include`.
+		 *
+		 * WooCommerce's Enabled checkbox on the variation metabox writes `post_status = private`
+		 * when unchecked ({@see \WC_Meta_Box_Product_Data::save_variations()}), and WooCommerce
+		 * honours that everywhere a customer can reach: `get_visible_children()` and
+		 * `get_available_variations()` both drop it. A cashier must not be able to sell a variation
+		 * the owner switched off, so the POS behaves the same way.
+		 *
+		 * The `include` lane is NOT exempt. Being asked for an id by name is not evidence the owner
+		 * wants it sold: the client learns those ids from the parent's `variations[]`, which
+		 * WooCommerce fills from `get_children()` — publish AND private — and from the change
+		 * signal, which journals a disabled variation like any other post. A disabled id simply is
+		 * not hydrated, the client's targeted-pull shortfall prunes it, and it leaves every till.
+		 * Re-enabling saves the variation, which journals it, and it comes back.
+		 *
+		 * Set after `parent::prepare_objects_query()` so an explicit `status` param cannot widen it.
+		 */
+		$args['post_status'] = 'publish';
 
 		/*
 		 * Leg-3 (ADR 0014 WP-M5): POS-hidden (`online_only`) variations are never served. As a
@@ -232,11 +247,20 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 				return $validation;
 			}
 			list( $ids, $search_meta ) = $this->search_variation_ids( $request );
+		} elseif ( array() === array_filter( (array) $request->get_param( 'include' ) ) ) {
+			/*
+			 * A bare collection request — no `include`, no discovery term — answers page one of the
+			 * POS-servable set with WooCommerce's own pagination, exactly as its `get_items()` would.
+			 *
+			 * This used to be a 400. That refusal is why the client still counts variations on the
+			 * FROZEN `wcpos/v1` lane — the single remaining v1 call in the app — because the census
+			 * probes a collection route and reads `X-WP-Total`, and no v2 variations route could
+			 * answer "how many". Refusing the question was never a safety property: `include` is a
+			 * filter, and a collection route with no filter is a collection.
+			 */
+			list( $ids, $search_meta ) = $this->collection_page( $request );
 		} else {
 			$ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
-			if ( array() === $ids ) {
-				return new WP_Error( 'woocommerce_pos_sync_missing_ids', 'variations requires a non-empty include list', array( 'status' => 400 ) );
-			}
 			// Leg-3 (ADR 0014 WP-M5): drop POS-hidden (`online_only`) variations from the served set. A hidden
 			// id simply isn't hydrated → the client's targeted pull returns nothing for it → Leg-3 prunes it.
 			// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
@@ -267,6 +291,19 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		foreach ( $ids as $id ) {
 			$variation = wc_get_product( $id );
 			if ( ! $variation instanceof WC_Product_Variation ) {
+				continue;
+			}
+			/*
+			 * DISABLED variations are never hydrated — see the `post_status` note in
+			 * prepare_objects_query(). The gate lives here as well because the `include` lane does
+			 * not build a WP_Query at all: it loads each id directly, so the query-level narrowing
+			 * that covers the collection and discovery lanes cannot reach it.
+			 *
+			 * Dropping it here (rather than out of $ids) deliberately leaves `meta.requested`
+			 * counting the ask: requested > returned is precisely the shortfall the client's
+			 * targeted pull reads as "prune this id".
+			 */
+			if ( 'publish' !== $variation->get_status() ) {
 				continue;
 			}
 			$payload  = $serializer->serialize( $variation, $serialization_request );
@@ -419,6 +456,42 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 *
 	 * @return array{0: array<int, int>, 1: array{total: int, page: int, per_page: int}}
 	 */
+	/**
+	 * One page of the POS-servable variation collection, with its total.
+	 *
+	 * WooCommerce's query pair, same as {@see search_variation_ids()} — the only difference is that
+	 * a bare collection request carries no discovery constraint to normalize away, so the
+	 * blank-scan guard that turns `?search=%20` into zero rows must NOT apply here. Visibility and
+	 * `post_status` narrowing both ride `prepare_objects_query()`, so this page counts exactly what
+	 * the client is allowed to receive.
+	 *
+	 * @return array{0: array<int, int>, 1: array{total: int, page: int, per_page: int}}
+	 */
+	private function collection_page( WP_REST_Request $request ): array {
+		$per_page = max( 1, min( 100, (int) ( $request->get_param( 'per_page' ) ?? 10 ) ) );
+		$page     = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
+		$request->set_param( 'per_page', $per_page );
+		$request->set_param( 'page', $page );
+
+		$results = $this->get_objects( $this->prepare_objects_query( $request ) );
+
+		$ids = array();
+		foreach ( $results['objects'] as $object ) {
+			if ( $object instanceof WC_Product_Variation ) {
+				$ids[] = $object->get_id();
+			}
+		}
+
+		return array(
+			$ids,
+			array(
+				'total'    => (int) ( $results['total'] ?? \count( $ids ) ),
+				'page'     => $page,
+				'per_page' => $per_page,
+			),
+		);
+	}
+
 	private function search_variation_ids( WP_REST_Request $request ): array {
 		$per_page = max( 1, min( 100, (int) ( $request->get_param( 'per_page' ) ?? 10 ) ) );
 		$page     = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );

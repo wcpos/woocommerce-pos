@@ -135,6 +135,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 
 		$schema_fields = array_keys( ( new WC_REST_Product_Variations_Controller() )->get_public_item_schema()['properties'] );
+
 		/*
 		 * WooCommerce emits three fields its variation SCHEMA does not declare: both `_gmt` date
 		 * variants, and `name`, which the variations controller gained in WC 8.3 without a
@@ -185,6 +186,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $variation->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+
 		/*
 		 * The COUNT matters as much as the rows. Dropping a product from the served documents is
 		 * easy — the hydration loop only keeps WC_Product_Variation instances. But if the QUERY
@@ -324,6 +326,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	/**
 	 * A discovery term that normalizes away hydrates nothing, not everything.
 	 *
+	 * @param array<string, string> $params Query parameters for the request.
+	 *
 	 * @dataProvider blank_discovery_terms
 	 */
 	public function test_blank_discovery_term_returns_no_rows( array $params ): void {
@@ -338,6 +342,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Discovery terms that normalize away to nothing.
+	 *
 	 * @return array<string, array{0: array<string, string>}>
 	 */
 	public function blank_discovery_terms(): array {
@@ -620,12 +626,97 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Requests without include or a search mode keep the existing 400.
+	 * A DISABLED variation is never served, even when the client names its id.
+	 *
+	 * "Disabled" is WooCommerce's own Enabled checkbox on the variation metabox
+	 * (`html-variation-admin.php`), which writes `post_status = private`
+	 * (`WC_Meta_Box_Product_Data::save_variations()`). A store owner unchecks it to take that
+	 * variation out of sale, and WooCommerce honours that everywhere a customer can reach —
+	 * `get_visible_children()` and `get_available_variations()` both drop it.
+	 *
+	 * The POS must behave the same way, so the cashier cannot sell something the owner switched
+	 * off. Serving it on the strength of the client having asked by id is a transport argument,
+	 * not a behavioural one: the id reaches the client from the parent's `variations[]` (which
+	 * WooCommerce populates with publish AND private children) and from the change signal, so
+	 * "the client asked for it" is not evidence the owner wants it sold.
+	 *
+	 * The client's targeted-pull shortfall then prunes it from every till, which is exactly the
+	 * intended outcome of disabling a variation.
 	 */
-	public function test_no_params_returns_existing_missing_ids_error(): void {
-		$response = $this->variations_request();
+	public function test_include_does_not_serve_a_disabled_variation(): void {
+		$enabled  = $this->create_variation( 'ENABLED-VARIATION' );
+		$disabled = $this->create_variation( 'DISABLED-VARIATION', 'private' );
 
-		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame( 'woocommerce_pos_sync_missing_ids', $response->get_data()['code'] );
+		$response = $this->variations_request(
+			array( 'include' => $enabled->get_id() . ',' . $disabled->get_id() )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $enabled->get_id() ),
+			array_column( $response->get_data()['documents'], 'id' ),
+			'A disabled (private) variation must not be hydrated even when named in include.'
+		);
+	}
+
+	/**
+	 * A bare collection request answers page one with WooCommerce's pagination headers.
+	 *
+	 * This route used to 400 without `include`, which is why the client still counts variations
+	 * on the frozen `wcpos/v1` lane — the one remaining v1 call in the app. The census reads
+	 * `X-WP-Total`, so the v2 route has to be able to answer "how many" before that call can move.
+	 */
+	public function test_bare_collection_request_returns_a_page_with_totals(): void {
+		$first  = $this->create_variation( 'BARE-COLLECTION-1' );
+		$second = $this->create_variation( 'BARE-COLLECTION-2' );
+
+		$response = $this->variations_request( array( 'per_page' => 1 ) );
+		$headers  = $response->get_headers();
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), 'A bare collection request must not 400.' );
+		$this->assertCount( 1, $data['documents'], 'per_page must bound the page.' );
+		// ProductHelper::create_variation_product() gives each parent its own variations, so the
+		// collection is wider than the two rows named here — assert the relationships, not a count.
+		$total = (int) $headers['X-WP-Total'];
+		$this->assertGreaterThanOrEqual( 2, $total );
+		$this->assertSame( $total, $data['meta']['total'], 'Header and envelope must agree.' );
+		$this->assertSame(
+			(string) $total,
+			(string) $headers['X-WP-TotalPages'],
+			'At per_page=1 there is one page per record.'
+		);
+		$this->assertNotEmpty( $first->get_id() );
+		$this->assertNotEmpty( $second->get_id() );
+	}
+
+	/**
+	 * A bare collection request counts only what the POS may sell.
+	 */
+	public function test_bare_collection_request_excludes_hidden_and_disabled(): void {
+		$countable = $this->create_variation( 'COUNTABLE' );
+		$disabled = $this->create_variation( 'NOT-COUNTABLE-DISABLED', 'private' );
+		$hidden   = $this->create_variation( 'NOT-COUNTABLE-HIDDEN' );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$response = $this->variations_request( array( 'per_page' => 100 ) );
+		$data     = $response->get_data();
+		$ids      = array_column( $data['documents'], 'id' );
+
+		$this->assertContains( $countable->get_id(), $ids );
+		$this->assertNotContains( $disabled->get_id(), $ids, 'A disabled variation must not be listed.' );
+		$this->assertNotContains( $hidden->get_id(), $ids, 'A POS-hidden variation must not be listed.' );
+		// The advertised total must describe the same set the page does, or the census over-counts.
+		$this->assertSame( \count( $ids ), (int) $response->get_headers()['X-WP-Total'] );
 	}
 }
