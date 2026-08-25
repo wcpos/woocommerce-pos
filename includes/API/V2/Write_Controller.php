@@ -469,7 +469,12 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		$id_type = $meta['id_type'] ?? '';
 		if ( in_array( $id_type, array( 'order', 'post', 'user' ), true ) ) {
-			$date = (string) ( $bare['date_modified_gmt'] ?? '' );
+			// Read the date from wherever the document carries it. A variation's document is the
+			// `{ id, parent_id, payload }` wrapper, so a top-level-only read makes this branch dead
+			// code for the one collection whose canonical revision IS a date — and it would come
+			// back to life, silently, the day the wrapper is dropped.
+			$nested = isset( $bare['payload'] ) && is_array( $bare['payload'] ) ? $bare['payload'] : array();
+			$date   = (string) ( $bare['date_modified_gmt'] ?? $nested['date_modified_gmt'] ?? '' );
 			return '' !== $date && $base === $date;
 		}
 		if ( 'term' === $id_type && $allow_term_grace ) {
@@ -952,11 +957,31 @@ class Write_Controller extends WP_REST_Controller {
 
 	private function revision_for( array $meta, int $id, array $bare ): string {
 		if ( 'product_variation' === ( $meta['post_type'] ?? '' ) ) {
-			// The targeted variation pull stores exactly this source as
-			// sync.revision (apps/web/src/db/variationIncludePull.ts): modified
-			// timestamp, falling back to the wrapper id.
+			/*
+			 * A variation's revision is its `date_modified_gmt`, deliberately: the client's targeted
+			 * pull synthesizes exactly that as `sync.revision`, so both sides agree without the
+			 * variations lane needing a stamped `_rxdb_revision`.
+			 *
+			 * Read the date from WHEREVER it is — nested under `payload` in today's
+			 * `{ id, parent_id, payload }` wrapper, or top level once that wrapper is dropped.
+			 *
+			 * This used to read `$bare['payload']['date_modified_gmt']` only, with `$bare['id']` as
+			 * the fallback. Against a FLAT document that silently degrades to the variation's own
+			 * ID — a value that never changes again. The failure would be total and invisible:
+			 * `revision_matches_with_grace()` would still let a queued date-based write through
+			 * (with the wrapper gone, its top-level `date_modified_gmt` branch finally resolves),
+			 * the ack would hand the client the id as `currentRevision`, and from then on every
+			 * stale baseRevision would equal every recomputed one. Two tills editing the same
+			 * variation hours apart would both pass the precondition; the per-record lock would
+			 * serialize them, so there would be no error — just a lost update, every time.
+			 *
+			 * The `$bare['id']` fallback is kept ONLY for a document carrying no date at all, and is
+			 * now unreachable for any real variation serialization.
+			 */
 			$payload = isset( $bare['payload'] ) && is_array( $bare['payload'] ) ? $bare['payload'] : array();
-			return (string) ( $payload['date_modified_gmt'] ?? $bare['id'] ?? $id );
+			$date    = $payload['date_modified_gmt'] ?? $bare['date_modified_gmt'] ?? null;
+
+			return (string) ( $date ?? $bare['id'] ?? $id );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {
 			return Order_Serializer::canonical_revision( $bare );
