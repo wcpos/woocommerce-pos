@@ -122,19 +122,18 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 == Changelog ==
 
 = 1.10.0 - 2026/08/25 =
-**A new sync engine.** The biggest update since we rebuilt WCPOS in React Native back in 2023. Your store now syncs through a change log -- the POS asks what changed since it last checked, instead of re-downloading your catalogue every time. Nearly everything below follows from that.
-- **Faster to open, and it stays fast.** Categories, tags, brands and coupons load on demand instead of before you can sell. Products and customers fill in quietly in the background. Once your catalogue is local, product search doesn't touch the server at all.
-- **Your server does less work.** When nothing has changed, the POS gets a tiny "nothing new" reply instead of a full page of data -- and when your server is busy, the POS notices and eases off.
-- **No more invisible walls.** Product lists stopped at 1,000 items and order lists at 200, with no message -- rows simply stopped arriving. Both now scroll as far as you like.
-- **Sorting and filtering that cover your whole store.** Sort by SKU, stock, price or date and get a real answer, not just the part already on the device. Filter orders by cashier, store, customer or date.
-- **Search that finds what WooCommerce finds.** Product search now matches inside words, so compound words work (searching "saippua" finds "Kuorintasaippua"). Customer search matches full names.
-- **Built to survive a dropped connection.** Browsing, cart building and saving orders keep working offline, and the new sync engine now queues the changes you make and replays them when you reconnect -- receipt emails, and customer, coupon and stock edits on Pro. Anything the server rejects is listed with the reason so you can fix and resend it, instead of disappearing silently. Taking payment is the one step that still needs a connection -- offline checkout, starting with cash, is the focus of 1.11.
+
+**A new sync engine.** The biggest update since we rebuilt WCPOS in React Native back in 2023. Your store now syncs through a change log -- the POS asks what changed since it last checked, instead of re-downloading your catalogue every time. It is the foundation the offline queue and Store Health below are built on.
+
 - **Prevent overselling (new, optional).** Turn it on in Checkout settings: the POS stops you adding more than you have, and the server refuses the order too, so a stale device can't oversell either. Backorders are respected.
+- **Built to survive a dropped connection.** Browsing, cart building and saving orders keep working offline, and the new sync engine queues the changes you make and replays them when you reconnect -- receipt emails, and customer, coupon and stock edits on Pro. Anything the server rejects is listed with the reason so you can fix and resend it, instead of disappearing silently. Taking payment is the one step that still needs a connection -- offline checkout, starting with cash, is the focus of 1.11.
 - **Barcode scanning, rebuilt.** Scan with the device camera on any platform. Support for USB, serial, Bluetooth and Bluetooth LE scanners alongside keyboard-wedge. A setup wizard and a test panel that measures your scanner and tells you what to fix. Optional scan sounds.
 - **Store Health.** New screens showing what's on the device versus the server, real storage usage, sync performance over time, and a searchable log where every warning links to an explanation.
-- **Money that matches WooCommerce exactly.** Totals keep full precision, compound taxes follow WooCommerce's own ordering and rounding, and cash change and cashback show in the order's currency.
+- **Search that finds what WooCommerce finds.** Product search now matches inside words, so compound words work (searching "saippua" finds "Kuorintasaippua"). Customer search matches full names.
 - **Printing.** Star cloud printers negotiate their format properly, receipts can be rendered server-side as an image for printers that need it, and auto-print rules can fire on order creation or only once paid. Offline receipts print in the right language.
-- Also: Settings redesigned; cashiers can create and edit products by default; dropdowns fixed on iPad; language switching fixed throughout; deleted items now disappear from the POS.
+- **Settings redesigned.** A calmer, row-based layout with shorter labels. Settings and Store Health now open as panels rather than modals.
+- **Cashiers can create and edit products by default.** Deleting stays opt-in, and catalogue edits are checked against real WordPress permissions -- a rejected edit is reverted with the server's reason shown.
+- **Fixed dropdowns not opening on iPad**, and language changes not reaching every part of the app.
 
 **Note for developers:** 1.10.0 introduces the `wcpos/v2` REST namespace. The POS now uses it for syncing and for the shared POS services that were previously served from `wcpos/v1`. The `wcpos/v1` routes still register but are frozen, and some legacy `API\Settings` controller methods have been removed. See the full release notes for the complete list of breaking changes.
 
