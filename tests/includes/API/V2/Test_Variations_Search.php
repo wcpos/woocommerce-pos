@@ -161,6 +161,51 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A SKU shared with a simple product never serves the product as a variation.
+	 *
+	 * WooCommerce widens `post_type` to `array( 'product', 'product_variation' )` whenever `sku`
+	 * is set, because products and variations share one SKU space. Inherited unguarded on this
+	 * route, a simple product would come back as a variation document and be filed into the
+	 * client's VARIATIONS collection — the mirror of the misfiled-variation pollution the client
+	 * already carries a one-shot repair for, where one record matching in both collections makes
+	 * every scan of that code falsely ambiguous.
+	 */
+	public function test_sku_lookup_never_serves_a_product_as_a_variation(): void {
+		$variation = $this->create_variation( 'SHARED-SKU-CODE' );
+		$product   = ProductHelper::create_simple_product();
+		// Written as meta, not through the CRUD: WooCommerce rejects a duplicate SKU on save, but
+		// importers and migrations write `_sku` directly and stores do carry duplicates. That is
+		// the data this guard exists for.
+		update_post_meta( $product->get_id(), '_sku', 'SHARED-SKU-CODE' );
+
+		$response = $this->variations_request( array( 'sku' => 'SHARED-SKU-CODE' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $variation->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+	}
+
+	/**
+	 * A paginated search reports its total in WooCommerce's headers, not only in the body.
+	 */
+	public function test_search_emits_woocommerce_pagination_headers(): void {
+		foreach ( range( 1, 3 ) as $index ) {
+			$this->create_variation( "PAGED-HEADER-{$index}" );
+		}
+
+		$response = $this->variations_request(
+			array(
+				'search'   => 'PAGED-HEADER',
+				'per_page' => 2,
+			)
+		);
+		$headers  = $response->get_headers();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '3', (string) $headers['X-WP-Total'] );
+		$this->assertSame( '2', (string) $headers['X-WP-TotalPages'] );
+	}
+
+	/**
 	 * Search uses partial LIKE matching against variation SKUs only.
 	 */
 	public function test_search_partially_matches_sku(): void {
