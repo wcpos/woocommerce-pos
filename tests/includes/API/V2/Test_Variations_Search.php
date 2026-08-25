@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
+use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
@@ -111,94 +112,52 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Variation payloads expose the complete product-document field set.
+	 * A variation document carries WooCommerce's VARIATION shape — nothing more, nothing less.
+	 *
+	 * This test used to assert a hand-copied 60-field list of the PRODUCT schema, `images`,
+	 * `categories`, `related_ids`, `variations` and all, under the name "the complete v2 field
+	 * set". It was green for the whole life of the bug: it pinned the products-controller output
+	 * as the contract, so the day a variation stopped carrying `image` there was nothing left to
+	 * notice (#1710).
+	 *
+	 * The expectation is now DERIVED from WooCommerce's own variations schema rather than copied
+	 * out of a response. A hand-copied list can only ever ratify whatever we happened to emit the
+	 * day someone wrote it down; deriving it states the actual rule — we serve what WooCommerce's
+	 * variations controller serves.
 	 */
-	public function test_variation_document_payload_has_full_v2_field_set(): void {
+	public function test_variation_document_payload_is_the_woocommerce_variation_shape(): void {
 		$variation = $this->create_variation( 'FIELD-SET-1456' );
 
 		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
 		$payload  = $response->get_data()['documents'][0]['payload'];
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertEqualsCanonicalizing(
-			array(
-				'id',
-				'name',
-				'slug',
-				'permalink',
-				'date_created',
-				'date_created_gmt',
-				'date_modified',
-				'date_modified_gmt',
-				'type',
-				'status',
-				'featured',
-				'catalog_visibility',
-				'description',
-				'short_description',
-				'sku',
-				'global_unique_id',
-				'price',
-				'regular_price',
-				'sale_price',
-				'date_on_sale_from',
-				'date_on_sale_from_gmt',
-				'date_on_sale_to',
-				'date_on_sale_to_gmt',
-				'price_html',
-				'on_sale',
-				'purchasable',
-				'total_sales',
-				'virtual',
-				'downloadable',
-				'downloads',
-				'download_limit',
-				'download_expiry',
-				'external_url',
-				'button_text',
-				'tax_status',
-				'tax_class',
-				'manage_stock',
-				'stock_quantity',
-				'stock_status',
-				'backorders',
-				'backorders_allowed',
-				'backordered',
-				'low_stock_amount',
-				'sold_individually',
-				'weight',
-				'dimensions',
-				'shipping_required',
-				'shipping_taxable',
-				'shipping_class',
-				'shipping_class_id',
-				'reviews_allowed',
-				'post_password',
-				'average_rating',
-				'rating_count',
-				'related_ids',
-				'upsell_ids',
-				'cross_sell_ids',
-				'parent_id',
-				'purchase_note',
-				'categories',
-				'brands',
-				'tags',
-				'images',
-				'has_options',
-				'attributes',
-				'default_attributes',
-				'variations',
-				'grouped_products',
-				'menu_order',
-				'meta_data',
-				'_links',
-			),
-			array_keys( $payload )
-		);
+
+		$schema_fields = array_keys( ( new WC_REST_Product_Variations_Controller() )->get_public_item_schema()['properties'] );
+		/*
+		 * WooCommerce emits three fields its variation SCHEMA does not declare (verified against
+		 * WC 10.4.3): both `_gmt` date variants, and `name`, which the variations controller
+		 * gained in WC 8.3 without a matching schema entry. Named here rather than smuggled in
+		 * with a loose assertion — if WooCommerce ever closes that gap, this test says so.
+		 */
+		$emitted_but_undeclared = array( 'date_created_gmt', 'date_modified_gmt', 'name' );
+		// `_links` is appended by rest_get_server()->response_to_data(), not by the schema.
+		$expected = array_unique( array_merge( $schema_fields, $emitted_but_undeclared, array( '_links' ) ) );
+
+		$this->assertEqualsCanonicalizing( $expected, array_keys( $payload ) );
+
+		// Named explicitly as well as covered by the derivation above: these are the fields that
+		// rode on every variation for the whole of 1.10.0 and meant nothing on any of them.
+		foreach ( array( 'images', 'categories', 'tags', 'brands', 'related_ids', 'price_html', 'variations', 'grouped_products', 'default_attributes' ) as $product_only ) {
+			$this->assertArrayNotHasKey( $product_only, $payload, "a variation must not carry the product field {$product_only}" );
+		}
+
+		// `barcode` is a v1-lane field: on v2 the client derives it at materialization from the
+		// configured carrier (sku / global_unique_id / meta key), so the server must not invent one.
 		$this->assertArrayNotHasKey( 'barcode', $payload );
 		$this->assertArrayHasKey( 'sku', $payload );
 		$this->assertArrayHasKey( 'global_unique_id', $payload );
+		$this->assertArrayHasKey( 'image', $payload );
 	}
 
 	/**
@@ -335,7 +294,13 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 100, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 10, 'term' ) ) ) ),
-			'page'              => array( array( 'search' => 'boundary', 'page' => 1000, 'per_page' => 100 ) ),
+			'page'              => array(
+				array(
+					'search' => 'boundary',
+					'page' => 1000,
+					'per_page' => 100,
+				),
+			),
 		);
 	}
 
@@ -350,7 +315,13 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
-			'page'              => array( array( 'search' => 'boundary', 'page' => 1001, 'per_page' => 100 ) ),
+			'page'              => array(
+				array(
+					'search' => 'boundary',
+					'page' => 1001,
+					'per_page' => 100,
+				),
+			),
 		);
 	}
 
