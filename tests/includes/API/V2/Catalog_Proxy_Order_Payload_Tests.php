@@ -49,11 +49,14 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		 * Neither of the remaining two is ours. `currency_symbol` is emitted by
 		 * WooCommerce itself and declared nowhere in the wc/v3 order schema
 		 * (`Automattic\WooCommerce\Admin\API\Init::add_currency_symbol_to_order_response`,
-		 * hooked on `woocommerce_rest_prepare_shop_order_object`; verified against
-		 * WC 10.4.3, which declares the field only on the unreleased v4 schema).
-		 * Named here rather than smuggled in with a loose assertion — if
-		 * WooCommerce ever closes that gap, this test says so. `_links` is
-		 * appended by `rest_get_server()->response_to_data()` from the
+		 * hooked on `woocommerce_rest_prepare_shop_order_object`; the field is declared
+		 * only on the not-yet-served v4 order schema). Verified across the whole CI
+		 * matrix — WC 10.9.4 through 11.0.1, per `.github/test-matrix.json` — not just
+		 * the version any one developer happens to run locally. Named here rather than
+		 * smuggled in with a loose assertion, and deliberately NOT de-duplicated: if
+		 * WooCommerce ever declares the field, `assertEqualsCanonicalizing` sees the
+		 * duplicate and this test says so instead of quietly absorbing the change.
+		 * `_links` is appended by `rest_get_server()->response_to_data()` from the
 		 * controller's own `prepare_links()`.
 		 */
 		$this->assertEqualsCanonicalizing(
@@ -64,6 +67,8 @@ trait Catalog_Proxy_Order_Payload_Tests {
 			),
 			array_keys( $row )
 		);
+		// assertSame, not canonicalizing: `Order_Serializer::add_pos_links()` documents the
+		// order these land in, and `links` is a small closed set the client reads by key.
 		$this->assertSame(
 			array( 'payment', 'receipt' ),
 			array_keys( $row['links'] ),
@@ -86,13 +91,14 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		/*
 		 * Emitted by WooCommerce, declared by WooCommerce nowhere. `get_order_item_data()`
 		 * serves `$item->get_data()` verbatim, so every prop on the item class reaches the
-		 * wire whether or not the schema knows about it — and `rate_percent` is a
-		 * `WC_Order_Item_Tax` prop with no entry in the wc/v3 order schema (verified against
-		 * WC 10.4.3); `tax_status` is a `WC_Order_Item_Shipping` prop the schema declares for
-		 * fee lines only; `amount` is a `WC_Order_Item_Fee` prop the schema never declares.
-		 * Listed per collection so the delta is reviewable: an entry appearing here is a
-		 * WooCommerce gap, an entry disappearing is WooCommerce closing it, and either way
-		 * this test is the thing that says so.
+		 * wire whether or not the schema knows about it — `rate_percent` is a
+		 * `WC_Order_Item_Tax` prop with no entry in the wc/v3 order schema; `tax_status` is a
+		 * `WC_Order_Item_Shipping` prop the schema declares for fee lines only; `amount` is a
+		 * `WC_Order_Item_Fee` prop the schema never declares. All three verified across the
+		 * whole CI matrix, WC 10.9.4 through 11.0.1 (`.github/test-matrix.json`). Listed per
+		 * collection so the delta is reviewable: an entry appearing here is a WooCommerce
+		 * gap, an entry disappearing is WooCommerce closing it, and either way this test is
+		 * the thing that says so.
 		 */
 		$emitted_but_undeclared = array(
 			'tax_lines'      => array( 'rate_percent' ),
@@ -130,6 +136,11 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		$row = $this->read_order_row( $this->create_field_set_order() );
 
 		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines' ) as $collection ) {
+			// An empty collection would walk zero items and pass without asserting anything.
+			$this->assertNotEmpty(
+				$row[ $collection ],
+				"the field-set fixture must populate {$collection}, or this pin asserts nothing"
+			);
 			foreach ( $row[ $collection ] as $index => $item ) {
 				$this->assertContains(
 					'_woocommerce_pos_uuid',
