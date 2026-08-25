@@ -50,6 +50,7 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'timezone',
 			'default_customer',
 			'default_customer_is_cashier',
+			'customer_tax_id_types',
 			'store_address',
 			'store_address_2',
 			'store_city',
