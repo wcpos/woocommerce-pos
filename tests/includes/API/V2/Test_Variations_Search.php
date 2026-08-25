@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
 use WC_REST_Product_Variations_Controller;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
@@ -135,10 +136,12 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$schema_fields = array_keys( ( new WC_REST_Product_Variations_Controller() )->get_public_item_schema()['properties'] );
 		/*
-		 * WooCommerce emits three fields its variation SCHEMA does not declare (verified against
-		 * WC 10.4.3): both `_gmt` date variants, and `name`, which the variations controller
-		 * gained in WC 8.3 without a matching schema entry. Named here rather than smuggled in
-		 * with a loose assertion — if WooCommerce ever closes that gap, this test says so.
+		 * WooCommerce emits three fields its variation SCHEMA does not declare: both `_gmt` date
+		 * variants, and `name`, which the variations controller gained in WC 8.3 without a
+		 * matching schema entry. Verified against the WooCommerce build this suite runs — the one
+		 * pinned in `.wp-env.json`, 10.4.3 at the time of writing, NOT the `WC tested up to`
+		 * header. Named here rather than smuggled in with a loose assertion: if WooCommerce ever
+		 * closes that gap, this test says so instead of silently drifting.
 		 */
 		$emitted_but_undeclared = array( 'date_created_gmt', 'date_modified_gmt', 'name' );
 		// `_links` is appended by rest_get_server()->response_to_data(), not by the schema.
@@ -212,6 +215,111 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( '3', (string) $headers['X-WP-Total'] );
 		$this->assertSame( '2', (string) $headers['X-WP-TotalPages'] );
+	}
+
+	/**
+	 * A hidden variation stays hidden even when the request also names it in `include`.
+	 *
+	 * `parent::prepare_objects_query()` maps `include` to `post__in`, and WP_Query IGNORES
+	 * `post__not_in` when `post__in` is present — so a raw exclusion merge would let
+	 * `?search=…&include=<hidden id>` serve a POS-hidden variation. Routing through
+	 * `Pos_Visibility::apply_to_wp_query_args()` intersects instead.
+	 */
+	public function test_hidden_variation_stays_hidden_when_named_in_include(): void {
+		$hidden = $this->create_variation( 'HIDDEN-INCLUDE-1710' );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$response = $this->variations_request(
+			array(
+				'search'  => 'HIDDEN-INCLUDE-1710',
+				'include' => array( $hidden->get_id() ),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( 0, $response->get_data()['meta']['total'] );
+	}
+
+	/**
+	 * A term matching two carriers on one variation returns it once, and counts it once.
+	 *
+	 * The replaced SQL used `SELECT DISTINCT` / `COUNT(DISTINCT …)` because an OR join over
+	 * `_sku` and the configured barcode key can match the same post through two meta rows. On
+	 * WP_Query it does not: measured here, the row and the total are both 1 with no GROUP BY of
+	 * ours. So this pins the OUTCOME rather than an implementation — a WordPress or WooCommerce
+	 * change that reintroduces the duplicate fails here, and we add the grouping then, with a
+	 * test that can go red to justify it.
+	 */
+	public function test_term_matching_two_carriers_returns_one_row(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_custom_barcode' ) );
+		$variation = $this->create_variation( 'TWOCARRIER-1710' );
+		// The same term on the configured barcode field as well as the SKU: an OR meta_query joins
+		// postmeta once per clause, so without a GROUP BY this variation comes back twice and the
+		// total reads 2.
+		update_post_meta( $variation->get_id(), '_custom_barcode', 'TWOCARRIER-1710' );
+
+		$response = $this->variations_request( array( 'search' => 'TWOCARRIER-1710' ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
+		$this->assertSame( 1, $data['meta']['total'] );
+	}
+
+	/**
+	 * A discovery term that normalizes away hydrates nothing, not everything.
+	 *
+	 * @dataProvider blank_discovery_terms
+	 */
+	public function test_blank_discovery_term_returns_no_rows( array $params ): void {
+		$this->create_variation( 'BLANK-SCAN-1710' );
+
+		$response = $this->variations_request( $params );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $data['documents'] );
+		$this->assertSame( 0, $data['meta']['total'] );
+	}
+
+	/**
+	 * @return array<string, array{0: array<string, string>}>
+	 */
+	public function blank_discovery_terms(): array {
+		return array(
+			'empty sku'      => array( array( 'sku' => '' ) ),
+			'comma only'     => array( array( 'sku' => ', ' ) ),
+			'blank search'   => array( array( 'search' => '   ' ) ),
+		);
+	}
+
+	/**
+	 * The POS sort keys reach the query instead of 400ing in argument validation.
+	 */
+	public function test_pos_orderby_values_are_accepted(): void {
+		$this->create_variation( 'ORDERBY-1710' );
+
+		foreach ( array( 'sku', 'barcode', 'stock_quantity', 'stock_status' ) as $orderby ) {
+			$response = $this->variations_request(
+				array(
+					'search'  => 'ORDERBY-1710',
+					'orderby' => $orderby,
+				)
+			);
+
+			$this->assertSame( 200, $response->get_status(), "orderby={$orderby} must be a valid sort key" );
+		}
 	}
 
 	/**

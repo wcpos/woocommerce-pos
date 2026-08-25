@@ -166,15 +166,24 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			$args['post_status'] = 'publish';
 		}
 
-		// Leg-3 (ADR 0014 WP-M5): POS-hidden (`online_only`) variations are never served. As a
-		// query exclusion rather than a post-hoc filter of the result, so paging and totals count
-		// the same set the client is allowed to see.
-		$hidden = ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::VARIATIONS );
-		if ( array() !== $hidden ) {
-			$args['post__not_in'] = array_merge( isset( $args['post__not_in'] ) ? (array) $args['post__not_in'] : array(), $hidden );
-		}
+		/*
+		 * Leg-3 (ADR 0014 WP-M5): POS-hidden (`online_only`) variations are never served. As a
+		 * query exclusion rather than a post-hoc filter of the result, so paging and totals count
+		 * the same set the client is allowed to see.
+		 *
+		 * Through the helper, NOT a raw `post__not_in` merge: `parent::prepare_objects_query()`
+		 * maps `include` to `post__in`, and WP_Query IGNORES `post__not_in` when `post__in` is
+		 * present — so `?search=X&include=<hidden id>` would have served a hidden variation.
+		 * `apply_to_wp_query_args()` already owns that trap: it intersects `post__in` with the
+		 * hidden set and pins an empty intersection to `array( 0 )`.
+		 */
+		$args = ( new Pos_Visibility() )->apply_to_wp_query_args( $args, Pos_Visibility::VARIATIONS );
 
-		// The POS sorts on fields WooCommerce does not offer as orderby values.
+		/*
+		 * The POS sorts on fields WooCommerce does not offer as orderby values. They are declared
+		 * in get_collection_params() below — without that, `orderby=sku` is rejected by REST
+		 * argument validation before this switch ever runs.
+		 */
 		if ( isset( $request['orderby'] ) ) {
 			switch ( $request['orderby'] ) {
 				case 'sku':
@@ -343,6 +352,47 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	}
 
 	/**
+	 * WooCommerce's collection params, plus the sort keys the POS grids offer.
+	 *
+	 * `orderby` is a validated enum. Appending here is what lets `prepare_objects_query()` act on
+	 * these four — otherwise the request 400s during argument validation and the switch is dead
+	 * code. 1.9.x extended the same enum for the same reason.
+	 */
+	public function get_collection_params() {
+		$params = parent::get_collection_params();
+
+		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
+			$params['orderby']['enum'] = array_values(
+				array_unique(
+					array_merge(
+						$params['orderby']['enum'],
+						array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
+					)
+				)
+			);
+		}
+
+		return $params;
+	}
+
+	/**
+	 * Does this discovery request still carry a term after normalization?
+	 *
+	 * `has_param()` is what selects discovery mode, and an empty or whitespace-only value passes
+	 * it. This is the check that decides whether a query would actually be constrained.
+	 */
+	private function has_discovery_constraint( WP_REST_Request $request ): bool {
+		$sku = (string) ( $request->get_param( 'sku' ) ?? '' );
+		if ( '' !== trim( $sku, " \t\n\r\0\x0B," ) ) {
+			return true;
+		}
+
+		$search = (string) ( $request->get_param( 'search' ) ?? '' );
+
+		return array() !== (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+	}
+
+	/**
 	 * Discover a page of published, POS-visible variation ids by SKU/barcode.
 	 *
 	 * The query is WooCommerce's — `prepare_objects_query()` + `get_objects()`, the same pair its
@@ -359,7 +409,26 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		$request->set_param( 'per_page', $per_page );
 		$request->set_param( 'page', $page );
 
-		$results = $this->get_objects( $this->prepare_objects_query( $request ) );
+		$query_args = $this->prepare_objects_query( $request );
+
+		/*
+		 * A discovery request whose terms normalize away — `?sku=`, `?sku=,%20`, `?search=%20` —
+		 * has no constraint left. Inherited, that query would return the FIRST PAGE OF EVERY
+		 * VARIATION and advertise the catalogue-wide total; the replaced SQL deliberately used
+		 * `1 = 0`. A blank scan must hydrate nothing, not everything.
+		 */
+		if ( ! $this->has_discovery_constraint( $request ) ) {
+			return array(
+				array(),
+				array(
+					'total'    => 0,
+					'page'     => $page,
+					'per_page' => $per_page,
+				),
+			);
+		}
+
+		$results = $this->get_objects( $query_args );
 
 		$ids = array();
 		foreach ( $results['objects'] as $object ) {

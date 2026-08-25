@@ -118,8 +118,39 @@ final class Product_Serializer {
 		 * @var mixed $payload
 		 */
 		$payload  = rest_get_server()->response_to_data( $response, false );
+		if ( $is_variation && \is_array( $payload ) ) {
+			$payload = self::backfill_pre_wc83_variation_fields( $payload, $object );
+		}
 
 		return self::augment( \is_array( $payload ) ? $payload : array(), $object, $request );
+	}
+
+	/**
+	 * `name` and `parent_id` on WooCommerce older than 8.3.
+	 *
+	 * WooCommerce added both to the VARIATIONS controller's response in 8.3; the products
+	 * controller has always emitted them. So moving variations onto their own controller would
+	 * silently drop two client-required fields on WooCommerce 5.3–8.2 — and this plugin still
+	 * declares `WC requires at least: 5.3`. The client reads `payload.name` for the variation row
+	 * title and `parent_id` to resolve the parent after a scan.
+	 *
+	 * The same backfill the v1 lane has always carried
+	 * (`API\V1\Product_Variations_Controller::wcpos_variation_response`), for the same reason.
+	 *
+	 * @param array                $payload Serialized variation payload.
+	 * @param WC_Product_Variation $object  The variation backing it.
+	 */
+	private static function backfill_pre_wc83_variation_fields( array $payload, $object ): array {
+		if ( ! isset( $payload['parent_id'] ) ) {
+			$payload['parent_id'] = $object->get_parent_id();
+		}
+		if ( ! isset( $payload['name'] ) ) {
+			$payload['name'] = \function_exists( 'wc_get_formatted_variation' )
+				? wc_get_formatted_variation( $object, true, false, false )
+				: '';
+		}
+
+		return $payload;
 	}
 
 	/**
