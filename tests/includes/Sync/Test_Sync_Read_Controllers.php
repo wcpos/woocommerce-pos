@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\API\V2\Digests_Controller;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
 use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
+use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -840,6 +841,93 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( 'global_unique_id' ), $after['barcode_fields']['products'] );
 		$this->assertArrayNotHasKey( 'candidate', $after );
 		$this->assertSame( array( 'supported' => true ), $after['meta'] );
+	}
+
+	/**
+	 * A payload contract bump moves the collection's fingerprint on its own.
+	 *
+	 * This is the whole migration mechanism for a served-SHAPE change: no journal row is written
+	 * (no save hook fires), the raw-row digest does not move, and tier 3 is only reached from a
+	 * tier-2 mismatch — so without this the client keeps an old-shape record indefinitely. The
+	 * fingerprint is the one signal that can ask for a re-pull, and it must respond to the contract
+	 * version with every other representation setting held fixed.
+	 */
+	public function test_payload_contract_version_participates_in_the_fingerprint(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$fingerprint = new Config_Fingerprint();
+
+		$settings = $fingerprint->representation_settings( 'variations' );
+
+		$this->assertArrayHasKey( 'payload_contract', $settings );
+		$this->assertSame( Config_Fingerprint::payload_contract_version( 'variations' ), $settings['payload_contract'] );
+
+		// The SERVED fingerprint must be computed over the settings that carry the contract
+		// version — asserting only on the settings array would pass even if fingerprint() ignored
+		// it, which is the failure that matters.
+		$this->assertSame( md5( (string) wp_json_encode( $settings ) ), $fingerprint->fingerprint( 'variations' ) );
+
+		// Same settings, one different contract version => different fingerprint. Computed rather
+		// than produced by mutating a constant, so the test states the property, not the value.
+		$bumped = $settings;
+		$bumped['payload_contract'] = $settings['payload_contract'] + 1;
+		ksort( $bumped );
+		$this->assertNotSame(
+			$fingerprint->fingerprint( 'variations' ),
+			md5( (string) wp_json_encode( $bumped ) ),
+			'A contract bump must move the fingerprint, or no client re-pulls.'
+		);
+	}
+
+	/**
+	 * The 1.10.1 variation reshape is announced: variations are past contract 1.
+	 */
+	public function test_variations_payload_contract_is_bumped_for_the_1101_reshape(): void {
+		$this->assertGreaterThan(
+			1,
+			Config_Fingerprint::payload_contract_version( 'variations' ),
+			'1.10.0 served variations in the PRODUCTS shape. Without a bump here no client re-pulls, '
+			. 'and the collapsed variation name — which client-side shape tolerance cannot repair — survives.'
+		);
+	}
+
+	/**
+	 * A collection still at the baseline contract must NOT have its fingerprint moved.
+	 *
+	 * Every fingerprint move marks that collection stale, and a stale `products` collection means a
+	 * FULL CATALOGUE re-fetch on every active till. Adding the contract key unconditionally would
+	 * have changed the serialization of every unbumped collection — `{"barcode_field":"_sku"}` to
+	 * `{"barcode_field":"_sku","payload_contract":1}`, and tax_rates' `[]` to an object — so
+	 * upgrading to 1.10.1 would have re-pulled the entire product catalogue and refreshed tax rates
+	 * for a shape that did not change.
+	 */
+	public function test_baseline_contract_collections_keep_their_fingerprint(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$fingerprint = new Config_Fingerprint();
+
+		foreach ( array( 'products', 'tax_rates' ) as $collection ) {
+			$this->assertSame(
+				1,
+				Config_Fingerprint::payload_contract_version( $collection ),
+				$collection . ' is expected to still be at the baseline for this assertion to mean anything.'
+			);
+			$this->assertArrayNotHasKey(
+				'payload_contract',
+				$fingerprint->representation_settings( $collection ),
+				$collection . ' is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+			);
+		}
+
+		// The exact pre-existing serializations, spelled out: this is the byte-for-byte property,
+		// not merely "the key is absent".
+		$this->assertSame( array( 'barcode_field' => '_sku' ), $fingerprint->representation_settings( 'products' ) );
+		$this->assertSame( array(), $fingerprint->representation_settings( 'tax_rates' ) );
+	}
+
+	/**
+	 * An unregistered collection reports the baseline, never zero.
+	 */
+	public function test_unknown_collection_reports_the_baseline_contract_version(): void {
+		$this->assertSame( 1, Config_Fingerprint::payload_contract_version( 'not_a_collection' ) );
 	}
 
 	/**
