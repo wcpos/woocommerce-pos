@@ -34,6 +34,18 @@ final class Product_Images {
 	 * @param array $record Product response record.
 	 */
 	private static function downsize_images( array $record ): array {
+		// A VARIATION carries `image` (singular) — WooCommerce's variations controller has no
+		// `images` array, and its `src` is the FULL SIZE file. Without this branch the medium
+		// downsizing silently stops applying to variations and every till pulls full-resolution
+		// originals (#1710). Mirrors what the v1 lane has always done in
+		// `API\V1\Product_Variations_Controller::wcpos_variation_response()`.
+		if ( isset( $record['image'] ) && \is_array( $record['image'] ) && isset( $record['image']['id'] ) ) {
+			$medium = image_downsize( (int) $record['image']['id'], 'medium' );
+			if ( $medium ) {
+				$record['image']['src'] = $medium[0];
+			}
+		}
+
 		if ( ! isset( $record['images'] ) || ! \is_array( $record['images'] ) ) {
 			return $record;
 		}

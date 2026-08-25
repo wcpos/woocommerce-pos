@@ -10,6 +10,8 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
+use WC_REST_Product_Variations_Controller;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
@@ -111,94 +113,263 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Variation payloads expose the complete product-document field set.
+	 * A variation document carries WooCommerce's VARIATION shape — nothing more, nothing less.
+	 *
+	 * This test used to assert a hand-copied 60-field list of the PRODUCT schema, `images`,
+	 * `categories`, `related_ids`, `variations` and all, under the name "the complete v2 field
+	 * set". It was green for the whole life of the bug: it pinned the products-controller output
+	 * as the contract, so the day a variation stopped carrying `image` there was nothing left to
+	 * notice (#1710).
+	 *
+	 * The expectation is now DERIVED from WooCommerce's own variations schema rather than copied
+	 * out of a response. A hand-copied list can only ever ratify whatever we happened to emit the
+	 * day someone wrote it down; deriving it states the actual rule — we serve what WooCommerce's
+	 * variations controller serves.
 	 */
-	public function test_variation_document_payload_has_full_v2_field_set(): void {
+	public function test_variation_document_payload_is_the_woocommerce_variation_shape(): void {
 		$variation = $this->create_variation( 'FIELD-SET-1456' );
 
 		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
 		$payload  = $response->get_data()['documents'][0]['payload'];
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertEqualsCanonicalizing(
-			array(
-				'id',
-				'name',
-				'slug',
-				'permalink',
-				'date_created',
-				'date_created_gmt',
-				'date_modified',
-				'date_modified_gmt',
-				'type',
-				'status',
-				'featured',
-				'catalog_visibility',
-				'description',
-				'short_description',
-				'sku',
-				'global_unique_id',
-				'price',
-				'regular_price',
-				'sale_price',
-				'date_on_sale_from',
-				'date_on_sale_from_gmt',
-				'date_on_sale_to',
-				'date_on_sale_to_gmt',
-				'price_html',
-				'on_sale',
-				'purchasable',
-				'total_sales',
-				'virtual',
-				'downloadable',
-				'downloads',
-				'download_limit',
-				'download_expiry',
-				'external_url',
-				'button_text',
-				'tax_status',
-				'tax_class',
-				'manage_stock',
-				'stock_quantity',
-				'stock_status',
-				'backorders',
-				'backorders_allowed',
-				'backordered',
-				'low_stock_amount',
-				'sold_individually',
-				'weight',
-				'dimensions',
-				'shipping_required',
-				'shipping_taxable',
-				'shipping_class',
-				'shipping_class_id',
-				'reviews_allowed',
-				'post_password',
-				'average_rating',
-				'rating_count',
-				'related_ids',
-				'upsell_ids',
-				'cross_sell_ids',
-				'parent_id',
-				'purchase_note',
-				'categories',
-				'brands',
-				'tags',
-				'images',
-				'has_options',
-				'attributes',
-				'default_attributes',
-				'variations',
-				'grouped_products',
-				'menu_order',
-				'meta_data',
-				'_links',
-			),
-			array_keys( $payload )
-		);
+
+		$schema_fields = array_keys( ( new WC_REST_Product_Variations_Controller() )->get_public_item_schema()['properties'] );
+
+		/*
+		 * WooCommerce emits three fields its variation SCHEMA does not declare: both `_gmt` date
+		 * variants, and `name`, which the variations controller gained in WC 8.3 without a
+		 * matching schema entry. Verified against the WooCommerce build this suite runs — the one
+		 * pinned in `.wp-env.json`, 10.4.3 at the time of writing, NOT the `WC tested up to`
+		 * header. Named here rather than smuggled in with a loose assertion: if WooCommerce ever
+		 * closes that gap, this test says so instead of silently drifting.
+		 */
+		$emitted_but_undeclared = array( 'date_created_gmt', 'date_modified_gmt', 'name' );
+		// `_links` is appended by rest_get_server()->response_to_data(), not by the schema.
+		$expected = array_unique( array_merge( $schema_fields, $emitted_but_undeclared, array( '_links' ) ) );
+
+		$this->assertEqualsCanonicalizing( $expected, array_keys( $payload ) );
+
+		// Named explicitly as well as covered by the derivation above: these are the fields that
+		// rode on every variation for the whole of 1.10.0 and meant nothing on any of them.
+		foreach ( array( 'images', 'categories', 'tags', 'brands', 'related_ids', 'price_html', 'variations', 'grouped_products', 'default_attributes' ) as $product_only ) {
+			$this->assertArrayNotHasKey( $product_only, $payload, "a variation must not carry the product field {$product_only}" );
+		}
+
+		// `barcode` is a v1-lane field: on v2 the client derives it at materialization from the
+		// configured carrier (sku / global_unique_id / meta key), so the server must not invent one.
 		$this->assertArrayNotHasKey( 'barcode', $payload );
 		$this->assertArrayHasKey( 'sku', $payload );
 		$this->assertArrayHasKey( 'global_unique_id', $payload );
+		$this->assertArrayHasKey( 'image', $payload );
+	}
+
+	/**
+	 * A SKU shared with a simple product never serves the product as a variation.
+	 *
+	 * WooCommerce widens `post_type` to `array( 'product', 'product_variation' )` whenever `sku`
+	 * is set, because products and variations share one SKU space. Inherited unguarded on this
+	 * route, a simple product would come back as a variation document and be filed into the
+	 * client's VARIATIONS collection — the mirror of the misfiled-variation pollution the client
+	 * already carries a one-shot repair for, where one record matching in both collections makes
+	 * every scan of that code falsely ambiguous.
+	 */
+	public function test_sku_lookup_never_serves_a_product_as_a_variation(): void {
+		$variation = $this->create_variation( 'SHARED-SKU-CODE' );
+		$product   = ProductHelper::create_simple_product();
+		// Written as meta, not through the CRUD: WooCommerce rejects a duplicate SKU on save, but
+		// importers and migrations write `_sku` directly and stores do carry duplicates. That is
+		// the data this guard exists for.
+		update_post_meta( $product->get_id(), '_sku', 'SHARED-SKU-CODE' );
+
+		$response = $this->variations_request( array( 'sku' => 'SHARED-SKU-CODE' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $variation->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+
+		/*
+		 * The COUNT matters as much as the rows. Dropping a product from the served documents is
+		 * easy — the hydration loop only keeps WC_Product_Variation instances. But if the QUERY
+		 * still counted it, the total and page count would describe a set the client can never
+		 * receive, and the pager would chase a page that is always short. This assertion is what
+		 * makes the post_type narrowing load-bearing rather than decorative.
+		 */
+		$this->assertSame( 1, $response->get_data()['meta']['total'] );
+		$this->assertSame( '1', (string) $response->get_headers()['X-WP-Total'] );
+	}
+
+	/**
+	 * A paginated search reports its total in WooCommerce's headers, not only in the body.
+	 */
+	public function test_search_emits_woocommerce_pagination_headers(): void {
+		foreach ( range( 1, 3 ) as $index ) {
+			$this->create_variation( "PAGED-HEADER-{$index}" );
+		}
+
+		$response = $this->variations_request(
+			array(
+				'search'   => 'PAGED-HEADER',
+				'per_page' => 2,
+			)
+		);
+		$headers  = $response->get_headers();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '3', (string) $headers['X-WP-Total'] );
+		$this->assertSame( '2', (string) $headers['X-WP-TotalPages'] );
+	}
+
+	/**
+	 * A hidden variation stays hidden even when the request also names it in `include`.
+	 *
+	 * `parent::prepare_objects_query()` maps `include` to `post__in`, and WP_Query IGNORES
+	 * `post__not_in` when `post__in` is present — so a raw exclusion merge would let
+	 * `?search=…&include=<hidden id>` serve a POS-hidden variation. Routing through
+	 * `Pos_Visibility::apply_to_wp_query_args()` intersects instead.
+	 */
+	public function test_hidden_variation_stays_hidden_when_named_in_include(): void {
+		$hidden = $this->create_variation( 'HIDDEN-INCLUDE-1710' );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$response = $this->variations_request(
+			array(
+				'search'  => 'HIDDEN-INCLUDE-1710',
+				'include' => array( $hidden->get_id() ),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( 0, $response->get_data()['meta']['total'] );
+	}
+
+	/**
+	 * Duplicate matching postmeta rows return one variation and count it once.
+	 *
+	 * Importers can leave multiple rows for one carrier. The meta-query join emits one result row
+	 * per match unless the variation id is grouped, inflating both documents and pagination totals.
+	 */
+	public function test_duplicate_matching_postmeta_rows_return_one_row(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_custom_barcode' ) );
+		$variation = $this->create_variation( 'NO-DUPLICATE-SKU-MATCH' );
+		add_post_meta( $variation->get_id(), '_custom_barcode', 'DUPLICATE-NEEDLE' );
+		add_post_meta( $variation->get_id(), '_custom_barcode', 'DUPLICATE-NEEDLE' );
+
+		$response = $this->variations_request( array( 'search' => 'DUPLICATE-NEEDLE' ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
+		$this->assertSame( 1, $data['meta']['total'] );
+	}
+
+	/**
+	 * A term matching two carriers on one variation returns it once, and counts it once.
+	 *
+	 * The replaced SQL used `SELECT DISTINCT` / `COUNT(DISTINCT …)` because an OR join over
+	 * `_sku` and the configured barcode key can match the same post through two meta rows. On
+	 * WP_Query it does not: measured here, the row and the total are both 1 with no GROUP BY of
+	 * ours. So this pins the OUTCOME rather than an implementation — a WordPress or WooCommerce
+	 * change that reintroduces the duplicate fails here, and we add the grouping then, with a
+	 * test that can go red to justify it.
+	 */
+	public function test_term_matching_two_carriers_returns_one_row(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_custom_barcode' ) );
+		$variation = $this->create_variation( 'TWOCARRIER-1710' );
+		// The same term on the configured barcode field as well as the SKU: an OR meta_query joins
+		// postmeta once per clause, so without a GROUP BY this variation comes back twice and the
+		// total reads 2.
+		update_post_meta( $variation->get_id(), '_custom_barcode', 'TWOCARRIER-1710' );
+
+		$response = $this->variations_request( array( 'search' => 'TWOCARRIER-1710' ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
+		$this->assertSame( 1, $data['meta']['total'] );
+	}
+
+	/**
+	 * Legacy controller responses retain fields required by the client.
+	 */
+	public function test_serializer_backfills_pre_wc83_variation_fields(): void {
+		$variation = $this->create_variation( 'LEGACY-FIELD-BACKFILL' );
+		$strip      = static function ( $response ) {
+			$data = $response->get_data();
+			unset( $data['name'], $data['parent_id'] );
+			$response->set_data( $data );
+
+			return $response;
+		};
+		add_filter( 'woocommerce_rest_prepare_product_variation_object', $strip, PHP_INT_MAX );
+		try {
+			$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $strip, PHP_INT_MAX );
+		}
+		$payload = $response->get_data()['documents'][0]['payload'];
+
+		$this->assertSame( $variation->get_parent_id(), $payload['parent_id'] );
+		$this->assertSame( wc_get_formatted_variation( $variation, true, false, false ), $payload['name'] );
+	}
+
+	/**
+	 * A discovery term that normalizes away hydrates nothing, not everything.
+	 *
+	 * @param array<string, string> $params Query parameters for the request.
+	 *
+	 * @dataProvider blank_discovery_terms
+	 */
+	public function test_blank_discovery_term_returns_no_rows( array $params ): void {
+		$this->create_variation( 'BLANK-SCAN-1710' );
+
+		$response = $this->variations_request( $params );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $data['documents'] );
+		$this->assertSame( 0, $data['meta']['total'] );
+	}
+
+	/**
+	 * Discovery terms that normalize away to nothing.
+	 *
+	 * @return array<string, array{0: array<string, string>}>
+	 */
+	public function blank_discovery_terms(): array {
+		return array(
+			'empty sku'      => array( array( 'sku' => '' ) ),
+			'comma only'     => array( array( 'sku' => ', ' ) ),
+			'blank search'   => array( array( 'search' => '   ' ) ),
+		);
+	}
+
+	/**
+	 * The POS sort keys reach the query instead of 400ing in argument validation.
+	 */
+	public function test_pos_orderby_values_are_accepted(): void {
+		$this->create_variation( 'ORDERBY-1710' );
+
+		foreach ( array( 'sku', 'barcode', 'stock_quantity', 'stock_status' ) as $orderby ) {
+			$response = $this->variations_request(
+				array(
+					'search'  => 'ORDERBY-1710',
+					'orderby' => $orderby,
+				)
+			);
+
+			$this->assertSame( 200, $response->get_status(), "orderby={$orderby} must be a valid sort key" );
+		}
 	}
 
 	/**
@@ -248,6 +419,24 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $exact->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+	}
+
+	/**
+	 * A SKU value that normalizes away does not suppress the search term.
+	 */
+	public function test_empty_normalized_sku_falls_back_to_search(): void {
+		$match = $this->create_variation( 'NORMALIZED-SKU-SEARCH-MATCH' );
+		$this->create_variation( 'NORMALIZED-SKU-OTHER' );
+
+		$response = $this->variations_request(
+			array(
+				'sku'    => ', ',
+				'search' => 'SEARCH-MATCH',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $match->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
 	}
 
 	/**
@@ -335,7 +524,13 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 100, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 10, 'term' ) ) ) ),
-			'page'              => array( array( 'search' => 'boundary', 'page' => 1000, 'per_page' => 100 ) ),
+			'page'              => array(
+				array(
+					'search' => 'boundary',
+					'page' => 1000,
+					'per_page' => 100,
+				),
+			),
 		);
 	}
 
@@ -350,7 +545,25 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
-			'page'              => array( array( 'search' => 'boundary', 'page' => 1001, 'per_page' => 100 ) ),
+			'empty sku search length' => array(
+				array(
+					'sku'    => ', ',
+					'search' => str_repeat( 'S', 257 ),
+				),
+			),
+			'empty sku search terms'  => array(
+				array(
+					'sku'    => ', ',
+					'search' => implode( ' ', array_fill( 0, 11, 'term' ) ),
+				),
+			),
+			'page'              => array(
+				array(
+					'search' => 'boundary',
+					'page' => 1001,
+					'per_page' => 100,
+				),
+			),
 		);
 	}
 
@@ -413,12 +626,97 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Requests without include or a search mode keep the existing 400.
+	 * A DISABLED variation is never served, even when the client names its id.
+	 *
+	 * "Disabled" is WooCommerce's own Enabled checkbox on the variation metabox
+	 * (`html-variation-admin.php`), which writes `post_status = private`
+	 * (`WC_Meta_Box_Product_Data::save_variations()`). A store owner unchecks it to take that
+	 * variation out of sale, and WooCommerce honours that everywhere a customer can reach —
+	 * `get_visible_children()` and `get_available_variations()` both drop it.
+	 *
+	 * The POS must behave the same way, so the cashier cannot sell something the owner switched
+	 * off. Serving it on the strength of the client having asked by id is a transport argument,
+	 * not a behavioural one: the id reaches the client from the parent's `variations[]` (which
+	 * WooCommerce populates with publish AND private children) and from the change signal, so
+	 * "the client asked for it" is not evidence the owner wants it sold.
+	 *
+	 * The client's targeted-pull shortfall then prunes it from every till, which is exactly the
+	 * intended outcome of disabling a variation.
 	 */
-	public function test_no_params_returns_existing_missing_ids_error(): void {
-		$response = $this->variations_request();
+	public function test_include_does_not_serve_a_disabled_variation(): void {
+		$enabled  = $this->create_variation( 'ENABLED-VARIATION' );
+		$disabled = $this->create_variation( 'DISABLED-VARIATION', 'private' );
 
-		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame( 'woocommerce_pos_sync_missing_ids', $response->get_data()['code'] );
+		$response = $this->variations_request(
+			array( 'include' => $enabled->get_id() . ',' . $disabled->get_id() )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $enabled->get_id() ),
+			array_column( $response->get_data()['documents'], 'id' ),
+			'A disabled (private) variation must not be hydrated even when named in include.'
+		);
+	}
+
+	/**
+	 * A bare collection request answers page one with WooCommerce's pagination headers.
+	 *
+	 * This route used to 400 without `include`, which is why the client still counts variations
+	 * on the frozen `wcpos/v1` lane — the one remaining v1 call in the app. The census reads
+	 * `X-WP-Total`, so the v2 route has to be able to answer "how many" before that call can move.
+	 */
+	public function test_bare_collection_request_returns_a_page_with_totals(): void {
+		$first  = $this->create_variation( 'BARE-COLLECTION-1' );
+		$second = $this->create_variation( 'BARE-COLLECTION-2' );
+
+		$response = $this->variations_request( array( 'per_page' => 1 ) );
+		$headers  = $response->get_headers();
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status(), 'A bare collection request must not 400.' );
+		$this->assertCount( 1, $data['documents'], 'per_page must bound the page.' );
+		// ProductHelper::create_variation_product() gives each parent its own variations, so the
+		// collection is wider than the two rows named here — assert the relationships, not a count.
+		$total = (int) $headers['X-WP-Total'];
+		$this->assertGreaterThanOrEqual( 2, $total );
+		$this->assertSame( $total, $data['meta']['total'], 'Header and envelope must agree.' );
+		$this->assertSame(
+			(string) $total,
+			(string) $headers['X-WP-TotalPages'],
+			'At per_page=1 there is one page per record.'
+		);
+		$this->assertNotEmpty( $first->get_id() );
+		$this->assertNotEmpty( $second->get_id() );
+	}
+
+	/**
+	 * A bare collection request counts only what the POS may sell.
+	 */
+	public function test_bare_collection_request_excludes_hidden_and_disabled(): void {
+		$countable = $this->create_variation( 'COUNTABLE' );
+		$disabled = $this->create_variation( 'NOT-COUNTABLE-DISABLED', 'private' );
+		$hidden   = $this->create_variation( 'NOT-COUNTABLE-HIDDEN' );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$response = $this->variations_request( array( 'per_page' => 100 ) );
+		$data     = $response->get_data();
+		$ids      = array_column( $data['documents'], 'id' );
+
+		$this->assertContains( $countable->get_id(), $ids );
+		$this->assertNotContains( $disabled->get_id(), $ids, 'A disabled variation must not be listed.' );
+		$this->assertNotContains( $hidden->get_id(), $ids, 'A POS-hidden variation must not be listed.' );
+		// The advertised total must describe the same set the page does, or the census over-counts.
+		$this->assertSame( \count( $ids ), (int) $response->get_headers()['X-WP-Total'] );
 	}
 }
