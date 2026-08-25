@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
+use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -96,93 +97,48 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Product rows expose the complete v2 field set without the legacy barcode alias.
+	 * A product row is WooCommerce's PRODUCT shape, with no WCPOS field on top.
+	 *
+	 * The expectation is DERIVED from WooCommerce's own products schema rather
+	 * than copied out of a response; see
+	 * {@see WCPOS_REST_Unit_Test_Case::view_context_fields()} for why a copied
+	 * list can only ever ratify whatever we happened to emit that day. This pin
+	 * used to be a 70-entry literal, which is the shape of the problem: it could
+	 * not tell a field WooCommerce declares from a field we happened to serve,
+	 * so it read as agreement with wc/v3 while asserting nothing of the kind
+	 * (#1712).
 	 */
-	public function test_product_row_has_full_v2_field_set(): void {
+	public function test_product_row_is_the_woocommerce_product_shape(): void {
 		$product = ProductHelper::create_simple_product();
 
 		$rows = $this->read( array( 'include' => array( $product->get_id() ) ) );
 		$row  = $rows[0];
 
+		/*
+		 * The delta is `_links` alone, and that is the load-bearing claim here: on
+		 * the product lane WCPOS adds NO top-level key of its own. The POS identity
+		 * rides `meta_data` — a key WooCommerce itself declares — so
+		 * `Sync\Proxy_Uuid_Stamper` injects `_woocommerce_pos_uuid` into an existing
+		 * field rather than widening the row (pinned by the uuid tests above).
+		 * `_links` is appended by `rest_get_server()->response_to_data()` from the
+		 * controller's own `prepare_links()`, not by the schema.
+		 */
 		$this->assertEqualsCanonicalizing(
-			array(
-				'id',
-				'name',
-				'slug',
-				'permalink',
-				'date_created',
-				'date_created_gmt',
-				'date_modified',
-				'date_modified_gmt',
-				'type',
-				'status',
-				'featured',
-				'catalog_visibility',
-				'description',
-				'short_description',
-				'sku',
-				'global_unique_id',
-				'price',
-				'regular_price',
-				'sale_price',
-				'date_on_sale_from',
-				'date_on_sale_from_gmt',
-				'date_on_sale_to',
-				'date_on_sale_to_gmt',
-				'price_html',
-				'on_sale',
-				'purchasable',
-				'total_sales',
-				'virtual',
-				'downloadable',
-				'downloads',
-				'download_limit',
-				'download_expiry',
-				'external_url',
-				'button_text',
-				'tax_status',
-				'tax_class',
-				'manage_stock',
-				'stock_quantity',
-				'stock_status',
-				'backorders',
-				'backorders_allowed',
-				'backordered',
-				'low_stock_amount',
-				'sold_individually',
-				'weight',
-				'dimensions',
-				'shipping_required',
-				'shipping_taxable',
-				'shipping_class',
-				'shipping_class_id',
-				'reviews_allowed',
-				'post_password',
-				'average_rating',
-				'rating_count',
-				'related_ids',
-				'upsell_ids',
-				'cross_sell_ids',
-				'parent_id',
-				'purchase_note',
-				'categories',
-				'brands',
-				'tags',
-				'images',
-				'has_options',
-				'attributes',
-				'default_attributes',
-				'variations',
-				'grouped_products',
-				'menu_order',
-				'meta_data',
-				'_links',
+			array_merge(
+				$this->view_context_fields( ( new WC_REST_Products_Controller() )->get_public_item_schema()['properties'] ),
+				array( '_links' )
 			),
 			array_keys( $row )
 		);
+		/*
+		 * Implied by the equality above, kept because it names the divergence this
+		 * test exists to hold: v1 aliases the POS barcode onto a top-level `barcode`
+		 * field (API\V1\Products_Controller::wcpos_product_response), and v2
+		 * deliberately does not — the client reads the configured barcode meta
+		 * instead. A regression that re-adds it should say "barcode came back", not
+		 * hand a reviewer an anonymous set difference.
+		 */
 		$this->assertArrayNotHasKey( 'barcode', $row );
-		$this->assertArrayHasKey( 'sku', $row );
-		$this->assertArrayHasKey( 'global_unique_id', $row );
 	}
 
 	/**
