@@ -106,6 +106,49 @@ final class Config_Fingerprint {
 	}
 
 	/**
+	 * The PAYLOAD CONTRACT version per collection — bump when the SHAPE of a served record changes.
+	 *
+	 * # Why this is a representation setting
+	 *
+	 * ADR 0006 built this signal for "a global setting change alters the served representation of
+	 * MANY records without bumping any record's `date_modified`". A PLUGIN UPGRADE that changes a
+	 * payload's shape is the same event, and the three tiers are blind to it in exactly the same
+	 * way: tier 1 writes no journal row (no save hook fires), tier 2's digest is derived from the
+	 * raw DB row and does not move, and tier 3 is only ever reached from a tier-2 mismatch. Without
+	 * a signal here, a client that synced a record under the old shape keeps it INDEFINITELY.
+	 *
+	 * 1.10.0 shipped variations serialized through the PRODUCTS controller — an `images` array
+	 * instead of the singular `image`, and `get_name()` (the generated post title, which
+	 * `generate_product_title()` collapses to just the parent name at 3+ attributes) instead of
+	 * `wc_get_formatted_variation()`. A client can be taught to read either image shape, but a
+	 * collapsed name is indistinguishable from a correct one, so tolerance cannot repair it. Only a
+	 * re-pull can, and only this signal asks for one.
+	 *
+	 * # Why a version rather than a hash of the payload
+	 *
+	 * The shape is a property of the CODE, not of the store's data or settings, so there is nothing
+	 * live to recompute it from — the honest form is a constant a human bumps in the same commit
+	 * that changes the shape. Deliberately NOT an option or a filter: nobody but us can change what
+	 * we serve (see the constants-not-env-vars rule in the repo's agent context).
+	 *
+	 * # Safety against an un-upgraded store
+	 *
+	 * A store still on the old plugin never moves this value, so its clients see no change and
+	 * re-fetch nothing. That is what lets the migration ship with no version gate and no bespoke
+	 * purge lane: the failure mode a gate would defend against is structurally absent.
+	 *
+	 * @var array<string, int>
+	 */
+	private const PAYLOAD_CONTRACT_VERSION = array(
+		// 2 (1.10.1): variations are serialized through WC_REST_Product_Variations_Controller
+		// instead of the products controller — singular `image`, `wc_get_formatted_variation()`
+		// `name`, and no product-only fields. See the 1.10.1 variations spec, S1/S6.
+		'variations' => 2,
+		'products'   => 1,
+		'tax_rates'  => 1,
+	);
+
+	/**
 	 * The canonicalized representation-affecting settings for a collection.
 	 * DELIBERATELY A SUPERSET: this set must GROW as new representation settings
 	 * are added, because an omitted setting would silently miss its config
@@ -123,9 +166,25 @@ final class Config_Fingerprint {
 			$settings = array();
 		}
 
+		// The served SHAPE is as much a part of the representation as the settings that fill it —
+		// see PAYLOAD_CONTRACT_VERSION. Every fingerprinted collection carries one, so a future
+		// shape change anywhere is a one-line bump rather than a new mechanism.
+		$settings['payload_contract'] = self::payload_contract_version( $collection );
+
 		ksort( $settings );
 
 		return $settings;
+	}
+
+	/**
+	 * This collection's payload contract version. Unknown collections report 1 rather than 0, so a
+	 * collection added to the registry without a deliberate entry starts from the same baseline as
+	 * every other unbumped one instead of silently reading as "older than everything".
+	 *
+	 * @param string $collection Collection name.
+	 */
+	public static function payload_contract_version( string $collection ): int {
+		return self::PAYLOAD_CONTRACT_VERSION[ $collection ] ?? 1;
 	}
 
 	/**
