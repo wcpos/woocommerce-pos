@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_HPOS_Unit_Test_Case;
  * V2 order-search probes using HPOS.
  */
 class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
+	use Catalog_Proxy_Order_Payload_Tests;
 	use Catalog_Proxy_Order_Search_Tests;
 	use HPOSToggleTrait;
 

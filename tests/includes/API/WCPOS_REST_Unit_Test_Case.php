@@ -127,6 +127,41 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		return $property->getValue( $this->endpoint );
 	}
 
+	/**
+	 * The field names a WooCommerce schema declares for a VIEW-context read.
+	 *
+	 * The primitive behind every DERIVED payload field-set pin. A hand-copied
+	 * field list can only ever ratify whatever we happened to emit the day
+	 * someone wrote it down — that is exactly how the v2 variation payload
+	 * changed shape with both suites green (#1710). Deriving the expectation
+	 * from the controller's own schema states the rule instead: we serve what
+	 * WooCommerce declares, and every deviation has to be named.
+	 *
+	 * Mirrors WordPress's own `rest_filter_response_by_context()`: a property is
+	 * served when its `context` list contains `view`, OR when it declares no
+	 * context at all. Properties scoped to `edit` only (`set_paid`,
+	 * `manual_update` on orders; `password` on customers) are write-side
+	 * arguments and never reach a read payload.
+	 *
+	 * @param array $properties A schema's `properties` map, e.g.
+	 *                          `$controller->get_public_item_schema()['properties']`
+	 *                          or a nested `['items']['properties']`.
+	 *
+	 * @return string[] Field names, in schema order.
+	 */
+	protected function view_context_fields( array $properties ): array {
+		return array_keys(
+			array_filter(
+				$properties,
+				static function ( $property ): bool {
+					$context = (array) ( $property['context'] ?? array() );
+
+					return empty( $context ) || \in_array( 'view', $context, true );
+				}
+			)
+		);
+	}
+
 	protected function setup_decimal_quantity_tests(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
