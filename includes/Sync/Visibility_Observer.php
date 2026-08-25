@@ -44,6 +44,20 @@ namespace WCPOS\WooCommercePOS\Sync;
  */
 final class Visibility_Observer {
 	/**
+	 * Bump when the seeded set changes shape and every install must re-announce it.
+	 *
+	 * @var int
+	 */
+	public const SEED_VERSION = 1;
+
+	/**
+	 * The one-time seed latch.
+	 *
+	 * @var string
+	 */
+	public const SEED_VERSION_OPTION = 'woocommerce_pos_sync_visibility_tombstone_seed';
+
+	/**
 	 * The journal rows are appended to.
 	 *
 	 * @var Sync_Journal
@@ -83,11 +97,44 @@ final class Visibility_Observer {
 	 * Watch every option that can move the POS servable set.
 	 */
 	public function register_hooks(): void {
+		// `delete_option` is the GENERIC pre-delete action — WordPress has no per-option form that
+		// fires before the row is gone (`delete_option_{$option}` fires after). Registered once and
+		// gated on the option name inside the callback.
+		add_action( 'delete_option', array( $this, 'snapshot_before_delete' ), 10, 1 );
+
 		foreach ( Pos_Visibility::source_options() as $option ) {
 			add_filter( "pre_update_option_{$option}", array( $this, 'snapshot_hidden_ids' ), 10, 3 );
 			add_action( "update_option_{$option}", array( $this, 'record_updated_option' ), 10, 3 );
 			add_action( "add_option_{$option}", array( $this, 'record_added_option' ), 10, 2 );
+			add_action( "delete_option_{$option}", array( $this, 'record_deleted_option' ), 10, 1 );
 		}
+	}
+
+	/**
+	 * Announce every record that was hidden before this observer existed.
+	 *
+	 * An install that already had records hidden transitioned them while nothing was watching, so no
+	 * tombstone was ever written for them. A till still holding one used to drop it on that record's
+	 * next edit — the update row, the empty pull, the client's shortfall prune — and the stream no
+	 * longer carries that update row. Without this pass the upgrade would strand exactly those
+	 * records until a tier 2 sweep.
+	 *
+	 * Latched by its own option rather than the sync schema version: no table changed, and bumping
+	 * the schema would re-run the unrelated customer compensation pass on every install. Two
+	 * concurrent requests can both seed before either latches; the duplicate rows are identical
+	 * tombstones at different sequences and a client applies them idempotently, which is the right
+	 * trade at this tier.
+	 */
+	public function maybe_seed_hidden_tombstones(): void {
+		if ( (int) get_option( self::SEED_VERSION_OPTION, 0 ) >= self::SEED_VERSION ) {
+			return;
+		}
+
+		$this->journal->append_catalogue_tombstones( $this->visibility->hidden_ids( Pos_Visibility::CATALOG ) );
+
+		// Latched even when the hidden set is empty — otherwise every request on a store that hides
+		// nothing would resolve the set again forever.
+		update_option( self::SEED_VERSION_OPTION, self::SEED_VERSION, false );
 	}
 
 	/**
@@ -119,16 +166,33 @@ final class Visibility_Observer {
 	 * @param string $option    Option name.
 	 */
 	public function record_updated_option( $old_value = null, $value = null, $option = '' ): void {
-		if ( ! \is_string( $option ) || ! \array_key_exists( $option, $this->hidden_before ) ) {
+		$this->consume_snapshot( $option );
+	}
+
+	/**
+	 * Capture the hidden set before an option is deleted.
+	 *
+	 * Deleting either source moves the set exactly as writing it does: dropping the visibility option
+	 * reveals every id it listed, and dropping the General option takes the `pos_only_products`
+	 * feature down with it. Both are reachable from `Settings::delete_settings()`.
+	 *
+	 * @param string $option Option about to be deleted.
+	 */
+	public function snapshot_before_delete( $option = '' ): void {
+		if ( ! \is_string( $option ) || ! \in_array( $option, Pos_Visibility::source_options(), true ) ) {
 			return;
 		}
 
-		$before = $this->hidden_before[ $option ];
-		// Consume the snapshot: a later `update_option_{$option}` that somehow arrives without its
-		// own `pre_update_option_{$option}` must not diff against a stale baseline.
-		unset( $this->hidden_before[ $option ] );
+		$this->hidden_before[ $option ] = $this->visibility->hidden_ids( Pos_Visibility::CATALOG );
+	}
 
-		$this->record_transitions( $before );
+	/**
+	 * Journal the transitions deleting the option caused.
+	 *
+	 * @param string $option Option name.
+	 */
+	public function record_deleted_option( $option = '' ): void {
+		$this->consume_snapshot( $option );
 	}
 
 	/**
@@ -144,6 +208,27 @@ final class Visibility_Observer {
 	 */
 	public function record_added_option( $option = '', $value = null ): void {
 		$this->record_transitions( array() );
+	}
+
+	/**
+	 * Diff against the snapshot this option's pre-write hook left, then discard it.
+	 *
+	 * The snapshot is consumed rather than merely read: a post-write hook that somehow arrives
+	 * without its own pre-write counterpart must not diff against a stale baseline. A missing
+	 * snapshot means the before state is unknown, and announcing the whole current set would be
+	 * worse than announcing nothing.
+	 *
+	 * @param mixed $option Option name from the hook.
+	 */
+	private function consume_snapshot( $option ): void {
+		if ( ! \is_string( $option ) || ! \array_key_exists( $option, $this->hidden_before ) ) {
+			return;
+		}
+
+		$before = $this->hidden_before[ $option ];
+		unset( $this->hidden_before[ $option ] );
+
+		$this->record_transitions( $before );
 	}
 
 	/**

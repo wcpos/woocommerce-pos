@@ -60,6 +60,7 @@ class Test_Sync_Visibility_Change_Signal extends Sync_REST_Store_Test_Case {
 		$this->remove_observer_callbacks( array( $this->observer, $this->journal ) );
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( Visibility_Observer::SEED_VERSION_OPTION );
 		parent::tearDown();
 	}
 
@@ -402,6 +403,105 @@ class Test_Sync_Visibility_Change_Signal extends Sync_REST_Store_Test_Case {
 			),
 			false
 		);
+
+		// Assert.
+		$this->assertSame( array(), $this->journal->page( array( 'product', 'variation' ), $cursor, 100 )['rows'] );
+	}
+
+	/**
+	 * Deleting the visibility option reveals its ids, and that is a transition.
+	 *
+	 * `delete_option()` fires neither of the update hooks, so a reset of the section from the tools
+	 * surface would otherwise leave every till missing records that are servable again.
+	 */
+	public function test_deleting_the_visibility_option_re_announces_its_ids(): void {
+		// Arrange.
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $product_id ) );
+		$this->observer->register_hooks();
+		$cursor = $this->journal->head_sequence();
+
+		// Act.
+		delete_option( Pos_Visibility::OPTION );
+
+		// Assert.
+		$rows = $this->journal->page( array( 'product' ), $cursor, 100 )['rows'];
+		$this->assertSame( array( $product_id ), array_column( $rows, 'object_id' ) );
+		$this->assertSame( 0, $rows[0]['deleted'] );
+	}
+
+	/**
+	 * Deleting the General option takes the feature down with it, revealing every hidden id.
+	 */
+	public function test_deleting_the_general_option_re_announces_the_hidden_set(): void {
+		// Arrange.
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $product_id ) );
+		$this->observer->register_hooks();
+		$cursor = $this->journal->head_sequence();
+
+		// Act.
+		delete_option( 'woocommerce_pos_settings_general' );
+
+		// Assert.
+		$rows = $this->journal->page( array( 'product' ), $cursor, 100 )['rows'];
+		$this->assertSame( array( $product_id ), array_column( $rows, 'object_id' ) );
+		$this->assertSame( 0, $rows[0]['deleted'] );
+	}
+
+	/**
+	 * An install that hid records BEFORE this observer existed still gets its tombstones.
+	 *
+	 * Every record hidden on an existing install transitioned while nothing was watching, so no
+	 * tombstone was ever written. A till that still holds one used to drop it on the record's next
+	 * edit — the update row, the empty pull, the shortfall prune — and this change removes that
+	 * update row. Without a one-time seed the upgrade would strand exactly those records.
+	 */
+	public function test_upgrade_seeds_tombstones_for_the_already_hidden_set(): void {
+		// Arrange: hidden before the observer exists, and no seed has run.
+		$product   = ProductHelper::create_variation_product();
+		$variation = (int) $product->get_children()[0];
+		$hidden    = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $hidden ), array( $variation ) );
+		delete_option( Visibility_Observer::SEED_VERSION_OPTION );
+		$cursor = $this->journal->head_sequence();
+
+		// Act.
+		$this->observer->maybe_seed_hidden_tombstones();
+
+		// Assert.
+		$rows = $this->journal->page( array( 'product', 'variation' ), $cursor, 100 )['rows'];
+		$this->assertSame(
+			array(
+				array( 'variation', $variation, 1 ),
+				array( 'product', $hidden, 1 ),
+			),
+			array_map(
+				static function ( array $row ): array {
+					return array( $row['object_type'], $row['object_id'], $row['deleted'] );
+				},
+				$rows
+			)
+		);
+	}
+
+	/**
+	 * The seed is latched: it never re-announces the hidden set on a later request.
+	 */
+	public function test_the_tombstone_seed_runs_at_most_once(): void {
+		// Arrange.
+		$hidden = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $hidden ) );
+		delete_option( Visibility_Observer::SEED_VERSION_OPTION );
+		$this->observer->maybe_seed_hidden_tombstones();
+		$cursor = $this->journal->head_sequence();
+
+		// Act.
+		$this->observer->maybe_seed_hidden_tombstones();
 
 		// Assert.
 		$this->assertSame( array(), $this->journal->page( array( 'product', 'variation' ), $cursor, 100 )['rows'] );
