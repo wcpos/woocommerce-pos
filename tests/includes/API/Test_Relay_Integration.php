@@ -477,6 +477,46 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It backs off for the re-registration window on an unknown relay site.
+	 *
+	 * The 404 cannot clear inside the 30s status window — the stored site_key
+	 * simply is not in the relay's registry, and re-registration is itself
+	 * rate-limited to once per REREGISTER_GUARD. Retrying on the short window
+	 * replays the identical 404 twice a minute indefinitely for any site that
+	 * cannot re-register.
+	 */
+	public function test_unknown_site_status_backs_off_for_the_reregistration_window(): void {
+		// Arrange.
+		$this->store_relay();
+		$calls = 0;
+		$this->mock_http(
+			function () use ( &$calls ) {
+				++$calls;
+
+				return $this->http_response( 404, array( 'error' => 'unknown site' ) );
+			}
+		);
+		$registry = new Cloud_Print_Registry();
+
+		// Act.
+		$registry->status_for( 'front' );
+
+		// Assert: backed off well past the short status window.
+		$expiry = (int) get_option( '_transient_timeout_' . Cloud_Print_Relay_Service::DOWN_TRANSIENT );
+		$this->assertGreaterThan(
+			time() + Cloud_Print_Relay_Service::STATUS_CACHE_TTL,
+			$expiry,
+			'unknown site must not retry on the 30s status window'
+		);
+
+		// Act: a second call inside the window must not reach the relay again.
+		$registry->status_for( 'front' );
+
+		// Assert.
+		$this->assertSame( 1, $calls, 'a futile unknown-site 404 must not be replayed while backed off' );
+	}
+
+	/**
 	 * It keeps the relay disabled when the admin disables it mid re-registration.
 	 */
 	public function test_reregister_preserves_disable_that_lands_mid_flight(): void {
@@ -508,6 +548,74 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		// Assert: credentials refreshed, but the admin's disable wins.
 		$this->assertFalse( (bool) $saved['enabled'] );
 		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
+	}
+
+	/**
+	 * It clears the per-printer status backoff when re-registration succeeds.
+	 *
+	 * Because status() reads the per-printer negative cache before DOWN_TRANSIENT,
+	 * the unknown-site 404 backoff (a full REREGISTER_GUARD window) would leave
+	 * the affected printer dead for up to an hour after recovery unless that
+	 * cache is cleared. A recovered site must poll the relay again on the next
+	 * call instead of returning the cached failure.
+	 */
+	public function test_successful_reregistration_clears_unknown_site_status_backoff(): void {
+		// Arrange: a registered site whose stored key the relay no longer knows.
+		$this->store_relay();
+		$status_calls = 0;
+		$this->mock_http(
+			function ( $pre, $args, $url ) use ( &$status_calls ) {
+				if ( false !== strpos( $url, '/api/status/' ) ) {
+					++$status_calls;
+
+					return $this->http_response( 404, array( 'error' => 'unknown site' ) );
+				}
+				if ( false !== strpos( $url, '/api/register' ) ) {
+					return $this->http_response(
+						201,
+						array(
+							'site_key'    => 'abcdef0123456789abcdef0123456789',
+							'hint_secret' => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+						)
+					);
+				}
+
+				return new WP_Error( 'unexpected', 'unexpected request' );
+			}
+		);
+		$registry = new Cloud_Print_Registry();
+
+		// Act: the 404 backs the printer off for the re-registration window.
+		$registry->status_for( 'front' );
+
+		// Assert: the per-printer failure is cached and the relay was hit once.
+		$this->assertNotFalse(
+			get_transient( Cloud_Print_Relay_Service::STATUS_TRANSIENT_PREFIX . 'front' ),
+			'the unknown-site 404 must cache a per-printer failure'
+		);
+		$this->assertSame( 1, $status_calls );
+
+		// Act: re-registration succeeds and adopts the relay's fresh key.
+		( new Cloud_Print_Relay_Service() )->reregister();
+
+		// Assert: the per-printer backoff is gone, so status can resume.
+		$this->assertFalse(
+			get_transient( Cloud_Print_Relay_Service::STATUS_TRANSIENT_PREFIX . 'front' ),
+			'successful re-registration must clear the per-printer status backoff'
+		);
+
+		// Act: the recovered printer polls the relay again.
+		$registry->status_for( 'front' );
+
+		// Assert: a fresh status request was issued, not the cached failure.
+		$this->assertSame(
+			2,
+			$status_calls,
+			'a recovered printer must poll the relay again instead of returning the cached failure'
+		);
+
+		// Clean up the per-printer transient re-cached by the final poll.
+		delete_transient( Cloud_Print_Relay_Service::STATUS_TRANSIENT_PREFIX . 'front' );
 	}
 
 	/**
