@@ -126,6 +126,9 @@ final class Augmentation_Pipeline {
 
 		// Declared ONCE, projected onto both lanes.
 		self::add_record_augmenter( array( Variable_Prices::class, 'augment_record' ), 10 );
+		// After the revision stamper at 9, so narrowing the child list cannot perturb the parent's
+		// `_rxdb_revision` — the write path recomputes that from a bare wc/v3 re-read.
+		self::add_record_augmenter( array( Variable_Children::class, 'augment_record' ), 10 );
 		self::add_record_augmenter( array( Product_Images::class, 'augment_record' ), 10 );
 
 		self::wire();
