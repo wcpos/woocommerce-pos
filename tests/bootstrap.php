@@ -10,6 +10,7 @@ use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\StaticMockerHack;
 use Automattic\WooCommerce\Testing\Tools\DependencyManagement\MockableLegacyProxy;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
+use WCPOS\WooCommercePOS\Sync\Visibility_Observer;
 
 error_reporting( E_ALL );
 ini_set( 'display_errors', 1 );
@@ -182,7 +183,7 @@ class Bootstrap {
 			foreach ( $hook->callbacks as $priority => $callbacks ) {
 				foreach ( $callbacks as $callback ) {
 					$function = $callback['function'];
-					if ( ! \is_array( $function ) || ! isset( $function[0] ) || ( ! $function[0] instanceof Sync_Journal && ! $function[0] instanceof Integrity_Digest ) ) {
+					if ( ! \is_array( $function ) || ! isset( $function[0] ) || ( ! $function[0] instanceof Sync_Journal && ! $function[0] instanceof Integrity_Digest && ! $function[0] instanceof Visibility_Observer ) ) {
 						continue;
 					}
 

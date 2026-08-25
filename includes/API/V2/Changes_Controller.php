@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
 use WP_REST_Controller;
@@ -31,6 +32,16 @@ use WP_REST_Server;
 final class Changes_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
 	use Request_Int_Param;
+
+	/**
+	 * The journal object types that name a `wp_posts` row, and so share the id-space
+	 * {@see Pos_Visibility} excludes on. Every OTHER journalled type — customers, tax rates,
+	 * coupons, terms — numbers its rows in its own space, where the same integer means an
+	 * unrelated record. The visibility drop below is gated on this list for that reason.
+	 *
+	 * @var string[]
+	 */
+	private const CATALOG_POST_OBJECT_TYPES = array( 'product', 'variation' );
 
 	private const PRODUCT_POST_TYPES_SQL     = "('product','product_variation')";
 	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
@@ -193,6 +204,11 @@ final class Changes_Controller extends WP_REST_Controller {
 		$page = $this->journal->page( $stream_types, $since, $limit );
 		$rows = $page['rows'];
 
+		// The POS servable set, resolved ONCE per request. A hidden record is FOREIGN to this
+		// stream in the way an order row is: the catalog lane will never serve it, so its update
+		// rows are dropped below.
+		$hidden_ids = array_fill_keys( ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG ), true );
+
 		$changes          = array();
 		$checkpoint_since = $since;
 		foreach ( $rows as $row ) {
@@ -206,6 +222,25 @@ final class Changes_Controller extends WP_REST_Controller {
 				'revision'     => (string) ( $row['revision'] ?? '' ),
 				'modified_gmt' => (string) ( $row['modified_gmt'] ?? '' ),
 			);
+			// POS-HIDDEN RECORDS. An update row for a record the catalog lane will never serve
+			// tells every till to pull an id that comes back empty, counts toward the backlog that
+			// trips the client's re-baseline guard, and moves a head no till can act on. Drop it —
+			// the checkpoint above already advanced past this sequence, so the cursor still reaches
+			// head and the idle 304 path stays alive.
+			//
+			// TOMBSTONES ARE NEVER DROPPED. A record that just became hidden is still resident on
+			// every till, and `deleted` is the one message about a hidden id a client must still
+			// receive; `Sync\Visibility_Observer` appends exactly that row when a record leaves the
+			// servable set. Filtering it here would strand the record on the till until an expensive
+			// tier 2 sweep noticed. A tombstone for a record the client never held is a no-op.
+			if (
+				0 === $change['deleted']
+				&& \in_array( $object_type, self::CATALOG_POST_OBJECT_TYPES, true )
+				&& isset( $hidden_ids[ $change['id'] ] )
+			) {
+				continue;
+			}
+
 			// Tag per-row collection ONLY for the unified `all` stream — that is
 			// the only consumer (the engine) that needs to disambiguate rows.
 			// The single-collection `products` / `tax_rates` endpoints keep their
