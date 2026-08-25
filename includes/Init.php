@@ -67,6 +67,7 @@ class Init {
 	 * | 8 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product` | `Proxy_Uuid_Stamper`, `Integrity_Digest` digest stampers, pipeline projections | 10 | order-critical (by number) | Preserved verbatim from the hand-wiring the pipeline replaced, so third-party code hooking either public filter still runs where it always did. |
 	 * | 9 | `woocommerce_before_product_object_save`, `woocommerce_before_product_variation_object_save` | `Sync\Pos_Uuid::stamp_on_save` | 10 | irrelevant | Default. The HOOK is the design (before the data store writes, so the uuid lands in the same save); the number is not. Registered unconditionally — identity is core, not an observer. |
 	 * | 10 | 32 catalogue/customer/order hooks | `Sync\Sync_Journal` (33 callbacks) | 10 | irrelevant | Default throughout. |
+	 * | 10b | `delete_option` plus `pre_update_option_*`, `update_option_*`, `add_option_*`, `delete_option_*` for the two `Pos_Visibility::source_options()` | `Sync\Visibility_Observer` (9 callbacks) | 10 | irrelevant | Default. Appends the journal row for a record entering or leaving the POS servable set — the transition the sequence-log stream relies on, since it drops a hidden record's update rows. `delete_option` is the generic PRE-delete action (the per-option form fires after) and is gated on the option name inside the callback. Registered after `Sync_Journal` only because it writes through it; the constructor also runs the observer's one-time tombstone seed. |
 	 * | 11 | `wcpos_sync_journal_purge` | `Sync\Sync_Journal_Purge::run_purge` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the daily event. |
 	 * | 12 | 21 catalogue/customer/order hooks (a subset of row 10's) | `Sync\Integrity_Digest` | 10 | unknown | Default. Shares every one of its hooks with `Sync_Journal` at the same priority, so the journal always runs first — no code found that depends on that, but nothing pins it either. |
 	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
@@ -149,6 +150,9 @@ class Init {
 
 		if ( $sync_schema_latched ) {
 			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal() )->register_hooks();
+			$visibility_observer = new \WCPOS\WooCommercePOS\Sync\Visibility_Observer();
+			$visibility_observer->register_hooks();
+			$visibility_observer->maybe_seed_hidden_tombstones();
 			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
 			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
 		}

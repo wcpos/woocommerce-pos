@@ -160,6 +160,54 @@ final class Sync_Journal {
 		);
 	}
 
+	/**
+	 * Append one tombstone per catalogue post id, in a single statement.
+	 *
+	 * The per-record `record_post_deleted()` path loads a `WC_Product` for the revision stamp, which
+	 * is fine for the handful of records one settings write moves and hopeless for the whole hidden
+	 * set of a store that keeps thousands of products online-only. This is the bulk form, shaped like
+	 * `append_customer_updates_for_all_users()`: one INSERT ... SELECT, no revision (a tombstone
+	 * carries no state the client compares), and the post type read from `wp_posts` so a stale id in
+	 * the merchant's list cannot announce a change to an unrelated record.
+	 *
+	 * @param int[] $ids Product / variation post ids.
+	 */
+	public function append_catalogue_tombstones( array $ids ): bool {
+		global $wpdb;
+
+		$ids = array_values(
+			array_unique(
+				array_filter(
+					array_map( 'intval', $ids ),
+					static function ( int $id ): bool {
+						return $id > 0;
+					}
+				)
+			)
+		);
+		if ( array() === $ids ) {
+			return true;
+		}
+
+		$now          = gmdate( 'Y-m-d H:i:s' );
+		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		return false !== $wpdb->query(
+			$wpdb->prepare(
+				'INSERT INTO ' . $this->table_name()
+				. ' (object_type, object_id, deleted, revision, modified_gmt, origin, created_gmt)'
+				. " SELECT CASE p.post_type WHEN 'product_variation' THEN 'variation' ELSE 'product' END,"
+				. " p.ID, 1, '', %s, 'visibility-seed', %s"
+				. " FROM {$wpdb->posts} p"
+				. " WHERE p.post_type IN ('product','product_variation') AND p.ID IN ({$placeholders})" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- %d placeholder list generated from count(); the ids are bound below.
+				. ' ORDER BY p.ID',
+				$now,
+				$now,
+				...$ids
+			)
+		);
+	}
+
 	public function register_hooks(): void {
 		add_action( 'woocommerce_new_product', array( $this, 'record_product_created' ), 10, 1 );
 		add_action( 'woocommerce_update_product', array( $this, 'record_product_updated' ), 10, 1 );
