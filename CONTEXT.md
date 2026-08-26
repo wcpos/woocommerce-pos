@@ -29,7 +29,7 @@ One POS query behaviour for one collection — the params it claims, the clauses
 _Avoid_: query filter, orderby mapping, proxy mirror
 
 **Read Lane**:
-One of the two paths a collection read reaches the client by — the direct lane (`wcpos/v1` controllers) and the proxy lane (`wcpos/v2` → `wc/v3`). Behaviour that exists on one lane only is a parity bug, not a design.
+One of the two paths a collection read reaches the client by — the direct lane (`wcpos/v1` controllers, plus the flat `wcpos/v2` routes with no `wc/v3` proxy backing, e.g. `/variations`) and the proxy lane (`wcpos/v2` → `wc/v3`). Behaviour that exists on one lane only is a parity bug, not a design. (Code comments also say "lane" for the request shapes *within* one route — include lane, discovery lane; that narrower sense is not this term.)
 _Avoid_: v1/v2 API, endpoint version
 
 **Replica policy**:

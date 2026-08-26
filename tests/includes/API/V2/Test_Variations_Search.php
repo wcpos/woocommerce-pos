@@ -14,7 +14,6 @@ use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
-use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 
@@ -663,17 +662,24 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Include mode preserves its records, caller order, and serialized wire fields.
+	 * Include mode preserves its records, caller order, and the variation payload shape.
+	 *
+	 * ASCENDING include order on purpose: the query's natural order is `date DESC, ID DESC`,
+	 * which coincides with a reversed-children list — an order pin using that fixture passes
+	 * without the reorder. Ascending cannot coincide, so this pin is mutation-sensitive.
+	 * The payload pin is the #1710 invariant by shape — a variation document carries `image`
+	 * (variations controller), never `images[]` (products controller) — rather than a
+	 * round-trip through the same serializer the route uses, which would drift with it.
 	 */
 	public function test_include_lane_serves_the_same_records_and_order(): void {
 		$product     = ProductHelper::create_variation_product();
-		$include_ids = array_reverse( array_map( 'intval', $product->get_children() ) );
-		$request     = $this->wp_rest_get_request( '/wcpos/v2/variations' );
+		$include_ids = array_map( 'intval', $product->get_children() );
+		sort( $include_ids );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/variations' );
 		$request->set_query_params( array( 'include' => $include_ids ) );
 
 		$response  = $this->server->dispatch( $request );
 		$documents = $response->get_data()['documents'];
-		$serializer = new Product_Serializer();
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $include_ids, array_column( $documents, 'id' ) );
@@ -681,11 +687,42 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			$this->assertArrayHasKey( 'id', $document );
 			$this->assertArrayHasKey( 'parent_id', $document );
 			$this->assertArrayHasKey( 'payload', $document );
-
-			$expected = $serializer->serialize( wc_get_product( $document['id'] ), $request );
-			$this->assertSame( $expected['id'], $document['payload']['id'] );
-			$this->assertSame( $expected['image'], $document['payload']['image'] );
+			$this->assertArrayHasKey( 'image', $document['payload'] );
+			$this->assertArrayNotHasKey( 'images', $document['payload'] );
 		}
+	}
+
+	/**
+	 * The include ask is a ceiling: paging params cannot skip it, widening params
+	 * cannot grow it.
+	 *
+	 * `offset` would make WP_Query skip named ids (absence from documents is the
+	 * client's prune signal — two valid variations would leave every till), and
+	 * WooCommerce's `on_sale=true` handling array-unions every on-sale id into
+	 * `post__in` on top of the ask. Both are pinned away in the include lane.
+	 */
+	public function test_include_lane_ignores_paging_and_widening_params(): void {
+		$product     = ProductHelper::create_variation_product();
+		$include_ids = array_map( 'intval', $product->get_children() );
+		sort( $include_ids );
+
+		$on_sale_product   = ProductHelper::create_variation_product();
+		$on_sale_variation = wc_get_product( (int) $on_sale_product->get_children()[0] );
+		$on_sale_variation->set_regular_price( '20' );
+		$on_sale_variation->set_sale_price( '10' );
+		$on_sale_variation->save();
+		delete_transient( 'wc_products_onsale' );
+
+		$response = $this->variations_request(
+			array(
+				'include' => $include_ids,
+				'offset'  => 1,
+				'on_sale' => 'true',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $include_ids, array_column( $response->get_data()['documents'], 'id' ) );
 	}
 
 	/**
@@ -749,6 +786,10 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $enabled->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
 		$this->assertSame( 1, $response->get_data()['meta']['returned'] );
+		// The accepted #1751 semantic shift, pinned: `requested` counts the
+		// query-eligible ask (1), not the raw ask (3) — the prune signal is
+		// absence from documents, not this counter.
+		$this->assertSame( 1, $response->get_data()['meta']['requested'] );
 	}
 
 	/**
