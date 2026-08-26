@@ -35,7 +35,7 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 	use Sync_Observer_Unhook_Trait;
 
 	/** REST namespace used by this test's throwaway route. */
-	private const TEST_NAMESPACE = 'wcpos-test/v1';
+	private const TEST_NAMESPACE = 'wcpos/v2';
 
 	/** @var Sync_Journal */
 	protected $journal;
