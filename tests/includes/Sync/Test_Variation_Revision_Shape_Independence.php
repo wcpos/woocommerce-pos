@@ -23,8 +23,8 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  * the old `$bare['payload']['date_modified_gmt'] ?? $bare['id']` chain silently degrades to the
  * variation's own id — a value that never changes again.
  *
- * That failure would be total and invisible. The grace comparer would still let a queued date-based
- * write through, the ack would hand the client the id as `currentRevision`, and from then on every
+ * That failure would make the strict revision comparison use the variation id as `currentRevision`.
+ * The ack would hand the client that id, and from then on every
  * stale baseRevision would equal every recomputed one: two tills editing the same variation hours
  * apart would both pass the precondition, the per-record lock would serialize them, and there would
  * be no error — just a lost update, every time.

@@ -207,7 +207,6 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			remove_role( self::ROLE );
 			$this->catalogTestRoleAdded = false;
 		}
-		delete_option( 'woocommerce_pos_sync_legacy_revision_grace' );
 		unset( $GLOBALS['wcpos_sync_test_rest_do_request_response'], $GLOBALS['wcpos_sync_test_rest_do_request_calls'], $GLOBALS['wcpos_sync_test_rest_do_request_queue'], $GLOBALS['wcpos_sync_test_wc_permissions'] );
 		parent::tearDown();
 	}
@@ -2430,61 +2429,37 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 
-	public function test_term_id_grace_applies_to_update_but_not_delete(): void {
+	/** @dataProvider termMutationOperations */
+	public function test_term_id_revision_conflicts( string $operation ): void {
 		$current = array(
 			'id' => 10,
 			'name' => 'Current',
 		);
-
-		$updateStore = new Fake_Mutation_Store();
-		$updateStore->resolve = 10;
-		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
-			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response(
-				array(
-					'id' => 10,
-					'name' => 'Updated',
-				),
-				200
-			),
-			new WP_REST_Response(
-				array(
-					'id' => 10,
-					'name' => 'Updated',
-				),
-				200
-			),
-		);
-		$updated = $this->push(
-			$updateStore,
-			array(
-				'collection' => 'categories',
-				'operation' => 'update',
-				'baseRevision' => '10',
-				'payload' => array( 'name' => 'Updated' ),
-			)
-		);
-		$this->assertSame( 200, $updated->get_status() );
-
-		unset( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
-		$deleteStore = new Fake_Mutation_Store();
-		$deleteStore->resolve = 10;
+		$store = new Fake_Mutation_Store();
+		$store->resolve = 10;
 		$this->setRestResponse( $current, 200 );
-		$deleted = $this->push(
-			$deleteStore,
+		$result = $this->push(
+			$store,
 			array(
 				'collection' => 'categories',
-				'operation' => 'delete',
-				'payload' => null,
+				'operation' => $operation,
 				'baseRevision' => '10',
+				'payload' => 'delete' === $operation ? null : array( 'name' => 'Updated' ),
 			)
 		);
-		$this->assertSame( 409, $deleted->get_status() );
-		$this->assertSame( 'woo_rxdb_sync_conflict', $deleted->get_data()['code'] );
+		$this->assertSame( 409, $result->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $result->get_data()['code'] );
+	}
+
+	public static function termMutationOperations(): array {
+		return array(
+			'update' => array( 'update' ),
+			'delete' => array( 'delete' ),
+		);
 	}
 
 	/** @dataProvider productMutationOperations */
-	public function test_product_mutation_accepts_pre_taxonomy_sort_revision_under_grace( string $operation ): void {
+	public function test_product_mutation_rejects_noncanonical_taxonomy_revision( string $operation ): void {
 		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$product  = ProductHelper::create_simple_product();
 		$current  = array(
@@ -2518,7 +2493,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( 409, $result->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $result->get_data()['code'] );
 	}
 
 	public static function productMutationOperations(): array {
@@ -2528,49 +2504,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 	}
 
-	public function test_orders_update_accepts_LEGACY_revision_over_unchanged_content_under_grace(): void {
-		list($order_id, $payload) = $this->real_order_payload();
-		$store = new Fake_Mutation_Store();
-		$store->resolve = $order_id;
-		$pre_augmentation_payload = $payload;
-		unset( $pre_augmentation_payload['tax_ids'] );
-		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines' ) as $payload_key ) {
-			if ( ! isset( $pre_augmentation_payload[ $payload_key ] ) ) {
-				continue;
-			}
-			foreach ( $pre_augmentation_payload[ $payload_key ] as &$item ) {
-				$item['meta_data'] = array_values(
-					array_filter(
-						$item['meta_data'] ?? array(),
-						static fn( $entry ): bool => Pos_Uuid::META_KEY !== ( $entry['key'] ?? null )
-					)
-				);
-				if ( 'line_items' === $payload_key && isset( $item['image']['id'] ) ) {
-					$item['image']['id'] = (string) $item['image']['id'];
-				}
-			}
-			unset( $item );
-		}
-		$legacy = Order_Serializer::legacy_revision( $pre_augmentation_payload );
-		$canonical = Order_Serializer::canonical_revision( $payload );
-		$this->assertNotSame( $legacy, $canonical );
-		$this->setRestResponse( $pre_augmentation_payload, 200 );
-
-		$result = $this->push(
-			$store,
-			array(
-				'collection' => 'orders',
-				'operation' => 'update',
-				'baseRevision' => $legacy,
-				'payload' => array( 'status' => 'completed' ),
-			)
-		);
-
-		$this->assertSame( 200, $result->get_status() );
-		$this->assertSame( $canonical, $result->get_data()['currentRevision'] );
-	}
-
-	public function test_orders_update_accepts_pre_augmentation_canonical_revision_under_grace(): void {
+	public function test_orders_update_rejects_noncanonical_revision_for_current_payload(): void {
 		$store = new Fake_Mutation_Store();
 		$store->resolve = 7001;
 		$payload = array(
@@ -2604,70 +2538,12 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( 409, $result->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $result->get_data()['code'] );
 		$this->assertSame( $current_revision, $result->get_data()['currentRevision'] );
 	}
 
-	public function test_orders_update_accepts_pre_item_uuid_canonical_revision_after_uuid_stamping(): void {
-		$store = new Fake_Mutation_Store();
-		$store->resolve = 7001;
-		$before_stamping = array(
-			'id'         => 7001,
-			'status'     => 'processing',
-			'line_items' => array(
-				array(
-					'id'        => 17,
-					'image'     => array( 'id' => '23' ),
-					'meta_data' => array(),
-				),
-			),
-		);
-		$after_stamping = $before_stamping;
-		$after_stamping['line_items'][0]['meta_data'][] = array(
-			'id'            => 91,
-			'key'           => Pos_Uuid::META_KEY,
-			'value'         => '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d',
-			'display_key'   => Pos_Uuid::META_KEY,
-			'display_value' => '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d',
-		);
-		$previous_revision = Revision::compute( $before_stamping );
-		$this->setRestResponse( $after_stamping, 200 );
-
-		$result = $this->push(
-			$store,
-			array(
-				'collection'   => 'orders',
-				'operation'    => 'update',
-				'baseRevision' => $previous_revision,
-				'payload'      => array( 'status' => 'completed' ),
-			)
-		);
-
-		$this->assertSame( 200, $result->get_status() );
-	}
-
-
-	public function test_grace_rejects_a_genuinely_stale_legacy_revision(): void {
-		list($order_id, $payload) = $this->real_order_payload();
-		$store = new Fake_Mutation_Store();
-		$store->resolve = $order_id;
-		$this->setRestResponse( $payload, 200 );
-		$stale_legacy = Order_Serializer::legacy_revision( array( 'status' => 'somewhere-else' ) );
-
-		$result = $this->push(
-			$store,
-			array(
-				'collection' => 'orders',
-				'operation' => 'update',
-				'baseRevision' => $stale_legacy,
-			)
-		);
-
-		$this->assertSame( 409, $result->get_status() );
-	}
-
-
-	public function test_grace_accepts_a_pre_1b_date_string_precondition_matching_the_current_document(): void {
+	public function test_orders_update_rejects_date_revision_matching_current_document(): void {
 		$store = new Fake_Mutation_Store();
 		$store->resolve = 7001;
 		$payload = array(
@@ -2677,7 +2553,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 		$this->setRestResponse( $payload, 200 );
 
-		$ok = $this->push(
+		$result = $this->push(
 			$store,
 			array(
 				'collection' => 'orders',
@@ -2686,40 +2562,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'payload' => array( 'status' => 'completed' ),
 			)
 		);
-		$this->assertSame( 200, $ok->get_status() );
-
-		$stale_store = new Fake_Mutation_Store();
-		$stale_store->resolve = 7001;
-		$stale = $this->push(
-			$stale_store,
-			array(
-				'collection' => 'orders',
-				'operation' => 'update',
-				'baseRevision' => '2020-01-01T00:00:00',
-			)
-		);
-		$this->assertSame( 409, $stale->get_status() );
-	}
-
-
-	public function test_grace_off_rejects_every_legacy_form(): void {
-		update_option( 'woocommerce_pos_sync_legacy_revision_grace', 'no' );
-		list($order_id, $payload) = $this->real_order_payload();
-		$store = new Fake_Mutation_Store();
-		$store->resolve = $order_id;
-		$this->setRestResponse( $payload, 200 );
-		$legacy = Order_Serializer::legacy_revision( $payload );
-
-		$result = $this->push(
-			$store,
-			array(
-				'collection' => 'orders',
-				'operation' => 'update',
-				'baseRevision' => $legacy,
-			)
-		);
-
 		$this->assertSame( 409, $result->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $result->get_data()['code'] );
 	}
 
 

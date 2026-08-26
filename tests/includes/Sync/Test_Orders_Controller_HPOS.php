@@ -103,7 +103,6 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 			$this->assertSame( $stored[ $payload['id'] ], $payload['_rxdb_digest'] );
 			$this->assertSame( Order_Serializer::canonical_revision( $bare ), $document['sync']['revision'] );
 			$this->assertSame( Order_Serializer::canonical_revision( $bare ), Order_Serializer::canonical_revision( $payload ) );
-			$this->assertSame( Order_Serializer::legacy_revision( $bare ), Order_Serializer::legacy_revision( $payload ) );
 		}
 	}
 
