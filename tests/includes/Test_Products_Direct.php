@@ -341,6 +341,12 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$variation = $this->create_test_variation();
 		$variation->set_manage_stock( false );
 		$variation->set_stock_status( 'outofstock' );
+
+		// Guard against fixture drift: a stock-managed PARENT makes
+		// get_manage_stock() return 'parent' and this test would silently
+		// exercise the managed branch instead.
+		$this->assertFalse( $variation->get_manage_stock() );
+
 		$variation->save();
 
 		$persisted = wc_get_product( $variation->get_id() );
@@ -352,6 +358,10 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	 * Integration test: the decimal-quantity feature itself still works
 	 * through a full save — a managed product with fractional stock above
 	 * zero persists as "in stock".
+	 *
+	 * Feature smoke test: with the floatval stock filter active, WC core's
+	 * validate_props() also resolves 0.5 to instock, so this does not pin
+	 * the hook alone — the direct tests above do that.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::save_decimal_quantities
 	 */
