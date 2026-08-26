@@ -24,11 +24,13 @@ use WP_REST_Server;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
- * Variations document endpoint (on-demand variation fetch).
+ * Variations document endpoint — the collection's hydration AND list/seed lane (ADR 0034).
  *
  * Why a flat route: the change-signal yields BARE variation ids (no parent), and WooCommerce's
  * only variation routes are parent-mediated (`products/<parent>/variations`). One flat route
- * lets the client pull a deferred variation set in ONE round trip with no parent->child dance.
+ * IS the cross-parent collection: bare pages seed the complete replica (the idle trickle),
+ * `include=` is one filter on it (targeted hydration, no parent->child dance), and the
+ * SKU/barcode discovery search is another.
  *
  * Why it EXTENDS WooCommerce's variations controller: because that is all the route ever needed.
  * WooCommerce's `get_objects()` already answers a cross-parent query — with no `product_id` in
@@ -87,7 +89,11 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 * Narrow WooCommerce's variation query to what the POS may serve.
 	 *
 	 * Everything WooCommerce already understands — `include`, `offset`, `order`, pagination,
-	 * status — comes from `parent::prepare_objects_query()`. Layered on top: POS visibility, the
+	 * status — comes from `parent::prepare_objects_query()`, which also applies
+	 * `woocommerce_rest_product_variation_object_query` internally (wc/v3's CRUD controller fires
+	 * it there, not in `get_items()`), so third-party query scoping reaches every lane built
+	 * through this method. Layered on top — deliberately AFTER that filter, so a third party
+	 * cannot widen what the POS may serve: POS visibility, the
 	 * barcode-carrier search, and the sort keys the POS grids offer. This is the seam 1.9.x used
 	 * for the same job (`API\V1\Product_Variations_Controller::prepare_objects_query`).
 	 *
@@ -231,12 +237,16 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	}
 
 	/**
-	 * GET /variations?include=12,34,56 — hydrate the given variation ids.
+	 * GET /variations — the flat collection's three lanes, one response shape.
 	 *
-	 * Mirrors the wc/v3 `products?include=` shape; the parent is resolved
-	 * server-side off the loaded variation object (get_parent_id), so the client
-	 * never needs to know parents. Unknown / non-variation ids are skipped
-	 * (deletes are handled by the change-signal tombstone path, not here).
+	 * `?sku=`/`?search=` discovers by barcode carrier; a bare request serves one
+	 * collection page (the trickle's seed lane); `?include=12,34` hydrates the
+	 * named ids. All three resolve ids through WooCommerce's collection query,
+	 * then hydrate through the shared assembly line below. Mirrors the wc/v3
+	 * `products?include=` shape; the parent is resolved server-side off the
+	 * loaded variation object (get_parent_id), so the client never needs to know
+	 * parents. Unknown / non-variation ids are skipped (deletes are handled by
+	 * the change-signal tombstone path, not here).
 	 */
 	public function get_variations( WP_REST_Request $request ) {
 		$started     = microtime( true );
@@ -260,11 +270,56 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			 */
 			list( $ids, $search_meta ) = $this->collection_page( $request );
 		} else {
-			$ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
-			// Leg-3 (ADR 0014 WP-M5): drop POS-hidden (`online_only`) variations from the served set. A hidden
-			// id simply isn't hydrated → the client's targeted pull returns nothing for it → Leg-3 prunes it.
-			// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
-			$ids = ( new Pos_Visibility() )->filter_visible_children( $ids );
+			/*
+			 * The ask runs through the SAME query WooCommerce's own collection read builds
+			 * (#1751): `parent::prepare_objects_query()` maps `include` to `post__in` and — in
+			 * wc/v3's CRUD controller — applies `woocommerce_rest_product_variation_object_query`
+			 * internally, so third-party query scoping reaches this lane like every other
+			 * (hook-parity contract #1738). The collection and discovery lanes always had that
+			 * property; this lane loaded ids directly and bypassed it. POS visibility and the
+			 * publish gate ride the same args (layered in our override).
+			 *
+			 * The paging/ordering params are PINNED, not honoured: this lane answers a named
+			 * ask, so `per_page` covers the whole ask, `offset`/`page` cannot skip any of it
+			 * (a skipped id is absent from documents, which the client reads as "prune this
+			 * id"), and `orderby=include` keeps WooCommerce from ordering by a meta key whose
+			 * EXISTS join would silently drop every variation lacking that meta row. Pinning
+			 * `orderby` also keeps the args complete for direct (non-dispatched) invocations,
+			 * which carry no route defaults. Served order is the include order either way —
+			 * the intersect below is the final authority.
+			 */
+			$include_ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
+			// Pins live on a QUERY-ONLY clone: the dispatched request stays exactly
+			// as the client sent it, for the serializer's prepare-filters and for
+			// anything downstream reading it after dispatch.
+			$query_request = clone $request;
+			$query_request->set_param( 'per_page', max( 1, count( $include_ids ) ) );
+			$query_request->set_param( 'page', 1 );
+			$query_request->set_param( 'offset', 0 );
+			$query_request->set_param( 'orderby', 'include' );
+			$query_request->set_param( 'order', 'asc' );
+			$args = $this->prepare_objects_query( $query_request );
+
+			/*
+			 * The ask is a CEILING. WooCommerce's variations controller UNIONS some
+			 * collection params into `post__in` (`on_sale=true` array-unions every on-sale
+			 * id on top of the ask), so without this intersection a stray param would
+			 * hydrate the whole store into the till. No request param or filter may widen
+			 * the served set beyond the named ids — narrowing is fine, that is what the
+			 * object_query filter and the visibility exclusion are for. An emptied ask pins
+			 * to `array( 0 )`, the same never-matches sentinel Pos_Visibility uses.
+			 */
+			$post_in = array_values( array_intersect( array_map( 'intval', (array) ( $args['post__in'] ?? array() ) ), $include_ids ) );
+			$args['post__in'] = array() === $post_in ? array( 0 ) : $post_in;
+			$results = $this->get_objects( $args );
+
+			$allowed_ids = array();
+			foreach ( $results['objects'] as $object ) {
+				if ( $object instanceof WC_Product_Variation ) {
+					$allowed_ids[] = $object->get_id();
+				}
+			}
+			$ids = array_values( array_intersect( $include_ids, $allowed_ids ) );
 		}
 		_prime_post_caches( $ids, true, true );
 
@@ -285,8 +340,13 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			? ( new Digest_Index() )->read_digests( 'products', $ids )
 			: array();
 
-		$serialization_request = new WP_REST_Request( 'GET', '/' );
-		$serializer            = new Product_Serializer();
+		$serializer = new Product_Serializer();
+		// A CLONE of the live request, not a synthetic bare one (so prepare-filters
+		// see the real request context), and not the live request itself (the
+		// serializer stamps store scope and a per-variation `product_id` onto
+		// whatever it is handed; the dispatched request must leave this method as
+		// the client sent it).
+		$serialization_request = clone $request;
 		$documents             = array();
 		foreach ( $ids as $id ) {
 			$variation = wc_get_product( $id );
@@ -295,13 +355,12 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			}
 			/*
 			 * DISABLED variations are never hydrated — see the `post_status` note in
-			 * prepare_objects_query(). The gate lives here as well because the `include` lane does
-			 * not build a WP_Query at all: it loads each id directly, so the query-level narrowing
-			 * that covers the collection and discovery lanes cannot reach it.
+			 * prepare_objects_query(). The query-level publish gate covers ALL lanes, including
+			 * `include`; this check only guards a status change between the id query and object load.
 			 *
-			 * Dropping it here (rather than out of $ids) deliberately leaves `meta.requested`
-			 * counting the ask: requested > returned is precisely the shortfall the client's
-			 * targeted pull reads as "prune this id".
+			 * `meta.requested` now counts the query-eligible ask: a disabled or query-filtered id is
+			 * absent from $ids. The client's targeted-pull shortfall — absence from documents — is
+			 * unchanged.
 			 */
 			if ( 'publish' !== $variation->get_status() ) {
 				continue;
@@ -446,17 +505,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	}
 
 	/**
-	 * Discover a page of published, POS-visible variation ids by SKU/barcode.
-	 *
-	 * The query is WooCommerce's — `prepare_objects_query()` + `get_objects()`, the same pair its
-	 * own `get_items()` uses. This method previously hand-built the SQL: a `wp_posts`/`wp_postmeta`
-	 * INNER JOIN with `LIKE` predicates assembled per (field, term) pair, a second COUNT(DISTINCT)
-	 * query for the total, and the hidden-id exclusion spliced into the same placeholder list. All
-	 * of it duplicated `WP_Query` — which is where such copies go wrong, quietly and later.
-	 *
-	 * @return array{0: array<int, int>, 1: array{total: int, page: int, per_page: int}}
-	 */
-	/**
 	 * One page of the POS-servable variation collection, with its total.
 	 *
 	 * WooCommerce's query pair, same as {@see search_variation_ids()} — the only difference is that
@@ -492,6 +540,17 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		);
 	}
 
+	/**
+	 * Discover a page of published, POS-visible variation ids by SKU/barcode.
+	 *
+	 * The query is WooCommerce's — `prepare_objects_query()` + `get_objects()`, the same pair its
+	 * own `get_items()` uses. This method previously hand-built the SQL: a `wp_posts`/`wp_postmeta`
+	 * INNER JOIN with `LIKE` predicates assembled per (field, term) pair, a second COUNT(DISTINCT)
+	 * query for the total, and the hidden-id exclusion spliced into the same placeholder list. All
+	 * of it duplicated `WP_Query` — which is where such copies go wrong, quietly and later.
+	 *
+	 * @return array{0: array<int, int>, 1: array{total: int, page: int, per_page: int}}
+	 */
 	private function search_variation_ids( WP_REST_Request $request ): array {
 		$per_page = max( 1, min( 100, (int) ( $request->get_param( 'per_page' ) ?? 10 ) ) );
 		$page     = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );

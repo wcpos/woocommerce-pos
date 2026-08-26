@@ -30,9 +30,13 @@ use WP_REST_Request;
  *    projection. `prepare_object_for_response` runs WooCommerce's own
  *    `woocommerce_rest_prepare_product_object` filter; `response_to_data` resolves
  *    embedded links exactly as a real request would.
- * 2. Variations are serialized through the SAME products controller as products —
- *    `wc_get_product()` hands back a `WC_Product_Variation` and the controller
- *    handles it, so the two lanes cannot drift apart.
+ * 2. Variations are serialized through WooCommerce's own VARIATIONS controller
+ *    (`WC_REST_Product_Variations_Controller`), products through the products
+ *    controller — this class picks per object type so a caller cannot pick
+ *    wrong. Hydrating a variation through the PRODUCTS controller is the #1710
+ *    incident (`images[]` instead of `image`: blank POS thumbnails, the
+ *    parent's image on every order line); post-#1710 the payload species is
+ *    the variations controller's everywhere.
  */
 final class Product_Serializer {
 	/**
@@ -87,8 +91,10 @@ final class Product_Serializer {
 
 		$request  = $request instanceof WP_REST_Request ? $request : $this->default_request();
 		// Every lane that hydrates a product — changes, resolve, targeted
-		// variations, the write ack — builds a bare `GET /` and hands it here, so
-		// this is the ONE place that has to carry the till's store scope into
+		// variations, the write ack — hands this method a request it may write to
+		// (a bare `GET /`, or a CLONE of the live request; never the dispatched
+		// request itself, because the stamps below mutate it), so this is the ONE
+		// place that has to carry the till's store scope into
 		// `woocommerce_rest_prepare_product_object`. Without it the assembly line
 		// serializes the global price and the till redisplays it moments after the
 		// cashier changed the store's (pro#425). Stamping is idempotent and never
@@ -99,8 +105,9 @@ final class Product_Serializer {
 		$is_variation = $object instanceof WC_Product_Variation;
 		if ( $is_variation ) {
 			// `prepare_links()` reads `$request['product_id']` to build the nested
-			// `products/<parent>/variations/<id>` route. The lanes that hydrate here build a
-			// bare `GET /`, so without this the links would claim parent 0.
+			// `products/<parent>/variations/<id>` route. No request handed here carries
+			// it (bare, or cloned from the FLAT route), so without this the links
+			// would claim parent 0.
 			$request->set_param( 'product_id', $object->get_parent_id() );
 		}
 		// Store scope is carried by the request + lane marker above, both controller-agnostic,
