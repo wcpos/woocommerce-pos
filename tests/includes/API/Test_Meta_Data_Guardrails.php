@@ -1,6 +1,6 @@
 <?php
 /**
- * Test Meta Data Performance.
+ * Test Meta Data Guardrails.
  *
  * Tests for meta data monitoring, pre-flight checks, and response size estimation.
  *
@@ -16,13 +16,23 @@ use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\API\V1\Products_Controller;
 
 /**
- * Meta Data Performance test case.
+ * Meta Data Guardrails test case.
+ *
+ * These cases assert the meta-volume GUARDRAILS: pre-flight meta counts, the warning
+ * and error thresholds and their filters, the safe-response bypass for excessive meta,
+ * essential-meta filtering, and the log messages each emits.
+ *
+ * Named "…_Performance" until #1725. It asserts status codes, meta counts and log
+ * text, and no performance property whatsoever — no timing, no query count, no rows
+ * examined — so anyone asking "do we have perf coverage?" found it and wrongly
+ * concluded yes. Actual performance gates live in
+ * {@see \WCPOS\WooCommercePOS\Tests\Sync\Test_Order_Save_Query_Budget}.
  *
  * @internal
  *
  * @coversNothing
  */
-class Test_Meta_Data_Performance extends WCPOS_REST_Unit_Test_Case {
+class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Captured log messages.
 	 *

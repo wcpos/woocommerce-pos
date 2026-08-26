@@ -365,12 +365,15 @@ function scan_classes( $root ) {
 }
 function read_annotations( $root ) {
 	$file = $root . '/' . OUTPUT_DIR . '/annotations.json';
-	if ( ! is_file( $file ) ) { return array( 'classes' => array(), 'cases' => array() ); }
+	if ( ! is_file( $file ) ) { return array( 'classes' => array(), 'cases' => array(), 'renames' => array() ); }
 	$data = json_decode( file_get_contents( $file ), true );
 	if ( ! is_array( $data ) || JSON_ERROR_NONE !== json_last_error() ) { fail( 'Invalid annotations JSON: ' . json_last_error_msg() ); }
-	foreach ( array( 'classes', 'cases' ) as $section ) {
+	foreach ( array( 'classes', 'cases', 'renames' ) as $section ) {
 		if ( ! isset( $data[ $section ] ) ) { $data[ $section ] = array(); }
 		elseif ( ! is_array( $data[ $section ] ) ) { fail( 'Annotation section "' . $section . '" must be an object.' ); }
+	}
+	foreach ( $data['renames'] as $from => $to ) {
+		if ( ! is_string( $to ) || '' === $to ) { fail( 'Rename target for "' . $from . '" must be a non-empty class name.' ); }
 	}
 	return $data;
 }
@@ -469,6 +472,18 @@ function build_inventory( $classes, $annotations ) {
 	}
 	foreach ( array_keys( $annotations['cases'] ) as $key ) {
 			if ( ! isset( $case_keys[ $key ] ) ) { fail( 'Stale case annotation (no such test case was scanned): ' . $key . $stale_hint ); }
+	}
+	// A rename entry is a claim about the tree, so hold it to the tree. The target has to
+	// exist (otherwise the entry is a typo silently doing nothing) and the source has to be
+	// gone (otherwise both classes are live, this is not a rename, and cancelling the old
+	// class's keys would hide real v1-only coverage from the ratchet).
+	foreach ( $annotations['renames'] as $from => $to ) {
+		if ( isset( $class_names[ $from ] ) ) {
+			fail( 'Rename source is still a live class, so this is not a rename: ' . $from . "\nRemove the entry from " . OUTPUT_DIR . '/annotations.json.' );
+		}
+		if ( ! isset( $class_names[ $to ] ) ) {
+			fail( 'Rename target was not scanned (no such class): ' . $to . "\nCorrect or remove the entry in " . OUTPUT_DIR . '/annotations.json.' );
+		}
 	}
 	usort( $cases, function ( $a, $b ) { return strcmp( $a['key'], $b['key'] ); } );
 	$summary = array( 'cases' => count( $cases ), 'v1_only' => 0, 'unresolved' => 0, 'by_lane' => array( 'v1' => 0, 'v2' => 0, 'wc3' => 0, 'wp2' => 0, 'unresolved' => 0, 'unit' => 0 ),
@@ -589,14 +604,42 @@ function diff_hint( $path, $existing, $generated ) {
  * Note that verdicts are irrelevant here by construction — only `v1_only` is read, and that
  * field is derived purely from dispatched lanes. No annotation can quiet this check.
  */
-function compare_to_baseline( $inventory, $baseline_path ) {
+/**
+ * Rewrite a baseline case key through the declared class renames.
+ *
+ * The ratchet keys on `Class::method`, so renaming a class makes every one of its cases
+ * look retired AND newly added at once — the set of uncovered BEHAVIOURS is unchanged, but
+ * their labels are not, and the gate reads labels. Left alone that blocks any rename of a
+ * v1-only class, which is a false alarm, and a gate that cries wolf gets muted.
+ *
+ * Deliberately narrow: a rename can only ever RE-LABEL a key that the baseline already
+ * held. It cannot conjure one. So the worst an entry can do is cancel an added key against
+ * a removed key that genuinely existed under the old name — which is exactly a rename. New
+ * v1-only coverage still has no baseline key to match and still fails. The entry is also
+ * validated against the scanned tree in build_inventory(): target must exist, source must
+ * not.
+ */
+function apply_renames( $key, $renames ) {
+	$split = strpos( $key, '::' );
+	if ( false === $split ) { return $key; }
+	$class = substr( $key, 0, $split );
+	return isset( $renames[ $class ] ) ? $renames[ $class ] . substr( $key, $split ) : $key;
+}
+function compare_to_baseline( $inventory, $baseline_path, $renames = array() ) {
 	$baseline = json_decode( file_get_contents( $baseline_path ), true );
 	if ( ! is_array( $baseline ) || ! isset( $baseline['cases'] ) || ! is_array( $baseline['cases'] ) ) {
 		fail( 'Baseline JSON is not a lane-coverage inventory: ' . $baseline_path );
 	}
 	$base_keys = array();
+	$relabelled = 0;
 	foreach ( $baseline['cases'] as $case ) {
-		if ( ! empty( $case['v1_only'] ) || ! empty( $case['unresolved'] ) ) { $base_keys[ $case['key'] ] = true; }
+		if ( empty( $case['v1_only'] ) && empty( $case['unresolved'] ) ) { continue; }
+		$key = apply_renames( $case['key'], $renames );
+		if ( $key !== $case['key'] ) { $relabelled++; }
+		$base_keys[ $key ] = true;
+	}
+	if ( $relabelled > 0 ) {
+		echo 'Relabelled ' . $relabelled . " baseline case(s) through declared class renames.\n";
 	}
 	$head_keys = array();
 	foreach ( $inventory['cases'] as $case ) {
@@ -632,13 +675,14 @@ function compare_to_baseline( $inventory, $baseline_path ) {
 }
 
 list( $mode, $root, $root_arg, $compare_path ) = parse_cli( array_slice( $argv, 1 ) );
-$inventory = build_inventory( scan_classes( $root ), read_annotations( $root ) );
-$json      = inventory_json( $inventory );
+$annotations = read_annotations( $root );
+$inventory   = build_inventory( scan_classes( $root ), $annotations );
+$json        = inventory_json( $inventory );
 if ( 'json' === $mode ) {
 	echo $json; exit( 0 );
 }
 if ( 'compare' === $mode ) {
-	compare_to_baseline( $inventory, $compare_path );
+	compare_to_baseline( $inventory, $compare_path, $annotations['renames'] );
 }
 if ( 'warnings' === $mode ) {
 	foreach ( warning_rows( $inventory ) as $row ) {

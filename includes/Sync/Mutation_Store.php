@@ -511,8 +511,15 @@ class Mutation_Store {
 	 * route a write/delete to the WRONG record, so we fetch up to two and **fail closed**
 	 * (`WP_Error` 409 `woo_rxdb_sync_identity_ambiguous`) when more than one record carries
 	 * the uuid — the caller aborts the mutation (and releases its reservation) rather than
-	 * corrupt a record. A unique match is returned by lowest id (deterministic) so retries
-	 * are stable.
+	 * corrupt a record. A unique match is the only id in the result set, so resolution is
+	 * deterministic and retries are stable without the query imposing an order.
+	 *
+	 * DELIBERATELY UNORDERED — do not add an `ORDER BY` back (#1725). Because the outcome
+	 * is decided by the COUNT (0 = none, 1 = that id, >1 = fail closed), which two ids a
+	 * `LIMIT 2` returns is immaterial. `wp_postmeta`/`wp_usermeta`/`wp_termmeta` index
+	 * `meta_key` but never `meta_value`, so `ORDER BY <id> ASC LIMIT 2` made the optimizer
+	 * prefer an id-ordered walk that expects to stop early — and, with at most one match,
+	 * never does. Measured at ~1.35 s per call on a real store; see Pos_Uuid::get_order_ids_by_uuid.
 	 *
 	 * @return int|WP_Error 0 if none, the id if unique, or a 409 WP_Error if ambiguous.
 	 */
@@ -526,7 +533,7 @@ class Mutation_Store {
 						"SELECT DISTINCT u.ID FROM {$wpdb->users} u"
 						. " JOIN {$wpdb->usermeta} m ON m.user_id = u.ID"
 						. ' WHERE m.meta_key = %s AND m.meta_value = %s'
-						. ' ORDER BY u.ID ASC LIMIT 2',
+						. ' LIMIT 2',
 						$key,
 						$uuid
 					)
@@ -547,7 +554,7 @@ class Mutation_Store {
 					$sql   .= ' AND p.post_type = %s';
 					$args[] = $post_type;
 				}
-				$sql  .= ' ORDER BY p.ID ASC LIMIT 2';
+				$sql  .= ' LIMIT 2';
 				$found = $wpdb->get_col( $wpdb->prepare( $sql, ...$args ) );
 				break;
 			case 'term':
@@ -555,7 +562,7 @@ class Mutation_Store {
 					$wpdb->prepare(
 						"SELECT DISTINCT term_id FROM {$wpdb->termmeta}"
 						. ' WHERE meta_key = %s AND meta_value = %s'
-						. ' ORDER BY term_id ASC LIMIT 2',
+						. ' LIMIT 2',
 						$key,
 						$uuid
 					)
