@@ -14,6 +14,7 @@ use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 
@@ -606,6 +607,88 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * WooCommerce's variation object-query filter scopes the bare collection lane.
+	 *
+	 * A parity PIN, not a #1751 fix: wc/v3's CRUD controller applies the filter inside
+	 * `prepare_objects_query()`, so this lane always had it — reverting #1751 does not
+	 * fail this test. It guards against a future rewrite dropping the parent call.
+	 */
+	public function test_object_query_filter_scopes_the_collection_lane(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = array_map( 'intval', $product->get_children() );
+		$allowed_id    = $variation_ids[0];
+		$filter        = static function ( array $args ) use ( $allowed_id ): array {
+			$args['post__in'] = array( $allowed_id );
+
+			return $args;
+		};
+
+		add_filter( 'woocommerce_rest_product_variation_object_query', $filter, 10, 2 );
+		try {
+			$response = $this->variations_request();
+		} finally {
+			remove_filter( 'woocommerce_rest_product_variation_object_query', $filter, 10 );
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $allowed_id ), array_column( $response->get_data()['documents'], 'id' ) );
+	}
+
+	/**
+	 * WooCommerce's variation object-query filter scopes explicitly included ids.
+	 *
+	 * THE #1751 pin: the include lane used to load ids directly, bypassing the query
+	 * and every third-party scope with it. Mutation-checked — reverting the include
+	 * lane to direct loading fails this test.
+	 */
+	public function test_object_query_filter_scopes_the_include_lane(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = array_map( 'intval', $product->get_children() );
+		$allowed_id    = $variation_ids[1];
+		$filter        = static function ( array $args ) use ( $allowed_id ): array {
+			$args['post__in'] = array( $allowed_id );
+
+			return $args;
+		};
+
+		add_filter( 'woocommerce_rest_product_variation_object_query', $filter, 10, 2 );
+		try {
+			$response = $this->variations_request( array( 'include' => $variation_ids ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_product_variation_object_query', $filter, 10 );
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $allowed_id ), array_column( $response->get_data()['documents'], 'id' ) );
+	}
+
+	/**
+	 * Include mode preserves its records, caller order, and serialized wire fields.
+	 */
+	public function test_include_lane_serves_the_same_records_and_order(): void {
+		$product     = ProductHelper::create_variation_product();
+		$include_ids = array_reverse( array_map( 'intval', $product->get_children() ) );
+		$request     = $this->wp_rest_get_request( '/wcpos/v2/variations' );
+		$request->set_query_params( array( 'include' => $include_ids ) );
+
+		$response  = $this->server->dispatch( $request );
+		$documents = $response->get_data()['documents'];
+		$serializer = new Product_Serializer();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $include_ids, array_column( $documents, 'id' ) );
+		foreach ( $documents as $document ) {
+			$this->assertArrayHasKey( 'id', $document );
+			$this->assertArrayHasKey( 'parent_id', $document );
+			$this->assertArrayHasKey( 'payload', $document );
+
+			$expected = $serializer->serialize( wc_get_product( $document['id'] ), $request );
+			$this->assertSame( $expected['id'], $document['payload']['id'] );
+			$this->assertSame( $expected['image'], $document['payload']['image'] );
+		}
+	}
+
+	/**
 	 * Include mode retains its existing envelope without search metadata.
 	 */
 	public function test_include_mode_still_returns_existing_shape(): void {
@@ -626,7 +709,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A DISABLED variation is never served, even when the client names its id.
+	 * Disabled and POS-hidden variations are never served from the include lane.
 	 *
 	 * "Disabled" is WooCommerce's own Enabled checkbox on the variation metabox
 	 * (`html-variation-admin.php`), which writes `post_status = private`
@@ -643,20 +726,29 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 * The client's targeted-pull shortfall then prunes it from every till, which is exactly the
 	 * intended outcome of disabling a variation.
 	 */
-	public function test_include_does_not_serve_a_disabled_variation(): void {
+	public function test_include_lane_still_drops_disabled_and_hidden_variations(): void {
 		$enabled  = $this->create_variation( 'ENABLED-VARIATION' );
 		$disabled = $this->create_variation( 'DISABLED-VARIATION', 'private' );
+		$hidden   = $this->create_variation( 'HIDDEN-VARIATION' );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
 
 		$response = $this->variations_request(
-			array( 'include' => $enabled->get_id() . ',' . $disabled->get_id() )
+			array( 'include' => array( $enabled->get_id(), $disabled->get_id(), $hidden->get_id() ) )
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame(
-			array( $enabled->get_id() ),
-			array_column( $response->get_data()['documents'], 'id' ),
-			'A disabled (private) variation must not be hydrated even when named in include.'
-		);
+		$this->assertSame( array( $enabled->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( 1, $response->get_data()['meta']['returned'] );
 	}
 
 	/**

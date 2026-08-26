@@ -87,7 +87,11 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 * Narrow WooCommerce's variation query to what the POS may serve.
 	 *
 	 * Everything WooCommerce already understands — `include`, `offset`, `order`, pagination,
-	 * status — comes from `parent::prepare_objects_query()`. Layered on top: POS visibility, the
+	 * status — comes from `parent::prepare_objects_query()`, which also applies
+	 * `woocommerce_rest_product_variation_object_query` internally (wc/v3's CRUD controller fires
+	 * it there, not in `get_items()`), so third-party query scoping reaches every lane built
+	 * through this method. Layered on top — deliberately AFTER that filter, so a third party
+	 * cannot widen what the POS may serve: POS visibility, the
 	 * barcode-carrier search, and the sort keys the POS grids offer. This is the seam 1.9.x used
 	 * for the same job (`API\V1\Product_Variations_Controller::prepare_objects_query`).
 	 *
@@ -260,11 +264,29 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			 */
 			list( $ids, $search_meta ) = $this->collection_page( $request );
 		} else {
-			$ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
-			// Leg-3 (ADR 0014 WP-M5): drop POS-hidden (`online_only`) variations from the served set. A hidden
-			// id simply isn't hydrated → the client's targeted pull returns nothing for it → Leg-3 prunes it.
-			// (Products get the equivalent exclusion via the catalog-proxy `post__not_in` filter.)
-			$ids = ( new Pos_Visibility() )->filter_visible_children( $ids );
+			/*
+			 * The ask runs through the SAME query WooCommerce's own collection read builds
+			 * (#1751): `parent::prepare_objects_query()` maps `include` to `post__in` and — in
+			 * wc/v3's CRUD controller — applies `woocommerce_rest_product_variation_object_query`
+			 * internally, so third-party query scoping reaches this lane like every other
+			 * (hook-parity contract #1738). The collection and discovery lanes always had that
+			 * property; this lane loaded ids directly and bypassed it. POS visibility and the
+			 * publish gate ride the same args (layered in our override); per_page is pinned to
+			 * the ask so the lane stays unpaginated, and the served order remains the include
+			 * order (WP_Query's own order differs; the wire must not).
+			 */
+			$include_ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
+			$request->set_param( 'per_page', max( 1, count( $include_ids ) ) );
+			$request->set_param( 'page', 1 );
+			$results = $this->get_objects( $this->prepare_objects_query( $request ) );
+
+			$allowed_ids = array();
+			foreach ( $results['objects'] as $object ) {
+				if ( $object instanceof WC_Product_Variation ) {
+					$allowed_ids[] = $object->get_id();
+				}
+			}
+			$ids = array_values( array_intersect( $include_ids, $allowed_ids ) );
 		}
 		_prime_post_caches( $ids, true, true );
 
@@ -285,9 +307,8 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			? ( new Digest_Index() )->read_digests( 'products', $ids )
 			: array();
 
-		$serialization_request = new WP_REST_Request( 'GET', '/' );
-		$serializer            = new Product_Serializer();
-		$documents             = array();
+		$serializer = new Product_Serializer();
+		$documents  = array();
 		foreach ( $ids as $id ) {
 			$variation = wc_get_product( $id );
 			if ( ! $variation instanceof WC_Product_Variation ) {
@@ -295,18 +316,17 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			}
 			/*
 			 * DISABLED variations are never hydrated — see the `post_status` note in
-			 * prepare_objects_query(). The gate lives here as well because the `include` lane does
-			 * not build a WP_Query at all: it loads each id directly, so the query-level narrowing
-			 * that covers the collection and discovery lanes cannot reach it.
+			 * prepare_objects_query(). The query-level publish gate covers ALL lanes, including
+			 * `include`; this check only guards a status change between the id query and object load.
 			 *
-			 * Dropping it here (rather than out of $ids) deliberately leaves `meta.requested`
-			 * counting the ask: requested > returned is precisely the shortfall the client's
-			 * targeted pull reads as "prune this id".
+			 * `meta.requested` now counts the query-eligible ask: a disabled or query-filtered id is
+			 * absent from $ids. The client's targeted-pull shortfall — absence from documents — is
+			 * unchanged.
 			 */
 			if ( 'publish' !== $variation->get_status() ) {
 				continue;
 			}
-			$payload  = $serializer->serialize( $variation, $serialization_request );
+			$payload  = $serializer->serialize( $variation, $request );
 			$document = array(
 				'id'        => $id,
 				'parent_id' => (int) $variation->get_parent_id(),
