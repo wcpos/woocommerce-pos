@@ -434,56 +434,6 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * The grace comparer (#423 step 2, option `woo_rxdb_sync_legacy_revision_grace`,
-	 * default on until retirement): on a canonical mismatch, accept a baseRevision
-	 * that matches the CURRENT document under a PRE-CUTOVER form —
-	 *  - the legacy order sha256 (no ksort, volatiles included): same content,
-	 *    old algorithm ⇒ the precondition is genuinely current;
-	 *  - a pre-taxonomy-sort sha256 for non-orders: same content, previous
-	 *    canonicalizer ⇒ queued writes survive the revision transition;
-	 *  - a pre-1b lane synthesis (non-sha256 values the client fetchers stored
-	 *    as sync.revision before the proxy revision stamp): date_modified_gmt
-	 *    for order/post/user collections, String(id) for term collections
-	 *    (deliberately vacuous — that lane never had optimistic concurrency;
-	 *    grace honours the contract the record was written under).
-	 * A real conflict mismatches every form → 409 exactly as before. The ack
-	 * always returns the CANONICAL currentRevision, re-anchoring the client.
-	 */
-	private function revision_matches_with_grace( $base, string $current_revision, array $meta, int $id, array $bare, bool $allow_term_grace = true ): bool {
-		if ( $base === $current_revision ) {
-			return true;
-		}
-		if ( ! is_string( $base ) || 'yes' !== get_option( 'woocommerce_pos_sync_legacy_revision_grace', 'yes' ) ) {
-			return false;
-		}
-		if ( 0 === strpos( $base, 'sha256:' ) ) {
-			if ( 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {
-				if ( Order_Serializer::pre_augmentation_canonical_revision( $bare ) === $base
-					|| Order_Serializer::pre_item_uuid_canonical_revision( $bare ) === $base ) {
-					return true;
-				}
-				$payload = ( new Order_Serializer() )->serialize_order( $id, new WP_REST_Request() );
-				return Order_Serializer::legacy_revision( $payload ) === $base;
-			}
-			return Revision::pre_taxonomy_sort_revision( $bare ) === $base;
-		}
-		$id_type = $meta['id_type'] ?? '';
-		if ( in_array( $id_type, array( 'order', 'post', 'user' ), true ) ) {
-			// Read the date from wherever the document carries it. A variation's document is the
-			// `{ id, parent_id, payload }` wrapper, so a top-level-only read makes this branch dead
-			// code for the one collection whose canonical revision IS a date — and it would come
-			// back to life, silently, the day the wrapper is dropped.
-			$nested = isset( $bare['payload'] ) && is_array( $bare['payload'] ) ? $bare['payload'] : array();
-			$date   = (string) ( $bare['date_modified_gmt'] ?? $nested['date_modified_gmt'] ?? '' );
-			return '' !== $date && $base === $date;
-		}
-		if ( 'term' === $id_type && $allow_term_grace ) {
-			return (string) ( $bare['id'] ?? '' ) === $base;
-		}
-		return false;
-	}
-
-	/**
 	 * The pre-CAS post-type capability gate shared by the update and delete paths.
 	 *
 	 * Only the WP-post-backed collections carry a Woo capability check of their own;
@@ -543,7 +493,7 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
 		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( ! $this->revision_matches_with_grace( $m['baseRevision'], $current_revision, $meta, $id, $current_bare ) ) {
+		if ( $m['baseRevision'] !== $current_revision ) {
 			return new WP_REST_Response(
 				array(
 					'code' => 'woo_rxdb_sync_conflict',
@@ -608,7 +558,7 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
 		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( ! $this->revision_matches_with_grace( $m['baseRevision'], $current_revision, $meta, $id, $current_bare, false ) ) {
+		if ( $m['baseRevision'] !== $current_revision ) {
 			return new WP_REST_Response(
 				array(
 					'code' => 'woo_rxdb_sync_conflict',
@@ -968,10 +918,9 @@ class Write_Controller extends WP_REST_Controller {
 			 * This used to read `$bare['payload']['date_modified_gmt']` only, with `$bare['id']` as
 			 * the fallback. Against a FLAT document that silently degrades to the variation's own
 			 * ID — a value that never changes again. The failure would be total and invisible:
-			 * `revision_matches_with_grace()` would still let a queued date-based write through
-			 * (with the wrapper gone, its top-level `date_modified_gmt` branch finally resolves),
 			 * the ack would hand the client the id as `currentRevision`, and from then on every
-			 * stale baseRevision would equal every recomputed one. Two tills editing the same
+			 * stale baseRevision would equal every recomputed one — the strict revision
+			 * comparison would pass every queued write. Two tills editing the same
 			 * variation hours apart would both pass the precondition; the per-record lock would
 			 * serialize them, so there would be no error — just a lost update, every time.
 			 *
