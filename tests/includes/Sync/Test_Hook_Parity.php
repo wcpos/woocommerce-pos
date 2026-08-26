@@ -73,8 +73,10 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 	);
 
 	private const ORDER_HOOKS = array(
+		'woocommerce_before_order_object_save',
 		'woocommerce_new_order',
 		'woocommerce_update_order',
+		'woocommerce_after_order_object_save',
 		'woocommerce_order_status_changed',
 		'woocommerce_before_trash_order',
 		'wp_trash_post',
@@ -97,15 +99,25 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 
 	private const EXPECTED_DIVERGENCES = array(
 		'order_create'             => array(
+			array( 'woocommerce_before_order_object_save', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
+			array( 'woocommerce_after_order_object_save', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
+			array( 'woocommerce_before_order_object_save', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
+			array( 'woocommerce_after_order_object_save', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
 		),
 		'order_update'             => array(
+			array( 'woocommerce_before_order_object_save', 'ADR 0035 accepts the post-update UUID augmentation save.' ),
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-update UUID augmentation save.' ),
+			array( 'woocommerce_after_order_object_save', 'ADR 0035 accepts the post-update UUID augmentation save.' ),
 		),
 		'order_coupon_application' => array(
+			array( 'woocommerce_before_order_object_save', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
+			array( 'woocommerce_after_order_object_save', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
+			array( 'woocommerce_before_order_object_save', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
+			array( 'woocommerce_after_order_object_save', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
 		),
 		'order_delete_with_reduced_stock' => array(
 			array( 'woocommerce_restore_order_stock', 'Deliberate v2 behavior: POS trash restores reduced stock (restore_stock_on_delete setting, default on); wc/v3 trash leaves stock reduced.' ),
@@ -583,6 +595,17 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		);
 	}
 
+	public function test_order_watch_list_observes_generic_object_save_hooks(): void {
+		list( $sequence ) = $this->record_hooks(
+			self::ORDER_HOOKS,
+			static function (): void {
+				wc_create_order();
+			}
+		);
+		$this->assertContains( 'woocommerce_before_order_object_save', $sequence );
+		$this->assertContains( 'woocommerce_after_order_object_save', $sequence );
+	}
+
 	public function test_parity_order_update(): void {
 		$baseline = OrderHelper::create_order();
 		$v2       = OrderHelper::create_order();
@@ -640,6 +663,7 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		$baseline_payload = $this->order_line_payload( $baseline_product->get_id(), 1, '', 'hook-parity-baseline' );
 		$v2_payload       = $this->order_line_payload( $v2_product->get_id(), 1, '', 'hook-parity-v2' );
 		$hooks            = array( 'woocommerce_order_applied_coupon', 'woocommerce_new_order', 'woocommerce_update_order' );
+		$hooks            = array_merge( $hooks, array( 'woocommerce_before_order_object_save', 'woocommerce_after_order_object_save' ) );
 		$this->assert_hook_parity(
 			'order_coupon_application',
 			$hooks,

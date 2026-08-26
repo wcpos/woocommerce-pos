@@ -307,7 +307,7 @@ final class Sync_Journal {
 				Logger::log( sprintf( 'WCPOS sync: ignored invalidation for missing customer %d', $object_id ) );
 				return;
 			}
-			$this->record( 'customer', $object_id, false, self::object_revision( $customer ), 'invalidate', true, 'update' );
+			$this->record( 'customer', $object_id, false, self::object_revision( $customer ), 'invalidate', true, 'invalidate' );
 			return;
 		}
 		$this->record( $object_type, $object_id, false, '', 'invalidate' );

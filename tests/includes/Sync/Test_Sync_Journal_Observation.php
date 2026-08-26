@@ -84,6 +84,22 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_order_row( $this->latest_row( 'order', $order->get_id(), $cursor ), 'invalidate', false );
 	}
 
+	public function test_customer_invalidation_is_not_deduplicated_with_a_profile_update(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => 'Updated before invalidation',
+			)
+		);
+		$cursor = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'customer', $user_id );
+
+		$row = $this->latest_row( 'customer', $user_id, $cursor );
+		$this->assertSame( 'invalidate', $row['origin'] );
+	}
+
 	/**
 	 * Every native variation path pairs the parent row (the parent document
 	 * carries the variable price range) — the public invalidation must too,
