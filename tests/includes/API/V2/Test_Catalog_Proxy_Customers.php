@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Services\Customer_Meta_Parity;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_REST_Response;
 
@@ -34,10 +35,16 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	 * pin below ratified that shape (#1712). The header is what the filter gates
 	 * on: `wcpos_request()` reads the real request headers, not the
 	 * `WP_REST_Request` object the dispatch helpers build.
+	 *
+	 * The sync read lane is missing from this boot for a DIFFERENT reason — the
+	 * schema latch is still unset when `Init::__construct()` reads it — and is
+	 * restored the same way, from the shared helper: see
+	 * {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()} (#1717).
 	 */
 	public function setUp(): void {
 		parent::setUp();
 		new Customer_Meta_Parity();
+		$this->install_sync_read_lane();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
 		$this->customer = CustomerHelper::create_customer(
@@ -56,6 +63,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
+		$this->uninstall_sync_read_lane();
 	}
 
 	/**
@@ -231,6 +239,12 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 	 * the assertion describes the shape a deployed client actually receives.
 	 */
 	public function test_customer_row_is_the_woocommerce_customer_shape_with_pos_parity(): void {
+		// The digest observers are detached by the phpunit bootstrap, so a fixture
+		// carries no stored digest and `_rxdb_digest` would be absent for a reason
+		// that has nothing to do with the wire contract. Seed one, so the field is
+		// pinned PRESENT rather than pinned absent (#1717).
+		( new Integrity_Digest() )->upsert_customer_digest( $this->customer->get_id() );
+
 		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
 		$request->set_query_params( array( 'include' => array( $this->customer->get_id() ) ) );
 
@@ -240,18 +254,28 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $rows );
 		/*
-		 * `tax_ids` is the one key WCPOS adds: v1 built it from the customer's meta via
-		 * `Services\Tax_Id_Reader` and stock wc/v3 has no such field, so without the
-		 * parity service it vanishes for every POS client. `meta_data` is declared by
-		 * WooCommerce but withheld from non-administrators, and the same service re-adds
-		 * it for cashiers — covered by Test_Catalog_Proxy_Customer_Meta_Parity, which
-		 * pins the per-role behaviour this shape assertion cannot see. `_links` is
-		 * appended by `rest_get_server()->response_to_data()`, not by the schema.
+		 * `tax_ids` is the one BUSINESS key WCPOS adds: v1 built it from the customer's
+		 * meta via `Services\Tax_Id_Reader` and stock wc/v3 has no such field, so
+		 * without the parity service it vanishes for every POS client. `meta_data` is
+		 * declared by WooCommerce but withheld from non-administrators, and the same
+		 * service re-adds it for cashiers — covered by
+		 * Test_Catalog_Proxy_Customer_Meta_Parity, which pins the per-role behaviour
+		 * this shape assertion cannot see.
+		 *
+		 * `_rxdb_revision` and `_rxdb_digest` are transport metadata, stamped by
+		 * `Sync\Augmentation_Pipeline::install()` as `Init::__construct()` wires it in
+		 * production: the canonical content revision the client pairs against a
+		 * push-side recompute (`Sync\Revision`, priority 9), and the stored digest that
+		 * seeds its existence-reconcile manifest (`Sync\Integrity_Digest`, priority 10 —
+		 * stamped only for records the digest index knows, hence the seed above).
+		 * `_links` is appended by `rest_get_server()->response_to_data()`, not by the
+		 * schema.
 		 */
 		$this->assertEqualsCanonicalizing(
 			array_merge(
 				$this->view_context_fields( ( new WC_REST_Customers_Controller() )->get_public_item_schema()['properties'] ),
-				array( 'tax_ids', '_links' )
+				array( 'tax_ids' ),
+				array( '_rxdb_revision', '_rxdb_digest', '_links' )
 			),
 			array_keys( $rows[0] )
 		);

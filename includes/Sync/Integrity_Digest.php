@@ -243,6 +243,21 @@ final class Integrity_Digest {
 	}
 
 	/**
+	 * Detach THE digest stamper from both served read lanes.
+	 *
+	 * The teardown twin of {@see register_proxy_digest_stampers()}, matching the
+	 * `unregister_*` seams {@see Revision} and {@see Proxy_Uuid_Stamper} already
+	 * expose. `Augmentation_Pipeline::reset()` only removes the projections the
+	 * pipeline itself installed, so without this a caller that installs the real
+	 * pipeline — a test wiring the production read lane — cannot unwind it and
+	 * leaks this filter into everything that runs after it.
+	 */
+	public static function unregister_proxy_digest_stampers(): void {
+		remove_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_digests' ), 10 );
+		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( __CLASS__, 'stamp_digests' ), 10 );
+	}
+
+	/**
 	 * Attach each served record's stored 64-bit digest as a top-level `_rxdb_digest`
 	 * string, so the client seeds its existence-reconcile manifest (ADR 0014 Leg 3)
 	 * as records flow through the NORMAL pull — no separate fetch. The client reads

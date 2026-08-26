@@ -11,7 +11,10 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variable;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
+use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Sync\Variable_Prices;
 use WP_UnitTestCase;
 
@@ -241,5 +244,49 @@ class Test_Augmentation_Pipeline extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertNull( $this->read_range( $serialized ) );
+	}
+
+	/**
+	 * Reset owns the projections; the batch-lane stampers own their own teardown.
+	 *
+	 * The asymmetry that makes `install()` unsafe to call without a matching
+	 * unwind (#1717): `reset()` removes only what the pipeline itself added, so a
+	 * caller that installs the real pipeline — a test wiring the production read
+	 * lane — leaks `Revision`, `Proxy_Uuid_Stamper` and `Integrity_Digest` into
+	 * everything that runs after it unless it also calls their `unregister_*`
+	 * seams. Pinned here so a refactor either keeps all three seams or folds the
+	 * teardown into `reset()` deliberately, rather than leaving half a teardown
+	 * that nothing notices.
+	 */
+	public function test_reset_leaves_batch_lane_stampers_to_their_own_unregistrars(): void {
+		// Arrange.
+		remove_all_filters( Augmentation_Pipeline::PROXY_FILTER );
+		Augmentation_Pipeline::install();
+
+		// Act.
+		Augmentation_Pipeline::reset();
+
+		// Assert.
+		$this->assertNotFalse(
+			has_filter( Augmentation_Pipeline::PROXY_FILTER, array( Revision::class, 'stamp_proxy_revisions' ) ),
+			'reset() must not silently unwire the revision stamper'
+		);
+		$this->assertNotFalse(
+			has_filter( Augmentation_Pipeline::PROXY_FILTER, array( Integrity_Digest::class, 'stamp_digests' ) ),
+			'reset() must not silently unwire the digest stamper'
+		);
+
+		Revision::unregister_proxy_stamps();
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		Integrity_Digest::unregister_proxy_digest_stampers();
+
+		$this->assertFalse(
+			has_filter( Augmentation_Pipeline::PROXY_FILTER ),
+			'reset() plus the three unregistrars is a COMPLETE unwind of install()'
+		);
+		$this->assertFalse(
+			has_filter( 'woocommerce_pos_sync_order_pull_payloads' ),
+			'the digest registrar also owns the order pull lane, so its unregistrar must too'
+		);
 	}
 }
