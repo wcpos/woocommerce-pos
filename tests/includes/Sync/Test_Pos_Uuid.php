@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Customer;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -441,5 +442,184 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 		// pass. This test exists because the ORIGINAL lock was ineffective without
 		// a persistent object cache — persistence is the property under test.
 		$this->assertTrue( Pos_Uuid::is_uuid( wc_get_order_item_meta( $item->get_id(), Pos_Uuid::META_KEY, true ) ) );
+	}
+
+	/**
+	 * CPT lookup returns the order that owns the uuid.
+	 *
+	 * COVERAGE NOTE (#1725): `get_order_ids_by_uuid()` used to be tested only in
+	 * Test_Pos_Uuid_HPOS — the datastore where its `wp_postmeta` full-scan
+	 * regression could not appear, because `wc_orders_meta` carries a composite
+	 * `(meta_key, meta_value)` index and `wp_postmeta` does not. The CPT branch,
+	 * which is the suite default AND the branch that broke, had no coverage at all.
+	 * These tests are that branch.
+	 */
+	public function test_get_order_ids_by_uuid_returns_the_owning_cpt_order(): void {
+		// Arrange.
+		$this->assert_running_on_cpt_storage();
+		$uuid  = wp_generate_uuid4();
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$order->save_meta_data();
+
+		// Act.
+		$ids = Pos_Uuid::get_order_ids_by_uuid( $uuid );
+
+		// Assert.
+		$this->assertSame( array( (string) $order->get_id() ), $ids );
+	}
+
+	/**
+	 * An unknown uuid owns nothing.
+	 *
+	 * This is the SHAPE of the call the hot path actually makes: the collision
+	 * detector runs while stamping, so the predicate usually matches at most the
+	 * record being stamped. A `LIMIT 2` that never reaches two is precisely what
+	 * let the bad plan walk the whole meta table.
+	 */
+	public function test_get_order_ids_by_uuid_returns_empty_for_an_unknown_uuid(): void {
+		// Arrange.
+		$this->assert_running_on_cpt_storage();
+		OrderHelper::create_order();
+
+		// Act.
+		$ids = Pos_Uuid::get_order_ids_by_uuid( wp_generate_uuid4() );
+
+		// Assert.
+		$this->assertSame( array(), $ids );
+	}
+
+	/**
+	 * A trashed CPT order retaining the uuid is not a live owner.
+	 */
+	public function test_get_order_ids_by_uuid_ignores_trashed_cpt_order_when_live_owner_exists(): void {
+		// Arrange.
+		global $wpdb;
+		$this->assert_running_on_cpt_storage();
+		$uuid    = wp_generate_uuid4();
+		$trashed = OrderHelper::create_order();
+		$trashed->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$trashed->save_meta_data();
+		$trashed_id = $trashed->get_id();
+		$trashed->delete( false );
+
+		$live = OrderHelper::create_order();
+		$live->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$live->save_meta_data();
+
+		$retained = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$trashed_id,
+				Pos_Uuid::META_KEY
+			)
+		);
+		$this->assertSame( $uuid, $retained, 'The trashed order must retain its uuid for this regression.' );
+
+		// Act.
+		$ids = Pos_Uuid::get_order_ids_by_uuid( $uuid );
+
+		// Assert.
+		$this->assertSame( array( (string) $live->get_id() ), $ids );
+	}
+
+	/**
+	 * A CPT refund sharing a uuid does not count as a second order owner.
+	 */
+	public function test_get_order_ids_by_uuid_ignores_cpt_refund_when_live_order_exists(): void {
+		// Arrange.
+		$this->assert_running_on_cpt_storage();
+		$uuid    = wp_generate_uuid4();
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 10,
+				'price'         => 10,
+			)
+		);
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$order->save();
+
+		$refund = wc_create_refund(
+			array(
+				'amount'   => '10.00',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertNotWPError( $refund );
+		$refund->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$refund->save();
+
+		// Act.
+		$ids = Pos_Uuid::get_order_ids_by_uuid( $uuid );
+
+		// Assert.
+		$this->assertSame( array( (string) $order->get_id() ), $ids );
+	}
+
+	/**
+	 * Two live CPT orders sharing a uuid are both reported, so callers can fail
+	 * closed on an ambiguous identity.
+	 *
+	 * Deliberately order-INDEPENDENT: the query carries no `ORDER BY` (#1725), and
+	 * every caller decides on the COUNT rather than on which ids came back.
+	 */
+	public function test_get_order_ids_by_uuid_reports_both_owners_when_two_live_cpt_orders_share_a_uuid(): void {
+		// Arrange.
+		$this->assert_running_on_cpt_storage();
+		$uuid  = wp_generate_uuid4();
+		$first = OrderHelper::create_order();
+		$first->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$first->save_meta_data();
+		$second = OrderHelper::create_order();
+		$second->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$second->save_meta_data();
+
+		// Act.
+		$ids = array_map( 'intval', Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
+		sort( $ids );
+
+		// Assert.
+		$expected = array( $first->get_id(), $second->get_id() );
+		sort( $expected );
+		$this->assertSame( $expected, $ids );
+	}
+
+	/**
+	 * A collision on a DIFFERENT live CPT order is reported; the record's own uuid
+	 * is not a collision with itself.
+	 */
+	public function test_uuid_owned_by_other_order_distinguishes_self_from_a_cpt_clone(): void {
+		// Arrange.
+		$this->assert_running_on_cpt_storage();
+		$uuid  = wp_generate_uuid4();
+		$owner = OrderHelper::create_order();
+		$owner->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$owner->save_meta_data();
+
+		// Act + Assert: the owner does not collide with itself.
+		$this->assertFalse( Pos_Uuid::uuid_owned_by_other_order( $uuid, $owner ) );
+
+		// Arrange: a clone copies the meta onto a second live order.
+		$clone = OrderHelper::create_order();
+		$clone->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$clone->save_meta_data();
+
+		// Act + Assert: each now sees the other as a live owner.
+		$this->assertTrue( Pos_Uuid::uuid_owned_by_other_order( $uuid, $owner ) );
+		$this->assertTrue( Pos_Uuid::uuid_owned_by_other_order( $uuid, $clone ) );
+	}
+
+	/**
+	 * Guard: these tests only mean anything on the legacy CPT order datastore.
+	 */
+	private function assert_running_on_cpt_storage(): void {
+		$this->assertFalse(
+			class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled(),
+			'This class is the CPT sibling of Test_Pos_Uuid_HPOS; HPOS must be off here.'
+		);
 	}
 }

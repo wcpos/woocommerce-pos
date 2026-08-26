@@ -414,6 +414,17 @@ class Pos_Uuid {
 	 * `meta_query` is NOT supported on the CPT order datastore (it fires a
 	 * `doing_it_wrong` and returns unfiltered results), so we query the meta table
 	 * directly — the same shape the plugin's other order-uuid lookups use.
+	 *
+	 * DELIBERATELY UNORDERED — do not add an `ORDER BY` back (#1725). Every caller
+	 * asks a counting question ("does a DIFFERENT record hold this uuid?", "is this
+	 * uuid ambiguous?"), so WHICH two ids come back is immaterial. `wp_postmeta`
+	 * indexes `meta_key` but never `meta_value`, and `ORDER BY m.post_id ASC LIMIT 2`
+	 * made the optimizer abandon the `meta_key` index for an id-ordered walk that
+	 * expects to stop early. In the common case the uuid matches at most one row, so
+	 * it never reaches two and walks the whole table: 887,404 rows and ~1.0 s per
+	 * call on a real store, versus ~51 ms without the clause. HPOS escapes it only
+	 * because `wc_orders_meta` carries a composite `(meta_key, meta_value)` index —
+	 * by data, not by code — so the clause is gone from both branches.
 	 */
 	public static function get_order_ids_by_uuid( string $uuid ): array {
 		global $wpdb;
@@ -433,7 +444,7 @@ class Pos_Uuid {
 					. " JOIN {$wpdb->prefix}wc_orders o ON o.id = m.order_id AND o.type = 'shop_order'"
 					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
 					. " AND o.status NOT IN ('trash','auto-draft')"
-					. ' ORDER BY m.order_id ASC LIMIT 2',
+					. ' LIMIT 2',
 					self::META_KEY,
 					$uuid
 				)
@@ -445,7 +456,7 @@ class Pos_Uuid {
 					. " JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_order'"
 					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
 					. " AND p.post_status NOT IN ('trash','auto-draft')"
-					. ' ORDER BY m.post_id ASC LIMIT 2',
+					. ' LIMIT 2',
 					self::META_KEY,
 					$uuid
 				)

@@ -194,3 +194,153 @@ foreach ( $expected as $method => $assertion ) {
 }
 
 echo count( $expected ) . " lane-coverage scanner regression tests passed.\n";
+
+// ---------------------------------------------------------------------------
+// Ratchet (--compare) regression tests.
+//
+// The ratchet is the half of this tool that can actually block a merge, so it needs
+// its own pins — an instrument nobody can make fail gates nothing. Renaming a v1-only
+// class re-labels every one of its keys at once, which reads to a key-based diff as a
+// wholesale retire-and-add. The `renames` annotation cancels that, and these cases pin
+// BOTH directions: that a declared rename passes, and that the gate still bites on
+// everything a rename is not.
+// ---------------------------------------------------------------------------
+
+$ratchet_root = sys_get_temp_dir() . '/wcpos-lane-ratchet-' . getmypid() . '-' . bin2hex( random_bytes( 4 ) );
+register_shutdown_function(
+	function () use ( $ratchet_root ) {
+		if ( ! is_dir( $ratchet_root ) ) { return; }
+		$iterator = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $ratchet_root, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ( $iterator as $path ) {
+			$path->isDir() ? rmdir( $path->getPathname() ) : unlink( $path->getPathname() );
+		}
+		rmdir( $ratchet_root );
+	}
+);
+
+/**
+ * Write a single-class v1-only fixture tree, plus annotations, and return its root.
+ */
+$write_tree = function ( $name, $class, array $methods, array $annotations ) use ( $ratchet_root ) {
+	$root = $ratchet_root . '/' . $name;
+	mkdir( $root . '/tests/lane-coverage', 0777, true );
+
+	$body = "<?php\nclass {$class} {\n";
+	foreach ( $methods as $method => $route ) {
+		$body .= "\tpublic function {$method}() {\n\t\t\$this->wp_rest_get_request( '{$route}' );\n\t}\n";
+	}
+	$body .= "}\n";
+	file_put_contents( $root . '/tests/' . $class . '.php', $body );
+	file_put_contents(
+		$root . '/tests/lane-coverage/annotations.json',
+		json_encode( $annotations, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+	);
+
+	return $root;
+};
+
+$run = function ( array $arguments ) use ( $scanner ) {
+	$command = escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $scanner );
+	foreach ( $arguments as $argument ) {
+		$command .= ' ' . escapeshellarg( $argument );
+	}
+	$output = array();
+	$status = 0;
+	exec( $command . ' 2>&1', $output, $status );
+
+	return array( $status, implode( "\n", $output ) );
+};
+
+$ratchet_failures = 0;
+$ratchet_checks   = 0;
+$check            = function ( $label, $expected_status, $actual_status, $output, $expected_text = null ) use ( &$ratchet_failures, &$ratchet_checks ) {
+	$ratchet_checks++;
+	$ok = $expected_status === $actual_status
+		&& ( null === $expected_text || false !== strpos( $output, $expected_text ) );
+	if ( ! $ok ) {
+		$ratchet_failures++;
+		fwrite( STDERR, "ratchet: {$label}: expected exit {$expected_status}" );
+		fwrite( STDERR, null === $expected_text ? '' : " containing \"{$expected_text}\"" );
+		fwrite( STDERR, ", got exit {$actual_status}:\n{$output}\n\n" );
+	}
+};
+
+$legacy = array( 'test_alpha' => '/wcpos/v1/products', 'test_beta' => '/wcpos/v1/products/42' );
+
+// The baseline: one v1-only class under its original name.
+$base_root = $write_tree( 'base', 'Test_Ratchet_Old_Name', $legacy, array( 'classes' => array(), 'cases' => array() ) );
+$base_json = $ratchet_root . '/base.json';
+list( $status, $output ) = $run( array( '--json', '--root=' . $base_root ) );
+$check( 'baseline scan succeeds', 0, $status, $output );
+file_put_contents( $base_json, $output );
+
+// 1. Pure rename, declared. No coverage changed, so the gate must not fire.
+$renamed = $write_tree(
+	'renamed',
+	'Test_Ratchet_New_Name',
+	$legacy,
+	array( 'classes' => array(), 'cases' => array(), 'renames' => array( 'Test_Ratchet_Old_Name' => 'Test_Ratchet_New_Name' ) )
+);
+list( $status, $output ) = $run( array( '--compare=' . $base_json, '--root=' . $renamed ) );
+$check( 'declared rename passes the ratchet', 0, $status, $output, 'No new v1-only coverage.' );
+$check( 'declared rename is reported, not silent', 0, $status, $output, 'Relabelled 2 baseline case(s)' );
+
+// 2. The SAME rename, undeclared. Proves the annotation is what cancels it, and that a
+//    key-based diff really does read a rename as new coverage.
+$undeclared = $write_tree( 'undeclared', 'Test_Ratchet_New_Name', $legacy, array( 'classes' => array(), 'cases' => array() ) );
+list( $status, $output ) = $run( array( '--compare=' . $base_json, '--root=' . $undeclared ) );
+$check( 'undeclared rename still fails', 1, $status, $output, 'New case without current-lane coverage' );
+
+// 3. A declared rename must not smuggle in genuinely new v1-only coverage alongside it.
+$smuggled = $write_tree(
+	'smuggled',
+	'Test_Ratchet_New_Name',
+	$legacy + array( 'test_gamma' => '/wcpos/v1/orders' ),
+	array( 'classes' => array(), 'cases' => array(), 'renames' => array( 'Test_Ratchet_Old_Name' => 'Test_Ratchet_New_Name' ) )
+);
+list( $status, $output ) = $run( array( '--compare=' . $base_json, '--root=' . $smuggled ) );
+$check( 'a rename cannot smuggle new v1-only coverage', 1, $status, $output, 'Test_Ratchet_New_Name::test_gamma' );
+
+// 4. A rename entry pointing at a class that was never scanned is a typo doing nothing.
+//    Exit 2 rather than 1: a malformed annotation is a scan failure (fail()), not a
+//    ratchet verdict, and it fires on every mode including --json.
+$bad_target = $write_tree(
+	'bad-target',
+	'Test_Ratchet_New_Name',
+	$legacy,
+	array( 'classes' => array(), 'cases' => array(), 'renames' => array( 'Test_Ratchet_Old_Name' => 'Test_Ratchet_Typo' ) )
+);
+list( $status, $output ) = $run( array( '--json', '--root=' . $bad_target ) );
+$check( 'rename target must exist', 2, $status, $output, 'Rename target was not scanned' );
+
+// 5. A rename whose source is still live is not a rename, and cancelling its keys would
+//    hide real v1-only coverage.
+$live_source = $write_tree(
+	'live-source',
+	'Test_Ratchet_Old_Name',
+	$legacy,
+	array( 'classes' => array(), 'cases' => array(), 'renames' => array( 'Test_Ratchet_Old_Name' => 'Test_Ratchet_Old_Name' ) )
+);
+list( $status, $output ) = $run( array( '--json', '--root=' . $live_source ) );
+$check( 'rename source must be gone', 2, $status, $output, 'Rename source is still a live class' );
+
+// 6. A JSON list decodes to integer keys, which would read as a correctly-absent source
+//    (no class is named "0") and silently do nothing. Reject the shape instead.
+$list_shaped = $write_tree(
+	'list-shaped',
+	'Test_Ratchet_New_Name',
+	$legacy,
+	array( 'classes' => array(), 'cases' => array(), 'renames' => array( 'Test_Ratchet_New_Name' ) )
+);
+list( $status, $output ) = $run( array( '--json', '--root=' . $list_shaped ) );
+$check( 'renames must be an object, not a list', 2, $status, $output, 'must be an object, not a list' );
+
+if ( $ratchet_failures > 0 ) {
+	fwrite( STDERR, $ratchet_failures . " lane-coverage ratchet regression test(s) failed.\n" );
+	exit( 1 );
+}
+
+echo $ratchet_checks . " lane-coverage ratchet regression tests passed.\n";

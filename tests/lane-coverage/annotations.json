@@ -1,5 +1,9 @@
 {
   "_readme": "Hand-authored. Behaviour names and verdicts only. Verdicts are human judgement and NEVER affect whether a case is classified v1-only — see tests/lane-coverage/README.md. Anything not listed here is 'unreviewed', which is the honest default: it means nobody has judged it yet.",
+  "_renames_readme": "Class renames, old => new. The ratchet keys on Class::method, so renaming a v1-only class reads as a wholesale retire-and-add and fails the gate on a change that altered no coverage at all. An entry here re-labels the BASELINE's keys before the diff. It can only re-label a key the baseline already held, never invent one, so new v1-only coverage still fails. Validated against the tree: the target must be a scanned class, the source must not.",
+  "renames": {
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Performance": "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Guardrails"
+  },
   "classes": {
     "WCPOS\\WooCommercePOS\\Tests\\API\\Print_Jobs_CloudPRNT_Test": { "behavior": "Print jobs over the CloudPRNT transport" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Print_Jobs_Controller_Test": { "behavior": "Print job queue REST surface" },
@@ -19,7 +23,7 @@
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_JWT_Plugin_Compatibility": { "behavior": "Compatibility with third-party JWT plugins" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Logs_Controller": { "behavior": "Client log ingestion" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Benchmark": { "behavior": "Meta data volume benchmark" },
-    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Performance": { "behavior": "Meta data response performance" },
+    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Data_Guardrails": { "behavior": "Meta data volume guardrails: pre-flight counts, thresholds, safe responses" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Meta_Value_Benchmark": { "behavior": "Meta value serialisation benchmark" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Order_Taxes": { "behavior": "Tax calculation on POS orders" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Orders_Controller": { "behavior": "Order reads and writes over the POS lane" },

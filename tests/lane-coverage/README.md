@@ -45,7 +45,7 @@ live there. Everything else under `wcpos/v1` is a legacy pin.
 | --- | --- | --- |
 | `inventory.json` | generator | Machine-readable classification. **Gitignored** — generated on demand. |
 | `inventory.md` | generator | The human inventory: behaviour → file:case → lane → verdict, with the v1-only list first. **Gitignored** — generated on demand. |
-| `annotations.json` | **humans** | Behaviour names and verdicts. The only tracked file here besides this README. |
+| `annotations.json` | **humans** | Behaviour names, verdicts, and declared class renames. The only tracked file here besides this README. |
 
 The inventory files are deliberately **not** checked in. They regenerate deterministically
 from source, CI regenerates everything it compares (including the merge-base baseline), and
@@ -136,6 +136,21 @@ which is what the previous audit's output could not express.
    scanner. New entries fail the build. Removing them — by porting the behaviour to `wcpos/v2`
    or by retiring the legacy test — is always allowed, and is how the number goes down.
 3. **Blind-test warnings are printed and never fail the build** (see below).
+
+### Renaming a v1-only class
+
+The diff in (2) keys on `Class::method`, so renaming a v1-only class retires every one of its
+keys and adds the same number back under the new name. The set of behaviours with no
+current-lane coverage is unchanged; only the labels moved — but the gate reads labels, so it
+fires. That is a false alarm, and a gate that cries wolf gets muted.
+
+Declare the rename in the `renames` section of `annotations.json` (old class => new class).
+It re-labels the **baseline's** keys before the diff runs. It is deliberately weak: it can
+only re-label a key the baseline already held, never invent one, so genuinely new v1-only
+coverage still has nothing to match against and still fails — including new cases added to
+the renamed class in the same PR. The entry is also checked against the tree, so it cannot
+rot: the target must be a scanned class and the source must not be. `scripts/tests/test-lane-coverage.php`
+pins all of that, including that an **un**declared rename still fails.
 
 ## Blind-test warnings
 
