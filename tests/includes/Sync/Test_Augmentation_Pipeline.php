@@ -31,8 +31,19 @@ class Test_Augmentation_Pipeline extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		Augmentation_Pipeline::reset();
+		// The unregistrars, not just remove_all_filters(): they also clear the
+		// STATIC registries the stampers keep, which no $wp_filter restore touches.
+		// Running them here as well as in the body of the test that asserts them
+		// means a mid-test failure cannot strand a half-installed pipeline —
+		// remove_filter() on an absent callback is a no-op, so this is idempotent.
+		Revision::unregister_proxy_stamps();
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		Integrity_Digest::unregister_proxy_digest_stampers();
 		remove_all_filters( Augmentation_Pipeline::PROXY_FILTER );
 		remove_all_filters( Augmentation_Pipeline::SERIALIZED_FILTER );
+		// install() wires the digest stamper onto the ORDER PULL lane too, and this
+		// class's hook state must stop at its own boundary on both.
+		remove_all_filters( 'woocommerce_pos_sync_order_pull_payloads' );
 		parent::tearDown();
 	}
 
