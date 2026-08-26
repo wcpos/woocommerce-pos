@@ -67,6 +67,30 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_present_hook_row( $restored, 'product', $product->get_id(), $this->object_revision( wc_get_product( $product->get_id() ) ) );
 	}
 
+	public function test_public_invalidation_action_records_product_and_order_changes(): void {
+		$product = ProductHelper::create_simple_product();
+		$cursor  = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'product', $product->get_id() );
+
+		$product_row = $this->latest_row( 'product', $product->get_id(), $cursor );
+		$this->assertSame( 'product', $product_row['object_type'] );
+		$this->assert_datetime_revision( $this->object_revision( $product ), (string) $product_row['revision'] );
+
+		$order   = wc_create_order();
+		$cursor  = $this->journal->head_sequence();
+		do_action( 'woocommerce_pos_invalidate', 'order', $order->get_id() );
+		$this->assert_order_row( $this->latest_row( 'order', $order->get_id(), $cursor ), 'invalidate', false );
+	}
+
+	public function test_public_invalidation_action_ignores_unknown_type(): void {
+		$cursor = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'unknown_type', 123 );
+
+		$this->assertSame( array(), $this->journal->page( array(), $cursor, 20 )['rows'] );
+	}
+
 	public function test_variation_lifecycle_also_touches_parent_product(): void {
 		$product = ProductHelper::create_simple_product();
 		$cursor  = $this->journal->head_sequence();

@@ -122,10 +122,11 @@ class Test_Rest_Dispatch_Till_Meta extends Sync_REST_Store_Test_Case {
 	 * Create an order through v2 with optional till metadata.
 	 *
 	 * @param array $till_meta Till metadata keyed by name.
+	 * @param array $payload   Additional order payload fields.
 	 *
 	 * @return array Created order ID, document, and revision.
 	 */
-	private function create_order( array $till_meta = array() ): array {
+	private function create_order( array $till_meta = array(), array $payload = array() ): array {
 		$product = ProductHelper::create_simple_product(
 			array(
 				'regular_price' => 10,
@@ -135,15 +136,18 @@ class Test_Rest_Dispatch_Till_Meta extends Sync_REST_Store_Test_Case {
 		$meta = array( '_woocommerce_pos_uuid' => self::RECORD_UUID ) + $till_meta;
 		$response = $this->push_envelope(
 			'create',
-			array(
-				'status'     => 'pending',
-				'line_items' => array(
-					array(
-						'product_id' => $product->get_id(),
-						'quantity'   => 1,
+			array_merge(
+				array(
+					'status'     => 'pending',
+					'line_items' => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 1,
+						),
 					),
+					'meta_data' => $this->meta_entries( $meta ),
 				),
-				'meta_data' => $this->meta_entries( $meta ),
+				$payload
 			)
 		);
 		$this->assertEquals( 201, $response->get_status() );
@@ -154,6 +158,28 @@ class Test_Rest_Dispatch_Till_Meta extends Sync_REST_Store_Test_Case {
 			'document' => $data['document'],
 			'revision' => $data['currentRevision'],
 		);
+	}
+
+	public function test_set_paid_create_stamps_offline_payment_assertion_and_cashier(): void {
+		$created = $this->create_order( array(), array( 'set_paid' => true ) );
+		$order   = wc_get_order( $created['order_id'] );
+
+		$this->assertSame( 'offline', $order->get_meta( '_pos_payment_asserted' ) );
+		$this->assertSame( (string) get_current_user_id(), $order->get_meta( '_pos_user' ) );
+	}
+
+	public function test_create_without_set_paid_does_not_stamp_payment_assertion(): void {
+		$created = $this->create_order();
+
+		$this->assertSame( '', wc_get_order( $created['order_id'] )->get_meta( '_pos_payment_asserted' ) );
+	}
+
+	public function test_set_paid_update_stamps_offline_payment_assertion(): void {
+		$created  = $this->create_order();
+		$response = $this->push_envelope( 'update', array( 'set_paid' => true ), $created['revision'] );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( 'offline', wc_get_order( $created['order_id'] )->get_meta( '_pos_payment_asserted' ) );
 	}
 
 	/**

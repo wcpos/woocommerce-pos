@@ -111,6 +111,22 @@ final class Orders_Controller extends WP_REST_Controller {
 		$serializer = new Order_Serializer();
 		$change_rows = $query->changes_after_checkpoint( $updated_at_gmt, $order_id, $sequence, $limit + 1 );
 		$has_more    = count( $change_rows ) > $limit;
+		$ids         = array_map( 'intval', array_column( $change_rows, 'order_id' ) );
+
+		/**
+		 * Filters the order IDs eligible for the custom pull lane.
+		 *
+		 * This interim hook-parity seam lets order-scoping plugins narrow a lane
+		 * that bypasses `woocommerce_rest_orders_prepare_object_query`. It retires
+		 * with this lane at the 1.11.0 protocol boundary (ADR 0035, #1748).
+		 * IDs not present in the fetched page are ignored by construction.
+		 *
+		 * @since 1.10.3
+		 *
+		 * @param int[]           $ids     Candidate order IDs in the fetched page.
+		 * @param WP_REST_Request $request Pull request.
+		 */
+		$allowed = (array) apply_filters( 'woocommerce_pos_order_pull_ids', $ids, $request );
 
 		$planner = new Order_Pull_Planner(
 			array(
@@ -124,7 +140,12 @@ final class Orders_Controller extends WP_REST_Controller {
 		$plan = $planner->plan(
 			$change_rows,
 			$has_more,
-			function ( int $id ) use ( $serializer, $request ): array {
+			function ( int $id ) use ( $serializer, $request, $allowed ): array {
+				// Narrow inside serialization: removing change rows would leave a
+				// fully filtered page unable to advance, so the client would loop forever.
+				if ( ! in_array( $id, $allowed, true ) ) {
+					return array();
+				}
 				$order    = wc_get_order( $id );
 				$had_uuid = $order && '' !== (string) $order->get_meta( Pos_Uuid::META_KEY );
 				$payload  = $serializer->serialize_order( $id, $request );

@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Sync;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Logger;
 
 final class Sync_Journal {
 	/** Persisted order backfill cursor. */
@@ -247,6 +248,37 @@ final class Sync_Journal {
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
+		add_action( 'woocommerce_pos_invalidate', array( $this, 'record_invalidation' ), 10, 2 );
+	}
+
+	/**
+	 * Record an out-of-band change announced by an extension.
+	 *
+	 * Plugins should fire `woocommerce_pos_invalidate` when a filter-only output
+	 * change cannot be observed by the journal. Formula fingerprints (#1742)
+	 * will eventually make those representation changes directly detectable.
+	 *
+	 * @since 1.10.3
+	 *
+	 * @param string $object_type Canonical journal object type.
+	 * @param int    $object_id   Changed object ID.
+	 */
+	public function record_invalidation( string $object_type, int $object_id ): void {
+		$collection = Collections::by_object_type( $object_type );
+		if ( $object_id <= 0 || null === $collection || ! isset( $collection['journal'] ) ) {
+			Logger::log( sprintf( 'WCPOS sync: ignored invalidation for object_type "%s" (id %d)', $object_type, $object_id ) );
+			return;
+		}
+
+		if ( 'order' === $object_type ) {
+			$this->record_order_change( $object_id, 'invalidate', false );
+		} elseif ( 'product' === ( $collection['identity']['loader'] ?? '' ) ) {
+			$this->record_catalogue_object( $object_type, $object_id, false );
+		} elseif ( 'customer' === ( $collection['identity']['loader'] ?? '' ) ) {
+			$this->record_customer( $object_id, false );
+		} else {
+			$this->record( $object_type, $object_id, false, '', 'invalidate' );
+		}
 	}
 
 	public function record_product_created( int $product_id ): void {

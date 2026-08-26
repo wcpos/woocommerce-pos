@@ -55,6 +55,9 @@ class Order_Writer extends Null_Writer {
 		$till_meta = Pos_Order_Audit::till_meta_from_payload( $meta_data );
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
+		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
+			$till_meta['_pos_payment_asserted'] = 'offline';
+		}
 		return array(
 			'method' => 'POST',
 			'route' => $meta['route'],
@@ -240,6 +243,9 @@ class Order_Writer extends Null_Writer {
 		$clear_email = isset( $forward['billing'] ) && is_array( $forward['billing'] )
 			&& array_key_exists( 'email', $forward['billing'] ) && '' === $forward['billing']['email'];
 		$fill_meta = array();
+		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
+			$fill_meta['_pos_payment_asserted'] = 'offline';
+		}
 		$pre_store = null;
 		$order     = wc_get_order( $id );
 		if ( $order ) {
@@ -326,6 +332,9 @@ class Order_Writer extends Null_Writer {
 	/** Persist server-owned order audit metadata. */
 	private function stamp_order_audit( int $id, array $payload, bool $stamp_version ): void {
 		$meta = array( '_pos_user' => (string) get_current_user_id() );
+		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
+			$meta['_pos_payment_asserted'] = 'offline';
+		}
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
 			$meta['_pos_user_created']         = $meta['_pos_user'];
