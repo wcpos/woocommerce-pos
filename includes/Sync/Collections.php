@@ -99,7 +99,10 @@ final class Collections {
 				'bulk_reader' => null,
 				'loader'      => 'product',
 			),
-			'proxy'       => null, // hydrated via the per-id /variations controller
+			// No wcpos proxy lane, and that is principled (ADR 0034): the flat
+			// /variations route is both the per-id hydration lane AND the
+			// list/seed lane (bare collection pages for the idle trickle).
+			'proxy'       => null,
 			// Variations use WooCommerce's nested REST resource. The write controller
 			// takes the parent from create payloads and the stored object thereafter.
 			'write'       => array( 'route' => '/wc/v3/products' ),

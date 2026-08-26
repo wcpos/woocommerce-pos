@@ -30,9 +30,13 @@ use WP_REST_Request;
  *    projection. `prepare_object_for_response` runs WooCommerce's own
  *    `woocommerce_rest_prepare_product_object` filter; `response_to_data` resolves
  *    embedded links exactly as a real request would.
- * 2. Variations are serialized through the SAME products controller as products —
- *    `wc_get_product()` hands back a `WC_Product_Variation` and the controller
- *    handles it, so the two lanes cannot drift apart.
+ * 2. Variations are serialized through WooCommerce's own VARIATIONS controller
+ *    (`WC_REST_Product_Variations_Controller`), products through the products
+ *    controller — this class picks per object type so a caller cannot pick
+ *    wrong. Hydrating a variation through the PRODUCTS controller is the #1710
+ *    incident (`images[]` instead of `image`: blank POS thumbnails, the
+ *    parent's image on every order line); post-#1710 the payload species is
+ *    the variations controller's everywhere.
  */
 final class Product_Serializer {
 	/**
