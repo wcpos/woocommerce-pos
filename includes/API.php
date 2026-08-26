@@ -450,8 +450,12 @@ class API {
 		// which matches this namespace by construction): every real POS client,
 		// old or new, carries the marker, while unmarked scanner traffic would
 		// otherwise inflate the `channel: none` tail this telemetry exists to
-		// measure (free#1752).
+		// measure (free#1752). The echo and auth lanes are excluded for the same
+		// reason: they are the gate's carve-outs, and a protocol-2 client's
+		// connect-time probes deliberately carry no signal — counting them would
+		// stamp every modern client with a daily false `none` row.
 		if ( 0 === stripos( $request->get_route(), '/wcpos/v2/' )
+			&& 1 !== preg_match( '#^/wcpos/v2/(?:echo$|auth(?:/|$))#i', $request->get_route() )
 			&& ( wcpos_request( 'query_var' ) || wcpos_request( 'header' ) ) ) {
 			try {
 				Client_Signal::record( $request );
