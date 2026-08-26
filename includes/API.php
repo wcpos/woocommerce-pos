@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Client_Signal;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -443,6 +444,24 @@ class API {
 	public function rest_pre_dispatch( $result, $server, $request ) {
 		if ( ! $this->route_classifier->in_wcpos_namespace( $request->get_route() ) ) {
 			return $result;
+		}
+
+		// Marker-gated on purpose (query var or header, NOT the rest_route arm,
+		// which matches this namespace by construction): every real POS client,
+		// old or new, carries the marker, while unmarked scanner traffic would
+		// otherwise inflate the `channel: none` tail this telemetry exists to
+		// measure (free#1752). The echo and auth lanes are excluded for the same
+		// reason: they are the gate's carve-outs, and a protocol-2 client's
+		// connect-time probes deliberately carry no signal — counting them would
+		// stamp every modern client with a daily false `none` row.
+		if ( 0 === stripos( $request->get_route(), '/wcpos/v2/' )
+			&& 1 !== preg_match( '#^/wcpos/v2/(?:echo$|auth(?:/|$))#i', $request->get_route() )
+			&& ( wcpos_request( 'query_var' ) || wcpos_request( 'header' ) ) ) {
+			try {
+				Client_Signal::record( $request );
+			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- Telemetry failures are deliberately ignored.
+				// Telemetry must never interrupt a POS request.
+			}
 		}
 
 		// Latch the till's store scope for the whole request (pro#425). Set

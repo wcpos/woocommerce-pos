@@ -61,6 +61,8 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		'Idempotency-Key',
 		'If-Match',
 		'If-None-Match',
+		'X-WCPOS-Protocol',
+		'X-WCPOS-Client',
 	);
 
 	/**
@@ -144,6 +146,8 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 					'If-None-Match',
 					'X-WCPOS-Idempotency-Key',
 					'X-WCPOS-Store',
+					'X-WCPOS-Protocol',
+					'X-WCPOS-Client',
 				),
 				$this->allow_list( $server ),
 				"{$route} preflight published the wrong allow-list."

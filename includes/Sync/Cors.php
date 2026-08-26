@@ -44,6 +44,8 @@ final class Cors {
 	 *   key (v1-shaped, predates the ADR 0011 mirror).
 	 * - `X-WCPOS-Store` — the till's store scope ({@see Store_Scope::HEADER},
 	 *   pro#425).
+	 * - `X-WCPOS-Protocol` — protocol signal (wcpos/woocommerce-pos#1752).
+	 * - `X-WCPOS-Client` — client platform signal (wcpos/woocommerce-pos#1752).
 	 *
 	 * @return string[] Header names in their canonical (sent) casing.
 	 */
@@ -54,6 +56,8 @@ final class Cors {
 				'If-None-Match',
 				'X-WCPOS-Idempotency-Key',
 				Store_Scope::HEADER,
+				'X-WCPOS-Protocol',
+				'X-WCPOS-Client',
 			)
 		);
 	}

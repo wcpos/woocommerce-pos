@@ -68,6 +68,8 @@ final class Echo_Probe {
 					'authorization' => isset( $params['authorization'] ) && '' !== $params['authorization'],
 					'wcpos'         => isset( $params['wcpos'] ) && '' !== $params['wcpos'],
 					'store_id'      => isset( $params['store_id'] ) && '' !== $params['store_id'],
+					'wcpos_protocol' => isset( $params['wcpos_protocol'] ) && '' !== $params['wcpos_protocol'],
+					'wcpos_client'   => isset( $params['wcpos_client'] ) && '' !== $params['wcpos_client'],
 				),
 			),
 			200
