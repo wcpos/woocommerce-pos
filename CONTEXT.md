@@ -44,7 +44,9 @@ _Avoid_: background sync, prefetch
 
 **Pointer stream**:
 The journal-backed change signal (`/changes/sequence-log`): tiny id-pointers the client
-filters and hydrates through the wc/v3 proxy. The engine's single transport paradigm.
+filters and hydrates through the collection's read lane (the wc/v3 proxy — or the flat
+route where the registry has no proxy lane, e.g. variations). The engine's single
+transport paradigm.
 _Avoid_: change feed, event stream
 
 **Canonical revision**:

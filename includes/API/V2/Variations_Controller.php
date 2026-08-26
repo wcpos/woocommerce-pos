@@ -289,12 +289,16 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			 * the intersect below is the final authority.
 			 */
 			$include_ids = array_values( array_unique( array_map( 'intval', (array) $request->get_param( 'include' ) ) ) );
-			$request->set_param( 'per_page', max( 1, count( $include_ids ) ) );
-			$request->set_param( 'page', 1 );
-			$request->set_param( 'offset', 0 );
-			$request->set_param( 'orderby', 'include' );
-			$request->set_param( 'order', 'asc' );
-			$args = $this->prepare_objects_query( $request );
+			// Pins live on a QUERY-ONLY clone: the dispatched request stays exactly
+			// as the client sent it, for the serializer's prepare-filters and for
+			// anything downstream reading it after dispatch.
+			$query_request = clone $request;
+			$query_request->set_param( 'per_page', max( 1, count( $include_ids ) ) );
+			$query_request->set_param( 'page', 1 );
+			$query_request->set_param( 'offset', 0 );
+			$query_request->set_param( 'orderby', 'include' );
+			$query_request->set_param( 'order', 'asc' );
+			$args = $this->prepare_objects_query( $query_request );
 
 			/*
 			 * The ask is a CEILING. WooCommerce's variations controller UNIONS some
