@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use WCPOS\WooCommercePOS\API\V2\Orders_Controller;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -55,6 +57,9 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 	/** @var int Serializer passes observed since the last reset. */
 	protected $passes = 0;
 
+	/** @var array<int, string> Deterministic per-order uuids the stub stamper injects. */
+	protected $order_uuids = array();
+
 	public function setUp(): void {
 		parent::setUp();
 
@@ -64,8 +69,16 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 		$wpdb->query( 'DELETE FROM ' . $this->journal->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$this->journal->register_hooks();
 
-		$this->passes = 0;
+		$this->passes      = 0;
+		$this->order_uuids = array();
 		add_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'count_pass' ), 10, 1 );
+		// The pull lane keys documents by uuid (ADR 0021), so an order with no
+		// `_woocommerce_pos_uuid` is not served at all. Production wires
+		// `Pos_Uuid::stamp_serialized_record` here; this stub models only its
+		// OUTCOME, deterministically per order so a payload hashed at write time
+		// and the same payload re-serialized by the pull agree. Same approach, and
+		// the same reason, as Test_Orders_Controller.
+		add_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 11, 2 );
 
 		// A route of our own keeps the assertions on the mechanism under test rather
 		// than on WooCommerce's order-controller internals, which move between minor
@@ -83,6 +96,8 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 
 	public function tearDown(): void {
 		remove_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'count_pass' ), 10 );
+		remove_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 11 );
+		delete_option( Sync_Journal::BACKFILL_OPTION );
 		remove_action( 'rest_api_init', array( __CLASS__, 'register_test_route' ) );
 		self::$route_body          = null;
 		$GLOBALS['wp_rest_server'] = null;
@@ -122,6 +137,28 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 		++$this->passes;
 
 		return $payload;
+	}
+
+	/**
+	 * Mirror a stable per-order uuid into the serialized payload.
+	 *
+	 * @param mixed $payload Serialized order payload.
+	 * @param mixed $object  The WC order.
+	 *
+	 * @return mixed
+	 */
+	public function stamp_test_uuid( $payload, $object = null ) {
+		if ( ! \is_array( $payload ) ) {
+			return $payload;
+		}
+		$order_id = \is_object( $object ) && method_exists( $object, 'get_id' )
+			? (int) $object->get_id()
+			: (int) ( $payload['id'] ?? 0 );
+		if ( ! isset( $this->order_uuids[ $order_id ] ) ) {
+			$this->order_uuids[ $order_id ] = Pos_Uuid::generate_uuid();
+		}
+
+		return Pos_Uuid::ensure_in_payload( $payload, $this->order_uuids[ $order_id ] );
 	}
 
 	/**
@@ -376,6 +413,70 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 		$this->journal->flush_deferred_order_rows();
 
 		$this->assertCount( 1, $this->rows_for( $order_id ) );
+	}
+
+	/**
+	 * The buffered row actually reaches the pull lane, carrying the revision it serves.
+	 *
+	 * THE COVERAGE GAP THIS CLOSES. Every other pull-lane test in this suite seeds
+	 * the journal by hand — `record_order_change()` is called directly in twenty
+	 * places — and not one of them lets the OBSERVER write the row it then pulls.
+	 * So the observer -> journal -> pull chain, which is exactly what buffering
+	 * changes, had no end-to-end coverage at all: a change that stopped the
+	 * observer writing would leave every one of those tests green, because they
+	 * bypass it.
+	 *
+	 * That failure mode is also the nastiest one available here. A dropped or stale
+	 * order row does not fail the request, log anything, or affect the till that
+	 * made the sale. It shows up as ANOTHER till never seeing the order, on a later
+	 * poll. Asserting the pull lane serves the same revision the row carries is what
+	 * catches it: a row frozen at an intermediate pass would disagree with the
+	 * payload the client is handed, and the client would re-pull forever.
+	 */
+	public function test_a_buffered_order_reaches_the_pull_lane_with_a_matching_revision(): void {
+		// Sequence-zero pulls are only journal-authoritative once backfill is done
+		// (Order_Query holds the baseline on the modified-date scan until then).
+		update_option( Sync_Journal::BACKFILL_OPTION, array( 'status' => 'complete' ), false );
+
+		$order_id = 0;
+		$this->dispatch(
+			function () use ( &$order_id ): void {
+				$order    = wc_create_order();
+				$order_id = $order->get_id();
+				for ( $i = 0; $i < 3; $i++ ) {
+					$order->set_customer_note( 'pulled ' . $i );
+					$order->save();
+				}
+			}
+		);
+
+		$request = new WP_REST_Request( 'GET', '/' );
+		$request->set_query_params(
+			array(
+				'limit'          => 100,
+				'updated_at_gmt' => '1970-01-01T00:00:00.000Z',
+				'order_id'       => 0,
+				'sequence'       => 0,
+			)
+		);
+		$data = ( new Orders_Controller() )->pull_orders( $request )->get_data();
+
+		$document = null;
+		foreach ( $data['documents'] as $candidate ) {
+			if ( (int) ( $candidate['payload']['id'] ?? 0 ) === $order_id ) {
+				$document = $candidate;
+			}
+		}
+
+		$this->assertNotNull( $document, 'an order journalled by the buffer must be served by the pull lane' );
+
+		$rows = $this->rows_for( $order_id );
+		$this->assertCount( 1, $rows );
+		$this->assertSame(
+			$document['sync']['revision'],
+			$rows[0]->revision,
+			'the journalled revision must equal the one the pull lane serves, or every client re-pulls forever'
+		);
 	}
 
 	/** Two orders touched in one dispatch each get their own row. */
