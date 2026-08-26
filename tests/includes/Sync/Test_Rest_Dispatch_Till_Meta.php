@@ -201,6 +201,39 @@ class Test_Rest_Dispatch_Till_Meta extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '', wc_get_order( $created['order_id'] )->get_meta( '_pos_payment_asserted' ) );
 	}
 
+	/**
+	 * A replayed create (born-twice repair) against an order a gateway paid in
+	 * the meantime must not relabel the payment — same guard as the update path.
+	 */
+	public function test_replayed_create_does_not_relabel_a_gateway_paid_order(): void {
+		$created = $this->create_order();
+		wc_get_order( $created['order_id'] )->payment_complete( 'txn-gateway-456' );
+
+		$product  = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 10,
+				'price'         => 10,
+			)
+		);
+		$response = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'pending',
+				'set_paid'   => true,
+				'line_items' => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'  => $this->meta_entries( array( '_woocommerce_pos_uuid' => self::RECORD_UUID ) ),
+			)
+		);
+
+		$this->assertContains( $response->get_status(), array( 200, 201 ) );
+		$this->assertSame( '', wc_get_order( $created['order_id'] )->get_meta( '_pos_payment_asserted' ) );
+	}
+
 	/** The revision the CLIENT holds for an order — the same recipe the push side recomputes. */
 	private function order_revision( \WC_Order $order ): string {
 		$current_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );

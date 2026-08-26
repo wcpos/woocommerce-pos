@@ -118,7 +118,9 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 
 		$variation_row = $this->latest_row( 'variation', $variation->get_id(), $cursor );
 		$this->assertSame( 'invalidate', $variation_row['origin'] );
-		$this->assertSame( $product->get_id(), $this->latest_row( 'product', $product->get_id(), $cursor )['object_id'] );
+		$parent_row = $this->latest_row( 'product', $product->get_id(), $cursor );
+		$this->assertSame( $product->get_id(), $parent_row['object_id'] );
+		$this->assertSame( 'invalidate', $parent_row['origin'], 'The paired parent row must carry the invalidate origin the contract promises.' );
 	}
 
 	public function test_public_invalidation_action_tolerates_missing_and_malformed_args(): void {

@@ -295,8 +295,14 @@ final class Sync_Journal {
 			if ( 'variation' === $object_type ) {
 				// Native variation paths always pair the parent row — the parent
 				// document carries the variable price range — so an invalidation
-				// must too, or the relief valve half-works.
-				$this->record_variation_parent( $object_id );
+				// must too, or the relief valve half-works. Recorded inline (not via
+				// record_variation_parent) so the paired row keeps the 'invalidate'
+				// origin the contract above promises for every row this action lands.
+				$parent_id = function_exists( 'wp_get_post_parent_id' ) ? (int) wp_get_post_parent_id( $object_id ) : 0;
+				if ( $parent_id > 0 ) {
+					$parent = function_exists( 'wc_get_product' ) ? wc_get_product( $parent_id ) : null;
+					$this->record( 'product', $parent_id, false, self::object_revision( $parent ), 'invalidate' );
+				}
 			}
 			return;
 		}

@@ -104,6 +104,15 @@ class Order_Writer extends Null_Writer {
 
 	/** Repair an existing born-twice order without inventing a version stamp. */
 	public function validate_existing_create( int $id, array $payload, array $prepared ) {
+		// The repair runs against an EXISTING order: if a gateway paid it between
+		// the two create arrivals, the replayed set_paid no longer describes this
+		// order's payment — same needs_payment() guard as the update path. The
+		// recovery phases keep stamping unconditionally: there the order was paid
+		// by this very push.
+		$order = wc_get_order( $id );
+		if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
+			unset( $payload['set_paid'] );
+		}
 		$this->stamp_order_audit( $id, $payload, false );
 		return null;
 	}
