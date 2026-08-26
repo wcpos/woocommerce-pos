@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Order_Document;
 use WCPOS\WooCommercePOS\Sync\Order_Pull_Planner;
 use WCPOS\WooCommercePOS\Sync\Order_Query;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -124,7 +125,21 @@ final class Orders_Controller extends WP_REST_Controller {
 			$change_rows,
 			$has_more,
 			function ( int $id ) use ( $serializer, $request ): array {
-				return $serializer->serialize_order( $id, $request );
+				$order    = wc_get_order( $id );
+				$had_uuid = $order && '' !== (string) $order->get_meta( Pos_Uuid::META_KEY );
+				$payload  = $serializer->serialize_order( $id, $request );
+				if ( ! $had_uuid && array() !== $payload ) {
+					/*
+					 * First serialization of an unstamped order MINTS its identity: the
+					 * uuid save advances the stored date_updated_gmt AFTER this payload
+					 * captured the pre-mint date. Hashing that payload would serve a
+					 * revision stale the moment it leaves — the client's next push
+					 * false-409s against a fresh re-read. Serialize again from the
+					 * settled order (a pure read now: the identity exists).
+					 */
+					$payload = $serializer->serialize_order( $id, $request );
+				}
+				return $payload;
 			},
 			static function ( array $full_payload ): string {
 				return Order_Serializer::canonical_revision( $full_payload );
