@@ -22,26 +22,29 @@ use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
 
 /**
- * Compares hook-name sequences from stock wc/v3 and v2 against fresh fixtures.
- *
- * Expected divergences accepted by ADR 0035:
- * - order create: two extra v2 `woocommerce_update_order` fires persist the UUID
- *   and WCPOS audit augmentation after the forwarded wc/v3 create.
- * - order update: one extra v2 `woocommerce_update_order` fire reasserts the UUID.
- * - order coupon application: the same two post-create augmentation saves as an
- *   ordinary v2 order create.
+ * Compares hook-name sequences (and argument-type signatures) from stock wc/v3
+ * and v2 against fresh fixtures. The sanctioned exceptions live ONLY in
+ * EXPECTED_DIVERGENCES below — one entry per extra v2 fire, each with its
+ * reason — and every key is pinned to a real operation by
+ * test_expected_divergences_name_real_operations_with_reasons().
  *
  * @covers \WCPOS\WooCommercePOS\API\V2\Write_Controller
  */
 class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
-	public const COVERED_WRITE_COLLECTIONS = array(
-		'products',
-		'variations',
-		'orders',
-		'customers',
-		'categories',
-		'brands',
-		'coupons',
+	/**
+	 * Writable collection => the singular used in this suite's pin method names
+	 * (test_parity_{singular}_{create|update|delete}). The manifest test derives
+	 * coverage from these METHOD names, so a new writable collection fails until
+	 * its pins actually exist — not until a string is appended to a list.
+	 */
+	private const COLLECTION_SINGULARS = array(
+		'products'   => 'product',
+		'variations' => 'variation',
+		'orders'     => 'order',
+		'customers'  => 'customer',
+		'categories' => 'category',
+		'brands'     => 'brand',
+		'coupons'    => 'coupon',
 	);
 
 	private const PRODUCT_HOOKS = array(
@@ -75,6 +78,11 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		'woocommerce_order_status_changed',
 		'woocommerce_before_trash_order',
 		'wp_trash_post',
+		// Stock movement hooks watched on EVERY order pin so the delete lane's
+		// deliberate v2-only restore (restore_stock_on_delete, default on) is
+		// pinned as a declared divergence instead of invisible.
+		'woocommerce_reduce_order_stock',
+		'woocommerce_restore_order_stock',
 	);
 
 	private const CATEGORY_HOOKS = array( 'created_product_cat', 'edited_product_cat', 'delete_product_cat' );
@@ -99,6 +107,9 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-create UUID augmentation save.' ),
 			array( 'woocommerce_update_order', 'ADR 0035 accepts the post-create audit-meta augmentation save.' ),
 		),
+		'order_delete_with_reduced_stock' => array(
+			array( 'woocommerce_restore_order_stock', 'Deliberate v2 behavior: POS trash restores reduced stock (restore_stock_on_delete setting, default on); wc/v3 trash leaves stock reduced.' ),
+		),
 	);
 
 	private $mutation_sequence = 0;
@@ -117,14 +128,36 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		parent::tearDown();
 	}
 
+	/**
+	 * Record fired hook names plus each fire's argument-TYPE signature.
+	 *
+	 * Types, not values: fixture ids differ between the baseline and v2 runs, so
+	 * value equality would always fail; a wrong argument SHAPE (missing arg,
+	 * wrong object class) is the context regression ADR 0035's "same order and
+	 * context" clause names, and it survives type comparison. PHP_INT_MAX
+	 * priority means nested hook cascades record in completion order — both
+	 * lanes are affected identically, so the comparison stays fair.
+	 *
+	 * @return array{0: string[], 1: string[]} Hook-name sequence, signature sequence.
+	 */
 	private function record_hooks( array $watched, callable $op ): array {
-		$sequence  = array();
-		$listeners = array();
+		$sequence   = array();
+		$signatures = array();
+		$listeners  = array();
 		foreach ( $watched as $hook ) {
 			// Filter-safe: some watched names are filters (woocommerce_order_item_quantity),
 			// and a void listener would replace their value with null mid-operation.
-			$listeners[ $hook ] = static function ( ...$args ) use ( &$sequence, $hook ) {
-				$sequence[] = $hook;
+			$listeners[ $hook ] = static function ( ...$args ) use ( &$sequence, &$signatures, $hook ) {
+				$sequence[]   = $hook;
+				$signatures[] = $hook . '(' . implode(
+					',',
+					array_map(
+						static function ( $arg ): string {
+							return is_object( $arg ) ? get_class( $arg ) : gettype( $arg );
+						},
+						$args
+					)
+				) . ')';
 				return $args[0] ?? null;
 			};
 			add_action( $hook, $listeners[ $hook ], PHP_INT_MAX, PHP_INT_MAX );
@@ -136,19 +169,61 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 				remove_action( $hook, $listener, PHP_INT_MAX );
 			}
 		}
-		return $sequence;
+		return array( $sequence, $signatures );
 	}
 
 	private function assert_hook_parity( string $operation, array $watched, callable $baseline, callable $v2 ): void {
-		$expected = $this->record_hooks( $watched, $baseline );
-		$actual   = $this->record_hooks( $watched, $v2 );
+		list( $expected, $expected_signatures ) = $this->record_hooks( $watched, $baseline );
+		list( $actual, $actual_signatures )     = $this->record_hooks( $watched, $v2 );
 
-		foreach ( self::EXPECTED_DIVERGENCES[ $operation ] ?? array() as $divergence ) {
-			$this->assertNotEmpty( $divergence[1], $operation . ' divergence requires a reason.' );
-			$expected[] = $divergence[0];
+		// A pin whose hooks stop firing in BOTH lanes must not rot green: every
+		// operation here performs a write its watch list observes, so an empty
+		// baseline means the fixture no longer exercises the operation.
+		$this->assertNotEmpty( $expected, $operation . ': the wc/v3 baseline recorded no hooks — the fixture no longer exercises this operation.' );
+
+		/*
+		 * Sanctioned divergences splice into the expected NAME sequence: a
+		 * two-element entry [hook, reason] appends at the tail (the common case —
+		 * v2's post-forward augmentation saves), a three-element entry
+		 * [hook, reason, index] inserts mid-sequence. assertSame is ordered, so
+		 * position is verified either way.
+		 */
+		$divergences         = self::EXPECTED_DIVERGENCES[ $operation ] ?? array();
+		$divergent_positions = array();
+		foreach ( $divergences as $divergence ) {
+			if ( isset( $divergence[2] ) ) {
+				$position = (int) $divergence[2];
+				array_splice( $expected, $position, 0, array( $divergence[0] ) );
+				foreach ( $divergent_positions as $index => $prior ) {
+					if ( $prior >= $position ) {
+						$divergent_positions[ $index ] = $prior + 1;
+					}
+				}
+				$divergent_positions[] = $position;
+			} else {
+				$expected[]            = $divergence[0];
+				$divergent_positions[] = \count( $expected ) - 1;
+			}
 		}
 
-		$this->assertSame( $expected, $actual, $operation . ' hook sequence differs.' );
+		$message = $operation . ' hook sequence differs. Sanctioned divergences already applied to the expected side: '
+			. ( array() === $divergences ? '(none)' : (string) wp_json_encode( $divergences ) );
+		$this->assertSame( $expected, $actual, $message );
+
+		// Context axis (ADR 0035 "same order and context"): with the divergent
+		// v2-only fires removed from the actual sequence, the remaining fires
+		// must match the baseline's argument-type signatures fire for fire.
+		$actual_core_signatures = array();
+		foreach ( $actual_signatures as $index => $signature ) {
+			if ( ! \in_array( $index, $divergent_positions, true ) ) {
+				$actual_core_signatures[] = $signature;
+			}
+		}
+		$this->assertSame(
+			$expected_signatures,
+			$actual_core_signatures,
+			$operation . ' hook argument shapes differ from the wc/v3 baseline.'
+		);
 	}
 
 	private function wc_request( string $method, string $route, array $params, int $status ) {
@@ -306,6 +381,9 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_every_writable_collection_has_a_parity_pin(): void {
+		// Same predicate as Write_Controller::collections(): registry rows with the
+		// write capability and an identity. Canonicalized — a registry reorder is
+		// not a coverage change.
 		$writable = array_keys(
 			array_filter(
 				Collections::with( 'write' ),
@@ -314,7 +392,33 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 				}
 			)
 		);
-		$this->assertSame( self::COVERED_WRITE_COLLECTIONS, $writable );
+		sort( $writable );
+		$mapped = array_keys( self::COLLECTION_SINGULARS );
+		sort( $mapped );
+		$this->assertSame( $mapped, $writable, 'A writable collection is missing from (or stale in) the parity singular map.' );
+
+		foreach ( self::COLLECTION_SINGULARS as $collection => $singular ) {
+			foreach ( array( 'create', 'update', 'delete' ) as $operation ) {
+				$this->assertTrue(
+					method_exists( $this, 'test_parity_' . $singular . '_' . $operation ),
+					sprintf( 'Writable collection "%s" has no parity pin test_parity_%s_%s().', $collection, $singular, $operation )
+				);
+			}
+		}
+	}
+
+	public function test_expected_divergences_name_real_operations_with_reasons(): void {
+		foreach ( self::EXPECTED_DIVERGENCES as $operation => $entries ) {
+			// A renamed or retired operation must not leave a sanctioned divergence
+			// silently un-applied forever.
+			$this->assertTrue(
+				method_exists( $this, 'test_parity_' . $operation ),
+				sprintf( 'EXPECTED_DIVERGENCES key "%s" names no test_parity_%s() pin.', $operation, $operation )
+			);
+			foreach ( $entries as $entry ) {
+				$this->assertNotSame( '', trim( (string) ( $entry[1] ?? '' ) ), sprintf( 'Divergence on "%s" carries no reason.', $operation ) );
+			}
+		}
 	}
 
 	public function test_parity_product_create(): void {
@@ -507,6 +611,27 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		);
 	}
 
+	/**
+	 * The delete lane's one REAL v2-only fire: deleting an order whose stock was
+	 * reduced restores it (restore_stock_on_delete, default on) — wc/v3's own
+	 * trash leaves stock reduced. Without reduced stock (the plain delete pin
+	 * above) wc_maybe_increase_stock_levels bails and the lanes are identical.
+	 */
+	public function test_parity_order_delete_with_reduced_stock(): void {
+		update_option( 'woocommerce_manage_stock', 'yes' );
+		$baseline_id = (int) $this->wc_request( 'POST', '/wc/v3/orders', $this->order_line_payload( $this->line_product( true )->get_id(), 2, 'processing' ), 201 )->get_data()['id'];
+		$v2_id       = (int) $this->wc_request( 'POST', '/wc/v3/orders', $this->order_line_payload( $this->line_product( true )->get_id(), 2, 'processing' ), 201 )->get_data()['id'];
+		$uuid        = $this->next_uuid();
+		$this->stamp_uuid( 'order', $v2_id, $uuid );
+		$revision = $this->order_revision( $v2_id );
+		$this->assert_hook_parity(
+			'order_delete_with_reduced_stock',
+			self::ORDER_HOOKS,
+			$this->wc_operation( 'DELETE', '/wc/v3/orders/' . $baseline_id, array( 'force' => false ), 200 ),
+			$this->v2_operation( 'delete', 'orders', $uuid, array(), $revision, false )
+		);
+	}
+
 	public function test_parity_order_coupon_application(): void {
 		$this->coupon_fixture( 'hook-parity-baseline' );
 		$this->coupon_fixture( 'hook-parity-v2' );
@@ -562,7 +687,7 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		$uuid        = $this->next_uuid();
 		$this->stamp_uuid( 'user', $customer_id, $uuid );
 		$revision = $this->resource_revision( '/wc/v3/customers', $customer_id );
-		$sequence = $this->record_hooks(
+		list( $sequence ) = $this->record_hooks(
 			array( 'woocommerce_update_customer' ),
 			function () use ( $uuid, $revision ): void {
 				$response = $this->push(

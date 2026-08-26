@@ -254,17 +254,31 @@ final class Sync_Journal {
 	/**
 	 * Record an out-of-band change announced by an extension.
 	 *
-	 * Plugins should fire `woocommerce_pos_invalidate` when a filter-only output
-	 * change cannot be observed by the journal. Formula fingerprints (#1742)
-	 * will eventually make those representation changes directly detectable.
+	 * Plugins fire `woocommerce_pos_invalidate` when they change a record's
+	 * SERVED representation in a way no save hook announces — a filter-only
+	 * output change (a pricing filter, an added payload field). The journal
+	 * appends a pointer row; clients hydrate pointer rows by sequence, so the
+	 * re-served payload carries the plugin's change. Formula fingerprints
+	 * (#1742) will eventually make representation changes directly detectable;
+	 * until then this action is the documented relief valve.
+	 *
+	 * `$object_type` is the registry's SINGULAR journal name: `product`,
+	 * `variation`, `customer`, `order`, `tax_rate`, and the other journalled
+	 * catalogue types. A plural (`products`) or unknown type is logged and
+	 * ignored. Rows land with origin `invalidate` on every type.
 	 *
 	 * @since 1.10.3
 	 *
-	 * @param string $object_type Canonical journal object type.
+	 * @param string $object_type Canonical (singular) journal object type.
 	 * @param int    $object_id   Changed object ID.
 	 */
-	public function record_invalidation( string $object_type, int $object_id ): void {
-		$collection = Collections::by_object_type( $object_type );
+	public function record_invalidation( $object_type = '', $object_id = 0 ): void {
+		// Loose signature on purpose: a public action handler whose posture is
+		// log-and-ignore — a one-arg or wrong-typed do_action() must not fatal
+		// the calling plugin's request.
+		$object_type = is_scalar( $object_type ) ? (string) $object_type : '';
+		$object_id   = is_scalar( $object_id ) ? (int) $object_id : 0;
+		$collection  = Collections::by_object_type( $object_type );
 		if ( $object_id <= 0 || null === $collection || ! isset( $collection['journal'] ) ) {
 			Logger::log( sprintf( 'WCPOS sync: ignored invalidation for object_type "%s" (id %d)', $object_type, $object_id ) );
 			return;
@@ -272,13 +286,31 @@ final class Sync_Journal {
 
 		if ( 'order' === $object_type ) {
 			$this->record_order_change( $object_id, 'invalidate', false );
-		} elseif ( 'product' === ( $collection['identity']['loader'] ?? '' ) ) {
-			$this->record_catalogue_object( $object_type, $object_id, false );
-		} elseif ( 'customer' === ( $collection['identity']['loader'] ?? '' ) ) {
-			$this->record_customer( $object_id, false );
-		} else {
-			$this->record( $object_type, $object_id, false, '', 'invalidate' );
+			return;
 		}
+		$loader = (string) ( $collection['identity']['loader'] ?? '' );
+		if ( 'product' === $loader ) {
+			$object = function_exists( 'wc_get_product' ) ? wc_get_product( $object_id ) : null;
+			$this->record( $object_type, $object_id, false, self::object_revision( $object ), 'invalidate' );
+			if ( 'variation' === $object_type ) {
+				// Native variation paths always pair the parent row — the parent
+				// document carries the variable price range — so an invalidation
+				// must too, or the relief valve half-works.
+				$this->record_variation_parent( $object_id );
+			}
+			return;
+		}
+		if ( 'customer' === $loader ) {
+			try {
+				$customer = class_exists( '\\WC_Customer' ) ? new \WC_Customer( $object_id ) : null;
+			} catch ( \Exception $e ) {
+				Logger::log( sprintf( 'WCPOS sync: ignored invalidation for missing customer %d', $object_id ) );
+				return;
+			}
+			$this->record( 'customer', $object_id, false, self::object_revision( $customer ), 'invalidate', true, 'update' );
+			return;
+		}
+		$this->record( $object_type, $object_id, false, '', 'invalidate' );
 	}
 
 	public function record_product_created( int $product_id ): void {

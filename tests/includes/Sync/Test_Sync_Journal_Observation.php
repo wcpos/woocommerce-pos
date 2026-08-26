@@ -75,12 +75,45 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 
 		$product_row = $this->latest_row( 'product', $product->get_id(), $cursor );
 		$this->assertSame( 'product', $product_row['object_type'] );
+		$this->assertSame( 'invalidate', $product_row['origin'], 'Invalidation rows must be distinguishable from hook rows on every type.' );
 		$this->assert_datetime_revision( $this->object_revision( $product ), (string) $product_row['revision'] );
 
 		$order   = wc_create_order();
 		$cursor  = $this->journal->head_sequence();
 		do_action( 'woocommerce_pos_invalidate', 'order', $order->get_id() );
 		$this->assert_order_row( $this->latest_row( 'order', $order->get_id(), $cursor ), 'invalidate', false );
+	}
+
+	/**
+	 * Every native variation path pairs the parent row (the parent document
+	 * carries the variable price range) — the public invalidation must too,
+	 * or the relief valve half-works for the collection most likely to use it
+	 * (store-pricing plugins changing filter-only variation output).
+	 */
+	public function test_public_invalidation_action_on_a_variation_also_touches_parent_product(): void {
+		$product   = ProductHelper::create_simple_product();
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $product->get_id() );
+		$variation->set_regular_price( '5' );
+		$variation->save();
+		$cursor = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'variation', $variation->get_id() );
+
+		$variation_row = $this->latest_row( 'variation', $variation->get_id(), $cursor );
+		$this->assertSame( 'invalidate', $variation_row['origin'] );
+		$this->assertSame( $product->get_id(), $this->latest_row( 'product', $product->get_id(), $cursor )['object_id'] );
+	}
+
+	public function test_public_invalidation_action_tolerates_missing_and_malformed_args(): void {
+		$cursor = $this->journal->head_sequence();
+
+		// A public action handler must never fatal the calling plugin's request:
+		// one-arg, wrong-typed, and unknown-type calls are logged and ignored.
+		do_action( 'woocommerce_pos_invalidate', 'product' );
+		do_action( 'woocommerce_pos_invalidate', array( 'product' ), 'not-an-id' );
+
+		$this->assertSame( array(), $this->journal->page( array(), $cursor, 20 )['rows'] );
 	}
 
 	public function test_public_invalidation_action_ignores_unknown_type(): void {

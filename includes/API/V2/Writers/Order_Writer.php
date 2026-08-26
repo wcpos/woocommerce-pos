@@ -23,6 +23,14 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
+	/**
+	 * Audit meta recording HOW an order came to be paid (ADR 0035 path 3):
+	 * `offline` means the till ASSERTED payment via `set_paid` — no gateway ran.
+	 * Server-owned (spoof-stripped via Pos_Order_Audit::SERVER_META_KEYS).
+	 */
+	public const PAYMENT_ASSERTED_META    = '_pos_payment_asserted';
+	public const PAYMENT_ASSERTED_OFFLINE = 'offline';
+
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
 
@@ -55,8 +63,10 @@ class Order_Writer extends Null_Writer {
 		$till_meta = Pos_Order_Audit::till_meta_from_payload( $meta_data );
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
-		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
-			$till_meta['_pos_payment_asserted'] = 'offline';
+		if ( self::asserts_payment( $payload ) ) {
+			// A CREATE carrying set_paid IS the payment event — the push itself
+			// marks the fresh order paid with no gateway involved.
+			$till_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
 		}
 		return array(
 			'method' => 'POST',
@@ -85,6 +95,11 @@ class Order_Writer extends Null_Writer {
 				return $this->prepare_order_update_after_read( $id, $payload );
 			},
 		);
+	}
+
+	/** Whether the push payload asserts payment via wc/v3's write-only set_paid flag. */
+	private static function asserts_payment( array $payload ): bool {
+		return isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
 	}
 
 	/** Repair an existing born-twice order without inventing a version stamp. */
@@ -243,12 +258,21 @@ class Order_Writer extends Null_Writer {
 		$clear_email = isset( $forward['billing'] ) && is_array( $forward['billing'] )
 			&& array_key_exists( 'email', $forward['billing'] ) && '' === $forward['billing']['email'];
 		$fill_meta = array();
-		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
-			$fill_meta['_pos_payment_asserted'] = 'offline';
-		}
 		$pre_store = null;
 		$order     = wc_get_order( $id );
 		if ( $order ) {
+			/*
+			 * `set_paid` is write-only in wc/v3, so a client re-sends it on every
+			 * later edit of an order it created offline. WooCommerce only takes
+			 * payment on update when the order still needs it (`$creating ||
+			 * needs_payment()` in its orders controller) — mirror that, pre-forward,
+			 * or an update to an order ALREADY paid by a real gateway (hosted pay
+			 * page) would stamp 'offline' over a gateway-taken payment: the exact
+			 * distinction this marker exists to draw. Fill-only, never overwrite.
+			 */
+			if ( self::asserts_payment( $payload ) && $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
+				$fill_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
+			}
 			$pre_store = (string) $order->get_meta( '_pos_store' );
 			foreach ( array( '_pos_user', '_pos_user_created' ) as $key ) {
 				if ( '' === (string) $order->get_meta( $key ) ) {
@@ -332,8 +356,12 @@ class Order_Writer extends Null_Writer {
 	/** Persist server-owned order audit metadata. */
 	private function stamp_order_audit( int $id, array $payload, bool $stamp_version ): void {
 		$meta = array( '_pos_user' => (string) get_current_user_id() );
-		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
-			$meta['_pos_payment_asserted'] = 'offline';
+		// Create-shaped phases only (create_after_identity, create_recovery, the
+		// born-twice repair): the create push itself asserted the payment, so no
+		// needs_payment() gate — by the time this runs post-forward the order is
+		// already paid BY THIS PUSH. The update path carries its own guard.
+		if ( self::asserts_payment( $payload ) ) {
+			$meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
 		}
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;

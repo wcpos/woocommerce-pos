@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WP_REST_Request;
 
 /**
@@ -180,6 +182,34 @@ class Test_Rest_Dispatch_Till_Meta extends Sync_REST_Store_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertSame( 'offline', wc_get_order( $created['order_id'] )->get_meta( '_pos_payment_asserted' ) );
+	}
+
+	/**
+	 * `set_paid` is write-only in wc/v3, so a client re-sends it on later edits
+	 * of an order it created offline. An order ALREADY paid by a real gateway
+	 * must not be re-labelled till-asserted — the marker's entire purpose is
+	 * distinguishing the two (ADR 0035 path 3).
+	 */
+	public function test_set_paid_update_does_not_relabel_a_gateway_paid_order(): void {
+		$created = $this->create_order();
+		$order   = wc_get_order( $created['order_id'] );
+		$order->payment_complete( 'txn-gateway-123' );
+
+		$response = $this->push_envelope( 'update', array( 'set_paid' => true ), $this->order_revision( wc_get_order( $created['order_id'] ) ) );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( '', wc_get_order( $created['order_id'] )->get_meta( '_pos_payment_asserted' ) );
+	}
+
+	/** The revision the CLIENT holds for an order — the same recipe the push side recomputes. */
+	private function order_revision( \WC_Order $order ): string {
+		$current_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
+		$current_request->set_param( 'dp', '6' );
+		$current = rest_do_request( $current_request )->get_data();
+		$current = Meta_Normalizer::normalize( $current );
+		$current = Order_Serializer::add_payment_link( $current, $order );
+
+		return Order_Serializer::canonical_revision( $current );
 	}
 
 	/**

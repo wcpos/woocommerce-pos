@@ -155,6 +155,28 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $later_sequence, $data['checkpoint']['sequence'] );
 	}
 
+	public function test_pull_id_filter_tolerates_string_ids_from_the_filter(): void {
+		$order   = OrderHelper::create_order();
+		$journal = new Sync_Journal();
+		$journal->record_order_change( $order->get_id(), 'hook:update', false );
+		// A scoping filter reading ids from $wpdb->get_col() returns STRINGS; the
+		// seam sanitizes to ints, so this must not read as "exclude everything"
+		// and silently skip the page past the checkpoint.
+		$filter = static function ( array $ids ): array {
+			return array_map( 'strval', $ids );
+		};
+
+		add_filter( 'woocommerce_pos_order_pull_ids', $filter, 10, 2 );
+		try {
+			$data = ( new Orders_Controller() )->pull_orders( $this->request( array( 'limit' => 100 ) ) )->get_data();
+		} finally {
+			remove_filter( 'woocommerce_pos_order_pull_ids', $filter, 10 );
+		}
+
+		$served_ids = array_map( static fn ( array $document ): int => (int) $document['payload']['id'], $data['documents'] );
+		$this->assertContains( $order->get_id(), $served_ids );
+	}
+
 	/**
 	 * Order tombstone loss is surfaced through the shared journal horizon.
 	 */

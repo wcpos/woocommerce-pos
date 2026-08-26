@@ -32,7 +32,10 @@ controller's `prepare_object_for_response()`, so `register_rest_field()` runs on
 core's own checkout is equally noisy, and suppressing hooks core fires would be
 anti-parity; the augmentation keys wcpos writes after `woocommerce_rest_prepare_*`
 (`tax_ids`, `links`, item uuids, `_rxdb_*`) are reserved — augmentations deliberately ride
-outside the filtered/hashed payload (see free#1744's fix class).
+outside the filtered/hashed payload (see free#1744's fix class). Found by the parity suite
+during free#1753 implementation and accepted: deleting an order whose stock was reduced
+fires `woocommerce_restore_order_stock` on the v2 lane only (`restore_stock_on_delete`,
+default on) — wc/v3's own trash leaves stock reduced; the POS deliberately does not.
 
 **Known temporary exceptions, dying with their code:** the `/orders/pull` and
 `/resolve/barcode` selection queries bypass `woocommerce_rest_*_object_query`; interim seam
