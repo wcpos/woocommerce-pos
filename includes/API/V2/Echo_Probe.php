@@ -62,7 +62,7 @@ final class Echo_Probe {
 
 		return new WP_REST_Response(
 			array(
-				'v'       => 1,
+				'v'       => 2,
 				'headers' => $headers,
 				'params'  => array(
 					'authorization' => isset( $params['authorization'] ) && '' !== $params['authorization'],
@@ -71,6 +71,8 @@ final class Echo_Probe {
 					'wcpos_protocol' => isset( $params['wcpos_protocol'] ) && '' !== $params['wcpos_protocol'],
 					'wcpos_client'   => isset( $params['wcpos_client'] ) && '' !== $params['wcpos_client'],
 				),
+				// The client reads this per store before sending an x-wcpos-* header unknown to the server.
+				'cors'    => array( 'reflects_request_headers' => true ),
 			),
 			200
 		);

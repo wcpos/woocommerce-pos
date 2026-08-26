@@ -157,6 +157,15 @@ final class Rest_Cors {
 	 */
 	private const MARKER_HEADER_PREFIX = 'x-wcpos';
 
+	/** Makes CR/LF/NUL and malformed names unreachable in the response header. */
+	private const HEADER_NAME_PATTERN = '/\A[A-Za-z0-9!#$%&\'*+.^_`|~-]+\z/';
+
+	/** Bounds the response-header size a hostile announcement can force against proxy header ceilings. */
+	private const REFLECT_MAX_NAMES = 16;
+
+	/** Bounds the response-header size a hostile announcement can force against proxy header ceilings. */
+	private const REFLECT_MAX_BYTES = 256;
+
 	/**
 	 * Register the wire contract. Unconditional — see the class docblock.
 	 */
@@ -193,11 +202,14 @@ final class Rest_Cors {
 	 * @return bool $served
 	 */
 	public static function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
-		if ( preg_match( self::CACHE_ROUTE_PATTERN, (string) $request->get_route() ) ) {
+		$owns_request = self::owns_request( $request );
+		if ( $owns_request && 'OPTIONS' === $request->get_method() ) {
+			self::send_cache_defeating_headers( $result, $server, array( 'Access-Control-Request-Headers' ) );
+		} elseif ( preg_match( self::CACHE_ROUTE_PATTERN, (string) $request->get_route() ) ) {
 			self::send_cache_defeating_headers( $result, $server );
 		}
 
-		if ( ! self::owns_request( $request ) ) {
+		if ( ! $owns_request ) {
 			return $served;
 		}
 
@@ -209,9 +221,26 @@ final class Rest_Cors {
 		$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
 
 		if ( 'OPTIONS' === $request->get_method() ) {
-			// Same list core built in serve_request(), through the same
-			// filter, so a third party that hooks it reaches both writes.
+			// The filtered list is the frozen compatibility floor; valid announced
+			// x-wcpos names are reflected after it in lowercase.
 			$allow_headers = apply_filters( 'rest_allowed_cors_headers', self::ALLOW_HEADERS_BASE, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
+			$allowed_names   = array_fill_keys( array_map( 'strtolower', $allow_headers ), true );
+			$reflected       = 0;
+			$reflected_bytes = 0;
+
+			foreach ( self::announced_header_names( $request ) as $header ) {
+				if ( ! preg_match( self::HEADER_NAME_PATTERN, $header ) || 0 !== strpos( $header, self::MARKER_HEADER_PREFIX ) || isset( $allowed_names[ $header ] ) ) {
+					continue;
+				}
+				if ( self::REFLECT_MAX_NAMES <= $reflected || self::REFLECT_MAX_BYTES < $reflected_bytes + strlen( $header ) ) {
+					break;
+				}
+
+				$allow_headers[]          = $header;
+				$allowed_names[ $header ] = true;
+				++$reflected;
+				$reflected_bytes += strlen( $header );
+			}
 
 			$server->send_header( 'Access-Control-Allow-Methods', 'OPTIONS, GET, POST, PUT, PATCH, DELETE' );
 			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', array_unique( $allow_headers ) ) );
@@ -277,18 +306,31 @@ final class Rest_Cors {
 	 * @return bool
 	 */
 	private static function preflight_announces_wcpos( WP_REST_Request $request ): bool {
-		$announced = (string) $request->get_header( 'Access-Control-Request-Headers' );
-		if ( '' === $announced ) {
-			return false;
-		}
-
-		foreach ( explode( ',', strtolower( $announced ) ) as $header ) {
-			if ( 0 === strpos( trim( $header ), self::MARKER_HEADER_PREFIX ) ) {
+		foreach ( self::announced_header_names( $request ) as $header ) {
+			if ( 0 === strpos( $header, self::MARKER_HEADER_PREFIX ) ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Parse the header names announced by a CORS preflight.
+	 *
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return string[] Trimmed, lowercase, non-empty header names.
+	 */
+	private static function announced_header_names( WP_REST_Request $request ): array {
+		return array_values(
+			array_filter(
+				array_map( 'trim', explode( ',', strtolower( (string) $request->get_header( 'Access-Control-Request-Headers' ) ) ) ),
+				static function ( string $header ): bool {
+					return '' !== $header;
+				}
+			)
+		);
 	}
 
 	/**
@@ -302,12 +344,15 @@ final class Rest_Cors {
 	 * Vary is defense-in-depth for intermediaries that ignore no-store but
 	 * honor Vary ({@see self::VARY_TOKENS}). Existing Vary tokens are
 	 * preserved (deduped case-insensitively); a wildcard Vary stays alone,
-	 * since '*' is grammatically an alternative to a field list.
+	 * since '*' is grammatically an alternative to a field list. Preflights
+	 * also vary on their announced headers because the answer depends on them
+	 * (RFC 9111 section 4.1).
 	 *
-	 * @param WP_HTTP_Response $result Result to send to the client.
-	 * @param WP_REST_Server   $server Server instance.
+	 * @param WP_HTTP_Response $result            Result to send to the client.
+	 * @param WP_REST_Server   $server            Server instance.
+	 * @param string[]         $extra_vary_tokens Additional Vary tokens.
 	 */
-	private static function send_cache_defeating_headers( WP_HTTP_Response $result, WP_REST_Server $server ): void {
+	private static function send_cache_defeating_headers( WP_HTTP_Response $result, WP_REST_Server $server, array $extra_vary_tokens = array() ): void {
 		$response_headers = array_change_key_case( $result->get_headers(), CASE_LOWER );
 		$existing_vary    = isset( $response_headers['vary'] )
 			? array_values(
@@ -323,7 +368,7 @@ final class Rest_Cors {
 		if ( in_array( '*', $existing_vary, true ) ) {
 			$vary = '*';
 		} else {
-			$vary_tokens = array_merge( $existing_vary, self::VARY_TOKENS );
+			$vary_tokens = array_merge( $existing_vary, self::VARY_TOKENS, $extra_vary_tokens );
 			$vary_tokens = array_change_key_case( array_combine( $vary_tokens, $vary_tokens ), CASE_LOWER );
 			$vary        = implode( ', ', $vary_tokens );
 		}
