@@ -165,6 +165,12 @@ class Test_Order_Save_Query_Budget extends WP_UnitTestCase {
 
 		$marker = static::FIXTURE_MARKER;
 
+		// The property is declared once on this class, so every paired subclass shares
+		// one slot. Reset on entry rather than relying only on the previous class's
+		// teardown — a stale non-zero value would make the CPT branch below skip its
+		// insert_id capture and every id derived from it would be wrong.
+		self::$fixture_first_id = 0;
+
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk test-fixture seeding; every value tuple is prepared.
 		if ( static::uses_hpos() ) {
 			$orders = $wpdb->prefix . 'wc_orders';
@@ -320,11 +326,9 @@ class Test_Order_Save_Query_Budget extends WP_UnitTestCase {
 	 * already owns it. A freshly-minted uuid on an unsaved order takes the mint path
 	 * instead and never reaches the detector — measuring that would gate nothing.
 	 *
-	 * @param null|string $resolved_uuid Receives the uuid the identity path settled on.
-	 *
 	 * @return int Rows examined.
 	 */
-	protected function measure_pos_open_order_save( &$resolved_uuid = null ): int {
+	protected function measure_pos_open_order_save(): int {
 		$product = ProductHelper::create_simple_product(
 			array(
 				'regular_price' => 18,

@@ -129,7 +129,7 @@ class Test_Rows_Examined extends WP_UnitTestCase {
 		$this->assertGreaterThanOrEqual(
 			self::PROBE_ROWS,
 			$examined,
-			"A scan of a {$this->row_count()}-row table reported only {$examined} rows examined.\n" . Rows_Examined::explain( $sql )
+			'A scan of a ' . self::PROBE_ROWS . "-row table reported only {$examined} rows examined.\n" . Rows_Examined::explain( $sql )
 		);
 	}
 
@@ -222,12 +222,5 @@ class Test_Rows_Examined extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'EXPLAIN:', $explained );
 		$this->assertStringContainsString( 'key=indexed_col', $explained );
-	}
-
-	/**
-	 * Row count, for failure messages.
-	 */
-	private function row_count(): int {
-		return self::PROBE_ROWS;
 	}
 }
