@@ -40,11 +40,12 @@ one-time self-healing 409 per order when a filter changes.
 
 **Consequences:** free#1745 (landed with this ADR) deletes the pre-1.10.0 versioned recipe
 list and legacy-grace comparer — they protected no shipped client, and their generic
-recipe-migration machinery goes with them. The schema-scope recipe change in free#1746 is a
-wire transition for the wild 1.10.x fleet, so it ships with its own fresh, targeted
-dual-accept: CAS accepts the current whole-payload recipe for one release, then drops it.
-Cross-collection ratification of schema-scoped fingerprints is pending the uniformity
-doctrine (free#1739).
+recipe-migration machinery goes with them. Compute-at-pull ships in 1.10.x with the current
+whole-payload recipe (byte-identical on the wire). The schema-scope recipe change is a wire
+transition and ships at the 1.11.0 protocol-gate boundary decided in free#1750 — the gate
+makes a dual-accept window unnecessary (superseding this ADR's earlier one-release
+dual-accept plan). Cross-collection ratification of schema-scoped fingerprints is pending
+the uniformity doctrine (free#1739).
 
 Decided 2026-08-26 with Paul in free#1737, part of the v2 Sync Engine Trust Audit
 (free#1731).
