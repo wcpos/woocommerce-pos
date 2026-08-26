@@ -373,6 +373,11 @@ function read_annotations( $root ) {
 		elseif ( ! is_array( $data[ $section ] ) ) { fail( 'Annotation section "' . $section . '" must be an object.' ); }
 	}
 	foreach ( $data['renames'] as $from => $to ) {
+		// A JSON list decodes to integer keys, so `"renames": ["Some_Class"]` would arrive
+		// as 0 => 'Some_Class' and sail past every check below: no class is named "0", so
+		// the source reads as correctly absent and the entry silently does nothing. That is
+		// the quiet rot the stale-annotation checks exist to prevent, so reject the shape.
+		if ( ! is_string( $from ) || '' === $from ) { fail( 'Rename keys must be class names — "renames" must be an object, not a list.' ); }
 		if ( ! is_string( $to ) || '' === $to ) { fail( 'Rename target for "' . $from . '" must be a non-empty class name.' ); }
 	}
 	return $data;

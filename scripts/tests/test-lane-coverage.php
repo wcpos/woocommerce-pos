@@ -255,7 +255,9 @@ $run = function ( array $arguments ) use ( $scanner ) {
 };
 
 $ratchet_failures = 0;
-$check            = function ( $label, $expected_status, $actual_status, $output, $expected_text = null ) use ( &$ratchet_failures ) {
+$ratchet_checks   = 0;
+$check            = function ( $label, $expected_status, $actual_status, $output, $expected_text = null ) use ( &$ratchet_failures, &$ratchet_checks ) {
+	$ratchet_checks++;
 	$ok = $expected_status === $actual_status
 		&& ( null === $expected_text || false !== strpos( $output, $expected_text ) );
 	if ( ! $ok ) {
@@ -325,9 +327,20 @@ $live_source = $write_tree(
 list( $status, $output ) = $run( array( '--json', '--root=' . $live_source ) );
 $check( 'rename source must be gone', 2, $status, $output, 'Rename source is still a live class' );
 
+// 6. A JSON list decodes to integer keys, which would read as a correctly-absent source
+//    (no class is named "0") and silently do nothing. Reject the shape instead.
+$list_shaped = $write_tree(
+	'list-shaped',
+	'Test_Ratchet_New_Name',
+	$legacy,
+	array( 'classes' => array(), 'cases' => array(), 'renames' => array( 'Test_Ratchet_New_Name' ) )
+);
+list( $status, $output ) = $run( array( '--json', '--root=' . $list_shaped ) );
+$check( 'renames must be an object, not a list', 2, $status, $output, 'must be an object, not a list' );
+
 if ( $ratchet_failures > 0 ) {
 	fwrite( STDERR, $ratchet_failures . " lane-coverage ratchet regression test(s) failed.\n" );
 	exit( 1 );
 }
 
-echo "7 lane-coverage ratchet regression tests passed.\n";
+echo $ratchet_checks . " lane-coverage ratchet regression tests passed.\n";
