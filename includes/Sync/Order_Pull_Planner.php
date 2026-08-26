@@ -66,7 +66,7 @@ final class Order_Pull_Planner {
 	 * @param callable $serialize         fn(int $order_id): array — the FULL payload, or array() when the
 	 *                                    order no longer serializes (absent/inaccessible).
 	 * @param callable $fallback_revision fn(array $full_payload, int $order_id, int $sequence): string —
-	 *                                    the canonical revision when the index row carries none.
+	 *                                    the canonical revision for fresh index rows, which normally carry none.
 	 */
 	public function plan( array $change_rows, bool $page_full, callable $serialize, callable $fallback_revision ): Generator {
 		$has_more = $page_full;

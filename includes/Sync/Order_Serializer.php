@@ -249,22 +249,6 @@ final class Order_Serializer {
 		return self::add_receipt_link( $payload, $order );
 	}
 
-	public function sync_metadata( array $payload, int $order_id, string $source, bool $partial, int $sequence ): array {
-		return array(
-			'order_id' => $order_id,
-			'source' => $source,
-			'partial' => $partial,
-			'sequence' => $sequence,
-			// UNIFIED (#423 step 1): orders hash through THE canonical
-			// Revision::compute like every other collection — identity-strip,
-			// recursive key-sort, excluded volatile fields. Every order site
-			// (pull, stream, skeleton, snapshot, sync-index, push check)
-			// funnels through here or revision_for, so all move atomically.
-			'revision' => self::canonical_revision( $payload ),
-			'generated_at_gmt' => gmdate( 'c' ),
-		);
-	}
-
 	/*
 	 * canonical_revision() is THE single order revision recipe.
 	 * The pre-1.10.0 versioned recipe list and grace comparer were retired per
@@ -279,7 +263,10 @@ final class Order_Serializer {
 		unset( $payload['tax_ids'], $payload['_rxdb_digest'] );
 
 		// HPOS removes these internal fields only after the restored order's save
-		// hooks run. Exclude them so that save and the completed restore hash alike.
+		// hooks run. The exclusion predates compute-at-pull (ADR 0033) and is frozen
+		// with the 1.10.x recipe: legacy journal rows stored hashes computed with it,
+		// and every read-time hash site (pull fallback, CAS re-read, proxy stamp)
+		// must keep matching them and each other across restore states.
 		if ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) {
 			$payload['meta_data'] = array_values(
 				array_filter(

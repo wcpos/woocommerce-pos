@@ -221,6 +221,54 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertSame( 'fallback-10-4', $result['complete']['checkpoint']['revision'] );
 	}
 
+	/**
+	 * Post-#1746 fresh journal rows carry the shapes pinned here: `''` on live
+	 * order rows, `'deleted'` on tombstones. Non-document checkpoints serve the
+	 * stored row value verbatim — including the client-visible `''` when a page
+	 * ends on a live row whose order no longer serializes — both already-shipped
+	 * wire shapes 1.10.x clients tolerate.
+	 */
+	public function test_non_document_rows_pass_their_stored_revision_into_checkpoints(): void {
+		$planner   = new Order_Pull_Planner( self::request_checkpoint(), true );
+		$decisions = iterator_to_array(
+			$planner->plan(
+				array(
+					self::row( 10, 1, array( 'revision' => '' ) ),
+					self::row(
+						11,
+						2,
+						array(
+							'revision' => 'deleted',
+							'deleted' => 1,
+						)
+					),
+					self::row( 12, 3, array( 'revision' => '' ) ),
+				),
+				false,
+				static function ( int $id ): array {
+					// Order 12 vanished between the journal write and this pull.
+					return 10 === $id ? self::payload( 10, self::UUID_A ) : array();
+				},
+				static function (): string {
+					return 'computed-rev';
+				}
+			),
+			false
+		);
+		$document  = $decisions[0];
+		$tombstone = $decisions[1];
+		$complete  = $decisions[2];
+
+		$this->assertSame( 'document', $document['type'] );
+		$this->assertSame( 'computed-rev', $document['revision'] );
+		$this->assertSame( 'computed-rev', $document['checkpoint']['revision'] );
+		$this->assertSame( 'tombstone', $tombstone['type'] );
+		$this->assertSame( 'deleted', $tombstone['checkpoint']['revision'] );
+		$this->assertSame( 'complete', $complete['type'] );
+		$this->assertSame( '', $complete['checkpoint']['revision'] );
+		$this->assertSame( 3, $complete['checkpoint']['sequence'] );
+	}
+
 	public function test_page_full_probe_reports_has_more(): void {
 		$planner = new Order_Pull_Planner( self::request_checkpoint(), false );
 		$result  = self::plan_result(

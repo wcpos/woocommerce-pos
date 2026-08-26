@@ -58,8 +58,15 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 		$order_ids = array();
 		$digest    = new Integrity_Digest();
 		$index     = new Sync_Journal();
+		$serializer = new Order_Serializer();
 		foreach ( $orders as $order ) {
 			$order_ids[] = $order->get_id();
+			// Settle identity first: post-#1746 the save path no longer serializes,
+			// so the FIRST serialization mints the order/item uuids — a write that
+			// bumps date_updated_gmt and re-upserts the stored digest via the Init
+			// wiring. Capture $stored from the steady state, as a real pull cadence
+			// would, or the stamp legitimately outruns this pre-pull snapshot.
+			$serializer->serialize_order( $order->get_id(), new \WP_REST_Request() );
 			$digest->upsert_order_digest( $order->get_id() );
 			$index->record_order_change( $order->get_id(), 'test:digest-pull', false );
 		}
@@ -104,6 +111,49 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 			$this->assertSame( Order_Serializer::canonical_revision( $bare ), $document['sync']['revision'] );
 			$this->assertSame( Order_Serializer::canonical_revision( $bare ), Order_Serializer::canonical_revision( $payload ) );
 		}
+	}
+
+	/**
+	 * First pull of an UNSTAMPED order must serve a durable revision.
+	 *
+	 * Serializing an order with no WCPOS uuid MINTS it (the Init-wired
+	 * serialized-order filter persists identity), and that save advances the
+	 * stored date_updated_gmt after the payload captured the pre-mint date. The
+	 * pull re-serializes from the settled order, so the served revision equals a
+	 * fresh post-pull recompute — the CAS side's view — instead of being stale
+	 * the moment it leaves (a false 409 on the client's next push). The frozen
+	 * past date makes the pre/post-mint divergence deterministic.
+	 */
+	public function test_hpos_first_pull_of_an_unstamped_order_serves_a_durable_revision(): void {
+		global $wpdb;
+		update_option( Api::SCHEMA_OPTION, Api::SCHEMA_VERSION, false );
+		new Init();
+		$order = OrderHelper::create_order();
+		$wpdb->update( "{$wpdb->prefix}wc_orders", array( 'date_updated_gmt' => '2020-01-01 00:00:00' ), array( 'id' => $order->get_id() ), array( '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		wp_cache_flush();
+		( new Sync_Journal() )->record_order_change( $order->get_id(), 'test:first-pull', false );
+		$this->assertSame( '', (string) wc_get_order( $order->get_id() )->get_meta( Pos_Uuid::META_KEY ), 'Fixture must start unstamped.' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders/pull' );
+		$request->set_query_params(
+			array(
+				'limit'          => 100,
+				'updated_at_gmt' => '1970-01-01T00:00:00.000Z',
+				'order_id'       => 0,
+				'sequence'       => 0,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$documents = $response->get_data()['documents'];
+		$this->assertCount( 1, $documents );
+
+		$fresh = ( new Order_Serializer() )->serialize_order( $order->get_id(), new \WP_REST_Request() );
+		$this->assertSame(
+			Order_Serializer::canonical_revision( $fresh ),
+			$documents[0]['sync']['revision'],
+			'The served revision must match a post-pull recompute — the write path re-reads fresh.'
+		);
 	}
 
 	/**

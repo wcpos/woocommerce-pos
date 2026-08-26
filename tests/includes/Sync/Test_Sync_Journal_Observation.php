@@ -12,10 +12,8 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Health;
-use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
-use WP_REST_Request;
 
 /**
  * One observer owns every collection's change rows.
@@ -264,6 +262,62 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:delete', true );
 	}
 
+	/**
+	 * Pins the WooCommerce fact that permanently closed date-based order
+	 * revisions (ADR 0033, decided in #1737): on the supported CPT store, most
+	 * order edits fire `woocommerce_update_order` WITHOUT moving
+	 * `post_modified` — a `date_modified` revision would be silent for them. If
+	 * a WooCommerce upgrade ever fails this test, that rejected design has
+	 * become viable again; the fix is a verdict discussion, not a test tweak.
+	 * The hook-based journal must catch the edit the date never records.
+	 */
+	public function test_cpt_order_edit_fires_update_hook_without_moving_post_modified(): void {
+		global $wpdb;
+		$order       = wc_create_order();
+		$order_id    = $order->get_id();
+		$fixed_past  = '2020-01-01 00:00:00';
+		$hook_fires  = 0;
+		$count_hook  = static function ( int $updated_order_id ) use ( $order_id, &$hook_fires ): void {
+			if ( $order_id === $updated_order_id ) {
+				++$hook_fires;
+			}
+		};
+		// Precondition: the order is CPT-backed. Under HPOS the wp_posts row is a
+		// placeholder and the post_modified assertion below would pass vacuously.
+		$this->assertSame( 'shop_order', get_post_type( $order_id ), 'This pin requires CPT order storage.' );
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_modified' => $fixed_past,
+				'post_modified_gmt' => $fixed_past,
+			),
+			array( 'ID' => $order_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $order_id );
+		$cursor = $this->journal->head_sequence();
+
+		add_action( 'woocommerce_update_order', $count_hook, 10, 1 );
+		try {
+			$order = wc_get_order( $order_id );
+			$order->update_meta_data( '_wcpos_pin_probe', 'x' );
+			$order->set_total( '42.00' );
+			$order->save();
+		} finally {
+			remove_action( 'woocommerce_update_order', $count_hook, 10 );
+		}
+
+		$this->assertGreaterThanOrEqual( 1, $hook_fires );
+		$this->assertSame(
+			$fixed_past,
+			$wpdb->get_var( $wpdb->prepare( "SELECT post_modified_gmt FROM {$wpdb->posts} WHERE ID = %d", $order_id ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		);
+		// The date never moved, yet the hook-based journal recorded the edit —
+		// the property date-based change detection cannot provide.
+		$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:update', false );
+	}
+
 	public function test_hpos_order_trash_and_untrash_append_delete_then_present_row(): void {
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
@@ -366,7 +420,8 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		}
 	}
 
-	public function test_hpos_untrash_row_records_the_settled_order_revision(): void {
+	public function test_hpos_untrash_row_reads_modified_gmt_from_the_settled_order(): void {
+		global $wpdb;
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
 		$this->toggle_cot_feature_and_usage( true );
@@ -375,31 +430,23 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			$order_id = $order->get_id();
 			$order->delete( false );
 			wp_cache_flush();
-			$cursor = $this->journal->head_sequence();
 
 			/*
-			 * The restore performs more than one object save. The journal's
-			 * one-shot fires on the FIRST save whose status is not `trash`, so
-			 * anything the restore changes afterwards is not reflected in the
-			 * revision it records. Force exactly that: mutate the order once,
-			 * immediately after the one-shot would have run.
+			 * `record_cot_order_untrashed()` defers its row until the restore has
+			 * settled. Revision capture no longer forces that deferral — order rows
+			 * store no revision (computed at pull time, ADR 0033) — so the one-shot's
+			 * remaining job is `modified_gmt`: a row recorded straight off
+			 * `woocommerce_untrash_order` (which fires BEFORE the restore saves)
+			 * would carry the pre-restore date and walk the pull checkpoint
+			 * backwards. Freeze the trashed order's date to a fixed past value so
+			 * that regression is distinguishable from the settled state.
 			 */
-			$mutated = false;
-			$mutate  = function ( $o ) use ( &$mutated, $order_id ): void {
-				if ( $mutated || ! \is_object( $o ) || (int) $o->get_id() !== $order_id || 'trash' === $o->get_status() ) {
-					return;
-				}
-				$mutated = true;
-				$o->update_meta_data( '_wcpos_untrash_revision_probe', 'changed-after-the-one-shot' );
-				$o->save_meta_data();
-			};
-			add_action( 'woocommerce_after_order_object_save', $mutate, 11, 1 );
-			try {
-				wc_get_order( $order_id )->untrash();
-			} finally {
-				remove_action( 'woocommerce_after_order_object_save', $mutate, 11 );
-			}
-			$this->assertTrue( $mutated, 'Expected the post-one-shot mutation probe to run.' );
+			$frozen_past = '2020-01-01 00:00:00';
+			$wpdb->update( "{$wpdb->prefix}wc_orders", array( 'date_updated_gmt' => $frozen_past ), array( 'id' => $order_id ), array( '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			wp_cache_flush();
+			$cursor = $this->journal->head_sequence();
+
+			wc_get_order( $order_id )->untrash();
 
 			$rows = array_values(
 				array_filter(
@@ -410,11 +457,10 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 				)
 			);
 			$this->assertCount( 1, $rows, 'Expected exactly one hook:untrash row.' );
-			$this->assertSame(
-				$this->order_revision( $order_id ),
-				$rows[0]['revision'],
-				'The untrash row must record the revision of the SETTLED order, not one captured part-way through the restore.'
-			);
+			$this->assertSame( '', $rows[0]['revision'], 'Order rows store no revision; the journal cannot advertise one captured part-way through the restore.' );
+			$settled = gmdate( 'Y-m-d H:i:s', wc_get_order( $order_id )->get_date_modified()->getTimestamp() );
+			$this->assertNotSame( $frozen_past, $settled, 'The restore saves must move the order modified date past the frozen pre-restore value.' );
+			$this->assertSame( $settled, $rows[0]['modified_gmt'], 'The untrash row must read modified_gmt from the SETTLED order, not from pre-restore state.' );
 		} finally {
 			$this->toggle_cot_feature_and_usage( false );
 			$this->clean_up_cot_setup();
@@ -449,7 +495,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assertSame( $order_ids[1], $second['lastOrderId'] );
 		$this->assertSame( array( $order_ids[0], $order_ids[1] ), array_column( $rows, 'order_id' ) );
 		$this->assertSame( array( 'backfill', 'backfill' ), array_column( $rows, 'origin' ) );
-		$this->assertStringStartsWith( 'sha256:', $rows[0]['revision'] );
+		$this->assertSame( '', $rows[0]['revision'] );
 	}
 
 	public function test_order_backfill_does_not_advance_past_a_failed_journal_write(): void {
@@ -525,7 +571,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		if ( $deleted ) {
 			$this->assertSame( 'deleted', $row['revision'] );
 		} else {
-			$this->assertSame( $this->order_revision( $row['object_id'] ), $row['revision'] );
+			$this->assertSame( '', $row['revision'] );
 		}
 	}
 
@@ -583,11 +629,5 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			$this->journal->register_hooks();
 		}
 		return $this->rows_for( 'customer', $customer_id, $cursor );
-	}
-
-	private function order_revision( int $order_id ): string {
-		$serializer = new Order_Serializer();
-		$payload = $serializer->serialize_order( $order_id, new WP_REST_Request() );
-		return (string) $serializer->sync_metadata( $payload, $order_id, 'custom-pull', false, 0 )['revision'];
 	}
 }
