@@ -44,6 +44,13 @@ final class Sync_Journal {
 		return $wpdb->prefix . Health::SYNC_JOURNAL_TABLE;
 	}
 
+	/**
+	 * The `revision` column is a per-lane union: a `date_modified` stamp for
+	 * catalogue/customer rows, `''` for live order rows (order revisions are
+	 * computed at pull time — ADR 0033), `'deleted'` for order tombstones, and
+	 * legacy pre-#1746 order rows may still carry stored `sha256:` hashes,
+	 * which the pull planner's stored-wins branch serves until they age out.
+	 */
 	public function schema_sql( string $table_name, string $charset_collate = '' ): string {
 		return "CREATE TABLE {$table_name} (\n"
 			. "  sequence BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n"
@@ -468,8 +475,10 @@ final class Sync_Journal {
 		$order         = wc_get_order( $order_id );
 		$modified_date = $order ? $order->get_date_modified() : null;
 		$modified      = $modified_date ? gmdate( 'Y-m-d H:i:s', $modified_date->getTimestamp() ) : gmdate( 'Y-m-d H:i:s' );
-		// Revisions are computed at pull time from the served payload (ADR 0033, #1746).
-		// The journal row is a change pointer, not a content stamp; 'deleted' stays as the tombstone marker.
+		// Order revisions are computed at pull time from the served payload (ADR 0033,
+		// #1746) — an order journal row is a change pointer, not a content stamp.
+		// 'deleted' is kept for wire compatibility (it flows into served checkpoints)
+		// and diagnostics; the planner branches on the `deleted` flag, not this value.
 		$revision = $deleted ? 'deleted' : '';
 
 		$now = gmdate( 'Y-m-d H:i:s' );

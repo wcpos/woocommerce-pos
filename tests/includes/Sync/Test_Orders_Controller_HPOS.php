@@ -58,8 +58,15 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 		$order_ids = array();
 		$digest    = new Integrity_Digest();
 		$index     = new Sync_Journal();
+		$serializer = new Order_Serializer();
 		foreach ( $orders as $order ) {
 			$order_ids[] = $order->get_id();
+			// Settle identity first: post-#1746 the save path no longer serializes,
+			// so the FIRST serialization mints the order/item uuids — a write that
+			// bumps date_updated_gmt and re-upserts the stored digest via the Init
+			// wiring. Capture $stored from the steady state, as a real pull cadence
+			// would, or the stamp legitimately outruns this pre-pull snapshot.
+			$serializer->serialize_order( $order->get_id(), new \WP_REST_Request() );
 			$digest->upsert_order_digest( $order->get_id() );
 			$index->record_order_change( $order->get_id(), 'test:digest-pull', false );
 		}
