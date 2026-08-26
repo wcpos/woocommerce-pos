@@ -253,23 +253,124 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Direct test: save_decimal_quantities for product without stock management.
+	 * Direct test: save_decimal_quantities preserves a manual "out of stock"
+	 * status when stock management is disabled.
+	 *
+	 * WooCommerce respects the manually chosen stock status when "Manage
+	 * stock" is unchecked; the decimal-quantity hook must not override it.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::save_decimal_quantities
 	 */
-	public function test_direct_save_decimal_quantities_no_stock_management(): void {
+	public function test_save_decimal_quantities_no_stock_management_preserves_outofstock(): void {
 		$this->enable_decimal_quantities();
 
 		$products = new Products();
 		$product  = new WC_Product_Simple();
 		$product->set_name( 'Test Product' );
 		$product->set_manage_stock( false );
+		$product->set_stock_status( 'outofstock' );
 		$product->save();
 
 		// Call method directly
 		$products->save_decimal_quantities( $product );
 
-		$this->assertEquals( 'instock', $product->get_stock_status() );
+		$this->assertSame( 'outofstock', $product->get_stock_status() );
+	}
+
+	/**
+	 * Direct test: save_decimal_quantities preserves a manual "on backorder"
+	 * status when stock management is disabled.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::save_decimal_quantities
+	 */
+	public function test_save_decimal_quantities_no_stock_management_preserves_onbackorder(): void {
+		$this->enable_decimal_quantities();
+
+		$products = new Products();
+		$product  = new WC_Product_Simple();
+		$product->set_name( 'Test Product' );
+		$product->set_manage_stock( false );
+		$product->set_stock_status( 'onbackorder' );
+		$product->save();
+
+		// Call method directly
+		$products->save_decimal_quantities( $product );
+
+		$this->assertSame( 'onbackorder', $product->get_stock_status() );
+	}
+
+	/**
+	 * Integration test: a full product save with the decimal-quantity hook
+	 * registered (the wp-admin "Update" flow) must not revert a manual
+	 * "out of stock" status to "in stock" when stock management is disabled.
+	 *
+	 * Regression test for the reported bug: decimal quantities enabled +
+	 * "Manage stock" unchecked + status "Out of stock" reverted to
+	 * "In stock" on save.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::save_decimal_quantities
+	 */
+	public function test_product_save_no_stock_management_persists_outofstock(): void {
+		$this->enable_decimal_quantities();
+
+		// Registers save_decimal_quantities on woocommerce_before_product_object_save.
+		new Products();
+
+		$product = new WC_Product_Simple();
+		$product->set_name( 'Test Product' );
+		$product->set_manage_stock( false );
+		$product->set_stock_status( 'outofstock' );
+		$product->save();
+
+		$persisted = wc_get_product( $product->get_id() );
+
+		$this->assertSame( 'outofstock', $persisted->get_stock_status() );
+	}
+
+	/**
+	 * Integration test: same as above for a variation without stock management.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::save_decimal_quantities
+	 */
+	public function test_variation_save_no_stock_management_persists_outofstock(): void {
+		$this->enable_decimal_quantities();
+
+		// Registers save_decimal_quantities on woocommerce_before_product_object_save.
+		new Products();
+
+		$variation = $this->create_test_variation();
+		$variation->set_manage_stock( false );
+		$variation->set_stock_status( 'outofstock' );
+		$variation->save();
+
+		$persisted = wc_get_product( $variation->get_id() );
+
+		$this->assertSame( 'outofstock', $persisted->get_stock_status() );
+	}
+
+	/**
+	 * Integration test: the decimal-quantity feature itself still works
+	 * through a full save — a managed product with fractional stock above
+	 * zero persists as "in stock".
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::save_decimal_quantities
+	 */
+	public function test_product_save_managed_decimal_stock_persists_instock(): void {
+		$this->enable_decimal_quantities();
+
+		// Registers save_decimal_quantities on woocommerce_before_product_object_save.
+		new Products();
+
+		$product = new WC_Product_Simple();
+		$product->set_name( 'Test Product' );
+		$product->set_manage_stock( true );
+		$product->set_stock_quantity( 0.5 );
+		$product->save();
+
+		$persisted = wc_get_product( $product->get_id() );
+
+		$this->assertSame( 'instock', $persisted->get_stock_status() );
+		$this->assertEquals( 0.5, $persisted->get_stock_quantity() );
 	}
 
 	/**

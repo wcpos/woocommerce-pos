@@ -209,9 +209,9 @@ class Products {
 	 * @param WC_Product $product Product.
 	 */
 	public function save_decimal_quantities( WC_Product $product ): void {
+		// Without stock management there is no quantity to derive a status from;
+		// WooCommerce respects the manually chosen stock status, so leave it untouched.
 		if ( ! $product->get_manage_stock() ) {
-			$product->set_stock_status( 'instock' );
-
 			return;
 		}
 
