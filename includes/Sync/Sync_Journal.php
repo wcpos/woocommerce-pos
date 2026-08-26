@@ -28,15 +28,19 @@ final class Sync_Journal {
 	private array $recorded_this_request = array();
 
 	/**
-	 * How many REST handlers deep we currently are, or 0 outside REST.
+	 * Matched REST requests whose callbacks have not finished yet.
 	 *
-	 * While this is above zero, order rows are buffered instead of written (see
-	 * {@see self::$deferred_order_rows}). Counted rather than flagged because a
+	 * While this is non-empty, order rows are buffered instead of written (see
+	 * {@see self::$deferred_order_rows}). Stacked rather than flagged because a
 	 * v2 push dispatches `/wcpos/v2/write`, which forwards internally through
 	 * `rest_do_request()` to `/wc/v3/orders`: the inner handler returning must
-	 * not put the outer one back on the immediate-write path.
+	 * not put the outer one back on the immediate-write path. Keeping each request
+	 * also lets an outer close discard an inner entry whose callback threw before
+	 * its closing filter ran.
+	 *
+	 * @var array<int, WP_REST_Request|null>
 	 */
-	private int $rest_dispatch_depth = 0;
+	private array $rest_dispatch_stack = array();
 
 	/**
 	 * Order rows owed to the journal at the end of the current REST handler.
@@ -299,8 +303,8 @@ final class Sync_Journal {
 		// Both filters below fire inside `respond_to_request()`, with the handler
 		// between them, so they are a genuinely matched pair: no route match means
 		// neither fires.
-		add_filter( 'rest_request_before_callbacks', array( $this, 'open_order_deferral' ), 10, 1 );
-		add_filter( 'rest_request_after_callbacks', array( $this, 'close_order_deferral' ), 10, 1 );
+		add_filter( 'rest_request_before_callbacks', array( $this, 'open_order_deferral' ), 10, 3 );
+		add_filter( 'rest_request_after_callbacks', array( $this, 'close_order_deferral' ), 10, 3 );
 		// Backstop. A dispatch that dies between the two filters (a route that never
 		// matched, a short-circuiting `rest_pre_dispatch` upstream, a thrown handler)
 		// must not silently drop a change: whatever is still owed lands here.
@@ -312,12 +316,14 @@ final class Sync_Journal {
 	 *
 	 * Passthrough filter on `rest_request_before_callbacks`.
 	 *
-	 * @param mixed $response Response so far, untouched.
+	 * @param mixed           $response Response so far, untouched.
+	 * @param mixed           $handler  Matched route handler.
+	 * @param WP_REST_Request $request  Current request.
 	 *
 	 * @return mixed
 	 */
-	public function open_order_deferral( $response = null ) {
-		++$this->rest_dispatch_depth;
+	public function open_order_deferral( $response = null, $handler = null, $request = null ) {
+		$this->rest_dispatch_stack[] = $request;
 
 		return $response;
 	}
@@ -338,12 +344,16 @@ final class Sync_Journal {
 	 * drifts up by one then silently defers everything to `shutdown` forever. Cheap
 	 * insurance against a class of bug that presents as missing change rows.
 	 *
-	 * @param mixed $response Prepared response, untouched.
+	 * @param mixed           $response Prepared response, untouched.
+	 * @param mixed           $handler  Matched route handler.
+	 * @param WP_REST_Request $request  Current request.
 	 *
 	 * @return mixed
 	 */
-	public function close_order_deferral( $response = null ) {
-		$this->rest_dispatch_depth = max( 0, $this->rest_dispatch_depth - 1 );
+	public function close_order_deferral( $response = null, $handler = null, $request = null ) {
+		do {
+			$opened_request = array_pop( $this->rest_dispatch_stack );
+		} while ( null !== $opened_request && $opened_request !== $request );
 		$this->flush_deferred_order_rows();
 
 		return $response;
@@ -361,7 +371,9 @@ final class Sync_Journal {
 		$owed                      = $this->deferred_order_rows;
 		$this->deferred_order_rows = array();
 		foreach ( $owed as $order_id => $origin ) {
-			$this->record_order_change( (int) $order_id, (string) $origin, false );
+			if ( ! $this->record_order_change( (int) $order_id, (string) $origin, false ) ) {
+				$this->deferred_order_rows[ $order_id ] = $origin;
+			}
 		}
 	}
 
@@ -376,7 +388,7 @@ final class Sync_Journal {
 	 * @param string $origin   Origin tag for the row.
 	 */
 	private function record_order_present( int $order_id, string $origin ): void {
-		if ( 0 === $this->rest_dispatch_depth ) {
+		if ( array() === $this->rest_dispatch_stack ) {
 			$this->record_order_change( $order_id, $origin, false );
 
 			return;

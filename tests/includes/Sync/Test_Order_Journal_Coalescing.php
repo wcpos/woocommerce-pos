@@ -352,6 +352,28 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 		$this->assertSame( 'hook:update', $rows[1]->origin );
 	}
 
+	/** A caught exception from an inner callback must not strand its depth. */
+	public function test_a_caught_nested_callback_exception_restores_the_outer_depth(): void {
+		$forwarded = false;
+
+		self::$route_body = static function () use ( &$forwarded ): void {
+			if ( ! $forwarded ) {
+				$forwarded = true;
+				try {
+					rest_do_request( new WP_REST_Request( 'POST', '/' . self::TEST_NAMESPACE . '/burst' ) );
+				} catch ( \RuntimeException $exception ) {
+					return;
+				}
+			}
+
+			throw new \RuntimeException( 'nested callback failed' );
+		};
+		rest_do_request( new WP_REST_Request( 'POST', '/' . self::TEST_NAMESPACE . '/burst' ) );
+
+		$order = wc_create_order();
+		$this->assertCount( 1, $this->rows_for( $order->get_id() ), 'a later non-REST save must be journalled immediately' );
+	}
+
 	/**
 	 * A dispatch that never reaches its closing filter still gets its row.
 	 *
@@ -477,6 +499,33 @@ class Test_Order_Journal_Coalescing extends Sync_Store_Test_Case {
 			$rows[0]->revision,
 			'the journalled revision must equal the one the pull lane serves, or every client re-pulls forever'
 		);
+	}
+
+	/** A failed insert remains owed so the shutdown backstop can retry it. */
+	public function test_a_failed_flush_retains_the_order_for_retry(): void {
+		global $wpdb;
+		$this->journal->open_order_deferral();
+		$order    = wc_create_order();
+		$order_id = $order->get_id();
+		$table    = $this->journal->table_name();
+		$fail     = static function ( string $query ) use ( $table ): string {
+			return false !== strpos( $query, 'INSERT INTO' ) && false !== strpos( $query, $table )
+				? str_replace( $table, $table . '_missing', $query )
+				: $query;
+		};
+
+		$previous_suppress_errors = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		try {
+			$this->journal->flush_deferred_order_rows();
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous_suppress_errors );
+		}
+
+		$this->assertSame( array(), $this->rows_for( $order_id ), 'the first insert must fail' );
+		$this->journal->flush_deferred_order_rows(); // what `shutdown` retries
+		$this->assertCount( 1, $this->rows_for( $order_id ), 'the failed row must remain owed' );
 	}
 
 	/** Two orders touched in one dispatch each get their own row. */
