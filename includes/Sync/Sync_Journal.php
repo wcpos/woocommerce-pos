@@ -12,7 +12,6 @@ namespace WCPOS\WooCommercePOS\Sync;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
-use WP_REST_Request;
 
 final class Sync_Journal {
 	/** Persisted order backfill cursor. */
@@ -436,11 +435,9 @@ final class Sync_Journal {
 	 *
 	 * `woocommerce_untrash_order` fires BEFORE the data store restores the
 	 * status, so the row cannot be written there. The restore then performs
-	 * MORE THAN ONE object save, so arming on the first
-	 * `woocommerce_after_order_object_save` whose status is not `trash`
-	 * captures a revision from part-way through the restore — anything a later
-	 * save changes is missing from it, and the journal advertises a revision
-	 * the order does not have.
+	 * MORE THAN ONE object save, so the journal row's modified_gmt must be read
+	 * from the SETTLED order for checkpoint ordering. The revision is computed
+	 * at pull time rather than stored here.
 	 *
 	 * Measured sequence for an HPOS untrash (status read from wc_orders):
 	 *
@@ -471,14 +468,9 @@ final class Sync_Journal {
 		$order         = wc_get_order( $order_id );
 		$modified_date = $order ? $order->get_date_modified() : null;
 		$modified      = $modified_date ? gmdate( 'Y-m-d H:i:s', $modified_date->getTimestamp() ) : gmdate( 'Y-m-d H:i:s' );
-		$revision      = 'deleted';
-
-		if ( $order && ! $deleted ) {
-			$serializer = new Order_Serializer();
-			$payload    = $serializer->serialize_order( $order_id, new WP_REST_Request() );
-			$sync_meta  = $serializer->sync_metadata( $payload, $order_id, 'custom-pull', false, 0 );
-			$revision   = (string) $sync_meta['revision'];
-		}
+		// Revisions are computed at pull time from the served payload (ADR 0033, #1746).
+		// The journal row is a change pointer, not a content stamp; 'deleted' stays as the tombstone marker.
+		$revision = $deleted ? 'deleted' : '';
 
 		$now = gmdate( 'Y-m-d H:i:s' );
 		return false !== $wpdb->insert(

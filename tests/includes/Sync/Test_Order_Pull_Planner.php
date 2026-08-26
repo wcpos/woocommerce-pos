@@ -221,6 +221,44 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertSame( 'fallback-10-4', $result['complete']['checkpoint']['revision'] );
 	}
 
+	public function test_empty_revision_on_superseded_and_tombstone_rows_flows_into_checkpoints(): void {
+		$planner   = new Order_Pull_Planner( self::request_checkpoint(), true );
+		$decisions = iterator_to_array(
+			$planner->plan(
+				array(
+					self::row( 10, 1, array( 'revision' => '' ) ),
+					self::row(
+						11,
+						2,
+						array(
+							'revision' => '',
+							'deleted' => 1,
+						)
+					),
+					self::row( 10, 3, array( 'revision' => '' ) ),
+				),
+				false,
+				static function ( int $id ): array {
+					return 10 === $id ? self::payload( 10, self::UUID_A ) : array();
+				},
+				static function (): string {
+					return 'computed-rev';
+				}
+			),
+			false
+		);
+		$tombstone = $decisions[0];
+		$document  = $decisions[1];
+		$complete  = $decisions[2];
+
+		$this->assertSame( 'tombstone', $tombstone['type'] );
+		$this->assertSame( '', $tombstone['checkpoint']['revision'] );
+		$this->assertSame( 'document', $document['type'] );
+		$this->assertSame( 'computed-rev', $document['revision'] );
+		$this->assertSame( 'computed-rev', $document['checkpoint']['revision'] );
+		$this->assertSame( $document['checkpoint'], $complete['checkpoint'] );
+	}
+
 	public function test_page_full_probe_reports_has_more(): void {
 		$planner = new Order_Pull_Planner( self::request_checkpoint(), false );
 		$result  = self::plan_result(

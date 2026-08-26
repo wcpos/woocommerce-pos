@@ -264,6 +264,46 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:delete', true );
 	}
 
+	public function test_cpt_order_edit_fires_update_hook_without_moving_post_modified(): void {
+		global $wpdb;
+		$order       = wc_create_order();
+		$order_id    = $order->get_id();
+		$fixed_past  = '2020-01-01 00:00:00';
+		$hook_fires  = 0;
+		$count_hook  = static function ( int $updated_order_id ) use ( $order_id, &$hook_fires ): void {
+			if ( $order_id === $updated_order_id ) {
+				++$hook_fires;
+			}
+		};
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_modified' => $fixed_past,
+				'post_modified_gmt' => $fixed_past,
+			),
+			array( 'ID' => $order_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $order_id );
+
+		add_action( 'woocommerce_update_order', $count_hook, 10, 1 );
+		try {
+			$order = wc_get_order( $order_id );
+			$order->update_meta_data( '_wcpos_pin_probe', 'x' );
+			$order->set_total( '42.00' );
+			$order->save();
+		} finally {
+			remove_action( 'woocommerce_update_order', $count_hook, 10 );
+		}
+
+		$this->assertGreaterThanOrEqual( 1, $hook_fires );
+		$this->assertSame(
+			$fixed_past,
+			$wpdb->get_var( $wpdb->prepare( "SELECT post_modified_gmt FROM {$wpdb->posts} WHERE ID = %d", $order_id ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		);
+	}
+
 	public function test_hpos_order_trash_and_untrash_append_delete_then_present_row(): void {
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
@@ -366,7 +406,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		}
 	}
 
-	public function test_hpos_untrash_row_records_the_settled_order_revision(): void {
+	public function test_hpos_untrash_row_carries_no_stored_revision(): void {
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
 		$this->toggle_cot_feature_and_usage( true );
@@ -378,11 +418,10 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			$cursor = $this->journal->head_sequence();
 
 			/*
-			 * The restore performs more than one object save. The journal's
-			 * one-shot fires on the FIRST save whose status is not `trash`, so
-			 * anything the restore changes afterwards is not reflected in the
-			 * revision it records. Force exactly that: mutate the order once,
-			 * immediately after the one-shot would have run.
+			 * The restore performs more than one object save. Preserve a mutation
+			 * after the first save to prove the settled order differs from that
+			 * intermediate state. Revision now moves to pull time; the one-shot
+			 * remains only so modified_gmt is read from the settled order.
 			 */
 			$mutated = false;
 			$mutate  = function ( $o ) use ( &$mutated, $order_id ): void {
@@ -410,11 +449,10 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 				)
 			);
 			$this->assertCount( 1, $rows, 'Expected exactly one hook:untrash row.' );
-			$this->assertSame(
-				$this->order_revision( $order_id ),
-				$rows[0]['revision'],
-				'The untrash row must record the revision of the SETTLED order, not one captured part-way through the restore.'
-			);
+			$this->assertSame( '', $rows[0]['revision'], 'The journal cannot advertise a revision captured part-way through the restore.' );
+			$payload = ( new Order_Serializer() )->serialize_order( $order_id, new WP_REST_Request() );
+			$meta    = array_column( $payload['meta_data'], 'value', 'key' );
+			$this->assertSame( 'changed-after-the-one-shot', $meta['_wcpos_untrash_revision_probe'] );
 		} finally {
 			$this->toggle_cot_feature_and_usage( false );
 			$this->clean_up_cot_setup();
@@ -449,7 +487,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assertSame( $order_ids[1], $second['lastOrderId'] );
 		$this->assertSame( array( $order_ids[0], $order_ids[1] ), array_column( $rows, 'order_id' ) );
 		$this->assertSame( array( 'backfill', 'backfill' ), array_column( $rows, 'origin' ) );
-		$this->assertStringStartsWith( 'sha256:', $rows[0]['revision'] );
+		$this->assertSame( '', $rows[0]['revision'] );
 	}
 
 	public function test_order_backfill_does_not_advance_past_a_failed_journal_write(): void {
@@ -525,7 +563,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		if ( $deleted ) {
 			$this->assertSame( 'deleted', $row['revision'] );
 		} else {
-			$this->assertSame( $this->order_revision( $row['object_id'] ), $row['revision'] );
+			$this->assertSame( '', $row['revision'] );
 		}
 	}
 
@@ -583,11 +621,5 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			$this->journal->register_hooks();
 		}
 		return $this->rows_for( 'customer', $customer_id, $cursor );
-	}
-
-	private function order_revision( int $order_id ): string {
-		$serializer = new Order_Serializer();
-		$payload = $serializer->serialize_order( $order_id, new WP_REST_Request() );
-		return (string) $serializer->sync_metadata( $payload, $order_id, 'custom-pull', false, 0 )['revision'];
 	}
 }
