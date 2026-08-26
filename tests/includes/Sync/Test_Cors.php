@@ -26,11 +26,11 @@ use WP_UnitTestCase;
 class Test_Cors extends WP_UnitTestCase {
 	public function test_allow_headers_appends_the_pos_client_headers_without_duplicates(): void {
 		$this->assertSame(
-			array( 'Authorization', 'Idempotency-Key', 'If-Match', 'If-None-Match', 'X-WCPOS-Idempotency-Key', 'X-WCPOS-Store' ),
+			array( 'Authorization', 'Idempotency-Key', 'If-Match', 'If-None-Match', 'X-WCPOS-Idempotency-Key', 'X-WCPOS-Store', 'X-WCPOS-Protocol', 'X-WCPOS-Client' ),
 			Cors::allow_headers( array( 'Authorization' ) )
 		);
 		$this->assertSame(
-			array( 'X-WCPOS-Store', 'Idempotency-Key', 'If-Match', 'If-None-Match', 'X-WCPOS-Idempotency-Key' ),
+			array( 'X-WCPOS-Store', 'Idempotency-Key', 'If-Match', 'If-None-Match', 'X-WCPOS-Idempotency-Key', 'X-WCPOS-Protocol', 'X-WCPOS-Client' ),
 			Cors::allow_headers( array( 'X-WCPOS-Store' ) )
 		);
 	}
