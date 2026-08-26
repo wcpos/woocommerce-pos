@@ -918,10 +918,9 @@ class Write_Controller extends WP_REST_Controller {
 			 * This used to read `$bare['payload']['date_modified_gmt']` only, with `$bare['id']` as
 			 * the fallback. Against a FLAT document that silently degrades to the variation's own
 			 * ID — a value that never changes again. The failure would be total and invisible:
-			 * the strict revision comparison would still let a queued date-based write through
-			 * (with the wrapper gone, its top-level `date_modified_gmt` branch finally resolves),
 			 * the ack would hand the client the id as `currentRevision`, and from then on every
-			 * stale baseRevision would equal every recomputed one. Two tills editing the same
+			 * stale baseRevision would equal every recomputed one — the strict revision
+			 * comparison would pass every queued write. Two tills editing the same
 			 * variation hours apart would both pass the precondition; the per-record lock would
 			 * serialize them, so there would be no error — just a lost update, every time.
 			 *
