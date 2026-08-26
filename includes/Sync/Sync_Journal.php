@@ -28,6 +28,45 @@ final class Sync_Journal {
 	private array $recorded_this_request = array();
 
 	/**
+	 * How many REST handlers deep we currently are, or 0 outside REST.
+	 *
+	 * While this is above zero, order rows are buffered instead of written (see
+	 * {@see self::$deferred_order_rows}). Counted rather than flagged because a
+	 * v2 push dispatches `/wcpos/v2/write`, which forwards internally through
+	 * `rest_do_request()` to `/wc/v3/orders`: the inner handler returning must
+	 * not put the outer one back on the immediate-write path.
+	 */
+	private int $rest_dispatch_depth = 0;
+
+	/**
+	 * Order rows owed to the journal at the end of the current REST handler.
+	 *
+	 * Shape: `order_id => origin`.
+	 *
+	 * WHY ORDERS ARE BUFFERED AND NOTHING ELSE IS. Every other collection derives
+	 * its journal revision from `get_date_modified()` (see self::object_revision),
+	 * which is free. An order's revision is a CONTENT HASH of its full serialized
+	 * payload — `record_order_change()` calls `Order_Serializer::serialize_order()`,
+	 * which runs `WC_REST_Orders_Controller::prepare_object_for_response()`, the
+	 * entire read lane, to produce one string. That cannot be cheapened: the hash
+	 * recipe is a wire contract with deployed clients (see the versioned recipe
+	 * list in Order_Serializer), so it can only be run FEWER TIMES, not faster.
+	 *
+	 * And it runs far more often than there are changes. One `POST /wcpos/v1/orders`
+	 * performs four order writes — `save_object()` saves, `calculate_totals()` saves
+	 * again while computing taxes, and again after — so four `woocommerce_new_order`
+	 * / `woocommerce_update_order` firings serialize the same order four times and
+	 * append four rows, three of which are superseded before the response is sent.
+	 * Measured on two HPOS stores (75k and 66k orders): the three redundant passes
+	 * cost 45-71 ms, 103-139 rows examined and 33-48 queries per checkout, on both
+	 * the CPT and HPOS datastores alike (#1725's residual).
+	 *
+	 * Buffering collapses them to one row carrying the revision the LAST pass would
+	 * have produced, which is the only one a client ever acts on.
+	 */
+	private array $deferred_order_rows = array();
+
+	/**
 	 * Option-name prefix for the per-object-type lossy-prune watermarks.
 	 *
 	 * The watermark is scoped per object type for the same reason heads are
@@ -241,6 +280,110 @@ final class Sync_Journal {
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
+
+		// Order-row buffering, bounded to one REST handler.
+		//
+		// `rest_request_before_callbacks` / `rest_request_after_callbacks` are the
+		// pair to use, and the choice is load-bearing in two ways.
+		//
+		// NOT `rest_post_dispatch`: it fires in `serve_request()`, once per HTTP
+		// request, so it never runs for `rest_do_request()` — which is how the v2
+		// push forwards a mutation to `/wc/v3/orders`, and how the tests dispatch.
+		// A buffer opened by an internal forward would never be closed by it.
+		//
+		// NOT `rest_pre_dispatch`: it fires in `dispatch()`, BEFORE route matching,
+		// so a request that matches no route opens a buffer that nothing closes.
+		// That is not hypothetical — measured on a live store, WP-CLI's bootstrap
+		// performs exactly such a dispatch, so the counter started every CLI
+		// process at 1 and no order row was ever written inside a request again.
+		// Both filters below fire inside `respond_to_request()`, with the handler
+		// between them, so they are a genuinely matched pair: no route match means
+		// neither fires.
+		add_filter( 'rest_request_before_callbacks', array( $this, 'open_order_deferral' ), 10, 1 );
+		add_filter( 'rest_request_after_callbacks', array( $this, 'close_order_deferral' ), 10, 1 );
+		// Backstop. A dispatch that dies between the two filters (a route that never
+		// matched, a short-circuiting `rest_pre_dispatch` upstream, a thrown handler)
+		// must not silently drop a change: whatever is still owed lands here.
+		add_action( 'shutdown', array( $this, 'flush_deferred_order_rows' ), 0 );
+	}
+
+	/**
+	 * Begin buffering order rows for the duration of one REST handler.
+	 *
+	 * Passthrough filter on `rest_request_before_callbacks`.
+	 *
+	 * @param mixed $response Response so far, untouched.
+	 *
+	 * @return mixed
+	 */
+	public function open_order_deferral( $response = null ) {
+		++$this->rest_dispatch_depth;
+
+		return $response;
+	}
+
+	/**
+	 * Close one handler level and write whatever it buffered.
+	 *
+	 * Passthrough filter on `rest_request_after_callbacks`. Running here keeps the
+	 * write INSIDE the request that made the change — the row is durable before the
+	 * response is returned, so deferring costs no crash-safety against the immediate
+	 * write it replaces.
+	 *
+	 * Flushes on EVERY close rather than only when the depth reaches zero. Under
+	 * nesting that writes the inner handler's rows a little earlier than strictly
+	 * necessary — correct, just one extra row if a caller keeps writing after an
+	 * internal forward returns. The alternative, flushing only at depth zero, makes
+	 * every write in the process hostage to one unbalanced open; a counter that
+	 * drifts up by one then silently defers everything to `shutdown` forever. Cheap
+	 * insurance against a class of bug that presents as missing change rows.
+	 *
+	 * @param mixed $response Prepared response, untouched.
+	 *
+	 * @return mixed
+	 */
+	public function close_order_deferral( $response = null ) {
+		$this->rest_dispatch_depth = max( 0, $this->rest_dispatch_depth - 1 );
+		$this->flush_deferred_order_rows();
+
+		return $response;
+	}
+
+	/**
+	 * Write one journal row for every order buffered during this handler.
+	 *
+	 * Public so a caller that owns a burst of order writes outside REST can bound it
+	 * explicitly, and so `shutdown` can backstop an unbalanced dispatch. Idempotent:
+	 * the buffer is taken before anything is written, so a re-entrant call (flush ->
+	 * record_order_change -> a hook that flushes again) writes nothing twice.
+	 */
+	public function flush_deferred_order_rows(): void {
+		$owed                      = $this->deferred_order_rows;
+		$this->deferred_order_rows = array();
+		foreach ( $owed as $order_id => $origin ) {
+			$this->record_order_change( (int) $order_id, (string) $origin, false );
+		}
+	}
+
+	/**
+	 * Buffer an order row, or write it now if we are not inside a REST dispatch.
+	 *
+	 * The FIRST origin wins: an order created and then updated within one request is
+	 * a create as far as any client is concerned, and the row's revision is read from
+	 * the order at flush time either way.
+	 *
+	 * @param int    $order_id Order that changed.
+	 * @param string $origin   Origin tag for the row.
+	 */
+	private function record_order_present( int $order_id, string $origin ): void {
+		if ( 0 === $this->rest_dispatch_depth ) {
+			$this->record_order_change( $order_id, $origin, false );
+
+			return;
+		}
+		if ( ! isset( $this->deferred_order_rows[ $order_id ] ) ) {
+			$this->deferred_order_rows[ $order_id ] = $origin;
+		}
 	}
 
 	public function record_product_created( int $product_id ): void {
@@ -416,11 +559,11 @@ final class Sync_Journal {
 	}
 
 	public function record_order_created( int $order_id ): void {
-		$this->record_order_change( $order_id, 'hook:create', false );
+		$this->record_order_present( $order_id, 'hook:create' );
 	}
 
 	public function record_order_updated( int $order_id ): void {
-		$this->record_order_change( $order_id, 'hook:update', false );
+		$this->record_order_present( $order_id, 'hook:update' );
 	}
 
 	public function record_order_deleted( int $order_id ): void {
@@ -468,6 +611,13 @@ final class Sync_Journal {
 
 	public function record_order_change( int $order_id, string $origin, bool $deleted ): bool {
 		global $wpdb;
+		// Any row written NOW supersedes one still owed for the same order: this row
+		// reads the order's current state, so a buffered row flushed after it could
+		// only repeat it — or, for a delete, resurrect it by appending a present row
+		// behind the tombstone. Dropping it also keeps the delete/untrash paths
+		// writing exactly the rows they write today.
+		unset( $this->deferred_order_rows[ $order_id ] );
+
 		$order         = wc_get_order( $order_id );
 		$modified_date = $order ? $order->get_date_modified() : null;
 		$modified      = $modified_date ? gmdate( 'Y-m-d H:i:s', $modified_date->getTimestamp() ) : gmdate( 'Y-m-d H:i:s' );

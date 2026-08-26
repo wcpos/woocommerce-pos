@@ -32,7 +32,13 @@ use WC_Unit_Test_Case;
 class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	/**
 	 * Every hook name the constructor registers ONLY when the sync schema latch
-	 * is set. Derived from `Sync_Journal::register_hooks()` (32 names),
+	 * is set. Derived from `Sync_Journal::register_hooks()` (35 names — the three
+	 * newest bound the per-REST-handler order-row buffer: `rest_request_before_callbacks`
+	 * opens it, `rest_request_after_callbacks` closes it, `shutdown` backstops a
+	 * handler that never closed. Those two must stay a matched pair fired from
+	 * `respond_to_request()`; `rest_pre_dispatch` is NOT interchangeable, because it
+	 * fires before route matching and an unmatched route then opens a buffer nothing
+	 * closes),
 	 * `Integrity_Digest::register_hooks()` (21, all a subset of the journal's),
 	 * `Visibility_Observer::register_hooks()` (9: four per watched option plus the
 	 * shared generic `delete_option`),
@@ -62,7 +68,10 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'pre_update_option_woocommerce_pos_settings_visibility',
 		'profile_update',
 		'remove_user_role',
+		'rest_request_after_callbacks',
+		'rest_request_before_callbacks',
 		'set_user_role',
+		'shutdown',
 		'untrashed_post',
 		'update_option_woocommerce_pos_settings_general',
 		'update_option_woocommerce_pos_settings_visibility',
