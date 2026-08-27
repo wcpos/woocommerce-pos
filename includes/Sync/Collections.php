@@ -45,9 +45,11 @@ namespace WCPOS\WooCommercePOS\Sync;
  *                   name on Digest_Index, so the reader, the proxy stamper and
  *                   the authoritative-absence answer all read one id-space fact
  *                   instead of each re-deciding it.
- *  - fingerprint  — UNIVERSAL config-change detection recipe + contract-version
- *                   lever; every collection carries it (null is invalid), with
- *                   the barcode flag naming recipe membership.
+ *  - fingerprint  — UNIVERSAL config-change detection membership; every
+ *                   collection carries it (null is invalid), with the barcode
+ *                   flag naming recipe membership. The contract-version lever
+ *                   itself lives in Config_Fingerprint::PAYLOAD_CONTRACT_VERSION,
+ *                   keyed by these same names.
  *  - backfill     — uuid backfill support: the meta-store kind (post, order,
  *                   user, or term) and the SCAN
  *                   scope (products+variations scan together — which is why

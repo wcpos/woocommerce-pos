@@ -293,9 +293,11 @@ final class Config_Fingerprint {
 	 * Deletes by EXACT key over the known COLLECTIONS rather than a
 	 * `LIKE 'woocommerce_pos_sync_config_fp_%'` scan: the namespace is a closed set, so the
 	 * exact-key form needs no $wpdb query and cannot collide with a future option that
-	 * happens to share the prefix. Only the barcode collections were ever written, but
-	 * sweeping the full COLLECTIONS set costs one extra no-op delete and catches a
-	 * stray row from any revision.
+	 * happens to share the prefix. Only the barcode collections were ever written, so
+	 * sweeping the now-universal membership (nine collections since #1756) costs a
+	 * handful of no-op deletes on a fresh install and nothing on an already-swept one
+	 * (the CLEANUP_VERSION latch above), while catching a stray row from any revision
+	 * that DID write one.
 	 *
 	 * Idempotent and correctness-neutral: the endpoint recomputes the fingerprint from
 	 * live options as the sole source of truth, so removing these rows cannot change a

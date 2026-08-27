@@ -942,28 +942,50 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * Baseline omission preserves the exact pre-Phase-1 wire serialization.
+	 *
+	 * A moved fingerprint marks the collection stale, and a stale `products`
+	 * means a FULL CATALOGUE re-fetch on every active till — the stakes are
+	 * spelled out on {@see Config_Fingerprint::representation_settings()}.
+	 * LITERALS on both sides on purpose: deriving the expectation from
+	 * Barcode_Field::meta_key() would move with the code under test and let a
+	 * changed default ship a fleet-wide re-fetch with this test green.
 	 */
 	public function test_preexisting_fingerprints_are_byte_stable(): void {
-		update_option( 'woocommerce_pos_settings_general', array() );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$fingerprint = new Config_Fingerprint();
-		$default     = Barcode_Field::meta_key();
 
-		$this->assertSame( array( 'barcode_field' => $default ), $fingerprint->representation_settings( 'products' ) );
+		foreach ( array( 'products' => 1, 'tax_rates' => 1, 'variations' => 2 ) as $collection => $contract ) {
+			$this->assertSame(
+				$contract,
+				Config_Fingerprint::payload_contract_version( $collection ),
+				$collection . ' is expected at this contract version for these literals to mean anything — a deliberate bump must update this test.'
+			);
+		}
+		$this->assertSame(
+			array( 'barcode_field' => '_sku' ),
+			$fingerprint->representation_settings( 'products' ),
+			'products is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+		);
 		$this->assertSame(
 			array(
-				'barcode_field'    => $default,
+				'barcode_field'    => '_sku',
 				'payload_contract' => 2,
 			),
-			$fingerprint->representation_settings( 'variations' )
+			$fingerprint->representation_settings( 'variations' ),
+			'variations at contract 2 must keep the exact serialization 1.10.1 shipped.'
 		);
-		$this->assertSame( array(), $fingerprint->representation_settings( 'tax_rates' ) );
+		$this->assertSame(
+			array(),
+			$fingerprint->representation_settings( 'tax_rates' ),
+			'tax_rates is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+		);
 	}
 
 	/**
 	 * Newly modeled recipes degenerate to the shared baseline-only fingerprint.
 	 */
 	public function test_new_collections_fingerprint_at_the_shared_baseline(): void {
-		$fingerprint         = new Config_Fingerprint();
+		$fingerprint          = new Config_Fingerprint();
 		$tax_rate_fingerprint = $fingerprint->fingerprint( 'tax_rates' );
 
 		foreach ( array( 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons' ) as $collection ) {
@@ -975,15 +997,57 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Digest formula sets cannot change without an explicit fingerprint review.
+	 * Digest formula key sets cannot change membership without an explicit
+	 * fingerprint review (ADR 0036). Compared as SORTED sets: reordering a
+	 * constant is a no-op everywhere production uses them (the SQL and the
+	 * formula fingerprint both sort), and a red pin on a no-op would instruct a
+	 * contract bump — a fleet-wide re-fetch — for a change that altered nothing.
 	 */
-	public function test_formula_key_sets_are_pinned_to_the_contract_version(): void {
-		$message = 'This key set is part of the digest formula. Changing it silently invalidates every stored digest: '
-			. 'bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for the owning collection in the same commit, '
-			. 'then update this hash (ADR 0036).';
+	public function test_digest_formula_key_sets_are_change_gated(): void {
+		$product_keys = Digest_Index::DIGESTED_META_KEYS;
+		sort( $product_keys );
+		$this->assertSame(
+			array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' ),
+			$product_keys,
+			'This set feeds the product/variation digest formula AND the served digests clients hold. Membership changes: '
+			. 'bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for BOTH products and variations (the set is shared) in the '
+			. 'same commit — the stored half rebuilds itself via digest_formula_fingerprint — then update this literal (ADR 0036).'
+		);
 
-		$this->assertSame( '4379dc7c293dd8cc0b19a52a1a1f93c4', md5( implode( ',', Digest_Index::DIGESTED_META_KEYS ) ), $message );
-		$this->assertSame( 'a91db2fff218f6a164ad342ad93d9a7f', md5( implode( ',', Digest_Index::CUSTOMER_DIGESTED_META_KEYS ) ), $message );
+		$customer_keys = Digest_Index::CUSTOMER_DIGESTED_META_KEYS;
+		sort( $customer_keys );
+		$this->assertSame(
+			array( 'billing_email', 'billing_phone', 'first_name', 'last_name' ),
+			$customer_keys,
+			'This set feeds the customer digest formula, which has NO automatic stored-digest rebuild trigger today. '
+			. 'Membership changes: bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for customers in the same commit, plan '
+			. 'a stored-digest rebuild (see the constant docblock; #1756 phase 2/3), then update this literal (ADR 0036).'
+		);
+
+		$order_keys = Digest_Index::ORDER_DIGESTED_META_KEYS;
+		sort( $order_keys );
+		$this->assertSame(
+			array( '_customer_user', '_order_total' ),
+			$order_keys,
+			'This set feeds the CPT-path order digest formula, which has NO automatic stored-digest rebuild trigger today. '
+			. 'Membership changes: bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for orders in the same commit, plan a '
+			. 'stored-digest rebuild (see the constant docblock; #1756 phase 2/3), then update this literal (ADR 0036).'
+		);
+	}
+
+	/**
+	 * `?collection=` narrowing now accepts every fingerprint collection — the one
+	 * non-additive behavior change of universal membership, pinned as intended:
+	 * a name that is a valid member scopes the response to that single key
+	 * (before #1756 phase 1, `orders` fell through to the full map).
+	 */
+	public function test_config_fingerprint_collection_param_scopes_to_new_members(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/changes/config-fingerprint' );
+		$request->set_query_params( array( 'collection' => 'orders' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'orders' ), array_keys( $response->get_data()['fingerprints'] ) );
 	}
 
 	/**
