@@ -75,6 +75,12 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * The frozen preflight compatibility floor, in wire order and casing.
 	 *
+	 * Deliberately NOT built from the server-side constants, same as
+	 * CLIENT_SENT_HEADERS: this is the wire contract, and a server-side
+	 * rename or narrowing must fail here, not silently follow. The ONLY
+	 * hand-written copy of the floor in this file — every floor assertion
+	 * points at it, so it cannot drift against itself.
+	 *
 	 * @var string[]
 	 */
 	private const PREFLIGHT_FLOOR = array(
@@ -126,8 +132,9 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'GET', '/wp/v2/types' ), $server );
 
-		// Assert.
-		$this->assertSame( array(), $this->cors_fields( $server ) );
+		// Assert. Every header, not just the Access-Control fields: the cache
+		// contract must not leak onto requests that are not ours either.
+		$this->assertSame( array(), $server->sent_headers );
 	}
 
 	/**
@@ -155,22 +162,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 			// doubling every cross-origin request. 7200 is Chromium's cap.
 			$this->assertSame( '7200', $server->sent_headers['Access-Control-Max-Age'] ?? null, "{$route} preflight is missing Max-Age." );
 			$this->assertSame(
-				array(
-					'Authorization',
-					'X-WP-Nonce',
-					'Content-Disposition',
-					'Content-MD5',
-					'Content-Type',
-					'X-HTTP-Method-Override',
-					'X-WCPOS',
-					'Idempotency-Key',
-					'If-Match',
-					'If-None-Match',
-					'X-WCPOS-Idempotency-Key',
-					'X-WCPOS-Store',
-					'X-WCPOS-Protocol',
-					'X-WCPOS-Client',
-				),
+				self::PREFLIGHT_FLOOR,
 				$this->allow_list( $server ),
 				"{$route} preflight published the wrong allow-list."
 			);
@@ -202,7 +194,9 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$server  = $this->new_spy_server();
 		$request = new WP_REST_Request( 'OPTIONS', self::NON_WCPOS_ROUTE );
-		$request->set_header( 'Access-Control-Request-Headers', 'x-evil-thing, x-wcpos-ok' );
+		// `x-wcposevil` claims ownership (bare-prefix arm, unchanged) but must
+		// not be reflected: extras require the hyphenated `x-wcpos-` namespace.
+		$request->set_header( 'Access-Control-Request-Headers', 'x-evil-thing, x-wcposevil, x-wcpos-ok' );
 
 		// Act.
 		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
@@ -210,6 +204,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array_merge( self::PREFLIGHT_FLOOR, array( 'x-wcpos-ok' ) ), $this->allow_list( $server ) );
 		$this->assertNotContains( 'x-evil-thing', $this->allow_list( $server ) );
+		$this->assertNotContains( 'x-wcposevil', $this->allow_list( $server ) );
 	}
 
 	/**
@@ -232,7 +227,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Hostile announcements cannot force an unbounded response header.
 	 */
-	public function test_preflight_announcing_many_wcpos_headers_caps_reflected_names_and_bytes(): void {
+	public function test_preflight_announcing_many_wcpos_headers_caps_reflected_names(): void {
 		// Arrange.
 		$server          = $this->new_spy_server();
 		$request         = new WP_REST_Request( 'OPTIONS', self::NON_WCPOS_ROUTE );
@@ -251,6 +246,50 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( self::PREFLIGHT_FLOOR, array_slice( $allow_list, 0, count( self::PREFLIGHT_FLOOR ) ) );
 		$this->assertSame( 16, count( $reflected_extras ) );
 		$this->assertLessThanOrEqual( 256, array_sum( array_map( 'strlen', $reflected_extras ) ) );
+	}
+
+	/**
+	 * The byte budget binds on its own: names short enough to pass the name
+	 * cap stop being reflected once their combined length exceeds 256 bytes.
+	 */
+	public function test_preflight_announcing_long_wcpos_headers_caps_reflected_bytes(): void {
+		// Arrange. Ten distinct 60-byte names: four fit in 256 bytes, the
+		// fifth would total 300 and every later one is the same size.
+		$server          = $this->new_spy_server();
+		$request         = new WP_REST_Request( 'OPTIONS', self::NON_WCPOS_ROUTE );
+		$announced_names = array();
+		for ( $index = 0; $index < 10; $index++ ) {
+			$announced_names[] = 'x-wcpos-' . str_pad( (string) $index, 52, 'a', STR_PAD_LEFT );
+		}
+		$request->set_header( 'Access-Control-Request-Headers', implode( ',', $announced_names ) );
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		// Assert.
+		$this->assertSame(
+			array_merge( self::PREFLIGHT_FLOOR, array_slice( $announced_names, 0, 4 ) ),
+			$this->allow_list( $server )
+		);
+	}
+
+	/**
+	 * One oversized announced name is skipped, not a truncation point: the
+	 * legitimate names after it still reflect. A `break` here would let a
+	 * single hostile announcement entry starve a real client header — the
+	 * outage class reflection exists to remove.
+	 */
+	public function test_preflight_announcing_an_oversized_name_still_reflects_later_names(): void {
+		// Arrange. 268 bytes exceeds the byte budget on its own.
+		$server  = $this->new_spy_server();
+		$request = new WP_REST_Request( 'OPTIONS', self::NON_WCPOS_ROUTE );
+		$request->set_header( 'Access-Control-Request-Headers', 'x-wcpos-' . str_repeat( 'a', 260 ) . ', x-wcpos-needed' );
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		// Assert.
+		$this->assertSame( array_merge( self::PREFLIGHT_FLOOR, array( 'x-wcpos-needed' ) ), $this->allow_list( $server ) );
 	}
 
 	/**
@@ -288,8 +327,8 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'OPTIONS', '/wp/v2/posts' ), $server );
 
-		// Assert.
-		$this->assertSame( array(), $this->cors_fields( $server ) );
+		// Assert. Every header, not just the Access-Control fields.
+		$this->assertSame( array(), $server->sent_headers );
 		$this->assertContains(
 			'X-WCPOS',
 			apply_filters( 'rest_allowed_cors_headers', self::CORE_ALLOW_DEFAULTS, new WP_REST_Request( 'OPTIONS', '/wp/v2/posts' ) ),
@@ -310,8 +349,8 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
-		// Assert.
-		$this->assertSame( array(), $this->cors_fields( $server ) );
+		// Assert. Every header, not just the Access-Control fields.
+		$this->assertSame( array(), $server->sent_headers );
 	}
 
 	/**

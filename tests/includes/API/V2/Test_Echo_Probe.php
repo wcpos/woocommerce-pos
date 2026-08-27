@@ -39,8 +39,10 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 
 		$data = $this->server->dispatch( $request )->get_data();
 
-		$this->assertSame( 2, $data['v'] );
-		$this->assertSame( true, $data['cors']['reflects_request_headers'] );
+		// `v` stays 1: shipped clients hard-gate on it and read a mismatch as
+		// "not the echo route"; `cors` is an additive field.
+		$this->assertSame( 1, $data['v'] );
+		$this->assertTrue( $data['cors']['reflects_request_headers'] );
 		foreach ( $values as $name => $value ) {
 			$this->assertEquals(
 				array(
