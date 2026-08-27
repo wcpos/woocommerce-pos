@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Sync;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Logger;
 
 final class Sync_Journal {
 	/** Persisted order backfill cursor. */
@@ -247,6 +248,75 @@ final class Sync_Journal {
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
+		add_action( 'woocommerce_pos_invalidate', array( $this, 'record_invalidation' ), 10, 2 );
+	}
+
+	/**
+	 * Record an out-of-band change announced by an extension.
+	 *
+	 * Plugins fire `woocommerce_pos_invalidate` when they change a record's
+	 * SERVED representation in a way no save hook announces — a filter-only
+	 * output change (a pricing filter, an added payload field). The journal
+	 * appends a pointer row; clients hydrate pointer rows by sequence, so the
+	 * re-served payload carries the plugin's change. Formula fingerprints
+	 * (#1742) will eventually make representation changes directly detectable;
+	 * until then this action is the documented relief valve.
+	 *
+	 * `$object_type` is the registry's SINGULAR journal name: `product`,
+	 * `variation`, `customer`, `order`, `tax_rate`, and the other journalled
+	 * catalogue types. A plural (`products`) or unknown type is logged and
+	 * ignored. Rows land with origin `invalidate` on every type.
+	 *
+	 * @since 1.10.3
+	 *
+	 * @param string $object_type Canonical (singular) journal object type.
+	 * @param int    $object_id   Changed object ID.
+	 */
+	public function record_invalidation( $object_type = '', $object_id = 0 ): void {
+		// Loose signature on purpose: a public action handler whose posture is
+		// log-and-ignore — a one-arg or wrong-typed do_action() must not fatal
+		// the calling plugin's request.
+		$object_type = is_scalar( $object_type ) ? (string) $object_type : '';
+		$object_id   = is_scalar( $object_id ) ? (int) $object_id : 0;
+		$collection  = Collections::by_object_type( $object_type );
+		if ( $object_id <= 0 || null === $collection || ! isset( $collection['journal'] ) ) {
+			Logger::log( sprintf( 'WCPOS sync: ignored invalidation for object_type "%s" (id %d)', $object_type, $object_id ) );
+			return;
+		}
+
+		if ( 'order' === $object_type ) {
+			$this->record_order_change( $object_id, 'invalidate', false );
+			return;
+		}
+		$loader = (string) ( $collection['identity']['loader'] ?? '' );
+		if ( 'product' === $loader ) {
+			$object = function_exists( 'wc_get_product' ) ? wc_get_product( $object_id ) : null;
+			$this->record( $object_type, $object_id, false, self::object_revision( $object ), 'invalidate' );
+			if ( 'variation' === $object_type ) {
+				// Native variation paths always pair the parent row — the parent
+				// document carries the variable price range — so an invalidation
+				// must too, or the relief valve half-works. Recorded inline (not via
+				// record_variation_parent) so the paired row keeps the 'invalidate'
+				// origin the contract above promises for every row this action lands.
+				$parent_id = function_exists( 'wp_get_post_parent_id' ) ? (int) wp_get_post_parent_id( $object_id ) : 0;
+				if ( $parent_id > 0 ) {
+					$parent = function_exists( 'wc_get_product' ) ? wc_get_product( $parent_id ) : null;
+					$this->record( 'product', $parent_id, false, self::object_revision( $parent ), 'invalidate' );
+				}
+			}
+			return;
+		}
+		if ( 'customer' === $loader ) {
+			try {
+				$customer = class_exists( '\\WC_Customer' ) ? new \WC_Customer( $object_id ) : null;
+			} catch ( \Exception $e ) {
+				Logger::log( sprintf( 'WCPOS sync: ignored invalidation for missing customer %d', $object_id ) );
+				return;
+			}
+			$this->record( 'customer', $object_id, false, self::object_revision( $customer ), 'invalidate', true, 'invalidate' );
+			return;
+		}
+		$this->record( $object_type, $object_id, false, '', 'invalidate' );
 	}
 
 	public function record_product_created( int $product_id ): void {

@@ -155,36 +155,51 @@ class Test_Rest_Dispatch_Customer_Tax_Ids extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'GB123456789', $ack[0]['value'] ?? null );
 	}
 
-	public function test_customer_create_announces_tax_ids_after_persistence(): void {
-		$observed_tax_ids = array();
-		$observer         = static function ( int $customer_id ) use ( &$observed_tax_ids ): void {
-			$observed_tax_ids[] = ( new Tax_Id_Reader() )->read_for_user( $customer_id );
+	public function test_customer_update_fires_once_and_persists_tax_ids_for_post_request_read(): void {
+		$created = $this->push_envelope( $this->create_envelope() );
+		$this->assertSame( 201, $created->get_status() );
+		$user_id      = (int) $created->get_data()['document']['id'];
+		$observed_ids = array();
+		$observer     = static function ( int $customer_id ) use ( &$observed_ids ): void {
+			$observed_ids[] = $customer_id;
 		};
 		add_action( 'woocommerce_update_customer', $observer, 20, 1 );
 
 		try {
 			$response = $this->push_envelope(
-				$this->create_envelope(
-					array(
-						'tax_ids' => array(
+				array(
+					'mutationId'   => 'a1b2c3d4-4444-4222-8333-000000000006',
+					'operation'    => 'update',
+					'collection'   => 'customers',
+					'recordId'     => self::REC,
+					'baseRevision' => $this->current_revision( $user_id ),
+					'payload'      => array(
+						'tax_ids'   => array(
 							array(
 								'type'    => 'au_abn',
 								'value'   => '51824753556',
 								'country' => 'AU',
 							),
 						),
+						'meta_data' => array(
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => self::REC,
+							),
+						),
 					),
-					'a1b2c3d4-4444-4222-8333-000000000006'
 				)
 			);
 		} finally {
 			remove_action( 'woocommerce_update_customer', $observer, 20 );
 		}
 
-		$this->assertSame( 201, $response->get_status() );
-		$this->assertNotEmpty( $observed_tax_ids );
-		$latest = end( $observed_tax_ids );
-		$this->assertSame( '51824753556', $latest[0]['value'] ?? null );
+		$this->assertSame( 200, $response->get_status() );
+		// ADR 0035 keeps WCPOS augmentations outside wc/v3 lifecycle hooks: pin the
+		// one native update fire, then prove the pushed tax IDs at read time.
+		$this->assertSame( array( $user_id ), $observed_ids );
+		$persisted = ( new Tax_Id_Reader() )->read_for_user( $user_id );
+		$this->assertSame( '51824753556', $persisted[0]['value'] ?? null );
 	}
 
 	public function test_customer_create_rejects_malformed_tax_ids_before_the_forward(): void {

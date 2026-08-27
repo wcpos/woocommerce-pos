@@ -111,6 +111,38 @@ final class Orders_Controller extends WP_REST_Controller {
 		$serializer = new Order_Serializer();
 		$change_rows = $query->changes_after_checkpoint( $updated_at_gmt, $order_id, $sequence, $limit + 1 );
 		$has_more    = count( $change_rows ) > $limit;
+		// The limit+1 probe row is a paging sentinel the planner pops before serving —
+		// it is not part of this page, so the filter must not see (or drop) its id.
+		$page_rows = $has_more ? array_slice( $change_rows, 0, $limit ) : $change_rows;
+		$ids       = array_map( 'intval', array_column( $page_rows, 'order_id' ) );
+
+		/**
+		 * Filters the order IDs eligible for the custom pull lane.
+		 *
+		 * The interim hook-parity seam for order-scoping plugins on a lane that
+		 * bypasses `woocommerce_rest_orders_prepare_object_query`. It retires with
+		 * the lane at the 1.11.0 protocol boundary (ADR 0035, #1748).
+		 *
+		 * The contract, precisely:
+		 *  - NARROW ONLY. Return the subset of `$ids` to serve; ids added by the
+		 *    filter are ignored by construction.
+		 *  - BE DETERMINISTIC for a given client. The checkpoint advances PAST an
+		 *    excluded row and its journal entry is never re-offered to that client,
+		 *    so exclusion is permanent per-checkpoint: a filter whose answer
+		 *    changes between pages corrupts what the till holds, and a scope that
+		 *    later WIDENS only reaches clients after a full resync.
+		 *  - Exclusion does not tombstone. A copy the till already holds stays
+		 *    until a real delete tombstones it (deleted rows bypass this filter,
+		 *    so tombstones for excluded orders still flow — which is the desired
+		 *    "drop it" signal for a scoped-out order).
+		 *
+		 * @since 1.10.3
+		 *
+		 * @param int[]           $ids     Candidate order IDs in this pull page.
+		 * @param WP_REST_Request $request Pull request.
+		 */
+		$allowed = array_map( 'intval', (array) apply_filters( 'woocommerce_pos_order_pull_ids', $ids, $request ) );
+		$allowed = array_flip( $allowed ); // O(1) membership for 250-row pages.
 
 		$planner = new Order_Pull_Planner(
 			array(
@@ -124,7 +156,12 @@ final class Orders_Controller extends WP_REST_Controller {
 		$plan = $planner->plan(
 			$change_rows,
 			$has_more,
-			function ( int $id ) use ( $serializer, $request ): array {
+			function ( int $id ) use ( $serializer, $request, $allowed ): array {
+				// Narrow inside serialization: removing change rows would leave a
+				// fully filtered page unable to advance, so the client would loop forever.
+				if ( ! isset( $allowed[ $id ] ) ) {
+					return array();
+				}
 				$order    = wc_get_order( $id );
 				$had_uuid = $order && '' !== (string) $order->get_meta( Pos_Uuid::META_KEY );
 				$payload  = $serializer->serialize_order( $id, $request );

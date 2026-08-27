@@ -67,6 +67,81 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_present_hook_row( $restored, 'product', $product->get_id(), $this->object_revision( wc_get_product( $product->get_id() ) ) );
 	}
 
+	public function test_public_invalidation_action_records_product_and_order_changes(): void {
+		$product = ProductHelper::create_simple_product();
+		$cursor  = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'product', $product->get_id() );
+
+		$product_row = $this->latest_row( 'product', $product->get_id(), $cursor );
+		$this->assertSame( 'product', $product_row['object_type'] );
+		$this->assertSame( 'invalidate', $product_row['origin'], 'Invalidation rows must be distinguishable from hook rows on every type.' );
+		$this->assert_datetime_revision( $this->object_revision( $product ), (string) $product_row['revision'] );
+
+		$order   = wc_create_order();
+		$cursor  = $this->journal->head_sequence();
+		do_action( 'woocommerce_pos_invalidate', 'order', $order->get_id() );
+		$this->assert_order_row( $this->latest_row( 'order', $order->get_id(), $cursor ), 'invalidate', false );
+	}
+
+	public function test_customer_invalidation_is_not_deduplicated_with_a_profile_update(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => 'Updated before invalidation',
+			)
+		);
+		$cursor = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'customer', $user_id );
+
+		$row = $this->latest_row( 'customer', $user_id, $cursor );
+		$this->assertSame( 'invalidate', $row['origin'] );
+	}
+
+	/**
+	 * Every native variation path pairs the parent row (the parent document
+	 * carries the variable price range) — the public invalidation must too,
+	 * or the relief valve half-works for the collection most likely to use it
+	 * (store-pricing plugins changing filter-only variation output).
+	 */
+	public function test_public_invalidation_action_on_a_variation_also_touches_parent_product(): void {
+		$product   = ProductHelper::create_simple_product();
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $product->get_id() );
+		$variation->set_regular_price( '5' );
+		$variation->save();
+		$cursor = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'variation', $variation->get_id() );
+
+		$variation_row = $this->latest_row( 'variation', $variation->get_id(), $cursor );
+		$this->assertSame( 'invalidate', $variation_row['origin'] );
+		$parent_row = $this->latest_row( 'product', $product->get_id(), $cursor );
+		$this->assertSame( $product->get_id(), $parent_row['object_id'] );
+		$this->assertSame( 'invalidate', $parent_row['origin'], 'The paired parent row must carry the invalidate origin the contract promises.' );
+	}
+
+	public function test_public_invalidation_action_tolerates_missing_and_malformed_args(): void {
+		$cursor = $this->journal->head_sequence();
+
+		// A public action handler must never fatal the calling plugin's request:
+		// one-arg, wrong-typed, and unknown-type calls are logged and ignored.
+		do_action( 'woocommerce_pos_invalidate', 'product' );
+		do_action( 'woocommerce_pos_invalidate', array( 'product' ), 'not-an-id' );
+
+		$this->assertSame( array(), $this->journal->page( array(), $cursor, 20 )['rows'] );
+	}
+
+	public function test_public_invalidation_action_ignores_unknown_type(): void {
+		$cursor = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'unknown_type', 123 );
+
+		$this->assertSame( array(), $this->journal->page( array(), $cursor, 20 )['rows'] );
+	}
+
 	public function test_variation_lifecycle_also_touches_parent_product(): void {
 		$product = ProductHelper::create_simple_product();
 		$cursor  = $this->journal->head_sequence();
