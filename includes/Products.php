@@ -209,17 +209,19 @@ class Products {
 	 * @param WC_Product $product Product.
 	 */
 	public function save_decimal_quantities( WC_Product $product ): void {
+		// Without stock management there is no quantity to derive a status from;
+		// WooCommerce respects the manually chosen stock status, so leave it untouched.
 		if ( ! $product->get_manage_stock() ) {
-			$product->set_stock_status( 'instock' );
-
 			return;
 		}
 
 		$stock_quantity               = $product->get_stock_quantity();
 		$stock_notification_threshold = absint( get_option( 'woocommerce_notify_no_stock_amount', 0 ) );
 
-		// Adjust the condition to consider stock quantities between 0 and 1 as instock if greater than 0.
-		$stock_is_above_notification_threshold = ( $stock_quantity > 0 && $stock_quantity > $stock_notification_threshold );
+		// Mirrors WC_Product::validate_props() minus its (int) cast on the stock
+		// quantity, which would truncate fractional stock (e.g. 0.5) to 0 and
+		// mark it out of stock. Re-check against core on WooCommerce updates.
+		$stock_is_above_notification_threshold = ( $stock_quantity > $stock_notification_threshold );
 		$backorders_are_allowed                = ( 'no' !== $product->get_backorders() );
 
 		if ( $stock_is_above_notification_threshold ) {
