@@ -131,6 +131,16 @@ final class Config_Fingerprint {
 	 * that changes the shape. Deliberately NOT an option or a filter: nobody but us can change what
 	 * we serve (see the constants-not-env-vars rule in the repo's agent context).
 	 *
+	 * # Skipped-release caveat for the collections #1756 phase 1 added
+	 *
+	 * A client cold-adopts a fingerprint key it has never stored, so a contract bump for one of
+	 * the six phase-1 collections only reaches tills whose server passed through a release that
+	 * served the key at the OLD version first — a server upgrade that skips straight past phase 1
+	 * cold-adopts at the new version with no re-pull. Between phase 1 and the 1.11.0 protocol
+	 * gate this is moot (recipe changes are batched AT the gate, whose forced resync covers
+	 * them); if a pre-gate bump for one of the six is ever needed, it needs a first-seen
+	 * migration protocol first (#1756 phase 2/3 territory — see the issue).
+	 *
 	 * ADR 0036 extends that rule to ANY collection serving-recipe change: serializer shape, digest
 	 * formula key sets (DIGESTED_META_KEYS / CUSTOMER_DIGESTED_META_KEYS in Digest_Index), or the
 	 * augmentation set. Bump that collection's version IN THE SAME COMMIT; the fingerprint move is
