@@ -98,7 +98,38 @@ class Form_Handler {
 
 			// set customer.
 			wp_set_current_user( $order->get_customer_id() );
+
+			/*
+			 * The pay nonce was minted in Templates\Payment with the logged-out nonce
+			 * identity forced to 0 (its nonce_user_logged_out filter). That filter only
+			 * exists while the template renders — it is not registered on this POST,
+			 * which WooCommerce's own pay handler processes later on this same 'wp'
+			 * hook (priority 20). Without the mirror here, a guest-session cookie
+			 * (set by the pay page itself, and always replayed by the iOS/Android
+			 * WebViews) makes WC_Session_Handler resolve the logged-out identity to
+			 * its 't_…' customer id at verify time, the nonce hash no longer matches,
+			 * and WC_Form_Handler::pay_action() drops the payment silently.
+			 * Priority 20 so it wins over WC_Session_Handler's filter (priority 10).
+			 */
+			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 20, 2 );
 		}
+	}
+
+	/**
+	 * Force the logged-out nonce identity to 0 for the pay nonce, matching the
+	 * identity Templates\Payment mints it with.
+	 *
+	 * @param int|string $uid    The logged-out nonce identity.
+	 * @param string|int $action The nonce action.
+	 *
+	 * @return int|string
+	 */
+	public function nonce_user_logged_out( $uid, $action ) {
+		if ( 'woocommerce-pay' === $action ) {
+			return 0;
+		}
+
+		return $uid;
 	}
 
 	/**
