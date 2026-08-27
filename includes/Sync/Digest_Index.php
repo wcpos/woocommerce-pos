@@ -41,6 +41,15 @@ final class Digest_Index {
 	 * sql-bypass fixture mutates (_price and _regular_price today — see
 	 * class-fixtures-controller.php sql_bypass()) plus the keys a
 	 * hook-bypassing import/inventory tool plausibly touches.
+	 *
+	 * Changing the MEMBERSHIP of this set moves two things, with two different
+	 * levers (ADR 0036): the STORED digests rebuild automatically — this set
+	 * feeds {@see digest_formula_fingerprint}, whose move schedules the guarded
+	 * product-digest rebuild — and the digests CLIENTS hold go stale, which is
+	 * what bumping Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for BOTH owners
+	 * (products AND variations — the set is shared) in the same commit repairs.
+	 * Reordering without a membership change is a no-op everywhere (SQL sorts).
+	 * The fingerprint tests pin the semantic set.
 	 */
 	public const DIGESTED_META_KEYS = array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
 
@@ -59,6 +68,15 @@ final class Digest_Index {
 	 * cannot live in a const): roles are part of the served record under #1379, and a hookless
 	 * capabilities write (direct update_user_meta/SQL/import) must drift the digest so the
 	 * integrity scan can repair the stale role — no role/profile hook fires for those writes.
+	 *
+	 * Changing the MEMBERSHIP of this set (ADR 0036): bump
+	 * Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for `customers` in the same
+	 * commit so clients re-pull — and know that the STORED customer digests have
+	 * NO automatic rebuild trigger today: {@see digest_formula_fingerprint} folds
+	 * the product keys only, so the scan reports store-wide false customer drift
+	 * until a manual rebuild. Extending the rebuild trigger to this set is
+	 * #1756 phase 2/3 work; until it lands, a change here also needs a
+	 * deliberate rebuild plan. The fingerprint tests pin the semantic set.
 	 */
 	public const CUSTOMER_DIGESTED_META_KEYS = array( 'first_name', 'last_name', 'billing_email', 'billing_phone' );
 
@@ -66,6 +84,12 @@ final class Digest_Index {
 	 * Order postmeta folded into the digest under the CPT (legacy) storage path (ADR 0015, Leg-3 phase 7).
 	 * Under HPOS these live as wc_orders COLUMNS (total_amount, customer_id) so no meta join is needed;
 	 * this allowlist only applies to the wp_posts fallback. Kept minimal — existence/identity signal.
+	 *
+	 * Changing the MEMBERSHIP of this set (ADR 0036): bump
+	 * Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for `orders` in the same
+	 * commit. Like the customer set, it has NO automatic stored-digest rebuild
+	 * trigger today ({@see digest_formula_fingerprint} folds product keys only) —
+	 * #1756 phase 2/3 owns that. The fingerprint tests pin the semantic set.
 	 */
 	public const ORDER_DIGESTED_META_KEYS = array( '_order_total', '_customer_user' );
 

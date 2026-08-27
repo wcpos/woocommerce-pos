@@ -131,6 +131,21 @@ final class Config_Fingerprint {
 	 * that changes the shape. Deliberately NOT an option or a filter: nobody but us can change what
 	 * we serve (see the constants-not-env-vars rule in the repo's agent context).
 	 *
+	 * # Skipped-release caveat for the collections #1756 phase 1 added
+	 *
+	 * A client cold-adopts a fingerprint key it has never stored, so a contract bump for one of
+	 * the six phase-1 collections only reaches tills whose server passed through a release that
+	 * served the key at the OLD version first — a server upgrade that skips straight past phase 1
+	 * cold-adopts at the new version with no re-pull. Between phase 1 and the 1.11.0 protocol
+	 * gate this is moot (recipe changes are batched AT the gate, whose forced resync covers
+	 * them); if a pre-gate bump for one of the six is ever needed, it needs a first-seen
+	 * migration protocol first (#1756 phase 2/3 territory — see the issue).
+	 *
+	 * ADR 0036 extends that rule to ANY collection serving-recipe change: serializer shape, digest
+	 * formula key sets (DIGESTED_META_KEYS / CUSTOMER_DIGESTED_META_KEYS in Digest_Index), or the
+	 * augmentation set. Bump that collection's version IN THE SAME COMMIT; the fingerprint move is
+	 * what triggers the client re-pull that a silent formula change never did.
+	 *
 	 * # Safety against an un-upgraded store
 	 *
 	 * A store still on the old plugin never moves this value, so its clients see no change and
@@ -148,11 +163,26 @@ final class Config_Fingerprint {
 	private const BASELINE_CONTRACT_VERSION = 1;
 
 	private const PAYLOAD_CONTRACT_VERSION = array(
+		// products: product serialization + DIGESTED_META_KEYS formula + barcode augmentation.
+		'products'   => 1,
 		// 2 (1.10.1): variations are serialized through WC_REST_Product_Variations_Controller
 		// instead of the products controller — singular `image`, `wc_get_formatted_variation()`
 		// `name`, and no product-only fields. See the 1.10.1 variations spec, S1/S6.
+		// variations: variation serialization + shared DIGESTED_META_KEYS formula + barcode augmentation.
 		'variations' => 2,
-		'products'   => 1,
+		// orders: order serialization + the HPOS/CPT order digest formula.
+		'orders'     => 1,
+		// customers: customer serialization + CUSTOMER_DIGESTED_META_KEYS formula.
+		'customers'  => 1,
+		// categories: product-category term serialization + its augmentation set.
+		'categories' => 1,
+		// brands: product-brand term serialization + its augmentation set.
+		'brands'     => 1,
+		// tags: product-tag term serialization + its augmentation set.
+		'tags'       => 1,
+		// coupons: coupon serialization + its augmentation set.
+		'coupons'    => 1,
+		// tax_rates: tax-rate serialization + its augmentation set.
 		'tax_rates'  => 1,
 	);
 
@@ -273,9 +303,11 @@ final class Config_Fingerprint {
 	 * Deletes by EXACT key over the known COLLECTIONS rather than a
 	 * `LIKE 'woocommerce_pos_sync_config_fp_%'` scan: the namespace is a closed set, so the
 	 * exact-key form needs no $wpdb query and cannot collide with a future option that
-	 * happens to share the prefix. Only the barcode collections were ever written, but
-	 * sweeping the full COLLECTIONS set costs one extra no-op delete and catches a
-	 * stray row from any revision.
+	 * happens to share the prefix. Only the barcode collections were ever written, so
+	 * sweeping the now-universal membership (nine collections since #1756) costs a
+	 * handful of no-op deletes on a fresh install and nothing on an already-swept one
+	 * (the CLEANUP_VERSION latch above), while catching a stray row from any revision
+	 * that DID write one.
 	 *
 	 * Idempotent and correctness-neutral: the endpoint recomputes the fingerprint from
 	 * live options as the sole source of truth, so removing these rows cannot change a
