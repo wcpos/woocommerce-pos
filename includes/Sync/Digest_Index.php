@@ -41,6 +41,9 @@ final class Digest_Index {
 	 * sql-bypass fixture mutates (_price and _regular_price today — see
 	 * class-fixtures-controller.php sql_bypass()) plus the keys a
 	 * hook-bypassing import/inventory tool plausibly touches.
+	 * Changing this set requires bumping the owning collection's
+	 * Config_Fingerprint::PAYLOAD_CONTRACT_VERSION in the same commit (ADR 0036);
+	 * the fingerprint tests pin this.
 	 */
 	public const DIGESTED_META_KEYS = array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
 
@@ -59,6 +62,9 @@ final class Digest_Index {
 	 * cannot live in a const): roles are part of the served record under #1379, and a hookless
 	 * capabilities write (direct update_user_meta/SQL/import) must drift the digest so the
 	 * integrity scan can repair the stale role — no role/profile hook fires for those writes.
+	 * Changing this set requires bumping the owning collection's
+	 * Config_Fingerprint::PAYLOAD_CONTRACT_VERSION in the same commit (ADR 0036);
+	 * the fingerprint tests pin this.
 	 */
 	public const CUSTOMER_DIGESTED_META_KEYS = array( 'first_name', 'last_name', 'billing_email', 'billing_phone' );
 

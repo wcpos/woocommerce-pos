@@ -131,6 +131,11 @@ final class Config_Fingerprint {
 	 * that changes the shape. Deliberately NOT an option or a filter: nobody but us can change what
 	 * we serve (see the constants-not-env-vars rule in the repo's agent context).
 	 *
+	 * ADR 0036 extends that rule to ANY collection serving-recipe change: serializer shape, digest
+	 * formula key sets (DIGESTED_META_KEYS / CUSTOMER_DIGESTED_META_KEYS in Digest_Index), or the
+	 * augmentation set. Bump that collection's version IN THE SAME COMMIT; the fingerprint move is
+	 * what triggers the client re-pull that a silent formula change never did.
+	 *
 	 * # Safety against an un-upgraded store
 	 *
 	 * A store still on the old plugin never moves this value, so its clients see no change and
@@ -148,11 +153,26 @@ final class Config_Fingerprint {
 	private const BASELINE_CONTRACT_VERSION = 1;
 
 	private const PAYLOAD_CONTRACT_VERSION = array(
+		// products: product serialization + DIGESTED_META_KEYS formula + barcode augmentation.
+		'products'   => 1,
 		// 2 (1.10.1): variations are serialized through WC_REST_Product_Variations_Controller
 		// instead of the products controller — singular `image`, `wc_get_formatted_variation()`
 		// `name`, and no product-only fields. See the 1.10.1 variations spec, S1/S6.
+		// variations: variation serialization + shared DIGESTED_META_KEYS formula + barcode augmentation.
 		'variations' => 2,
-		'products'   => 1,
+		// orders: order serialization + the HPOS/CPT order digest formula.
+		'orders'     => 1,
+		// customers: customer serialization + CUSTOMER_DIGESTED_META_KEYS formula.
+		'customers'  => 1,
+		// categories: product-category term serialization + its augmentation set.
+		'categories' => 1,
+		// brands: product-brand term serialization + its augmentation set.
+		'brands'     => 1,
+		// tags: product-tag term serialization + its augmentation set.
+		'tags'       => 1,
+		// coupons: coupon serialization + its augmentation set.
+		'coupons'    => 1,
+		// tax_rates: tax-rate serialization + its augmentation set.
 		'tax_rates'  => 1,
 	);
 

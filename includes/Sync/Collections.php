@@ -45,7 +45,9 @@ namespace WCPOS\WooCommercePOS\Sync;
  *                   name on Digest_Index, so the reader, the proxy stamper and
  *                   the authoritative-absence answer all read one id-space fact
  *                   instead of each re-deciding it.
- *  - fingerprint  — config-change detection membership + the barcode flag.
+ *  - fingerprint  — UNIVERSAL config-change detection recipe + contract-version
+ *                   lever; every collection carries it (null is invalid), with
+ *                   the barcode flag naming recipe membership.
  *  - backfill     — uuid backfill support: the meta-store kind (post, order,
  *                   user, or term) and the SCAN
  *                   scope (products+variations scan together — which is why
@@ -135,7 +137,7 @@ final class Collections {
 				'object_types' => array( 'order' ),
 				'live_rows' => 'order_live_row_exists_sql',
 			),
-			'fingerprint' => null,
+			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array( 'kind' => 'order' ),
 		),
 		'customers' => array(
@@ -159,7 +161,7 @@ final class Collections {
 				'object_types' => array( 'customer' ),
 				'live_rows' => 'customer_live_row_exists_sql',
 			),
-			'fingerprint' => null,
+			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array( 'kind' => 'user' ),
 		),
 		'categories' => array(
@@ -180,7 +182,7 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/products/categories' ),
 			'journal'     => array( 'object_type' => 'category' ),
 			'digest'      => null,
-			'fingerprint' => null,
+			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'term',
 				'taxonomy' => 'product_cat',
@@ -204,7 +206,7 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/products/brands' ),
 			'journal'     => array( 'object_type' => 'brand' ),
 			'digest'      => null,
-			'fingerprint' => null,
+			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'term',
 				'taxonomy' => 'product_brand',
@@ -228,7 +230,7 @@ final class Collections {
 			'write'       => null, // read-only: no client push path exists
 			'journal'     => array( 'object_type' => 'tag' ),
 			'digest'      => null,
-			'fingerprint' => null,
+			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'term',
 				'taxonomy' => 'product_tag',
@@ -252,7 +254,7 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/coupons' ),
 			'journal'     => array( 'object_type' => 'coupon' ),
 			'digest'      => null,
-			'fingerprint' => null,
+			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'post',
 				'scan_post_types' => array( 'shop_coupon' ),
