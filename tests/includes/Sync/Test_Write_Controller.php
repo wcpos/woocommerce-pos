@@ -21,6 +21,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -182,6 +183,8 @@ final class Fake_Mutation_Store {
 }
 
 final class Test_Write_Controller extends WP_UnitTestCase {
+	use Sync_Observer_Unhook_Trait;
+
 	public const REC = '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d';
 	/** The throwaway cashier-tier role the Access-settings grant test mutates. */
 	private const ROLE = 'wcpos_access_test_cashier';
@@ -3032,6 +3035,50 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		// Assert: in the trash, not gone.
 		$this->assertPushSucceeded( $deleted, 'delete' );
 		$this->assertSame( 'trash', get_post_status( $product_id ) );
+	}
+
+	/**
+	 * #1741: trashing a variable product from the till cascades to its variations (WooCommerce's
+	 * own `wp_trash_post` handling) and the parent's LAST journal row is the tombstone — each
+	 * cascaded variation delete appends a non-deleted parent row, so hook order matters. The
+	 * bootstrap detaches every journal observer, so the pin attaches its own.
+	 */
+	public function test_variable_product_delete_without_force_trashes_variations_and_tombstones_parent(): void {
+		// Arrange.
+		global $wpdb;
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$parent        = ProductHelper::create_variation_product();
+		$parent_id     = $parent->get_id();
+		$variation_ids = $parent->get_children();
+		$this->assertNotEmpty( $variation_ids );
+		$revision = $this->assertPushConflicted( $this->pushCatalog( 'products', $parent_id, 'delete', 'sha256:stale' ), 'stale delete' );
+		$journal  = new Sync_Journal();
+		$journal->install();
+		$journal->register_hooks();
+		$cursor = $journal->head_sequence();
+
+		try {
+			// Act.
+			$deleted = $this->pushCatalog( 'products', $parent_id, 'delete', $revision );
+		} finally {
+			$this->remove_observer_callbacks( array( $journal ) );
+		}
+
+		// Assert.
+		$this->assertPushSucceeded( $deleted, 'delete' );
+		$this->assertSame( 'trash', get_post_status( $parent_id ) );
+		foreach ( $variation_ids as $variation_id ) {
+			$this->assertSame( 'trash', get_post_status( $variation_id ), "variation {$variation_id}" );
+		}
+		$last = $wpdb->get_row(
+			$wpdb->prepare(
+				'SELECT deleted FROM ' . $journal->table_name() . " WHERE object_type = 'product' AND object_id = %d AND sequence > %d ORDER BY sequence DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				$parent_id,
+				$cursor
+			)
+		);
+		$this->assertNotNull( $last, 'the delete wrote a parent journal row' );
+		$this->assertSame( 1, (int) $last->deleted );
 	}
 
 	/** #1741: an explicit `force: true` is honoured — the post is removed outright. */

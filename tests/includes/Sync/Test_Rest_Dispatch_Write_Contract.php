@@ -191,8 +191,10 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 				return \Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper::create_coupon( 'force-default' )->get_id();
 			case 'categories':
 				return $this->factory->term->create( array( 'taxonomy' => 'product_cat' ) );
-			default:
+			case 'customers':
 				return $this->factory->user->create( array( 'role' => 'customer' ) );
+			default:
+				throw new \InvalidArgumentException( "No delete record factory for collection '{$collection}'." );
 		}
 	}
 
@@ -875,40 +877,14 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$this->assertFalse( $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
 	}
 
-	/** @dataProvider deleteCollectionDefaults */
-	public function test_delete_without_force_forwards_collection_default( string $fixture_name, bool $expected_force ): void {
-		// Arrange.
-		$fixture   = $this->fixture( $fixture_name );
-		$record_id = $this->delete_record_id( $fixture['collection'] );
-		$current   = array( 'id' => $record_id );
-		$revision  = Revision::compute( $current );
-		$this->store->resolve                    = $record_id;
-		$fixture['envelope']['baseRevision']     = $revision;
-		$fixture['headers']['If-Match']          = '"' . $revision . '"';
-		$GLOBALS['wcpos_sync_contract_responses'] = array(
-			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => $record_id ), 200 ),
-		);
-
-		// Act.
-		$response = $this->server->dispatch( $this->request( $fixture['collection'], $fixture['envelope'], $fixture['headers'] ) );
-
-		// Assert.
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $expected_force, $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
-	}
-
-	public static function deleteCollectionDefaults(): array {
-		return array(
-			'products trash'  => array( 'product-delete', false ),
-			'coupons trash'   => array( 'coupon-delete', false ),
-			'categories hard' => array( 'category-delete', true ),
-			'customers hard'  => array( 'customer-delete', true ),
-		);
-	}
-
-	/** @dataProvider explicitDeleteForces */
-	public function test_delete_with_explicit_force_forwards_envelope_value( string $fixture_name, bool $force ): void {
+	/**
+	 * #1741: the forwarded delete's `force` is the envelope's when present; otherwise the writer
+	 * asks WooCommerce to trash and deletes permanently only when WooCommerce answers that the
+	 * type cannot be trashed (terms, users).
+	 *
+	 * @dataProvider deleteForceCases
+	 */
+	public function test_delete_forwards_the_envelope_force_or_asks_woocommerce_to_trash( string $fixture_name, ?bool $envelope_force, bool $trash_refused, array $expected_forces, int $expected_status ): void {
 		// Arrange.
 		$fixture   = $this->fixture( $fixture_name );
 		$record_id = $this->delete_record_id( $fixture['collection'] );
@@ -916,25 +892,40 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$revision  = Revision::compute( $current );
 		$this->store->resolve                = $record_id;
 		$fixture['envelope']['baseRevision'] = $revision;
-		$fixture['envelope']['force']        = $force;
 		$fixture['headers']['If-Match']      = '"' . $revision . '"';
-		$GLOBALS['wcpos_sync_contract_responses'] = array(
-			new WP_REST_Response( $current, 200 ),
-			new WP_REST_Response( array( 'id' => $record_id ), 200 ),
-		);
+		if ( null !== $envelope_force ) {
+			$fixture['envelope']['force'] = $envelope_force;
+		}
+		$responses = array( new WP_REST_Response( $current, 200 ) );
+		if ( $trash_refused ) {
+			$responses[] = new WP_REST_Response( array( 'code' => 'woocommerce_rest_trash_not_supported' ), 501 );
+		}
+		$responses[] = new WP_REST_Response( array( 'id' => $record_id ), 200 );
+		$GLOBALS['wcpos_sync_contract_responses'] = $responses;
 
 		// Act.
 		$response = $this->server->dispatch( $this->request( $fixture['collection'], $fixture['envelope'], $fixture['headers'] ) );
 
 		// Assert.
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $force, $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+		$this->assertSame( $expected_status, $response->get_status() );
+		$deletes = array_values(
+			array_filter(
+				$GLOBALS['wcpos_sync_contract_calls'],
+				static fn( $request ) => 'DELETE' === $request->get_method()
+			)
+		);
+		$this->assertSame( $expected_forces, array_map( static fn( $request ) => $request->get_param( 'force' ), $deletes ) );
 	}
 
-	public static function explicitDeleteForces(): array {
+	public static function deleteForceCases(): array {
+		// fixture, envelope force, WooCommerce refuses the trash, forwarded forces, response status.
 		return array(
-			'product force true'  => array( 'product-delete', true ),
-			'category force false' => array( 'category-delete', false ),
+			'products: no force trashes'                       => array( 'product-delete', null, false, array( false ), 200 ),
+			'coupons: no force trashes'                        => array( 'coupon-delete', null, false, array( false ), 200 ),
+			'categories: trash refused, deleted permanently'   => array( 'category-delete', null, true, array( false, true ), 200 ),
+			'customers: trash refused, deleted permanently'    => array( 'customer-delete', null, true, array( false, true ), 200 ),
+			'products: explicit true is forwarded'             => array( 'product-delete', true, false, array( true ), 200 ),
+			'categories: explicit false is returned, no retry' => array( 'category-delete', false, true, array( false ), 501 ),
 		);
 	}
 
