@@ -121,6 +121,19 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 
 == Changelog ==
 
+= 1.10.3 - 2026/08/28 =
+
+**Follow-up fixes to the 1.10 sync engine, plus a payment fix for the mobile apps.**
+
+- **Card payments in the iOS and Android apps work again.** The hosted pay page silently refused the payment and reloaded itself, with no error and no request to the gateway, whenever the app replayed WooCommerce's guest session cookie -- which the native apps always do. The web app was unaffected.
+- **Saving an order is faster.** Every save rebuilt the order's sync fingerprint -- up to four times per checkout. It is now computed when the order is synced instead, so a save does only the work WooCommerce would do anyway.
+- **"Out of stock" sticks on products that don't manage stock.** With **Enable decimal quantities** on, saving a product in wp-admin forced its stock status back to "In stock" whenever "Manage stock" was unchecked, undoing a manually chosen "Out of stock" or "On backorder". WCPOS now leaves that choice alone, as WooCommerce does.
+- **Variations respect your other plugins' rules.** When the POS fetched specific variations by id, plugins that scope which variations are visible (multilingual and multi-store plugins, for example) were bypassed. That lane now runs the same WooCommerce query as every other product request.
+- **POS edits fire the same WooCommerce hooks as wp-admin.** Creating, updating and deleting records from the till now triggers exactly the hooks a wc/v3 write would, in the same order -- so plugins listening for those events see POS changes too. A customer update fired `woocommerce_update_customer` twice; it now fires once. An order paid through a real gateway is never relabelled as paid offline if a till re-sends the same payment flag.
+- **Store Health repair coverage now spans every record type**, not only products, so a settings change that alters how records are served triggers the right re-sync everywhere.
+
+**Note for developers:** the `woocommerce_pos_sync_legacy_revision_grace` option and the pre-1.10.0 revision recipes are gone -- a `baseRevision` now compares strictly against the canonical revision. New extension points: `woocommerce_pos_order_pull_ids` (narrow which orders `/orders/pull` serves) and `do_action( 'woocommerce_pos_invalidate', ... )` (journal an out-of-band change so tills re-fetch the record). Owned CORS preflights now reflect any announced `x-wcpos-*` request header over the frozen allow-list, and the echo probe reports `cors.reflects_request_headers`. The POS app also sends its protocol and version (`wcpos_protocol` / `wcpos_client`); the plugin records a daily, consent-gated `pos_client_signal` event from it.
+
 = 1.10.2 - 2026/08/26 =
 - **Fixed a regression in order save speed for CPT orders** -- HPOS orders are not affected.
 
