@@ -599,7 +599,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		$deleted = $this->pushCatalog( $collection, $record_id, 'delete', $revision );
 		$this->assertPushSucceeded( $deleted, 'delete' );
-		$this->assertNull( get_post( $record_id ) );
+		// The grant is what let the delete through. Without `force` a product or coupon lands in
+		// the trash (#1741); a variation cannot be trashed, so its delete is permanent.
+		if ( 'product_variation' === $post_type ) {
+			$this->assertNull( get_post( $record_id ), 'variation delete is permanent' );
+		} else {
+			$this->assertSame( 'trash', get_post_status( $record_id ) );
+		}
 	}
 
 	public static function grantedCatalogMutations(): array {
@@ -3013,6 +3019,46 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array( 'GET', 'DELETE' ), array_map( static fn( $request ) => $request->get_method(), $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ) );
 	}
 
+	/** #1741: a delete push with no `force` trashes a post-backed record instead of destroying it. */
+	public function test_product_delete_without_force_moves_post_to_trash(): void {
+		// Arrange: an administrator's product; a stale precondition hands back the canonical revision.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$revision   = $this->assertPushConflicted( $this->pushCatalog( 'products', $product_id, 'delete', 'sha256:stale' ), 'stale delete' );
+
+		// Act.
+		$deleted = $this->pushCatalog( 'products', $product_id, 'delete', $revision );
+
+		// Assert: in the trash, not gone.
+		$this->assertPushSucceeded( $deleted, 'delete' );
+		$this->assertSame( 'trash', get_post_status( $product_id ) );
+	}
+
+	/** #1741: an explicit `force: true` is honoured — the post is removed outright. */
+	public function test_product_delete_with_force_true_removes_post_entirely(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$revision   = $this->assertPushConflicted( $this->pushCatalog( 'products', $product_id, 'delete', 'sha256:stale' ), 'stale delete' );
+		$store      = new Fake_Mutation_Store();
+		$store->resolve = $product_id;
+
+		// Act.
+		$deleted = $this->push(
+			$store,
+			array(
+				'collection'   => 'products',
+				'operation'    => 'delete',
+				'payload'      => null,
+				'baseRevision' => $revision,
+				'force'        => true,
+			)
+		);
+
+		// Assert.
+		$this->assertPushSucceeded( $deleted, 'force delete' );
+		$this->assertNull( get_post( $product_id ) );
+	}
 
 	public function test_delete_of_existing_record_without_base_revision_is_rejected_428(): void {
 		// An existing record must not be force-deleted without a precondition — the client

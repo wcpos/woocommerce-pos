@@ -48,9 +48,32 @@ class Null_Writer implements Collection_Writer_Interface {
 	public function persist( string $phase, int $id, array $payload, array $current = array(), array $response_data = array(), array $context = array() ): void {
 	}
 
-	/** Permanently delete a generic collection record. */
+	/** Delete a generic collection record, honouring the envelope's `force` flag. */
 	public function delete( array $meta, int $id, array $mutation, callable $dispatch, callable $can_delete ) {
-		return $dispatch( $this->delete_request( $meta['route'] . '/' . $id, $id, true ) );
+		$force = \array_key_exists( 'force', $mutation ) ? (bool) $mutation['force'] : $this->default_force( $meta );
+
+		return $dispatch( $this->delete_request( $meta['route'] . '/' . $id, $id, $force ) );
+	}
+
+	/**
+	 * The delete mode when the envelope carries no `force`.
+	 *
+	 * Trash where WooCommerce supports it, permanent delete where it does not. Post-backed
+	 * collections (products, coupons) trash unless the site has disabled trash
+	 * (`EMPTY_TRASH_DAYS` of 0 — wc/v3 answers `force=false` with a 501 then). Term-backed
+	 * (categories, brands, tags) and user-backed (customers) records cannot be trashed, so
+	 * their only delete is permanent. An explicit envelope value always wins: a `force:false`
+	 * on a term is forwarded as-is and WooCommerce's 501 is the honest answer. Variations
+	 * never reach this method — {@see Variation_Writer::delete()} forces, as they cannot trash.
+	 *
+	 * @param array $meta Collection meta (`post_type` / `taxonomy` / `id_type`).
+	 */
+	protected function default_force( array $meta ): bool {
+		if ( empty( $meta['post_type'] ) ) {
+			return true;
+		}
+
+		return ! ( \defined( 'EMPTY_TRASH_DAYS' ) && EMPTY_TRASH_DAYS > 0 );
 	}
 
 	/** Use the shared generic document reader. */

@@ -183,6 +183,19 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		return array_column( $this->fixtures( 'valid-envelopes' ), null, 'name' )[ $name ];
 	}
 
+	private function delete_record_id( string $collection ): int {
+		switch ( $collection ) {
+			case 'products':
+				return ProductHelper::create_simple_product()->get_id();
+			case 'coupons':
+				return \Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper::create_coupon( 'force-default' )->get_id();
+			case 'categories':
+				return $this->factory->term->create( array( 'taxonomy' => 'product_cat' ) );
+			default:
+				return $this->factory->user->create( array( 'role' => 'customer' ) );
+		}
+	}
+
 	private function request( string $collection, array $envelope, array $headers = array() ): WP_REST_Request {
 		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/' . $collection );
 		$request->set_header( 'Content-Type', 'application/json' );
@@ -859,7 +872,70 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 				$GLOBALS['wcpos_sync_contract_calls']
 			)
 		);
-		$this->assertTrue( $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+		$this->assertFalse( $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+	}
+
+	/** @dataProvider deleteCollectionDefaults */
+	public function test_delete_without_force_forwards_collection_default( string $fixture_name, bool $expected_force ): void {
+		// Arrange.
+		$fixture   = $this->fixture( $fixture_name );
+		$record_id = $this->delete_record_id( $fixture['collection'] );
+		$current   = array( 'id' => $record_id );
+		$revision  = Revision::compute( $current );
+		$this->store->resolve                    = $record_id;
+		$fixture['envelope']['baseRevision']     = $revision;
+		$fixture['headers']['If-Match']          = '"' . $revision . '"';
+		$GLOBALS['wcpos_sync_contract_responses'] = array(
+			new WP_REST_Response( $current, 200 ),
+			new WP_REST_Response( array( 'id' => $record_id ), 200 ),
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $this->request( $fixture['collection'], $fixture['envelope'], $fixture['headers'] ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $expected_force, $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+	}
+
+	public static function deleteCollectionDefaults(): array {
+		return array(
+			'products trash'  => array( 'product-delete', false ),
+			'coupons trash'   => array( 'coupon-delete', false ),
+			'categories hard' => array( 'category-delete', true ),
+			'customers hard'  => array( 'customer-delete', true ),
+		);
+	}
+
+	/** @dataProvider explicitDeleteForces */
+	public function test_delete_with_explicit_force_forwards_envelope_value( string $fixture_name, bool $force ): void {
+		// Arrange.
+		$fixture   = $this->fixture( $fixture_name );
+		$record_id = $this->delete_record_id( $fixture['collection'] );
+		$current   = array( 'id' => $record_id );
+		$revision  = Revision::compute( $current );
+		$this->store->resolve                = $record_id;
+		$fixture['envelope']['baseRevision'] = $revision;
+		$fixture['envelope']['force']        = $force;
+		$fixture['headers']['If-Match']      = '"' . $revision . '"';
+		$GLOBALS['wcpos_sync_contract_responses'] = array(
+			new WP_REST_Response( $current, 200 ),
+			new WP_REST_Response( array( 'id' => $record_id ), 200 ),
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $this->request( $fixture['collection'], $fixture['envelope'], $fixture['headers'] ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $force, $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+	}
+
+	public static function explicitDeleteForces(): array {
+		return array(
+			'product force true'  => array( 'product-delete', true ),
+			'category force false' => array( 'category-delete', false ),
+		);
 	}
 
 	public function test_dispatched_delete_428_and_conflict_match_golden_shapes(): void {
