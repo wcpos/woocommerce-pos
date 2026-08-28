@@ -83,6 +83,12 @@ class Stock_Validator {
 			return $order;
 		}
 
+		$data_store = $order->get_data_store();
+		if ( $order->is_paid() || ( method_exists( $data_store, 'get_stock_reduced' ) && $data_store->get_stock_reduced( $order->get_id() ) ) ) {
+			// payment_complete() reduced stock and released the hold; do not reserve sold lines again.
+			return $order;
+		}
+
 		return $this->validate_order( $order );
 	}
 
@@ -93,6 +99,10 @@ class Stock_Validator {
 	 */
 	public function release_checkout_stock( WC_Order $order ): void {
 		global $wpdb;
+
+		if ( ! Settings::instance()->prevent_overselling_enabled() ) {
+			return;
+		}
 
 		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->wc_reserved_stock,
@@ -548,7 +558,7 @@ class Stock_Validator {
 	private function reserved_stock_query( int $owner_id, int $exclude_order_id ): string {
 		global $wpdb;
 
-		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 			$join         = "{$wpdb->prefix}wc_orders orders ON stock_table.order_id = orders.id";
 			$where_status = "orders.status IN ( 'wc-checkout-draft', 'wc-pending' )";
 		} else {

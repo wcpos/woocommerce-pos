@@ -370,6 +370,72 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		}
 	}
 
+	/** Paid orders are not treated as fresh checkout reservations. */
+	public function test_paid_checkout_is_not_validated_or_reserved(): void {
+		global $wpdb;
+
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 0 );
+		$order   = $this->create_order( 'completed', array( array( $product, 1 ) ) );
+		$order->save();
+
+		$result = Stock_Validator::instance()->validate_checkout( $order );
+
+		$this->assertSame( $order, $result );
+		$this->assertSame(
+			0,
+			(int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+					$order->get_id()
+				)
+			)
+		);
+	}
+
+	/** Disabled POS reservations do not release holds owned by WooCommerce. */
+	public function test_release_checkout_stock_only_releases_when_enabled(): void {
+		global $wpdb;
+
+		$product = $this->create_stock_product( 1 );
+		$order   = $this->create_order( 'pending', array() );
+		$order->save();
+		$wpdb->query(
+			$wpdb->prepare(
+				"INSERT INTO {$wpdb->wc_reserved_stock} ( order_id, product_id, stock_quantity, timestamp, expires ) VALUES ( %d, %d, 1, NOW(), NOW() + INTERVAL 1 HOUR )",
+				$order->get_id(),
+				$product->get_id()
+			)
+		);
+
+		try {
+			Stock_Validator::instance()->release_checkout_stock( $order );
+			$this->assertSame(
+				1,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				)
+			);
+
+			$this->set_prevent_overselling( true );
+			Stock_Validator::instance()->release_checkout_stock( $order );
+			$this->assertSame(
+				0,
+				(int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->wc_reserved_stock} WHERE order_id = %d",
+						$order->get_id()
+					)
+				)
+			);
+		} finally {
+			$wpdb->delete( $wpdb->wc_reserved_stock, array( 'order_id' => $order->get_id() ), array( '%d' ) );
+		}
+	}
+
 	/**
 	 * Revalidating an order never lets another order take a unit it already holds.
 	 *
