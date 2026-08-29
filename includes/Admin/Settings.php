@@ -109,6 +109,7 @@ class Settings {
 				'react',
 				'react-dom',
 				'wp-api-fetch',
+				\WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE,
 				'wp-url',
 				'lodash',
 			),
