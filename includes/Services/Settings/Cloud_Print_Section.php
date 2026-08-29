@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
+use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
 use WP_Error;
@@ -226,6 +227,9 @@ class Cloud_Print_Section extends Abstract_Section {
 			'printers'    => $clean_printers,
 			'assignments' => array_map( array( $this, 'sanitize_assignment' ), $assigns ),
 		);
+
+		$clean['assignments'] = $this->clear_unrenderable_templates( $clean['assignments'], $clean_printers );
+
 		update_option( $this->option_name(), $clean );
 
 		// Drop per-printer runtime state for printers that were removed, so a
@@ -349,6 +353,66 @@ class Cloud_Print_Section extends Abstract_Section {
 		$printer['fullReceiptRaster'] = array_key_exists( 'fullReceiptRaster', $printer ) ? rest_sanitize_boolean( $printer['fullReceiptRaster'] ) : false;
 
 		return $printer;
+	}
+
+	/**
+	 * Blank any assignment whose template its printer cannot render.
+	 *
+	 * A provider that declares a single template engine (Epson SDP and the Star
+	 * providers all speak only 'thermal') renders nothing for any other engine,
+	 * so the pairing has to be dealt with here rather than discovered as a
+	 * receipt that never prints.
+	 *
+	 * Refusing the whole save was worse than the bug: one unrenderable row —
+	 * including one the admin cannot see, because the template picker filters
+	 * by engine and so cannot display the stored value — blocked every
+	 * subsequent settings write and silently reverted the screen. Clearing the
+	 * template instead always saves, and leaves the rule visibly incomplete:
+	 * Cloud_Print_Trigger_Service skips assignments with no template, so the
+	 * rule stops firing rather than queuing jobs that print nothing.
+	 *
+	 * Only resolvable templates are judged. A template_id that is empty or no
+	 * longer exists cannot be classified and is left alone.
+	 *
+	 * @param array $assignments Sanitized assignments.
+	 * @param array $printers    Sanitized printers being written.
+	 *
+	 * @return array Assignments with unrenderable templates cleared.
+	 */
+	private function clear_unrenderable_templates( array $assignments, array $printers ): array {
+		$providers = array();
+		foreach ( $printers as $printer ) {
+			if ( ! empty( $printer['id'] ) ) {
+				$providers[ $printer['id'] ] = (string) ( $printer['provider'] ?? '' );
+			}
+		}
+
+		return array_map(
+			function ( array $assignment ) use ( $providers ): array {
+				$printer_id  = (string) ( $assignment['printer_id'] ?? '' );
+				$template_id = (string) ( $assignment['template_id'] ?? '' );
+				if ( '' === $template_id || ! isset( $providers[ $printer_id ] ) ) {
+					return $assignment;
+				}
+
+				$supported = Provider::template_engines( $providers[ $printer_id ] );
+				if ( 'all' === $supported ) {
+					return $assignment;
+				}
+
+				$template = Print_Job_Service::load_template( $template_id );
+				if ( null === $template ) {
+					return $assignment;
+				}
+
+				if ( (string) ( $template['engine'] ?? '' ) !== $supported ) {
+					$assignment['template_id'] = '';
+				}
+
+				return $assignment;
+			},
+			$assignments
+		);
 	}
 
 	/**
