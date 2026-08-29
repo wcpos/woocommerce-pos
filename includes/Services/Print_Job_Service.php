@@ -1105,9 +1105,13 @@ class Print_Job_Service {
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
 				'posts_per_page' => 1,
+				// Newest by the time it actually failed, not by creation: two jobs for
+				// one printer can go terminal in a different order than they were
+				// queued, and it is the most recently failed one a late result
+				// belongs to.
 				'orderby'        => array(
-					'date' => 'DESC',
-					'ID'   => 'DESC',
+					'terminal_at' => 'DESC',
+					'ID'          => 'DESC',
 				),
 				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					array(
@@ -1126,7 +1130,7 @@ class Print_Job_Service {
 						'key'     => self::META_RETRIED_TO,
 						'compare' => 'NOT EXISTS',
 					),
-					array(
+					'terminal_at' => array(
 						'key'     => self::META_TERMINAL_AT,
 						'value'   => time() - self::UNCONFIRMED_RESULT_WINDOW,
 						'compare' => '>=',

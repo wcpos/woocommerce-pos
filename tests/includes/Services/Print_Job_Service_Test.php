@@ -383,6 +383,46 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertSame( 'submitted', $job['external_state'] );
 	}
 	/**
+	 * The most recently failed job wins, not the most recently created one.
+	 *
+	 * Two jobs for one printer can go terminal in a different order than they
+	 * were queued — the older one may be claimed and time out after a newer one
+	 * has already failed. A late result belongs to whichever failed last.
+	 */
+	public function test_find_unconfirmed_returns_the_job_that_failed_most_recently(): void {
+		// Arrange: the older job is created first but fails second.
+		$service = new Print_Job_Service();
+		$older   = $service->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$newer = $service->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		foreach ( array( $newer, $older ) as $id ) {
+			$service->claim( $id );
+			update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+			$service->release_stale_claims( 'p1' );
+		}
+		// Pin the failure times: the newer-created job failed a minute earlier.
+		update_post_meta( $newer, Print_Job_Service::META_TERMINAL_AT, time() - 60 );
+		update_post_meta( $older, Print_Job_Service::META_TERMINAL_AT, time() );
+
+		// Act.
+		$found = $service->find_unconfirmed( 'p1' );
+
+		// Assert: creation order does not decide it.
+		$this->assertSame( $older, $found['id'] );
+	}
+
+	/**
 	 * A late result is attributed to an unconfirmed job only within the window.
 	 */
 	public function test_find_unconfirmed_ignores_a_job_failed_outside_the_result_window(): void {
