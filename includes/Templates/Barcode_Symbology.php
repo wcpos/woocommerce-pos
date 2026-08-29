@@ -365,13 +365,26 @@ class Barcode_Symbology {
 	/**
 	 * Build the ePOS-Print XML payload for a barcode value.
 	 *
+	 * Code 128 uses the same `{B` selector and `{{` escaping as the ESC/POS
+	 * lane — the ePOS-Print spec defines the data identically. The branch is
+	 * keyed on the name ePOS will receive, not on normalize_linear(): that
+	 * folds every unmodelled type to Code 128, which would hand `{B` to the
+	 * pass-through symbologies in EPOS_XML_ONLY_TYPES (`jan13`, `gs1_128`,
+	 * `code128_auto`, …) and silently blank them.
+	 *
+	 * Unlike escpos_payload() there is no MAX_DATA_BYTES clamp here: the
+	 * emitter validates the value up front with the ESC/POS rules and falls
+	 * back to text, and the data travels as XML rather than a length-prefixed
+	 * byte command, so a clamp could only ever produce a wrong-but-scannable
+	 * symbol.
+	 *
 	 * @param string $type  The barcode type attribute value.
 	 * @param string $value The barcode value.
 	 *
 	 * @return string The XML barcode payload.
 	 */
 	public static function epos_xml_payload( string $type, string $value ): string {
-		if ( self::DEFAULT_SYMBOLOGY === self::normalize_linear( $type ) ) {
+		if ( self::DEFAULT_SYMBOLOGY === self::epos_xml_name( $type ) ) {
 			return self::escpos_code128_data( $value );
 		}
 

@@ -144,15 +144,11 @@ class Epos_Xml_Thermal_Emitter {
 		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
 
 		$this->buffer .= '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
-		$this->buffer .= '<text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>';
-		$this->printer = array(
-			'align'   => 'left',
-			'em'      => false,
-			'ul'      => false,
-			'reverse' => false,
-			'dw'      => false,
-			'dh'      => false,
-		);
+
+		// The printer still holds whatever the previous job left, so treat every
+		// attribute as unknown and let the transition write the full reset preamble.
+		$this->printer = array_fill_keys( array( 'align', 'em', 'ul', 'reverse', 'dw', 'dh' ), null );
+		$this->buffer .= '<text' . $this->style_transition() . '/>';
 
 		$children = isset( $ast['children'] ) && \is_array( $ast['children'] ) ? $ast['children'] : array();
 		$this->walk_nodes( $this->nodes_with_auto_drawer( $children ) );
@@ -371,36 +367,38 @@ class Epos_Xml_Thermal_Emitter {
 	}
 
 	/**
-	 * Emit a single <text> element using the current style state.
+	 * Emit a single <text> line in the current style state.
 	 *
-	 * @param string $content The plain text content (will be XML-escaped).
+	 * @param string      $content The plain text content (will be XML-escaped).
+	 * @param string|null $align   Alignment override for this line (rows are
+	 *                             pre-padded and always print left-aligned).
 	 *
 	 * @return void
 	 */
-	private function emit_text_element( string $content ): void {
-		$this->buffer .= '<text' . $this->style_attributes( $this->align, $this->em, $this->ul, $this->reverse, $this->dw, $this->dh ) . '>' . $this->escape( $content ) . "\n" . '</text>';
+	private function emit_text_element( string $content, ?string $align = null ): void {
+		$this->buffer .= '<text' . $this->style_transition( $align ) . '>' . $this->escape( $content ) . "\n" . '</text>';
 	}
 
 	/**
-	 * Build the text attributes that change the printer to the desired state.
+	 * Build the <text> attributes that move the printer to the current style,
+	 * and record the printer as now holding that style.
 	 *
-	 * @param string $align   Desired alignment.
-	 * @param bool   $em      Desired emphasis state.
-	 * @param bool   $ul      Desired underline state.
-	 * @param bool   $reverse Desired reverse state.
-	 * @param bool   $dw      Desired double-width state.
-	 * @param bool   $dh      Desired double-height state.
+	 * The attributes persist on the printer until changed, so only the values
+	 * that differ from what it holds are written; a null entry in $printer
+	 * (unknown) is always written.
+	 *
+	 * @param string|null $align Alignment override; null uses the wrapper state.
 	 *
 	 * @return string The attribute string (with a leading space when non-empty).
 	 */
-	private function style_attributes( string $align, bool $em, bool $ul, bool $reverse, bool $dw, bool $dh ): string {
+	private function style_transition( ?string $align = null ): string {
 		$desired = array(
-			'align'   => $align,
-			'em'      => $em,
-			'ul'      => $ul,
-			'reverse' => $reverse,
-			'dw'      => $dw,
-			'dh'      => $dh,
+			'align'   => null === $align ? $this->align : $align,
+			'em'      => $this->em,
+			'ul'      => $this->ul,
+			'reverse' => $this->reverse,
+			'dw'      => $this->dw,
+			'dh'      => $this->dh,
 		);
 		$attrs = '';
 		foreach ( $desired as $name => $value ) {
@@ -520,7 +518,7 @@ class Epos_Xml_Thermal_Emitter {
 			}
 		}
 
-		$this->buffer .= '<text' . $this->style_attributes( 'left', $this->em, $this->ul, $this->reverse, $this->dw, $this->dh ) . '>' . $this->escape( $line ) . "\n" . '</text>';
+		$this->emit_text_element( $line, 'left' );
 	}
 
 	/**
@@ -544,7 +542,7 @@ class Epos_Xml_Thermal_Emitter {
 			$text = str_repeat( '-', $this->columns );
 		}
 
-		$this->buffer .= '<text' . $this->style_attributes( $this->align, $this->em, $this->ul, $this->reverse, $this->dw, $this->dh ) . '>' . $this->escape( $text ) . "\n" . '</text>';
+		$this->emit_text_element( $text );
 	}
 
 	/**
@@ -559,14 +557,27 @@ class Epos_Xml_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_barcode( array $node ): void {
-		$value  = isset( $node['value'] ) ? (string) $node['value'] : '';
+		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
+		if ( '' === trim( $value ) ) {
+			return;
+		}
+
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		$height = max( 1, min( 255, $height ) );
 
+		// Same rescue as the ESC/POS lane: a value the symbology cannot encode
+		// would be dropped by the printer "with no error returned" (ePOS-Print
+		// manual), so print it as a centered line instead of nothing.
+		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_ESCPOS ) ) {
+			$this->emit_text_element( (string) preg_replace( '/[\x00-\x1f\x7f]/', ' ', $value ), 'center' );
+
+			return;
+		}
+
 		$payload = Barcode_Symbology::epos_xml_payload( $type, $value );
 
-		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '" align="' . $this->align . '">' . $this->escape( $payload ) . '</barcode>';
+		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $payload ) . '</barcode>';
 		$this->printer['align'] = null;
 	}
 
@@ -579,9 +590,12 @@ class Epos_Xml_Thermal_Emitter {
 	 */
 	private function emit_qrcode( array $node ): void {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
-		$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
+		if ( '' === trim( $value ) ) {
+			return;
+		}
+		$size = isset( $node['size'] ) ? (int) $node['size'] : 4;
 
-		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '" align="' . $this->align . '">' . $this->escape( $value ) . '</symbol>';
+		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $value ) . '</symbol>';
 		$this->printer['align'] = null;
 	}
 

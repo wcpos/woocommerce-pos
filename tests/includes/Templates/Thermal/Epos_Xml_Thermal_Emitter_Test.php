@@ -370,6 +370,38 @@ PHP;
 	}
 
 	/**
+	 * ePOS-only symbologies pass through without the Code 128 selector.
+	 *
+	 * @return void
+	 */
+	public function test_epos_only_symbology_data_is_not_prefixed(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><barcode type="jan13">4006381333931</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '<barcode type="jan13" hri="none" height="40" align="left">4006381333931</barcode>', $xml );
+		$this->assertStringNotContainsString( '{B', $xml );
+	}
+
+	/**
+	 * Empty barcode and QR values emit nothing; an unencodable value falls
+	 * back to a centered text line, as on the ESC/POS lane.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_empty_or_invalid_values_are_rescued(): void {
+		// Arrange / Act.
+		$empty   = $this->render( '<receipt><barcode type="code128">  </barcode><qrcode>  </qrcode></receipt>' );
+		$invalid = $this->render( '<receipt><barcode type="ean13">4006381333932</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringNotContainsString( '<barcode', $empty );
+		$this->assertStringNotContainsString( '<symbol', $empty );
+		$this->assertStringNotContainsString( '<barcode', $invalid );
+		$this->assertStringContainsString( '<text align="center">4006381333932' . "\n" . '</text>', $invalid );
+	}
+
+	/**
 	 * Text content with XML-significant characters is escaped and round-trips.
 	 *
 	 * @return void
@@ -385,8 +417,9 @@ PHP;
 		$this->assertStringContainsString( 'Tom &amp; Jerry &lt;x&gt;', $xml );
 		$doc = simplexml_load_string( $xml );
 		$this->assertNotFalse( $doc );
-		// $doc->text[0] is the state-reset preamble; the content line follows it.
-		$this->assertEquals( 'Tom & Jerry <x>', rtrim( (string) $doc->text[1], "\n" ) );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$this->assertEquals( 'Tom & Jerry <x>', rtrim( (string) $texts[0], "\n" ) );
 	}
 
 	/**

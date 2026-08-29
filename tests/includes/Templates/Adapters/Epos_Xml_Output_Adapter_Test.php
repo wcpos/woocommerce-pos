@@ -34,6 +34,10 @@ class Epos_Xml_Output_Adapter_Test extends \WP_UnitTestCase {
 	public function test_transform_switches_emphasis_off_after_store_name(): void {
 		$xml = ( new Epos_Xml_Output_Adapter() )->transform( $this->receipt_data() );
 
+		$this->assertStringStartsWith(
+			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>',
+			$xml
+		);
 		$this->assertStringContainsString( '<text align="center" em="true">Acme Store', $xml );
 		$this->assertStringContainsString( '<text align="center" em="false">RECEIPT', $xml );
 	}
