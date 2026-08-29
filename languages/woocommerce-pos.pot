@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-29T18:21:51+00:00\n"
+"POT-Creation-Date: 2026-08-29T18:57:36+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -685,9 +685,9 @@ msgid "This job's template no longer exists, so it cannot be re-rendered."
 msgstr ""
 
 #: includes/API/V1/Print_Jobs_Controller.php:819
-#: includes/API/V1/Print_Jobs_Controller.php:1408
-#: includes/API/V1/Print_Jobs_Controller.php:1524
-#: includes/API/V1/Print_Jobs_Controller.php:1556
+#: includes/API/V1/Print_Jobs_Controller.php:1431
+#: includes/API/V1/Print_Jobs_Controller.php:1547
+#: includes/API/V1/Print_Jobs_Controller.php:1579
 msgid "Print job could not be created."
 msgstr ""
 
@@ -747,64 +747,64 @@ msgstr ""
 msgid "spooler stopped"
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1348
+#: includes/API/V1/Print_Jobs_Controller.php:1371
 msgid "A printer_id is required."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1373
+#: includes/API/V1/Print_Jobs_Controller.php:1396
 msgid "PrintNode print jobs require an order and a template."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1388
-#: includes/API/V1/Print_Jobs_Controller.php:1487
+#: includes/API/V1/Print_Jobs_Controller.php:1411
+#: includes/API/V1/Print_Jobs_Controller.php:1510
 msgid "Unknown printer."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1437
+#: includes/API/V1/Print_Jobs_Controller.php:1460
 msgid "Unknown order."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1446
+#: includes/API/V1/Print_Jobs_Controller.php:1469
 msgid "Unknown template."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1463
+#: includes/API/V1/Print_Jobs_Controller.php:1486
 msgid "The selected template cannot be printed on this printer."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1509
+#: includes/API/V1/Print_Jobs_Controller.php:1532
 msgid "Test print is not available for this printer yet."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1583
+#: includes/API/V1/Print_Jobs_Controller.php:1606
 msgid "This PrintNode printer is missing its API key or printer id."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1597
+#: includes/API/V1/Print_Jobs_Controller.php:1620
 msgid "Could not generate the test print."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1672
+#: includes/API/V1/Print_Jobs_Controller.php:1695
 msgid "Epson Server Direct Print accepts order-based ePOS-Print jobs only, not raw payloads."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1679
+#: includes/API/V1/Print_Jobs_Controller.php:1702
 msgid "Epson Server Direct Print requires the epos-xml format."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1690
+#: includes/API/V1/Print_Jobs_Controller.php:1713
 msgid "Star CloudPRNT does not accept the epos-xml format."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1702
+#: includes/API/V1/Print_Jobs_Controller.php:1725
 msgid "Star CloudPRNT printers require order-based template jobs or a raw payload."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1720
+#: includes/API/V1/Print_Jobs_Controller.php:1743
 msgid "No relay verification is pending."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1760
+#: includes/API/V1/Print_Jobs_Controller.php:1783
 msgid "Sorry, you cannot manage print jobs."
 msgstr ""
 
