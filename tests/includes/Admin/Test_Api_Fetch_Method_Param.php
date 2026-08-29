@@ -105,4 +105,32 @@ class Test_Api_Fetch_Method_Param extends \WP_UnitTestCase {
 
 		$this->assertContains( Admin::API_FETCH_METHOD_PARAM_HANDLE, wp_scripts()->registered['wcpos-template-editor']->deps );
 	}
+
+	/**
+	 * Test the invariant behind the three wiring tests: once every admin enqueue
+	 * site has run, no WCPOS script that talks through wp-api-fetch is missing
+	 * the shim. A bundle that forgets the dependency works everywhere except on
+	 * the method-blocking hosts the shim exists for, so this is the only place
+	 * the omission is visible.
+	 */
+	public function test_every_wcpos_script_using_wp_api_fetch_depends_on_shim(): void {
+		( new Settings() )->enqueue_assets();
+		( new Menu() )->enqueue_gallery_assets();
+		set_current_screen( 'wcpos_template' );
+		$GLOBALS['post'] = self::factory()->post->create_and_get( array( 'post_type' => 'wcpos_template' ) );
+		( new Single_Template() )->enqueue_scripts( 'post.php' );
+
+		$missing = array();
+		foreach ( wp_scripts()->registered as $handle => $script ) {
+			$is_wcpos_script = 0 === strpos( $handle, 'wcpos-' ) || 0 === strpos( $handle, PLUGIN_NAME . '-' );
+			if ( $is_wcpos_script && Admin::API_FETCH_METHOD_PARAM_HANDLE !== $handle
+				&& \in_array( 'wp-api-fetch', $script->deps, true )
+				&& ! \in_array( Admin::API_FETCH_METHOD_PARAM_HANDLE, $script->deps, true ) ) {
+				$missing[] = $handle;
+			}
+		}
+
+		$this->assertSame( array(), $missing, 'WCPOS scripts depending on wp-api-fetch without the _method shim' );
+		$this->assertGreaterThanOrEqual( 3, \count( array_filter( array_keys( wp_scripts()->registered ), static fn( $h ) => 0 === strpos( $h, 'wcpos-' ) || 0 === strpos( $h, PLUGIN_NAME . '-' ) ) ), 'the enqueue sites above must actually register the bundles' );
+	}
 }
