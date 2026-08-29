@@ -699,6 +699,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 400 )
 			);
 		}
+		foreach ( $ids as $id ) {
+			if ( ( ! \is_int( $id ) && ! \is_string( $id ) ) || ! ctype_digit( (string) $id ) || (int) $id < 1 ) {
+				return new WP_Error(
+					'wcpos_print_job_invalid_ids',
+					__( 'One or more selected print jobs are invalid.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
 
 		$deleted = 0;
 		foreach ( array_map( 'intval', $ids ) as $id ) {
@@ -1222,6 +1231,28 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return $this->serve_raw( $ack, $soap );
 		}
 		$epos = $this->jobs->render_payload( $job );
+
+		// An empty render means the job produced nothing printable — most often
+		// a template whose engine this provider cannot render (Server Direct
+		// Print only speaks the thermal pipeline's ePOS-Print XML). Dispatching
+		// it anyway sends <PrintData></PrintData>: the printer parses that
+		// happily, prints nothing, and posts back success="true", so the job is
+		// recorded as Printed. Fail the job here instead, so the queue shows the
+		// truth and the log names the printer.
+		if ( '' === $epos ) {
+			Logger::error(
+				sprintf(
+					'%s: print job %d rendered an empty payload for printer "%s"; nothing was sent to the printer.',
+					$request->get_route(),
+					(int) $job['id'],
+					$printer_id
+				)
+			);
+			update_post_meta( (int) $job['id'], Print_Job_Service::META_ERROR, 'empty_rendered_payload' );
+			$this->jobs->set_status( (int) $job['id'], Print_Job_Service::STATUS_FAILED );
+
+			return $this->serve_raw( $ack, $soap );
+		}
 
 		// Server Direct Print expects the print data wrapped in
 		// PrintRequestInfo > ePOSPrint > PrintData — NOT the SOAP envelope used

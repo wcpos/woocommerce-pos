@@ -388,6 +388,23 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It rejects malformed IDs before deleting any selected jobs.
+	 */
+	public function test_queue_bulk_delete_rejects_nested_ids_without_deleting(): void {
+		// Arrange.
+		$job = $this->make_job( 'kitchen' );
+
+		// Act.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/queue/delete' );
+		$request->set_body_params( array( 'ids' => array( $job, array( 'nested' ) ) ) );
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertNotNull( $this->jobs->get( $job ) );
+	}
+
+	/**
 	 * DELETE without force cancels; with force the row is gone.
 	 */
 	public function test_delete_item_force_removes_a_terminal_job(): void {

@@ -369,6 +369,7 @@ describe('PrintQueue', () => {
 		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
 		expect(screen.queryByTestId('queue-error-13')).toBeNull();
 		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Printed');
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('1 minute ago');
 	});
 
 	it('deletes a single job through the bulk delete endpoint', async () => {
@@ -383,6 +384,7 @@ describe('PrintQueue', () => {
 				((c[0] as ApiOpts).path ?? '').includes('queue/delete')
 			);
 			expect(deleteCall).toBeTruthy();
+			expect((deleteCall?.[0] as ApiOpts).method).toBe('POST');
 			expect((deleteCall?.[0] as { data?: { ids?: number[] } })?.data?.ids).toEqual([11]);
 		});
 	});
