@@ -84,17 +84,21 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Build a DELETE request (not provided by the base case).
+	 * Build a DELETE request for one print job.
 	 *
-	 * @param string $path Route.
+	 * Takes the id rather than a route so set_route() still receives a literal
+	 * prefix: the lane scanner resolves the namespace from that literal, and a
+	 * bare variable would mark the whole class unresolved.
+	 *
+	 * @param int $id Print job id.
 	 *
 	 * @return \WP_REST_Request
 	 */
-	private function wp_rest_delete_request( string $path = '' ): \WP_REST_Request {
+	private function delete_job_request( int $id ): \WP_REST_Request {
 		$request = new \WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
 		$request->set_method( 'DELETE' );
-		$request->set_route( $path );
+		$request->set_route( '/wcpos/v1/print-jobs/' . $id );
 
 		return $request;
 	}
@@ -412,7 +416,7 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		$printed = $this->make_job( 'kitchen', Print_Job_Service::STATUS_PRINTED );
 
 		// Act: without force a terminal job cannot be cancelled.
-		$request  = $this->wp_rest_delete_request( '/wcpos/v1/print-jobs/' . $printed );
+		$request  = $this->delete_job_request( $printed );
 		$response = rest_do_request( $request );
 
 		// Assert.
@@ -420,7 +424,7 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotNull( $this->jobs->get( $printed ) );
 
 		// Act: with force it is deleted outright.
-		$forced = $this->wp_rest_delete_request( '/wcpos/v1/print-jobs/' . $printed );
+		$forced = $this->delete_job_request( $printed );
 		$forced->set_query_params( array( 'force' => 'true' ) );
 		$forced_response = rest_do_request( $forced );
 
