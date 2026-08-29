@@ -134,7 +134,6 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 - **"Out of stock" stays set** on products that don't manage stock when decimal quantities are switched on.
 - **Deleting a product or coupon from the till now sends it to the trash** instead of deleting it for good.
 - **Templates, stores and sessions can be edited again** on hosts that block certain requests.
-- **The Logs screen shows every page again.**
 - **Variations now follow the rules set by your other plugins**, such as multilingual and multi-store plugins.
 - **Changes made at the till now trigger WooCommerce's own hooks**, so your other plugins notice them.
 - **Store Health now spots when any kind of record needs re-syncing**, not just products.
