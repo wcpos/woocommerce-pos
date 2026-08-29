@@ -55,8 +55,10 @@ class Epson_Sdp_Adapter implements Provider_Adapter_Interface {
 		$name = (string) preg_replace( '/[\x00-\x1F\x7F]/', '', $printer_name );
 		$text = "WCPOS - Cloud Print Test\nPrinter: " . $name . "\n";
 		$text .= 'Date: ' . gmdate( 'Y-m-d H:i' ) . "\nIf you can read this, printing works!\n";
+		// Three blank lines before the cut, the same bottom margin the receipt
+		// templates use, so the last line is not flush against the blade.
 		$xml = '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">'
-			. '<text>' . esc_html( $text ) . '</text><cut type="feed"/></epos-print>';
+			. '<text>' . esc_html( $text ) . '</text><feed line="3"/><cut type="feed"/></epos-print>';
 
 		return array(
 			'content_type' => $this->content_type(),

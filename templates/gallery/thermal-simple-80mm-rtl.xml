@@ -181,6 +181,6 @@ these star columns with hard-coded widths.
   <align mode="center"><text>{{store.footer_imprint}}</text></align>
   {{/store.footer_imprint}}
 
-  <feed lines="2" />
+  <feed lines="3" />
   <cut />
 </receipt>

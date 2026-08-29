@@ -27,8 +27,11 @@ class Epos_Xml_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$total        = isset( $receipt_data['totals']['total_incl'] ) ? (float) $receipt_data['totals']['total_incl'] : 0;
 		$lines        = array(
 			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">',
+			// ePOS <text> attributes are printer state that persists across jobs, so
+			// start from a known reset and switch emphasis off again explicitly.
+			'<text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>',
 			'<text align="center" em="true">' . $this->escape( $store_name ) . "\n" . '</text>',
-			'<text align="center">RECEIPT' . "\n" . '</text>',
+			'<text align="center" em="false">RECEIPT' . "\n" . '</text>',
 			'<text align="left">Order #' . $this->escape( $order_number ) . "\n" . '</text>',
 		);
 

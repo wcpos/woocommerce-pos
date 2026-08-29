@@ -90,6 +90,56 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Text after a styled heading explicitly restores the default printer state.
+	 *
+	 * @return void
+	 */
+	public function test_plain_text_after_styled_heading_restores_default_style(): void {
+		// Arrange.
+		$markup = '<receipt><align mode="center"><bold><size width="2" height="2"><text>Store</text></size></bold></align><text>Plain</text></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '<text align="center" em="true" dw="true" dh="true">Store', $xml );
+		$this->assertStringContainsString( '<text align="left" em="false" dw="false" dh="false">Plain', $xml );
+	}
+
+	/**
+	 * Consecutive plain text elements do not repeat unchanged printer state.
+	 *
+	 * @return void
+	 */
+	public function test_consecutive_plain_texts_do_not_repeat_style_attributes(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><text>First</text><text>Second</text></receipt>' );
+
+		// Assert.
+		$this->assertStringStartsWith(
+			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>',
+			$xml
+		);
+		$this->assertStringContainsString( "<text>First\n</text><text>Second\n</text>", $xml );
+	}
+
+	/**
+	 * The document starts by resetting every persistent text attribute.
+	 *
+	 * @return void
+	 */
+	public function test_document_starts_with_printer_state_reset(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><text>Hello</text></receipt>' );
+
+		// Assert.
+		$this->assertStringStartsWith(
+			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>',
+			$xml
+		);
+	}
+
+	/**
 	 * Plain left text has no alignment or styling attributes.
 	 *
 	 * @return void
@@ -99,12 +149,12 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$xml = $this->render( '<receipt><text>Hello</text></receipt>' );
 
 		// Assert.
-		$this->assertNotFalse( simplexml_load_string( $xml ) );
-		$this->assertStringContainsString( 'Hello', $xml );
-		$this->assertStringNotContainsString( 'align=', $xml );
-		$this->assertStringNotContainsString( 'em="true"', $xml );
-		$this->assertStringNotContainsString( 'dw="true"', $xml );
-		$this->assertStringNotContainsString( 'dh="true"', $xml );
+		$doc = simplexml_load_string( $xml );
+		$this->assertNotFalse( $doc );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$this->assertSame( 'Hello', rtrim( (string) $texts[0], "\n" ) );
+		$this->assertCount( 0, $texts[0]->attributes() );
 	}
 
 	/**
@@ -121,10 +171,11 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertNotFalse( simplexml_load_string( $xml ) );
-		$this->assertEquals( 1, substr_count( $xml, '<text' ) );
 		$doc = simplexml_load_string( $xml );
 		$this->assertNotFalse( $doc );
-		$line = rtrim( (string) $doc->text, "\n" );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$line = rtrim( (string) $texts[0], "\n" );
 		$this->assertEquals( 48, strlen( $line ) );
 		$this->assertStringStartsWith( 'Item', $line );
 		$this->assertStringEndsWith( '$9.99', $line );
@@ -287,6 +338,83 @@ PHP;
 	}
 
 	/**
+	 * Barcode alignment is explicit and text after it reasserts its alignment.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_alignment_is_explicit_and_invalidates_text_alignment_state(): void {
+		// Arrange.
+		$markup = '<receipt><align mode="center"><barcode type="code128">72316</barcode></align><text>Plain</text></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '<barcode type="code128" hri="none" height="40" align="center">', $xml );
+		$this->assertStringContainsString( '<text align="left">Plain', $xml );
+	}
+
+	/**
+	 * Code 128 payloads select code set B and escape literal braces.
+	 *
+	 * @return void
+	 */
+	public function test_code128_payload_selects_code_set_and_escapes_braces(): void {
+		// Arrange / Act.
+		$plain  = $this->render( '<receipt><barcode type="code128">72316</barcode></receipt>' );
+		$braces = $this->render( '<receipt><barcode type="code128">A{B</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '>{B72316</barcode>', $plain );
+		$this->assertStringContainsString( '>{BA{{B</barcode>', $braces );
+	}
+
+	/**
+	 * ePOS-only symbologies pass through without the Code 128 selector.
+	 *
+	 * @return void
+	 */
+	public function test_epos_only_symbology_data_is_not_prefixed(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><barcode type="jan13">4006381333931</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '<barcode type="jan13" hri="none" height="40" align="left">4006381333931</barcode>', $xml );
+		$this->assertStringNotContainsString( '{B', $xml );
+	}
+
+	/**
+	 * QR (<symbol>) data shares the barcode escape layer: backslashes are doubled.
+	 *
+	 * @return void
+	 */
+	public function test_qrcode_data_doubles_backslashes(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><qrcode>C:\dir\x41</qrcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '>C:\\\\dir\\\\x41</symbol>', $xml );
+	}
+
+	/**
+	 * Empty barcode and QR values emit nothing; an unencodable value falls
+	 * back to a centered text line, as on the ESC/POS lane.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_empty_or_invalid_values_are_rescued(): void {
+		// Arrange / Act.
+		$empty   = $this->render( '<receipt><barcode type="code128">  </barcode><qrcode>  </qrcode></receipt>' );
+		$invalid = $this->render( '<receipt><barcode type="ean13">4006381333932</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringNotContainsString( '<barcode', $empty );
+		$this->assertStringNotContainsString( '<symbol', $empty );
+		$this->assertStringNotContainsString( '<barcode', $invalid );
+		$this->assertStringContainsString( '<text align="center">4006381333932' . "\n" . '</text>', $invalid );
+	}
+
+	/**
 	 * Text content with XML-significant characters is escaped and round-trips.
 	 *
 	 * @return void
@@ -302,7 +430,9 @@ PHP;
 		$this->assertStringContainsString( 'Tom &amp; Jerry &lt;x&gt;', $xml );
 		$doc = simplexml_load_string( $xml );
 		$this->assertNotFalse( $doc );
-		$this->assertEquals( 'Tom & Jerry <x>', rtrim( (string) $doc->text, "\n" ) );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$this->assertEquals( 'Tom & Jerry <x>', rtrim( (string) $texts[0], "\n" ) );
 	}
 
 	/**

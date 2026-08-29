@@ -220,6 +220,52 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * ePOS XML uses the ESC/POS Code 128 encoding without a byte-length clamp.
+	 *
+	 * @return void
+	 */
+	public function test_epos_xml_payload_encodes_code128_only_without_clamping(): void {
+		// Arrange.
+		$long = str_repeat( '1', 300 );
+
+		// Act / Assert.
+		$this->assertSame( '{BA{{B', Barcode_Symbology::epos_xml_payload( 'code128', 'A{B' ) );
+		$this->assertSame( '4006381333931', Barcode_Symbology::epos_xml_payload( 'ean13', '4006381333931' ) );
+		$this->assertSame( 302, \strlen( Barcode_Symbology::epos_xml_payload( 'code128', $long ) ) );
+	}
+
+	/**
+	 * ePOS-only pass-through symbologies keep their data verbatim.
+	 *
+	 * normalize_linear() folds unknown types to Code 128; keying the `{B`
+	 * selector on that would blank every symbology ePOS accepts but WCPOS
+	 * does not model (they are numeric or carry their own FNC1/code-set rules).
+	 *
+	 * @return void
+	 */
+	public function test_epos_xml_payload_leaves_epos_only_symbologies_untouched(): void {
+		// Arrange / Act / Assert.
+		$this->assertSame( '4006381333931', Barcode_Symbology::epos_xml_payload( 'jan13', '4006381333931' ) );
+		$this->assertSame( '(01)201234567890*', Barcode_Symbology::epos_xml_payload( 'gs1_128', '(01)201234567890*' ) );
+		$this->assertSame( 'ORDER-72316', Barcode_Symbology::epos_xml_payload( 'code128_auto', 'ORDER-72316' ) );
+		// An unknown name still falls back to Code 128, exactly like epos_xml_name().
+		$this->assertSame( '{Bxyz', Barcode_Symbology::epos_xml_payload( 'not-a-symbology', 'xyz' ) );
+	}
+
+	/**
+	 * ePOS barcode data has its own `\xnn` / `\\` escape layer, so a literal
+	 * backslash is doubled for every symbology (otherwise `A\x41` scans as `AA`).
+	 *
+	 * @return void
+	 */
+	public function test_epos_xml_payload_doubles_backslashes(): void {
+		// Arrange / Act / Assert.
+		$this->assertSame( '{BA\\\\x41', Barcode_Symbology::epos_xml_payload( 'code128', 'A\\x41' ) );
+		$this->assertSame( 'C:\\\\dir', Barcode_Symbology::epos_xml_payload( 'code39', 'C:\\dir' ) );
+		$this->assertSame( 'C:\\\\dir', Barcode_Symbology::epos_xml_escape_data( 'C:\\dir' ) );
+	}
+
+	/**
 	 * StarPRNT Code 128 data escapes percent and carries no start code.
 	 *
 	 * Star's escape character is "%", not ESC/POS's "{", and omitting the start
