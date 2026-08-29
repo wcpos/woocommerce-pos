@@ -1119,25 +1119,70 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @param string          $printer_id Printer ID.
 	 * @param string          $code       Failure code.
 	 * @param int             $job_id     Print job ID.
+	 * @param int|null        $status     Epson ePOS response status bitmask, when the result carried one.
 	 */
-	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id ): void {
+	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id, ?int $status = null ): void {
+		// One detail string serves both the stored reason and the log line, and it
+		// keeps the raw hex even when no bit decodes, so an unmapped or
+		// model-specific status can still be read back from a screenshot.
+		$flags  = null === $status ? '' : implode( ', ', self::describe_epson_status( $status ) );
+		$detail = null === $status ? '' : sprintf( ' (0x%08X%s)', $status, '' === $flags ? '' : ': ' . $flags );
+		$reason = $code . $detail;
+
 		// Persist it too, not just log it. Push providers already record their
 		// submission error against the job; polling printers report theirs here,
 		// and without this the queue can only ever say "Failed" while the reason
-		// (EX_TIMEOUT, a Star status code) is buried in the log.
-		if ( '' !== $code ) {
-			update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $code ) );
+		// (EX_TIMEOUT, a Star status code) is buried in the log. The decoded
+		// Epson status bits are what turn "EX_TIMEOUT" into "cover open".
+		if ( '' !== $reason ) {
+			update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $reason ) );
 		}
 
 		Logger::error(
 			sprintf(
-				'%s: printer "%s" reported failure code "%s" for print job %d.',
+				'%s: printer "%s" reported failure code "%s"%s for print job %d.',
 				$request->get_route(),
 				$printer_id,
 				$code,
+				$detail,
 				$job_id
 			)
 		);
+	}
+
+	/**
+	 * Decode an Epson ePOS-Print response status bitmask.
+	 *
+	 * @param int $status Decimal ASB status bitmask.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function describe_epson_status( int $status ): array {
+		// Epson ePOS-Print XML User's Manual, response `status` table (ASB bits).
+		// Fault bits only: informational ones (print complete, drawer pin, feed
+		// button, panel switch, buzzer) say nothing about why a print failed.
+		$labels = array(
+			0x00000001 => __( 'no response from printer', 'woocommerce-pos' ),
+			0x00000008 => __( 'offline', 'woocommerce-pos' ),
+			0x00000020 => __( 'cover open', 'woocommerce-pos' ),
+			0x00000100 => __( 'waiting for online recovery', 'woocommerce-pos' ),
+			0x00000400 => __( 'mechanical error', 'woocommerce-pos' ),
+			0x00000800 => __( 'autocutter error', 'woocommerce-pos' ),
+			0x00002000 => __( 'unrecoverable error', 'woocommerce-pos' ),
+			0x00004000 => __( 'auto-recoverable error', 'woocommerce-pos' ),
+			0x00020000 => __( 'paper near end', 'woocommerce-pos' ),
+			0x00080000 => __( 'paper end', 'woocommerce-pos' ),
+			0x80000000 => __( 'spooler stopped', 'woocommerce-pos' ),
+		);
+
+		$descriptions = array();
+		foreach ( $labels as $bit => $label ) {
+			if ( 0 !== ( $status & $bit ) ) {
+				$descriptions[] = $label;
+			}
+		}
+
+		return $descriptions;
 	}
 
 	/**
@@ -1212,7 +1257,16 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 						$code = sanitize_text_field( $matches[1] );
 					}
 
-					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'] );
+					$status = null;
+					if ( 1 === preg_match( '/\bstatus="(\d+)"/', $result_xml, $matches ) ) {
+						// The ASB status is unsigned 32-bit; on a 32-bit PHP build a value
+						// with bit 31 set does not fit and (int) would saturate to
+						// 0x7FFFFFFF, decoding every label. Such a value is left undecoded
+						// rather than misdecoded.
+						$status = (float) $matches[1] <= PHP_INT_MAX ? (int) $matches[1] : null;
+					}
+
+					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'], $status );
 				}
 			}
 
