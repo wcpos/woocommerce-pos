@@ -570,7 +570,7 @@ JS;
 		wp_enqueue_script(
 			'wcpos-template-gallery',
 			PLUGIN_URL . $dir . '/js/template-gallery.js',
-			array( 'react', 'react-dom', 'wp-api-fetch', 'wp-url' ),
+			array( 'react', 'react-dom', 'wp-api-fetch', \WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE, 'wp-url' ),
 			PLUGIN_VERSION,
 			true
 		);
