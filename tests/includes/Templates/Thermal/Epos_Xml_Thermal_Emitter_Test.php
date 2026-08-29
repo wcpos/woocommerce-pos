@@ -384,6 +384,19 @@ PHP;
 	}
 
 	/**
+	 * QR (<symbol>) data shares the barcode escape layer: backslashes are doubled.
+	 *
+	 * @return void
+	 */
+	public function test_qrcode_data_doubles_backslashes(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><qrcode>C:\dir\x41</qrcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '>C:\\\\dir\\\\x41</symbol>', $xml );
+	}
+
+	/**
 	 * Empty barcode and QR values emit nothing; an unencodable value falls
 	 * back to a centered text line, as on the ESC/POS lane.
 	 *

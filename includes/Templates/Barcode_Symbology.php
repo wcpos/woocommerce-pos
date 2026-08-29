@@ -372,6 +372,12 @@ class Barcode_Symbology {
 	 * pass-through symbologies in EPOS_XML_ONLY_TYPES (`jan13`, `gs1_128`,
 	 * `code128_auto`, …) and silently blank them.
 	 *
+	 * ePOS barcode data also has its own escape layer on top of the XML text:
+	 * `\xnn` is a control byte and `\\` a literal backslash (ePOS-Print XML
+	 * manual, <barcode> "escape sequences"). A raw backslash in a value would
+	 * therefore be decoded by the printer — `A\x41` scans as `AA` — so every
+	 * backslash is doubled first, for every symbology.
+	 *
 	 * Unlike escpos_payload() there is no MAX_DATA_BYTES clamp here: the
 	 * emitter validates the value up front with the ESC/POS rules and falls
 	 * back to text, and the data travels as XML rather than a length-prefixed
@@ -384,11 +390,27 @@ class Barcode_Symbology {
 	 * @return string The XML barcode payload.
 	 */
 	public static function epos_xml_payload( string $type, string $value ): string {
+		$value = self::epos_xml_escape_data( $value );
+
 		if ( self::DEFAULT_SYMBOLOGY === self::epos_xml_name( $type ) ) {
 			return self::escpos_code128_data( $value );
 		}
 
 		return $value;
+	}
+
+	/**
+	 * Apply the ePOS-Print barcode/symbol data escape layer to a value.
+	 *
+	 * Shared by <barcode> and <symbol> (QR) data, which use the same
+	 * `\xnn` / `\\` escape sequences.
+	 *
+	 * @param string $value The raw value.
+	 *
+	 * @return string The value with literal backslashes doubled.
+	 */
+	public static function epos_xml_escape_data( string $value ): string {
+		return str_replace( '\\', '\\\\', $value );
 	}
 
 	/**

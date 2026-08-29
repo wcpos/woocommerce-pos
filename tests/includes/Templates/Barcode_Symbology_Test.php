@@ -253,6 +253,19 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * ePOS barcode data has its own `\xnn` / `\\` escape layer, so a literal
+	 * backslash is doubled for every symbology (otherwise `A\x41` scans as `AA`).
+	 *
+	 * @return void
+	 */
+	public function test_epos_xml_payload_doubles_backslashes(): void {
+		// Arrange / Act / Assert.
+		$this->assertSame( '{BA\\\\x41', Barcode_Symbology::epos_xml_payload( 'code128', 'A\\x41' ) );
+		$this->assertSame( 'C:\\\\dir', Barcode_Symbology::epos_xml_payload( 'code39', 'C:\\dir' ) );
+		$this->assertSame( 'C:\\\\dir', Barcode_Symbology::epos_xml_escape_data( 'C:\\dir' ) );
+	}
+
+	/**
 	 * StarPRNT Code 128 data escapes percent and carries no start code.
 	 *
 	 * Star's escape character is "%", not ESC/POS's "{", and omitting the start

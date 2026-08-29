@@ -595,7 +595,10 @@ class Epos_Xml_Thermal_Emitter {
 		}
 		$size = isset( $node['size'] ) ? (int) $node['size'] : 4;
 
-		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $value ) . '</symbol>';
+		// <symbol> data shares the barcode escape layer (`\xnn`, `\\`).
+		$payload = Barcode_Symbology::epos_xml_escape_data( $value );
+
+		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $payload ) . '</symbol>';
 		$this->printer['align'] = null;
 	}
 
