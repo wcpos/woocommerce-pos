@@ -123,32 +123,23 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 
 = 1.10.3 - 2026/08/30 =
 
-**Follow-up fixes across the 1.10 sync engine, receipt printing, and the mobile apps.**
+- **Card payments work again in the iOS and Android apps.**
+- **Product search no longer matches product descriptions**, so searches find the right products again.
+- **Prevent overselling now holds stock during checkout**, so two tills can't sell the same item.
+- **Orders save faster.**
+- **Epson receipts print properly again** -- text size, the order barcode, and where the paper is cut.
+- **Receipts no longer print twice** when a printer briefly loses its connection.
+- **A blank print no longer reports as printed** -- the print queue now shows what went wrong.
+- **The print queue can be cleared**, shows every job by default, and lists the newest first.
+- **"Out of stock" stays set** on products that don't manage stock when decimal quantities are switched on.
+- **Deleting a product or coupon from the till now sends it to the trash** instead of deleting it for good.
+- **Templates, stores and sessions can be edited again** on hosts that block certain requests.
+- **The Logs screen shows every page again.**
+- **Variations now follow the rules set by your other plugins**, such as multilingual and multi-store plugins.
+- **Changes made at the till now trigger WooCommerce's own hooks**, so your other plugins notice them.
+- **Store Health now spots when any kind of record needs re-syncing**, not just products.
 
-- **Card payments in the iOS and Android apps work again.** The hosted pay page silently refused the payment and reloaded itself, with no error and no request to the gateway, whenever the app replayed WooCommerce's guest session cookie -- which the native apps always do. The web app was unaffected.
-- **Product search stops matching descriptions.** Searching the POS returned products whose description merely mentioned your term, crowding real name matches out of the results -- on a large catalogue a search could show 6 of the 11 products that actually matched. Search reads product name, SKU and barcode again, as it did in 1.9.
-- **Prevent overselling now reserves stock, not just checks it.** With the feature switched on, saving an order from the till checked stock but did not hold it, so two tills could pass the same check at the same moment. Stock is now reserved as part of the save, and released again if the order is rejected.
-- **Saving an order is faster.** Every save rebuilt the order's sync fingerprint -- up to four times per checkout. It is now computed when the order is synced instead, so a save does only the work WooCommerce would do anyway.
-- **"Out of stock" sticks on products that don't manage stock.** With **Enable decimal quantities** on, saving a product in wp-admin forced its stock status back to "In stock" whenever "Manage stock" was unchecked, undoing a manually chosen "Out of stock" or "On backorder". WCPOS now leaves that choice alone, as WooCommerce does.
-- **Variations respect your other plugins' rules.** When the POS fetched specific variations by id, plugins that scope which variations are visible (multilingual and multi-store plugins, for example) were bypassed. That lane now runs the same WooCommerce query as every other product request.
-- **POS edits fire the same WooCommerce hooks as wp-admin, with one deliberate exception.** Creating, updating and deleting records from the till now triggers the hooks a wc/v3 write would, in the same order -- except that deleting an order from the POS restores reduced stock, while wc/v3 leaves it reduced. A customer update fired `woocommerce_update_customer` twice; it now fires once. An order paid through a real gateway is never relabelled as paid offline if a till re-sends the same payment flag.
-- **Deleting a product or coupon from the till now sends it to the trash.** Since 1.10.0 a delete pushed from the POS was permanent -- no trash, no undo -- for every catalogue record. Products and coupons now trash by default like a wp-admin delete (unless your site has trash disabled); categories, brands and customers still delete outright because WooCommerce has no trash for them. Deleting from the till remains opt-in.
-- **Store Health repair fingerprints now span every record type**, not only products, so each collection can be re-synced when its payload contract changes. Barcode-setting changes are tracked automatically; extensions that filter served records can trigger a repair with `woocommerce_pos_invalidate`.
-
-**Receipt printing**
-
-- **Receipts print the way the template looks (Epson ePOS).** Everything after a double-size store name printed double-size too, and bold, underline and alignment leaked down the receipt the same way. The order barcode silently did not print at all, and the paper was cut before the footer. All three are fixed; the app's direct WiFi and USB printing gets the matching cut fix.
-- **A job that printed nothing no longer reports "Printed".** Changing an auto-print rule's printer could leave the rule on a template the new printer cannot render: the printer accepted the job, printed a blank page and honestly reported success. The pairing is corrected when you change the printer, refused before dispatch, and shown as failed with the reason. A rule left in that state no longer blocks the whole settings screen from saving.
-- **Receipts no longer print twice.** A job the printer had taken but not yet confirmed -- after a dropped link, for example -- was sent again two minutes later and printed a second copy. It is now marked unconfirmed and left for you to retry, and a late confirmation from the printer still closes the job off properly.
-- **The print queue answers the questions you open it for.** Rows can be deleted, every status shows by default instead of only "needs attention", the newest job is at the top, and each row names its template and why it failed. Epson failure codes are decoded, so a failed job reads "cover open" or "paper end" rather than a number alone.
-- **An idle Epson printer no longer fails its own jobs.** Epson Server Direct Print printers post a status after every poll; an empty one was being read as a failed print result, failing a job that was still in progress.
-
-**WP Admin**
-
-- **Editing works on hosts that block PUT and DELETE.** Deleting or activating a receipt template, and terminating login sessions, returned a 403 on hosts whose firewall rejects those methods or the header WordPress substitutes for them -- a common firewall default. These requests now take a form every host accepts.
-- **The Logs screen pages properly.** The pager collapsed to a single page on hosts that strip response headers, so 200 pages of logs showed as one.
-
-**Note for developers:** the `woocommerce_pos_sync_legacy_revision_grace` option and the pre-1.10.0 revision recipes are gone -- a `baseRevision` now compares strictly against the canonical revision. New extension points: `woocommerce_pos_order_pull_ids` (narrow which orders `/orders/pull` serves) and `do_action( 'woocommerce_pos_invalidate', ... )` (journal an out-of-band change so tills re-fetch the record). Owned CORS preflights now reflect any announced `x-wcpos-*` request header over the frozen allow-list, and the echo probe reports `cors.reflects_request_headers`. `wcpos/v2` product search is served by the new `API\Product_Search`, which holds the v1 title/SKU/barcode SQL so the two lanes cannot drift again. Admin bundles depend on a new registered script handle, `wcpos-api-fetch-method-param`, which rewrites `wp.apiFetch` `PUT`/`PATCH`/`DELETE` on `wcpos/v*` routes to `POST` + `?_method=` -- the handle string is a compatibility contract for extensions that enqueue against it. The POS app also sends its protocol and version (`wcpos_protocol` / `wcpos_client`); the plugin records a daily, consent-gated `pos_client_signal` event from it.
+**Note for developers:** the `woocommerce_pos_sync_legacy_revision_grace` option and the pre-1.10.0 revision recipes are gone. New extension points: `woocommerce_pos_order_pull_ids` and `woocommerce_pos_invalidate`. `wcpos/v2` product search matches title, SKU and barcode only. Admin bundles now depend on a new script handle, `wcpos-api-fetch-method-param`, which rewrites `PUT`/`PATCH`/`DELETE` on `wcpos/v*` routes to `POST` + `?_method=`. The app now sends `wcpos_protocol` and `wcpos_client` with every request.
 
 = 1.10.2 - 2026/08/26 =
 - **Fixed a regression in order save speed for CPT orders** -- HPOS orders are not affected.
