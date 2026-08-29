@@ -56,7 +56,7 @@ final class Product_Search {
 	 */
 	public static function posts_join( string $join, WP_Query $query ): string {
 		global $wpdb;
-		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
+		if ( self::is_searching( $query ) && false === strpos( $join, 'pm1' ) ) {
 			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
 		}
 		return $join;
@@ -71,9 +71,19 @@ final class Product_Search {
 	 */
 	public static function posts_groupby( string $groupby, WP_Query $query ): string {
 		global $wpdb;
-		if ( ! empty( $query->query_vars['s'] ) ) {
+		if ( self::is_searching( $query ) ) {
 			$groupby = "{$wpdb->posts}.ID";
 		}
 		return $groupby;
+	}
+
+	/**
+	 * Whether the query carries a search term. Not empty(): the literal term "0" is a search.
+	 *
+	 * @param WP_Query $query Query instance.
+	 * @return bool
+	 */
+	private static function is_searching( WP_Query $query ): bool {
+		return isset( $query->query_vars['s'] ) && '' !== (string) $query->query_vars['s'];
 	}
 }

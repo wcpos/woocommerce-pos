@@ -31,7 +31,8 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 * @return array
 	 */
 	public function forwarded_params( array $params, WP_REST_Request $request ): array {
-		$this->searching = ! empty( $params['search'] );
+		// Not empty(): the literal search term "0" is a search too.
+		$this->searching = isset( $params['search'] ) && '' !== trim( (string) $params['search'] );
 
 		return $params;
 	}

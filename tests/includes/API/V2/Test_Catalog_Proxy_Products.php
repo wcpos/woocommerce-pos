@@ -205,4 +205,18 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $title->get_id(), $rows[0]['id'] );
 		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
 	}
+
+	/**
+	 * PHP's empty() calls the string "0" empty; a search for the literal term 0 is still a search.
+	 */
+	public function test_product_search_for_literal_zero_is_a_search(): void {
+		$description = ProductHelper::create_simple_product( array( 'name' => 'Alpha', 'sku' => 'ALPHA', 'description' => 'Rated 0 stars' ) );
+		$zero        = ProductHelper::create_simple_product( array( 'name' => 'Beta', 'sku' => 'ZERO-0', 'description' => 'no digits here' ) );
+
+		$rows = $this->read( array( 'search' => '0' ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $zero->get_id(), $rows[0]['id'] );
+		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
+	}
 }
