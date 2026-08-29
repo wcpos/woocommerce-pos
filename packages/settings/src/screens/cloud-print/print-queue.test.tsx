@@ -335,6 +335,29 @@ describe('PrintQueue', () => {
 		).toBeInTheDocument();
 	});
 
+	it('renders rows in the order the server returned them, newest first', async () => {
+		// The server orders DESC; the table must not re-sort or reverse it. The
+		// shared fixture gives every job the same created_gmt, so an ascending
+		// regression would pass unnoticed — use distinct timestamps and assert
+		// the rendered order.
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = [
+				{ ...base.jobs[0], id: 11, created_gmt: '2026-08-29 12:00:00' },
+				{ ...base.jobs[1], id: 12, created_gmt: '2026-08-29 11:00:00' },
+				{ ...base.jobs[2], id: 13, created_gmt: '2026-08-29 10:00:00' },
+			];
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		const rendered = screen
+			.getAllByTestId(/^queue-row-/)
+			.map((row) => row.getAttribute('data-testid'));
+		expect(rendered).toEqual(['queue-row-11', 'queue-row-12', 'queue-row-13']);
+	});
+
 	it('shows a recorded failure reason on the row', async () => {
 		routeQueue(() => {
 			const base = makeQueue();
