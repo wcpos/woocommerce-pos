@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-28T19:21:55+00:00\n"
+"POT-Creation-Date: 2026-08-29T13:48:04+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -673,9 +673,9 @@ msgid "This job's template no longer exists, so it cannot be re-rendered."
 msgstr ""
 
 #: includes/API/V1/Print_Jobs_Controller.php:742
-#: includes/API/V1/Print_Jobs_Controller.php:1239
-#: includes/API/V1/Print_Jobs_Controller.php:1355
-#: includes/API/V1/Print_Jobs_Controller.php:1387
+#: includes/API/V1/Print_Jobs_Controller.php:1260
+#: includes/API/V1/Print_Jobs_Controller.php:1376
+#: includes/API/V1/Print_Jobs_Controller.php:1408
 msgid "Print job could not be created."
 msgstr ""
 
@@ -691,90 +691,90 @@ msgstr ""
 msgid "Invalid printer token."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1179
+#: includes/API/V1/Print_Jobs_Controller.php:1200
 msgid "A printer_id is required."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1204
+#: includes/API/V1/Print_Jobs_Controller.php:1225
 msgid "PrintNode print jobs require an order and a template."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1219
-#: includes/API/V1/Print_Jobs_Controller.php:1318
+#: includes/API/V1/Print_Jobs_Controller.php:1240
+#: includes/API/V1/Print_Jobs_Controller.php:1339
 msgid "Unknown printer."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1268
+#: includes/API/V1/Print_Jobs_Controller.php:1289
 msgid "Unknown order."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1277
+#: includes/API/V1/Print_Jobs_Controller.php:1298
 msgid "Unknown template."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1294
+#: includes/API/V1/Print_Jobs_Controller.php:1315
 msgid "The selected template cannot be printed on this printer."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1340
+#: includes/API/V1/Print_Jobs_Controller.php:1361
 msgid "Test print is not available for this printer yet."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1414
+#: includes/API/V1/Print_Jobs_Controller.php:1435
 msgid "This PrintNode printer is missing its API key or printer id."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1428
+#: includes/API/V1/Print_Jobs_Controller.php:1449
 msgid "Could not generate the test print."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1503
+#: includes/API/V1/Print_Jobs_Controller.php:1524
 msgid "Epson Server Direct Print accepts order-based ePOS-Print jobs only, not raw payloads."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1510
+#: includes/API/V1/Print_Jobs_Controller.php:1531
 msgid "Epson Server Direct Print requires the epos-xml format."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1521
+#: includes/API/V1/Print_Jobs_Controller.php:1542
 msgid "Star CloudPRNT does not accept the epos-xml format."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1533
+#: includes/API/V1/Print_Jobs_Controller.php:1554
 msgid "Star CloudPRNT printers require order-based template jobs or a raw payload."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1551
+#: includes/API/V1/Print_Jobs_Controller.php:1572
 msgid "No relay verification is pending."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1591
+#: includes/API/V1/Print_Jobs_Controller.php:1612
 msgid "Sorry, you cannot manage print jobs."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Products_Controller.php:146
+#: includes/API/V1/Products_Controller.php:147
 #: includes/API/V1/Product_Variations_Controller.php:142
 msgid "Barcode"
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:184
+#: includes/API/V1/Products_Controller.php:185
 msgid "Limit result set to products assigned to brand IDs or slugs, separated by commas."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:192
+#: includes/API/V1/Products_Controller.php:193
 msgid "Operator to compare product brand terms."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:202
+#: includes/API/V1/Products_Controller.php:203
 msgid "Operator to compare product category terms."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:212
+#: includes/API/V1/Products_Controller.php:213
 msgid "Operator to compare product tag terms."
 msgstr ""
 
@@ -3159,12 +3159,18 @@ msgstr ""
 msgid "You do not have permission to update access settings."
 msgstr ""
 
-#: includes/Services/Settings/Cloud_Print_Section.php:194
+#: includes/Services/Settings/Cloud_Print_Section.php:195
 msgid "Star Online printers need an API key, a valid stario.online CloudPRNT URL, and a device."
 msgstr ""
 
-#: includes/Services/Settings/Cloud_Print_Section.php:203
+#: includes/Services/Settings/Cloud_Print_Section.php:204
 msgid "Duplicate printer id."
+msgstr ""
+
+#. translators: 1: printer name, 2: receipt template name.
+#: includes/Services/Settings/Cloud_Print_Section.php:237
+#, php-format
+msgid "%1$s cannot print the \"%2$s\" template. Choose a template this printer supports."
 msgstr ""
 
 #. translators: Error message shown when invalid arguments are provided.
