@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-29T13:48:04+00:00\n"
+"POT-Creation-Date: 2026-08-29T15:20:19+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -3165,12 +3165,6 @@ msgstr ""
 
 #: includes/Services/Settings/Cloud_Print_Section.php:204
 msgid "Duplicate printer id."
-msgstr ""
-
-#. translators: 1: printer name, 2: receipt template name.
-#: includes/Services/Settings/Cloud_Print_Section.php:237
-#, php-format
-msgid "%1$s cannot print the \"%2$s\" template. Choose a template this printer supports."
 msgstr ""
 
 #. translators: Error message shown when invalid arguments are provided.
