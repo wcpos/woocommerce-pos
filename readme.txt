@@ -123,7 +123,7 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 
 = 1.10.3 - 2026/08/30 =
 
-- **Card payments work again in the iOS and Android apps.**
+- **Payments work again in the iOS and Android apps.**
 - **Product search no longer matches product descriptions**, so searches find the right products again.
 - **Prevent overselling now holds stock during checkout**, so two tills can't sell the same item.
 - **Orders save faster.**
