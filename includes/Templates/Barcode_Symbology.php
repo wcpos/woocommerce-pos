@@ -363,6 +363,22 @@ class Barcode_Symbology {
 	}
 
 	/**
+	 * Build the ePOS-Print XML payload for a barcode value.
+	 *
+	 * @param string $type  The barcode type attribute value.
+	 * @param string $value The barcode value.
+	 *
+	 * @return string The XML barcode payload.
+	 */
+	public static function epos_xml_payload( string $type, string $value ): string {
+		if ( self::DEFAULT_SYMBOLOGY === self::normalize_linear( $type ) ) {
+			return self::escpos_code128_data( $value );
+		}
+
+		return $value;
+	}
+
+	/**
 	 * Map a symbology to its StarPRNT `ESC b n1` selector.
 	 *
 	 * @param string $type The barcode type attribute value.

@@ -220,6 +220,21 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * ePOS XML uses the ESC/POS Code 128 encoding without a byte-length clamp.
+	 *
+	 * @return void
+	 */
+	public function test_epos_xml_payload_encodes_code128_only_without_clamping(): void {
+		// Arrange.
+		$long = str_repeat( '1', 300 );
+
+		// Act / Assert.
+		$this->assertSame( '{BA{{B', Barcode_Symbology::epos_xml_payload( 'code128', 'A{B' ) );
+		$this->assertSame( '4006381333931', Barcode_Symbology::epos_xml_payload( 'ean13', '4006381333931' ) );
+		$this->assertSame( 302, \strlen( Barcode_Symbology::epos_xml_payload( 'code128', $long ) ) );
+	}
+
+	/**
 	 * StarPRNT Code 128 data escapes percent and carries no start code.
 	 *
 	 * Star's escape character is "%", not ESC/POS's "{", and omitting the start

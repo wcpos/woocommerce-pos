@@ -28,7 +28,8 @@ class Epos_Xml_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$lines        = array(
 			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">',
 			'<text align="center" em="true">' . $this->escape( $store_name ) . "\n" . '</text>',
-			'<text align="center">RECEIPT' . "\n" . '</text>',
+			// ePOS <text> attributes persist until changed; switch emphasis off explicitly.
+			'<text align="center" em="false">RECEIPT' . "\n" . '</text>',
 			'<text align="left">Order #' . $this->escape( $order_number ) . "\n" . '</text>',
 		);
 

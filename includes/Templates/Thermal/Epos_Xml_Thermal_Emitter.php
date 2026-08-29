@@ -11,6 +11,8 @@
  * fixed, non-template layout from canonical receipt data.
  *
  * Deliberate deviations / limitations:
+ *  - ePOS `<text>` attributes are persistent printer state, so the emitter
+ *    tracks that state and emits only changes after a reset preamble.
  *  - Double rules (`<line style="double"/>`) are emitted as ASCII `=` repeated
  *    across the paper width (consistent with the ESC/POS emitter) rather than a
  *    box-drawing glyph, so output is codepage-independent.
@@ -99,6 +101,22 @@ class Epos_Xml_Thermal_Emitter {
 	private $dh = false;
 
 	/**
+	 * The text style state currently held by the printer.
+	 *
+	 * A null value means the state is unknown and must be re-emitted.
+	 *
+	 * @var array
+	 */
+	private $printer = array(
+		'align'   => null,
+		'em'      => null,
+		'ul'      => null,
+		'reverse' => null,
+		'dw'      => null,
+		'dh'      => null,
+	);
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $options Render options.
@@ -126,6 +144,15 @@ class Epos_Xml_Thermal_Emitter {
 		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
 
 		$this->buffer .= '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+		$this->buffer .= '<text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>';
+		$this->printer = array(
+			'align'   => 'left',
+			'em'      => false,
+			'ul'      => false,
+			'reverse' => false,
+			'dw'      => false,
+			'dh'      => false,
+		);
 
 		$children = isset( $ast['children'] ) && \is_array( $ast['children'] ) ? $ast['children'] : array();
 		$this->walk_nodes( $this->nodes_with_auto_drawer( $children ) );
@@ -351,34 +378,37 @@ class Epos_Xml_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_text_element( string $content ): void {
-		$this->buffer .= '<text' . $this->style_attributes() . '>' . $this->escape( $content ) . "\n" . '</text>';
+		$this->buffer .= '<text' . $this->style_attributes( $this->align, $this->em, $this->ul, $this->reverse, $this->dw, $this->dh ) . '>' . $this->escape( $content ) . "\n" . '</text>';
 	}
 
 	/**
-	 * Build the style attribute string for the current state.
+	 * Build the text attributes that change the printer to the desired state.
+	 *
+	 * @param string $align   Desired alignment.
+	 * @param bool   $em      Desired emphasis state.
+	 * @param bool   $ul      Desired underline state.
+	 * @param bool   $reverse Desired reverse state.
+	 * @param bool   $dw      Desired double-width state.
+	 * @param bool   $dh      Desired double-height state.
 	 *
 	 * @return string The attribute string (with a leading space when non-empty).
 	 */
-	private function style_attributes(): string {
+	private function style_attributes( string $align, bool $em, bool $ul, bool $reverse, bool $dw, bool $dh ): string {
+		$desired = array(
+			'align'   => $align,
+			'em'      => $em,
+			'ul'      => $ul,
+			'reverse' => $reverse,
+			'dw'      => $dw,
+			'dh'      => $dh,
+		);
 		$attrs = '';
-		if ( 'center' === $this->align || 'right' === $this->align ) {
-			$attrs .= ' align="' . $this->align . '"';
+		foreach ( $desired as $name => $value ) {
+			if ( $this->printer[ $name ] !== $value ) {
+				$attrs .= ' ' . $name . '="' . ( \is_bool( $value ) ? ( $value ? 'true' : 'false' ) : $value ) . '"';
+			}
 		}
-		if ( $this->em ) {
-			$attrs .= ' em="true"';
-		}
-		if ( $this->ul ) {
-			$attrs .= ' ul="true"';
-		}
-		if ( $this->reverse ) {
-			$attrs .= ' reverse="true"';
-		}
-		if ( $this->dw ) {
-			$attrs .= ' dw="true"';
-		}
-		if ( $this->dh ) {
-			$attrs .= ' dh="true"';
-		}
+		$this->printer = $desired;
 
 		return $attrs;
 	}
@@ -490,7 +520,7 @@ class Epos_Xml_Thermal_Emitter {
 			}
 		}
 
-		$this->buffer .= '<text align="left">' . $this->escape( $line ) . "\n" . '</text>';
+		$this->buffer .= '<text' . $this->style_attributes( 'left', $this->em, $this->ul, $this->reverse, $this->dw, $this->dh ) . '>' . $this->escape( $line ) . "\n" . '</text>';
 	}
 
 	/**
@@ -514,7 +544,7 @@ class Epos_Xml_Thermal_Emitter {
 			$text = str_repeat( '-', $this->columns );
 		}
 
-		$this->buffer .= '<text>' . $this->escape( $text ) . "\n" . '</text>';
+		$this->buffer .= '<text' . $this->style_attributes( $this->align, $this->em, $this->ul, $this->reverse, $this->dw, $this->dh ) . '>' . $this->escape( $text ) . "\n" . '</text>';
 	}
 
 	/**
@@ -534,7 +564,10 @@ class Epos_Xml_Thermal_Emitter {
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		$height = max( 1, min( 255, $height ) );
 
-		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '">' . $this->escape( $value ) . '</barcode>';
+		$payload = Barcode_Symbology::epos_xml_payload( $type, $value );
+
+		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '" align="' . $this->align . '">' . $this->escape( $payload ) . '</barcode>';
+		$this->printer['align'] = null;
 	}
 
 	/**
@@ -548,7 +581,8 @@ class Epos_Xml_Thermal_Emitter {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
 		$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
 
-		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '">' . $this->escape( $value ) . '</symbol>';
+		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '" align="' . $this->align . '">' . $this->escape( $value ) . '</symbol>';
+		$this->printer['align'] = null;
 	}
 
 	/**

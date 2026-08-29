@@ -348,6 +348,6 @@ the star to the remaining 32-CPL space at render time.
   <align mode="center"><text>{{store.opening_hours_notes}}</text></align>
   {{/store.opening_hours_notes}}
 
-  <feed lines="2" />
+  <feed lines="3" />
   <cut />
 </receipt>
