@@ -387,6 +387,23 @@ describe('PrintQueue', () => {
 		expect(screen.getByTestId('queue-error-13')).not.toHaveTextContent('claim_timeout');
 	});
 
+	it('drops the retry advice from an unconfirmed failure that was already retried', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13
+					? { ...job, error: 'claim_timeout', unconfirmed: true, retried_to: 21 }
+					: job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('never confirmed');
+		expect(screen.getByTestId('queue-error-13')).not.toHaveTextContent('retry it if it did not print');
+	});
+
 	it('shows completion timing instead of a stale error on a printed job', async () => {
 		routeQueue(() => {
 			const base = makeQueue();

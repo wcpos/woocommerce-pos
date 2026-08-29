@@ -496,10 +496,15 @@ export function PrintQueue() {
 															className="wcpos:text-red-700"
 															data-testid={`queue-error-${job.id}`}
 														>
-															{t(
-																'cloud_print.queue_unconfirmed',
-																'The printer never confirmed this job. It was not re-sent automatically, which could print it twice — retry it if it did not print.'
-															)}
+															{job.retried_to
+																? t(
+																		'cloud_print.queue_unconfirmed_retried',
+																		'The printer never confirmed this job.'
+																	)
+																: t(
+																		'cloud_print.queue_unconfirmed',
+																		'The printer never confirmed this job. It was not re-sent automatically, which could print it twice — retry it if it did not print.'
+																	)}
 														</span>
 													) : job.status === 'failed' && job.error ? (
 														<span
