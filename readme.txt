@@ -128,9 +128,9 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 - **Prevent overselling now holds stock during checkout**, so two tills can't sell the same item.
 - **Orders save faster.**
 - **Epson receipts print properly again** -- text size, the order barcode, and where the paper is cut.
-- **Receipts no longer print twice** when a printer briefly loses its connection.
-- **A blank print no longer reports as printed** -- the print queue now shows what went wrong.
-- **The print queue can be cleared**, shows every job by default, and lists the newest first.
+- **Cloud print no longer prints a receipt twice** when a printer briefly loses its connection.
+- **A blank cloud print no longer reports as printed** -- the cloud print queue now shows what went wrong.
+- **The cloud print queue can be cleared**, shows every job by default, and lists the newest first.
 - **"Out of stock" stays set** on products that don't manage stock when decimal quantities are switched on.
 - **Deleting a product or coupon from the till now sends it to the trash** instead of deleting it for good.
 - **Variations now follow the rules set by your other plugins**, such as multilingual and multi-store plugins.
