@@ -24,6 +24,12 @@
 
 	var REWRITTEN_METHODS = { PUT: true, PATCH: true, DELETE: true };
 
+	// Only WCPOS routes are rewritten. The shared instance also serves core
+	// calls on these screens, and core's own middlewares (media uploads, for
+	// one) key off the verb — a rewritten `DELETE /wp/v2/media/{id}` would be
+	// mistaken for an upload.
+	var WCPOS_ROUTE = /(^|\/)wcpos\/v\d+\//;
+
 	wp.apiFetch.use( function ( options, next ) {
 		var method = String( options.method || 'GET' ).toUpperCase();
 
@@ -31,9 +37,16 @@
 			return next( options );
 		}
 
-		// api-fetch accepts either a REST `path` or an absolute `url`.
+		// api-fetch accepts either a REST `path` or an absolute `url`. A
+		// `namespace` + `endpoint` caller is left alone: core assembles its
+		// `path` AFTER this middleware and would drop the `_method` param.
 		var key = typeof options.url === 'string' ? 'url' : 'path';
-		var target = options[ key ] || '';
+		var target = options[ key ];
+
+		if ( typeof target !== 'string' || ! WCPOS_ROUTE.test( target ) ) {
+			return next( options );
+		}
+
 		var separator = target.indexOf( '?' ) === -1 ? '?' : '&';
 		var rewritten = Object.assign( {}, options, { method: 'POST' } );
 

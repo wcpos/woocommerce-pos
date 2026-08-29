@@ -98,6 +98,25 @@ describe('api-fetch _method shim', () => {
 		expect(received.headers ?? {}).not.toHaveProperty('X-HTTP-Method-Override');
 	});
 
+	it('leaves non-WCPOS routes alone so core middlewares still see the real verb', async () => {
+		const received = await sendThroughChain({ path: '/wp/v2/media/9', method: 'DELETE' });
+
+		// Untouched by the shim: core's httpV1 middleware still applies its own override.
+		expect(received.path).not.toContain('_method');
+		expect(received.headers).toHaveProperty('X-HTTP-Method-Override', 'DELETE');
+	});
+
+	it('leaves namespace + endpoint callers alone (core builds their path after this middleware)', async () => {
+		const received = await sendThroughChain({
+			namespace: 'wcpos/v1',
+			endpoint: '/templates/42?wcpos=1',
+			method: 'DELETE',
+		});
+
+		expect(received.path).not.toContain('_method');
+		expect(received.headers).toHaveProperty('X-HTTP-Method-Override', 'DELETE');
+	});
+
 	it('registers its middleware only once when loaded twice', () => {
 		const use = vi.spyOn(apiFetch, 'use');
 
