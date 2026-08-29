@@ -346,6 +346,90 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It ignores a SetResponse post that does not contain a print result.
+	 */
+	public function test_set_response_without_response_element_keeps_claim(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ID'             => '',
+				'ResponseFile'   => '<?xml version="1.0" encoding="UTF-8"?><PrintResponseInfo Version="1.00"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'claimed', $this->jobs->get( $id )['status'] );
+		$this->assertSame( array(), $this->logged_messages );
+	}
+
+	/**
+	 * It never hands a pending job to an empty SetResponse post.
+	 */
+	public function test_set_response_without_response_element_does_not_dispatch_a_job(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ID'             => '',
+				'ResponseFile'   => '<?xml version="1.0" encoding="UTF-8"?><PrintResponseInfo Version="1.00"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+		$this->assertSame( '<response success="true" code="" status=""/>', $response->get_raw_body() );
+	}
+
+	/**
+	 * It never hands a pending job to an untyped post that carries a ResponseFile.
+	 */
+	public function test_untyped_post_with_empty_response_file_does_not_dispatch_a_job(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ID'           => '',
+				'ResponseFile' => '<?xml version="1.0" encoding="UTF-8"?><PrintResponseInfo Version="1.00"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+		$this->assertSame( '<response success="true" code="" status=""/>', $response->get_raw_body() );
+	}
+
+	/**
 	 * It marks a failed result and logs the printer's code from the form field.
 	 */
 	public function test_set_response_form_post_records_failure(): void {

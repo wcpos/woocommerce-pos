@@ -1190,11 +1190,17 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// substring test can never match it. The raw-body branch is kept only for
 		// a caller that posts the bare XML, which the printer never does.
 		$result_xml = (string) $request->get_param( 'ResponseFile' );
-		if ( '' === $result_xml && false !== strpos( $raw_body, 'success=' ) ) {
+		if ( '' === $result_xml && false !== strpos( $raw_body, '<response' ) ) {
 			$result_xml = $raw_body;
 		}
 
-		if ( 'SetResponse' === $connection_type || '' !== $result_xml ) {
+		// A print result is recognised by its ePOS <response> element, whichever
+		// way it arrived — the bare-XML caller sends no ConnectionType, so the
+		// type is deliberately not consulted here. The printer also posts an
+		// empty <PrintResponseInfo/> after every idle poll; reading that as a
+		// result marked the in-flight job failed ("unknown"). It is acked below
+		// and never dispatched on.
+		if ( false !== strpos( $result_xml, '<response' ) ) {
 			$claim = $this->jobs->find_active_claim( $printer_id );
 			if ( null !== $claim ) {
 				$ok = false !== strpos( $result_xml, 'success="true"' );
@@ -1213,8 +1219,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return $this->serve_raw( $ack, $soap );
 		}
 
-		// A status notification is not asking for work.
-		if ( 'SetStatus' === $connection_type ) {
+		// A status notification or a result post — typed, or recognisable only by
+		// its ResponseFile — is not asking for work. Only the GetRequest lane below
+		// (and a legacy untyped poll) may be handed a job.
+		if ( 'SetStatus' === $connection_type || 'SetResponse' === $connection_type || '' !== $result_xml ) {
 			return $this->serve_raw( $ack, $soap );
 		}
 
