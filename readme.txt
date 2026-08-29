@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.2
+Stable tag: 1.10.3
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,24 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.3 - 2026/08/30 =
+
+- **Payments work again in the iOS and Android apps.**
+- **Product search no longer matches product descriptions**, so searches find the right products again.
+- **Prevent overselling now holds stock during checkout**, so two tills can't sell the same item.
+- **Orders save faster.**
+- **Epson receipts print properly again** -- text size, the order barcode, and where the paper is cut.
+- **Cloud print no longer prints a receipt twice** when a printer briefly loses its connection.
+- **A blank cloud print no longer reports as printed** -- the cloud print queue now shows what went wrong.
+- **The cloud print queue can be cleared**, shows every job by default, and lists the newest first.
+- **"Out of stock" stays set** on products that don't manage stock when decimal quantities are switched on.
+- **Deleting a product or coupon from the till now sends it to the trash** instead of deleting it for good.
+- **Variations now follow the rules set by your other plugins**, such as multilingual and multi-store plugins.
+- **Changes made at the till now trigger WooCommerce's own hooks**, so your other plugins notice them.
+- **Store Health now spots when any kind of record needs re-syncing**, not just products.
+
+**Note for developers:** the `woocommerce_pos_sync_legacy_revision_grace` option and the pre-1.10.0 revision recipes are gone. New extension points: `woocommerce_pos_order_pull_ids` and `woocommerce_pos_invalidate`. `wcpos/v2` product search matches title, SKU and barcode only. Admin bundles now depend on a new script handle, `wcpos-api-fetch-method-param`, which rewrites `PUT`/`PATCH`/`DELETE` on `wcpos/v*` routes to `POST` + `?_method=`. The app now sends `wcpos_protocol` and `wcpos_client` with every request.
 
 = 1.10.2 - 2026/08/26 =
 - **Fixed a regression in order save speed for CPT orders** -- HPOS orders are not affected.
