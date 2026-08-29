@@ -18,6 +18,7 @@ use WC_Data;
 use WC_Product;
 use WC_Product_Variable;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\API\Product_Search;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
@@ -360,46 +361,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
-		global $wpdb;
-
-		if ( empty( $search ) ) {
-			return $search; // skip processing - no search term in query.
-		}
-
-		$q            = $wp_query->query_vars;
-		$n            = ! empty( $q['exact'] ) ? '' : '%';
-		$search_terms = (array) $q['search_terms'];
-
-		// Fields in the main 'posts' table.
-		$post_fields = array( 'post_title' );
-
-		// Meta fields to search.
-		$meta_fields = Barcode_Field::search_keys();
-
-		$search_conditions = array();
-
-		foreach ( $search_terms as $term ) {
-			$term = $n . $wpdb->esc_like( $term ) . $n;
-
-			// Search in post fields.
-			foreach ( $post_fields as $field ) {
-				$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
-			}
-
-			// Search in meta fields.
-			foreach ( $meta_fields as $field ) {
-				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
-			}
-		}
-
-		if ( ! empty( $search_conditions ) ) {
-			$search = ' AND (' . implode( ' OR ', $search_conditions ) . ') ';
-			if ( ! is_user_logged_in() ) {
-				$search .= " AND ($wpdb->posts.post_password = '') ";
-			}
-		}
-
-		return $search;
+		return Product_Search::posts_search( $search, $wp_query );
 	}
 
 	/**
@@ -620,13 +582,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_join_to_products_search( string $join, WP_Query $query ) {
-		global $wpdb;
-
-		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
-			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
-		}
-
-		return $join;
+		return Product_Search::posts_join( $join, $query );
 	}
 
 	/**
@@ -638,13 +594,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_groupby_product_search( string $groupby, WP_Query $query ) {
-		global $wpdb;
-
-		if ( ! empty( $query->query_vars['s'] ) ) {
-			$groupby = "{$wpdb->posts}.ID";
-		}
-
-		return $groupby;
+		return Product_Search::posts_groupby( $groupby, $query );
 	}
 
 	/**

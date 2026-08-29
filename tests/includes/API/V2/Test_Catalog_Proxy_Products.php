@@ -142,18 +142,81 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Product search deliberately does not widen title search to SKU search.
+	 * Product search matches the v1 title, SKU, and barcode fields only.
 	 */
-	public function test_search_does_not_match_product_sku(): void {
-		$product = ProductHelper::create_simple_product();
-		$product->set_name( 'V2 Product Search Boundary' );
-		$product->set_sku( 'SKU-ONLY-NEEDLE-1456' );
-		$product->save();
+	public function test_product_search(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
 
-		$rows = $this->read( array( 'search' => 'NEEDLE-1456' ) );
+		$title       = wp_generate_password( 12, false );
+		$sku         = wp_generate_password( 8, false );
+		$barcode     = wp_generate_password( 10, false );
+		$description = 'A string containing ' . $title . ' and ' . $sku . ' and ' . $barcode;
 
-		// Barcode lookup belongs to /wcpos/v2/resolve/barcode; broader catalog
-		// filtering is client-side by design, not a server-side product search mode.
-		$this->assertSame( array(), $rows );
+		ProductHelper::create_simple_product( array( 'description' => $description ) );
+		$product2 = ProductHelper::create_simple_product(
+			array(
+				'description' => $description,
+				'name'        => 'Foo ' . $title . ' bar',
+			)
+		);
+		$product3 = ProductHelper::create_simple_product(
+			array(
+				'description' => $description,
+				'sku'         => 'foo-' . $sku . '-bar',
+			)
+		);
+		$product4 = ProductHelper::create_simple_product( array( 'description' => $description ) );
+		$product4->update_meta_data( '_barcode', 'foo-' . $barcode . '-bar' );
+		$product4->save_meta_data();
+
+		$this->assertCount( 4, $this->read( array( 'search' => '' ) ) );
+
+		$rows = $this->read( array( 'search' => $title ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $product2->get_id(), $rows[0]['id'] );
+
+		$rows = $this->read( array( 'search' => $sku ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $product3->get_id(), $rows[0]['id'] );
+
+		$rows = $this->read( array( 'search' => $barcode ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $product4->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * Regression: wcpos/v2 search must not match product descriptions.
+	 */
+	public function test_product_search_does_not_match_description(): void {
+		$term        = wp_generate_password( 12, false );
+		$description = ProductHelper::create_simple_product( array( 'description' => 'Contains ' . $term ) );
+		$title       = ProductHelper::create_simple_product( array( 'name' => 'Contains ' . $term ) );
+
+		$rows = $this->read( array( 'search' => $term ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $title->get_id(), $rows[0]['id'] );
+		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * PHP's empty() calls the string "0" empty; a search for the literal term 0 is still a search.
+	 */
+	public function test_product_search_for_literal_zero_is_a_search(): void {
+		$description = ProductHelper::create_simple_product( array( 'name' => 'Alpha', 'sku' => 'ALPHA', 'description' => 'Rated 0 stars' ) );
+		$zero        = ProductHelper::create_simple_product( array( 'name' => 'Beta', 'sku' => 'ZERO-0', 'description' => 'no digits here' ) );
+
+		$rows = $this->read( array( 'search' => '0' ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $zero->get_id(), $rows[0]['id'] );
+		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
 	}
 }
