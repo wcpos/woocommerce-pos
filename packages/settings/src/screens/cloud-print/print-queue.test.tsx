@@ -317,7 +317,11 @@ describe('PrintQueue', () => {
 		});
 	});
 
-	it('requests the active view by default — printed history is opt-in', async () => {
+	it('requests every status by default, newest first', async () => {
+		// "Needs attention" as the default hid the job that just fired, so the
+		// queue could not answer the question it is usually opened to answer:
+		// did my receipt go through? Ordering is the server's job (DESC) — what
+		// matters here is that the client stops narrowing the view for you.
 		routeQueue(makeQueue);
 		renderQueue();
 
@@ -325,7 +329,87 @@ describe('PrintQueue', () => {
 		const firstQueueCall = apiFetchMock.mock.calls
 			.map((c) => (c[0] as ApiOpts).path)
 			.find((path) => path.includes('print-jobs/queue') && !path.includes('cancel'));
-		expect(firstQueueCall).toContain('status=active');
+		expect(firstQueueCall).not.toContain('status=active');
+		expect(
+			screen.getByText('Jobs across every status, including printed and cancelled.')
+		).toBeInTheDocument();
+	});
+
+	it('renders rows in the order the server returned them, newest first', async () => {
+		// The server orders DESC; the table must not re-sort or reverse it. The
+		// shared fixture gives every job the same created_gmt, so an ascending
+		// regression would pass unnoticed — use distinct timestamps and assert
+		// the rendered order.
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = [
+				{ ...base.jobs[0], id: 11, created_gmt: '2026-08-29 12:00:00' },
+				{ ...base.jobs[1], id: 12, created_gmt: '2026-08-29 11:00:00' },
+				{ ...base.jobs[2], id: 13, created_gmt: '2026-08-29 10:00:00' },
+			];
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		const rendered = screen
+			.getAllByTestId(/^queue-row-/)
+			.map((row) => row.getAttribute('data-testid'));
+		expect(rendered).toEqual(['queue-row-11', 'queue-row-12', 'queue-row-13']);
+	});
+
+	it('shows a recorded failure reason on the row', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13 ? { ...job, error: 'EX_TIMEOUT' } : job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('EX_TIMEOUT');
+	});
+
+	it('shows completion timing instead of a stale error on a printed job', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13
+					? {
+							...job,
+							status: 'printed',
+							error: 'EX_TIMEOUT',
+							terminal_at: nowSeconds() - 60,
+						}
+					: job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.queryByTestId('queue-error-13')).toBeNull();
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Printed');
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('1 minute ago');
+	});
+
+	it('deletes a single job through the bulk delete endpoint', async () => {
+		routeQueue(makeQueue);
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		fireEvent.click(screen.getByTestId('queue-delete-11'));
+
+		await waitFor(() => {
+			const deleteCall = apiFetchMock.mock.calls.find((c) =>
+				((c[0] as ApiOpts).path ?? '').includes('queue/delete')
+			);
+			expect(deleteCall).toBeTruthy();
+			expect((deleteCall?.[0] as ApiOpts).method).toBe('POST');
+			expect((deleteCall?.[0] as { data?: { ids?: number[] } })?.data?.ids).toEqual([11]);
+		});
 	});
 
 	it('never shows a stale banner for a push provider with a backlog', async () => {

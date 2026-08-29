@@ -180,6 +180,56 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'claimed', $service->get( $first_id )['status'] );
 		$this->assertEquals( 'pending', $service->get( $second_id )['status'] );
 	}
+
+	/**
+	 * It does not delete a waiting job while its lifecycle lock is held.
+	 */
+	public function test_delete_refuses_waiting_job_while_lifecycle_lock_is_held(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id' => 'printer-1',
+				'payload'    => base64_encode( 'a' ),
+			)
+		);
+		add_option( Print_Job_Service::LIFECYCLE_LOCK_PREFIX . $id, (string) time(), '', false );
+
+		try {
+			$deleted = $service->delete( $id );
+		} finally {
+			delete_option( Print_Job_Service::LIFECYCLE_LOCK_PREFIX . $id );
+		}
+
+		$this->assertFalse( $deleted );
+		$this->assertSame( Print_Job_Service::STATUS_PENDING, $service->get( $id )['status'] );
+	}
+
+	/**
+	 * It reports when WordPress refuses to delete a terminal job.
+	 */
+	public function test_delete_propagates_wordpress_failure(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id' => 'printer-1',
+				'payload'    => base64_encode( 'a' ),
+			)
+		);
+		$service->set_status( $id, Print_Job_Service::STATUS_PRINTED );
+		add_filter( 'pre_delete_post', '__return_false' );
+
+		try {
+			$deleted = $service->delete( $id );
+		} finally {
+			remove_filter( 'pre_delete_post', '__return_false' );
+		}
+
+		$this->assertFalse( $deleted );
+		$this->assertSame( Print_Job_Service::POST_TYPE, get_post_type( $id ) );
+	}
+
 	/**
 	 * It does not resurrect a job cancelled between the claim's read and write.
 	 */

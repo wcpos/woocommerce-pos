@@ -151,6 +151,64 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It stores a stable reason when an empty render fails a job.
+	 */
+	public function test_empty_render_persists_failure_reason(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '' ),
+			)
+		);
+
+		$this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+
+		$this->assertSame( 'empty_rendered_payload', $this->jobs->get( $id )['error'] );
+	}
+
+	/**
+	 * It records the printer's failure code against the job, not just the log.
+	 *
+	 * Without this the queue can only ever say "Failed" while the reason the
+	 * printer gave — EX_TIMEOUT and friends — is buried in the WCPOS log, so
+	 * diagnosing a recurring printer fault means log-diving.
+	 */
+	public function test_failure_code_is_persisted_on_the_job(): void {
+		// Arrange: a claimed job the printer is about to report on.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+
+		// Act: the printer posts a failure result.
+		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/print-jobs/epson-sdp' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_query_params(
+			array(
+				'printer_id' => 'p1',
+				'pt'         => 'tok',
+			)
+		);
+		$request->set_body_params(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="false" code="EX_TIMEOUT"/>',
+			)
+		);
+		rest_do_request( $request );
+
+		// Assert: the job is failed and carries the reason.
+		$job = $this->jobs->get( $id );
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $job['status'] );
+		$this->assertSame( 'EX_TIMEOUT', $job['error'] );
+	}
+
+	/**
 	 * It wraps the print data in the Server Direct Print response envelope.
 	 *
 	 * The printer discards a response it cannot recognise without printing or

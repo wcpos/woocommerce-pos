@@ -173,6 +173,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/queue/delete',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'delete_queue' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/test',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -483,6 +495,27 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
+		// Without force this route cancels: it takes a waiting job out of the
+		// running but leaves the row as history. With force the row goes for
+		// good, which is the only way to clear a terminal job before its
+		// retention window expires.
+		if ( rest_sanitize_boolean( $request->get_param( 'force' ) ) ) {
+			if ( ! $this->jobs->delete( $id ) ) {
+				return new WP_Error(
+					'wcpos_print_job_not_deleted',
+					__( 'The print job could not be deleted.', 'woocommerce-pos' ),
+					array( 'status' => 500 )
+				);
+			}
+
+			return rest_ensure_response(
+				array(
+					'deleted'  => true,
+					'previous' => $job,
+				)
+			);
+		}
+
 		if ( ! $this->jobs->cancel_if_waiting( $id ) ) {
 			return new WP_Error(
 				'wcpos_print_job_not_cancellable',
@@ -539,6 +572,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 					array(
 						'limit' => $per_page,
 						'page'  => $page,
+						// Newest first: the job an admin opens the queue to check
+						// on is the one that just fired, not the oldest survivor.
+						'order' => 'DESC',
 					)
 				)
 			)
@@ -640,6 +676,47 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		);
 
 		return rest_ensure_response( array( 'cancelled' => $cancelled ) );
+	}
+
+	/**
+	 * Permanently delete queue rows.
+	 *
+	 * Unlike cancel_queue(), this removes history: any status may be deleted,
+	 * because the point is clearing a queue the admin no longer wants to look
+	 * at rather than stopping work. Waiting jobs are cancelled on the way out
+	 * so nothing is left half-claimed.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function delete_queue( $request ) {
+		$ids = $request->get_param( 'ids' );
+		if ( ! \is_array( $ids ) || empty( $ids ) ) {
+			return new WP_Error(
+				'wcpos_print_job_no_ids',
+				__( 'No print jobs were selected.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+		foreach ( $ids as $id ) {
+			if ( ( ! \is_int( $id ) && ! \is_string( $id ) ) || ! ctype_digit( (string) $id ) || (int) $id < 1 ) {
+				return new WP_Error(
+					'wcpos_print_job_invalid_ids',
+					__( 'One or more selected print jobs are invalid.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
+		$deleted = 0;
+		foreach ( array_map( 'intval', $ids ) as $id ) {
+			if ( $id > 0 && $this->jobs->delete( $id ) ) {
+				++$deleted;
+			}
+		}
+
+		return rest_ensure_response( array( 'deleted' => $deleted ) );
 	}
 
 	/**
@@ -1044,6 +1121,14 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @param int             $job_id     Print job ID.
 	 */
 	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id ): void {
+		// Persist it too, not just log it. Push providers already record their
+		// submission error against the job; polling printers report theirs here,
+		// and without this the queue can only ever say "Failed" while the reason
+		// (EX_TIMEOUT, a Star status code) is buried in the log.
+		if ( '' !== $code ) {
+			update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $code ) );
+		}
+
 		Logger::error(
 			sprintf(
 				'%s: printer "%s" reported failure code "%s" for print job %d.',
@@ -1163,6 +1248,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 					$printer_id
 				)
 			);
+			update_post_meta( (int) $job['id'], Print_Job_Service::META_ERROR, 'empty_rendered_payload' );
 			$this->jobs->set_status( (int) $job['id'], Print_Job_Service::STATUS_FAILED );
 
 			return $this->serve_raw( $ack, $soap );
