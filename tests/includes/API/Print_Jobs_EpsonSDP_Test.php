@@ -552,6 +552,96 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It does not automatically offer a stale claim again.
+	 */
+	public function test_get_request_poll_after_claim_ttl_returns_ack_and_fails_job(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ConnectionType' => 'GetRequest',
+				'ID'             => '',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( '<response success="true" code="" status=""/>', $response->get_raw_body() );
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It accepts a successful result that arrives after the claim TTL.
+	 */
+	public function test_set_response_after_claim_ttl_marks_unconfirmed_job_printed(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="true" code="" status="251658262"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $this->jobs->get( $id )['status'] );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
+	}
+
+	/**
+	 * It records a failed result that arrives after the claim TTL.
+	 */
+	public function test_set_response_failure_after_claim_ttl_records_code_and_logs_failure(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="false" code="EPTR_REC_EMPTY" status="251658262"/>',
+			)
+		);
+
+		// Assert: the cleared error is replaced by the printer's decoded reason.
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( 'EPTR_REC_EMPTY (0x0F000016)', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
+		$this->assertSame(
+			sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPTR_REC_EMPTY" (0x0F000016) for print job %d.', $id ),
+			$this->logged_messages[ count( $this->logged_messages ) - 1 ]
+		);
+	}
+
+	/**
 	 * It authenticates and claims a job from path credentials alone.
 	 *
 	 * Mirrors the CloudPRNT path-credential route: printer_id and pt ride in

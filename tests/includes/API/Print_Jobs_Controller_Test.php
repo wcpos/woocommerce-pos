@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
@@ -99,6 +100,57 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		add_filter( 'pre_http_request', $this->http_filter, 10, 3 );
+	}
+
+	/**
+	 * It records a late CloudPRNT DELETE result on the unconfirmed job.
+	 */
+	public function test_cloudprnt_delete_after_claim_ttl_marks_unconfirmed_job_printed(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'              => 'p1',
+						'provider'        => 'star-cloudprnt',
+						'poll_token_hash' => Cloud_Print_Registry::hash_token( 'tok' ),
+					),
+				),
+			)
+		);
+		$jobs = new Print_Job_Service();
+		$id   = $jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+		$jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+		$jobs->set_status( $id, Print_Job_Service::STATUS_FAILED );
+		update_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, '1' );
+		update_post_meta( $id, Print_Job_Service::META_ERROR, 'Timed out.' );
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/cloudprnt' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_query_params(
+			array(
+				'printer_id' => 'p1',
+				'pt'         => 'tok',
+				'token'      => $id,
+				'code'       => '200 OK',
+			)
+		);
+
+		// Act.
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $jobs->get( $id )['status'] );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
 	}
 
 	/**

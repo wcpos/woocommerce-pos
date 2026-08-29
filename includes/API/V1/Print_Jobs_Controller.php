@@ -870,7 +870,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( 'DELETE' === $request->get_method() ) {
 			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
 			$status = '' === $code || '000' === $code || 1 === preg_match( '/^2\d{2,3}(?:\s|$)/', $code ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
-			$this->jobs->set_status( (int) $job['id'], $status );
+			$this->jobs->record_printer_result( (int) $job['id'], Print_Job_Service::STATUS_PRINTED === $status );
 
 			if ( Print_Job_Service::STATUS_FAILED === $status ) {
 				$this->log_printer_failure( $request, $printer_id, $code, (int) $job['id'] );
@@ -1247,9 +1247,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// and never dispatched on.
 		if ( false !== strpos( $result_xml, '<response' ) ) {
 			$claim = $this->jobs->find_active_claim( $printer_id );
+			if ( null === $claim ) {
+				// A result that arrives after the claim timed out belongs to the job
+				// that was failed as unconfirmed — record it there instead of
+				// dropping it, so a printer that merely reported late shows the truth.
+				$claim = $this->jobs->find_unconfirmed( $printer_id );
+			}
 			if ( null !== $claim ) {
 				$ok = false !== strpos( $result_xml, 'success="true"' );
-				$this->jobs->set_status( (int) $claim['id'], $ok ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED );
+				$this->jobs->record_printer_result( (int) $claim['id'], $ok );
 
 				if ( ! $ok ) {
 					$code = 'unknown';

@@ -45,6 +45,7 @@ export interface QueueJob {
 	retried_to?: number;
 	/** Printer- or provider-reported failure reason, when one was recorded. */
 	error?: string;
+	unconfirmed?: boolean;
 	/** Unix seconds the job reached a terminal status; 0 when still waiting. */
 	terminal_at?: number;
 }
@@ -490,7 +491,17 @@ export function PrintQueue() {
 													</Chip>
 												</TableCell>
 												<TableCell className="wcpos:text-gray-600">
-													{job.status === 'failed' && job.error ? (
+													{job.status === 'failed' && job.unconfirmed ? (
+														<span
+															className="wcpos:text-red-700"
+															data-testid={`queue-error-${job.id}`}
+														>
+															{t(
+																'cloud_print.queue_unconfirmed',
+																'The printer never confirmed this job. It was not re-sent automatically, which could print it twice — retry it if it did not print.'
+															)}
+														</span>
+													) : job.status === 'failed' && job.error ? (
 														<span
 															className="wcpos:text-red-700"
 															data-testid={`queue-error-${job.id}`}

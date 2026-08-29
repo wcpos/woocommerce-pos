@@ -267,10 +267,10 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Stale-claim cleanup never leaves a concurrently re-claimed job without
-	 * its claim timestamp (which the next cleanup would treat as stale).
+	 * It fails a stale claim without making it eligible for automatic delivery.
 	 */
-	public function test_release_stale_claims_preserves_a_fresh_claim_timestamp(): void {
+	public function test_release_stale_claims_stale_claim_marks_failed_and_unconfirmed(): void {
+		// Arrange.
 		$service = new Print_Job_Service();
 		$service->register_post_type();
 		$id = $service->create(
@@ -280,36 +280,86 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 				'payload'      => base64_encode( 'a' ),
 			)
 		);
-		$this->assertEquals( true, $service->try_claim( $id ) );
-		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - ( 2 * Print_Job_Service::CLAIM_TTL ) );
+		$service->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$service->release_stale_claims( 'printer-1' );
+
+		// Assert.
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $service->get( $id )['status'] );
+		$this->assertSame( 'claim_timeout', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
+		$this->assertTrue( $service->get( $id )['unconfirmed'] );
+		$this->assertSame( '1', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertGreaterThan( 0, (int) get_post_meta( $id, Print_Job_Service::META_TERMINAL_AT, true ) );
+	}
+
+	/**
+	 * It leaves a fresh in-flight claim unchanged.
+	 */
+	public function test_release_stale_claims_fresh_claim_remains_claimed(): void {
+		// Arrange.
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'a' ),
+			)
+		);
+		$service->claim( $id );
+		$claimed_at = (int) get_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, true );
+
+		// Act.
+		$service->release_stale_claims( 'printer-1' );
+
+		// Assert.
+		$this->assertSame( Print_Job_Service::STATUS_CLAIMED, $service->get( $id )['status'] );
+		$this->assertSame( $claimed_at, (int) get_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, true ) );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
+	}
+
+	/**
+	 * It does not overwrite a cancellation that lands during stale cleanup.
+	 */
+	public function test_release_stale_claims_concurrent_cancellation_remains_cancelled(): void {
+		// Arrange.
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id'   => 'printer-1',
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'a' ),
+			)
+		);
+		$service->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
 
 		$raced = false;
 		$race  = function ( $delete, $object_id, $meta_key ) use ( $service, $id, &$raced ) {
 			if ( ! $raced && $id === (int) $object_id && Print_Job_Service::META_CLAIMED_AT === $meta_key ) {
 				$raced = true;
-				// A printer poll claims mid-cleanup. Against the old
-				// requeue-then-delete order this lands after the pending
-				// flip, succeeds, and the cleanup then erases its fresh
-				// timestamp.
-				$service->try_claim( $id );
+				$service->cancel_if_waiting( $id );
 			}
 
 			return $delete;
 		};
 		add_filter( 'delete_post_metadata', $race, 10, 3 );
 
+		// Act.
 		try {
 			$service->release_stale_claims( 'printer-1' );
 		} finally {
 			remove_filter( 'delete_post_metadata', $race, 10 );
 		}
 
-		$job = $service->get( $id );
-		if ( Print_Job_Service::STATUS_CLAIMED === $job['status'] ) {
-			$this->assertNotEmpty( get_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, true ) );
-		} else {
-			$this->assertEquals( Print_Job_Service::STATUS_PENDING, $job['status'] );
-		}
+		// Assert.
+		$this->assertSame( Print_Job_Service::STATUS_CANCELLED, $service->get( $id )['status'] );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
 	}
 
 	/**
@@ -331,5 +381,29 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertSame( 'star-online', $job['external_provider'] );
 		$this->assertSame( '689', $job['external_job_id'] );
 		$this->assertSame( 'submitted', $job['external_state'] );
+	}
+	/**
+	 * A late result is attributed to an unconfirmed job only within the window.
+	 */
+	public function test_find_unconfirmed_ignores_a_job_failed_outside_the_result_window(): void {
+		// Arrange: a claim that went stale and was failed as unconfirmed.
+		$service = new Print_Job_Service();
+		$id      = $service->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$service->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+		$service->release_stale_claims( 'p1' );
+		$this->assertSame( $id, $service->find_unconfirmed( 'p1' )['id'] );
+
+		// Act: age it past the window.
+		update_post_meta( $id, Print_Job_Service::META_TERMINAL_AT, time() - Print_Job_Service::UNCONFIRMED_RESULT_WINDOW - 1 );
+
+		// Assert.
+		$this->assertNull( $service->find_unconfirmed( 'p1' ) );
 	}
 }
