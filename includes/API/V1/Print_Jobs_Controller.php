@@ -1147,6 +1147,27 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 		$epos = $this->jobs->render_payload( $job );
 
+		// An empty render means the job produced nothing printable — most often
+		// a template whose engine this provider cannot render (Server Direct
+		// Print only speaks the thermal pipeline's ePOS-Print XML). Dispatching
+		// it anyway sends <PrintData></PrintData>: the printer parses that
+		// happily, prints nothing, and posts back success="true", so the job is
+		// recorded as Printed. Fail the job here instead, so the queue shows the
+		// truth and the log names the printer.
+		if ( '' === $epos ) {
+			Logger::error(
+				sprintf(
+					'%s: print job %d rendered an empty payload for printer "%s"; nothing was sent to the printer.',
+					$request->get_route(),
+					(int) $job['id'],
+					$printer_id
+				)
+			);
+			$this->jobs->set_status( (int) $job['id'], Print_Job_Service::STATUS_FAILED );
+
+			return $this->serve_raw( $ack, $soap );
+		}
+
 		// Server Direct Print expects the print data wrapped in
 		// PrintRequestInfo > ePOSPrint > PrintData — NOT the SOAP envelope used
 		// by the direct ePOS-Print web service, which is a different protocol.
