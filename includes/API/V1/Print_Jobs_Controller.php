@@ -1186,9 +1186,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$connection_type = (string) $request->get_param( 'ConnectionType' );
 
 		// Result XML is a form field, so in the raw body it is percent-encoded
-		// (`success="true"` arrives as `success%3D%22true%22`) and a raw-body
-		// substring test can never match it. The raw-body branch is kept only for
-		// a caller that posts the bare XML, which the printer never does.
+		// (`<response` arrives as `%3Cresponse`) and a raw-body substring test can
+		// never match it. The raw-body branch is kept only for a caller that posts
+		// the bare XML, which the printer never does.
 		$result_xml = (string) $request->get_param( 'ResponseFile' );
 		if ( '' === $result_xml && false !== strpos( $raw_body, '<response' ) ) {
 			$result_xml = $raw_body;
