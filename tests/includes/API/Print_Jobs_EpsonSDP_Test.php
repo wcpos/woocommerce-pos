@@ -445,6 +445,29 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It decodes a status whose top bit is set, which is above PHP_INT_MAX on 32-bit PHP.
+	 */
+	public function test_failed_result_with_top_bit_status_records_full_hex_and_label(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		// Act. 0x80000008 — spooler stopped (bit 31) plus offline (bit 3).
+		$this->sdp( '<response success="false" code="EX_TIMEOUT" status="2147483656"/>' );
+		$job = $this->jobs->get( $id );
+
+		// Assert.
+		$this->assertSame( 'failed', $job['status'] );
+		$this->assertSame( 'EX_TIMEOUT (0x80000008: offline, spooler stopped)', $job['error'] );
+	}
+
+	/**
 	 * It authenticates and claims a job from path credentials alone.
 	 *
 	 * Mirrors the CloudPRNT path-credential route: printer_id and pt ride in

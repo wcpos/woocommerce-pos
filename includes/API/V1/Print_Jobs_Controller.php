@@ -1253,7 +1253,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 					$status = null;
 					if ( 1 === preg_match( '/\bstatus="(\d+)"/', $result_xml, $matches ) ) {
-						$status = (int) $matches[1];
+						// The ASB status is unsigned 32-bit; on a 32-bit PHP build a value
+						// with bit 31 set does not fit and (int) would saturate to
+						// 0x7FFFFFFF, decoding every label. Such a value is left undecoded
+						// rather than misdecoded.
+						$status = (float) $matches[1] <= PHP_INT_MAX ? (int) $matches[1] : null;
 					}
 
 					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'], $status );
