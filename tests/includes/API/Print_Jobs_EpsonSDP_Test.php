@@ -642,6 +642,73 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It records a result against the active claim and logs the unconfirmed job.
+	 *
+	 * A Server Direct Print result carries no job token, so it can only be
+	 * attributed to the printer's active claim. That is correct for the ordering
+	 * printers actually use — a printer holding an unsent result retries that POST
+	 * before polling for more work — and it is what keeps a reboot case right: the
+	 * result belongs to the job the printer is holding now, not to the earlier one
+	 * whose result was lost. The pairing is still worth a log line, because if it
+	 * ever does happen the attribution is the wrong job.
+	 */
+	public function test_set_response_while_an_unconfirmed_job_exists_records_the_claim_and_logs_it(): void {
+		// Arrange: job A times out unconfirmed, then job B is claimed by the next poll.
+		$a = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $a );
+		update_post_meta( $a, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+		$b = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'GetRequest',
+				'ID'             => '',
+			)
+		);
+		$this->assertSame( Print_Job_Service::STATUS_CLAIMED, $this->jobs->get( $b )['status'] );
+
+		// Act: the printer reports success for the job it is holding.
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="true" code="" status="251658262"/>',
+			)
+		);
+
+		// Assert: the result lands on the claim, not on the unconfirmed job.
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $this->jobs->get( $b )['status'] );
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $a )['status'] );
+		$this->assertTrue( $this->jobs->get( $a )['unconfirmed'] );
+		$this->assertSame( 'claim_timeout', get_post_meta( $a, Print_Job_Service::META_ERROR, true ) );
+
+		// Assert: the ordering is visible in the log if it ever happens in the field.
+		$this->assertNotEmpty(
+			array_filter(
+				$this->logged_messages,
+				function ( $message ) use ( $a, $b ) {
+					return (string) $message === sprintf(
+						'Printer "p1": result recorded against claimed job %d while unconfirmed job %d is still awaiting one.',
+						$b,
+						$a
+					);
+				}
+			),
+			'a result arriving while a job is still unconfirmed must be logged'
+		);
+	}
+
+	/**
 	 * It authenticates and claims a job from path credentials alone.
 	 *
 	 * Mirrors the CloudPRNT path-credential route: printer_id and pt ride in

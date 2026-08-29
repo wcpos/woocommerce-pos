@@ -1252,6 +1252,23 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				// that was failed as unconfirmed — record it there instead of
 				// dropping it, so a printer that merely reported late shows the truth.
 				$claim = $this->jobs->find_unconfirmed( $printer_id );
+			} else {
+				// A result carries no job token — printjobid is SDP 2.00 only — so it
+				// can only be attributed to the active claim. A printer holding an
+				// unsent result retries that POST before polling for more work, so a
+				// result should not arrive while an earlier job is still awaiting one.
+				// Log it if it ever does: the attribution below would be the wrong job.
+				$unconfirmed = $this->jobs->find_unconfirmed( $printer_id );
+				if ( null !== $unconfirmed ) {
+					Logger::warning(
+						sprintf(
+							'Printer "%s": result recorded against claimed job %d while unconfirmed job %d is still awaiting one.',
+							$printer_id,
+							(int) $claim['id'],
+							(int) $unconfirmed['id']
+						)
+					);
+				}
 			}
 			if ( null !== $claim ) {
 				$ok = false !== strpos( $result_xml, 'success="true"' );
