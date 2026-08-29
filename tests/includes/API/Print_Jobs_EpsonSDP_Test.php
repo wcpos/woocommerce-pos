@@ -363,14 +363,14 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 				'ConnectionType' => 'SetResponse',
 				'ID'             => '',
 				'ResponseFile'   => '<?xml version="1.0" encoding="utf-8"?><PrintResponseInfo Version="1.00">'
-					. '<response success="false" code="EPTR_REC_EMPTY" status="251854870"/>'
+					. '<response success="false" code="EPTR_REC_EMPTY" status="252182550"/>'
 					. '</PrintResponseInfo>',
 			)
 		);
 
 		$this->assertEquals( 'failed', $this->jobs->get( $id )['status'] );
 		$this->assertEquals(
-			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPTR_REC_EMPTY" for print job %d.', $id ) ),
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPTR_REC_EMPTY" (0x0F080016: paper end) for print job %d.', $id ) ),
 			$this->logged_messages
 		);
 	}
@@ -412,7 +412,34 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'failed', $this->jobs->get( $id )['status'] );
 		$this->assertEquals(
-			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPOS2_ERR_PRINT" for print job %d.', $id ) ),
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPOS2_ERR_PRINT" (0x0F000016) for print job %d.', $id ) ),
+			$this->logged_messages
+		);
+	}
+
+	/**
+	 * It records decoded Epson status details for a failed result.
+	 */
+	public function test_failed_result_with_known_status_records_diagnostics(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		// Act.
+		$this->sdp( '<response success="false" code="EX_TIMEOUT" status="251658280"/>' );
+		$job = $this->jobs->get( $id );
+
+		// Assert.
+		$this->assertSame( 'failed', $job['status'] );
+		$this->assertSame( 'EX_TIMEOUT (0x0F000028: offline, cover open)', $job['error'] );
+		$this->assertSame(
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EX_TIMEOUT" (0x0F000028: offline, cover open) for print job %d.', $id ) ),
 			$this->logged_messages
 		);
 	}
