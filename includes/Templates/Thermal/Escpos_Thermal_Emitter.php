@@ -610,7 +610,7 @@ class Escpos_Thermal_Emitter {
 	}
 
 	/**
-	 * Emit a paper cut command.
+	 * Feed to the cutting position and emit a paper cut command.
 	 *
 	 * @param array $node The cut AST node.
 	 *
@@ -618,7 +618,7 @@ class Escpos_Thermal_Emitter {
 	 */
 	private function emit_cut( array $node ): void {
 		$cut_type = isset( $node['cut_type'] ) ? $node['cut_type'] : 'partial';
-		$this->raw( array( 0x1d, 0x56, 'full' === $cut_type ? 0x41 : 0x42 ) );
+		$this->raw( array( 0x1d, 0x56, 'full' === $cut_type ? 0x41 : 0x42, 0x00 ) );
 	}
 
 	/**

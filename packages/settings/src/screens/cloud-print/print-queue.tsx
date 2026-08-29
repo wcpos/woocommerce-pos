@@ -43,6 +43,11 @@ export interface QueueJob {
 	content_type: string;
 	created_gmt: string;
 	retried_to?: number;
+	/** Printer- or provider-reported failure reason, when one was recorded. */
+	error?: string;
+	unconfirmed?: boolean;
+	/** Unix seconds the job reached a terminal status; 0 when still waiting. */
+	terminal_at?: number;
 }
 
 export interface QueueSummaryPrinter {
@@ -128,9 +133,10 @@ function isStale(printer: QueueSummaryPrinter): boolean {
 export function PrintQueue() {
 	const queryClient = useQueryClient();
 	const [printerFilter, setPrinterFilter] = React.useState('');
-	// Default view: jobs that still need something — waiting, printing, failed.
-	// Printed/cancelled history is opt-in via the status filter.
-	const [statusFilter, setStatusFilter] = React.useState('active');
+	// Default view: everything, newest first. "Needs attention" hides the job
+	// that just fired, so the first question the queue gets asked — did my
+	// receipt go through? — used to require changing the filter to answer.
+	const [statusFilter, setStatusFilter] = React.useState('');
 	const [page, setPage] = React.useState(1);
 	const [selected, setSelected] = React.useState<Set<number>>(new Set());
 
@@ -169,6 +175,17 @@ export function PrintQueue() {
 				method: 'POST',
 				data: body,
 			}) as Promise<{ cancelled: number }>,
+		onSuccess: invalidate,
+		onError: onMutationError,
+	});
+
+	const deleteJobs = useMutation({
+		mutationFn: (ids: number[]) =>
+			apiFetch({
+				path: `${QUEUE_ENDPOINT}/delete?wcpos=1`,
+				method: 'POST',
+				data: { ids },
+			}) as Promise<{ deleted: number }>,
 		onSuccess: invalidate,
 		onError: onMutationError,
 	});
@@ -298,7 +315,7 @@ export function PrintQueue() {
 			title={t('cloud_print.queue_title', 'Print queue')}
 			description={t(
 				'cloud_print.queue_description',
-				'Jobs waiting to be fetched by your printers.'
+				'Jobs across every status, including printed and cancelled.'
 			)}
 		>
 			{stalePrinters.map((printer) => (
@@ -344,7 +361,7 @@ export function PrintQueue() {
 				</p>
 			) : (
 				<>
-					<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:flex-wrap">
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:flex-wrap wcpos:mb-3">
 						<Select
 							id="wcpos-queue-printer-filter"
 							inline
@@ -384,6 +401,18 @@ export function PrintQueue() {
 								})}
 							</Button>
 						)}
+						{selected.size > 0 && (
+							<Button
+								variant="ghost-destructive"
+								data-testid="queue-delete-selected"
+								onClick={() => deleteJobs.mutate(Array.from(selected))}
+								disabled={deleteJobs.isPending}
+							>
+								{t('cloud_print.queue_delete_selected', 'Delete selected ({count})', {
+									count: String(selected.size),
+								})}
+							</Button>
+						)}
 					</div>
 
 					{jobs.length === 0 ? (
@@ -392,7 +421,7 @@ export function PrintQueue() {
 						</p>
 					) : (
 						<div className="wcpos:overflow-x-auto">
-							<Table data-testid="queue-table" className="wcpos:min-w-[36rem]">
+							<Table data-testid="queue-table" className="wcpos:min-w-[52rem]">
 								<TableHeader>
 									<TableHeaderRow>
 										<TableHead className="wcpos:w-8">
@@ -408,11 +437,13 @@ export function PrintQueue() {
 											{t('cloud_print.queue_col_order', 'Order')}
 										</TableHead>
 										<TableHead>{t('cloud_print.queue_col_printer', 'Printer')}</TableHead>
+										<TableHead>{t('cloud_print.queue_col_template', 'Template')}</TableHead>
 										<TableHead className="wcpos:w-28">
 											{t('cloud_print.queue_col_status', 'Status')}
 										</TableHead>
+										<TableHead>{t('cloud_print.queue_col_detail', 'Detail')}</TableHead>
 										<TableHead className="wcpos:w-32">
-											{t('cloud_print.queue_col_waiting', 'Waiting')}
+											{t('cloud_print.queue_col_created', 'Created')}
 										</TableHead>
 										<TableHead className="wcpos:w-24" />
 									</TableHeaderRow>
@@ -420,10 +451,13 @@ export function PrintQueue() {
 								<TableBody>
 									{jobs.map((job) => {
 										const meta = STATUS_META[job.status] ?? STATUS_META.pending;
-										const waiting =
-											job.status === 'pending' || job.status === 'claimed'
-												? timeAgo(job.created_gmt)
-												: '—';
+										// Every row gets an age. The old column only filled this in
+										// for waiting jobs, so a printed row — the one you check
+										// after a sale — showed a dash where its timing belonged.
+										const created = timeAgo(job.created_gmt);
+										const finished = job.terminal_at
+											? relativeAge(new Date(job.terminal_at * 1000))
+											: '';
 										return (
 											<TableRow key={job.id} data-testid={`queue-row-${job.id}`}>
 												<TableCell>
@@ -448,13 +482,45 @@ export function PrintQueue() {
 													)}
 												</TableCell>
 												<TableCell>{printerNames.get(job.printer_id) ?? job.printer_id}</TableCell>
+												<TableCell className="wcpos:text-gray-600">
+													{job.template_id || '—'}
+												</TableCell>
 												<TableCell>
 													<Chip variant={meta.variant} shape="pill" size="sm">
 														{meta.label()}
 													</Chip>
 												</TableCell>
+												<TableCell className="wcpos:text-gray-600">
+													{job.status === 'failed' && job.unconfirmed ? (
+														<span
+															className="wcpos:text-red-700"
+															data-testid={`queue-error-${job.id}`}
+														>
+															{job.retried_to
+																? t(
+																		'cloud_print.queue_unconfirmed_retried',
+																		'The printer never confirmed this job.'
+																	)
+																: t(
+																		'cloud_print.queue_unconfirmed',
+																		'The printer never confirmed this job. It was not re-sent automatically, which could print it twice — retry it if it did not print.'
+																	)}
+														</span>
+													) : job.status === 'failed' && job.error ? (
+														<span
+															className="wcpos:text-red-700"
+															data-testid={`queue-error-${job.id}`}
+														>
+															{job.error}
+														</span>
+													) : job.status === 'printed' && finished ? (
+														t('cloud_print.queue_printed_ago', 'Printed {ago}', { ago: finished })
+													) : (
+														'—'
+													)}
+												</TableCell>
 												<TableCell className="wcpos:tabular-nums wcpos:text-gray-600">
-													{waiting}
+													{created}
 												</TableCell>
 												<TableCell className="wcpos:text-right">
 													{(job.status === 'pending' || job.status === 'claimed') && (
@@ -481,6 +547,17 @@ export function PrintQueue() {
 															{t('cloud_print.queue_retry', 'Retry')}
 														</Button>
 													) : null}
+													<Button
+														variant="text"
+														onClick={() => deleteJobs.mutate([job.id])}
+														disabled={deleteJobs.isPending}
+														data-testid={`queue-delete-${job.id}`}
+														aria-label={t('cloud_print.queue_delete_job', 'Delete job {id}', {
+															id: String(job.id),
+														})}
+													>
+														{t('cloud_print.queue_delete', 'Delete')}
+													</Button>
 												</TableCell>
 											</TableRow>
 										);

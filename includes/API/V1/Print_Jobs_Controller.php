@@ -173,6 +173,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/queue/delete',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'delete_queue' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/test',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -483,6 +495,27 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
+		// Without force this route cancels: it takes a waiting job out of the
+		// running but leaves the row as history. With force the row goes for
+		// good, which is the only way to clear a terminal job before its
+		// retention window expires.
+		if ( rest_sanitize_boolean( $request->get_param( 'force' ) ) ) {
+			if ( ! $this->jobs->delete( $id ) ) {
+				return new WP_Error(
+					'wcpos_print_job_not_deleted',
+					__( 'The print job could not be deleted.', 'woocommerce-pos' ),
+					array( 'status' => 500 )
+				);
+			}
+
+			return rest_ensure_response(
+				array(
+					'deleted'  => true,
+					'previous' => $job,
+				)
+			);
+		}
+
 		if ( ! $this->jobs->cancel_if_waiting( $id ) ) {
 			return new WP_Error(
 				'wcpos_print_job_not_cancellable',
@@ -539,6 +572,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 					array(
 						'limit' => $per_page,
 						'page'  => $page,
+						// Newest first: the job an admin opens the queue to check
+						// on is the one that just fired, not the oldest survivor.
+						'order' => 'DESC',
 					)
 				)
 			)
@@ -640,6 +676,47 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		);
 
 		return rest_ensure_response( array( 'cancelled' => $cancelled ) );
+	}
+
+	/**
+	 * Permanently delete queue rows.
+	 *
+	 * Unlike cancel_queue(), this removes history: any status may be deleted,
+	 * because the point is clearing a queue the admin no longer wants to look
+	 * at rather than stopping work. Waiting jobs are cancelled on the way out
+	 * so nothing is left half-claimed.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function delete_queue( $request ) {
+		$ids = $request->get_param( 'ids' );
+		if ( ! \is_array( $ids ) || empty( $ids ) ) {
+			return new WP_Error(
+				'wcpos_print_job_no_ids',
+				__( 'No print jobs were selected.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+		foreach ( $ids as $id ) {
+			if ( ( ! \is_int( $id ) && ! \is_string( $id ) ) || ! ctype_digit( (string) $id ) || (int) $id < 1 ) {
+				return new WP_Error(
+					'wcpos_print_job_invalid_ids',
+					__( 'One or more selected print jobs are invalid.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
+		$deleted = 0;
+		foreach ( array_map( 'intval', $ids ) as $id ) {
+			if ( $id > 0 && $this->jobs->delete( $id ) ) {
+				++$deleted;
+			}
+		}
+
+		return rest_ensure_response( array( 'deleted' => $deleted ) );
 	}
 
 	/**
@@ -793,7 +870,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( 'DELETE' === $request->get_method() ) {
 			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
 			$status = '' === $code || '000' === $code || 1 === preg_match( '/^2\d{2,3}(?:\s|$)/', $code ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
-			$this->jobs->set_status( (int) $job['id'], $status );
+			$this->jobs->record_printer_result( (int) $job['id'], Print_Job_Service::STATUS_PRINTED === $status );
 
 			if ( Print_Job_Service::STATUS_FAILED === $status ) {
 				$this->log_printer_failure( $request, $printer_id, $code, (int) $job['id'] );
@@ -1042,17 +1119,70 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @param string          $printer_id Printer ID.
 	 * @param string          $code       Failure code.
 	 * @param int             $job_id     Print job ID.
+	 * @param int|null        $status     Epson ePOS response status bitmask, when the result carried one.
 	 */
-	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id ): void {
+	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id, ?int $status = null ): void {
+		// One detail string serves both the stored reason and the log line, and it
+		// keeps the raw hex even when no bit decodes, so an unmapped or
+		// model-specific status can still be read back from a screenshot.
+		$flags  = null === $status ? '' : implode( ', ', self::describe_epson_status( $status ) );
+		$detail = null === $status ? '' : sprintf( ' (0x%08X%s)', $status, '' === $flags ? '' : ': ' . $flags );
+		$reason = $code . $detail;
+
+		// Persist it too, not just log it. Push providers already record their
+		// submission error against the job; polling printers report theirs here,
+		// and without this the queue can only ever say "Failed" while the reason
+		// (EX_TIMEOUT, a Star status code) is buried in the log. The decoded
+		// Epson status bits are what turn "EX_TIMEOUT" into "cover open".
+		if ( '' !== $reason ) {
+			update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $reason ) );
+		}
+
 		Logger::error(
 			sprintf(
-				'%s: printer "%s" reported failure code "%s" for print job %d.',
+				'%s: printer "%s" reported failure code "%s"%s for print job %d.',
 				$request->get_route(),
 				$printer_id,
 				$code,
+				$detail,
 				$job_id
 			)
 		);
+	}
+
+	/**
+	 * Decode an Epson ePOS-Print response status bitmask.
+	 *
+	 * @param int $status Decimal ASB status bitmask.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function describe_epson_status( int $status ): array {
+		// Epson ePOS-Print XML User's Manual, response `status` table (ASB bits).
+		// Fault bits only: informational ones (print complete, drawer pin, feed
+		// button, panel switch, buzzer) say nothing about why a print failed.
+		$labels = array(
+			0x00000001 => __( 'no response from printer', 'woocommerce-pos' ),
+			0x00000008 => __( 'offline', 'woocommerce-pos' ),
+			0x00000020 => __( 'cover open', 'woocommerce-pos' ),
+			0x00000100 => __( 'waiting for online recovery', 'woocommerce-pos' ),
+			0x00000400 => __( 'mechanical error', 'woocommerce-pos' ),
+			0x00000800 => __( 'autocutter error', 'woocommerce-pos' ),
+			0x00002000 => __( 'unrecoverable error', 'woocommerce-pos' ),
+			0x00004000 => __( 'auto-recoverable error', 'woocommerce-pos' ),
+			0x00020000 => __( 'paper near end', 'woocommerce-pos' ),
+			0x00080000 => __( 'paper end', 'woocommerce-pos' ),
+			0x80000000 => __( 'spooler stopped', 'woocommerce-pos' ),
+		);
+
+		$descriptions = array();
+		foreach ( $labels as $bit => $label ) {
+			if ( 0 !== ( $status & $bit ) ) {
+				$descriptions[] = $label;
+			}
+		}
+
+		return $descriptions;
 	}
 
 	/**
@@ -1101,19 +1231,48 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$connection_type = (string) $request->get_param( 'ConnectionType' );
 
 		// Result XML is a form field, so in the raw body it is percent-encoded
-		// (`success="true"` arrives as `success%3D%22true%22`) and a raw-body
-		// substring test can never match it. The raw-body branch is kept only for
-		// a caller that posts the bare XML, which the printer never does.
+		// (`<response` arrives as `%3Cresponse`) and a raw-body substring test can
+		// never match it. The raw-body branch is kept only for a caller that posts
+		// the bare XML, which the printer never does.
 		$result_xml = (string) $request->get_param( 'ResponseFile' );
-		if ( '' === $result_xml && false !== strpos( $raw_body, 'success=' ) ) {
+		if ( '' === $result_xml && false !== strpos( $raw_body, '<response' ) ) {
 			$result_xml = $raw_body;
 		}
 
-		if ( 'SetResponse' === $connection_type || '' !== $result_xml ) {
+		// A print result is recognised by its ePOS <response> element, whichever
+		// way it arrived — the bare-XML caller sends no ConnectionType, so the
+		// type is deliberately not consulted here. The printer also posts an
+		// empty <PrintResponseInfo/> after every idle poll; reading that as a
+		// result marked the in-flight job failed ("unknown"). It is acked below
+		// and never dispatched on.
+		if ( false !== strpos( $result_xml, '<response' ) ) {
 			$claim = $this->jobs->find_active_claim( $printer_id );
+			if ( null === $claim ) {
+				// A result that arrives after the claim timed out belongs to the job
+				// that was failed as unconfirmed — record it there instead of
+				// dropping it, so a printer that merely reported late shows the truth.
+				$claim = $this->jobs->find_unconfirmed( $printer_id );
+			} else {
+				// A result carries no job token — printjobid is SDP 2.00 only — so it
+				// can only be attributed to the active claim. A printer holding an
+				// unsent result retries that POST before polling for more work, so a
+				// result should not arrive while an earlier job is still awaiting one.
+				// Log it if it ever does: the attribution below would be the wrong job.
+				$unconfirmed = $this->jobs->find_unconfirmed( $printer_id );
+				if ( null !== $unconfirmed ) {
+					Logger::warning(
+						sprintf(
+							'Printer "%s": result recorded against claimed job %d while unconfirmed job %d is still awaiting one.',
+							$printer_id,
+							(int) $claim['id'],
+							(int) $unconfirmed['id']
+						)
+					);
+				}
+			}
 			if ( null !== $claim ) {
 				$ok = false !== strpos( $result_xml, 'success="true"' );
-				$this->jobs->set_status( (int) $claim['id'], $ok ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED );
+				$this->jobs->record_printer_result( (int) $claim['id'], $ok );
 
 				if ( ! $ok ) {
 					$code = 'unknown';
@@ -1121,15 +1280,26 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 						$code = sanitize_text_field( $matches[1] );
 					}
 
-					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'] );
+					$status = null;
+					if ( 1 === preg_match( '/\bstatus="(\d+)"/', $result_xml, $matches ) ) {
+						// The ASB status is unsigned 32-bit; on a 32-bit PHP build a value
+						// with bit 31 set does not fit and (int) would saturate to
+						// 0x7FFFFFFF, decoding every label. Such a value is left undecoded
+						// rather than misdecoded.
+						$status = (float) $matches[1] <= PHP_INT_MAX ? (int) $matches[1] : null;
+					}
+
+					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'], $status );
 				}
 			}
 
 			return $this->serve_raw( $ack, $soap );
 		}
 
-		// A status notification is not asking for work.
-		if ( 'SetStatus' === $connection_type ) {
+		// A status notification or a result post — typed, or recognisable only by
+		// its ResponseFile — is not asking for work. Only the GetRequest lane below
+		// (and a legacy untyped poll) may be handed a job.
+		if ( 'SetStatus' === $connection_type || 'SetResponse' === $connection_type || '' !== $result_xml ) {
 			return $this->serve_raw( $ack, $soap );
 		}
 
@@ -1146,6 +1316,28 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return $this->serve_raw( $ack, $soap );
 		}
 		$epos = $this->jobs->render_payload( $job );
+
+		// An empty render means the job produced nothing printable — most often
+		// a template whose engine this provider cannot render (Server Direct
+		// Print only speaks the thermal pipeline's ePOS-Print XML). Dispatching
+		// it anyway sends <PrintData></PrintData>: the printer parses that
+		// happily, prints nothing, and posts back success="true", so the job is
+		// recorded as Printed. Fail the job here instead, so the queue shows the
+		// truth and the log names the printer.
+		if ( '' === $epos ) {
+			Logger::error(
+				sprintf(
+					'%s: print job %d rendered an empty payload for printer "%s"; nothing was sent to the printer.',
+					$request->get_route(),
+					(int) $job['id'],
+					$printer_id
+				)
+			);
+			update_post_meta( (int) $job['id'], Print_Job_Service::META_ERROR, 'empty_rendered_payload' );
+			$this->jobs->set_status( (int) $job['id'], Print_Job_Service::STATUS_FAILED );
+
+			return $this->serve_raw( $ack, $soap );
+		}
 
 		// Server Direct Print expects the print data wrapped in
 		// PrintRequestInfo > ePOSPrint > PrintData — NOT the SOAP envelope used

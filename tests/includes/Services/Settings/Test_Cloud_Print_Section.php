@@ -125,4 +125,159 @@ class Test_Cloud_Print_Section extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertEquals( 'wcpos_cloud_print_duplicate_printer_id', $result->get_error_code() );
 	}
+
+	/**
+	 * It clears a template the printer cannot render, and still saves.
+	 *
+	 * Epson SDP speaks only the thermal pipeline, so a legacy-php template
+	 * renders to nothing. Rejecting the write blocked every later settings
+	 * save — including the one that would have fixed the row — so the pairing
+	 * is cleared instead, leaving the rule visibly incomplete.
+	 */
+	public function test_write_clears_template_engine_the_provider_cannot_render(): void {
+		// Arrange.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'front',
+						'name'     => 'Front counter',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'front',
+						'template_id' => 'plugin-core',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert: saved, with the unrenderable template cleared.
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( '', $result['assignments'][0]['template_id'] );
+		$this->assertSame( 'front', $result['assignments'][0]['printer_id'] );
+	}
+
+	/**
+	 * An unrenderable row must never block an unrelated settings save.
+	 *
+	 * This is the regression that mattered: the picker filters by engine, so a
+	 * stored pairing it cannot display was invisible — and while the write was
+	 * rejected, every save failed and the screen silently reverted.
+	 */
+	public function test_write_is_not_blocked_by_an_unrenderable_row(): void {
+		// Arrange: one bad row, plus a good one the admin is adding.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'front',
+						'name'     => 'Front counter',
+						'provider' => 'epson-sdp',
+					),
+					array(
+						'id'                   => 'office',
+						'name'                 => 'Office',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'key',
+						'printnode_printer_id' => 42,
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'front',
+						'template_id' => 'plugin-core',
+						'scope'       => 'every',
+					),
+					array(
+						'printer_id'  => 'office',
+						'template_id' => 'plugin-core',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert: the save succeeds and the valid row is untouched.
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( '', $result['assignments'][0]['template_id'] );
+		$this->assertSame( 'plugin-core', $result['assignments'][1]['template_id'] );
+	}
+
+	/**
+	 * It accepts a legacy template for a provider that renders every engine.
+	 */
+	public function test_write_accepts_any_engine_for_an_all_engine_provider(): void {
+		// Arrange.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'                   => 'office',
+						'name'                 => 'Office',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'key',
+						'printnode_printer_id' => 42,
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'office',
+						'template_id' => 'plugin-core',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'plugin-core', $result['assignments'][0]['template_id'] );
+	}
+
+	/**
+	 * It still saves when the assigned template no longer exists.
+	 *
+	 * An unresolvable template cannot be classified, and blocking the whole
+	 * save over one would stop unrelated edits.
+	 */
+	public function test_write_allows_an_unresolvable_template(): void {
+		// Arrange.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'front',
+						'name'     => 'Front counter',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'front',
+						'template_id' => '99999999',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+	}
 }

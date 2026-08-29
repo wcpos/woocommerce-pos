@@ -44,6 +44,10 @@ class Test_Lane_Coverage_Fixture {
 		new \WP_REST_Request( 'GET', $route );
 	}
 
+	public function test_method_only_rest_request_has_no_lane_signal() {
+		new \WP_REST_Request( 'POST' );
+	}
+
 	public function test_live_v1_collection() {
 		$this->wp_rest_get_request( '/wcpos/v1/products/variations' );
 	}
@@ -171,6 +175,7 @@ $expected = array(
 	'test_unresolved_route_variable'  => array( array( 'unresolved' ), false, true ),
 	'test_dynamic_rest_request_concatenation' => array( array( 'v1' ), true, false ),
 	'test_unresolved_rest_request_variable' => array( array( 'unresolved' ), false, true ),
+	'test_method_only_rest_request_has_no_lane_signal' => array( array(), false, false ),
 	'test_live_v1_collection'         => array( array( 'v1' ), false, false ),
 	'test_live_v1_collection_query'   => array( array( 'v1' ), false, false ),
 	'test_live_v1_collection_concatenation' => array( array( 'v1' ), false, false ),

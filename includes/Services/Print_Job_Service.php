@@ -19,6 +19,7 @@ class Print_Job_Service {
 	const META_FORMAT     = '_wcpos_pj_format';
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
+	const META_UNCONFIRMED = '_wcpos_pj_unconfirmed';
 	const META_RETRIED_TO = '_wcpos_pj_retried_to';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
 	const META_PN_KIND           = '_wcpos_pj_pn_kind';
@@ -45,8 +46,19 @@ class Print_Job_Service {
 	/** Unix time a job reached a terminal status — the retention clock. */
 	const META_TERMINAL_AT = '_wcpos_pj_terminal_at';
 
-	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
+	/**
+	 * Seconds a claimed job stays in-flight before it is treated as stale. A stale
+	 * claim is failed as "unconfirmed", never re-queued: the printer may have
+	 * printed it and simply be unable to report yet (see find_unconfirmed()).
+	 */
 	const CLAIM_TTL = 120;
+
+	/**
+	 * Seconds after a claim was failed as unconfirmed during which a printer's
+	 * late result is still attributed to it. Printers report within minutes of
+	 * a link coming back; anything older is a stray post, not a late result.
+	 */
+	const UNCONFIRMED_RESULT_WINDOW = HOUR_IN_SECONDS;
 
 	const STATUS_PENDING   = 'pending';
 	const STATUS_CLAIMED   = 'claimed';
@@ -175,6 +187,9 @@ class Print_Job_Service {
 			'drawer_connector'  => self::normalize_drawer_connector( (string) get_post_meta( $id, self::META_DRAWER_CONNECTOR, true ) ),
 			'drawer_error'      => (string) get_post_meta( $id, self::META_DRAWER_ERROR, true ),
 			'retried_to'        => (int) get_post_meta( $id, self::META_RETRIED_TO, true ),
+			'error'             => (string) get_post_meta( $id, self::META_ERROR, true ),
+			'unconfirmed'       => '1' === (string) get_post_meta( $id, self::META_UNCONFIRMED, true ),
+			'terminal_at'       => (int) get_post_meta( $id, self::META_TERMINAL_AT, true ),
 		);
 	}
 
@@ -454,15 +469,20 @@ class Print_Job_Service {
 	public function query_rows( array $filters = array() ): array {
 		global $wpdb;
 
+		$order = isset( $filters['order'] ) && 'DESC' === strtoupper( (string) $filters['order'] ) ? 'DESC' : 'ASC';
+
 		$query = new \WP_Query(
 			array(
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
 				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
 				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				// Oldest-first by default: oldest_pending_gmt() reads row zero to
+				// find a printer's longest-waiting job. The queue *view* asks for
+				// DESC instead, where the newest job is the one being looked for.
 				'orderby'        => array(
-					'date' => 'ASC',
-					'ID'   => 'ASC',
+					'date' => $order,
+					'ID'   => $order,
 				),
 				'fields'         => 'ids',
 				'no_found_rows'  => true,
@@ -496,6 +516,9 @@ class Print_Job_Service {
 					'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
 					'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
 					'retried_to'   => (int) get_post_meta( $id, self::META_RETRIED_TO, true ),
+					'error'        => (string) get_post_meta( $id, self::META_ERROR, true ),
+					'unconfirmed'  => '1' === (string) get_post_meta( $id, self::META_UNCONFIRMED, true ),
+					'terminal_at'  => (int) get_post_meta( $id, self::META_TERMINAL_AT, true ),
 				);
 			},
 			$ids
@@ -651,6 +674,31 @@ class Print_Job_Service {
 		}
 
 		return $cancelled;
+	}
+
+	/**
+	 * Permanently remove a job row.
+	 *
+	 * The retention purge clears terminal jobs on its own schedule; this is the
+	 * admin's manual escape hatch for a queue full of noise they do not want to
+	 * wait out. A still-waiting job is cancelled first so a printer that is
+	 * mid-poll cannot claim a row that is about to vanish.
+	 *
+	 * @param int $id Job ID.
+	 *
+	 * @return bool True when the row was deleted.
+	 */
+	public function delete( int $id ): bool {
+		if ( self::POST_TYPE !== get_post_type( $id ) ) {
+			return false;
+		}
+
+		$status = (string) get_post_meta( $id, self::META_STATUS, true );
+		if ( \in_array( $status, array( self::STATUS_PENDING, self::STATUS_CLAIMED ), true ) && ! $this->cancel_if_waiting( $id ) ) {
+			return false;
+		}
+
+		return (bool) wp_delete_post( $id, true );
 	}
 
 	/**
@@ -1044,7 +1092,73 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * Re-queue stale claims for a printer (crashed/aborted prints).
+	 * The printer's newest unconfirmed, unresolved job within
+	 * UNCONFIRMED_RESULT_WINDOW, or null.
+	 *
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return array|null
+	 */
+	public function find_unconfirmed( string $printer_id ): ?array {
+		$posts = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				// Newest by the time it actually failed, not by creation: two jobs for
+				// one printer can go terminal in a different order than they were
+				// queued, and it is the most recently failed one a late result
+				// belongs to.
+				'orderby'        => array(
+					'terminal_at' => 'DESC',
+					'ID'          => 'DESC',
+				),
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'   => self::META_PRINTER,
+						'value' => sanitize_text_field( $printer_id ),
+					),
+					array(
+						'key'   => self::META_STATUS,
+						'value' => self::STATUS_FAILED,
+					),
+					array(
+						'key'   => self::META_UNCONFIRMED,
+						'value' => '1',
+					),
+					array(
+						'key'     => self::META_RETRIED_TO,
+						'compare' => 'NOT EXISTS',
+					),
+					'terminal_at' => array(
+						'key'     => self::META_TERMINAL_AT,
+						'value'   => time() - self::UNCONFIRMED_RESULT_WINDOW,
+						'compare' => '>=',
+						'type'    => 'NUMERIC',
+					),
+				),
+			)
+		);
+		return empty( $posts ) ? null : $this->get( (int) $posts[0]->ID );
+	}
+
+	/**
+	 * Record the printer's own result for a job — the claim it holds, or one
+	 * failed as unconfirmed whose result arrived late. Success clears the
+	 * unconfirmed flag and its explanatory text; a failure's code is recorded by
+	 * the caller after this.
+	 *
+	 * @param int  $id Job ID.
+	 * @param bool $ok Whether the printer reported success.
+	 */
+	public function record_printer_result( int $id, bool $ok ): void {
+		$this->set_status( $id, $ok ? self::STATUS_PRINTED : self::STATUS_FAILED );
+		delete_post_meta( $id, self::META_UNCONFIRMED );
+		delete_post_meta( $id, self::META_ERROR );
+	}
+
+	/**
+	 * Fail stale claims without risking an automatic duplicate print.
 	 *
 	 * @param string $printer_id Printer ID.
 	 * @param int    $ttl        Claim TTL in seconds.
@@ -1062,11 +1176,23 @@ class Print_Job_Service {
 				// Drop the timestamp while the job is still claimed — nothing
 				// can re-claim it until the status flips, so a fresh claim's
 				// timestamp can never be erased by this cleanup. Then the
-				// requeue is conditional on still-claimed: same race as
+				// failure is conditional on still-claimed: same race as
 				// try_claim() — a cancellation landing after the query above
-				// must not be overwritten back to pending.
+				// must not be overwritten as failed.
 				delete_post_meta( $job['id'], self::META_CLAIMED_AT );
-				update_post_meta( $job['id'], self::META_STATUS, self::STATUS_PENDING, self::STATUS_CLAIMED );
+				if ( update_post_meta( $job['id'], self::META_STATUS, self::STATUS_FAILED, self::STATUS_CLAIMED ) ) {
+					// A machine code, like every other META_ERROR writer; the queue UI
+					// turns the unconfirmed flag into the merchant-facing explanation.
+					update_post_meta( $job['id'], self::META_ERROR, 'claim_timeout' );
+					// The compare-and-swap above is the only status write; a second,
+					// unconditional one would clobber a result or cancellation that
+					// landed in between. Only the terminal side effects are wanted.
+					$this->finalize_status_change( (int) $job['id'], self::STATUS_FAILED );
+					// Flag last: it is what makes the row visible to find_unconfirmed(),
+					// so nothing above can race a late result that lands once it is set.
+					update_post_meta( $job['id'], self::META_UNCONFIRMED, '1' );
+					\WCPOS\WooCommercePOS\Logger::warning( sprintf( 'Printer "%s" did not report a result for print job %d before the claim timeout.', $printer_id, (int) $job['id'] ) );
+				}
 			}
 		}
 	}

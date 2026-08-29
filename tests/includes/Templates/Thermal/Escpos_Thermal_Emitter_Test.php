@@ -287,8 +287,8 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		// Act / Assert.
 		$this->assertEquals( 0x1b, \ord( $partial[0] ) );
 		$this->assertEquals( 0x40, \ord( $partial[1] ) );
-		$this->assertTrue( $this->includes_sequence( $partial, array( 0x1d, 0x56, 0x42 ) ) );
-		$this->assertTrue( $this->includes_sequence( $full, array( 0x1d, 0x56, 0x41 ) ) );
+		$this->assertTrue( $this->includes_sequence( $partial, array( 0x1d, 0x56, 0x42, 0x00 ) ) );
+		$this->assertTrue( $this->includes_sequence( $full, array( 0x1d, 0x56, 0x41, 0x00 ) ) );
 	}
 
 	/**

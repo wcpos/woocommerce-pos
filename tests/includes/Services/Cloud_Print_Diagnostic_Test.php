@@ -89,7 +89,8 @@ class Cloud_Print_Diagnostic_Test extends WP_UnitTestCase {
 			$expected .= 'Printer: Counter' . "\n";
 			$expected .= 'Date: ' . $date . "\n";
 			$expected .= 'If you can read this, printing works!' . "\n";
-			$expected .= '[feed][cut]';
+			// Three feeds before the cut: the same bottom margin as receipts.
+			$expected .= '[feed][feed][feed][cut]';
 
 			return $expected;
 		};

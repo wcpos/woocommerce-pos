@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-27T08:42:03+00:00\n"
+"POT-Creation-Date: 2026-08-29T18:57:36+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -457,31 +457,31 @@ msgstr ""
 msgid "Store not found or not accessible by this cashier."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:101
+#: includes/API/V1/Checkout_Controller.php:102
 msgid "Sorry, you cannot view checkout state."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:112
+#: includes/API/V1/Checkout_Controller.php:113
 msgid "Sorry, you cannot process checkout."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:139
+#: includes/API/V1/Checkout_Controller.php:141
 msgid "Missing X-WCPOS-Idempotency-Key header."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:150
+#: includes/API/V1/Checkout_Controller.php:152
 #: includes/API/V1/Gateway_Bootstrap_Controller.php:98
 msgid "Payment gateway not found."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:158
+#: includes/API/V1/Checkout_Controller.php:160
 msgid "Payment gateway is not available for POS checkout."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:250
+#: includes/API/V1/Checkout_Controller.php:279
 #: includes/API/V1/Receipts_Controller.php:170
 msgid "Order not found."
 msgstr ""
@@ -493,24 +493,24 @@ msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Customers_Controller.php:110
-#: includes/API/V1/Orders_Controller.php:337
+#: includes/API/V1/Orders_Controller.php:376
 msgid "Tax ID type."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Customers_Controller.php:114
-#: includes/API/V1/Orders_Controller.php:341
+#: includes/API/V1/Orders_Controller.php:380
 msgid "Tax ID value."
 msgstr ""
 
 #: includes/API/V1/Customers_Controller.php:118
-#: includes/API/V1/Orders_Controller.php:345
+#: includes/API/V1/Orders_Controller.php:384
 msgid "ISO 3166-1 alpha-2 country code."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Customers_Controller.php:122
-#: includes/API/V1/Orders_Controller.php:349
+#: includes/API/V1/Orders_Controller.php:388
 msgid "Optional human-readable label."
 msgstr ""
 
@@ -520,7 +520,7 @@ msgstr ""
 
 #. translators: Use default WordPress translation.
 #: includes/API/V1/Customers_Controller.php:349
-#: includes/API/V1/Orders_Controller.php:835
+#: includes/API/V1/Orders_Controller.php:874
 msgid "Invalid email address."
 msgstr ""
 
@@ -555,49 +555,49 @@ msgid "You do not have permission to view logs."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Orders_Controller.php:290
+#: includes/API/V1/Orders_Controller.php:329
 #: includes/API/V2/Order_Email_Controller.php:40
 msgid "Email address"
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:295
+#: includes/API/V1/Orders_Controller.php:334
 #: includes/API/V2/Order_Email_Controller.php:45
 msgid "Save email to order"
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:328
+#: includes/API/V1/Orders_Controller.php:367
 msgid "Customer tax IDs snapshotted at sale time."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:513
-#: includes/API/V1/Orders_Controller.php:527
-#: includes/API/V1/Orders_Controller.php:544
-#: includes/API/V2/Writers/Order_Writer.php:429
+#: includes/API/V1/Orders_Controller.php:552
+#: includes/API/V1/Orders_Controller.php:566
+#: includes/API/V1/Orders_Controller.php:583
+#: includes/API/V2/Writers/Order_Writer.php:484
 msgid "date_created_gmt must be a valid ISO 8601 UTC date."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:554
-#: includes/API/V2/Writers/Order_Writer.php:423
+#: includes/API/V1/Orders_Controller.php:593
+#: includes/API/V2/Writers/Order_Writer.php:478
 msgid "date_created_gmt cannot be more than 24 hours in the future."
 msgstr ""
 
 #. translators: %s: email address.
-#: includes/API/V1/Orders_Controller.php:890
+#: includes/API/V1/Orders_Controller.php:929
 #, php-format
 msgid "Email address %s added to billing details from WCPOS."
 msgstr ""
 
 #. translators: %s: email address.
-#: includes/API/V1/Orders_Controller.php:903
+#: includes/API/V1/Orders_Controller.php:942
 #, php-format
 msgid "Order details manually sent to %s from WCPOS."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:968
+#: includes/API/V1/Orders_Controller.php:1007
 msgid "Unique identifier for the order status."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:974
+#: includes/API/V1/Orders_Controller.php:1013
 msgid "Display name of the order status."
 msgstr ""
 
@@ -633,148 +633,204 @@ msgstr ""
 msgid "Provider-specific public metadata."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:299
+#: includes/API/V1/Print_Jobs_Controller.php:311
 msgid "The PrintNode API key must be sent in the request body, not the query string."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:312
+#: includes/API/V1/Print_Jobs_Controller.php:324
 msgid "A PrintNode API key is required."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:359
+#: includes/API/V1/Print_Jobs_Controller.php:371
 msgid "The Star Online API key must be sent in the request body, not the query string."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:374
+#: includes/API/V1/Print_Jobs_Controller.php:386
 msgid "A Star Online API key and a valid stario.online CloudPRNT URL are required."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:460
-#: includes/API/V1/Print_Jobs_Controller.php:481
-#: includes/API/V1/Print_Jobs_Controller.php:657
-#: includes/API/V1/Print_Jobs_Controller.php:1030
+#: includes/API/V1/Print_Jobs_Controller.php:472
+#: includes/API/V1/Print_Jobs_Controller.php:493
+#: includes/API/V1/Print_Jobs_Controller.php:734
+#: includes/API/V1/Print_Jobs_Controller.php:1107
 msgid "Print job not found."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:489
+#: includes/API/V1/Print_Jobs_Controller.php:506
+msgid "The print job could not be deleted."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:522
 msgid "Only pending or claimed print jobs can be cancelled."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:664
+#: includes/API/V1/Print_Jobs_Controller.php:698
+msgid "No print jobs were selected."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:706
+msgid "One or more selected print jobs are invalid."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:741
 msgid "This print job has already been retried."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:676
+#: includes/API/V1/Print_Jobs_Controller.php:753
 msgid "This job's stored receipt has been cleaned up and it has no template to re-render from."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:693
+#: includes/API/V1/Print_Jobs_Controller.php:770
 msgid "This job's template no longer exists, so it cannot be re-rendered."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:742
-#: includes/API/V1/Print_Jobs_Controller.php:1239
-#: includes/API/V1/Print_Jobs_Controller.php:1355
-#: includes/API/V1/Print_Jobs_Controller.php:1387
+#: includes/API/V1/Print_Jobs_Controller.php:819
+#: includes/API/V1/Print_Jobs_Controller.php:1431
+#: includes/API/V1/Print_Jobs_Controller.php:1547
+#: includes/API/V1/Print_Jobs_Controller.php:1579
 msgid "Print job could not be created."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:751
+#: includes/API/V1/Print_Jobs_Controller.php:828
 msgid "Print job retry could not be recorded."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:897
+#: includes/API/V1/Print_Jobs_Controller.php:974
 msgid "The print job is not available in the requested media type."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:999
+#: includes/API/V1/Print_Jobs_Controller.php:1076
 msgid "Invalid printer token."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1179
+#: includes/API/V1/Print_Jobs_Controller.php:1165
+msgid "no response from printer"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1166
+msgid "offline"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1167
+msgid "cover open"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1168
+msgid "waiting for online recovery"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1169
+msgid "mechanical error"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1170
+msgid "autocutter error"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1171
+msgid "unrecoverable error"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1172
+msgid "auto-recoverable error"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1173
+msgid "paper near end"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1174
+msgid "paper end"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1175
+msgid "spooler stopped"
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1371
 msgid "A printer_id is required."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1204
+#: includes/API/V1/Print_Jobs_Controller.php:1396
 msgid "PrintNode print jobs require an order and a template."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1219
-#: includes/API/V1/Print_Jobs_Controller.php:1318
+#: includes/API/V1/Print_Jobs_Controller.php:1411
+#: includes/API/V1/Print_Jobs_Controller.php:1510
 msgid "Unknown printer."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1268
+#: includes/API/V1/Print_Jobs_Controller.php:1460
 msgid "Unknown order."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1277
+#: includes/API/V1/Print_Jobs_Controller.php:1469
 msgid "Unknown template."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1294
+#: includes/API/V1/Print_Jobs_Controller.php:1486
 msgid "The selected template cannot be printed on this printer."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1340
+#: includes/API/V1/Print_Jobs_Controller.php:1532
 msgid "Test print is not available for this printer yet."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1414
+#: includes/API/V1/Print_Jobs_Controller.php:1606
 msgid "This PrintNode printer is missing its API key or printer id."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1428
+#: includes/API/V1/Print_Jobs_Controller.php:1620
 msgid "Could not generate the test print."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1503
+#: includes/API/V1/Print_Jobs_Controller.php:1695
 msgid "Epson Server Direct Print accepts order-based ePOS-Print jobs only, not raw payloads."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1510
+#: includes/API/V1/Print_Jobs_Controller.php:1702
 msgid "Epson Server Direct Print requires the epos-xml format."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1521
+#: includes/API/V1/Print_Jobs_Controller.php:1713
 msgid "Star CloudPRNT does not accept the epos-xml format."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1533
+#: includes/API/V1/Print_Jobs_Controller.php:1725
 msgid "Star CloudPRNT printers require order-based template jobs or a raw payload."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1551
+#: includes/API/V1/Print_Jobs_Controller.php:1743
 msgid "No relay verification is pending."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1591
+#: includes/API/V1/Print_Jobs_Controller.php:1783
 msgid "Sorry, you cannot manage print jobs."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Products_Controller.php:146
+#: includes/API/V1/Products_Controller.php:147
 #: includes/API/V1/Product_Variations_Controller.php:142
 msgid "Barcode"
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:184
+#: includes/API/V1/Products_Controller.php:185
 msgid "Limit result set to products assigned to brand IDs or slugs, separated by commas."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:192
+#: includes/API/V1/Products_Controller.php:193
 msgid "Operator to compare product brand terms."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:202
+#: includes/API/V1/Products_Controller.php:203
 msgid "Operator to compare product category terms."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:212
+#: includes/API/V1/Products_Controller.php:213
 msgid "Operator to compare product tag terms."
 msgstr ""
 
@@ -3159,11 +3215,11 @@ msgstr ""
 msgid "You do not have permission to update access settings."
 msgstr ""
 
-#: includes/Services/Settings/Cloud_Print_Section.php:194
+#: includes/Services/Settings/Cloud_Print_Section.php:195
 msgid "Star Online printers need an API key, a valid stario.online CloudPRNT URL, and a device."
 msgstr ""
 
-#: includes/Services/Settings/Cloud_Print_Section.php:203
+#: includes/Services/Settings/Cloud_Print_Section.php:204
 msgid "Duplicate printer id."
 msgstr ""
 
@@ -3195,7 +3251,7 @@ msgid "Star Online request failed with status %d."
 msgstr ""
 
 #. translators: %d: Number of order line items without enough stock.
-#: includes/Services/Stock_Validator.php:136
+#: includes/Services/Stock_Validator.php:387
 #, php-format
 msgid "Cannot complete order: %d item(s) exceed available stock."
 msgstr ""

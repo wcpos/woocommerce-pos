@@ -18,6 +18,7 @@ use Exception;
 use WC_Abstract_Order;
 use WC_Data;
 use WC_Email_Customer_Invoice;
+use WC_Order;
 use WC_Order_Item;
 use WC_Order_Item_Fee;
 use WC_Order_Item_Product;
@@ -26,6 +27,7 @@ use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -104,6 +106,43 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
+		}
+	}
+
+	/**
+	 * Persist new checkout orders as pending until stock is reserved atomically.
+	 *
+	 * @param WP_REST_Request $request  Full request details.
+	 * @param bool            $creating Whether a new order is being created.
+	 * @return WC_Data|WP_Error
+	 * @throws \Throwable If checkout stock validation cannot be completed.
+	 */
+	protected function save_object( $request, $creating = false ) {
+		$validator = Stock_Validator::instance();
+		if ( ! $creating || ! \wcpos_request() || ! SettingsService::instance()->prevent_overselling_enabled() || ! $validator->should_validate_create_request( $request ) ) {
+			return parent::save_object( $request, $creating );
+		}
+
+		$target_status = $request->get_param( 'status' );
+		$set_paid      = $request->get_param( 'set_paid' );
+
+		try {
+			return $validator->around_paid_create(
+				array(
+					'status'         => $target_status,
+					'set_paid'       => rest_sanitize_boolean( $set_paid ),
+					'transaction_id' => $request->get_param( 'transaction_id' ),
+				),
+				function ( array $neutralised ) use ( $request, $creating ) {
+					$request->set_param( 'status', $neutralised['status'] );
+					$request->set_param( 'set_paid', $neutralised['set_paid'] );
+
+					return parent::save_object( $request, $creating );
+				}
+			);
+		} finally {
+			$request->set_param( 'status', $target_status );
+			$request->set_param( 'set_paid', $set_paid );
 		}
 	}
 

@@ -7,6 +7,7 @@ import { Button, Chip, FilterTabs, TextArea, type ChipVariant } from '@wcpos/ui'
 
 import { formatCopyPayload, formatLocalTimestamp } from './format-copy-payload';
 import { groupByDay } from './group-by-day';
+import { logsRequestPath, unwrapLogsEnvelope, type LogsEnvelope } from './logs-request';
 import { markLogsRead } from './use-unread-log-counts';
 import Notice from '../../components/notice';
 import { Select } from '../../components/ui';
@@ -35,7 +36,7 @@ interface LogsResponse {
 	has_fatal_errors: boolean;
 	fatal_errors_url: string;
 	sources?: LogSource[];
-	/** Injected client-side from the `X-WP-TotalPages` response header. */
+	/** Lifted client-side from the `_wcpos.total_pages` envelope field (see logs-request.ts). */
 	_totalPages?: number;
 }
 
@@ -238,23 +239,13 @@ function Logs() {
 	const [expandedKey, setExpandedKey] = React.useState<string | null>(null);
 	const [page, setPage] = React.useState(1);
 
-	const levelParam = filter === 'all' ? '' : `&level=${filter}`;
-	const sourceParam = `&source=${encodeURIComponent(source)}`;
-
 	const { data, dataUpdatedAt } = useSuspenseQuery<LogsResponse>({
 		queryKey: ['logs', filter, source, page],
 		queryFn: () =>
-			apiFetch({
-				path: `wcpos/v1/logs?wcpos=1&per_page=50&page=${page}${levelParam}${sourceParam}`,
+			apiFetch<LogsEnvelope<LogsResponse>>({
+				path: logsRequestPath(page, filter, source),
 				method: 'GET',
-				parse: false,
-			}).then(async (response: any) => {
-				const json = await response.json();
-				return {
-					...json,
-					_totalPages: parseInt(response.headers.get('X-WP-TotalPages') || '1', 10),
-				};
-			}),
+			}).then(unwrapLogsEnvelope),
 	});
 
 	const entries = data?.entries ?? [];

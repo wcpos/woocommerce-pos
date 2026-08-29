@@ -31,6 +31,14 @@ use WP_Screen;
  */
 class Admin {
 	/**
+	 * Script handle for the api-fetch `_method` shim (assets/js/api-fetch-method-param.js).
+	 *
+	 * Pro references this handle by its string value, guarded by
+	 * wp_script_is( ..., 'registered' ), so the value is a compatibility contract.
+	 */
+	public const API_FETCH_METHOD_PARAM_HANDLE = 'wcpos-api-fetch-method-param';
+
+	/**
 	 * POS Menu IDs.
 	 *
 	 * @var string[] Unique menu identifier.
@@ -57,6 +65,7 @@ class Admin {
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
 		add_action( 'admin_init', array( $this, 'init' ) );
+		add_action( 'admin_init', array( $this, 'register_scripts' ) );
 		add_action( 'current_screen', array( $this, 'current_screen' ) );
 
 		// register the screen handlers.
@@ -78,6 +87,25 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
+	}
+
+	/**
+	 * Register the shared admin scripts that WCPOS bundles depend on.
+	 *
+	 * The api-fetch shim routes PUT/PATCH/DELETE through POST + `?_method=`
+	 * so wp-admin mutations survive hosts that 403 the bare verbs or the
+	 * `X-HTTP-Method-Override` header (see the shim's header comment). It is
+	 * only registered here; each bundle that uses `wp.apiFetch` enqueues it
+	 * by listing self::API_FETCH_METHOD_PARAM_HANDLE as a dependency.
+	 */
+	public function register_scripts(): void {
+		wp_register_script(
+			self::API_FETCH_METHOD_PARAM_HANDLE,
+			PLUGIN_URL . 'assets/js/api-fetch-method-param.js',
+			array( 'wp-api-fetch' ),
+			VERSION,
+			true
+		);
 	}
 
 	/**

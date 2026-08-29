@@ -23,6 +23,7 @@ assets/js/*
 !assets/js/README.md
 !assets/js/indexeddb.worker.js
 !assets/js/opfs.worker.js
+!assets/js/api-fetch-method-param.js
 assets/css/*
 !assets/css/README.md
 assets/asset-manifest.json
