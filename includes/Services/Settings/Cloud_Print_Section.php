@@ -228,19 +228,7 @@ class Cloud_Print_Section extends Abstract_Section {
 			'assignments' => array_map( array( $this, 'sanitize_assignment' ), $assigns ),
 		);
 
-		$mismatch = $this->first_engine_mismatch( $clean['assignments'], $clean_printers );
-		if ( null !== $mismatch ) {
-			return new WP_Error(
-				'wcpos_cloud_print_template_engine_unsupported',
-				sprintf(
-					/* translators: 1: printer name, 2: receipt template name. */
-					__( '%1$s cannot print the "%2$s" template. Choose a template this printer supports.', 'woocommerce-pos' ),
-					$mismatch['printer_name'],
-					$mismatch['template_title']
-				),
-				array( 'status' => 400 )
-			);
-		}
+		$clean['assignments'] = $this->clear_unrenderable_templates( $clean['assignments'], $clean_printers );
 
 		update_option( $this->option_name(), $clean );
 
@@ -368,61 +356,63 @@ class Cloud_Print_Section extends Abstract_Section {
 	}
 
 	/**
-	 * The first assignment whose template engine its printer cannot render.
+	 * Blank any assignment whose template its printer cannot render.
 	 *
 	 * A provider that declares a single template engine (Epson SDP and the Star
-	 * providers all speak only 'thermal') silently renders nothing for any other
-	 * engine, so the pairing has to be refused at write time rather than
-	 * discovered as a receipt that never prints. The client already filters the
-	 * template picker by engine, but that is presentation: switching a rule's
-	 * printer leaves the previously chosen template_id in place, which is
-	 * exactly how an unrenderable pairing reaches this endpoint.
+	 * providers all speak only 'thermal') renders nothing for any other engine,
+	 * so the pairing has to be dealt with here rather than discovered as a
+	 * receipt that never prints.
+	 *
+	 * Refusing the whole save was worse than the bug: one unrenderable row —
+	 * including one the admin cannot see, because the template picker filters
+	 * by engine and so cannot display the stored value — blocked every
+	 * subsequent settings write and silently reverted the screen. Clearing the
+	 * template instead always saves, and leaves the rule visibly incomplete:
+	 * Cloud_Print_Trigger_Service skips assignments with no template, so the
+	 * rule stops firing rather than queuing jobs that print nothing.
 	 *
 	 * Only resolvable templates are judged. A template_id that is empty or no
-	 * longer exists cannot be classified, and refusing the whole save over one
-	 * would block unrelated edits; the dispatch path logs and fails those jobs.
+	 * longer exists cannot be classified and is left alone.
 	 *
 	 * @param array $assignments Sanitized assignments.
 	 * @param array $printers    Sanitized printers being written.
 	 *
-	 * @return array|null Mismatch details, or null when every pairing renders.
+	 * @return array Assignments with unrenderable templates cleared.
 	 */
-	private function first_engine_mismatch( array $assignments, array $printers ): ?array {
+	private function clear_unrenderable_templates( array $assignments, array $printers ): array {
 		$providers = array();
-		$names     = array();
 		foreach ( $printers as $printer ) {
 			if ( ! empty( $printer['id'] ) ) {
 				$providers[ $printer['id'] ] = (string) ( $printer['provider'] ?? '' );
-				$names[ $printer['id'] ]     = (string) ( $printer['name'] ?? $printer['id'] );
 			}
 		}
 
-		foreach ( $assignments as $assignment ) {
-			$printer_id  = (string) ( $assignment['printer_id'] ?? '' );
-			$template_id = (string) ( $assignment['template_id'] ?? '' );
-			if ( '' === $template_id || ! isset( $providers[ $printer_id ] ) ) {
-				continue;
-			}
+		return array_map(
+			function ( array $assignment ) use ( $providers ): array {
+				$printer_id  = (string) ( $assignment['printer_id'] ?? '' );
+				$template_id = (string) ( $assignment['template_id'] ?? '' );
+				if ( '' === $template_id || ! isset( $providers[ $printer_id ] ) ) {
+					return $assignment;
+				}
 
-			$supported = Provider::template_engines( $providers[ $printer_id ] );
-			if ( 'all' === $supported ) {
-				continue;
-			}
+				$supported = Provider::template_engines( $providers[ $printer_id ] );
+				if ( 'all' === $supported ) {
+					return $assignment;
+				}
 
-			$template = Print_Job_Service::load_template( $template_id );
-			if ( null === $template ) {
-				continue;
-			}
+				$template = Print_Job_Service::load_template( $template_id );
+				if ( null === $template ) {
+					return $assignment;
+				}
 
-			if ( (string) ( $template['engine'] ?? '' ) !== $supported ) {
-				return array(
-					'printer_name'   => '' !== $names[ $printer_id ] ? $names[ $printer_id ] : $printer_id,
-					'template_title' => (string) ( $template['title'] ?? $template_id ),
-				);
-			}
-		}
+				if ( (string) ( $template['engine'] ?? '' ) !== $supported ) {
+					$assignment['template_id'] = '';
+				}
 
-		return null;
+				return $assignment;
+			},
+			$assignments
+		);
 	}
 
 	/**
