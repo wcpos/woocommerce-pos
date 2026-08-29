@@ -62,6 +62,43 @@ function appliesOptions(storeOptions: StoreOption[], current: CloudAssignment): 
 	return [...base, ...stores];
 }
 
+/**
+ * Template options for one rule, always able to display the stored value.
+ *
+ * A Select can only render a value that exists in its options, and the
+ * template list is filtered by the printer's engine — so a stored template the
+ * printer cannot render, or a cleared one, is absent from the list and the
+ * Select falls back to displaying some other template. The row then looks
+ * configured while Cloud_Print_Trigger_Service skips it for having no usable
+ * template, which is the silent no-op this whole area keeps reproducing.
+ *
+ * Stand a disabled entry in for the stored value instead, the same way
+ * appliesOptions() represents a store that is no longer in the list.
+ */
+function templateSelectOptions(
+	options: { value: string; label: string }[],
+	templateId: string
+): { value: string; label: string; disabled?: boolean }[] {
+	const plain = options.map(({ value, label }) => ({ value, label }));
+	if (plain.some((option) => option.value === templateId)) {
+		return plain;
+	}
+
+	return [
+		{
+			value: templateId,
+			label:
+				'' === templateId
+					? t('cloud_print.rule_template_none', 'Choose a template…')
+					: t('cloud_print.rule_template_unsupported', 'Unsupported template (#{id})', {
+							id: templateId,
+						}),
+			disabled: true,
+		},
+		...plain,
+	];
+}
+
 function parseApplies(value: string): { store_id: number; scope: ScopeValue } {
 	if (value.startsWith('store:')) {
 		const storeId = Number.parseInt(value.slice('store:'.length), 10);
@@ -226,9 +263,12 @@ export function AutoPrintRules({
 									data-testid={`rule-template-${i}`}
 									aria-label={t('cloud_print.rule_template_label', 'Receipt template')}
 									className="wcpos:max-w-full"
-									style={sentenceSelectWidth(optionsForPrinter(a.printer_id), a.template_id)}
+									style={sentenceSelectWidth(
+										templateSelectOptions(optionsForPrinter(a.printer_id), a.template_id),
+										a.template_id
+									)}
 									value={a.template_id}
-									options={optionsForPrinter(a.printer_id)}
+									options={templateSelectOptions(optionsForPrinter(a.printer_id), a.template_id)}
 									onChange={({ value }) => update(i, { template_id: String(value) })}
 								/>
 								<span>{t('cloud_print.rule_template_suffix', 'template,')}</span>

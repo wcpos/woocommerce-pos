@@ -226,6 +226,37 @@ describe('AutoPrintRules', () => {
 		expect(next[0].template_id).toBe('22');
 	});
 
+	it('shows a cleared template as unselected, not as some other template', () => {
+		// The server clears a template the printer cannot render. The Select can
+		// only display a value present in its options, so without an entry for
+		// the empty value it would fall back to showing a real template — the
+		// row would look configured while the trigger skips it for having none.
+		renderRules({
+			assignments: [{ printer_id: 'front', store_id: 0, scope: 'every', template_id: '' }],
+		});
+
+		const select = screen.getByTestId('rule-template-0') as HTMLSelectElement;
+		expect(select.value).toBe('');
+		expect(screen.getByText('Choose a template…')).toBeInTheDocument();
+	});
+
+	it('shows a stored template the printer cannot render rather than substituting one', () => {
+		renderRules({
+			printers: [{ id: 'front', name: 'Front counter', provider: 'epson-sdp', store_id: 0 }],
+			templateOptions: [
+				{ value: '11', label: 'Standard receipt', engine: 'thermal' as const },
+				{ value: 'plugin-core', label: 'Legacy PHP Template', engine: 'legacy-php' as const },
+			],
+			assignments: [
+				{ printer_id: 'front', store_id: 0, scope: 'every', template_id: 'plugin-core' },
+			],
+		});
+
+		const select = screen.getByTestId('rule-template-0') as HTMLSelectElement;
+		expect(select.value).toBe('plugin-core');
+		expect(screen.getByText(/Unsupported template/)).toBeInTheDocument();
+	});
+
 	it('+ Add rule appends a default rule', () => {
 		const { onChange, printers } = renderRules();
 		fireEvent.click(screen.getByTestId('rules-add'));
