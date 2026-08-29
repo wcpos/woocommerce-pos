@@ -125,4 +125,108 @@ class Test_Cloud_Print_Section extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertEquals( 'wcpos_cloud_print_duplicate_printer_id', $result->get_error_code() );
 	}
+
+	/**
+	 * It refuses an assignment whose template the printer cannot render.
+	 *
+	 * Epson SDP speaks only the thermal pipeline, so a legacy-php template
+	 * renders to nothing. Accepting the pairing produced a rule that looked
+	 * configured and silently never printed.
+	 */
+	public function test_write_rejects_template_engine_the_provider_cannot_render(): void {
+		// Arrange.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'front',
+						'name'     => 'Front counter',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'front',
+						'template_id' => 'plugin-core',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wcpos_cloud_print_template_engine_unsupported', $result->get_error_code() );
+	}
+
+	/**
+	 * It accepts a legacy template for a provider that renders every engine.
+	 */
+	public function test_write_accepts_any_engine_for_an_all_engine_provider(): void {
+		// Arrange.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'                   => 'office',
+						'name'                 => 'Office',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'key',
+						'printnode_printer_id' => 42,
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'office',
+						'template_id' => 'plugin-core',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'plugin-core', $result['assignments'][0]['template_id'] );
+	}
+
+	/**
+	 * It still saves when the assigned template no longer exists.
+	 *
+	 * An unresolvable template cannot be classified, and blocking the whole
+	 * save over one would stop unrelated edits.
+	 */
+	public function test_write_allows_an_unresolvable_template(): void {
+		// Arrange.
+		$section = new Cloud_Print_Section();
+
+		// Act.
+		$result = $section->write(
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'front',
+						'name'     => 'Front counter',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(
+					array(
+						'printer_id'  => 'front',
+						'template_id' => '99999999',
+						'scope'       => 'every',
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+	}
 }

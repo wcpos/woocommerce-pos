@@ -124,6 +124,24 @@ export function AutoPrintRules({
 		onChange(assignments.map((a, i) => (i === index ? { ...a, ...patch } : a)));
 	};
 
+	// Switching the printer re-filters the template options, so a template the
+	// old printer could render may not exist in the new printer's list. Patching
+	// printer_id alone would leave that stale template_id in state while the
+	// Select renders some other option — the row then looks correctly configured
+	// and saves a pairing the printer cannot print. Reconcile the template the
+	// same way add() picks one for a new row.
+	const changePrinter = (
+		assignment: CloudAssignment,
+		printerId: string
+	): Partial<CloudAssignment> => {
+		const options = optionsForPrinter(printerId);
+		if (options.some((option) => option.value === assignment.template_id)) {
+			return { printer_id: printerId };
+		}
+
+		return { printer_id: printerId, template_id: options[0]?.value ?? '' };
+	};
+
 	const add = () => {
 		const first = printers[0];
 		if (!first) return;
@@ -200,7 +218,7 @@ export function AutoPrintRules({
 									style={sentenceSelectWidth(printerOptions, a.printer_id)}
 									value={a.printer_id}
 									options={printerOptions}
-									onChange={({ value }) => update(i, { printer_id: String(value) })}
+									onChange={({ value }) => update(i, changePrinter(a, String(value)))}
 								/>
 								<span>{t('cloud_print.rule_using', 'using the')}</span>
 								<Select

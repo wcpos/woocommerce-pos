@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
+use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
 use WP_Error;
@@ -226,6 +227,21 @@ class Cloud_Print_Section extends Abstract_Section {
 			'printers'    => $clean_printers,
 			'assignments' => array_map( array( $this, 'sanitize_assignment' ), $assigns ),
 		);
+
+		$mismatch = $this->first_engine_mismatch( $clean['assignments'], $clean_printers );
+		if ( null !== $mismatch ) {
+			return new WP_Error(
+				'wcpos_cloud_print_template_engine_unsupported',
+				sprintf(
+					/* translators: 1: printer name, 2: receipt template name. */
+					__( '%1$s cannot print the "%2$s" template. Choose a template this printer supports.', 'woocommerce-pos' ),
+					$mismatch['printer_name'],
+					$mismatch['template_title']
+				),
+				array( 'status' => 400 )
+			);
+		}
+
 		update_option( $this->option_name(), $clean );
 
 		// Drop per-printer runtime state for printers that were removed, so a
@@ -349,6 +365,64 @@ class Cloud_Print_Section extends Abstract_Section {
 		$printer['fullReceiptRaster'] = array_key_exists( 'fullReceiptRaster', $printer ) ? rest_sanitize_boolean( $printer['fullReceiptRaster'] ) : false;
 
 		return $printer;
+	}
+
+	/**
+	 * The first assignment whose template engine its printer cannot render.
+	 *
+	 * A provider that declares a single template engine (Epson SDP and the Star
+	 * providers all speak only 'thermal') silently renders nothing for any other
+	 * engine, so the pairing has to be refused at write time rather than
+	 * discovered as a receipt that never prints. The client already filters the
+	 * template picker by engine, but that is presentation: switching a rule's
+	 * printer leaves the previously chosen template_id in place, which is
+	 * exactly how an unrenderable pairing reaches this endpoint.
+	 *
+	 * Only resolvable templates are judged. A template_id that is empty or no
+	 * longer exists cannot be classified, and refusing the whole save over one
+	 * would block unrelated edits; the dispatch path logs and fails those jobs.
+	 *
+	 * @param array $assignments Sanitized assignments.
+	 * @param array $printers    Sanitized printers being written.
+	 *
+	 * @return array|null Mismatch details, or null when every pairing renders.
+	 */
+	private function first_engine_mismatch( array $assignments, array $printers ): ?array {
+		$providers = array();
+		$names     = array();
+		foreach ( $printers as $printer ) {
+			if ( ! empty( $printer['id'] ) ) {
+				$providers[ $printer['id'] ] = (string) ( $printer['provider'] ?? '' );
+				$names[ $printer['id'] ]     = (string) ( $printer['name'] ?? $printer['id'] );
+			}
+		}
+
+		foreach ( $assignments as $assignment ) {
+			$printer_id  = (string) ( $assignment['printer_id'] ?? '' );
+			$template_id = (string) ( $assignment['template_id'] ?? '' );
+			if ( '' === $template_id || ! isset( $providers[ $printer_id ] ) ) {
+				continue;
+			}
+
+			$supported = Provider::template_engines( $providers[ $printer_id ] );
+			if ( 'all' === $supported ) {
+				continue;
+			}
+
+			$template = Print_Job_Service::load_template( $template_id );
+			if ( null === $template ) {
+				continue;
+			}
+
+			if ( (string) ( $template['engine'] ?? '' ) !== $supported ) {
+				return array(
+					'printer_name'   => '' !== $names[ $printer_id ] ? $names[ $printer_id ] : $printer_id,
+					'template_title' => (string) ( $template['title'] ?? $template_id ),
+				);
+			}
+		}
+
+		return null;
 	}
 
 	/**

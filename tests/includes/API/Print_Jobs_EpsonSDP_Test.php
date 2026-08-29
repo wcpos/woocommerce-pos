@@ -110,6 +110,47 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It never dispatches an empty print payload as a successful job.
+	 *
+	 * A job that renders to nothing — most often a template whose engine Server
+	 * Direct Print cannot render — used to be sent as <PrintData></PrintData>.
+	 * The printer parses that, prints nothing, and posts back success="true",
+	 * so the queue recorded a receipt that never existed. Fail the job instead.
+	 */
+	public function test_poll_fails_the_job_when_the_payload_renders_empty(): void {
+		// Arrange: an empty payload stands in for a render that produced nothing.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '' ),
+			)
+		);
+
+		// Act.
+		$response = $this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+		$body     = $response->get_raw_body();
+
+		// Assert: nothing printable was handed to the printer.
+		$this->assertStringNotContainsString( '<PrintData>', $body );
+		$this->assertStringNotContainsString( 'PrintRequestInfo', $body );
+
+		// Assert: the queue tells the truth rather than reporting a print.
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+
+		// Assert: the log names the printer and the job.
+		$this->assertNotEmpty(
+			array_filter(
+				$this->logged_messages,
+				function ( $message ) {
+					return false !== strpos( (string) $message, 'rendered an empty payload' );
+				}
+			),
+			'an empty render must be logged'
+		);
+	}
+
+	/**
 	 * It wraps the print data in the Server Direct Print response envelope.
 	 *
 	 * The printer discards a response it cannot recognise without printing or
