@@ -314,7 +314,7 @@ export function PrintQueue() {
 			title={t('cloud_print.queue_title', 'Print queue')}
 			description={t(
 				'cloud_print.queue_description',
-				'Jobs waiting to be fetched by your printers.'
+				'Jobs across every status, including printed and cancelled.'
 			)}
 		>
 			{stalePrinters.map((printer) => (
@@ -490,7 +490,7 @@ export function PrintQueue() {
 													</Chip>
 												</TableCell>
 												<TableCell className="wcpos:text-gray-600">
-													{job.error ? (
+													{job.status === 'failed' && job.error ? (
 														<span
 															className="wcpos:text-red-700"
 															data-testid={`queue-error-${job.id}`}

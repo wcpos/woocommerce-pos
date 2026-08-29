@@ -330,6 +330,9 @@ describe('PrintQueue', () => {
 			.map((c) => (c[0] as ApiOpts).path)
 			.find((path) => path.includes('print-jobs/queue') && !path.includes('cancel'));
 		expect(firstQueueCall).not.toContain('status=active');
+		expect(
+			screen.getByText('Jobs across every status, including printed and cancelled.')
+		).toBeInTheDocument();
 	});
 
 	it('shows a recorded failure reason on the row', async () => {
@@ -344,6 +347,28 @@ describe('PrintQueue', () => {
 
 		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
 		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('EX_TIMEOUT');
+	});
+
+	it('shows completion timing instead of a stale error on a printed job', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13
+					? {
+							...job,
+							status: 'printed',
+							error: 'EX_TIMEOUT',
+							terminal_at: nowSeconds() - 60,
+						}
+					: job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.queryByTestId('queue-error-13')).toBeNull();
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Printed');
 	});
 
 	it('deletes a single job through the bulk delete endpoint', async () => {

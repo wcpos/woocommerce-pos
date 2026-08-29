@@ -679,9 +679,12 @@ class Print_Job_Service {
 			return false;
 		}
 
-		$this->cancel_if_waiting( $id );
+		$status = (string) get_post_meta( $id, self::META_STATUS, true );
+		if ( \in_array( $status, array( self::STATUS_PENDING, self::STATUS_CLAIMED ), true ) && ! $this->cancel_if_waiting( $id ) ) {
+			return false;
+		}
 
-		return null !== wp_delete_post( $id, true );
+		return (bool) wp_delete_post( $id, true );
 	}
 
 	/**
