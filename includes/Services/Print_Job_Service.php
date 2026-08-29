@@ -175,6 +175,8 @@ class Print_Job_Service {
 			'drawer_connector'  => self::normalize_drawer_connector( (string) get_post_meta( $id, self::META_DRAWER_CONNECTOR, true ) ),
 			'drawer_error'      => (string) get_post_meta( $id, self::META_DRAWER_ERROR, true ),
 			'retried_to'        => (int) get_post_meta( $id, self::META_RETRIED_TO, true ),
+			'error'             => (string) get_post_meta( $id, self::META_ERROR, true ),
+			'terminal_at'       => (int) get_post_meta( $id, self::META_TERMINAL_AT, true ),
 		);
 	}
 
@@ -454,15 +456,20 @@ class Print_Job_Service {
 	public function query_rows( array $filters = array() ): array {
 		global $wpdb;
 
+		$order = isset( $filters['order'] ) && 'DESC' === strtoupper( (string) $filters['order'] ) ? 'DESC' : 'ASC';
+
 		$query = new \WP_Query(
 			array(
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
 				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
 				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
+				// Oldest-first by default: oldest_pending_gmt() reads row zero to
+				// find a printer's longest-waiting job. The queue *view* asks for
+				// DESC instead, where the newest job is the one being looked for.
 				'orderby'        => array(
-					'date' => 'ASC',
-					'ID'   => 'ASC',
+					'date' => $order,
+					'ID'   => $order,
 				),
 				'fields'         => 'ids',
 				'no_found_rows'  => true,
@@ -496,6 +503,8 @@ class Print_Job_Service {
 					'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
 					'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
 					'retried_to'   => (int) get_post_meta( $id, self::META_RETRIED_TO, true ),
+					'error'        => (string) get_post_meta( $id, self::META_ERROR, true ),
+					'terminal_at'  => (int) get_post_meta( $id, self::META_TERMINAL_AT, true ),
 				);
 			},
 			$ids
@@ -651,6 +660,28 @@ class Print_Job_Service {
 		}
 
 		return $cancelled;
+	}
+
+	/**
+	 * Permanently remove a job row.
+	 *
+	 * The retention purge clears terminal jobs on its own schedule; this is the
+	 * admin's manual escape hatch for a queue full of noise they do not want to
+	 * wait out. A still-waiting job is cancelled first so a printer that is
+	 * mid-poll cannot claim a row that is about to vanish.
+	 *
+	 * @param int $id Job ID.
+	 *
+	 * @return bool True when the row was deleted.
+	 */
+	public function delete( int $id ): bool {
+		if ( self::POST_TYPE !== get_post_type( $id ) ) {
+			return false;
+		}
+
+		$this->cancel_if_waiting( $id );
+
+		return null !== wp_delete_post( $id, true );
 	}
 
 	/**

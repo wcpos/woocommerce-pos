@@ -317,7 +317,11 @@ describe('PrintQueue', () => {
 		});
 	});
 
-	it('requests the active view by default — printed history is opt-in', async () => {
+	it('requests every status by default, newest first', async () => {
+		// "Needs attention" as the default hid the job that just fired, so the
+		// queue could not answer the question it is usually opened to answer:
+		// did my receipt go through? Ordering is the server's job (DESC) — what
+		// matters here is that the client stops narrowing the view for you.
 		routeQueue(makeQueue);
 		renderQueue();
 
@@ -325,7 +329,37 @@ describe('PrintQueue', () => {
 		const firstQueueCall = apiFetchMock.mock.calls
 			.map((c) => (c[0] as ApiOpts).path)
 			.find((path) => path.includes('print-jobs/queue') && !path.includes('cancel'));
-		expect(firstQueueCall).toContain('status=active');
+		expect(firstQueueCall).not.toContain('status=active');
+	});
+
+	it('shows a recorded failure reason on the row', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13 ? { ...job, error: 'EX_TIMEOUT' } : job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('EX_TIMEOUT');
+	});
+
+	it('deletes a single job through the bulk delete endpoint', async () => {
+		routeQueue(makeQueue);
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		fireEvent.click(screen.getByTestId('queue-delete-11'));
+
+		await waitFor(() => {
+			const deleteCall = apiFetchMock.mock.calls.find((c) =>
+				((c[0] as ApiOpts).path ?? '').includes('queue/delete')
+			);
+			expect(deleteCall).toBeTruthy();
+			expect((deleteCall?.[0] as { data?: { ids?: number[] } })?.data?.ids).toEqual([11]);
+		});
 	});
 
 	it('never shows a stale banner for a push provider with a backlog', async () => {

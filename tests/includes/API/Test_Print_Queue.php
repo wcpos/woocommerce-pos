@@ -84,6 +84,22 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Build a DELETE request (not provided by the base case).
+	 *
+	 * @param string $path Route.
+	 *
+	 * @return \WP_REST_Request
+	 */
+	private function wp_rest_delete_request( string $path = '' ): \WP_REST_Request {
+		$request = new \WP_REST_Request();
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_method( 'DELETE' );
+		$request->set_route( $path );
+
+		return $request;
+	}
+
+	/**
 	 * Fetch the queue endpoint.
 	 *
 	 * @param array $params Query params.
@@ -98,13 +114,16 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It paginates jobs oldest-first and never includes the payload.
+	 * It paginates jobs newest-first and never includes the payload.
+	 *
+	 * The dispatch order is still oldest-first — receipts print FIFO — but the
+	 * admin view answers "what just happened?", so the newest job leads.
 	 */
 	public function test_queue_paginates_jobs_without_payload(): void {
 		// Arrange.
-		$first = $this->make_job( 'kitchen' );
 		$this->make_job( 'kitchen' );
-		$this->make_job( 'front' );
+		$this->make_job( 'kitchen' );
+		$newest = $this->make_job( 'front' );
 
 		// Act.
 		$response = $this->queue(
@@ -119,8 +138,8 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 3, $data['total'] );
 		$this->assertCount( 2, $data['jobs'] );
-		$this->assertEquals( $first, $data['jobs'][0]['id'] );
-		$this->assertEquals( 'kitchen', $data['jobs'][0]['printer_id'] );
+		$this->assertEquals( $newest, $data['jobs'][0]['id'] );
+		$this->assertEquals( 'front', $data['jobs'][0]['printer_id'] );
 		$this->assertEquals( 'pending', $data['jobs'][0]['status'] );
 		$this->assertNotEmpty( $data['jobs'][0]['created_gmt'] );
 		$this->assertArrayNotHasKey( 'payload', $data['jobs'][0] );
@@ -226,8 +245,9 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert: printed and cancelled history is excluded.
 		$this->assertEquals( 3, $data['total'] );
+		// Newest first, so the newest of the three non-terminal jobs leads.
 		$this->assertEquals(
-			array( $pending, $claimed, $failed ),
+			array( $failed, $claimed, $pending ),
 			array_column( $data['jobs'], 'id' )
 		);
 	}
@@ -247,8 +267,9 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertEquals( array( $failed ), array_column( $active['jobs'], 'id' ) );
-		$this->assertEquals( array( $retried, $failed ), array_column( $history['jobs'], 'id' ) );
-		$this->assertEquals( 999, $history['jobs'][0]['retried_to'] );
+		// Newest first: the un-retried failure leads, the retried one follows.
+		$this->assertEquals( array( $failed, $retried ), array_column( $history['jobs'], 'id' ) );
+		$this->assertEquals( 999, $history['jobs'][1]['retried_to'] );
 		$this->assertEquals( 2, $active['summary']['counts']['failed'] );
 		$this->assertEquals( 1, $active['summary']['counts']['failed_unresolved'] );
 	}
@@ -303,8 +324,92 @@ class Test_Print_Queue extends WCPOS_REST_Unit_Test_Case {
 			$seen[] = $data['jobs'][0]['id'];
 		}
 
-		// Assert: every job appears exactly once, in ID order.
-		$this->assertEquals( $ids, $seen );
+		// Assert: every job appears exactly once, newest first. Paging must stay
+		// total-ordered on (date, ID) or offset pagination duplicates or skips
+		// rows created in the same second.
+		$this->assertEquals( array_reverse( $ids ), $seen );
+	}
+
+	/**
+	 * Dispatch order stays oldest-first even though the view is newest-first.
+	 *
+	 * Receipts must print in the order they were rung up. The queue view's DESC
+	 * ordering is presentation only; if it ever leaked into next_pending() the
+	 * newest sale would jump the counter queue.
+	 */
+	public function test_dispatch_still_takes_the_oldest_pending_job(): void {
+		// Arrange.
+		$oldest = $this->make_job( 'kitchen' );
+		$this->make_job( 'kitchen' );
+
+		// Act.
+		$next = $this->jobs->next_pending( 'kitchen' );
+
+		// Assert.
+		$this->assertSame( $oldest, (int) $next['id'] );
+	}
+
+	/**
+	 * It deletes selected jobs of any status through the bulk endpoint.
+	 */
+	public function test_queue_bulk_delete_removes_rows_of_any_status(): void {
+		// Arrange.
+		$printed = $this->make_job( 'kitchen', Print_Job_Service::STATUS_PRINTED );
+		$waiting = $this->make_job( 'kitchen' );
+		$kept    = $this->make_job( 'front' );
+
+		// Act.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/queue/delete' );
+		$request->set_body_params( array( 'ids' => array( $printed, $waiting ) ) );
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( 2, $response->get_data()['deleted'] );
+		$this->assertNull( $this->jobs->get( $printed ), 'a printed row must be removable' );
+		$this->assertNull( $this->jobs->get( $waiting ), 'a waiting row must be removable' );
+		$this->assertNotNull( $this->jobs->get( $kept ), 'unselected jobs must survive' );
+	}
+
+	/**
+	 * It rejects a bulk delete with no ids rather than clearing the queue.
+	 */
+	public function test_queue_bulk_delete_requires_ids(): void {
+		// Arrange.
+		$job = $this->make_job( 'kitchen' );
+
+		// Act.
+		$request  = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/queue/delete' );
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertNotNull( $this->jobs->get( $job ) );
+	}
+
+	/**
+	 * DELETE without force cancels; with force the row is gone.
+	 */
+	public function test_delete_item_force_removes_a_terminal_job(): void {
+		// Arrange.
+		$printed = $this->make_job( 'kitchen', Print_Job_Service::STATUS_PRINTED );
+
+		// Act: without force a terminal job cannot be cancelled.
+		$request  = $this->wp_rest_delete_request( '/wcpos/v1/print-jobs/' . $printed );
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertEquals( 409, $response->get_status() );
+		$this->assertNotNull( $this->jobs->get( $printed ) );
+
+		// Act: with force it is deleted outright.
+		$forced = $this->wp_rest_delete_request( '/wcpos/v1/print-jobs/' . $printed );
+		$forced->set_query_params( array( 'force' => 'true' ) );
+		$forced_response = rest_do_request( $forced );
+
+		// Assert.
+		$this->assertEquals( 200, $forced_response->get_status() );
+		$this->assertNull( $this->jobs->get( $printed ) );
 	}
 
 	/**
