@@ -89,6 +89,13 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 	protected const FIXED_SLACK = 100;
 
 	/**
+	 * Most rows the first (warm-up) call may examine beyond the second. Measured
+	 * ~326 at every size; 600 leaves headroom while staying well under the
+	 * smallest collection here, so a per-process memo cannot hide inside it.
+	 */
+	protected const WARM_UP_ALLOWANCE = 600;
+
+	/**
 	 * Marks every fixture row so teardown can find them again.
 	 */
 	protected const FIXTURE_MARKER = 'WCPOS_MAX_ID_BUDGET_FIXTURE';
@@ -373,6 +380,12 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 	 * not anything the page does. One warm-up call absorbs it; what is measured is
 	 * the cost every subsequent page pays.
 	 *
+	 * The warm-up is itself bounded: the two calls may differ by at most
+	 * {@see self::WARM_UP_ALLOWANCE}. Production runs one fresh PHP process per scan
+	 * page, so a per-process memo of the completion id would make the second call
+	 * read ~0 while every real page still paid in full — and would show up here as a
+	 * first-minus-second gap the size of the collection.
+	 *
 	 * @param string $collection Collection to scan.
 	 * @param array  $filters    Scan filters.
 	 */
@@ -380,9 +393,16 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 		$page = function () use ( $collection, $filters ) {
 			return $this->index->bucket_aggregates( $this->one_id_window(), $collection, $filters );
 		};
-		$page();
+		$first  = Rows_Examined::measure( $page );
+		$second = Rows_Examined::measure( $page );
 
-		return Rows_Examined::measure( $page );
+		$this->assertLessThanOrEqual(
+			static::WARM_UP_ALLOWANCE,
+			$first - $second,
+			sprintf( 'The first %s scan call examined %d rows and the second %d: more than the one-off warm-up separates them, so something is being memoised per process.', $collection, $first, $second )
+		);
+
+		return $second;
 	}
 
 	/**
@@ -406,11 +426,12 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 	public function test_customer_scan_page_stays_inside_the_absolute_row_budget(): void {
 		$rows = $this->measure( 'customers' );
 
-		$this->assertLessThanOrEqual(
-			static::CUSTOMER_ROW_BUDGET,
+		$this->assert_within_budget(
 			$rows,
-			sprintf( 'A one-id customer scan page examined %d rows on a %d-user fixture (budget %d): the completion query is digesting the collection again. ', $rows, static::FIXTURE_SIZE, static::CUSTOMER_ROW_BUDGET )
-			. $this->diagnostic_page_explain( 'customers', array() )
+			static::CUSTOMER_ROW_BUDGET,
+			sprintf( 'A one-id customer scan page examined %d rows on a %d-user fixture (budget %d): the completion query is digesting the collection again. ', $rows, static::FIXTURE_SIZE, static::CUSTOMER_ROW_BUDGET ),
+			'customers',
+			array()
 		);
 	}
 
@@ -422,11 +443,12 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 		$budget = static::ROWS_PER_LIVE_ROW * $live + static::FIXED_SLACK;
 		$rows   = $this->measure( 'orders' );
 
-		$this->assertLessThanOrEqual(
-			$budget,
+		$this->assert_within_budget(
 			$rows,
-			sprintf( 'A one-id order scan page examined %d rows over %d live orders (budget %d): the completion query is digesting the collection again. ', $rows, $live, $budget )
-			. $this->diagnostic_page_explain( 'orders', array() )
+			$budget,
+			sprintf( 'A one-id order scan page examined %d rows over %d live orders (budget %d): the completion query is digesting the collection again. ', $rows, $live, $budget ),
+			'orders',
+			array()
 		);
 	}
 
@@ -439,11 +461,63 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 		$budget  = static::ROWS_PER_LIVE_ROW * $live + static::FIXED_SLACK;
 		$rows    = $this->measure( 'products', $filters );
 
-		$this->assertLessThanOrEqual(
-			$budget,
+		$this->assert_within_budget(
 			$rows,
-			sprintf( 'A one-id published-product scan page examined %d rows over %d live product-space rows (budget %d): the completion query is digesting the collection again. ', $rows, $live, $budget )
-			. $this->diagnostic_page_explain( 'products', $filters )
+			$budget,
+			sprintf( 'A one-id published-product scan page examined %d rows over %d live product-space rows (budget %d): the completion query is digesting the collection again. ', $rows, $live, $budget ),
+			'products',
+			$filters
 		);
+	}
+
+	/**
+	 * The gate only means something if the shape it defends against actually blows
+	 * the budget on this fixture. Run the OLD completion shape — MAX(id) over the
+	 * un-windowed per-row digest SELECT as a derived table — for each collection and
+	 * pin that it examines more rows than the per-live-row ceiling allows. If a
+	 * future digest SELECT becomes cheap enough to pass, the ceiling needs
+	 * re-deriving from data, not loosening.
+	 */
+	public function test_the_derived_digest_shape_blows_the_budget(): void {
+		global $wpdb;
+
+		$shapes = array(
+			'customers' => array( $this->index->customer_digest_select_sql(), static::CUSTOMER_ROW_BUDGET ),
+			'orders'    => array( $this->index->order_digest_select_sql(), static::ROWS_PER_LIVE_ROW * $this->live_rows( 'orders' ) + static::FIXED_SLACK ),
+			'products'  => array( $this->index->row_digest_select_sql(), static::ROWS_PER_LIVE_ROW * $this->live_rows( 'products' ) + static::FIXED_SLACK ),
+		);
+		$this->index->raise_group_concat_max_len();
+		foreach ( $shapes as $collection => list( $digest_sql, $budget ) ) {
+			$sql  = 'SELECT MAX(live.id) FROM (' . $digest_sql . ') live';
+			$rows = Rows_Examined::measure(
+				static function () use ( $wpdb, $sql ) {
+					// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The pre-#1805 completion shape, rebuilt from the engine's own digest SELECT.
+					return $wpdb->get_var( $sql );
+				}
+			);
+
+			$this->assertGreaterThan(
+				$budget,
+				$rows,
+				sprintf( 'The derived-digest completion shape for %s examined only %d rows (budget %d), so the budget would pass for the wrong reason.', $collection, $rows, $budget )
+			);
+		}
+	}
+
+	/**
+	 * Fail with the page's EXPLAINs only when over budget — building them costs
+	 * another full scan call, which a green run should not pay.
+	 *
+	 * @param int    $rows       Rows examined.
+	 * @param int    $budget     Ceiling.
+	 * @param string $message    Failure message prefix.
+	 * @param string $collection Collection scanned.
+	 * @param array  $filters    Scan filters.
+	 */
+	private function assert_within_budget( int $rows, int $budget, string $message, string $collection, array $filters ): void {
+		if ( $rows > $budget ) {
+			$this->fail( $message . $this->diagnostic_page_explain( $collection, $filters ) );
+		}
+		$this->assertLessThanOrEqual( $budget, $rows );
 	}
 }

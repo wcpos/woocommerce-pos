@@ -22,13 +22,23 @@ stores on 2026-08-30 with MariaDB's slow log at 50 ms:
 
 ## Decisions
 
-**1. A uuid the record loaded from its own row is trusted on save.** The ownership scan
-runs only for a uuid whose provenance is NOT this record's own persisted meta row: a
-cloned object (WooCommerce's "Duplicate" clones the meta with its ids cleared), an
-importer rewriting the value in memory, a record with no id yet. An ordinary save — stock,
-price, a REST update — carries a `WC_Meta_Data` entry with an id and no changes, and skips
-the scan entirely. `Pos_Uuid::carries_own_persisted_uuid()` is the rule; `stamp_on_save()`
-is its only caller today.
+**1. A uuid the record loaded from its own row is trusted on the save and read paths.**
+The ownership detector runs only for a uuid whose provenance is NOT this record's own
+persisted meta row: a cloned object (WooCommerce's "Duplicate" clones the meta with its
+ids cleared), an importer rewriting the value in memory, a record with no id yet, a record
+returning from trash/auto-draft (invisible to the detector while inactive, so another
+record may have adopted its uuid — the restore must re-prove ownership). An ordinary save
+or read carries a `WC_Meta_Data` entry with an id and no changes, and skips the detector
+entirely. The rule is `Pos_Uuid::is_own_persisted_uuid()`, applied inside `ensure_uuid()`
+behind the opt-in `trust_persisted` option so there is one selection of the canonical
+entry. Callers that pass it: `stamp_on_save` (the write hook), `stamp_serialized_record`
+(the per-object product lane and the order pull lane — on the legacy CPT order store the
+order detector is a full postmeta walk per served order), `ensure_user_uuid` (customers:
+`wp_usermeta` has no `meta_value` index either) and V1's `Uuid_Handler::maybe_add_post_uuid`
+(which ran the scan once per served record of every list response). Callers that must NOT
+pass it, because they exist to re-key a loaded duplicate: `Uuid_Backfill_Controller`
+(`mode=collisions`) and `Proxy_Uuid_Stamper` (in-response duplicates). A trust rule inside
+`ensure_uuid` by default would silently delete both repairs.
 
 **2. Hookless copies are the collision backfill's job, not the save path's.** A uuid copied
 by direct SQL or a migration tool now passes rule 1 on both records, so neither record's
@@ -45,11 +55,13 @@ scan cheap and was ruled out even as an opt-in: `ALTER TABLE` on a merchant's po
 multi-minute, table-locking operation on large stores, runs under whatever privileges and
 timeouts the host allows, can fail half-way, and is exactly the "plugin touched my
 database" report this plugin must never generate. The by-uuid lookups that remain on the
-legacy CPT order store (`get_order_ids_by_uuid`, `resolve_id_by_uuid('post')`) keep the
-postmeta shape; the only O(1) answer for them is a plugin-owned uuid→id table with a
-completeness latch and a batched backfill, which is a schema addition and a separate
-decision. HPOS stores are unaffected — `wc_orders_meta` carries a `(meta_key, meta_value)`
-index by WooCommerce's own design.
+legacy CPT order store — the write path's `resolve_id_by_uuid()` (the born-twice check on
+a POS order create, and product creates from the till) and V1's order-create lookup —
+keep the postmeta shape; the only O(1) answer for them is a plugin-owned uuid→id table
+with a completeness latch and a batched backfill, which is a schema addition and a
+separate decision. Their read-path twin (the order pull lane's detector) is covered by
+decision 1. HPOS stores are unaffected — `wc_orders_meta` carries a `(meta_key,
+meta_value)` index by WooCommerce's own design.
 
 **4. The scan's completion id comes off the base table.** `max_id` is `MAX(id)` over
 `wp_users`, the orders table, or `wp_posts` under the collection's own servable predicate —
@@ -84,9 +96,10 @@ scan (clone, duplicator end to end, rewritten value, unsaved record), the one th
 id against orphans, drafts, trashed CPT and HPOS orders, and asserts the query no longer
 contains a digest expression.
 
-Not fixed here, by decision 3: the by-uuid lookups on the legacy CPT order store
-(`get_order_ids_by_uuid` at 0.46 s × 8 in the same capture; `resolve_id_by_uuid('post')`).
-HPOS stores do not pay them.
+Not fixed here, by decision 3: the write-path by-uuid lookups on the legacy CPT order
+store (`resolve_id_by_uuid` on a POS create; V1's order-create `get_order_ids_by_uuid`).
+The read-path share of the 0.46 s × 8 order lookups in the capture is covered by decision
+1. HPOS stores pay neither.
 
 ## Consequences
 

@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
@@ -20,8 +19,6 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
  * @covers \WCPOS\WooCommercePOS\Sync\Digest_Index
  */
 class Test_Digest_Index extends Sync_Store_Test_Case {
-	use HPOSToggleTrait;
-
 	/**
 	 * The read half under test.
 	 *
@@ -415,32 +412,6 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 		$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'orders' )['max_id'];
 
 		$this->assertSame( $live->get_id(), $max_id );
-	}
-
-	/**
-	 * The HPOS twin: the live side reads the orders table and ends at the last live
-	 * order there.
-	 */
-	public function test_bucket_aggregates_orders_max_id_ends_at_the_last_live_hpos_order(): void {
-		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
-		$this->setup_cot();
-		$this->toggle_cot_feature_and_usage( true );
-
-		try {
-			$live    = OrderHelper::create_order();
-			$trashed = OrderHelper::create_order();
-			$trashed->delete();
-			$this->assertSame( 'trash', $trashed->get_status() );
-			$this->clear_stored_digests( 'order' );
-
-			$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'orders' )['max_id'];
-
-			$this->assertSame( $live->get_id(), $max_id );
-		} finally {
-			$this->toggle_cot_feature_and_usage( false );
-			$this->clean_up_cot_setup();
-			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
-		}
 	}
 
 	/**

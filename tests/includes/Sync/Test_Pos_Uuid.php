@@ -724,6 +724,98 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The order pull lane serves records loaded from their own row. On the CPT store
+	 * the order detector is a full `wp_postmeta` uuid walk (#1805: 0.46 s per served
+	 * order on the demo store), so a loaded, unchanged uuid is trusted there too.
+	 */
+	public function test_stamp_serialized_record_skips_the_ownership_scan_for_a_loaded_cpt_order(): void {
+		$this->assert_running_on_cpt_storage();
+		$order = OrderHelper::create_order();
+		$uuid  = Pos_Uuid::ensure_uuid( $order, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other_order' ) ) );
+		$loaded = wc_get_order( $order->get_id() );
+
+		$probes = $this->capture_uuid_value_probes(
+			static function () use ( $loaded, &$payload ) {
+				$payload = Pos_Uuid::stamp_serialized_record( array( 'id' => $loaded->get_id() ), $loaded );
+			}
+		);
+
+		$this->assertSame( array(), $probes );
+		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $payload['meta_data'] ) );
+	}
+
+	/**
+	 * The customer read path: `wp_usermeta` has no meta_value index either, so a
+	 * customer's loaded, unchanged uuid is trusted rather than re-proved per read.
+	 */
+	public function test_ensure_user_uuid_skips_the_ownership_scan_for_a_stamped_customer(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$uuid    = Pos_Uuid::ensure_user_uuid( $user_id );
+		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
+
+		$probes = $this->capture_uuid_value_probes(
+			static function () use ( $user_id, &$again ) {
+				$again = Pos_Uuid::ensure_user_uuid( $user_id );
+			}
+		);
+
+		$this->assertSame( array(), $probes );
+		$this->assertSame( $uuid, $again );
+	}
+
+	/**
+	 * The read-path trust is opt-in: the backfill's collision repair and the proxy
+	 * stamper's in-response duplicates still go through the detector by default.
+	 */
+	public function test_ensure_uuid_without_trust_still_runs_the_detector_on_a_loaded_record(): void {
+		$product = ProductHelper::create_simple_product();
+		Pos_Uuid::ensure_uuid( $product, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other' ) ) );
+		$loaded = wc_get_product( $product->get_id() );
+
+		$probes = $this->capture_uuid_value_probes(
+			static function () use ( $loaded ) {
+				Pos_Uuid::ensure_uuid( $loaded, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other' ) ) );
+			}
+		);
+
+		$this->assertCount( 1, $probes );
+	}
+
+	/**
+	 * A trashed record is not a live owner, so a clone made while it is in the trash
+	 * keeps the copied uuid — and the tills now key on the clone. Restoring the
+	 * original through WC CRUD is the one save of a loaded, unchanged uuid that must
+	 * still run the scan: the restored record is re-keyed, the live owner untouched.
+	 */
+	public function test_stamp_on_save_scans_when_a_record_returns_from_the_trash(): void {
+		$original    = ProductHelper::create_simple_product();
+		$original_id = $original->get_id();
+		$uuid        = Pos_Uuid::ensure_uuid( $original, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other' ) ) );
+		$original->delete(); // Trashes the post; WC_Data::delete() then zeroes the object's id.
+		$this->assertSame( 'trash', get_post_status( $original_id ) );
+
+		$clone = clone wc_get_product( $original_id );
+		$clone->set_id( 0 );
+		$clone->set_status( 'publish' );
+		Pos_Uuid::stamp_on_save( $clone );
+		$this->assertSame( $uuid, $clone->get_meta( Api::UUID_META_KEY ), 'No live owner while the original is trashed.' );
+		$clone->save();
+
+		$restored = wc_get_product( $original_id );
+		$restored->set_status( 'publish' );
+		$probes = $this->capture_uuid_value_probes(
+			static function () use ( $restored ) {
+				Pos_Uuid::stamp_on_save( $restored );
+			}
+		);
+
+		$this->assertCount( 1, $probes );
+		$this->assertTrue( Pos_Uuid::is_uuid( $restored->get_meta( Api::UUID_META_KEY ) ) );
+		$this->assertNotSame( $uuid, $restored->get_meta( Api::UUID_META_KEY ) );
+		$this->assertSame( $uuid, get_post_meta( $clone->get_id(), Api::UUID_META_KEY, true ) );
+	}
+
+	/**
 	 * A hookless copy (direct SQL, a migration tool) is NOT caught by either record's
 	 * next save — deliberately. Catching it cost every save a full uuid scan (#1805),
 	 * and it re-keyed whichever record saved first, original included. It stays the

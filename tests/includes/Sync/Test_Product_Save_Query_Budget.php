@@ -242,12 +242,13 @@ class Test_Product_Save_Query_Budget extends WP_UnitTestCase {
 		);
 
 		$this->assertFalse( $owned_by_other );
-		$this->assertGreaterThanOrEqual(
-			static::PRODUCT_FIXTURE_SIZE,
-			$rows,
-			'The ownership scan examined fewer rows than the fixture holds, so the budget below would pass for the wrong reason. '
-			. Rows_Examined::explain( $this->diagnostic_scan_sql( $loaded ) )
-		);
+		if ( $rows < static::PRODUCT_FIXTURE_SIZE ) {
+			$this->fail(
+				'The ownership scan examined fewer rows than the fixture holds, so the budget below would pass for the wrong reason. '
+				. Rows_Examined::explain( $this->diagnostic_scan_sql( $loaded ) )
+			);
+		}
+		$this->assertGreaterThanOrEqual( static::PRODUCT_FIXTURE_SIZE, $rows );
 	}
 
 	/**
@@ -263,15 +264,17 @@ class Test_Product_Save_Query_Budget extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( $uuid, $loaded->get_meta( Pos_Uuid::META_KEY ), 'The hook must keep the persisted identity.' );
-		$this->assertLessThanOrEqual(
-			static::ROW_BUDGET,
-			$rows,
-			sprintf(
-				'stamp_on_save examined %d rows on a %d-product fixture (budget %d): the uuid ownership scan is back on the save path. ',
-				$rows,
-				static::PRODUCT_FIXTURE_SIZE,
-				static::ROW_BUDGET
-			) . Rows_Examined::explain( $this->diagnostic_scan_sql( $loaded ) )
-		);
+		// The EXPLAIN is built only on failure: it costs a full scan of the fixture.
+		if ( $rows > static::ROW_BUDGET ) {
+			$this->fail(
+				sprintf(
+					'stamp_on_save examined %d rows on a %d-product fixture (budget %d): the uuid ownership scan is back on the save path. ',
+					$rows,
+					static::PRODUCT_FIXTURE_SIZE,
+					static::ROW_BUDGET
+				) . Rows_Examined::explain( $this->diagnostic_scan_sql( $loaded ) )
+			);
+		}
+		$this->assertLessThanOrEqual( static::ROW_BUDGET, $rows );
 	}
 }

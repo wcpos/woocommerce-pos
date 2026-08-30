@@ -249,8 +249,7 @@ final class Digest_Index {
 			. ')),1,16),16,10) AS UNSIGNED) AS crc'
 			. " FROM {$wpdb->posts} p"
 			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
-			. ' WHERE p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND p.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+			. ' WHERE ' . $this->live_product_predicate_sql( 'p' )
 			. ( '' === $where_sql ? '' : ' AND ' . $where_sql )
 			. ' GROUP BY p.ID';
 	}
@@ -315,7 +314,7 @@ final class Digest_Index {
 				. ' COALESCE(o.customer_id,0),'
 				. " COALESCE(o.date_updated_gmt,''))),1,16),16,10) AS UNSIGNED) AS crc"
 				. " FROM {$orders_table} o"
-				. " WHERE o.type = 'shop_order' AND o.status NOT IN ('trash','auto-draft')"
+				. ' WHERE ' . $this->live_order_predicate_sql( 'o' )
 				. $condition;
 		}
 
@@ -329,7 +328,7 @@ final class Digest_Index {
 			. " COALESCE(GROUP_CONCAT(CONCAT(pm.meta_key,'=',COALESCE(pm.meta_value,'')) ORDER BY pm.meta_key ASC, pm.meta_id ASC SEPARATOR '|'),''))),1,16),16,10) AS UNSIGNED) AS crc"
 			. " FROM {$wpdb->posts} p"
 			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
-			. " WHERE p.post_type = 'shop_order' AND p.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL
+			. ' WHERE ' . $this->live_order_predicate_sql( 'p' )
 			. $condition
 			. ' GROUP BY p.ID';
 	}
@@ -478,8 +477,7 @@ final class Digest_Index {
 		global $wpdb;
 
 		return "EXISTS (SELECT 1 FROM {$wpdb->posts} lp WHERE lp.ID = {$id_expr}"
-			. ' AND lp.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND lp.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . ')';
+			. ' AND ' . $this->live_product_predicate_sql( 'lp' ) . ')';
 	}
 
 	/**
@@ -503,10 +501,10 @@ final class Digest_Index {
 		if ( $this->orders_are_hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return "EXISTS (SELECT 1 FROM {$orders_table} lo WHERE lo.id = {$id_expr}"
-				. " AND lo.type = 'shop_order' AND lo.status NOT IN ('trash','auto-draft'))";
+				. ' AND ' . $this->live_order_predicate_sql( 'lo' ) . ')';
 		}
 		return "EXISTS (SELECT 1 FROM {$wpdb->posts} lp WHERE lp.ID = {$id_expr}"
-			. " AND lp.post_type = 'shop_order' AND lp.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL . ')';
+			. ' AND ' . $this->live_order_predicate_sql( 'lp' ) . ')';
 	}
 
 	/**
@@ -827,9 +825,8 @@ final class Digest_Index {
 		global $wpdb;
 
 		return (bool) $wpdb->get_var(
-			'SELECT EXISTS (SELECT 1 FROM ' . $wpdb->posts
-			. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . ' LIMIT 1)'
+			'SELECT EXISTS (SELECT 1 FROM ' . $wpdb->posts . ' p'
+			. ' WHERE ' . $this->live_product_predicate_sql( 'p' ) . ' LIMIT 1)'
 			. ' AND NOT EXISTS (SELECT 1 FROM ' . $this->table_name()
 			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL . ' LIMIT 1)'
 		);
@@ -843,6 +840,30 @@ final class Digest_Index {
 		return "(({$post_alias}.post_type = 'product' AND {$post_alias}.post_status = 'publish')"
 			. " OR ({$post_alias}.post_type = 'product_variation' AND {$parent_alias}.post_type = 'product'"
 			. " AND {$parent_alias}.post_status = 'publish'))";
+	}
+
+	/**
+	 * A LIVE product-space row over a `wp_posts` alias: a product or variation that
+	 * is not trashed/auto-draft. ONE spelling for the digest SELECT, the live-row
+	 * probes, the rebuild guard and the completion id — the scan is only sound
+	 * while every side agrees on what "live" means.
+	 */
+	private function live_product_predicate_sql( string $alias ): string {
+		return "{$alias}.post_type IN " . self::PRODUCT_POST_TYPES_SQL
+			. " AND {$alias}.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
+	}
+
+	/**
+	 * A LIVE order over the active order store's alias — `wc_orders` under HPOS,
+	 * `wp_posts` under legacy CPT — with the same one-spelling rule as
+	 * {@see live_product_predicate_sql}.
+	 */
+	private function live_order_predicate_sql( string $alias ): string {
+		if ( $this->orders_are_hpos() ) {
+			return "{$alias}.type = 'shop_order' AND {$alias}.status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
+		}
+
+		return "{$alias}.post_type = 'shop_order' AND {$alias}.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
 	}
 
 	/**
@@ -890,19 +911,18 @@ final class Digest_Index {
 			if ( $this->orders_are_hpos() ) {
 				$orders_table = $wpdb->prefix . 'wc_orders';
 				return array(
-					'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE o.type = 'shop_order' AND o.status NOT IN ('trash','auto-draft')",
+					'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
 					'args' => array(),
 				);
 			}
 			return array(
-				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE p.post_type = 'shop_order' AND p.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL,
+				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' ),
 				'args' => array(),
 			);
 		}
 		if ( ! $publish ) {
 			return array(
-				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE p.post_type IN " . self::PRODUCT_POST_TYPES_SQL
-					. ' AND p.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL,
+				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_product_predicate_sql( 'p' ),
 				'args' => array(),
 			);
 		}
