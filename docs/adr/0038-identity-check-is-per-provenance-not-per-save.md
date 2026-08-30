@@ -43,8 +43,9 @@ detector, for a different reason: their contract that no two records in one resp
 a uuid (`Test_Products_Controller::test_uuid_is_unique`,
 `Test_Customers_Controller::test_customer_uuid_is_unique`) rests on the per-record detector
 alone — V1 has no bulk-read in-response check the way v2's proxy stamper does. That is one
-scan per served record on V1 list pages; it was not in the measured capture (the dev
-stores run v2), and giving V1 the v2-style in-response check is the fix if it ever is.
+scan per served record on V1 list pages. Owner's ruling (2026-08-30): V1 performance is not
+a target — a slower legacy API is acceptable and is a reason for merchants to move to the
+current app. Do not spend effort here.
 
 **2. Hookless copies are the collision backfill's job, not the save path's.** A uuid copied
 by direct SQL or a migration tool now passes rule 1 on both records, so neither record's
