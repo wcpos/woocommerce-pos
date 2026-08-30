@@ -22,6 +22,7 @@ use WCPOS\WooCommercePOS\API\Product_Search;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
@@ -220,13 +221,10 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Define new sorting options.
-			$new_sort_options = array(
-				'sku',
-				'barcode',
-				'stock_quantity',
-				'stock_status',
-			);
+			// The POS sorts are DECLARED once, in Sync\Collection_Rules, and projected here.
+			// The v2 proxy lane claims the same list, so a sort cannot be advertised on one
+			// Read Lane and rejected on the other (#1779).
+			$new_sort_options = Collection_Rules::orderby_enum( 'products' );
 			// Merge new options, avoiding duplicates.
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}

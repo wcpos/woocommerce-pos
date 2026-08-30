@@ -85,6 +85,13 @@ final class Collection_Rules_Plan {
 	public const HOOK_POSTS_ORDERBY = 'posts_orderby';
 
 	/**
+	 * Legacy storage — a meta sort whose NULL rows must land last in both directions.
+	 *
+	 * @var string
+	 */
+	public const HOOK_POSTS_CLAUSES = 'posts_clauses';
+
+	/**
 	 * HPOS storage — filter rules, appended to the `WHERE` clause.
 	 *
 	 * The `woocommerce_orders_table_query_clauses` hook carries two unrelated roles and
@@ -269,6 +276,9 @@ final class Collection_Rules_Plan {
 			case self::HOOK_POSTS_ORDERBY:
 				return \is_string( $value ) ? $this->apply_legacy_sort_clause( $value, $context[0] ?? null ) : $value;
 
+			case self::HOOK_POSTS_CLAUSES:
+				return \is_array( $value ) ? $this->apply_legacy_nulls_last_clause( $value, $context[0] ?? null ) : $value;
+
 			case self::HOOK_HPOS_FILTERS:
 				return \is_array( $value ) ? $this->apply_hpos_filters( $value, $context[0] ?? null ) : $value;
 
@@ -345,6 +355,20 @@ final class Collection_Rules_Plan {
 	 */
 	public function needs_legacy_posts_orderby(): bool {
 		return null !== $this->sort && isset( $this->rules['sorts'][ $this->sort ]['posts']['posts_orderby'] );
+	}
+
+	/**
+	 * Whether the claimed sort's NULL meta values must be forced last in both directions.
+	 *
+	 * Reads the sort's declaration rather than naming a sort inline, so a second
+	 * `nulls_last` meta sort added to the table is picked up wherever this is asked.
+	 *
+	 * @return bool
+	 */
+	public function needs_legacy_nulls_last(): bool {
+		return Collection_Rules::STORAGE_POSTS === $this->storage
+			&& null !== $this->sort
+			&& ! empty( $this->rules['sorts'][ $this->sort ]['posts']['nulls_last'] );
 	}
 
 	/**
@@ -677,23 +701,60 @@ final class Collection_Rules_Plan {
 			return $orderby;
 		}
 
-		/*
-		 * The direction comes from the query WooCommerce built, exactly as the HPOS sort
-		 * takes it from that query's args — one derivation for both storages and both
-		 * Read Lanes. `WP_Query::get_posts()` normalises `order` (upper-cased, defaulting
-		 * to DESC) before `posts_orderby` fires, and it is populated from the same request
-		 * `order` param v1 used to read directly, so this is byte-identical on the direct
-		 * lane while giving the proxy lane the same answer instead of its own hard-coded
-		 * DESC. The terminal `ASC` is v1's own fallback, reached only if nothing at all
-		 * supplied a direction.
-		 */
-		$order = $query->query_vars['order'] ?? $this->request_order ?? 'ASC';
-		$order = \is_scalar( $order ) ? strtoupper( (string) $order ) : 'ASC';
-		// $request_order is the RAW request param — it feeds SQL text below, so it
-		// must never carry anything but the two legal directions.
-		$order = \in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
+		$order = $this->resolve_order( $query );
 
 		return "{$wpdb->posts}.{$column} {$order}";
+	}
+
+	/**
+	 * Force a meta sort's NULL rows to the end of the result set, whichever way it runs.
+	 *
+	 * MySQL sorts NULLs first under ASC and last under DESC. A cashier sorting the grid by
+	 * stock wants the products that do not manage stock out of the way at BOTH ends, so
+	 * the `ORDER BY` is rewritten to sort on the NULL-ness first and the numeric value
+	 * second — `wcpos/v1`'s `wcpos_posts_clauses()`, verbatim.
+	 *
+	 * @param array $clauses The query clauses so far.
+	 * @param mixed $query   The WP_Query instance.
+	 *
+	 * @return array
+	 */
+	private function apply_legacy_nulls_last_clause( array $clauses, $query ): array {
+		global $wpdb;
+
+		if ( ! $this->needs_legacy_nulls_last() ) {
+			return $clauses;
+		}
+
+		$order = $this->resolve_order( $query );
+
+		$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
+
+		return $clauses;
+	}
+
+	/**
+	 * The sort direction a legacy clause body should write.
+	 *
+	 * Taken from the query WooCommerce built, exactly as the HPOS sort takes it from that
+	 * query's args — one derivation for both storages and both Read Lanes.
+	 * `WP_Query::get_posts()` normalises `order` (upper-cased, defaulting to DESC) before
+	 * the clause filters fire, and it is populated from the same request `order` param v1
+	 * used to read directly, so this is byte-identical on the direct lane while giving the
+	 * proxy lane the same answer instead of its own hard-coded default. The terminal `ASC`
+	 * is v1's own fallback, reached only if nothing at all supplied a direction.
+	 *
+	 * @param mixed $query The WP_Query instance.
+	 *
+	 * @return string Either `ASC` or `DESC`.
+	 */
+	private function resolve_order( $query ): string {
+		$order = $query->query_vars['order'] ?? $this->request_order ?? 'ASC';
+		$order = \is_scalar( $order ) ? strtoupper( (string) $order ) : 'ASC';
+
+		// $request_order is the RAW request param — it feeds SQL text, so it must never
+		// carry anything but the two legal directions.
+		return \in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
 	}
 
 	/**
