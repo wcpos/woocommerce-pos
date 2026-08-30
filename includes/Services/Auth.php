@@ -63,6 +63,20 @@ class Auth {
 	private const SESSION_ACTIVITY_REFRESH_SECONDS = 5 * MINUTE_IN_SECONDS;
 
 	/**
+	 * Transient prefix for the per-session "last seen" record.
+	 *
+	 * Activity is recorded OUTSIDE the session row on purpose. Writing it into the row
+	 * meant every authenticated request did a read-modify-write of the whole
+	 * `_woocommerce_pos_refresh_tokens` array, which is neither atomic nor cheap: a
+	 * request overlapping a login, logout or revoke for the same user could write back a
+	 * stale copy and erase the concurrent change — losing a session that had just been
+	 * issued, so the new client worked until its access token expired and was then refused
+	 * a refresh. Four parallel E2E shards on one cashier do exactly that. A per-session key
+	 * cannot collide with another session's write, and reading it costs no row load at all.
+	 */
+	private const SESSION_SEEN_TRANSIENT_PREFIX = 'wcpos_session_seen_';
+
+	/**
 	 * Byte ceiling on the stored session row before it is discarded UNREAD.
 	 *
 	 * This is a LAST RESORT for a row no longer safe to load, not a tidy-up threshold —
@@ -588,6 +602,14 @@ class Auth {
 			return $decoded;
 		}
 
+		/*
+		 * Before the first row read on this path. A refresh loads the whole session row —
+		 * `is_refresh_token_valid()` below, then `update_session_activity()` — so it needs
+		 * the same protection a login has against a row too large to read (#1776).
+		 * Validating an ACCESS token needs no such guard: it no longer touches the row.
+		 */
+		$this->discard_oversized_session_row( absint( $decoded->data->user->id ) );
+
 		// Check if refresh token is still valid (not revoked).
 		if ( ! $this->is_refresh_token_valid( $decoded->data->user->id, $decoded->jti ?? '' ) ) {
 			return new WP_Error(
@@ -639,6 +661,7 @@ class Auth {
 		if ( isset( $refresh_tokens[ $jti ] ) ) {
 			unset( $refresh_tokens[ $jti ] );
 			update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+			$this->forget_session_activity( $jti );
 
 			return true;
 		}
@@ -671,6 +694,7 @@ class Auth {
 			foreach ( $refresh_tokens as $jti => $token_data ) {
 				$ttl = $this->get_access_token_blacklist_ttl( $token_data, $issued_at, $access_expire );
 				$this->blacklist_token( $jti, $ttl );
+				$this->forget_session_activity( (string) $jti );
 			}
 		}
 
@@ -763,6 +787,7 @@ class Auth {
 			if ( $jti !== $current_jti ) {
 				$ttl = $this->get_access_token_blacklist_ttl( $token_data, $issued_at, $access_expire );
 				$this->blacklist_token( $jti, $ttl );
+				$this->forget_session_activity( (string) $jti );
 			}
 		}
 
@@ -787,6 +812,9 @@ class Auth {
 	 * @return bool
 	 */
 	public function update_session_activity( int $user_id, string $jti ): bool {
+		// Public surface: any caller reaching the row goes through the size guard first.
+		$this->discard_oversized_session_row( $user_id );
+
 		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
 		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $jti ] ) ) {
 			return false;
@@ -813,17 +841,28 @@ class Auth {
 			return;
 		}
 
-		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
-		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $jti ] ) ) {
+		$key  = self::SESSION_SEEN_TRANSIENT_PREFIX . $jti;
+		$seen = get_transient( $key );
+
+		// The throttle reads the transient, never the session row: this runs on every
+		// authenticated request, and the row is the one thing this path must not touch.
+		if ( is_numeric( $seen ) && time() - (int) $seen < self::SESSION_ACTIVITY_REFRESH_SECONDS ) {
 			return;
 		}
 
-		$last_active = isset( $refresh_tokens[ $jti ]['last_active'] ) ? (int) $refresh_tokens[ $jti ]['last_active'] : 0;
-		if ( time() - $last_active < self::SESSION_ACTIVITY_REFRESH_SECONDS ) {
-			return;
-		}
+		// The TTL IS the idle window, so a missing transient means "not seen in a week".
+		set_transient( $key, time(), self::SESSION_EVICTION_IDLE_SECONDS );
+	}
 
-		$this->update_session_activity( $user_id, $jti );
+	/**
+	 * Forget a session's recorded activity.
+	 *
+	 * @param string $jti Refresh token JTI (session identifier).
+	 */
+	private function forget_session_activity( string $jti ): void {
+		if ( '' !== $jti ) {
+			delete_transient( self::SESSION_SEEN_TRANSIENT_PREFIX . $jti );
+		}
 	}
 
 	/**
@@ -1025,7 +1064,10 @@ class Auth {
 				continue;
 			}
 
-			$activity = $this->session_last_seen( $token_data );
+			// The ROW timestamp is the cheap filter. It is authoritative when it says a
+			// session is live, because login and refresh both write it; when it says idle
+			// the activity transient still gets the final word, below.
+			$activity = $this->session_row_last_seen( $token_data );
 			if ( $activity > $idle_before ) {
 				continue;
 			}
@@ -1048,7 +1090,17 @@ class Auth {
 			}
 		);
 
-		foreach ( \array_slice( $candidates, 0, $evict_count ) as $candidate ) {
+		foreach ( $candidates as $candidate ) {
+			if ( $evict_count <= 0 ) {
+				break;
+			}
+
+			// Checked only for rows already stale, so this costs a handful of transient
+			// reads rather than one per stored session.
+			if ( $this->session_last_seen( $candidate['jti'], $refresh_tokens[ $candidate['jti'] ] ) > $idle_before ) {
+				continue;
+			}
+
 			/*
 			 * Blacklist ONLY a session that can still hold a live access token. An eviction
 			 * is not a revoke: clearing a bloated row can drop thousands of long-dead
@@ -1064,20 +1116,46 @@ class Auth {
 				$this->blacklist_token( $candidate['jti'], $horizon - $issued_at );
 			}
 
+			$this->forget_session_activity( $candidate['jti'] );
 			unset( $refresh_tokens[ $candidate['jti'] ] );
+			--$evict_count;
 		}
 
 		return $refresh_tokens;
 	}
 
 	/**
-	 * When a session was last seen, from whichever timestamp it carries.
+	 * When a session was last seen, taking the later of the row and the activity record.
+	 *
+	 * The row is rewritten by login and refresh; the transient is written by ordinary
+	 * authenticated requests. Neither alone is the whole picture — a device working through
+	 * a long-lived access token has an old row timestamp and a fresh transient, and a
+	 * session that has not been used at all has the reverse.
+	 *
+	 * @param string $jti        Refresh token JTI (session identifier).
+	 * @param array  $token_data Stored session record.
+	 *
+	 * @return int Unix timestamp; 0 when neither source carries a usable timestamp.
+	 */
+	private function session_last_seen( string $jti, array $token_data ): int {
+		$row_seen = $this->session_row_last_seen( $token_data );
+		$seen     = '' === $jti ? false : get_transient( self::SESSION_SEEN_TRANSIENT_PREFIX . $jti );
+
+		return is_numeric( $seen ) ? max( $row_seen, (int) $seen ) : $row_seen;
+	}
+
+	/**
+	 * When the stored record itself says a session was last seen.
+	 *
+	 * Login and refresh both rewrite `last_active` in the row, so this stays accurate for
+	 * everything except the stretch between refreshes — which is what the activity
+	 * transient covers.
 	 *
 	 * @param array $token_data Stored session record.
 	 *
 	 * @return int Unix timestamp; 0 when the record carries no usable timestamp.
 	 */
-	private function session_last_seen( array $token_data ): int {
+	private function session_row_last_seen( array $token_data ): int {
 		if ( isset( $token_data['last_active'] ) ) {
 			return (int) $token_data['last_active'];
 		}
@@ -1104,7 +1182,7 @@ class Auth {
 		// Rows written before `access_expires` was recorded. The newest access token such a
 		// session can hold was minted no later than its last recorded activity, so one
 		// access-token lifetime past that moment is the outside limit.
-		$last_seen = $this->session_last_seen( $token_data );
+		$last_seen = $this->session_row_last_seen( $token_data );
 
 		return $last_seen > 0 ? $this->get_access_token_expire( $last_seen ) : 0;
 	}

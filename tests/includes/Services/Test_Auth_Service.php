@@ -1518,23 +1518,100 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An authenticated request keeps a session out of the eviction pool.
+	 * An authenticated request must not touch the session row.
 	 *
-	 * Before this, only `refresh_access_token()` moved `last_active`, so a device working
-	 * through a 30-minute access token looked idle the entire time.
+	 * Recording activity in the row meant every request did a read-modify-write of the
+	 * whole array. Overlapping a login, logout or revoke for the same user — four parallel
+	 * E2E shards on one cashier — that writes back a stale copy and erases the concurrent
+	 * change, losing a session that had just been issued.
 	 */
-	public function test_validating_an_access_token_marks_the_session_active(): void {
+	public function test_validating_an_access_token_does_not_write_the_session_row(): void {
 		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
 		$decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
 
 		$stale = time() - 30 * DAY_IN_SECONDS;
 		$this->set_session_field( $decoded->jti, 'last_active', $stale );
+		delete_transient( 'wcpos_session_seen_' . $decoded->jti );
 
-		$this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$writes = $this->count_session_row_writes(
+			function () use ( $tokens ) {
+				$this->auth_service->validate_token( $tokens['access_token'], 'access' );
+			}
+		);
 
 		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
 
-		$this->assertGreaterThan( $stale, (int) $refresh_tokens[ $decoded->jti ]['last_active'] );
+		$this->assertSame( 0, $writes );
+		$this->assertSame( $stale, (int) $refresh_tokens[ $decoded->jti ]['last_active'] );
+	}
+
+	/**
+	 * Activity is recorded per session, in a transient, so two sessions cannot collide.
+	 */
+	public function test_validating_an_access_token_records_activity_in_a_transient(): void {
+		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		delete_transient( 'wcpos_session_seen_' . $decoded->jti );
+
+		$this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		$this->assertEqualsWithDelta( time(), (int) get_transient( 'wcpos_session_seen_' . $decoded->jti ), 5 );
+	}
+
+	/**
+	 * The activity transient is rewritten at most once every few minutes.
+	 */
+	public function test_validating_an_access_token_throttles_the_activity_transient(): void {
+		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$key     = 'wcpos_session_seen_' . $decoded->jti;
+
+		$recent = time() - MINUTE_IN_SECONDS;
+		set_transient( $key, $recent, Auth::SESSION_EVICTION_IDLE_SECONDS );
+		$this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		$this->assertSame( $recent, (int) get_transient( $key ), 'a minute-old record is left alone' );
+
+		$stale = time() - 10 * MINUTE_IN_SECONDS;
+		set_transient( $key, $stale, Auth::SESSION_EVICTION_IDLE_SECONDS );
+		$this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		$this->assertGreaterThan( $stale, (int) get_transient( $key ), 'a ten-minute-old record is refreshed' );
+	}
+
+	/**
+	 * A session whose activity record has expired is idle, whatever the row says.
+	 */
+	public function test_store_refresh_token_beyond_cap_evicts_a_session_whose_activity_transient_expired(): void {
+		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
+		$oldest  = array_key_last( $planted );
+		delete_transient( 'wcpos_session_seen_' . $oldest );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $oldest, $refresh_tokens );
+	}
+
+	/**
+	 * A fresh activity record saves a session whose row timestamp is ancient.
+	 *
+	 * This is the case the row alone cannot see: a device working through a long-lived
+	 * access token has not rewritten `last_active` since its last refresh.
+	 */
+	public function test_store_refresh_token_beyond_cap_keeps_a_session_with_a_fresh_activity_transient(): void {
+		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
+		$oldest  = array_key_last( $planted );
+		set_transient( 'wcpos_session_seen_' . $oldest, time(), Auth::SESSION_EVICTION_IDLE_SECONDS );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayHasKey( $oldest, $refresh_tokens );
+		// The next-oldest went instead: the cap is still enforced.
+		$this->assertCount( Auth::MAX_SESSIONS_PER_USER, $refresh_tokens );
 	}
 
 	/**
@@ -1550,9 +1627,11 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		// which would take it straight back out of the eviction pool.
 		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $evicted['access_token'], 'access' ) );
 
-		// Idle for longer than anything planted below, so it is the eviction candidate.
+		// Idle for longer than anything planted below, so it is the eviction candidate. The
+		// validation above recorded activity, so that record has to age out too.
 		$this->set_session_field( $evicted_refresh->jti, 'last_active', $this->idle_timestamp() - DAY_IN_SECONDS );
 		$this->set_session_field( $evicted_refresh->jti, 'created', $this->idle_timestamp() - DAY_IN_SECONDS );
+		delete_transient( 'wcpos_session_seen_' . $evicted_refresh->jti );
 
 		$this->plant_sessions( Auth::MAX_SESSIONS_PER_USER - 1, $this->idle_timestamp(), array(), true );
 		$this->auth_service->generate_refresh_token( $this->test_user );
@@ -1677,6 +1756,25 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A refresh loads the whole row, so it needs the same unreadable-row guard as a login.
+	 *
+	 * Without it the recovery path only ran on login, and a client that still held a valid
+	 * refresh token would keep loading the row it could not afford to load.
+	 */
+	public function test_refreshing_an_access_token_discards_an_unreadable_session_row(): void {
+		$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		$this->plant_oversized_session_row();
+		$this->assertGreaterThan( Auth::MAX_SESSIONS_ROW_BYTES, $this->session_row_bytes() );
+
+		$refreshed = $this->auth_service->refresh_access_token( $tokens['refresh_token'] );
+
+		// The session it named went with the row, so the refresh is refused — correctly, and
+		// the same way a login recovers: the client signs in again.
+		$this->assertInstanceOf( WP_Error::class, $refreshed );
+		$this->assertSame( 0, $this->session_row_bytes() );
+	}
+
+	/**
 	 * A big-but-readable row is TRIMMED, not thrown away.
 	 *
 	 * The first release of this guard deleted anything past a megabyte, which signed every
@@ -1713,6 +1811,36 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		foreach ( array_keys( $planted ) as $planted_jti ) {
 			$this->assertArrayHasKey( $planted_jti, $refresh_tokens );
 		}
+	}
+
+	/**
+	 * How many times `$run` writes the session row.
+	 *
+	 * Counts through the `update_user_metadata` short-circuit filter, returning `$check`
+	 * untouched so the write still happens — the count is the assertion, not a stub.
+	 *
+	 * @param callable $run The code under test.
+	 *
+	 * @return int Number of writes to `_woocommerce_pos_refresh_tokens`.
+	 */
+	private function count_session_row_writes( callable $run ): int {
+		$writes = 0;
+		$spy    = function ( $check, $object_id, $meta_key ) use ( &$writes ) {
+			if ( '_woocommerce_pos_refresh_tokens' === $meta_key ) {
+				++$writes;
+			}
+
+			return $check;
+		};
+
+		add_filter( 'update_user_metadata', $spy, 10, 3 );
+		try {
+			$run();
+		} finally {
+			remove_filter( 'update_user_metadata', $spy, 10 );
+		}
+
+		return $writes;
 	}
 
 	/**
