@@ -449,11 +449,13 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		update_option( 'woocommerce_pos_settings_general', $settings );
 		Settings::instance()->reset_sections_for_testing();
 
-		$store = new Store();
-		$this->assertSame( 'allowed', $store->get_tracking_consent() );
-
-		delete_option( 'woocommerce_pos_settings_general' );
-		Settings::instance()->reset_sections_for_testing();
+		try {
+			$store = new Store();
+			$this->assertSame( 'allowed', $store->get_tracking_consent() );
+		} finally {
+			delete_option( 'woocommerce_pos_settings_general' );
+			Settings::instance()->reset_sections_for_testing();
+		}
 	}
 
 	public function test_get_tax_ids_returns_empty_when_settings_blank(): void {
