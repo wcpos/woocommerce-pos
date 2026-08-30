@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.3
+Stable tag: 1.10.4
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,15 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.4 - 2026/08/30 =
+
+- **Sorting products or variations by SKU, barcode or stock now works** -- and no longer hides items that don't have one.
+- **The till repairs a damaged local database at startup** instead of getting stuck until site data is cleared.
+- **The product grid no longer crashes when a search narrows the results.**
+- **A brief network glitch no longer shows "Website is unreachable"** or drops the till into offline mode.
+- **Removing a line from the cart now responds to the first press.**
+- **Logging in no longer fails on stores with a large number of saved sessions.**
 
 = 1.10.3 - 2026/08/30 =
 
