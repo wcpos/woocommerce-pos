@@ -1430,6 +1430,114 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Logging in past the cap keeps exactly MAX_SESSIONS_PER_USER sessions.
+	 */
+	public function test_store_refresh_token_beyond_cap_keeps_only_the_capped_number_of_sessions(): void {
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER + 1; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( Auth::MAX_SESSIONS_PER_USER, $refresh_tokens );
+	}
+
+	/**
+	 * The session created by the most recent login survives the eviction.
+	 */
+	public function test_store_refresh_token_beyond_cap_retains_the_newest_session(): void {
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$newest         = $this->auth_service->generate_refresh_token( $this->test_user );
+		$newest_decoded = $this->auth_service->validate_token( $newest, 'refresh' );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayHasKey( $newest_decoded->jti, $refresh_tokens );
+	}
+
+	/**
+	 * The oldest session is the one evicted when the cap is exceeded.
+	 */
+	public function test_store_refresh_token_beyond_cap_evicts_the_oldest_session(): void {
+		$oldest         = $this->auth_service->generate_refresh_token( $this->test_user );
+		$oldest_decoded = $this->auth_service->validate_token( $oldest, 'refresh' );
+
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $oldest_decoded->jti, $refresh_tokens );
+	}
+
+	/**
+	 * An evicted session's outstanding access token is rejected, not left working.
+	 */
+	public function test_store_refresh_token_beyond_cap_rejects_the_evicted_access_token(): void {
+		$evicted         = $this->auth_service->generate_token_pair( $this->test_user );
+		$evicted_refresh = $this->auth_service->validate_token( $evicted['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $evicted['access_token'], 'access' ) );
+
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+		$this->assertArrayNotHasKey( $evicted_refresh->jti, $refresh_tokens );
+
+		$validated = $this->auth_service->validate_token( $evicted['access_token'], 'access' );
+
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertSame( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Sessions kept under the cap are untouched by eviction.
+	 */
+	public function test_store_refresh_token_under_cap_keeps_every_session(): void {
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( Auth::MAX_SESSIONS_PER_USER, $refresh_tokens );
+	}
+
+	/**
+	 * Expired sessions are still pruned on write, independently of the cap.
+	 */
+	public function test_store_refresh_token_prunes_expired_sessions(): void {
+		$expired_jti = wp_generate_uuid4();
+		update_user_meta(
+			$this->test_user->ID,
+			'_woocommerce_pos_refresh_tokens',
+			array(
+				$expired_jti => array(
+					'expires'     => time() - HOUR_IN_SECONDS,
+					'created'     => time() - DAY_IN_SECONDS,
+					'last_active' => time() - DAY_IN_SECONDS,
+					'ip_address'  => '127.0.0.1',
+					'user_agent'  => self::CHROME_DESKTOP_USER_AGENT,
+					'device_info' => array(),
+				),
+			)
+		);
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $expired_jti, $refresh_tokens );
+		$this->assertCount( 1, $refresh_tokens );
+	}
+
+	/**
 	 * Store a session against an injected context and return the stored session.
 	 *
 	 * store_refresh_token_jti() is private; the optional Session_Context

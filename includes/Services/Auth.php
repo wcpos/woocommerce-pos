@@ -21,6 +21,18 @@ use const HOUR_IN_SECONDS;
  */
 class Auth {
 	/**
+	 * Maximum number of refresh-token sessions retained per user.
+	 *
+	 * Refresh tokens live for weeks and every entry carries a user agent plus parsed
+	 * device info, so without a cap the `_woocommerce_pos_refresh_tokens` row grows until
+	 * `get_user_meta()` can no longer unserialize it inside the PHP memory limit — at which
+	 * point the user can never log in again. Fifty comfortably covers a real merchant's
+	 * devices (tills, tablets, phones, browsers, plus repeated re-logins from each) while
+	 * keeping the serialized row in the low hundreds of kilobytes.
+	 */
+	public const MAX_SESSIONS_PER_USER = 50;
+
+	/**
 	 * The single instance of the class.
 	 *
 	 * @var null|Auth
@@ -881,7 +893,76 @@ class Auth {
 			'device_info' => $device_info,
 		);
 
+		// Cap the number of stored sessions so programmatic clients cannot grow the row without bound.
+		$refresh_tokens = $this->evict_oldest_sessions( $refresh_tokens, $jti );
+
 		update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Drop the least recently active sessions until the per-user cap is met.
+	 *
+	 * Evicted sessions are blacklisted the same way revoke_all_sessions_except() does, so the
+	 * device that lost its slot is cleanly logged out instead of keeping a working access token
+	 * for the remainder of that token's life.
+	 *
+	 * @param array  $refresh_tokens Stored sessions keyed by refresh token JTI.
+	 * @param string $protected_jti  JTI that must never be evicted (the session being stored).
+	 *
+	 * @return array The sessions to persist.
+	 */
+	private function evict_oldest_sessions( array $refresh_tokens, string $protected_jti ): array {
+		$evict_count = \count( $refresh_tokens ) - self::MAX_SESSIONS_PER_USER;
+		if ( $evict_count <= 0 ) {
+			return $refresh_tokens;
+		}
+
+		// Order eviction candidates oldest-first. The insertion index breaks ties explicitly
+		// because usort() is not stable before PHP 8.0 and bulk logins share a timestamp.
+		$candidates = array();
+		$index      = 0;
+		foreach ( $refresh_tokens as $candidate_jti => $token_data ) {
+			$position = $index++;
+			if ( (string) $candidate_jti === $protected_jti ) {
+				continue;
+			}
+
+			if ( isset( $token_data['last_active'] ) ) {
+				$activity = (int) $token_data['last_active'];
+			} elseif ( isset( $token_data['created'] ) ) {
+				$activity = (int) $token_data['created'];
+			} else {
+				$activity = 0;
+			}
+
+			$candidates[] = array(
+				'jti'      => (string) $candidate_jti,
+				'activity' => $activity,
+				'index'    => $position,
+			);
+		}
+
+		usort(
+			$candidates,
+			function ( $a, $b ) {
+				if ( $a['activity'] === $b['activity'] ) {
+					return $a['index'] <=> $b['index'];
+				}
+
+				return $a['activity'] <=> $b['activity'];
+			}
+		);
+
+		$issued_at     = time();
+		$access_expire = $this->get_access_token_expire( $issued_at );
+
+		foreach ( \array_slice( $candidates, 0, $evict_count ) as $candidate ) {
+			$ttl = $this->get_access_token_blacklist_ttl( $refresh_tokens[ $candidate['jti'] ], $issued_at, $access_expire );
+			$this->blacklist_token( $candidate['jti'], $ttl );
+			unset( $refresh_tokens[ $candidate['jti'] ] );
+		}
+
+		return $refresh_tokens;
 	}
 
 	/**
