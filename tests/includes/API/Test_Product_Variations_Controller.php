@@ -7,6 +7,7 @@ use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\API\V1\Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Products;
+use WP_REST_Request;
 
 /**
  * @internal
@@ -492,36 +493,38 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Orderby.
+	 *
+	 * Every one of these fixtures used to contain ONLY variations that carry the sorted
+	 * meta, which is why the sort-as-filter defect survived them: with no meta-less row
+	 * present an INNER JOIN and a LEFT JOIN return the identical list. Each now carries a
+	 * variation with no value for the key, and asserts it is still served — last.
 	 */
 	public function test_variation_orderby_sku(): void {
-		$product       = ProductHelper::create_variation_product();
-		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'sku',
-				'order'   => 'asc',
-			)
-		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'sku' );
+		$product  = ProductHelper::create_variation_product();
+		$metaless = $this->wcpos_add_variation( $product->get_id(), array(), array( '_sku' ) );
 
-		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE LARGE', $skus[0] );
-		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $skus[1] );
+		foreach ( array( 'asc', 'desc' ) as $order ) {
+			// Route literal kept in the case body, never in a shared helper: a
+			// non-allowlisted wcpos/v1 literal in class scope is attributed to EVERY case in
+			// the class, which would drag the sibling `/wcpos/v1/products/variations` cases
+			// off the lane-coverage allowlist. See tests/lane-coverage/README.md.
+			$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+			$rows    = $this->wcpos_sorted_rows( $request, 'sku', $order );
+			$skus    = wp_list_pluck( $rows, 'sku' );
 
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'sku',
-				'order'   => 'desc',
-			)
-		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'sku' );
+			$this->assertCount( 3, $skus );
+			$large = 'asc' === $order ? 0 : 1;
+			$small = 'asc' === $order ? 1 : 0;
+			$this->assertStringStartsWith( 'DUMMY SKU VARIABLE LARGE', $skus[ $large ] );
+			$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $skus[ $small ] );
 
-		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $skus[0] );
-		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE LARGE', $skus[1] );
+			/*
+			 * Asserted on the ID, not the reported sku: a variation with no `_sku` row of
+			 * its own reports the PARENT's sku in the payload, so the value cannot identify
+			 * the meta-less row. What matters is that it is served, and served last.
+			 */
+			$this->assertSame( $metaless, wp_list_pluck( $rows, 'id' )[2] );
+		}
 	}
 
 	public function test_variation_orderby_barcode(): void {
@@ -538,65 +541,46 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$variation_ids = $product->get_children();
 		update_post_meta( $variation_ids[0], '_barcode', 'alpha' );
 		update_post_meta( $variation_ids[1], '_barcode', 'zeta' );
+		// No `_barcode` row whatsoever — the row an INNER JOIN drops. On a default store
+		// this is EVERY variation, because the barcode field defaults to the GTIN meta.
+		$this->wcpos_add_variation( $product->get_id() );
 
-		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'barcode',
-				'order'   => 'asc',
-			)
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$this->assertSame(
+			array( 'alpha', 'zeta', '' ),
+			wp_list_pluck( $this->wcpos_sorted_rows( $request, 'barcode', 'asc' ), 'barcode' )
 		);
-		$response         = $this->server->dispatch( $request );
-		$data             = $response->get_data();
-		$barcodes         = wp_list_pluck( $data, 'barcode' );
 
-		$this->assertEquals( $barcodes, array( 'alpha', 'zeta' ) );
-
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'barcode',
-				'order'   => 'desc',
-			)
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$this->assertSame(
+			array( 'zeta', 'alpha', '' ),
+			wp_list_pluck( $this->wcpos_sorted_rows( $request, 'barcode', 'desc' ), 'barcode' )
 		);
-		$response         = $this->server->dispatch( $request );
-		$data             = $response->get_data();
-		$barcodes         = wp_list_pluck( $data, 'barcode' );
-
-		$this->assertEquals( $barcodes, array( 'zeta', 'alpha' ) );
 	}
 
+	/**
+	 * Asserted on IDS, not the reported status: WooCommerce defaults a variation with no
+	 * `_stock_status` row to its parent's status in the payload, so a value sequence could
+	 * not tell the meta-less row from a real one.
+	 */
 	public function test_variation_orderby_stock_status(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
 		update_post_meta( $variation_ids[0], '_stock_status', 'instock' );
 		update_post_meta( $variation_ids[1], '_stock_status', 'outofstock' );
+		$metaless = $this->wcpos_add_variation( $product->get_id(), array(), array( '_stock_status' ) );
 
-		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'stock_status',
-				'order'   => 'asc',
-			)
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$this->assertSame(
+			array( $variation_ids[0], $variation_ids[1], $metaless ),
+			wp_list_pluck( $this->wcpos_sorted_rows( $request, 'stock_status', 'asc' ), 'id' )
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_status' );
 
-		$this->assertEquals( $skus, array( 'instock', 'outofstock' ) );
-
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'stock_status',
-				'order'   => 'desc',
-			)
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$this->assertSame(
+			array( $variation_ids[1], $variation_ids[0], $metaless ),
+			wp_list_pluck( $this->wcpos_sorted_rows( $request, 'stock_status', 'desc' ), 'id' )
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_status' );
-
-		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
 	}
 
 	public function test_variation_orderby_stock_quantity(): void {
@@ -606,32 +590,77 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		update_post_meta( $variation_ids[0], '_manage_stock', 'yes' );
 		update_post_meta( $variation_ids[1], '_stock', 2 );
 		update_post_meta( $variation_ids[1], '_manage_stock', 'yes' );
+		// Not stock-managed: no `_stock` value, and it must still be served, last.
+		$this->wcpos_add_variation( $product->get_id(), array(), array( '_stock' ) );
 
-		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$this->assertSame(
+			array( 1, 2, null ),
+			wp_list_pluck( $this->wcpos_sorted_rows( $request, 'stock_quantity', 'asc' ), 'stock_quantity' )
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$this->assertSame(
+			array( 2, 1, null ),
+			wp_list_pluck( $this->wcpos_sorted_rows( $request, 'stock_quantity', 'desc' ), 'stock_quantity' )
+		);
+	}
+
+	/**
+	 * Create an extra variation on a parent, optionally stripping meta keys from it.
+	 *
+	 * WooCommerce writes these keys on save, so the row has to be removed after the fact
+	 * to reproduce the catalogue shape an importer leaves behind.
+	 *
+	 * @param int   $parent_id Parent product id.
+	 * @param array $meta      Meta to write, key => value.
+	 * @param array $strip     Meta keys to delete entirely.
+	 *
+	 * @return int The variation id.
+	 */
+	private function wcpos_add_variation( int $parent_id, array $meta = array(), array $strip = array() ): int {
+		$variation = new WC_Product_Variation();
+		$variation->set_parent_id( $parent_id );
+		$variation->set_regular_price( '5' );
+		$variation->save();
+
+		foreach ( $meta as $key => $value ) {
+			update_post_meta( $variation->get_id(), $key, $value );
+		}
+		foreach ( $strip as $key ) {
+			delete_post_meta( $variation->get_id(), $key );
+		}
+		wc_delete_product_transients( $parent_id );
+		wp_cache_flush();
+
+		return $variation->get_id();
+	}
+
+	/**
+	 * Dispatch a prepared collection request under one sort and return its rows.
+	 *
+	 * Takes the REQUEST, never a route: a route literal here would be class-scope signal
+	 * for the lane-coverage scanner and would reclassify every sibling case in the file.
+	 *
+	 * @param WP_REST_Request $request Prepared request carrying the route.
+	 * @param string          $orderby Sort key.
+	 * @param string          $order   Sort direction.
+	 *
+	 * @return array The served rows, in served order.
+	 */
+	private function wcpos_sorted_rows( WP_REST_Request $request, string $orderby, string $order ): array {
 		$request->set_query_params(
 			array(
-				'orderby' => 'stock_quantity',
-				'order'   => 'asc',
+				'orderby'  => $orderby,
+				'order'    => $order,
+				'per_page' => 100,
 			)
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( $skus, array( 1, 2 ) );
+		$this->assertEquals( 200, $response->get_status() );
 
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'stock_quantity',
-				'order'   => 'desc',
-			)
-		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_quantity' );
-
-		$this->assertEquals( $skus, array( 2, 1 ) );
+		return $response->get_data();
 	}
 
 	/**
@@ -679,6 +708,8 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		update_post_meta( $variation_ids[0], '_manage_stock', 'yes' );
 		update_post_meta( $variation_ids[1], '_stock', '3.5' );
 		update_post_meta( $variation_ids[1], '_manage_stock', 'yes' );
+		// Not stock-managed: no `_stock` value, and it must still be served, last.
+		$this->wcpos_add_variation( $product->get_id(), array(), array( '_stock' ) );
 		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
 		$request->set_query_params(
 			array(
@@ -690,7 +721,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 3.5, 11.2 ) );
+		$this->assertEquals( array( 3.5, 11.2, null ), $skus );
 
 		// reverse order
 		$request->set_query_params(
@@ -703,7 +734,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 11.2, 3.5 ) );
+		$this->assertEquals( array( 11.2, 3.5, null ), $skus );
 	}
 
 	/**

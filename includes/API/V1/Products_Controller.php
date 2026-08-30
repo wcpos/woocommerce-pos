@@ -23,6 +23,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
@@ -60,6 +61,16 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @var WP_REST_Request|null
 	 */
 	protected $wcpos_request;
+
+	/**
+	 * Request keys the product Collection Rules plan reads on this lane.
+	 *
+	 * @var array
+	 */
+	private const WCPOS_SORT_PARAM_MAP = array(
+		'orderby' => 'orderby',
+		'order'   => 'order',
+	);
 
 	/**
 	 * Memoized parent collection params.
@@ -372,24 +383,18 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 */
 	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
-		global $wpdb;
-
-		// Handle NULL values in stock_quantity sorting
-		// By default, MySQL sorts NULLs first in ASC and last in DESC
-		// We want NULLs to always be last regardless of sort direction.
-		if ( isset( $this->wcpos_request ) ) {
-			$orderby = $this->wcpos_request->get_param( 'orderby' );
-			$order   = strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' );
-
-			if ( 'stock_quantity' === $orderby ) {
-				// Modify ORDER BY to put NULLs last
-				// Use CASE to assign a sort priority: non-NULL = 0, NULL = 1
-				// Then sort by the actual value.
-				$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
-			}
+		if ( ! isset( $this->wcpos_request ) ) {
+			return $clauses;
 		}
 
-		return $clauses;
+		$post_type = $wp_query->query_vars['post_type'] ?? null;
+		if ( 'product' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product', $post_type, true ) ) ) {
+			return $clauses;
+		}
+
+		$plan = Collection_Rules::for_request( 'products', $this->wcpos_request, self::WCPOS_SORT_PARAM_MAP );
+
+		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
 	}
 
 	/**
@@ -688,31 +693,14 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$args = parent::prepare_objects_query( $request );
 		$args = $this->wcpos_apply_store_api_tax_operator_fallbacks( $args, $request );
 
-		// Add custom 'orderby' options.
-		if ( isset( $request['orderby'] ) ) {
-			switch ( $request['orderby'] ) {
-				case 'sku':
-					$args['meta_key'] = '_sku';
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'barcode':
-					$args['meta_key'] = Barcode_Field::orderby_key();
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'stock_quantity':
-					$args['meta_key'] = '_stock';
-					$args['orderby']  = 'meta_value_num';
-
-					break;
-				case 'stock_status':
-					$args['meta_key'] = '_stock_status';
-					$args['orderby']  = 'meta_value';
-
-					break;
-			}
-		}
+		/*
+		 * The POS sorts (`sku`, `barcode`, `stock_quantity`, `stock_status`) are NOT
+		 * mapped onto `meta_key` + `orderby => meta_value` here any more. That pair
+		 * INNER JOINs postmeta, so it dropped every product with no value for the key —
+		 * a sort acting as a filter (#1779 follow-up). `Sync\Collection_Rules` declares
+		 * them and `wcpos_posts_clauses()` applies them as a LEFT JOIN, on this lane and
+		 * on the v2 proxy alike.
+		 */
 
 		return $args;
 	}

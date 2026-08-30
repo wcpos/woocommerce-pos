@@ -18,6 +18,8 @@ use WC_Data;
 use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
@@ -46,9 +48,23 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	/**
 	 * Store the request object for use in lifecycle methods.
 	 *
-	 * @var WP_REST_Request
+	 * Null until `wcpos_dispatch_request()` runs: the instance exists, and its filters are
+	 * registered, before any request is assigned — which is why the readers guard with
+	 * `isset()`. Matches the same property on `API\V1\Products_Controller`.
+	 *
+	 * @var null|WP_REST_Request
 	 */
 	protected $wcpos_request;
+
+	/**
+	 * Request keys the variation Collection Rules plan reads on this lane.
+	 *
+	 * @var array
+	 */
+	private const WCPOS_SORT_PARAM_MAP = array(
+		'orderby' => 'orderby',
+		'order'   => 'order',
+	);
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.
@@ -65,6 +81,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		add_action( 'woocommerce_rest_insert_product_variation_object', array( $this, 'wcpos_insert_product_variation_object' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'wcpos_product_variation_query' ), 10, 2 );
 		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
+		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
 
 		/*
 		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
@@ -171,14 +188,9 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Define new sorting options.
-			$new_sort_options = array(
-				'sku',
-				'barcode',
-				'stock_quantity',
-				'stock_status',
-			);
-			// Merge new options, avoiding duplicates.
+			// DECLARED once, in Sync\Collection_Rules, and projected here — so a sort cannot
+			// be advertised on one lane and rejected on the other.
+			$new_sort_options = Collection_Rules::orderby_enum( 'variations' );
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}
 
@@ -461,6 +473,33 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 
 	/**
+	 * Apply the declared POS variation sorts to the SQL clauses.
+	 *
+	 * `posts_clauses` fires for EVERY WP_Query, so the body is guarded by post type and by
+	 * the plan itself — it contributes nothing unless this request claimed one of the
+	 * declared sorts.
+	 *
+	 * @param array    $clauses  Associative array of the clauses for the query.
+	 * @param WP_Query $wp_query The WP_Query instance.
+	 *
+	 * @return array
+	 */
+	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
+		if ( ! isset( $this->wcpos_request ) ) {
+			return $clauses;
+		}
+
+		$post_type = $wp_query->query_vars['post_type'] ?? null;
+		if ( 'product_variation' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product_variation', $post_type, true ) ) ) {
+			return $clauses;
+		}
+
+		$plan = Collection_Rules::for_request( 'variations', $this->wcpos_request, self::WCPOS_SORT_PARAM_MAP );
+
+		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
+	}
+
+	/**
 	 * Prepare objects query.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -470,31 +509,13 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	protected function prepare_objects_query( $request ) {
 		$args = parent::prepare_objects_query( $request );
 
-		// Add custom 'orderby' options.
-		if ( isset( $request['orderby'] ) ) {
-			switch ( $request['orderby'] ) {
-				case 'sku':
-					$args['meta_key'] = '_sku';
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'barcode':
-					$args['meta_key'] = Barcode_Field::orderby_key();
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'stock_quantity':
-					$args['meta_key'] = '_stock';
-					$args['orderby']  = 'meta_value_num';
-
-					break;
-				case 'stock_status':
-					$args['meta_key'] = '_stock_status';
-					$args['orderby']  = 'meta_value';
-
-					break;
-			}
-		}
+		/*
+		 * The POS sorts (`sku`, `barcode`, `stock_quantity`, `stock_status`) are NOT mapped
+		 * onto `meta_key` + `orderby => meta_value` here any more. That pair INNER JOINs
+		 * postmeta, so it dropped every variation with no value for the key — a sort acting
+		 * as a filter. `Sync\Collection_Rules` declares them and `wcpos_posts_clauses()`
+		 * applies them as a LEFT JOIN, on this lane and on `wcpos/v2` alike.
+		 */
 
 		return $args;
 	}

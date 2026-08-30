@@ -11,6 +11,8 @@ use WC_Product_Variation;
 use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
@@ -50,6 +52,23 @@ use WP_REST_Server;
  * search, and the request bounds. Everything else is WooCommerce's.
  */
 class Variations_Controller extends WC_REST_Product_Variations_Controller {
+	/**
+	 * Request keys the variation Collection Rules plan reads on this lane.
+	 *
+	 * @var array
+	 */
+	private const WCPOS_SORT_PARAM_MAP = array(
+		'orderby' => 'orderby',
+		'order'   => 'order',
+	);
+
+	/**
+	 * The request whose declared sort `wcpos_posts_clauses()` applies.
+	 *
+	 * @var null|WP_REST_Request
+	 */
+	private $wcpos_sort_request = null;
+
 	use Endpoint_Permissions;
 
 	private const MAX_SKU_LENGTH    = 4096;
@@ -204,34 +223,18 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		$args = ( new Pos_Visibility() )->apply_to_wp_query_args( $args, Pos_Visibility::VARIATIONS );
 
 		/*
-		 * The POS sorts on fields WooCommerce does not offer as orderby values. They are declared
-		 * in get_collection_params() below — without that, `orderby=sku` is rejected by REST
-		 * argument validation before this switch ever runs.
+		 * The POS sorts on fields WooCommerce does not offer as orderby values. They are
+		 * declared in Sync\Collection_Rules and projected into get_collection_params()
+		 * below — without that, `orderby=sku` is rejected by REST argument validation
+		 * before anything here runs.
+		 *
+		 * They are applied as SQL clauses, NOT as `meta_key` + `orderby => meta_value`:
+		 * that pair INNER JOINs postmeta and drops every variation with no value for the
+		 * key, so the sort silently filtered. `wcpos_posts_clauses()` LEFT JOINs instead
+		 * and orders the meta-less rows last.
 		 */
-		if ( isset( $request['orderby'] ) ) {
-			switch ( $request['orderby'] ) {
-				case 'sku':
-					$args['meta_key'] = '_sku'; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'barcode':
-					$args['meta_key'] = Barcode_Field::orderby_key(); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'stock_quantity':
-					$args['meta_key'] = '_stock'; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					$args['orderby']  = 'meta_value_num';
-
-					break;
-				case 'stock_status':
-					$args['meta_key'] = '_stock_status'; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					$args['orderby']  = 'meta_value';
-
-					break;
-			}
-		}
+		$this->wcpos_sort_request = $request;
+		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
 
 		return $args;
 	}
@@ -452,6 +455,33 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	}
 
 	/**
+	 * Apply the declared POS variation sorts to the SQL clauses.
+	 *
+	 * `posts_clauses` fires for EVERY WP_Query, so the body is guarded by post type and by
+	 * the plan itself — it contributes nothing unless this request claimed one of the
+	 * declared sorts.
+	 *
+	 * @param array    $clauses  Associative array of the clauses for the query.
+	 * @param WP_Query $wp_query The WP_Query instance.
+	 *
+	 * @return array
+	 */
+	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
+		if ( null === $this->wcpos_sort_request ) {
+			return $clauses;
+		}
+
+		$post_type = $wp_query->query_vars['post_type'] ?? null;
+		if ( 'product_variation' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product_variation', $post_type, true ) ) ) {
+			return $clauses;
+		}
+
+		$plan = Collection_Rules::for_request( 'variations', $this->wcpos_sort_request, self::WCPOS_SORT_PARAM_MAP );
+
+		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
+	}
+
+	/**
 	 * WooCommerce's collection params, plus the sort keys the POS grids offer.
 	 *
 	 * `orderby` is a validated enum. Appending here is what lets `prepare_objects_query()` act on
@@ -466,7 +496,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 				array_unique(
 					array_merge(
 						$params['orderby']['enum'],
-						array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
+						Collection_Rules::orderby_enum( 'variations' )
 					)
 				)
 			);

@@ -77,33 +77,26 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		// NOT the generic object_query filter: the products controller OVERWRITES
 		// orderby AFTER that filter via WC()->query->get_catalog_ordering_args(),
 		// so the rewrite must ride that function's own filter — the last word on
-		// product catalog ordering. The claimed POS sort rides it for the same
-		// reason, and must be applied FIRST so the tiebreak sees the meta sort it
-		// produced rather than wc/v3's default (#1779).
-		$ordering = static function ( $args ) use ( $plan ) {
-			$args = (array) $args;
-			if ( null !== $plan ) {
-				$args = $plan->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
-			}
-
-			return Stable_Sort::with_post_id_tiebreak( $args );
+		// product catalog ordering.
+		$stable_sort = static function ( $args ) {
+			return Stable_Sort::with_post_id_tiebreak( (array) $args );
 		};
-		add_filter( 'woocommerce_get_catalog_ordering_args', $ordering );
-		$bindings = array( array( 'woocommerce_get_catalog_ordering_args', $ordering, 10 ) );
+		add_filter( 'woocommerce_get_catalog_ordering_args', $stable_sort );
+		$bindings = array( array( 'woocommerce_get_catalog_ordering_args', $stable_sort, 10 ) );
 
-		if ( null !== $plan && $plan->needs_legacy_nulls_last() ) {
+		if ( null !== $plan && $plan->needs_meta_sort() ) {
 			/*
-			 * `posts_clauses` fires for EVERY WP_Query, so the binding is scoped to this
-			 * forward AND guarded by post type — no unrelated query inside the forward can
-			 * pick up a product stock ORDER BY.
+			 * A claimed POS sort is written straight into the SQL clauses rather than into
+			 * the ordering args: the args form can only express `meta_key` + `meta_value`,
+			 * which INNER JOINs postmeta and drops every product that has no value for the
+			 * key (#1779 follow-up). `posts_clauses` fires for EVERY WP_Query, so the
+			 * binding is scoped to this forward AND guarded by post type — no unrelated
+			 * query inside the forward can pick up a product sort.
 			 */
 			$clauses = static function ( $clauses, $query = null ) use ( $plan ) {
-				$post_type = $query->query_vars['post_type'] ?? null;
-				if ( 'product' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product', $post_type, true ) ) ) {
-					return $clauses;
-				}
-
-				return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $query );
+				return self::is_product_query( $query )
+					? $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $query )
+					: $clauses;
 			};
 			add_filter( 'posts_clauses', $clauses, 10, 2 );
 			$bindings[] = array( 'posts_clauses', $clauses, 10 );
@@ -133,5 +126,22 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		$bindings[] = array( 'woocommerce_rest_product_object_query', $filter, 10 );
 
 		return $bindings;
+	}
+
+	/**
+	 * Whether a WP_Query inside the forward is the product query this behavior owns.
+	 *
+	 * @param mixed $query The WP_Query instance.
+	 *
+	 * @return bool
+	 */
+	private static function is_product_query( $query ): bool {
+		$post_type = \is_object( $query ) ? ( $query->query_vars['post_type'] ?? null ) : null;
+
+		if ( 'product' === $post_type ) {
+			return true;
+		}
+
+		return \is_array( $post_type ) && \in_array( 'product', $post_type, true );
 	}
 }

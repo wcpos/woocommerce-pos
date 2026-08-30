@@ -85,7 +85,7 @@ final class Collection_Rules_Plan {
 	public const HOOK_POSTS_ORDERBY = 'posts_orderby';
 
 	/**
-	 * Legacy storage — a meta sort whose NULL rows must land last in both directions.
+	 * Legacy storage — a postmeta sort that must not filter the result set.
 	 *
 	 * @var string
 	 */
@@ -277,7 +277,7 @@ final class Collection_Rules_Plan {
 				return \is_string( $value ) ? $this->apply_legacy_sort_clause( $value, $context[0] ?? null ) : $value;
 
 			case self::HOOK_POSTS_CLAUSES:
-				return \is_array( $value ) ? $this->apply_legacy_nulls_last_clause( $value, $context[0] ?? null ) : $value;
+				return \is_array( $value ) ? $this->apply_meta_sort_clauses( $value, $context[0] ?? null ) : $value;
 
 			case self::HOOK_HPOS_FILTERS:
 				return \is_array( $value ) ? $this->apply_hpos_filters( $value, $context[0] ?? null ) : $value;
@@ -358,17 +358,17 @@ final class Collection_Rules_Plan {
 	}
 
 	/**
-	 * Whether the claimed sort's NULL meta values must be forced last in both directions.
+	 * Whether the claimed sort is a postmeta sort applied through `posts_clauses`.
 	 *
-	 * Reads the sort's declaration rather than naming a sort inline, so a second
-	 * `nulls_last` meta sort added to the table is picked up wherever this is asked.
+	 * Reads the sort's declaration rather than naming a sort inline, so a `meta_sort`
+	 * row added to the table is picked up by every lane that asks.
 	 *
 	 * @return bool
 	 */
-	public function needs_legacy_nulls_last(): bool {
+	public function needs_meta_sort(): bool {
 		return Collection_Rules::STORAGE_POSTS === $this->storage
 			&& null !== $this->sort
-			&& ! empty( $this->rules['sorts'][ $this->sort ]['posts']['nulls_last'] );
+			&& '' !== (string) ( $this->rules['sorts'][ $this->sort ]['posts']['meta_sort']['key'] ?? '' );
 	}
 
 	/**
@@ -707,28 +707,53 @@ final class Collection_Rules_Plan {
 	}
 
 	/**
-	 * Force a meta sort's NULL rows to the end of the result set, whichever way it runs.
+	 * Sort on a postmeta value without letting the sort decide which rows exist.
 	 *
-	 * MySQL sorts NULLs first under ASC and last under DESC. A cashier sorting the grid by
-	 * stock wants the products that do not manage stock out of the way at BOTH ends, so
-	 * the `ORDER BY` is rewritten to sort on the NULL-ness first and the numeric value
-	 * second — `wcpos/v1`'s `wcpos_posts_clauses()`, verbatim.
+	 * WP_Query's `meta_key` + `orderby => meta_value` pair INNER JOINs `postmeta`, so a
+	 * row with no value for the key is DROPPED — a sort silently acting as a filter. On a
+	 * default store that made `orderby=barcode` answer with an empty page (the barcode
+	 * field defaults to `_global_unique_id`, which most catalogues never populate) and
+	 * `orderby=sku` hide every product without a SKU. A cashier sorting a column expects
+	 * the same products in a different order, never fewer, so the join is LEFT and the
+	 * rows with no value are ordered LAST whichever way the column runs — MySQL would
+	 * otherwise float them to the top under ASC.
+	 *
+	 * The `ID` tiebreak makes the order total, so the rows that share a value (or share
+	 * having none) cannot swap places between two pages of the same walk.
 	 *
 	 * @param array $clauses The query clauses so far.
 	 * @param mixed $query   The WP_Query instance.
 	 *
 	 * @return array
 	 */
-	private function apply_legacy_nulls_last_clause( array $clauses, $query ): array {
+	private function apply_meta_sort_clauses( array $clauses, $query ): array {
 		global $wpdb;
 
-		if ( ! $this->needs_legacy_nulls_last() ) {
+		if ( ! $this->needs_meta_sort() ) {
 			return $clauses;
 		}
 
-		$order = $this->resolve_order( $query );
+		$rule  = $this->rules['sorts'][ $this->sort ]['posts']['meta_sort'];
+		$alias = 'wcpos_sort_meta';
 
-		$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
+		// One join per query: `posts_clauses` can run more than once for a single
+		// WP_Query when another filter re-enters it.
+		if ( false === strpos( (string) ( $clauses['join'] ?? '' ), $alias ) ) {
+			$clauses['join'] = (string) ( $clauses['join'] ?? '' ) . $wpdb->prepare(
+				" LEFT JOIN {$wpdb->postmeta} AS {$alias} ON ( {$alias}.post_id = {$wpdb->posts}.ID AND {$alias}.meta_key = %s )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names and the generated alias only; the meta key is bound.
+				(string) $rule['key']
+			);
+		}
+
+		// A duplicate meta row for the same key would otherwise repeat the product.
+		if ( '' === (string) ( $clauses['groupby'] ?? '' ) ) {
+			$clauses['groupby'] = "{$wpdb->posts}.ID";
+		}
+
+		$order = $this->resolve_order( $query );
+		$value = empty( $rule['numeric'] ) ? "{$alias}.meta_value" : "{$alias}.meta_value + 0";
+
+		$clauses['orderby'] = "( {$alias}.meta_value IS NULL OR {$alias}.meta_value = '' ) ASC, {$value} {$order}, {$wpdb->posts}.ID ASC";
 
 		return $clauses;
 	}

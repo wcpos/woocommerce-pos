@@ -221,39 +221,36 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Port of API\V1 test_product_orderby_sku — the same fixture and the same
-	 * expected sequences, against /wcpos/v2/products (#1779).
+	 * Port of API\V1 test_product_orderby_sku, plus the product that has no SKU at all.
+	 *
+	 * The sequences here used to stop at `zeta`, because every product in the fixture had
+	 * a SKU — which is exactly why the sort-as-filter bug survived: with no meta-less row
+	 * present, an INNER JOIN and a LEFT JOIN return the same list (#1779 follow-up).
 	 */
 	public function test_product_orderby_sku(): void {
 		ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
 		ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
 		ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
 		ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
+		$this->create_product_without_meta( '_sku' );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'sku',
-				'order'   => 'asc',
-			)
-		);
+		$rows = $this->read( array( 'orderby' => 'sku', 'order' => 'asc' ) );
 
-		$this->assertSame( array( '123456789', '987654321', 'alpha', 'zeta' ), wp_list_pluck( $rows, 'sku' ) );
+		$this->assertSame( array( '123456789', '987654321', 'alpha', 'zeta', '' ), wp_list_pluck( $rows, 'sku' ) );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'sku',
-				'order'   => 'desc',
-			)
-		);
+		$rows = $this->read( array( 'orderby' => 'sku', 'order' => 'desc' ) );
 
-		$this->assertSame( array( 'zeta', 'alpha', '987654321', '123456789' ), wp_list_pluck( $rows, 'sku' ) );
+		$this->assertSame( array( 'zeta', 'alpha', '987654321', '123456789', '' ), wp_list_pluck( $rows, 'sku' ) );
 	}
 
 	/**
-	 * Port of API\V1 test_product_orderby_barcode (#1779).
+	 * Port of API\V1 test_product_orderby_barcode, plus a product with no barcode.
 	 *
-	 * v2 serves no top-level `barcode` field by design, so the barcode is read back
-	 * out of `meta_data` — the ORDER is what this pins, not the field alias.
+	 * The barcode row is the one that has NO postmeta row at all, which is the shape the
+	 * default store is in — the barcode field defaults to `_global_unique_id`, which most
+	 * catalogues never populate — and the shape that made this sort answer with an empty
+	 * page. v2 serves no top-level `barcode` field by design, so the value is read back
+	 * out of `meta_data`.
 	 */
 	public function test_product_orderby_barcode(): void {
 		add_filter(
@@ -273,49 +270,91 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		$product2->update_meta_data( '_barcode', 'zeta' );
 		$product2->save_meta_data();
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'barcode',
-				'order'   => 'asc',
-			)
-		);
+		// No `_barcode` meta row whatsoever — the row an INNER JOIN drops.
+		ProductHelper::create_simple_product();
 
-		$this->assertSame( array( 'alpha', 'zeta' ), $this->barcodes( $rows ) );
+		$rows = $this->read( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'barcode',
-				'order'   => 'desc',
-			)
-		);
+		$this->assertSame( array( 'alpha', 'zeta', null ), $this->barcodes( $rows ) );
 
-		$this->assertSame( array( 'zeta', 'alpha' ), $this->barcodes( $rows ) );
+		$rows = $this->read( array( 'orderby' => 'barcode', 'order' => 'desc' ) );
+
+		$this->assertSame( array( 'zeta', 'alpha', null ), $this->barcodes( $rows ) );
 	}
 
 	/**
-	 * Port of API\V1 test_product_orderby_stock_status (#1779).
+	 * A sort must never change WHICH products come back — only their order.
+	 *
+	 * The regression this pins is the whole point: `orderby=barcode` answered a
+	 * category-filtered browse window with an empty page on any store whose products
+	 * carry no barcode, so the POS grid's barcode column went blank.
+	 */
+	public function test_product_orderby_barcode_preserves_category_membership(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$category = wp_insert_term( 'Gear', 'product_cat' );
+		$this->assertIsArray( $category );
+		$members = array();
+		foreach ( array( 'b-alpha', null, 'b-mike' ) as $barcode ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_category_ids( array( (int) $category['term_id'] ) );
+			$product->save();
+			if ( null !== $barcode ) {
+				$product->update_meta_data( '_barcode', $barcode );
+				$product->save_meta_data();
+			}
+			$members[] = $product->get_id();
+		}
+		// A product OUTSIDE the category, so a filter that stopped filtering also fails.
+		ProductHelper::create_simple_product();
+
+		$unsorted = $this->read( array( 'category' => (string) $category['term_id'] ) );
+		$sorted   = $this->read(
+			array(
+				'category' => (string) $category['term_id'],
+				'orderby'  => 'barcode',
+				'order'    => 'asc',
+			)
+		);
+
+		sort( $members );
+		$this->assertSame( $members, $this->sorted_ids( $unsorted ) );
+		$this->assertSame( $members, $this->sorted_ids( $sorted ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_stock_status, plus a product with no status meta.
+	 *
+	 * Asserted on IDS, not on the reported status: WooCommerce defaults a product with no
+	 * `_stock_status` row to "instock" in the payload, so the value sequence could not
+	 * tell the meta-less row apart from a real in-stock one. What this pins is that the
+	 * row is still SERVED, and served last.
 	 */
 	public function test_product_orderby_stock_status(): void {
-		ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
-		ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
+		$instock    = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
+		$outofstock = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
+		$metaless   = $this->create_product_without_meta( '_stock_status' );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'stock_status',
-				'order'   => 'asc',
-			)
+		$rows = $this->read( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
+
+		$this->assertSame(
+			array( $instock->get_id(), $outofstock->get_id(), $metaless ),
+			wp_list_pluck( $rows, 'id' )
 		);
 
-		$this->assertSame( array( 'instock', 'outofstock' ), wp_list_pluck( $rows, 'stock_status' ) );
+		$rows = $this->read( array( 'orderby' => 'stock_status', 'order' => 'desc' ) );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'stock_status',
-				'order'   => 'desc',
-			)
+		$this->assertSame(
+			array( $outofstock->get_id(), $instock->get_id(), $metaless ),
+			wp_list_pluck( $rows, 'id' )
 		);
-
-		$this->assertSame( array( 'outofstock', 'instock' ), wp_list_pluck( $rows, 'stock_status' ) );
 	}
 
 	/**
@@ -335,27 +374,17 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		}
 		ProductHelper::create_simple_product();
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'stock_quantity',
-				'order'   => 'asc',
-			)
-		);
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
 
 		$this->assertSame( array( -1, 0, 1, 2, null, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'stock_quantity',
-				'order'   => 'desc',
-			)
-		);
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
 
 		$this->assertSame( array( 2, 1, 0, -1, null, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
 	}
 
 	/**
-	 * Port of API\V1 test_product_orderby_decimal_stock_quantity (#1779).
+	 * Port of API\V1 test_product_orderby_decimal_stock_quantity, plus an unmanaged product.
 	 */
 	public function test_product_orderby_decimal_stock_quantity(): void {
 		$this->setup_decimal_quantity_tests();
@@ -369,24 +398,47 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
+		ProductHelper::create_simple_product();
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'stock_quantity',
-				'order'   => 'asc',
-			)
-		);
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
 
-		$this->assertEquals( array( 3.5, 11.2, 20.7 ), wp_list_pluck( $rows, 'stock_quantity' ) );
+		$this->assertEquals( array( 3.5, 11.2, 20.7, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
 
-		$rows = $this->read(
-			array(
-				'orderby' => 'stock_quantity',
-				'order'   => 'desc',
-			)
-		);
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
 
-		$this->assertEquals( array( 20.7, 11.2, 3.5 ), wp_list_pluck( $rows, 'stock_quantity' ) );
+		$this->assertEquals( array( 20.7, 11.2, 3.5, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+	}
+
+	/**
+	 * A product whose postmeta row for `$meta_key` is absent entirely.
+	 *
+	 * WooCommerce always writes these keys, so the row has to be removed after the fact
+	 * to reproduce the catalogue shape an importer leaves behind.
+	 *
+	 * @param string $meta_key The meta key to strip.
+	 *
+	 * @return int The product id.
+	 */
+	private function create_product_without_meta( string $meta_key ): int {
+		$product = ProductHelper::create_simple_product();
+		delete_post_meta( $product->get_id(), $meta_key );
+		wp_cache_flush();
+
+		return $product->get_id();
+	}
+
+	/**
+	 * Row ids, ascending.
+	 *
+	 * @param array $rows Product rows.
+	 *
+	 * @return array<int, int>
+	 */
+	private function sorted_ids( array $rows ): array {
+		$ids = wp_list_pluck( $rows, 'id' );
+		sort( $ids );
+
+		return $ids;
 	}
 
 	/**

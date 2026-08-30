@@ -373,6 +373,67 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A sort must never hide a variation — only reorder it.
+	 *
+	 * The lane's only sort coverage used to be `test_pos_orderby_values_are_accepted`,
+	 * which asserts a 200 and nothing about the body. That is why this went unnoticed:
+	 * `orderby=barcode` was applied as `meta_key` + `orderby => meta_value`, which INNER
+	 * JOINs postmeta, so every variation with no barcode row was DROPPED. On a default
+	 * store the barcode field is the GTIN meta, which most catalogues never populate, so
+	 * the answer was an empty page.
+	 */
+	public function test_pos_orderby_barcode_serves_variations_without_a_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$alpha = $this->create_variation( 'BSORT1802A' );
+		update_post_meta( $alpha->get_id(), '_barcode', 'b-alpha' );
+		$mike = $this->create_variation( 'BSORT1802M' );
+		update_post_meta( $mike->get_id(), '_barcode', 'b-mike' );
+		// No `_barcode` row whatsoever — the row an INNER JOIN drops.
+		$none = $this->create_variation( 'BSORT1802N' );
+
+		$expected = array( $alpha->get_id(), $mike->get_id(), $none->get_id() );
+		sort( $expected );
+
+		foreach ( array( 'asc', 'desc' ) as $order ) {
+			$served = $this->variation_ids(
+				array(
+					'search'  => 'BSORT1802',
+					'orderby' => 'barcode',
+					'order'   => $order,
+				)
+			);
+
+			$this->assertSame( $none->get_id(), end( $served ), "the barcode-less variation must be served LAST ({$order})" );
+
+			sort( $served );
+			$this->assertSame( $expected, $served, "the barcode sort must not drop a variation ({$order})" );
+		}
+	}
+
+	/**
+	 * The variation ids a request serves, in served order.
+	 *
+	 * @param array $params Query parameters.
+	 *
+	 * @return array<int, int>
+	 */
+	private function variation_ids( array $params ): array {
+		$response = $this->variations_request( $params );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		return wp_list_pluck( $response->get_data()['documents'], 'id' );
+	}
+
+	/**
 	 * Search uses partial LIKE matching against variation SKUs only.
 	 */
 	public function test_search_partially_matches_sku(): void {
