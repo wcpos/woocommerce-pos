@@ -1430,12 +1430,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Logging in past the cap keeps exactly MAX_SESSIONS_PER_USER sessions.
+	 * Eviction trims IDLE sessions down to the cap.
 	 */
 	public function test_store_refresh_token_beyond_cap_keeps_only_the_capped_number_of_sessions(): void {
-		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER + 1; $i++ ) {
-			$this->auth_service->generate_refresh_token( $this->test_user );
-		}
+		$this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
 
 		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
 
@@ -1446,9 +1446,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 * The session created by the most recent login survives the eviction.
 	 */
 	public function test_store_refresh_token_beyond_cap_retains_the_newest_session(): void {
-		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
-			$this->auth_service->generate_refresh_token( $this->test_user );
-		}
+		$this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
 
 		$newest         = $this->auth_service->generate_refresh_token( $this->test_user );
 		$newest_decoded = $this->auth_service->validate_token( $newest, 'refresh' );
@@ -1459,33 +1457,105 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The oldest session is the one evicted when the cap is exceeded.
+	 * The least recently seen session is the one evicted.
 	 */
 	public function test_store_refresh_token_beyond_cap_evicts_the_oldest_session(): void {
-		$oldest         = $this->auth_service->generate_refresh_token( $this->test_user );
-		$oldest_decoded = $this->auth_service->validate_token( $oldest, 'refresh' );
+		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
+		$oldest  = array_key_last( $planted );
 
-		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $oldest, $refresh_tokens );
+	}
+
+	/**
+	 * An idle session is chosen over a busy one even when the busy one is older.
+	 *
+	 * This is the rule the #1798 cap lacked. "Oldest of N" is not a proxy for unused when
+	 * a programmatic client mints N sessions in an hour.
+	 */
+	public function test_store_refresh_token_beyond_cap_evicts_the_idle_session_not_the_oldest_busy_one(): void {
+		// The oldest session by CREATION, but seen moments ago — a device working right now.
+		$busy = $this->plant_sessions( 1, time(), array( 'created' => time() - 30 * DAY_IN_SECONDS ) );
+		$this->plant_sessions( Auth::MAX_SESSIONS_PER_USER - 2, time(), array(), true );
+		$idle = $this->plant_sessions( 1, $this->idle_timestamp(), array(), true );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( array_key_first( $idle ), $refresh_tokens );
+		$this->assertArrayHasKey( array_key_first( $busy ), $refresh_tokens );
+	}
+
+	/**
+	 * Three hundred logins in an hour must not sign an in-use device out.
+	 *
+	 * The shared E2E cashier authenticates hundreds of times a day across parallel shards.
+	 * Under the #1798 cap every login past the cap evicted and blacklisted a session that
+	 * was minutes old and still serving requests, which is what produced the 401 storm.
+	 * The cap now yields rather than log a live session out.
+	 */
+	public function test_three_hundred_logins_in_an_hour_keep_an_active_session_valid(): void {
+		$first          = $this->auth_service->generate_token_pair( $this->test_user );
+		$first_refresh  = $this->auth_service->validate_token( $first['refresh_token'], 'refresh' );
+
+		for ( $i = 0; $i < 300; $i++ ) {
 			$this->auth_service->generate_refresh_token( $this->test_user );
 		}
 
 		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
 
-		$this->assertArrayNotHasKey( $oldest_decoded->jti, $refresh_tokens );
+		$this->assertGreaterThan( Auth::MAX_SESSIONS_PER_USER, \count( $refresh_tokens ) );
+		$this->assertArrayHasKey( $first_refresh->jti, $refresh_tokens );
+		$this->assertFalse( get_transient( 'wcpos_blacklist_' . $first_refresh->jti ) );
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$this->auth_service->validate_token( $first['access_token'], 'access' )
+		);
 	}
 
 	/**
-	 * An evicted session's outstanding access token is rejected, not left working.
+	 * An authenticated request keeps a session out of the eviction pool.
+	 *
+	 * Before this, only `refresh_access_token()` moved `last_active`, so a device working
+	 * through a 30-minute access token looked idle the entire time.
+	 */
+	public function test_validating_an_access_token_marks_the_session_active(): void {
+		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		$stale = time() - 30 * DAY_IN_SECONDS;
+		$this->set_session_field( $decoded->jti, 'last_active', $stale );
+
+		$this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertGreaterThan( $stale, (int) $refresh_tokens[ $decoded->jti ]['last_active'] );
+	}
+
+	/**
+	 * An evicted session that could still hold a live access token is still revoked.
+	 *
+	 * Deliberately artificial — an idle session's 30-minute access token is long dead in
+	 * practice — but it pins that eviction has not quietly stopped revoking.
 	 */
 	public function test_store_refresh_token_beyond_cap_rejects_the_evicted_access_token(): void {
 		$evicted         = $this->auth_service->generate_token_pair( $this->test_user );
 		$evicted_refresh = $this->auth_service->validate_token( $evicted['refresh_token'], 'refresh' );
-
+		// Validate FIRST: a successful access-token validation now marks the session live,
+		// which would take it straight back out of the eviction pool.
 		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $evicted['access_token'], 'access' ) );
 
-		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
-			$this->auth_service->generate_refresh_token( $this->test_user );
-		}
+		// Idle for longer than anything planted below, so it is the eviction candidate.
+		$this->set_session_field( $evicted_refresh->jti, 'last_active', $this->idle_timestamp() - DAY_IN_SECONDS );
+		$this->set_session_field( $evicted_refresh->jti, 'created', $this->idle_timestamp() - DAY_IN_SECONDS );
+
+		$this->plant_sessions( Auth::MAX_SESSIONS_PER_USER - 1, $this->idle_timestamp(), array(), true );
+		$this->auth_service->generate_refresh_token( $this->test_user );
 
 		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
 		$this->assertArrayNotHasKey( $evicted_refresh->jti, $refresh_tokens );
@@ -1500,9 +1570,9 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 * Sessions kept under the cap are untouched by eviction.
 	 */
 	public function test_store_refresh_token_under_cap_keeps_every_session(): void {
-		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
-			$this->auth_service->generate_refresh_token( $this->test_user );
-		}
+		$this->plant_sessions( Auth::MAX_SESSIONS_PER_USER - 1, $this->idle_timestamp() );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
 
 		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
 
@@ -1543,7 +1613,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 * nothing.
 	 */
 	public function test_store_refresh_token_beyond_cap_does_not_blacklist_an_evicted_dead_session(): void {
-		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, time() - DAY_IN_SECONDS );
+		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
 		$oldest  = array_key_last( $planted );
 
 		$this->auth_service->generate_refresh_token( $this->test_user );
@@ -1555,12 +1625,15 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A session whose access token is still live IS blacklisted, and only for as long as
-	 * that access token can still validate — never for the refresh token's whole life.
+	 * A blacklist written by eviction lasts no longer than the access token it guards.
 	 */
 	public function test_store_refresh_token_beyond_cap_bounds_the_blacklist_to_the_access_token_lifetime(): void {
-		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, time() );
-		$oldest  = array_key_last( $planted );
+		$planted = $this->plant_sessions(
+			Auth::MAX_SESSIONS_PER_USER,
+			$this->idle_timestamp(),
+			array( 'access_expires' => time() + ( HOUR_IN_SECONDS / 2 ) )
+		);
+		$oldest = array_key_last( $planted );
 
 		$this->auth_service->generate_refresh_token( $this->test_user );
 
@@ -1574,9 +1647,6 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 	/**
 	 * A row too large to load is discarded unread, and the login that found it succeeds.
-	 *
-	 * This is the recovery path for a user already in the #1776 failure state: the cap
-	 * only helps a row this process can still read.
 	 */
 	public function test_login_discards_an_oversized_session_row_and_starts_a_fresh_one(): void {
 		global $wpdb;
@@ -1607,8 +1677,30 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A row under the byte ceiling is left alone — the discard must not fire on healthy
-	 * rows and silently log everyone out.
+	 * A big-but-readable row is TRIMMED, not thrown away.
+	 *
+	 * The first release of this guard deleted anything past a megabyte, which signed every
+	 * device out over a row eviction could simply have cut down.
+	 */
+	public function test_login_trims_a_large_but_readable_row_and_keeps_the_active_session(): void {
+		$active = $this->plant_sessions( 1, time() );
+		$this->plant_bulky_idle_sessions( 251 );
+
+		$before = $this->session_row_bytes();
+		$this->assertGreaterThan( 2 * MB_IN_BYTES, $before );
+		$this->assertLessThan( Auth::MAX_SESSIONS_ROW_BYTES, $before );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( Auth::MAX_SESSIONS_PER_USER, $refresh_tokens );
+		$this->assertArrayHasKey( array_key_first( $active ), $refresh_tokens );
+		$this->assertLessThan( $before, $this->session_row_bytes() );
+	}
+
+	/**
+	 * A row under the byte ceiling is left alone.
 	 */
 	public function test_login_keeps_a_session_row_under_the_byte_ceiling(): void {
 		$planted = $this->plant_sessions( 3, time() );
@@ -1624,31 +1716,89 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A timestamp comfortably past the eviction idle window.
+	 */
+	private function idle_timestamp(): int {
+		return time() - Auth::SESSION_EVICTION_IDLE_SECONDS - DAY_IN_SECONDS;
+	}
+
+	/**
+	 * The stored length of the session row, in bytes.
+	 */
+	private function session_row_bytes(): int {
+		global $wpdb;
+
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT LENGTH(meta_value) FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s",
+				$this->test_user->ID,
+				'_woocommerce_pos_refresh_tokens'
+			)
+		);
+	}
+
+	/**
+	 * Overwrite one field of one stored session.
+	 *
+	 * @param string $jti   Session JTI.
+	 * @param string $field Field name.
+	 * @param mixed  $value New value.
+	 */
+	private function set_session_field( string $jti, string $field, $value ): void {
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+		$refresh_tokens = \is_array( $refresh_tokens ) ? $refresh_tokens : array();
+		$refresh_tokens[ $jti ][ $field ] = $value;
+		update_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
 	 * Write session records straight to user meta, oldest last.
 	 *
-	 * @param int $count      How many sessions to plant.
-	 * @param int $newest_seen Timestamp of the most recently active planted session.
+	 * @param int   $count       How many sessions to plant.
+	 * @param int   $newest_seen Timestamp of the most recently active planted session.
+	 * @param array $overrides   Fields to force on every planted session.
+	 * @param bool  $append      Keep the sessions already stored.
 	 *
 	 * @return array The planted sessions, keyed by JTI, in planting order.
 	 */
-	private function plant_sessions( int $count, int $newest_seen ): array {
+	private function plant_sessions( int $count, int $newest_seen, array $overrides = array(), bool $append = false ): array {
 		$sessions = array();
 		for ( $i = 0; $i < $count; $i++ ) {
-			$seen                                = $newest_seen - $i;
-			$sessions[ wp_generate_uuid4() ] = array(
-				'expires'        => time() + 30 * DAY_IN_SECONDS,
-				'created'        => $seen,
-				'last_active'    => $seen,
-				'access_expires' => $seen + ( HOUR_IN_SECONDS / 2 ),
-				'ip_address'     => '127.0.0.1',
-				'user_agent'     => self::CHROME_DESKTOP_USER_AGENT,
-				'device_info'    => array(),
+			$seen                            = $newest_seen - $i;
+			$sessions[ wp_generate_uuid4() ] = array_merge(
+				array(
+					'expires'        => time() + 30 * DAY_IN_SECONDS,
+					'created'        => $seen,
+					'last_active'    => $seen,
+					'access_expires' => $seen + ( HOUR_IN_SECONDS / 2 ),
+					'ip_address'     => '127.0.0.1',
+					'user_agent'     => self::CHROME_DESKTOP_USER_AGENT,
+					'device_info'    => array(),
+				),
+				$overrides
 			);
 		}
 
-		update_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', $sessions );
+		$stored = $append ? get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true ) : array();
+		$stored = \is_array( $stored ) ? $stored : array();
+
+		update_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', array_merge( $stored, $sessions ) );
 
 		return $sessions;
+	}
+
+	/**
+	 * Append idle sessions fat enough to push the row past two megabytes.
+	 *
+	 * @param int $count How many to plant.
+	 */
+	private function plant_bulky_idle_sessions( int $count ): void {
+		$this->plant_sessions(
+			$count,
+			$this->idle_timestamp(),
+			array( 'user_agent' => str_repeat( 'U', 8192 ) ),
+			true
+		);
 	}
 
 	/**
@@ -1661,7 +1811,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		global $wpdb;
 
 		$sessions = array();
-		for ( $i = 0; $i < 20; $i++ ) {
+		for ( $i = 0; $i < 110; $i++ ) {
 			$sessions[ wp_generate_uuid4() ] = array(
 				'expires'     => time() + 30 * DAY_IN_SECONDS,
 				'created'     => time() - $i,

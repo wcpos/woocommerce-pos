@@ -16,6 +16,7 @@ use WP_Error;
 use WP_User;
 use const DAY_IN_SECONDS;
 use const HOUR_IN_SECONDS;
+use const MINUTE_IN_SECONDS;
 
 /**
  * Auth Service class.
@@ -26,25 +27,55 @@ class Auth {
 	 *
 	 * Refresh tokens live for weeks and every entry carries a user agent plus parsed
 	 * device info, so without a cap the `_woocommerce_pos_refresh_tokens` row grows until
-	 * `get_user_meta()` can no longer unserialize it inside the PHP memory limit — at which
-	 * point the user can never log in again. Fifty comfortably covers a real merchant's
-	 * devices (tills, tablets, phones, browsers, plus repeated re-logins from each) while
-	 * keeping the serialized row in the low hundreds of kilobytes.
+	 * `get_user_meta()` can no longer unserialize it inside the PHP memory limit.
+	 *
+	 * This is a ceiling on ACCUMULATED CLUTTER, never a limit on how many devices may be
+	 * signed in at once: `evict_oldest_sessions()` only ever removes sessions that have
+	 * been idle for SESSION_EVICTION_IDLE_SECONDS, and lets the count exceed this number
+	 * rather than log a live device out. Two hundred covers a large merchant's real
+	 * devices with room to spare, and 200 entries serialize to roughly a hundred
+	 * kilobytes.
 	 */
-	public const MAX_SESSIONS_PER_USER = 50;
+	public const MAX_SESSIONS_PER_USER = 200;
+
+	/**
+	 * How long a session must have gone unseen before eviction may remove it.
+	 *
+	 * The cap alone is not a safe eviction rule. A client that authenticates
+	 * programmatically mints sessions far faster than a merchant does, so "the oldest of
+	 * N" can be a session created minutes ago and still in use — and evicting it
+	 * blacklists its access token, logging a working device out mid-request. That is
+	 * exactly what happened on the shared E2E cashier after #1798 shipped a 50-session
+	 * cap. A week of silence is a long time for a till: a device seen inside that window
+	 * is treated as live and is never a candidate, whatever the count.
+	 */
+	public const SESSION_EVICTION_IDLE_SECONDS = 7 * DAY_IN_SECONDS;
+
+	/**
+	 * How stale a session's `last_active` may get before an authenticated request rewrites it.
+	 *
+	 * `last_active` decides what eviction may touch, so it has to reflect USE, not just
+	 * token refreshes — before this, only `refresh_access_token()` moved it, and a device
+	 * happily working through a 30-minute access token looked idle the whole time. Every
+	 * authenticated request now refreshes it, throttled to one write per session per five
+	 * minutes so the POS's request volume does not turn into a write per call.
+	 */
+	private const SESSION_ACTIVITY_REFRESH_SECONDS = 5 * MINUTE_IN_SECONDS;
 
 	/**
 	 * Byte ceiling on the stored session row before it is discarded UNREAD.
 	 *
-	 * The cap above keeps a healthy row to a few hundred kilobytes, so anything past a
-	 * megabyte was written before the cap existed — and a pre-cap row can be large enough
-	 * that reading it is itself expensive (#1776 measured 9 MB, which costs ~26 MB to
-	 * fetch and ~38 MB to unserialize). `LENGTH()` is answered by MySQL without sending
-	 * the value, so the check below costs one small query and never materializes the row
-	 * it is guarding against. Discarding it logs every session for that user out once,
-	 * which is the correct trade against a row that can never be rewritten.
+	 * This is a LAST RESORT for a row no longer safe to load, not a tidy-up threshold —
+	 * discarding it signs every one of that user's devices out at once. The bar is set
+	 * from measurement rather than caution: a 9,216,730-byte row (17,000 sessions) read
+	 * fine under the 128 MB limit that produced the #1776 fatal — `get_user_meta()` cost
+	 * ~26 MB to fetch and ~38 MB with the unserialize, and it was the WRITE-BACK, at ~42
+	 * MB more, that exhausted the request. Six megabytes therefore sits below anything
+	 * measured to be unreadable while still catching a row heading for that fatal. The
+	 * first release of this guard used one megabyte, which is comfortably readable and
+	 * threw away rows that eviction could simply have trimmed.
 	 */
-	public const MAX_SESSIONS_ROW_BYTES = 1048576;
+	public const MAX_SESSIONS_ROW_BYTES = 6291456;
 
 	/**
 	 * The single instance of the class.
@@ -236,6 +267,15 @@ class Auth {
 						'woocommerce_pos_auth_session_revoked',
 						'Session has been revoked',
 						array( 'status' => 403 )
+					);
+				}
+
+				// The session is live: record that, so eviction can tell a device that is
+				// working right now from one that has not been seen in a week.
+				if ( isset( $decoded_token->refresh_jti ) ) {
+					$this->touch_session_activity(
+						absint( $decoded_token->data->user->id ),
+						(string) $decoded_token->refresh_jti
 					);
 				}
 			}
@@ -758,6 +798,35 @@ class Auth {
 	}
 
 	/**
+	 * Refresh a session's `last_active`, at most once every few minutes.
+	 *
+	 * Called from token validation, so it runs on EVERY authenticated request. The
+	 * throttle is what makes that affordable: the value only has to be accurate to within
+	 * minutes for a rule that asks whether a session has been unseen for a week, and the
+	 * read is already in the user's meta cache by this point.
+	 *
+	 * @param int    $user_id The user ID.
+	 * @param string $jti     Refresh token JTI (session identifier).
+	 */
+	private function touch_session_activity( int $user_id, string $jti ): void {
+		if ( 0 === $user_id || '' === $jti ) {
+			return;
+		}
+
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $jti ] ) ) {
+			return;
+		}
+
+		$last_active = isset( $refresh_tokens[ $jti ]['last_active'] ) ? (int) $refresh_tokens[ $jti ]['last_active'] : 0;
+		if ( time() - $last_active < self::SESSION_ACTIVITY_REFRESH_SECONDS ) {
+			return;
+		}
+
+		$this->update_session_activity( $user_id, $jti );
+	}
+
+	/**
 	 * Check if the current user can manage sessions for the target user.
 	 *
 	 * @param int $target_user_id The target user ID.
@@ -935,8 +1004,19 @@ class Auth {
 			return $refresh_tokens;
 		}
 
-		// Order eviction candidates oldest-first. The insertion index breaks ties explicitly
-		// because usort() is not stable before PHP 8.0 and bulk logins share a timestamp.
+		$issued_at = time();
+		$idle_before = $issued_at - self::SESSION_EVICTION_IDLE_SECONDS;
+
+		/*
+		 * Order eviction candidates oldest-first. The insertion index breaks ties explicitly
+		 * because usort() is not stable before PHP 8.0 and bulk logins share a timestamp.
+		 *
+		 * A session seen within SESSION_EVICTION_IDLE_SECONDS is NOT a candidate at any
+		 * count. Being the oldest of N says nothing about being unused when N sessions were
+		 * minted in an hour, and evicting a live one blacklists a working device's access
+		 * token. The cap yields to that: a user whose sessions are all recent keeps them
+		 * all, and the row stays bounded by MAX_SESSIONS_ROW_BYTES instead.
+		 */
 		$candidates = array();
 		$index      = 0;
 		foreach ( $refresh_tokens as $candidate_jti => $token_data ) {
@@ -945,12 +1025,9 @@ class Auth {
 				continue;
 			}
 
-			if ( isset( $token_data['last_active'] ) ) {
-				$activity = (int) $token_data['last_active'];
-			} elseif ( isset( $token_data['created'] ) ) {
-				$activity = (int) $token_data['created'];
-			} else {
-				$activity = 0;
+			$activity = $this->session_last_seen( $token_data );
+			if ( $activity > $idle_before ) {
+				continue;
 			}
 
 			$candidates[] = array(
@@ -970,8 +1047,6 @@ class Auth {
 				return $a['activity'] <=> $b['activity'];
 			}
 		);
-
-		$issued_at = time();
 
 		foreach ( \array_slice( $candidates, 0, $evict_count ) as $candidate ) {
 			/*
@@ -996,6 +1071,25 @@ class Auth {
 	}
 
 	/**
+	 * When a session was last seen, from whichever timestamp it carries.
+	 *
+	 * @param array $token_data Stored session record.
+	 *
+	 * @return int Unix timestamp; 0 when the record carries no usable timestamp.
+	 */
+	private function session_last_seen( array $token_data ): int {
+		if ( isset( $token_data['last_active'] ) ) {
+			return (int) $token_data['last_active'];
+		}
+
+		if ( isset( $token_data['created'] ) ) {
+			return (int) $token_data['created'];
+		}
+
+		return 0;
+	}
+
+	/**
 	 * The last moment an access token minted against a session can still validate.
 	 *
 	 * @param array $token_data Stored session record.
@@ -1010,13 +1104,7 @@ class Auth {
 		// Rows written before `access_expires` was recorded. The newest access token such a
 		// session can hold was minted no later than its last recorded activity, so one
 		// access-token lifetime past that moment is the outside limit.
-		if ( isset( $token_data['last_active'] ) ) {
-			$last_seen = (int) $token_data['last_active'];
-		} elseif ( isset( $token_data['created'] ) ) {
-			$last_seen = (int) $token_data['created'];
-		} else {
-			$last_seen = 0;
-		}
+		$last_seen = $this->session_last_seen( $token_data );
 
 		return $last_seen > 0 ? $this->get_access_token_expire( $last_seen ) : 0;
 	}
@@ -1024,11 +1112,14 @@ class Auth {
 	/**
 	 * Drop the stored session row when it is too large to be read safely.
 	 *
-	 * The cap in `evict_oldest_sessions()` only helps a row this process can still load.
-	 * A row written before the cap existed can be large enough that reading it exhausts
-	 * the request — and because that read happens on every login, the user is then locked
-	 * out permanently (#1776). `LENGTH()` lets MySQL answer with a number instead of the
-	 * value, so the size can be checked without paying for the row.
+	 * A LAST RESORT, not a tidy-up: discarding the row signs every one of that user's
+	 * devices out at once, so the ceiling is set above anything measured to be readable
+	 * (see MAX_SESSIONS_ROW_BYTES) and everything below it is TRIMMED by
+	 * `evict_oldest_sessions()` on the same write instead. What this catches is the one
+	 * case trimming cannot: a row so large that reading it exhausts the request before any
+	 * of the code below runs, which — because that read happens on every login — locks the
+	 * user out permanently (#1776). `LENGTH()` lets MySQL answer with a number instead of
+	 * the value, so the size is checked without paying for the row.
 	 *
 	 * @param int $user_id The user ID.
 	 */
@@ -1067,7 +1158,7 @@ class Auth {
 
 		Logger::warning(
 			sprintf(
-				'Discarded an oversized WCPOS session row for user %d (%d bytes, ceiling %d). Every POS session for this user has been logged out once; the row is rebuilt, capped, on this login.',
+				'Discarded an unreadable WCPOS session row for user %d (%d bytes, ceiling %d). The row was too large to load safely, so every POS session for this user has been logged out once; it is rebuilt, capped, on this login.',
 				$user_id,
 				$bytes,
 				self::MAX_SESSIONS_ROW_BYTES
