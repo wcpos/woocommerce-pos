@@ -219,4 +219,190 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $zero->get_id(), $rows[0]['id'] );
 		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
 	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_sku — the same fixture and the same
+	 * expected sequences, against /wcpos/v2/products (#1779).
+	 */
+	public function test_product_orderby_sku(): void {
+		ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
+		ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
+		ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
+		ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'sku',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertSame( array( '123456789', '987654321', 'alpha', 'zeta' ), wp_list_pluck( $rows, 'sku' ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'sku',
+				'order'   => 'desc',
+			)
+		);
+
+		$this->assertSame( array( 'zeta', 'alpha', '987654321', '123456789' ), wp_list_pluck( $rows, 'sku' ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_barcode (#1779).
+	 *
+	 * v2 serves no top-level `barcode` field by design, so the barcode is read back
+	 * out of `meta_data` — the ORDER is what this pins, not the field alias.
+	 */
+	public function test_product_orderby_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$product1 = ProductHelper::create_simple_product();
+		$product1->update_meta_data( '_barcode', 'alpha' );
+		$product1->save_meta_data();
+
+		$product2 = ProductHelper::create_simple_product();
+		$product2->update_meta_data( '_barcode', 'zeta' );
+		$product2->save_meta_data();
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'barcode',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertSame( array( 'alpha', 'zeta' ), $this->barcodes( $rows ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'barcode',
+				'order'   => 'desc',
+			)
+		);
+
+		$this->assertSame( array( 'zeta', 'alpha' ), $this->barcodes( $rows ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_stock_status (#1779).
+	 */
+	public function test_product_orderby_stock_status(): void {
+		ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
+		ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'stock_status',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertSame( array( 'instock', 'outofstock' ), wp_list_pluck( $rows, 'stock_status' ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'stock_status',
+				'order'   => 'desc',
+			)
+		);
+
+		$this->assertSame( array( 'outofstock', 'instock' ), wp_list_pluck( $rows, 'stock_status' ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_stock_quantity (#1779).
+	 *
+	 * Products that do not manage stock carry a NULL `_stock`, and they must land LAST
+	 * in both directions — MySQL would otherwise float them to the top under ASC.
+	 */
+	public function test_product_orderby_stock_quantity(): void {
+		foreach ( array( 1, 2, null, 0, -1 ) as $quantity ) {
+			ProductHelper::create_simple_product(
+				array(
+					'stock_quantity' => $quantity,
+					'manage_stock'   => true,
+				)
+			);
+		}
+		ProductHelper::create_simple_product();
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'stock_quantity',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertSame( array( -1, 0, 1, 2, null, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'stock_quantity',
+				'order'   => 'desc',
+			)
+		);
+
+		$this->assertSame( array( 2, 1, 0, -1, null, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_decimal_stock_quantity (#1779).
+	 */
+	public function test_product_orderby_decimal_stock_quantity(): void {
+		$this->setup_decimal_quantity_tests();
+		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+
+		foreach ( array( '11.2', '3.5', '20.7' ) as $quantity ) {
+			ProductHelper::create_simple_product(
+				array(
+					'stock_quantity' => $quantity,
+					'manage_stock'   => true,
+				)
+			);
+		}
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'stock_quantity',
+				'order'   => 'asc',
+			)
+		);
+
+		$this->assertEquals( array( 3.5, 11.2, 20.7 ), wp_list_pluck( $rows, 'stock_quantity' ) );
+
+		$rows = $this->read(
+			array(
+				'orderby' => 'stock_quantity',
+				'order'   => 'desc',
+			)
+		);
+
+		$this->assertEquals( array( 20.7, 11.2, 3.5 ), wp_list_pluck( $rows, 'stock_quantity' ) );
+	}
+
+	/**
+	 * The configured barcode value of each row, in row order.
+	 *
+	 * @param array $rows Product rows.
+	 *
+	 * @return array<int, null|string>
+	 */
+	private function barcodes( array $rows ): array {
+		$barcodes = array();
+		foreach ( $rows as $row ) {
+			$meta       = array_column( $row['meta_data'], 'value', 'key' );
+			$barcodes[] = $meta['_barcode'] ?? null;
+		}
+
+		return $barcodes;
+	}
 }

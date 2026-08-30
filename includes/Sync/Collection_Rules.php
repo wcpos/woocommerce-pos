@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WP_REST_Request;
 
 /**
@@ -196,6 +197,9 @@ final class Collection_Rules {
 	 *                WP_Query `orderby` vocabulary cannot express (rewritten through
 	 *                `posts_orderby`), OR
 	 *                `array( 'meta_key' => ..., 'orderby' => meta_value|meta_value_num )`.
+	 *                A meta sort MAY add `'nulls_last' => true`, which rewrites the
+	 *                `ORDER BY` through `posts_clauses` so rows whose meta value is NULL
+	 *                land last in BOTH directions (MySQL puts them first under ASC).
 	 *
 	 * Filter row shape:
 	 *   - `meta`      => `array( 'key' => <meta key>, 'storage' => <optional storage lock> )`
@@ -282,6 +286,60 @@ final class Collection_Rules {
 					),
 					'exclude' => array(
 						'id_set' => array( 'operator' => 'NOT IN' ),
+					),
+				),
+			),
+
+			/*
+			 * The POS grid's SKU / barcode / stock columns. `wcpos/v1` has implemented
+			 * these since 1.9 and is the frozen authority, so the rows below reproduce its
+			 * `prepare_objects_query()` switch verbatim — same meta keys, same
+			 * `meta_value` / `meta_value_num` choice. Declaring them here is what lets the
+			 * v2 proxy lane serve the same four sorts: without a row the proxy forwards
+			 * `orderby=sku` to wc/v3, whose own enum answers 400 (#1779).
+			 *
+			 * Products are never HPOS — they are posts on every store — so there is no
+			 * `hpos` half to these rows.
+			 */
+			'products' => array(
+				'sorts' => array(
+					'sku' => array(
+						'posts' => array(
+							'meta_key' => '_sku', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Declaration row, not a live query arg.
+							'orderby'  => 'meta_value',
+						),
+					),
+
+					/*
+					 * The barcode meta key is a store setting (`_sku` unless the merchant
+					 * points it elsewhere), so the row reads the same accessor the v1
+					 * controller does rather than hard-coding a key that would drift.
+					 */
+					'barcode' => array(
+						'posts' => array(
+							'meta_key' => Barcode_Field::orderby_key(), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Declaration row, not a live query arg.
+							'orderby'  => 'meta_value',
+						),
+					),
+
+					/*
+					 * `_stock` is NULL for every product that does not manage stock, and a
+					 * cashier sorting by stock wants those rows out of the way at BOTH ends
+					 * — MySQL would otherwise float them to the top under ASC. `nulls_last`
+					 * is v1's `wcpos_posts_clauses()` rewrite, declared instead of copied.
+					 */
+					'stock_quantity' => array(
+						'posts' => array(
+							'meta_key'   => '_stock', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Declaration row, not a live query arg.
+							'orderby'    => 'meta_value_num',
+							'nulls_last' => true,
+						),
+					),
+					'stock_status' => array(
+						'posts' => array(
+							'meta_key' => '_stock_status', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Declaration row, not a live query arg.
+							'orderby'  => 'meta_value',
+						),
 					),
 				),
 			),
