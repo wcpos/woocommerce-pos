@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.4
+Stable tag: 1.10.5
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,12 @@ WCPOS keeps your data in your own WooCommerce database, unless you turn on a fea
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.5 - 2026/08/30 =
+
+- **Saving products and variations is much faster on large stores.**
+- **Orders load faster** on stores that don't use HPOS.
+- **Store Health scans are much faster on large stores.**
 
 = 1.10.4 - 2026/08/30 =
 
