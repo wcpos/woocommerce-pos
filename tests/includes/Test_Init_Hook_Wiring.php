@@ -40,7 +40,10 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 *
 	 * `woocommerce_update_coupon` is deliberately absent: `Coupon_Modified_Date`
 	 * registers it unconditionally, so the latch changes how many callbacks it
-	 * carries but not whether the hook exists.
+	 * carries but not whether the hook exists. `untrashed_post` and
+	 * `woocommerce_untrash_order` are absent for the same reason since #1805:
+	 * `Pos_Uuid::register_hooks()` (unconditional — identity is core) re-proves
+	 * uuid ownership on restore, so the latch only adds the observers' callbacks.
 	 *
 	 * @var string[]
 	 */
@@ -63,7 +66,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'profile_update',
 		'remove_user_role',
 		'set_user_role',
-		'untrashed_post',
 		'update_option_woocommerce_pos_settings_general',
 		'update_option_woocommerce_pos_settings_visibility',
 		'updated_term_meta',
@@ -85,7 +87,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'woocommerce_tax_rate_added',
 		'woocommerce_tax_rate_deleted',
 		'woocommerce_tax_rate_updated',
-		'woocommerce_untrash_order',
 		'woocommerce_update_customer',
 		'woocommerce_update_order',
 		'woocommerce_update_product',
@@ -230,12 +231,17 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// so WCPOS writes after core's rest_send_cors_headers at 10.
 			'rest_pre_serve_request'                                => array( 20 ),
 			'send_headers'                                          => array( 99, 9999 ),
+			// Pos_Uuid re-proves uuid ownership on restore (#1805); unconditional
+			// like stamp_on_save — identity is core. The sync observers add their
+			// own callbacks on the same two hooks once the latch is set.
+			'untrashed_post'                                        => array( 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
 			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
+			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),
 		);
 		ksort( $expected );

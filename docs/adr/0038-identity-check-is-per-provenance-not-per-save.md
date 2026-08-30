@@ -26,8 +26,13 @@ stores on 2026-08-30 with MariaDB's slow log at 50 ms:
 The ownership detector runs only for a uuid whose provenance is NOT this record's own
 persisted meta row: a cloned object (WooCommerce's "Duplicate" clones the meta with its
 ids cleared), an importer rewriting the value in memory, a record with no id yet, a record
-returning from trash/auto-draft (invisible to the detector while inactive, so another
-record may have adopted its uuid — the restore must re-prove ownership). An ordinary save
+returning from trash/auto-draft through WC CRUD (a pending status change). A record was
+invisible to the detector while trashed, so another record may have adopted its uuid — and a
+*native* restore (wp-admin's Restore, `wp_untrash_post()`, `WC_Order::untrash()`) persists
+the status before any WC object save, so no save or read ever sees the transition. The
+untrash hooks (`untrashed_post`; `woocommerce_untrash_order` for HPOS, armed on the first
+live save because it fires before the restore) therefore re-prove ownership once per
+restore and re-key the RESTORED record, never the one the tills already key on. An ordinary save
 or read carries a `WC_Meta_Data` entry with an id and no changes, and skips the detector
 entirely. The rule is `Pos_Uuid::is_own_persisted_uuid()`, applied inside `ensure_uuid()`
 behind the opt-in `trust_persisted` option so there is one selection of the canonical

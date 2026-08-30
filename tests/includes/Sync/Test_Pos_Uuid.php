@@ -797,6 +797,80 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The wp-admin Restore action is `wp_untrash_post()`: the status change is
+	 * persisted before any WC object save, so neither the write hook nor the read
+	 * path sees a transition. The untrash hook re-proves ownership: a clone that adopted the
+	 * uuid while the original was trashed keeps it, and the restored original is
+	 * re-keyed in the database.
+	 */
+	public function test_native_restore_re_keys_a_product_whose_uuid_was_adopted_while_trashed(): void {
+		Pos_Uuid::register_hooks();
+		$original    = ProductHelper::create_simple_product();
+		$original_id = $original->get_id();
+		$uuid        = Pos_Uuid::ensure_uuid( $original, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other' ) ) );
+		wp_trash_post( $original_id );
+
+		$clone = clone wc_get_product( $original_id );
+		$clone->set_id( 0 );
+		$clone->set_status( 'publish' );
+		$clone->save();
+		$this->assertSame( $uuid, get_post_meta( $clone->get_id(), Api::UUID_META_KEY, true ), 'No live owner while the original is trashed.' );
+
+		wp_untrash_post( $original_id );
+
+		$restored_uuid = get_post_meta( $original_id, Api::UUID_META_KEY, true );
+		$this->assertSame( 'publish', get_post_status( $original_id ) );
+		$this->assertTrue( Pos_Uuid::is_uuid( $restored_uuid ) );
+		$this->assertNotSame( $uuid, $restored_uuid );
+		$this->assertSame( $uuid, get_post_meta( $clone->get_id(), Api::UUID_META_KEY, true ) );
+	}
+
+	/**
+	 * A restore whose uuid nobody adopted keeps it: the recheck runs exactly once
+	 * and changes nothing.
+	 */
+	public function test_native_restore_keeps_a_product_uuid_nobody_adopted(): void {
+		Pos_Uuid::register_hooks();
+		$product    = ProductHelper::create_simple_product();
+		$product_id = $product->get_id();
+		$uuid       = Pos_Uuid::ensure_uuid( $product, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other' ) ) );
+		wp_trash_post( $product_id );
+
+		$probes = $this->capture_uuid_value_probes(
+			static function () use ( $product_id ) {
+				wp_untrash_post( $product_id );
+			}
+		);
+
+		$this->assertCount( 1, $probes );
+		$this->assertSame( $uuid, get_post_meta( $product_id, Api::UUID_META_KEY, true ) );
+	}
+
+	/**
+	 * The CPT order twin: orders on legacy storage restore through
+	 * `wp_untrash_post()` too, and the order-aware detector decides.
+	 */
+	public function test_native_restore_re_keys_a_cpt_order_whose_uuid_was_adopted_while_trashed(): void {
+		$this->assert_running_on_cpt_storage();
+		Pos_Uuid::register_hooks();
+		$original    = OrderHelper::create_order();
+		$original_id = $original->get_id();
+		$uuid        = Pos_Uuid::ensure_uuid( $original, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other_order' ) ) );
+		wp_trash_post( $original_id );
+
+		$copy = OrderHelper::create_order();
+		$copy->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$copy->save_meta_data();
+
+		wp_untrash_post( $original_id );
+
+		$restored_uuid = (string) wc_get_order( $original_id )->get_meta( Api::UUID_META_KEY );
+		$this->assertTrue( Pos_Uuid::is_uuid( $restored_uuid ) );
+		$this->assertNotSame( $uuid, $restored_uuid );
+		$this->assertSame( $uuid, (string) wc_get_order( $copy->get_id() )->get_meta( Api::UUID_META_KEY ) );
+	}
+
+	/**
 	 * A hookless copy (direct SQL, a migration tool) is NOT caught by either record's
 	 * next save — deliberately. Catching it cost every save a full uuid scan (#1805),
 	 * and it re-keyed whichever record saved first, original included. It stays the

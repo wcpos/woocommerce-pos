@@ -535,6 +535,12 @@ class Pos_Uuid {
 		}
 		add_action( 'woocommerce_before_product_object_save', array( __CLASS__, 'stamp_on_save' ), 10, 1 );
 		add_action( 'woocommerce_before_product_variation_object_save', array( __CLASS__, 'stamp_on_save' ), 10, 1 );
+		// A record leaving the trash must re-prove ownership: it was invisible to
+		// the detector while inactive, so another record may hold its uuid now.
+		// Both storage lanes — `untrashed_post` never fires for HPOS orders and
+		// `woocommerce_untrash_order` never fires for posts (ADR 0038).
+		add_action( 'untrashed_post', array( __CLASS__, 'recheck_ownership_after_untrash' ), 10, 1 );
+		add_action( 'woocommerce_untrash_order', array( __CLASS__, 'recheck_order_ownership_after_untrash' ), 10, 1 );
 	}
 
 	/**
@@ -558,6 +564,62 @@ class Pos_Uuid {
 				'trust_persisted' => true,
 			)
 		);
+	}
+
+	/**
+	 * Re-prove uuid ownership for a post that just left the trash (products,
+	 * variations, and orders on the legacy CPT store).
+	 *
+	 * A trashed record is not a live owner, so a clone or import made while it
+	 * was in the trash legitimately kept the copied uuid — and the tills now key
+	 * on that record. A native restore (wp-admin's Restore, `wp_untrash_post()`)
+	 * persists the status change before any WC object save, so neither the write
+	 * hook nor the trusted read path ever sees a trash→live transition: this hook
+	 * is the one seam. It runs the detector once per restore — a rare event — and
+	 * re-keys the RESTORED record when another live record owns its uuid, never
+	 * the record the tills already hold (ADR 0038).
+	 *
+	 * @param mixed $post_id Restored post id (`untrashed_post`).
+	 */
+	public static function recheck_ownership_after_untrash( $post_id ): void {
+		$post_id   = (int) $post_id;
+		$post_type = \function_exists( 'get_post_type' ) ? get_post_type( $post_id ) : '';
+		if ( \in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
+			$object   = \function_exists( 'wc_get_product' ) ? wc_get_product( $post_id ) : null;
+			$collides = array( __CLASS__, 'uuid_owned_by_other' );
+		} elseif ( 'shop_order' === $post_type ) {
+			$object   = \function_exists( 'wc_get_order' ) ? wc_get_order( $post_id ) : null;
+			$collides = array( __CLASS__, 'uuid_owned_by_other_order' );
+		} else {
+			return;
+		}
+		if ( \is_object( $object ) && method_exists( $object, 'get_id' ) && (int) $object->get_id() === $post_id ) {
+			self::ensure_uuid( $object, array( 'collides' => $collides ) );
+		}
+	}
+
+	/**
+	 * HPOS twin of {@see recheck_ownership_after_untrash}: `untrashed_post` never
+	 * fires for orders in the orders table, and `woocommerce_untrash_order` fires
+	 * BEFORE the data store restores the status (a detector run there would see a
+	 * still-trashed row and, worse, the restore's own save would write the old meta
+	 * back). Arm a one-shot on the order's first live object save and re-prove
+	 * ownership then — the same seam {@see Integrity_Digest::record_order_untrashed}
+	 * uses.
+	 *
+	 * @param mixed $order_id Order being restored (`woocommerce_untrash_order`).
+	 */
+	public static function recheck_order_ownership_after_untrash( $order_id ): void {
+		$order_id = (int) $order_id;
+		$handler  = static function ( $order ) use ( $order_id, &$handler ): void {
+			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! method_exists( $order, 'get_status' )
+				|| (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
+				return;
+			}
+			remove_action( 'woocommerce_after_order_object_save', $handler );
+			self::ensure_uuid( $order, array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_order' ) ) );
+		};
+		add_action( 'woocommerce_after_order_object_save', $handler );
 	}
 
 	/**
