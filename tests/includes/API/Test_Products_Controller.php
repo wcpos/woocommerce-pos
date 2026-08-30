@@ -474,6 +474,11 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * A sort must never change WHICH products come back — only their order.
+	 *
+	 * Asserted on BOTH lanes in one case, with literal routes. The claim is a parity claim
+	 * — the two lanes must answer a category-filtered barcode sort with the same set — and
+	 * a v1-only version of it would be a legacy pin that proves nothing about the lane the
+	 * app actually calls (tests/lane-coverage/README.md).
 	 */
 	public function test_product_orderby_barcode_preserves_category_membership(): void {
 		add_filter(
@@ -516,6 +521,25 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( $members, $unsorted );
 		$this->assertSame( $members, $sorted );
+
+		// The same claim on the lane the app actually calls.
+		$v2_request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$v2_request->set_query_params(
+			array(
+				'category' => (string) $category['term_id'],
+				'orderby'  => 'barcode',
+				'order'    => 'asc',
+				'per_page' => 100,
+			)
+		);
+		$v2_response = $this->server->dispatch( $v2_request );
+
+		$this->assertEquals( 200, $v2_response->get_status() );
+
+		$v2_ids = wp_list_pluck( $v2_response->get_data(), 'id' );
+		sort( $v2_ids );
+
+		$this->assertSame( $members, $v2_ids );
 	}
 
 	/**
