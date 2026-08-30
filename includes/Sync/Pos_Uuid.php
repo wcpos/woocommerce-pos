@@ -125,6 +125,20 @@ class Pos_Uuid {
 			return '';
 		}
 		$uuid = self::generate_uuid();
+		if ( '' !== $existing ) {
+			// A re-key changes the record's client-side primary key (ADR 0038). Rare
+			// and consequential, so it is always on the record: which record, the
+			// identity it lost, the one it received.
+			Logger::log(
+				sprintf(
+					'Re-keyed %s #%d: uuid %s is already owned by another record; it now carries %s.',
+					\get_class( $object ),
+					method_exists( $object, 'get_id' ) ? (int) $object->get_id() : 0,
+					$existing,
+					$uuid
+				)
+			);
+		}
 		$object->update_meta_data( self::META_KEY, $uuid );
 		if ( $persist ) {
 			call_user_func( array( $object, 'save_meta_data' ) );
@@ -487,16 +501,69 @@ class Pos_Uuid {
 	 * Before-save hook: ensure the WC object carries a unique uuid as part of the
 	 * in-progress save (persist:false — the save itself writes it).
 	 *
+	 * The ownership scan runs only for a uuid that did NOT come from this record's
+	 * own persisted meta row ({@see carries_own_persisted_uuid}). It walks every
+	 * uuid row in `wp_postmeta` (no `meta_value` index), so on every save it cost
+	 * 0.46 s and 30k rows examined on a 30k-product store, 114 times an hour, for
+	 * a fact the loaded row already stated (#1805, ADR 0038).
+	 *
 	 * @param mixed $object
 	 */
 	public static function stamp_on_save( $object ): void {
 		self::ensure_uuid(
 			$object,
 			array(
-				'collides' => array( __CLASS__, 'uuid_owned_by_other' ),
+				'collides' => self::carries_own_persisted_uuid( $object ) ? null : array( __CLASS__, 'uuid_owned_by_other' ),
 				'persist'  => false,
 			)
 		);
+	}
+
+	/**
+	 * True when the record's canonical uuid meta entry was READ from this record's
+	 * own meta row and has not been changed in memory since — the uuid is already
+	 * this record's persisted identity, not a value that arrived by copy.
+	 *
+	 * The ownership scan exists to catch a uuid that reached a record some other
+	 * way, and every such provenance fails this test: a duplicated object
+	 * (WooCommerce's "Duplicate" clones the meta with its ids cleared), an importer
+	 * rewriting the value in memory (a tracked change on the entry), a record with
+	 * no id yet. What passes is the ordinary save — a stock change, a price edit, a
+	 * REST update — where the scan re-proved a fact at a cost linear in catalog size.
+	 *
+	 * A copy made WITHOUT hooks (direct SQL, a migration tool) passes too, on both
+	 * records: neither save re-keys it. Deliberate (ADR 0038): the scan caught that
+	 * shape only when one of the two next saved, and re-keyed whichever that was —
+	 * the original as readily as the copy. The collision backfill
+	 * (`/uuid/backfill?mode=collisions`) walks the store once in bounded pages and
+	 * re-keys the later copy, never the owner; it is the repair for that shape.
+	 *
+	 * Duck-typed on WC_Meta_Data (`->id`, `get_changes()`): a bare array or a fake
+	 * without change tracking is never trusted.
+	 *
+	 * @param mixed $object
+	 */
+	public static function carries_own_persisted_uuid( $object ): bool {
+		if ( ! \is_object( $object ) || ! method_exists( $object, 'get_id' ) || ! method_exists( $object, 'get_meta_data' ) ) {
+			return false;
+		}
+		if ( (int) $object->get_id() <= 0 ) {
+			return false;
+		}
+		foreach ( (array) $object->get_meta_data() as $meta ) {
+			if ( self::META_KEY !== Meta_Entry::key( $meta ) || ! self::is_uuid( Meta_Entry::value( $meta ) ) ) {
+				continue;
+			}
+			// The first valid entry is the canonical one (read_valid_uuid_from_meta
+			// serves it; prune_duplicate_uuid_meta keeps it), so only its provenance
+			// decides. A trailing duplicate is pruned by the save either way.
+			return \is_object( $meta )
+				&& method_exists( $meta, 'get_changes' )
+				&& ! empty( $meta->id )
+				&& array() === $meta->get_changes();
+		}
+
+		return false;
 	}
 
 	/**
