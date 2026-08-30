@@ -1430,6 +1430,276 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Logging in past the cap keeps exactly MAX_SESSIONS_PER_USER sessions.
+	 */
+	public function test_store_refresh_token_beyond_cap_keeps_only_the_capped_number_of_sessions(): void {
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER + 1; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( Auth::MAX_SESSIONS_PER_USER, $refresh_tokens );
+	}
+
+	/**
+	 * The session created by the most recent login survives the eviction.
+	 */
+	public function test_store_refresh_token_beyond_cap_retains_the_newest_session(): void {
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$newest         = $this->auth_service->generate_refresh_token( $this->test_user );
+		$newest_decoded = $this->auth_service->validate_token( $newest, 'refresh' );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayHasKey( $newest_decoded->jti, $refresh_tokens );
+	}
+
+	/**
+	 * The oldest session is the one evicted when the cap is exceeded.
+	 */
+	public function test_store_refresh_token_beyond_cap_evicts_the_oldest_session(): void {
+		$oldest         = $this->auth_service->generate_refresh_token( $this->test_user );
+		$oldest_decoded = $this->auth_service->validate_token( $oldest, 'refresh' );
+
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $oldest_decoded->jti, $refresh_tokens );
+	}
+
+	/**
+	 * An evicted session's outstanding access token is rejected, not left working.
+	 */
+	public function test_store_refresh_token_beyond_cap_rejects_the_evicted_access_token(): void {
+		$evicted         = $this->auth_service->generate_token_pair( $this->test_user );
+		$evicted_refresh = $this->auth_service->validate_token( $evicted['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $evicted['access_token'], 'access' ) );
+
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+		$this->assertArrayNotHasKey( $evicted_refresh->jti, $refresh_tokens );
+
+		$validated = $this->auth_service->validate_token( $evicted['access_token'], 'access' );
+
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertSame( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Sessions kept under the cap are untouched by eviction.
+	 */
+	public function test_store_refresh_token_under_cap_keeps_every_session(): void {
+		for ( $i = 0; $i < Auth::MAX_SESSIONS_PER_USER; $i++ ) {
+			$this->auth_service->generate_refresh_token( $this->test_user );
+		}
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( Auth::MAX_SESSIONS_PER_USER, $refresh_tokens );
+	}
+
+	/**
+	 * Expired sessions are still pruned on write, independently of the cap.
+	 */
+	public function test_store_refresh_token_prunes_expired_sessions(): void {
+		$expired_jti = wp_generate_uuid4();
+		update_user_meta(
+			$this->test_user->ID,
+			'_woocommerce_pos_refresh_tokens',
+			array(
+				$expired_jti => array(
+					'expires'     => time() - HOUR_IN_SECONDS,
+					'created'     => time() - DAY_IN_SECONDS,
+					'last_active' => time() - DAY_IN_SECONDS,
+					'ip_address'  => '127.0.0.1',
+					'user_agent'  => self::CHROME_DESKTOP_USER_AGENT,
+					'device_info' => array(),
+				),
+			)
+		);
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $expired_jti, $refresh_tokens );
+		$this->assertCount( 1, $refresh_tokens );
+	}
+
+	/**
+	 * A session whose access token has already expired is evicted WITHOUT a blacklist
+	 * transient — clearing a bloated row must not write thousands of records that guard
+	 * nothing.
+	 */
+	public function test_store_refresh_token_beyond_cap_does_not_blacklist_an_evicted_dead_session(): void {
+		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, time() - DAY_IN_SECONDS );
+		$oldest  = array_key_last( $planted );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertArrayNotHasKey( $oldest, $refresh_tokens );
+		$this->assertFalse( get_transient( 'wcpos_blacklist_' . $oldest ) );
+	}
+
+	/**
+	 * A session whose access token is still live IS blacklisted, and only for as long as
+	 * that access token can still validate — never for the refresh token's whole life.
+	 */
+	public function test_store_refresh_token_beyond_cap_bounds_the_blacklist_to_the_access_token_lifetime(): void {
+		$planted = $this->plant_sessions( Auth::MAX_SESSIONS_PER_USER, time() );
+		$oldest  = array_key_last( $planted );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$this->assertTrue( get_transient( 'wcpos_blacklist_' . $oldest ) );
+
+		$timeout = (int) get_option( '_transient_timeout_wcpos_blacklist_' . $oldest );
+
+		$this->assertGreaterThan( time(), $timeout );
+		$this->assertLessThanOrEqual( $planted[ $oldest ]['access_expires'], $timeout );
+	}
+
+	/**
+	 * A row too large to load is discarded unread, and the login that found it succeeds.
+	 *
+	 * This is the recovery path for a user already in the #1776 failure state: the cap
+	 * only helps a row this process can still read.
+	 */
+	public function test_login_discards_an_oversized_session_row_and_starts_a_fresh_one(): void {
+		global $wpdb;
+
+		$planted = $this->plant_oversized_session_row();
+
+		$token = $this->auth_service->generate_refresh_token( $this->test_user );
+		$this->assertNotInstanceOf( WP_Error::class, $token );
+
+		$decoded        = $this->auth_service->validate_token( $token, 'refresh' );
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( 1, $refresh_tokens );
+		$this->assertArrayHasKey( $decoded->jti, $refresh_tokens );
+		foreach ( array_keys( $planted ) as $planted_jti ) {
+			$this->assertArrayNotHasKey( $planted_jti, $refresh_tokens );
+		}
+		$this->assertLessThanOrEqual(
+			Auth::MAX_SESSIONS_ROW_BYTES,
+			(int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT LENGTH(meta_value) FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s",
+					$this->test_user->ID,
+					'_woocommerce_pos_refresh_tokens'
+				)
+			)
+		);
+	}
+
+	/**
+	 * A row under the byte ceiling is left alone — the discard must not fire on healthy
+	 * rows and silently log everyone out.
+	 */
+	public function test_login_keeps_a_session_row_under_the_byte_ceiling(): void {
+		$planted = $this->plant_sessions( 3, time() );
+
+		$this->auth_service->generate_refresh_token( $this->test_user );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+
+		$this->assertCount( 4, $refresh_tokens );
+		foreach ( array_keys( $planted ) as $planted_jti ) {
+			$this->assertArrayHasKey( $planted_jti, $refresh_tokens );
+		}
+	}
+
+	/**
+	 * Write session records straight to user meta, oldest last.
+	 *
+	 * @param int $count      How many sessions to plant.
+	 * @param int $newest_seen Timestamp of the most recently active planted session.
+	 *
+	 * @return array The planted sessions, keyed by JTI, in planting order.
+	 */
+	private function plant_sessions( int $count, int $newest_seen ): array {
+		$sessions = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$seen                                = $newest_seen - $i;
+			$sessions[ wp_generate_uuid4() ] = array(
+				'expires'        => time() + 30 * DAY_IN_SECONDS,
+				'created'        => $seen,
+				'last_active'    => $seen,
+				'access_expires' => $seen + ( HOUR_IN_SECONDS / 2 ),
+				'ip_address'     => '127.0.0.1',
+				'user_agent'     => self::CHROME_DESKTOP_USER_AGENT,
+				'device_info'    => array(),
+			);
+		}
+
+		update_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', $sessions );
+
+		return $sessions;
+	}
+
+	/**
+	 * Plant a genuinely serialized session row past the byte ceiling, straight through
+	 * $wpdb so nothing in the write path can cap it first.
+	 *
+	 * @return array The planted sessions, keyed by JTI.
+	 */
+	private function plant_oversized_session_row(): array {
+		global $wpdb;
+
+		$sessions = array();
+		for ( $i = 0; $i < 20; $i++ ) {
+			$sessions[ wp_generate_uuid4() ] = array(
+				'expires'     => time() + 30 * DAY_IN_SECONDS,
+				'created'     => time() - $i,
+				'last_active' => time() - $i,
+				'ip_address'  => '127.0.0.1',
+				// A real row grows through thousands of small entries; a few fat ones cross
+				// the same ceiling without making the fixture slow to build.
+				'user_agent'  => str_repeat( 'U', 65536 ),
+				'device_info' => array(),
+			);
+		}
+
+		$blob = serialize( $sessions );
+		$this->assertGreaterThan( Auth::MAX_SESSIONS_ROW_BYTES, \strlen( $blob ) );
+
+		$wpdb->delete(
+			$wpdb->usermeta,
+			array(
+				'user_id'  => $this->test_user->ID,
+				'meta_key' => '_woocommerce_pos_refresh_tokens',
+			),
+			array( '%d', '%s' )
+		);
+		$wpdb->insert(
+			$wpdb->usermeta,
+			array(
+				'user_id'    => $this->test_user->ID,
+				'meta_key'   => '_woocommerce_pos_refresh_tokens',
+				'meta_value' => $blob,
+			),
+			array( '%d', '%s', '%s' )
+		);
+		wp_cache_delete( $this->test_user->ID, 'user_meta' );
+
+		return $sessions;
+	}
+
+	/**
 	 * Store a session against an injected context and return the stored session.
 	 *
 	 * store_refresh_token_jti() is private; the optional Session_Context

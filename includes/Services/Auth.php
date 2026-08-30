@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use Exception;
 use WCPOS\Vendor\Firebase\JWT\JWT;
 use WCPOS\Vendor\Firebase\JWT\Key;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WP_Error;
 use WP_User;
@@ -20,6 +21,31 @@ use const HOUR_IN_SECONDS;
  * Auth Service class.
  */
 class Auth {
+	/**
+	 * Maximum number of refresh-token sessions retained per user.
+	 *
+	 * Refresh tokens live for weeks and every entry carries a user agent plus parsed
+	 * device info, so without a cap the `_woocommerce_pos_refresh_tokens` row grows until
+	 * `get_user_meta()` can no longer unserialize it inside the PHP memory limit — at which
+	 * point the user can never log in again. Fifty comfortably covers a real merchant's
+	 * devices (tills, tablets, phones, browsers, plus repeated re-logins from each) while
+	 * keeping the serialized row in the low hundreds of kilobytes.
+	 */
+	public const MAX_SESSIONS_PER_USER = 50;
+
+	/**
+	 * Byte ceiling on the stored session row before it is discarded UNREAD.
+	 *
+	 * The cap above keeps a healthy row to a few hundred kilobytes, so anything past a
+	 * megabyte was written before the cap existed — and a pre-cap row can be large enough
+	 * that reading it is itself expensive (#1776 measured 9 MB, which costs ~26 MB to
+	 * fetch and ~38 MB to unserialize). `LENGTH()` is answered by MySQL without sending
+	 * the value, so the check below costs one small query and never materializes the row
+	 * it is guarding against. Discarding it logs every session for that user out once,
+	 * which is the correct trade against a row that can never be rewritten.
+	 */
+	public const MAX_SESSIONS_ROW_BYTES = 1048576;
+
 	/**
 	 * The single instance of the class.
 	 *
@@ -820,6 +846,10 @@ class Auth {
 	private function store_refresh_token_jti( int $user_id, string $jti, int $expires, ?Session_Context $context = null ): void {
 		$context = null === $context ? Session_Context::from_request() : $context;
 
+		// BEFORE the read: a pre-cap row can be too large to load, and this is the first
+		// point in the login flow where WCPOS knows the user id.
+		$this->discard_oversized_session_row( $user_id );
+
 		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
 		if ( ! \is_array( $refresh_tokens ) ) {
 			$refresh_tokens = array();
@@ -881,7 +911,168 @@ class Auth {
 			'device_info' => $device_info,
 		);
 
+		// Cap the number of stored sessions so programmatic clients cannot grow the row without bound.
+		$refresh_tokens = $this->evict_oldest_sessions( $refresh_tokens, $jti );
+
 		update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Drop the least recently active sessions until the per-user cap is met.
+	 *
+	 * Evicted sessions are blacklisted the same way revoke_all_sessions_except() does, so the
+	 * device that lost its slot is cleanly logged out instead of keeping a working access token
+	 * for the remainder of that token's life.
+	 *
+	 * @param array  $refresh_tokens Stored sessions keyed by refresh token JTI.
+	 * @param string $protected_jti  JTI that must never be evicted (the session being stored).
+	 *
+	 * @return array The sessions to persist.
+	 */
+	private function evict_oldest_sessions( array $refresh_tokens, string $protected_jti ): array {
+		$evict_count = \count( $refresh_tokens ) - self::MAX_SESSIONS_PER_USER;
+		if ( $evict_count <= 0 ) {
+			return $refresh_tokens;
+		}
+
+		// Order eviction candidates oldest-first. The insertion index breaks ties explicitly
+		// because usort() is not stable before PHP 8.0 and bulk logins share a timestamp.
+		$candidates = array();
+		$index      = 0;
+		foreach ( $refresh_tokens as $candidate_jti => $token_data ) {
+			$position = $index++;
+			if ( (string) $candidate_jti === $protected_jti ) {
+				continue;
+			}
+
+			if ( isset( $token_data['last_active'] ) ) {
+				$activity = (int) $token_data['last_active'];
+			} elseif ( isset( $token_data['created'] ) ) {
+				$activity = (int) $token_data['created'];
+			} else {
+				$activity = 0;
+			}
+
+			$candidates[] = array(
+				'jti'      => (string) $candidate_jti,
+				'activity' => $activity,
+				'index'    => $position,
+			);
+		}
+
+		usort(
+			$candidates,
+			function ( $a, $b ) {
+				if ( $a['activity'] === $b['activity'] ) {
+					return $a['index'] <=> $b['index'];
+				}
+
+				return $a['activity'] <=> $b['activity'];
+			}
+		);
+
+		$issued_at = time();
+
+		foreach ( \array_slice( $candidates, 0, $evict_count ) as $candidate ) {
+			/*
+			 * Blacklist ONLY a session that can still hold a live access token. An eviction
+			 * is not a revoke: clearing a bloated row can drop thousands of long-dead
+			 * sessions at once, and a transient for each would guard nothing — an expired
+			 * access token is already rejected on its own `exp` claim, and the refresh token
+			 * dies with the meta entry (`is_refresh_token_valid()` requires the entry). This
+			 * also bounds each transient this path writes to one access-token lifetime,
+			 * rather than the refresh-token expiry `get_access_token_blacklist_ttl()` falls
+			 * back to for a session with no recorded access-token expiry.
+			 */
+			$horizon = $this->access_token_horizon( $refresh_tokens[ $candidate['jti'] ] );
+			if ( $horizon > $issued_at ) {
+				$this->blacklist_token( $candidate['jti'], $horizon - $issued_at );
+			}
+
+			unset( $refresh_tokens[ $candidate['jti'] ] );
+		}
+
+		return $refresh_tokens;
+	}
+
+	/**
+	 * The last moment an access token minted against a session can still validate.
+	 *
+	 * @param array $token_data Stored session record.
+	 *
+	 * @return int Unix timestamp; 0 when the session carries no usable timestamp at all.
+	 */
+	private function access_token_horizon( array $token_data ): int {
+		if ( isset( $token_data['access_expires'] ) ) {
+			return (int) $token_data['access_expires'];
+		}
+
+		// Rows written before `access_expires` was recorded. The newest access token such a
+		// session can hold was minted no later than its last recorded activity, so one
+		// access-token lifetime past that moment is the outside limit.
+		if ( isset( $token_data['last_active'] ) ) {
+			$last_seen = (int) $token_data['last_active'];
+		} elseif ( isset( $token_data['created'] ) ) {
+			$last_seen = (int) $token_data['created'];
+		} else {
+			$last_seen = 0;
+		}
+
+		return $last_seen > 0 ? $this->get_access_token_expire( $last_seen ) : 0;
+	}
+
+	/**
+	 * Drop the stored session row when it is too large to be read safely.
+	 *
+	 * The cap in `evict_oldest_sessions()` only helps a row this process can still load.
+	 * A row written before the cap existed can be large enough that reading it exhausts
+	 * the request — and because that read happens on every login, the user is then locked
+	 * out permanently (#1776). `LENGTH()` lets MySQL answer with a number instead of the
+	 * value, so the size can be checked without paying for the row.
+	 *
+	 * @param int $user_id The user ID.
+	 */
+	private function discard_oversized_session_row( int $user_id ): void {
+		global $wpdb;
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT umeta_id, LENGTH(meta_value) AS meta_bytes FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s",
+				$user_id,
+				'_woocommerce_pos_refresh_tokens'
+			)
+		);
+
+		if ( empty( $rows ) ) {
+			return;
+		}
+
+		$bytes = 0;
+		foreach ( $rows as $row ) {
+			$bytes += (int) $row->meta_bytes;
+		}
+
+		if ( $bytes <= self::MAX_SESSIONS_ROW_BYTES ) {
+			return;
+		}
+
+		foreach ( $rows as $row ) {
+			$wpdb->delete( $wpdb->usermeta, array( 'umeta_id' => (int) $row->umeta_id ), array( '%d' ) );
+		}
+
+		// The row may already be sitting in the user's meta cache from an earlier
+		// `get_user_meta()` in this request; without this the next read serves the value
+		// that was just deleted.
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		Logger::warning(
+			sprintf(
+				'Discarded an oversized WCPOS session row for user %d (%d bytes, ceiling %d). Every POS session for this user has been logged out once; the row is rebuilt, capped, on this login.',
+				$user_id,
+				$bytes,
+				self::MAX_SESSIONS_ROW_BYTES
+			)
+		);
 	}
 
 	/**
