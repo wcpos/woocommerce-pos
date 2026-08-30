@@ -62,6 +62,32 @@ if plugin_major_minor "$TMP_DIR/empty.php" >/dev/null 2>&1; then
   fail "expected a non-zero exit when no VERSION constant is present"
 fi
 
+# Write a fixture whose VERSION constant is exactly $1.
+mk_version_file() {
+  printf "\t\\\\define( __NAMESPACE__ . '\\\\VERSION', '%s' );\n" "$1" > "$2"
+}
+
+# Malformed dotted values must be REJECTED, not reduced. `1.10.` and `1.10.4.0`
+# both cut down to a plausible-looking "1.10", which would resolve a real bundle
+# tag and report "no drift" for a version we never actually parsed — the exact
+# "could not check reads as no drift" failure this script exists to avoid.
+# A bare two-part `1.10` is rejected too: VERSION is always three-part.
+for bad in '1.10.' '1.10.4.0' '1.10' '1..4' '1' '1.10.x' '.1.10'; do
+  mk_version_file "$bad" "$TMP_DIR/bad.php"
+  if got=$(plugin_major_minor "$TMP_DIR/bad.php" 2>/dev/null); then
+    fail "expected VERSION='$bad' to be rejected, got '$got'"
+  fi
+done
+
+# Well-formed values still parse after the tightening, including multi-digit parts.
+for good in '1.10.4:1.10' '1.9.17:1.9' '2.0.0:2.0' '10.20.30:10.20'; do
+  mk_version_file "${good%%:*}" "$TMP_DIR/good.php"
+  got=$(plugin_major_minor "$TMP_DIR/good.php") \
+    || fail "expected VERSION='${good%%:*}' to parse"
+  [[ "$got" == "${good##*:}" ]] \
+    || fail "expected '${good##*:}' from VERSION='${good%%:*}', got '$got'"
+done
+
 # ---------------------------------------------------------------------------
 # newest_bundle_tag — must sort numerically; v1.10.14 beats v1.10.9
 # ---------------------------------------------------------------------------

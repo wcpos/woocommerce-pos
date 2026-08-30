@@ -21,11 +21,15 @@ WORKER_FILE="${WORKER_FILE:-assets/js/opfs.worker.js}"
 BUNDLE_REPO="${BUNDLE_REPO:-wcpos/web-bundle}"
 BUNDLE_WORKER_PATH="${BUNDLE_WORKER_PATH:-build/opfs.worker.js}"
 
+# Emit a workflow annotation and stop. Every failure path routes through here so
+# that "could not check" is always a red job, never a silent pass.
 fail() {
   echo "::error::$*" >&2
   exit 1
 }
 
+# Print a file's SHA-256. Runners have `sha256sum`; macOS has `shasum` — the test
+# script runs locally too, so support both.
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'
@@ -35,10 +39,16 @@ sha256_of() {
 }
 
 # Pure: read the runtime VERSION constant and reduce it to major.minor.
+# Returns non-zero unless the constant is a complete `major.minor.patch`.
+# Strictness is the point: `1.10.` and `1.10.4.0` both `cut` down to a
+# plausible-looking `1.10`, which would resolve a real tag and report "no drift"
+# for a version we could not actually parse. A bare two-part `1.10` is rejected
+# for the same reason — the plugin's VERSION is always three-part, so a two-part
+# value means something upstream is wrong and guessing would defeat the check.
 plugin_major_minor() {
   local file="$1" version
   version=$(sed -n "s/.*\\\\VERSION', '\([0-9][0-9.]*\)'.*/\1/p" "$file" | head -1)
-  [[ -n "$version" ]] || return 1
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
   printf '%s' "$version" | cut -d. -f1,2
 }
 
