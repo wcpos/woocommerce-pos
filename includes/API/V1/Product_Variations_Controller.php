@@ -48,7 +48,11 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	/**
 	 * Store the request object for use in lifecycle methods.
 	 *
-	 * @var WP_REST_Request
+	 * Null until `wcpos_dispatch_request()` runs: the instance exists, and its filters are
+	 * registered, before any request is assigned — which is why the readers guard with
+	 * `isset()`. Matches the same property on `API\V1\Products_Controller`.
+	 *
+	 * @var null|WP_REST_Request
 	 */
 	protected $wcpos_request;
 
