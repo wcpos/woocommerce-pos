@@ -745,25 +745,6 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The customer read path: `wp_usermeta` has no meta_value index either, so a
-	 * customer's loaded, unchanged uuid is trusted rather than re-proved per read.
-	 */
-	public function test_ensure_user_uuid_skips_the_ownership_scan_for_a_stamped_customer(): void {
-		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
-		$uuid    = Pos_Uuid::ensure_user_uuid( $user_id );
-		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ) );
-
-		$probes = $this->capture_uuid_value_probes(
-			static function () use ( $user_id, &$again ) {
-				$again = Pos_Uuid::ensure_user_uuid( $user_id );
-			}
-		);
-
-		$this->assertSame( array(), $probes );
-		$this->assertSame( $uuid, $again );
-	}
-
-	/**
 	 * The read-path trust is opt-in: the backfill's collision repair and the proxy
 	 * stamper's in-response duplicates still go through the detector by default.
 	 */

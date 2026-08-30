@@ -31,14 +31,20 @@ record may have adopted its uuid — the restore must re-prove ownership). An or
 or read carries a `WC_Meta_Data` entry with an id and no changes, and skips the detector
 entirely. The rule is `Pos_Uuid::is_own_persisted_uuid()`, applied inside `ensure_uuid()`
 behind the opt-in `trust_persisted` option so there is one selection of the canonical
-entry. Callers that pass it: `stamp_on_save` (the write hook), `stamp_serialized_record`
-(the per-object product lane and the order pull lane — on the legacy CPT order store the
-order detector is a full postmeta walk per served order), `ensure_user_uuid` (customers:
-`wp_usermeta` has no `meta_value` index either) and V1's `Uuid_Handler::maybe_add_post_uuid`
-(which ran the scan once per served record of every list response). Callers that must NOT
-pass it, because they exist to re-key a loaded duplicate: `Uuid_Backfill_Controller`
+entry. Callers that pass it: `stamp_on_save` (the write hook) and `stamp_serialized_record`
+(the v2 per-object product lane and the order pull lane — on the legacy CPT order store the
+order detector is a full postmeta walk per served order). Callers that must NOT pass it,
+because they exist to re-key a loaded duplicate: `Uuid_Backfill_Controller`
 (`mode=collisions`) and `Proxy_Uuid_Stamper` (in-response duplicates). A trust rule inside
 `ensure_uuid` by default would silently delete both repairs.
+
+The V1 list lanes (`Uuid_Handler::maybe_add_post_uuid`, `ensure_user_uuid`) also keep the
+detector, for a different reason: their contract that no two records in one response share
+a uuid (`Test_Products_Controller::test_uuid_is_unique`,
+`Test_Customers_Controller::test_customer_uuid_is_unique`) rests on the per-record detector
+alone — V1 has no bulk-read in-response check the way v2's proxy stamper does. That is one
+scan per served record on V1 list pages; it was not in the measured capture (the dev
+stores run v2), and giving V1 the v2-style in-response check is the fix if it ever is.
 
 **2. Hookless copies are the collision backfill's job, not the save path's.** A uuid copied
 by direct SQL or a migration tool now passes rule 1 on both records, so neither record's

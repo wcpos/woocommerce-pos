@@ -31,15 +31,7 @@ trait Uuid_Handler {
 			? array( 'WCPOS\\WooCommercePOS\\Sync\\Pos_Uuid', 'uuid_owned_by_other_order' )
 			: array( 'WCPOS\\WooCommercePOS\\Sync\\Pos_Uuid', 'uuid_owned_by_other' );
 
-		// Served records are loaded from their own row: a loaded, unchanged uuid is
-		// trusted rather than re-proved with a per-record meta walk (#1805, ADR 0038).
-		Pos_Uuid::ensure_uuid(
-			$object,
-			array(
-				'collides'        => $collides,
-				'trust_persisted' => true,
-			)
-		);
+		Pos_Uuid::ensure_uuid( $object, array( 'collides' => $collides ) );
 	}
 
 	/**

@@ -92,8 +92,9 @@ class Pos_Uuid {
 	 * unchanged ({@see is_own_persisted_uuid}) — the ordinary save and read paths,
 	 * where the detector re-proved a fact the row already stated at a cost linear
 	 * in catalog size (#1805, ADR 0038). Leave it off where a loaded duplicate MUST
-	 * be re-keyed: the collision backfill and the proxy stamper's in-response
-	 * duplicates.
+	 * be re-keyed: the collision backfill, the proxy stamper's in-response
+	 * duplicates, and the V1 list lanes, whose no-shared-uuid-per-response contract
+	 * has no other check.
 	 *
 	 * @param mixed $object
 	 */
@@ -207,14 +208,12 @@ class Pos_Uuid {
 			return '';
 		}
 
-		// A loaded, unchanged uuid is trusted: this is a read path, and
-		// `wp_usermeta` has no meta_value index either (ADR 0038).
+		// No `trust_persisted` here: V1's customer list has no in-response
+		// duplicate check, so its "no two records share a uuid" contract rests on
+		// this detector (Test_Customers_Controller::test_customer_uuid_is_unique).
 		return self::ensure_uuid(
 			$customer,
-			array(
-				'collides'        => array( __CLASS__, 'uuid_owned_by_other_user' ),
-				'trust_persisted' => true,
-			)
+			array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_user' ) )
 		);
 	}
 
