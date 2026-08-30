@@ -1,0 +1,44 @@
+name: OPFS Worker Drift
+
+# The POS web app loads its OPFS worker from THIS repo (Frontend.php builds the URL
+# from PLUGIN_URL), not from the CDN bundle — so a bundle release does not reach web
+# merchants until the worker is re-vendored here.
+#
+# The drift is caused by an event in another repo (a wcpos/web-bundle tag), which
+# fires nothing here; hence the schedule as well as the PR trigger.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opfs-worker-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: 🧵 OPFS worker matches the bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the drift script
+        run: bash .github/scripts/test-check-opfs-worker-drift.sh
+
+      - name: Check the vendored worker against the bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/check-opfs-worker-drift.sh
