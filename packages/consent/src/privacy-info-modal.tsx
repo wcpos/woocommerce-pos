@@ -22,7 +22,7 @@ export function PrivacyInfoModal({ open, onClose, copy }: PrivacyInfoModalProps)
 	return (
 		<Modal open={open} onClose={onClose} title={consentText(copy, 'title', 'consent.modal_title')}>
 			<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-3">
-				{consentText(copy, 'body', 'consent.modal_intro')}
+				{consentText(copy, 'body', 'consent.modal_intro_v2')}
 			</p>
 			<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-2">
 				{consentText(copy, 'fields_intro', 'consent.modal_includes')}
@@ -36,6 +36,9 @@ export function PrivacyInfoModal({ open, onClose, copy }: PrivacyInfoModalProps)
 				</li>
 				<li>
 					<strong>{t('consent.modal_usage_label')}</strong> — {t('consent.modal_usage_desc')}
+				</li>
+				<li>
+					<strong>{t('consent.modal_errors_label')}</strong> — {t('consent.modal_errors_desc')}
 				</li>
 			</ul>
 			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">

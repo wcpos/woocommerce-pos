@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Abstracts;
 
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_UnitTestCase;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 
@@ -101,6 +102,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'timezone',
 			'default_customer',
 			'default_customer_is_cashier',
+			'tracking_consent',
 			'store_address',
 			'store_address_2',
 			'store_city',
@@ -435,6 +437,23 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$is_cashier = $this->store->get_default_customer_is_cashier();
 		$this->assertIsBool( $is_cashier );
 		$this->assertFalse( $is_cashier ); // Default value
+	}
+
+	public function test_get_tracking_consent_defaults_to_undecided(): void {
+		$this->assertSame( 'undecided', $this->store->get_tracking_consent() );
+	}
+
+	public function test_get_tracking_consent_mirrors_general_setting(): void {
+		$settings                     = (array) get_option( 'woocommerce_pos_settings_general', array() );
+		$settings['tracking_consent'] = 'allowed';
+		update_option( 'woocommerce_pos_settings_general', $settings );
+		Settings::instance()->reset_sections_for_testing();
+
+		$store = new Store();
+		$this->assertSame( 'allowed', $store->get_tracking_consent() );
+
+		delete_option( 'woocommerce_pos_settings_general' );
+		Settings::instance()->reset_sections_for_testing();
 	}
 
 	public function test_get_tax_ids_returns_empty_when_settings_blank(): void {

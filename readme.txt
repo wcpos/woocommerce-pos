@@ -113,7 +113,14 @@ Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) 
 Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 = What data does WCPOS send outside my site? =
-WCPOS keeps your data in your own WooCommerce database, unless you turn on a feature that relies on an outside service. It contacts outside services to: load the POS web bundle, other interface assets, and translations from a CDN (jsDelivr); send anonymous usage analytics to wcpos.com **if you opt in** (withdraw any time in settings); validate your license key, site identifier (`site_uuid`), and anonymous identifier (`anon_id`) with wcpos.com when you activate Pro; and relay cloud print jobs through the WCPOS Cloud Print relay at cloudprint.wcpos.com **if you use cloud printing** — your site registers with the relay automatically when you open the Cloud Print settings, and each print job for a relay-addressed printer is then passed through the relay to your configured cloud printer, so the receipt contents (which include order details) leave your site (developers can opt out with the `woocommerce_pos_cloud_print_relay_enabled` filter). Full details are in our [privacy policy](https://wcpos.com/privacy).
+Your products, orders and customers stay in your own WooCommerce database. WCPOS only talks to outside services for a few specific reasons:
+
+* **To load the app.** The POS interface, its assets and translations are served from a CDN (jsDelivr), like any web app.
+* **To find and fix bugs — only if you opt in.** With your permission, WCPOS sends us anonymous usage data (which features are used, on what kind of setup) and anonymous error reports from the POS (what went wrong, on which version and platform). This is how we spot problems before you have to write in, fix them faster, and decide what to build next. It never includes customer details, order contents, prices or your site address, and you can change your mind any time in POS > Settings > General.
+* **To activate Pro.** Your license key, site identifier (`site_uuid`) and anonymous identifier (`anon_id`) are validated with wcpos.com.
+* **To print through the WCPOS Cloud Print relay — only if you use cloud printing.** Your site registers with the relay at cloudprint.wcpos.com when you open the Cloud Print settings, and print jobs for relay-addressed printers are passed through it to your printer, so those receipt contents (which include order details) leave your site. Developers can opt out with the `woocommerce_pos_cloud_print_relay_enabled` filter.
+
+Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Screenshots ==
 
