@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Store_Defaults;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WC_Countries;
 use function wc_format_country_state_string;
 
@@ -73,6 +74,7 @@ class Store extends \WC_Data implements StoreInterface {
 		'tax_total_display'           => '',
 		'default_customer'            => 0,
 		'default_customer_is_cashier' => false,
+		'customer_tax_id_types'       => array(),
 		// Pro properties (with WooCommerce defaults in free version).
 		'url'                         => '',
 		'phone'                       => '',
@@ -163,6 +165,7 @@ class Store extends \WC_Data implements StoreInterface {
 	public function set_woocommerce_pos_settings() {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );
 		$this->set_prop( 'default_customer_is_cashier', Settings::instance()->default_customer_is_cashier() );
+		$this->set_prop( 'customer_tax_id_types', Tax_Id_Settings::get_enabled_types() );
 		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );
 	}
 
@@ -491,6 +494,16 @@ class Store extends \WC_Data implements StoreInterface {
 	 */
 	public function get_default_customer_is_cashier( $context = 'view' ) {
 		return $this->get_prop( 'default_customer_is_cashier', $context );
+	}
+
+	/**
+	 * Get customer tax-ID types offered by the POS.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 * @return array
+	 */
+	public function get_customer_tax_id_types( $context = 'view' ): array {
+		return (array) $this->get_prop( 'customer_tax_id_types', $context );
 	}
 
 	/**

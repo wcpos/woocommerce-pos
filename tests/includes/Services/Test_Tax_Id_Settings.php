@@ -143,4 +143,75 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 		update_option( 'woocommerce_pos_settings_tax_ids', array( 'write_map' => 'not-an-array' ) );
 		$this->assertSame( array(), Tax_Id_Settings::get_overrides() );
 	}
+
+	/**
+	 * Missing or empty enabled_types means every customer-applicable type.
+	 */
+	public function test_get_enabled_types_returns_all_when_unset_or_empty(): void {
+		$expected = Tax_Id_Types::customer_applicable_types();
+
+		$this->assertSame( $expected, Tax_Id_Settings::get_enabled_types() );
+
+		update_option( 'woocommerce_pos_settings_tax_ids', array( 'enabled_types' => array() ) );
+
+		$this->assertSame( $expected, Tax_Id_Settings::get_enabled_types() );
+	}
+
+	/**
+	 * Unknown and business-register types are excluded from enabled_types.
+	 */
+	public function test_get_enabled_types_filters_non_customer_types(): void {
+		update_option(
+			'woocommerce_pos_settings_tax_ids',
+			array(
+				'enabled_types' => array(
+					Tax_Id_Types::TYPE_DE_HRB,
+					'unknown_type',
+					Tax_Id_Types::TYPE_BR_CPF,
+				),
+			)
+		);
+
+		$this->assertSame( array( Tax_Id_Types::TYPE_BR_CPF ), Tax_Id_Settings::get_enabled_types() );
+	}
+
+	/**
+	 * Duplicate enabled types are returned once.
+	 */
+	public function test_get_enabled_types_deduplicates(): void {
+		update_option(
+			'woocommerce_pos_settings_tax_ids',
+			array(
+				'enabled_types' => array(
+					Tax_Id_Types::TYPE_BR_CPF,
+					Tax_Id_Types::TYPE_BR_CPF,
+				),
+			)
+		);
+
+		$this->assertSame( array( Tax_Id_Types::TYPE_BR_CPF ), Tax_Id_Settings::get_enabled_types() );
+	}
+
+	/**
+	 * Enabled types are returned in their canonical order.
+	 */
+	public function test_get_enabled_types_returns_canonical_order(): void {
+		// A subset, stored back-to-front: the result must follow the canonical
+		// list, not the order the merchant happened to tick the boxes in.
+		update_option(
+			'woocommerce_pos_settings_tax_ids',
+			array(
+				'enabled_types' => array(
+					Tax_Id_Types::TYPE_OTHER,
+					Tax_Id_Types::TYPE_ES_NIF,
+					Tax_Id_Types::TYPE_EU_VAT,
+				),
+			)
+		);
+
+		$this->assertSame(
+			array( Tax_Id_Types::TYPE_EU_VAT, Tax_Id_Types::TYPE_ES_NIF, Tax_Id_Types::TYPE_OTHER ),
+			Tax_Id_Settings::get_enabled_types()
+		);
+	}
 }

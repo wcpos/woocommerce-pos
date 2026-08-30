@@ -27,7 +27,8 @@ class Tax_Ids_Section extends Abstract_Section {
 	 */
 	public function defaults(): array {
 		return array(
-			'write_map' => array(),
+			'write_map'     => array(),
+			'enabled_types' => array(),
 		);
 	}
 
@@ -52,8 +53,8 @@ class Tax_Ids_Section extends Abstract_Section {
 	}
 
 	/**
-	 * Write_map is intentionally a full replacement (not deep-merged) so
-	 * users can remove entries by sending the trimmed map.
+	 * Write_map and enabled_types are intentionally full replacements (not
+	 * deep-merged) so users can remove entries by sending trimmed values.
 	 *
 	 * @param array $existing Existing settings view.
 	 * @param array $patch    Incoming partial payload.
@@ -62,6 +63,9 @@ class Tax_Ids_Section extends Abstract_Section {
 		$settings = array_replace_recursive( $existing, $patch );
 		if ( isset( $patch['write_map'] ) && \is_array( $patch['write_map'] ) ) {
 			$settings['write_map'] = $patch['write_map'];
+		}
+		if ( isset( $patch['enabled_types'] ) && \is_array( $patch['enabled_types'] ) ) {
+			$settings['enabled_types'] = $patch['enabled_types'];
 		}
 
 		return $settings;
@@ -73,7 +77,21 @@ class Tax_Ids_Section extends Abstract_Section {
 	 */
 	public function endpoint_args(): array {
 		return array(
-			'write_map' => array(
+			'enabled_types' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					if ( ! \is_array( $param ) ) {
+						return false;
+					}
+					foreach ( $param as $type ) {
+						if ( ! \is_string( $type ) || ! \in_array( $type, Tax_Id_Types::customer_applicable_types(), true ) ) {
+							return false;
+						}
+					}
+
+					return true;
+				},
+			),
+			'write_map'     => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					if ( ! \is_array( $param ) ) {
 						return false;

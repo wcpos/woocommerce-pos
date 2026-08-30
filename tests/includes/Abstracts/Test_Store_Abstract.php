@@ -101,6 +101,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'timezone',
 			'default_customer',
 			'default_customer_is_cashier',
+			'customer_tax_id_types',
 			'store_address',
 			'store_address_2',
 			'store_city',

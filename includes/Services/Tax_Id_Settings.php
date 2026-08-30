@@ -19,6 +19,24 @@ use WCPOS\WooCommercePOS\Services\Settings;
  */
 class Tax_Id_Settings {
 	/**
+	 * Customer tax-ID types enabled in the POS.
+	 *
+	 * @return string[]
+	 */
+	public static function get_enabled_types(): array {
+		$raw   = Settings::instance()->tax_id_enabled_types();
+		$types = array();
+
+		foreach ( Tax_Id_Types::customer_applicable_types() as $type ) {
+			if ( \in_array( $type, $raw, true ) ) {
+				$types[] = $type;
+			}
+		}
+
+		return empty( $types ) ? Tax_Id_Types::customer_applicable_types() : $types;
+	}
+
+	/**
 	 * Default per-type → meta-key write map.
 	 *
 	 * `_billing_vat_number` is the WC EU VAT Number current key and is read
