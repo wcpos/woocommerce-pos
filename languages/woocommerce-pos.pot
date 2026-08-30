@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.10.2\n"
+"Project-Id-Version: WCPOS 1.10.3\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-29T18:57:36+00:00\n"
+"POT-Creation-Date: 2026-08-30T01:32:37+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -809,28 +809,28 @@ msgid "Sorry, you cannot manage print jobs."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Products_Controller.php:147
+#: includes/API/V1/Products_Controller.php:148
 #: includes/API/V1/Product_Variations_Controller.php:142
 msgid "Barcode"
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:185
+#: includes/API/V1/Products_Controller.php:186
 msgid "Limit result set to products assigned to brand IDs or slugs, separated by commas."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:193
+#: includes/API/V1/Products_Controller.php:194
 msgid "Operator to compare product brand terms."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:203
+#: includes/API/V1/Products_Controller.php:204
 msgid "Operator to compare product category terms."
 msgstr ""
 
 #. translators: REST API collection parameter description.
-#: includes/API/V1/Products_Controller.php:213
+#: includes/API/V1/Products_Controller.php:214
 msgid "Operator to compare product tag terms."
 msgstr ""
 
@@ -3274,19 +3274,19 @@ msgid "Download receipt for order #%s"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/Sync/Collection_Rules.php:168
+#: includes/Sync/Collection_Rules.php:169
 #: tests/includes/Sync/Test_Collection_Rules_Plan.php:246
 msgid "Filter orders by POS cashier."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/Sync/Collection_Rules.php:174
+#: includes/Sync/Collection_Rules.php:175
 #: tests/includes/Sync/Test_Collection_Rules_Plan.php:251
 msgid "Filter orders by POS store."
 msgstr ""
 
 #. translators: %s: the unrecognised Collection Rules hook key.
-#: includes/Sync/Collection_Rules_Plan.php:284
+#: includes/Sync/Collection_Rules_Plan.php:294
 #, php-format
 msgid "Unknown Collection Rules hook \"%s\"; the value was passed through unchanged."
 msgstr ""
