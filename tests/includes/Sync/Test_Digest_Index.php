@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -52,6 +53,8 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 
 	/**
 	 * One range wide enough to hold every id a test creates, in a single bucket.
+	 *
+	 * @param int $bucket_size Bucket width, and the window's end.
 	 */
 	private function whole_space( int $bucket_size = 1000000 ): array {
 		return array(
@@ -74,6 +77,9 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 
 	/**
 	 * Hide a product-space id from the POS through the visibility contract.
+	 *
+	 * @param string $post_type_key Visibility option key for the post type.
+	 * @param int    $id            Product-space id to hide.
 	 */
 	private function hide_from_pos( string $post_type_key, int $id ): void {
 		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
@@ -178,7 +184,7 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * status=publish scopes the listing to the readable catalog.
+	 * The status=publish filter scopes the listing to the readable catalog.
 	 */
 	public function test_bucket_listing_products_publish_status_excludes_draft_product(): void {
 		$published = ProductHelper::create_simple_product();
@@ -307,8 +313,8 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * max_id covers the stored side too, so orphan digests past the last live post
-	 * are still inside the walk.
+	 * The max_id covers the stored side too, so orphan digests past the last live
+	 * post are still inside the walk.
 	 */
 	public function test_bucket_aggregates_max_id_covers_an_orphan_stored_digest(): void {
 		global $wpdb;
@@ -327,6 +333,166 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 		$max_id = $this->index->bucket_aggregates( $this->whole_space() )['max_id'];
 
 		$this->assertSame( $orphan_id, $max_id );
+	}
+
+	/**
+	 * The published scope's completion id still covers an orphan on the stored side.
+	 */
+	public function test_bucket_aggregates_publish_max_id_covers_an_orphan_stored_digest(): void {
+		$this->insert_orphan_stored_digest( 'product', 987654 );
+
+		$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'products', array( 'status' => 'publish' ) )['max_id'];
+
+		$this->assertSame( 987654, $max_id );
+	}
+
+	/**
+	 * Under the published scope the live side ends at the last servable row — a
+	 * variation of a published parent counts, a later draft product does not — while
+	 * the unscoped walk still reaches the draft.
+	 */
+	public function test_bucket_aggregates_publish_max_id_ends_at_the_last_servable_product_space_row(): void {
+		$variable  = ProductHelper::create_variation_product();
+		$last_live = max( array_map( 'intval', $variable->get_children() ) );
+		$draft     = ProductHelper::create_simple_product( array( 'status' => 'draft' ) );
+		$this->assertGreaterThan( $last_live, $draft->get_id() );
+		$this->clear_stored_product_digests();
+
+		$publish_max = $this->index->bucket_aggregates( $this->whole_space(), 'products', array( 'status' => 'publish' ) )['max_id'];
+		$all_max     = $this->index->bucket_aggregates( $this->whole_space() )['max_id'];
+
+		$this->assertSame( $last_live, $publish_max );
+		$this->assertSame( $draft->get_id(), $all_max );
+	}
+
+	/**
+	 * The customer completion id covers an orphan stored digest past the last user.
+	 */
+	public function test_bucket_aggregates_customers_max_id_covers_an_orphan_stored_digest(): void {
+		$this->insert_orphan_stored_digest( 'customer', 987654 );
+
+		$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'customers' )['max_id'];
+
+		$this->assertSame( 987654, $max_id );
+	}
+
+	/**
+	 * Without an orphan the customer completion id is the last user id.
+	 */
+	public function test_bucket_aggregates_customers_max_id_ends_at_the_last_user(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+
+		$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'customers' )['max_id'];
+
+		$this->assertSame( $user_id, $max_id );
+	}
+
+	/**
+	 * The order completion id covers an orphan stored digest past the last order.
+	 */
+	public function test_bucket_aggregates_orders_max_id_covers_an_orphan_stored_digest(): void {
+		$this->insert_orphan_stored_digest( 'order', 987654 );
+
+		$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'orders' )['max_id'];
+
+		$this->assertSame( 987654, $max_id );
+	}
+
+	/**
+	 * On the CPT order store the live side ends at the last LIVE order: a trashed
+	 * order past it is not servable and does not extend the walk.
+	 */
+	public function test_bucket_aggregates_orders_max_id_ends_at_the_last_live_cpt_order(): void {
+		$live    = OrderHelper::create_order();
+		$trashed = OrderHelper::create_order();
+		$trashed->delete();
+		$this->assertSame( 'trash', $trashed->get_status() );
+		$this->clear_stored_digests( 'order' );
+
+		$max_id = $this->index->bucket_aggregates( $this->whole_space(), 'orders' )['max_id'];
+
+		$this->assertSame( $live->get_id(), $max_id );
+	}
+
+	/**
+	 * #1805: the completion query reads MAX(id) off the base table under the same
+	 * predicate. It must not wrap the per-row digest SELECT (an MD5 of every row plus
+	 * a GROUP_CONCAT of its meta, materialised into a temp table) as a derived table
+	 * just to take its max — that cost 0.4–3 s per scan page on real stores.
+	 */
+	public function test_bucket_aggregates_max_id_query_does_not_digest_the_collection(): void {
+		$cases = array(
+			array( 'products', array() ),
+			array( 'products', array( 'status' => 'publish' ) ),
+			array( 'customers', array() ),
+			array( 'orders', array() ),
+		);
+		foreach ( $cases as list( $collection, $filters ) ) {
+			$sql   = $this->captured_max_id_query( $collection, $filters );
+			$label = $collection . ( isset( $filters['status'] ) ? '/' . $filters['status'] : '' );
+
+			$this->assertNotSame( '', $sql, $label . ': the completion query was not issued.' );
+			$this->assertStringNotContainsStringIgnoringCase( 'MD5(', $sql, $label );
+			$this->assertStringNotContainsStringIgnoringCase( 'GROUP_CONCAT', $sql, $label );
+		}
+	}
+
+	/**
+	 * The completion query production issued for one scan call, off the `query`
+	 * filter — never rebuilt by hand.
+	 *
+	 * @param string $collection Collection to scan.
+	 * @param array  $filters    Scan filters.
+	 */
+	private function captured_max_id_query( string $collection, array $filters ): string {
+		$captured = '';
+		$capture  = static function ( $query ) use ( &$captured ) {
+			if ( false !== stripos( (string) $query, 'GREATEST(' ) ) {
+				$captured = (string) $query;
+			}
+
+			return $query;
+		};
+		add_filter( 'query', $capture );
+		try {
+			$this->index->bucket_aggregates( $this->whole_space(), $collection, $filters );
+		} finally {
+			remove_filter( 'query', $capture );
+		}
+
+		return $captured;
+	}
+
+	/**
+	 * Store a digest for an id no live row has.
+	 *
+	 * @param string $object_type Stored object type.
+	 * @param int    $object_id   Id with no live row.
+	 */
+	private function insert_orphan_stored_digest( string $object_type, int $object_id ): void {
+		global $wpdb;
+
+		$wpdb->insert(
+			$this->index->table_name(),
+			array(
+				'object_type' => $object_type,
+				'object_id' => $object_id,
+				'digest' => 42,
+				'updated_gmt' => gmdate( 'Y-m-d H:i:s' ),
+			),
+			array( '%s', '%d', '%d', '%s' )
+		);
+	}
+
+	/**
+	 * Drop every stored digest of one object type.
+	 *
+	 * @param string $object_type Stored object type.
+	 */
+	private function clear_stored_digests( string $object_type ): void {
+		global $wpdb;
+
+		$wpdb->delete( $this->index->table_name(), array( 'object_type' => $object_type ), array( '%s' ) );
 	}
 
 	/**

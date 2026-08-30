@@ -66,6 +66,33 @@ class Test_Pos_Uuid_HPOS extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Restoring an HPOS order re-proves ownership on its first live save
+	 * (`woocommerce_untrash_order` fires before the status is restored): a copy
+	 * that adopted the uuid while the original was trashed keeps it, and the
+	 * restored original is re-keyed.
+	 */
+	public function test_hpos_restore_re_keys_an_order_whose_uuid_was_adopted_while_trashed(): void {
+		Pos_Uuid::register_hooks();
+		$original    = wc_create_order();
+		$original_id = $original->get_id();
+		$uuid        = Pos_Uuid::ensure_uuid( $original, array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other_order' ) ) );
+		$original->delete( false );
+		$this->assertSame( 'trash', wc_get_order( $original_id )->get_status() );
+
+		$copy = wc_create_order();
+		$copy->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$copy->save_meta_data();
+
+		wc_get_order( $original_id )->untrash();
+
+		$restored_uuid = (string) wc_get_order( $original_id )->get_meta( Pos_Uuid::META_KEY );
+		$this->assertNotSame( 'trash', wc_get_order( $original_id )->get_status() );
+		$this->assertTrue( Pos_Uuid::is_uuid( $restored_uuid ) );
+		$this->assertNotSame( $uuid, $restored_uuid );
+		$this->assertSame( $uuid, (string) wc_get_order( $copy->get_id() )->get_meta( Pos_Uuid::META_KEY ) );
+	}
+
+	/**
 	 * A trashed HPOS order retaining the UUID is not a live owner.
 	 */
 	public function test_get_order_ids_by_uuid_ignores_trashed_hpos_order_when_live_owner_exists(): void {

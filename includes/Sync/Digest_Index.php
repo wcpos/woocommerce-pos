@@ -249,8 +249,7 @@ final class Digest_Index {
 			. ')),1,16),16,10) AS UNSIGNED) AS crc'
 			. " FROM {$wpdb->posts} p"
 			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
-			. ' WHERE p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND p.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+			. ' WHERE ' . $this->live_product_predicate_sql( 'p' )
 			. ( '' === $where_sql ? '' : ' AND ' . $where_sql )
 			. ' GROUP BY p.ID';
 	}
@@ -315,7 +314,7 @@ final class Digest_Index {
 				. ' COALESCE(o.customer_id,0),'
 				. " COALESCE(o.date_updated_gmt,''))),1,16),16,10) AS UNSIGNED) AS crc"
 				. " FROM {$orders_table} o"
-				. " WHERE o.type = 'shop_order' AND o.status NOT IN ('trash','auto-draft')"
+				. ' WHERE ' . $this->live_order_predicate_sql( 'o' )
 				. $condition;
 		}
 
@@ -329,7 +328,7 @@ final class Digest_Index {
 			. " COALESCE(GROUP_CONCAT(CONCAT(pm.meta_key,'=',COALESCE(pm.meta_value,'')) ORDER BY pm.meta_key ASC, pm.meta_id ASC SEPARATOR '|'),''))),1,16),16,10) AS UNSIGNED) AS crc"
 			. " FROM {$wpdb->posts} p"
 			. " LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN {$meta_keys_sql}"
-			. " WHERE p.post_type = 'shop_order' AND p.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL
+			. ' WHERE ' . $this->live_order_predicate_sql( 'p' )
 			. $condition
 			. ' GROUP BY p.ID';
 	}
@@ -478,8 +477,7 @@ final class Digest_Index {
 		global $wpdb;
 
 		return "EXISTS (SELECT 1 FROM {$wpdb->posts} lp WHERE lp.ID = {$id_expr}"
-			. ' AND lp.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND lp.post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . ')';
+			. ' AND ' . $this->live_product_predicate_sql( 'lp' ) . ')';
 	}
 
 	/**
@@ -503,10 +501,10 @@ final class Digest_Index {
 		if ( $this->orders_are_hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return "EXISTS (SELECT 1 FROM {$orders_table} lo WHERE lo.id = {$id_expr}"
-				. " AND lo.type = 'shop_order' AND lo.status NOT IN ('trash','auto-draft'))";
+				. ' AND ' . $this->live_order_predicate_sql( 'lo' ) . ')';
 		}
 		return "EXISTS (SELECT 1 FROM {$wpdb->posts} lp WHERE lp.ID = {$id_expr}"
-			. " AND lp.post_type = 'shop_order' AND lp.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL . ')';
+			. ' AND ' . $this->live_order_predicate_sql( 'lp' ) . ')';
 	}
 
 	/**
@@ -537,15 +535,12 @@ final class Digest_Index {
 		$publish      = 'products' === $collection && 'publish' === ( $filters['status'] ?? '' );
 		$object_types = self::OBJECT_TYPES_SQL;
 		$current_sql  = $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
-		$max_sql      = $this->row_digest_select_sql();
 		if ( 'customers' === $collection ) {
 			$object_types = "('customer')";
 			$current_sql  = $this->customer_digest_select_sql( 'u.ID >= %d AND u.ID < %d' );
-			$max_sql      = $this->customer_digest_select_sql();
 		} elseif ( 'orders' === $collection ) {
 			$object_types = "('order')";
 			$current_sql  = $this->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
-			$max_sql      = $this->order_digest_select_sql();
 		}
 		$current_scope = $publish ? $this->product_servable_predicate_sql( 't.id', true ) : array(
 			'sql' => '',
@@ -555,8 +550,8 @@ final class Digest_Index {
 			'sql' => '',
 			'args' => array(),
 		);
-		$current_join  = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = t.id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
-		$stored_join   = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = d.object_id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
+		$current_join  = $publish ? $this->servable_product_join_sql( 't.id' ) : '';
+		$stored_join   = $publish ? $this->servable_product_join_sql( 'd.object_id' ) : '';
 
 		// Current side: one SQL pass — per-row canonical digests aggregated
 		// per bucket inside the DB engine. Raw rows are digested for
@@ -622,25 +617,16 @@ final class Digest_Index {
 			);
 		}
 
-		$max_query =
-			'SELECT GREATEST('
-			. "COALESCE((SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_type IN " . self::PRODUCT_POST_TYPES_SQL
-			. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . '), 0),'
-			. ' COALESCE((SELECT MAX(object_id) FROM ' . $this->table_name()
-			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL . '), 0))';
-		$max_args = array();
-		if ( 'products' !== $collection || $publish ) {
-			$live_scope = $publish ? $this->product_servable_predicate_sql( 'live.id', true ) : array(
-				'sql' => '',
-				'args' => array(),
-			);
-			$live_join  = $publish ? " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = live.id LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'" : '';
-			$max_query  = 'SELECT GREATEST(COALESCE((SELECT MAX(live.id) FROM (' . $max_sql . ') live' . $live_join . ( '' === $live_scope['sql'] ? '' : ' WHERE ' . $live_scope['sql'] ) . '), 0),'
-				. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d'
-				. ' WHERE d.object_type IN ' . $object_types . '), 0))';
-			$max_args   = $live_scope['args'];
-		}
-		$max_id = (int) $wpdb->get_var( empty( $max_args ) ? $max_query : $wpdb->prepare( $max_query, ...$max_args ) );
+		// Completion id: the larger of the last LIVE id under the collection's own
+		// servable predicate and the last STORED id. The live side is MAX(id)
+		// straight off the base table — wrapping the un-windowed per-row digest
+		// SELECT as a derived table just to take its max digested the whole
+		// collection on every scan page (0.4–3 s on real stores; #1805, ADR 0038).
+		$live_max  = $this->live_max_id_sql( $collection, $publish );
+		$max_query = 'SELECT GREATEST(COALESCE((' . $live_max['sql'] . '), 0),'
+			. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d'
+			. ' WHERE d.object_type IN ' . $object_types . '), 0))';
+		$max_id    = (int) $wpdb->get_var( empty( $live_max['args'] ) ? $max_query : $wpdb->prepare( $max_query, ...$live_max['args'] ) );
 
 		return array(
 			'buckets' => $buckets,
@@ -839,9 +825,8 @@ final class Digest_Index {
 		global $wpdb;
 
 		return (bool) $wpdb->get_var(
-			'SELECT EXISTS (SELECT 1 FROM ' . $wpdb->posts
-			. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-			. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL . ' LIMIT 1)'
+			'SELECT EXISTS (SELECT 1 FROM ' . $wpdb->posts . ' p'
+			. ' WHERE ' . $this->live_product_predicate_sql( 'p' ) . ' LIMIT 1)'
 			. ' AND NOT EXISTS (SELECT 1 FROM ' . $this->table_name()
 			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL . ' LIMIT 1)'
 		);
@@ -855,6 +840,98 @@ final class Digest_Index {
 		return "(({$post_alias}.post_type = 'product' AND {$post_alias}.post_status = 'publish')"
 			. " OR ({$post_alias}.post_type = 'product_variation' AND {$parent_alias}.post_type = 'product'"
 			. " AND {$parent_alias}.post_status = 'publish'))";
+	}
+
+	/**
+	 * A LIVE product-space row over a `wp_posts` alias: a product or variation that
+	 * is not trashed/auto-draft. ONE spelling for the digest SELECT, the live-row
+	 * probes, the rebuild guard and the completion id — the scan is only sound
+	 * while every side agrees on what "live" means.
+	 */
+	private function live_product_predicate_sql( string $alias ): string {
+		return "{$alias}.post_type IN " . self::PRODUCT_POST_TYPES_SQL
+			. " AND {$alias}.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
+	}
+
+	/**
+	 * A LIVE order over the active order store's alias — `wc_orders` under HPOS,
+	 * `wp_posts` under legacy CPT — with the same one-spelling rule as
+	 * {@see live_product_predicate_sql}.
+	 */
+	private function live_order_predicate_sql( string $alias ): string {
+		if ( $this->orders_are_hpos() ) {
+			return "{$alias}.type = 'shop_order' AND {$alias}.status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
+		}
+
+		return "{$alias}.post_type = 'shop_order' AND {$alias}.post_status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
+	}
+
+	/**
+	 * The joins {@see product_servable_predicate_sql} reads through: the post row
+	 * behind `$id_expr` as `catalog_post`, and its parent as `parent_product` when
+	 * it is a variation. One spelling for every side of the scan.
+	 */
+	private function servable_product_join_sql( string $id_expr ): string {
+		global $wpdb;
+
+		return " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = {$id_expr}" . $this->parent_product_join_sql();
+	}
+
+	/**
+	 * `catalog_post`'s parent as `parent_product` when it is a variation (NULL otherwise).
+	 */
+	private function parent_product_join_sql(): string {
+		global $wpdb;
+
+		return " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent AND catalog_post.post_type = 'product_variation'";
+	}
+
+	/**
+	 * `MAX(id)` of a collection's LIVE rows under the same predicate its digest
+	 * SELECT uses — off the base table, never through a digested row (#1805).
+	 *
+	 * Customers are every `wp_users` row (#1379), so this is the primary key's end.
+	 * Orders and products carry a type/status predicate, so this is one index pass
+	 * over the live rows of that type — the honest floor, since no index ends on
+	 * the id under a status filter. Under the published product scope the servable
+	 * predicate (published, or a variation of a published parent, and not POS-hidden)
+	 * applies to the post row itself, exactly as the windowed sides apply it.
+	 *
+	 * @return array{sql: string, args: array<int, int>}
+	 */
+	private function live_max_id_sql( string $collection, bool $publish ): array {
+		global $wpdb;
+		if ( 'customers' === $collection ) {
+			return array(
+				'sql' => "SELECT MAX(u.ID) FROM {$wpdb->users} u",
+				'args' => array(),
+			);
+		}
+		if ( 'orders' === $collection ) {
+			if ( $this->orders_are_hpos() ) {
+				$orders_table = $wpdb->prefix . 'wc_orders';
+				return array(
+					'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
+					'args' => array(),
+				);
+			}
+			return array(
+				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' ),
+				'args' => array(),
+			);
+		}
+		if ( ! $publish ) {
+			return array(
+				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_product_predicate_sql( 'p' ),
+				'args' => array(),
+			);
+		}
+		$scope = $this->product_servable_predicate_sql( 'catalog_post.ID', true );
+		return array(
+			'sql' => "SELECT MAX(catalog_post.ID) FROM {$wpdb->posts} catalog_post" . $this->parent_product_join_sql()
+				. ' WHERE ' . $scope['sql'],
+			'args' => $scope['args'],
+		);
 	}
 
 	private function product_servable_predicate_sql( string $id_expr, bool $publish ): array {
