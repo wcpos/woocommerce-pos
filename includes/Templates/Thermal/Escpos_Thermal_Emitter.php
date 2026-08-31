@@ -18,8 +18,8 @@
  *    across the paper width instead of the CP437 box-drawing byte 0xCD. This
  *    keeps the output codepage-independent so it renders correctly regardless of
  *    the printer's active character table.
- *  - Images (`<image>`) are skipped entirely. Server-side rasterization is out
- *    of scope, so the emitter writes nothing for image nodes.
+ *  - Images (`<image>`) are thresholded to 1-bit dots by Thermal_Bitmap and sent
+ *    as a `GS v 0` raster bit image.
  *  - CP932 / Japanese kanji-mode byte sequences are out of scope; text is
  *    emitted as plain UTF-8.
  *
@@ -273,7 +273,7 @@ class Escpos_Thermal_Emitter {
 				$this->emit_qrcode( $node );
 				break;
 			case 'image':
-				// Skipped: server-side rasterization is out of scope.
+				$this->emit_image( $node );
 				break;
 			case 'cut':
 				$this->emit_cut( $node );
@@ -531,12 +531,56 @@ class Escpos_Thermal_Emitter {
 
 		$this->raw( array( 0x1d, 0x68, $height ) ); // GS h — barcode height.
 		$this->raw( array( 0x1d, 0x77, 0x02 ) );    // GS w — module width.
-		$this->raw( array( 0x1d, 0x48, 0x00 ) );    // GS H — HRI off.
+		// GS H 2 — HRI below the bars, matching the preview, the PDF and the
+		// raster lane. With HRI off the merchant designs against a receipt that
+		// carries the order number and the printer hands over one that does not.
+		$this->raw( array( 0x1d, 0x48, 0x02 ) );
 
 		$data = Barcode_Symbology::escpos_payload( $type, $value );
 		// GS k m n d1..dn — function B, length-prefixed.
 		$this->raw( array( 0x1d, 0x6b, Barcode_Symbology::escpos_id( $type ), \strlen( $data ) ) );
 		$this->raw_string( $data );
+	}
+
+	/**
+	 * Print a template `<image>` (in practice, the store logo).
+	 *
+	 * `GS v 0 m xL xH yL yH d1..dk` — the raster bit image, whose data layout is
+	 * exactly what Thermal_Bitmap produces: row-major, MSB first, a set bit being
+	 * a black dot. xL/xH count BYTES per row, not dots, which is why the bitmap
+	 * pads its width to a whole byte. The printer's current `ESC a` alignment
+	 * applies, so nothing extra is needed to centre a logo inside `<align>`.
+	 *
+	 * A src that resolves to nothing (a remote URL, a missing file) prints
+	 * nothing rather than a stray line feed.
+	 *
+	 * @param array $node The image AST node.
+	 *
+	 * @return void
+	 */
+	private function emit_image( array $node ): void {
+		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->columns ) );
+		if ( null === $bitmap ) {
+			return;
+		}
+
+		$bytes_per_row = $bitmap->bytes_per_row();
+		$height        = $bitmap->height();
+
+		$this->raw(
+			array(
+				0x1d,
+				0x76,
+				0x30,
+				0x00,
+				$bytes_per_row & 0xff,
+				( $bytes_per_row >> 8 ) & 0xff,
+				$height & 0xff,
+				( $height >> 8 ) & 0xff,
+			)
+		);
+		$this->raw_string( $bitmap->raster() );
+		$this->raw( array( 0x0a ) );
 	}
 
 	/**

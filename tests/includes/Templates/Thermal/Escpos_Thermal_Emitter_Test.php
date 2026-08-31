@@ -588,11 +588,13 @@ PHP;
 	}
 
 	/**
-	 * Images are skipped and emit no raster command.
+	 * An unresolvable image src emits no raster command, and the receipt prints.
+	 *
+	 * A logo that cannot be read is worth losing; the receipt around it is not.
 	 *
 	 * @return void
 	 */
-	public function test_image_is_skipped(): void {
+	public function test_unresolvable_image_src_emits_no_raster_command(): void {
 		// Arrange.
 		$bytes = $this->render(
 			'<receipt paper-width="48"><text>Before</text><image src="x" width="64"/><text>After</text></receipt>'
@@ -605,6 +607,61 @@ PHP;
 		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x76, 0x30 ) ) );
 		$this->assertStringContainsString( 'Before', $printable );
 		$this->assertStringContainsString( 'After', $printable );
+	}
+
+	/**
+	 * A resolvable image is emitted as a GS v 0 raster bit image.
+	 *
+	 * The header counts BYTES per row, not dots — 16 dots wide is xL = 2 — which
+	 * is the mistake that turns a logo into eight rolls of noise.
+	 *
+	 * @return void
+	 */
+	public function test_image_is_emitted_as_a_raster_bit_image(): void {
+		// Arrange. A 16x8 solid black logo: 2 bytes per row, 8 rows.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Act.
+		$header = array( 0x1d, 0x76, 0x30, 0x00, 0x02, 0x00, 0x08, 0x00 );
+
+		// Assert.
+		$this->assertTrue( $this->includes_sequence( $bytes, $header ) );
+		$this->assertStringContainsString(
+			"\x1d\x76\x30\x00\x02\x00\x08\x00" . str_repeat( "\xff", 16 ) . "\x0a",
+			$bytes
+		);
+	}
+
+	/**
+	 * A solid black PNG as a data URI.
+	 *
+	 * @param int $width  Width in pixels.
+	 * @param int $height Height in pixels.
+	 *
+	 * @return string The data URI.
+	 */
+	private function black_png_data_uri( int $width, int $height ): string {
+		$image = imagecreatetruecolor( $width, $height );
+		imagefilledrectangle( $image, 0, 0, $width - 1, $height - 1, imagecolorallocate( $image, 0, 0, 0 ) );
+		ob_start();
+		imagepng( $image );
+
+		return 'data:image/png;base64,' . base64_encode( (string) ob_get_clean() );
+	}
+
+	/**
+	 * A barcode carries its value under the bars.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_prints_human_readable_characters_below(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><barcode type="code128">55766</barcode></receipt>' );
+
+		// Assert. GS H 2 — HRI below the bars.
+		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1d, 0x48, 0x02 ) ) );
 	}
 
 	/**
