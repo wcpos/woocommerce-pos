@@ -321,7 +321,12 @@ class Starprnt_Thermal_Emitter {
 		}
 
 		$this->raw_string( $text );
-		$this->line_open = true;
+
+		// The parser preserves a text node verbatim, newlines included, so this
+		// may have ended the line itself — `<receipt>Total\n<image/></receipt>`
+		// leaves the printer at column zero. Reading the state off the bytes just
+		// written keeps close_open_line() from spending a second line feed there.
+		$this->line_open = "\n" !== substr( $text, -1 );
 	}
 
 	/**

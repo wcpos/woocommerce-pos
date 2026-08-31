@@ -718,6 +718,26 @@ PHP;
 	}
 
 	/**
+	 * Raw text that already ended its line does not get a second line feed.
+	 *
+	 * The parser preserves a text node verbatim, so `Total\n` immediately before
+	 * an image leaves the printer at column zero already. Closing the line again
+	 * would open a blank one the preview does not have.
+	 *
+	 * @return void
+	 */
+	public function test_image_after_newline_terminated_text_adds_no_blank_line(): void {
+		// Arrange / Act. The text node ends exactly at the newline, no indent.
+		$bytes = $this->render(
+			"<receipt paper-width=\"48\">Total\n<image src=\"" . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert. One line feed after 'Total', not two.
+		$this->assertStringContainsString( "Total\x0a\x1b\x61\x01", $bytes );
+		$this->assertStringNotContainsString( "Total\x0a\x0a", $bytes );
+	}
+
+	/**
 	 * A QR code after unterminated text starts on a fresh line.
 	 *
 	 * @return void
