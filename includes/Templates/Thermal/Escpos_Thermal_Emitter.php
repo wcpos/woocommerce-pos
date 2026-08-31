@@ -551,6 +551,10 @@ class Escpos_Thermal_Emitter {
 	 * pads its width to a whole byte. The printer's current `ESC a` alignment
 	 * applies, so nothing extra is needed to centre a logo inside `<align>`.
 	 *
+	 * No trailing line feed: `GS v 0` leaves the printer "at the beginning of the
+	 * line" (ESC/POS Command Reference), so one here would open a blank line the
+	 * preview does not have.
+	 *
 	 * A src that resolves to nothing (a remote URL, a missing file) prints
 	 * nothing rather than a stray line feed.
 	 *
@@ -580,7 +584,6 @@ class Escpos_Thermal_Emitter {
 			)
 		);
 		$this->raw_string( $bitmap->raster() );
-		$this->raw( array( 0x0a ) );
 	}
 
 	/**

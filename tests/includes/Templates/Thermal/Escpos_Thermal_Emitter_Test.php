@@ -629,6 +629,11 @@ PHP;
 		// Assert.
 		$this->assertTrue( $this->includes_sequence( $bytes, $header ) );
 		$this->assertStringContainsString(
+			"\x1d\x76\x30\x00\x02\x00\x08\x00" . str_repeat( "\xff", 16 ),
+			$bytes
+		);
+		// GS v 0 already returns to the start of the next line, so no feed follows.
+		$this->assertStringNotContainsString(
 			"\x1d\x76\x30\x00\x02\x00\x08\x00" . str_repeat( "\xff", 16 ) . "\x0a",
 			$bytes
 		);
