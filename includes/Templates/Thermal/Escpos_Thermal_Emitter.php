@@ -109,6 +109,19 @@ class Escpos_Thermal_Emitter {
 	private $active_scaled_spacing = 0;
 
 	/**
+	 * Whether unterminated text is sitting in the printer's line buffer.
+	 *
+	 * `GS v 0`, `GS k` and `GS ( k` are only executed at the beginning of a line
+	 * in standard mode; issued mid-line the printer discards them and reports
+	 * nothing. Bare text in a template (`<receipt>Total<image/></receipt>`) parses
+	 * to a `raw-text` node, which prints without a terminator, so the emitter has
+	 * to know whether a line is open before it sends one of those commands.
+	 *
+	 * @var bool
+	 */
+	private $line_open = false;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $options Render options.
@@ -133,6 +146,7 @@ class Escpos_Thermal_Emitter {
 		$this->width                 = 1;
 		$this->height                = 1;
 		$this->active_scaled_spacing = 0;
+		$this->line_open             = false;
 
 		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
 
@@ -298,7 +312,24 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_inline_text( string $value ): void {
-		$this->raw_string( Thermal_Text_Layout::normalize_text( $value ) );
+		$text = Thermal_Text_Layout::normalize_text( $value );
+		if ( '' === $text ) {
+			return;
+		}
+
+		$this->raw_string( $text );
+		$this->line_open = true;
+	}
+
+	/**
+	 * Close an open line so a beginning-of-line command can execute.
+	 *
+	 * @return void
+	 */
+	private function close_open_line(): void {
+		if ( $this->line_open ) {
+			$this->newline();
+		}
 	}
 
 	/**
@@ -529,6 +560,9 @@ class Escpos_Thermal_Emitter {
 			return;
 		}
 
+		// GS k only executes at the beginning of a line in standard mode.
+		$this->close_open_line();
+
 		$this->raw( array( 0x1d, 0x68, $height ) ); // GS h — barcode height.
 		$this->raw( array( 0x1d, 0x77, 0x02 ) );    // GS w — module width.
 		// GS H 2 — HRI below the bars, matching the preview, the PDF and the
@@ -548,8 +582,14 @@ class Escpos_Thermal_Emitter {
 	 * `GS v 0 m xL xH yL yH d1..dk` — the raster bit image, whose data layout is
 	 * exactly what Thermal_Bitmap produces: row-major, MSB first, a set bit being
 	 * a black dot. xL/xH count BYTES per row, not dots, which is why the bitmap
-	 * pads its width to a whole byte. The printer's current `ESC a` alignment
-	 * applies, so nothing extra is needed to centre a logo inside `<align>`.
+	 * pads its width to a whole byte.
+	 *
+	 * The image is centred unconditionally, ignoring any enclosing `<align>`.
+	 * That is the contract the other three renderers already keep — the preview
+	 * (thermal-renderer.ts), the PDF (Html_Thermal_Emitter::render_image()) and
+	 * the raster lane (Raster_Thermal_Emitter::draw_image()) all hard-centre an
+	 * `<image>` — and inheriting the `ESC a` state instead would left-align the
+	 * bare `<image>` the template editor inserts, which all three show centred.
 	 *
 	 * No trailing line feed: `GS v 0` leaves the printer "at the beginning of the
 	 * line" (ESC/POS Command Reference), so one here would open a blank line the
@@ -568,9 +608,13 @@ class Escpos_Thermal_Emitter {
 			return;
 		}
 
+		// GS v 0 only executes at the beginning of a line in standard mode.
+		$this->close_open_line();
+
 		$bytes_per_row = $bitmap->bytes_per_row();
 		$height        = $bitmap->height();
 
+		$this->raw( array( 0x1b, 0x61, $this->align_byte( 'center' ) ) );
 		$this->raw(
 			array(
 				0x1d,
@@ -584,6 +628,7 @@ class Escpos_Thermal_Emitter {
 			)
 		);
 		$this->raw_string( $bitmap->raster() );
+		$this->raw( array( 0x1b, 0x61, $this->align_byte( $this->align ) ) );
 	}
 
 	/**
@@ -637,6 +682,9 @@ class Escpos_Thermal_Emitter {
 		$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
 		$size  = max( Thermal_Bounds::QRCODE_SIZE_MIN, min( Thermal_Bounds::QRCODE_SIZE_MAX, $size ) );
 
+		// GS ( k only executes at the beginning of a line in standard mode.
+		$this->close_open_line();
+
 		// Select model 2.
 		$this->raw( array( 0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00 ) );
 		// Set module size.
@@ -685,6 +733,7 @@ class Escpos_Thermal_Emitter {
 		for ( $index = 0; $index < $lines; $index++ ) {
 			$this->raw( array( 0x0a ) );
 		}
+		$this->line_open = false;
 	}
 
 	/**
@@ -694,6 +743,7 @@ class Escpos_Thermal_Emitter {
 	 */
 	private function newline(): void {
 		$this->raw( array( 0x0a ) );
+		$this->line_open = false;
 		if ( $this->active_scaled_spacing > 0 ) {
 			$this->raw( array( 0x1b, 0x32 ) );
 			$this->active_scaled_spacing = 0;

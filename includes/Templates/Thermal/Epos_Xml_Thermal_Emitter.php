@@ -393,6 +393,14 @@ class Epos_Xml_Thermal_Emitter {
 	 * resolves the src without an outbound request, which matters because this
 	 * runs inside the printer's job fetch.
 	 *
+	 * The image is centred unconditionally, ignoring any enclosing `<align>`.
+	 * That is the contract the other three renderers already keep — the preview
+	 * (thermal-renderer.ts), the PDF (Html_Thermal_Emitter::render_image()) and
+	 * the raster lane (Raster_Thermal_Emitter::draw_image()) all hard-centre an
+	 * `<image>` — and following the wrapper here instead would left-align the
+	 * bare `<image>` that the template editor inserts, which every one of those
+	 * three shows centred.
+	 *
 	 * A src that resolves to nothing (a remote URL, a missing file) emits
 	 * nothing: a receipt without its logo still prints, where a broken `<image>`
 	 * element risks the printer rejecting the whole job.
@@ -407,13 +415,18 @@ class Epos_Xml_Thermal_Emitter {
 			return;
 		}
 
+		// align is a documented <image> attribute, not borrowed from <text>:
+		// ePOS-Print XML User's Manual, chapter 4, lists left/center/right on this
+		// element and defaults it to "left".
 		$this->buffer .= '<image width="' . $bitmap->width() . '" height="' . $bitmap->height() . '"'
-			. ' align="' . $this->escape( $this->align ) . '" color="color_1" mode="mono">'
+			. ' align="center" color="color_1" mode="mono">'
 			. base64_encode( $bitmap->raster() )
 			. '</image>';
 
-		// <image align> moves the printer's alignment the same way <text align>
-		// does, so the tracked state has to be invalidated alongside it.
+		// The manual's note on <text align> — "the align setting specified in this
+		// element is also applied to <image>, <logo>, <barcode> and <symbol>" —
+		// runs both ways: this <image> has moved the printer's persistent
+		// alignment, so the tracked state can no longer be trusted.
 		$this->printer['align'] = null;
 	}
 

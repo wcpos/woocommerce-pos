@@ -354,6 +354,49 @@ PHP;
 	}
 
 	/**
+	 * A bare image is centered, matching the preview, the PDF and the raster lane.
+	 *
+	 * All three of those hard-center an `<image>` regardless of the enclosing
+	 * `<align>`, so this lane sets center itself and restores afterwards.
+	 */
+	public function test_emit_image_is_centered_without_an_align_wrapper(): void {
+		// Arrange / Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert. ESC GS a 1 precedes the raster block, ESC GS a 0 restores after.
+		$this->assertStringContainsString( "\x1b\x1d\x61\x01\x1b\x30\x1b\x58", $bytes );
+		$this->assertStringContainsString( "\x1b\x7a\x01\x1b\x1d\x61\x00", $bytes );
+	}
+
+	/**
+	 * An image after unterminated text starts on a fresh line.
+	 */
+	public function test_emit_image_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48">Total<image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert.
+		$this->assertStringContainsString( 'Total' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Total' . "\x1b\x1d\x61", $bytes );
+	}
+
+	/**
+	 * A barcode after unterminated text starts on a fresh line.
+	 */
+	public function test_emit_barcode_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Order<barcode type="code128">55766</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Order' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Order' . "\x1b\x62", $bytes );
+	}
+
+	/**
 	 * It splits an image taller than 24 dots into consecutive bands.
 	 */
 	public function test_emit_image_splits_into_twenty_four_dot_bands(): void {

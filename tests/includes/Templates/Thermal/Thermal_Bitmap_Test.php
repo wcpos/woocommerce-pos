@@ -154,6 +154,49 @@ class Thermal_Bitmap_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A very tall image is scaled down to fit rather than dropped.
+	 *
+	 * The rendered height has to stay inside the row count every lane's raster
+	 * command can express; scaling preserves the aspect ratio, where rejecting
+	 * would lose the logo entirely.
+	 *
+	 * @return void
+	 */
+	public function test_from_bytes_scales_an_over_tall_image_down_to_fit(): void {
+		// Arrange. 100x1000 asked for at full 576-dot width would render 5760 tall.
+		$png = $this->solid_png( 100, 1000, 0, 0, 0 );
+
+		// Act.
+		$bitmap = Thermal_Bitmap::from_bytes( $png, 576, 576 );
+
+		// Assert.
+		$this->assertNotNull( $bitmap );
+		$this->assertSame( 2047, $bitmap->height() );
+		// Aspect ratio survives: 2047/10, padded up to a whole byte.
+		$this->assertSame( 208, $bitmap->width() );
+	}
+
+	/**
+	 * An image whose header reports too many pixels is skipped without decoding.
+	 *
+	 * imagecreatefromstring() decompresses to ~4 bytes per pixel, and this runs
+	 * inside the printer's job fetch where an out-of-memory means no receipt.
+	 *
+	 * @return void
+	 */
+	public function test_from_bytes_rejects_an_oversized_source_before_decoding(): void {
+		// Arrange. A PNG header claiming 8000x8000 (64 MP) over the 16 MP budget.
+		// Only the IHDR is read, so the truncated body never has to be valid.
+		$ihdr = "\x89PNG\r\n\x1a\n" . pack( 'N', 13 ) . 'IHDR'
+			. pack( 'NN', 8000, 8000 ) . "\x08\x02\x00\x00\x00";
+		$ihdr .= pack( 'N', crc32( substr( $ihdr, 12 ) ) );
+
+		// Act / Assert.
+		$this->assertSame( array( 8000, 8000 ), \array_slice( (array) getimagesizefromstring( $ihdr ), 0, 2 ) );
+		$this->assertNull( Thermal_Bitmap::from_bytes( $ihdr, 576, 576 ) );
+	}
+
+	/**
 	 * Bytes that are not a decodable image yield no bitmap.
 	 *
 	 * @return void

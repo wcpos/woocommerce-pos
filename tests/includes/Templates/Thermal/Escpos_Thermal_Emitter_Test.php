@@ -640,6 +640,62 @@ PHP;
 	}
 
 	/**
+	 * A bare image is centered, matching the preview, the PDF and the raster lane.
+	 *
+	 * All three of those hard-center an `<image>` regardless of the enclosing
+	 * `<align>`. Inheriting the ESC a state instead would left-align the bare
+	 * `<image>` the template editor inserts.
+	 *
+	 * @return void
+	 */
+	public function test_image_is_centered_without_an_align_wrapper(): void {
+		// Arrange / Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert. ESC a 1 immediately precedes the raster, ESC a 0 restores after.
+		$this->assertStringContainsString( "\x1b\x61\x01\x1d\x76\x30", $bytes );
+		$this->assertStringContainsString( str_repeat( "\xff", 16 ) . "\x1b\x61\x00", $bytes );
+	}
+
+	/**
+	 * An image after unterminated text starts on a fresh line.
+	 *
+	 * `GS v 0` is only executed at the beginning of a line in standard mode, so a
+	 * raster issued while a `raw-text` node has left the line open is discarded
+	 * by the printer with no error — the logo would silently vanish.
+	 *
+	 * @return void
+	 */
+	public function test_image_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48">Total<image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert. The inline text is terminated before the alignment and raster.
+		$this->assertStringContainsString( 'Total' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Total' . "\x1b\x61", $bytes );
+	}
+
+	/**
+	 * A barcode after unterminated text starts on a fresh line.
+	 *
+	 * `GS k` carries the same beginning-of-line requirement as `GS v 0`.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Order<barcode type="code128">55766</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Order' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Order' . "\x1d\x68", $bytes );
+	}
+
+	/**
 	 * A solid black PNG as a data URI.
 	 *
 	 * @param int $width  Width in pixels.

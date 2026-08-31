@@ -38,13 +38,28 @@ final class Thermal_Bitmap {
 	private const BLACK_THRESHOLD = 128;
 
 	/**
-	 * Hard ceiling on the source height, in dots.
+	 * Hard ceiling on the rendered height, in dots.
 	 *
-	 * A tall image scaled to full paper width would allocate its own height in
-	 * dots; 4000 is about half a metre of paper, far past any real logo, and
-	 * keeps a hostile template from turning one `<image>` into a huge job.
+	 * 2047 is the most restrictive vertical limit documented across the raster
+	 * commands these dots feed — ESC/POS `GS v 0` counts rows in (yL + yH x 256)
+	 * and Epson's TM reference caps that range on several models. An image past
+	 * it is scaled down to fit rather than rejected: 2047 dots is already ~25 cm
+	 * of paper, so anything taller is a template mistake, and a smaller logo
+	 * beats a command the printer silently ignores.
 	 */
-	private const MAX_HEIGHT = 4000;
+	private const MAX_HEIGHT = 2047;
+
+	/**
+	 * Ceiling on the source image, in pixels, before it is decoded.
+	 *
+	 * Decoding decompresses the whole image into ~4 bytes per pixel, so a
+	 * merchant who sets a 40-megapixel photo as the store logo would
+	 * spend ~160 MB to produce a 576-dot bitmap — inside the printer's job fetch,
+	 * where running out of memory means no receipt at all. 16 MP costs ~64 MB and
+	 * is far past any real logo, so the dimensions are read from the header
+	 * first and anything larger is skipped without decoding.
+	 */
+	private const MAX_SOURCE_PIXELS = 16000000;
 
 	/**
 	 * Width in dots. Always a multiple of 8.
@@ -117,6 +132,16 @@ final class Thermal_Bitmap {
 			return null;
 		}
 
+		// Read the dimensions from the header before decoding. getimagesizefromstring()
+		// parses only the header, so an oversized source costs nothing to reject,
+		// where imagecreatefromstring() would have to decompress it first.
+		$size = \function_exists( 'getimagesizefromstring' ) ? @getimagesizefromstring( $bytes ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Non-images return false rather than warning.
+		if ( \is_array( $size ) && isset( $size[0], $size[1] ) ) {
+			if ( $size[0] < 1 || $size[1] < 1 || ( $size[0] * $size[1] ) > self::MAX_SOURCE_PIXELS ) {
+				return null;
+			}
+		}
+
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Invalid image data returns false rather than warning.
 		$source = @imagecreatefromstring( $bytes );
 		if ( false === $source ) {
@@ -133,14 +158,11 @@ final class Thermal_Bitmap {
 		$target   = max( 1, $target );
 		$height   = max( 1, (int) round( $natural_height * ( $target / $natural_width ) ) );
 
+		// A very tall image is scaled down to fit rather than dropped, so the
+		// aspect ratio survives and the raster stays inside every lane's row count.
 		if ( $height > self::MAX_HEIGHT ) {
-			// unset() rather than imagedestroy(): the call has been a no-op since
-			// PHP 8.0 and is deprecated as of 8.5, while dropping the only
-			// reference frees the handle on 8.x and on 7.4 alike. See the same
-			// note in Raster_Thermal_Emitter.
-			unset( $source );
-
-			return null;
+			$target = max( 1, (int) floor( $target * ( self::MAX_HEIGHT / $height ) ) );
+			$height = self::MAX_HEIGHT;
 		}
 
 		// ePOS-Print wants the width in whole bytes ("set the image width to a

@@ -106,6 +106,19 @@ class Starprnt_Thermal_Emitter {
 	private $height = 1;
 
 	/**
+	 * Whether unterminated text is sitting in the printer's line buffer.
+	 *
+	 * Star's graphics and barcode commands, like their ESC/POS counterparts, are
+	 * line-oriented: `ESC X` starts a raster band and `ESC b` a barcode, and both
+	 * expect to begin at the start of a line. Bare text in a template
+	 * (`<receipt>Total<image/></receipt>`) parses to a `raw-text` node, which
+	 * prints without a terminator, so the emitter tracks whether a line is open.
+	 *
+	 * @var bool
+	 */
+	private $line_open = false;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $options Render options.
@@ -129,6 +142,7 @@ class Starprnt_Thermal_Emitter {
 		$this->invert    = false;
 		$this->width     = 1;
 		$this->height    = 1;
+		$this->line_open = false;
 
 		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
 
@@ -301,7 +315,24 @@ class Starprnt_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_inline_text( string $value ): void {
-		$this->raw_string( Thermal_Text_Layout::normalize_text( $value ) );
+		$text = Thermal_Text_Layout::normalize_text( $value );
+		if ( '' === $text ) {
+			return;
+		}
+
+		$this->raw_string( $text );
+		$this->line_open = true;
+	}
+
+	/**
+	 * Close an open line so a line-oriented command can start cleanly.
+	 *
+	 * @return void
+	 */
+	private function close_open_line(): void {
+		if ( $this->line_open ) {
+			$this->newline();
+		}
 	}
 
 	/**
@@ -536,6 +567,9 @@ class Starprnt_Thermal_Emitter {
 			return;
 		}
 
+		// ESC b starts a barcode block; close any open text line first.
+		$this->close_open_line();
+
 		$this->raw( array( 0x1b, 0x62, Barcode_Symbology::starprnt_id( $type ), 0x02, 0x02, $height ) );
 		$this->raw_string( Barcode_Symbology::starprnt_payload( $type, $value ) );
 		$this->raw( array( 0x1e ) );
@@ -553,6 +587,14 @@ class Starprnt_Thermal_Emitter {
 	 * duration so consecutive bands butt together instead of leaving white
 	 * stripes, and restored to the default (`ESC z 1`) afterwards.
 	 *
+	 * The image is centred unconditionally, ignoring any enclosing `<align>`.
+	 * That is the contract the other three renderers already keep — the preview
+	 * (thermal-renderer.ts), the PDF (Html_Thermal_Emitter::render_image()) and
+	 * the raster lane (Raster_Thermal_Emitter::draw_image()) all hard-centre an
+	 * `<image>` — and inheriting the wrapper's alignment instead would left-align
+	 * the bare `<image>` the template editor inserts, which all three show
+	 * centred.
+	 *
 	 * A src that resolves to nothing (a remote URL, a missing file) prints
 	 * nothing, and in particular does not disturb the line spacing.
 	 *
@@ -566,9 +608,13 @@ class Starprnt_Thermal_Emitter {
 			return;
 		}
 
+		// ESC X starts a raster band; close any open text line first.
+		$this->close_open_line();
+
 		$width  = $bitmap->width();
 		$height = $bitmap->height();
 
+		$this->raw( array( 0x1b, 0x1d, 0x61, $this->align_byte( 'center' ) ) );
 		$this->raw( array( 0x1b, 0x30 ) ); // ESC 0 — 24-dot line spacing.
 
 		for ( $top = 0; $top < $height; $top += 24 ) {
@@ -592,6 +638,7 @@ class Starprnt_Thermal_Emitter {
 		}
 
 		$this->raw( array( 0x1b, 0x7a, 0x01 ) ); // ESC z 1 — default line spacing.
+		$this->raw( array( 0x1b, 0x1d, 0x61, $this->align_byte( $this->align ) ) );
 	}
 
 	/**
@@ -694,6 +741,7 @@ class Starprnt_Thermal_Emitter {
 		for ( $index = 0; $index < $lines; $index++ ) {
 			$this->raw( array( 0x0a ) );
 		}
+		$this->line_open = false;
 	}
 
 	/**
@@ -703,6 +751,7 @@ class Starprnt_Thermal_Emitter {
 	 */
 	private function newline(): void {
 		$this->raw( array( 0x0a ) );
+		$this->line_open = false;
 	}
 
 	/**

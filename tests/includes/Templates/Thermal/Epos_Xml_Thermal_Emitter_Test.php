@@ -528,18 +528,38 @@ PHP;
 	}
 
 	/**
-	 * The image carries the enclosing alignment, and later text re-states its own.
+	 * An image is centred with no align wrapper, matching the other renderers.
 	 *
-	 * ePOS alignment is persistent printer state that <image align> moves, so a
-	 * cached "the printer is already left-aligned" would leave the next line
-	 * centred under the logo.
+	 * The preview, the PDF and the raster lane all hard-centre an `<image>`
+	 * regardless of the enclosing `<align>`, so this lane does too.
+	 *
+	 * @return void
+	 */
+	public function test_image_is_centered_without_an_align_wrapper(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( 'align="center"', $xml );
+	}
+
+	/**
+	 * The image moves printer alignment, so the cached text alignment is dropped.
+	 *
+	 * The manual's note on <text align> — "the align setting specified in this
+	 * element is also applied to <image>, <logo>, <barcode> and <symbol>" — runs
+	 * both ways. A cached "the printer is already left-aligned" would leave the
+	 * line after the logo centred under it.
 	 *
 	 * @return void
 	 */
 	public function test_image_alignment_invalidates_the_cached_text_alignment(): void {
 		// Arrange.
 		$markup = '<receipt paper-width="48">'
-			. '<align mode="center"><image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/></align>'
+			. '<image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/>'
 			. '<text>after</text>'
 			. '</receipt>';
 
@@ -547,7 +567,6 @@ PHP;
 		$xml = $this->render( $markup );
 
 		// Assert.
-		$this->assertStringContainsString( 'align="center"', $xml );
 		$this->assertStringContainsString( '<text align="left">after', $xml );
 	}
 
