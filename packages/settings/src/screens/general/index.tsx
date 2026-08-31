@@ -216,12 +216,12 @@ function General() {
 								syncConsent(choice);
 								mutate({ tracking_consent: choice });
 							}}
-							label={t('settings.allow_anonymous_usage_data')}
+							label={t('settings.allow_anonymous_usage_data_v2')}
 						/>
 					</Label>
 				</FormRow>
 				<p className="wcpos:text-sm wcpos:text-gray-500">
-					{t('settings.allow_anonymous_usage_data_tip')}{' '}
+					{t('settings.allow_anonymous_usage_data_tip_v2')}{' '}
 					<button
 						type="button"
 						onClick={() => setPrivacyInfoOpen(true)}
