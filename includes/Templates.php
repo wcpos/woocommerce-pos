@@ -42,6 +42,11 @@ class Templates {
 	const OFFLINE_CAPABLE_ENGINES = array( 'logicless', 'thermal' );
 
 	/**
+	 * File extensions a bundled gallery template's content file can use.
+	 */
+	const GALLERY_CONTENT_EXTENSIONS = array( 'html', 'php', 'xml' );
+
+	/**
 	 * Per-request cache of installed gallery template preview data profiles.
 	 *
 	 * @var array<string,string|null>
@@ -335,8 +340,8 @@ class Templates {
 		$preview_data    = null;
 		if ( \is_string( $gallery_key ) && '' !== $gallery_key ) {
 			if ( ! array_key_exists( $gallery_key, self::$gallery_preview_data_cache ) ) {
-				$gallery_template = self::get_gallery_template_by_key( $gallery_key );
-				self::$gallery_preview_data_cache[ $gallery_key ] = $gallery_template['preview_data'] ?? null;
+				$gallery_metadata = self::get_gallery_template_metadata( $gallery_key );
+				self::$gallery_preview_data_cache[ $gallery_key ] = $gallery_metadata['preview_data'] ?? null;
 			}
 
 			$preview_data = self::$gallery_preview_data_cache[ $gallery_key ];
@@ -1009,8 +1014,7 @@ class Templates {
 			return array();
 		}
 
-		$templates  = array();
-		$extensions = array( 'html', 'php', 'xml' );
+		$templates = array();
 
 		foreach ( Gallery_Registry::all() as $key => $metadata ) {
 			if ( $type && ( $metadata['type'] ?? '' ) !== $type ) {
@@ -1020,34 +1024,15 @@ class Templates {
 				continue;
 			}
 
-			$content_file = null;
-			foreach ( $extensions as $ext ) {
-				$candidate = $gallery_dir . $key . '.' . $ext;
-				if ( file_exists( $candidate ) ) {
-					$content_file = $candidate;
-					break;
-				}
-			}
+			$content_file = self::find_gallery_content_file( $key );
 
-			if ( ! $content_file ) {
+			if ( '' === $content_file ) {
 				continue;
 			}
 
-			$metadata['key']       = $key;
-			$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
-				? 'rtl'
-				: 'ltr';
-
-			$templates[] = array_merge(
-				$metadata,
-				array(
-					'content'         => file_get_contents( $content_file ),
-					'content_file'    => $content_file,
-					'is_premade'      => true,
-					'is_virtual'      => true,
-					'source'          => 'gallery',
-					'offline_capable' => in_array( $metadata['engine'] ?? 'logicless', self::OFFLINE_CAPABLE_ENGINES, true ),
-				)
+			$templates[] = self::build_gallery_template(
+				self::prepare_gallery_metadata( $key, $metadata ),
+				$content_file
 			);
 		}
 
@@ -1062,22 +1047,111 @@ class Templates {
 	}
 
 	/**
+	 * Locate the content file for a bundled gallery template key.
+	 *
+	 * Only stats the candidate paths for the given key — it never reads file
+	 * contents, and never touches the other bundled gallery templates.
+	 *
+	 * @param string $key Gallery template key (e.g. "standard-receipt").
+	 *
+	 * @return string Absolute path to the content file, or '' when none exists.
+	 */
+	private static function find_gallery_content_file( string $key ): string {
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+
+		foreach ( self::GALLERY_CONTENT_EXTENSIONS as $ext ) {
+			$candidate = $gallery_dir . $key . '.' . $ext;
+			if ( file_exists( $candidate ) ) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Normalize a raw registry entry into gallery template metadata.
+	 *
+	 * @param string              $key      Gallery template key.
+	 * @param array<string,mixed> $metadata Raw registry entry.
+	 *
+	 * @return array<string,mixed> Normalized metadata.
+	 */
+	private static function prepare_gallery_metadata( string $key, array $metadata ): array {
+		$metadata['key']       = $key;
+		$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
+			? 'rtl'
+			: 'ltr';
+
+		return $metadata;
+	}
+
+	/**
+	 * Build a full gallery template record by reading its content file.
+	 *
+	 * @param array<string,mixed> $metadata     Normalized metadata for the key.
+	 * @param string              $content_file Absolute path to the content file.
+	 *
+	 * @return array<string,mixed> Gallery template record.
+	 */
+	private static function build_gallery_template( array $metadata, string $content_file ): array {
+		return array_merge(
+			$metadata,
+			array(
+				'content'         => file_get_contents( $content_file ),
+				'content_file'    => $content_file,
+				'is_premade'      => true,
+				'is_virtual'      => true,
+				'source'          => 'gallery',
+				'offline_capable' => in_array( $metadata['engine'] ?? 'logicless', self::OFFLINE_CAPABLE_ENGINES, true ),
+			)
+		);
+	}
+
+	/**
+	 * Get a single gallery template's metadata without reading any template file.
+	 *
+	 * Metadata (title, description, engine, preview_data, ...) lives in
+	 * Gallery_Registry, so callers that only need metadata never pay for reading
+	 * the bundled template content — which is why get_template() uses this rather
+	 * than get_gallery_template_by_key().
+	 *
+	 * @param string $key Gallery template key (e.g. "standard-receipt").
+	 *
+	 * @return null|array Gallery template metadata, or null when the key is unknown
+	 *                    or has no bundled content file.
+	 */
+	public static function get_gallery_template_metadata( string $key ): ?array {
+		$registry = Gallery_Registry::all();
+
+		if ( ! isset( $registry[ $key ] ) ) {
+			return null;
+		}
+
+		if ( '' === self::find_gallery_content_file( $key ) ) {
+			return null;
+		}
+
+		return self::prepare_gallery_metadata( $key, $registry[ $key ] );
+	}
+
+	/**
 	 * Get a single gallery template by its key.
+	 *
+	 * Reads only the requested template's content file.
 	 *
 	 * @param string $key Gallery template key (e.g. "standard-receipt").
 	 *
 	 * @return null|array Gallery template data or null if not found.
 	 */
 	public static function get_gallery_template_by_key( string $key ): ?array {
-		$templates = self::get_gallery_templates();
+		$metadata = self::get_gallery_template_metadata( $key );
 
-		foreach ( $templates as $template ) {
-			if ( ( $template['key'] ?? '' ) === $key ) {
-				return $template;
-			}
+		if ( null === $metadata ) {
+			return null;
 		}
 
-		return null;
+		return self::build_gallery_template( $metadata, self::find_gallery_content_file( $key ) );
 	}
 
 	/**
