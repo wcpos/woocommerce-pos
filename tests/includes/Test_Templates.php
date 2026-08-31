@@ -14,6 +14,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates;
+use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WP_UnitTestCase;
 
@@ -1260,6 +1261,103 @@ class Test_Templates extends WP_UnitTestCase {
 	public function test_get_gallery_template_by_key_returns_null_for_invalid(): void {
 		$template = Templates::get_gallery_template_by_key( 'nonexistent-template' );
 		$this->assertNull( $template );
+	}
+
+	/**
+	 * Test gallery metadata lookup returns registry metadata without file contents.
+	 *
+	 * get_template() resolves preview_data through this lookup, so it must never
+	 * carry template content — reading content is what made the old path scan the
+	 * whole gallery directory.
+	 */
+	public function test_get_gallery_template_metadata_valid_key_returns_metadata_without_content(): void {
+		// Arrange.
+		$registry = Gallery_Registry::all();
+
+		// Act.
+		$metadata = Templates::get_gallery_template_metadata( 'standard-receipt' );
+
+		// Assert.
+		$this->assertIsArray( $metadata );
+		$this->assertSame( 'standard-receipt', $metadata['key'] );
+		$this->assertSame( $registry['standard-receipt']['preview_data'], $metadata['preview_data'] );
+		$this->assertArrayNotHasKey( 'content', $metadata );
+		$this->assertArrayNotHasKey( 'content_file', $metadata );
+	}
+
+	/**
+	 * Test gallery metadata lookup normalizes text direction.
+	 */
+	public function test_get_gallery_template_metadata_rtl_key_returns_rtl_direction(): void {
+		// Act.
+		$ltr = Templates::get_gallery_template_metadata( 'standard-receipt' );
+		$rtl = Templates::get_gallery_template_metadata( 'standard-receipt-rtl' );
+
+		// Assert.
+		$this->assertSame( 'ltr', $ltr['direction'] );
+		$this->assertSame( 'rtl', $rtl['direction'] );
+	}
+
+	/**
+	 * Test gallery metadata lookup returns null for an unknown key.
+	 */
+	public function test_get_gallery_template_metadata_unknown_key_returns_null(): void {
+		// Act.
+		$metadata = Templates::get_gallery_template_metadata( 'nonexistent-template' );
+
+		// Assert.
+		$this->assertNull( $metadata );
+	}
+
+	/**
+	 * Test every gallery key resolves the same preview data through get_template.
+	 *
+	 * Pins the behavioural contract across the metadata-only resolution path: an
+	 * installed gallery template still reports exactly the registry's preview_data.
+	 */
+	public function test_get_template_every_gallery_key_returns_registry_preview_data(): void {
+		foreach ( Gallery_Registry::all() as $key => $entry ) {
+			// Arrange.
+			$post_id = Templates::install_gallery_template( $key );
+			$this->assertIsInt( $post_id, $key . ' should install.' );
+
+			// Act.
+			$template = Templates::get_template( $post_id );
+
+			// Assert.
+			$this->assertSame( $key, $template['gallery_key'], $key . ' should record its gallery key.' );
+			$this->assertSame(
+				$entry['preview_data'],
+				$template['preview_data'],
+				$key . ' should expose the registry preview data profile.'
+			);
+
+			wp_delete_post( $post_id, true );
+		}
+	}
+
+	/**
+	 * Test gallery template lookup by key still returns the bundled content.
+	 *
+	 * get_gallery_template_by_key() now reads only the requested key's file; the
+	 * returned record must stay identical to the matching entry in the full list.
+	 */
+	public function test_get_gallery_template_by_key_matches_full_gallery_listing(): void {
+		// Arrange.
+		$listed = null;
+		foreach ( Templates::get_gallery_templates() as $candidate ) {
+			if ( 'thermal-simple-80mm' === $candidate['key'] ) {
+				$listed = $candidate;
+				break;
+			}
+		}
+
+		// Act.
+		$single = Templates::get_gallery_template_by_key( 'thermal-simple-80mm' );
+
+		// Assert.
+		$this->assertIsArray( $listed );
+		$this->assertSame( $listed, $single );
 	}
 
 	/**
