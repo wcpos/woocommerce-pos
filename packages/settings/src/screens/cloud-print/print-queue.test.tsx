@@ -35,7 +35,7 @@ function makeQueue(overrides: Partial<QueueResponse> = {}): QueueResponse {
 				order_id: 4291,
 				order_number: '4291',
 				order_edit_url: 'https://mystore.com/wp-admin/admin.php?page=wc-orders&id=4291',
-				template_id: 'receipt',
+				template_id: '75431',
 				content_type: 'application/vnd.star.starprnt',
 				created_gmt: created,
 			},
@@ -97,6 +97,13 @@ function routeQueue(getQueue: () => QueueResponse) {
 		if (opts.path.includes('/reprint')) {
 			return Promise.resolve({ id: 99 });
 		}
+		if (opts.path.includes('wcpos/v1/templates')) {
+			// The template-name map is built from the unfiltered list, so a
+			// draft still resolves; ids absent here fall back to the raw id.
+			return Promise.resolve([
+				{ id: 75431, title: 'Kitchen 80mm', status: 'draft', is_active: false, engine: 'thermal' },
+			]);
+		}
 		return Promise.resolve({});
 	});
 }
@@ -125,6 +132,10 @@ describe('PrintQueue', () => {
 		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('#4291');
 		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('Kitchen');
 		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('Waiting');
+		// Template name shown when resolved; raw id is the fallback (row 12).
+		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('Kitchen 80mm');
+		expect(screen.getByTestId('queue-row-11')).not.toHaveTextContent('75431');
+		expect(screen.getByTestId('queue-row-12')).toHaveTextContent('receipt');
 		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Failed');
 		expect(screen.getByTestId('queue-retry-13')).toBeInTheDocument();
 	});

@@ -20,6 +20,7 @@ import {
 	type ChipVariant,
 } from '@wcpos/ui';
 
+import { useReceiptTemplateNames } from '../../hooks/use-receipt-templates';
 import { t } from '../../translations';
 
 const QUEUE_ENDPOINT = 'wcpos/v1/print-jobs/queue';
@@ -132,6 +133,9 @@ function isStale(printer: QueueSummaryPrinter): boolean {
  */
 export function PrintQueue() {
 	const queryClient = useQueryClient();
+	// Mirrors printerNames below: display names resolve client-side from the
+	// already-cached templates query, so the queue rows stay id-only.
+	const templateNames = useReceiptTemplateNames();
 	const [printerFilter, setPrinterFilter] = React.useState('');
 	// Default view: everything, newest first. "Needs attention" hides the job
 	// that just fired, so the first question the queue gets asked — did my
@@ -483,7 +487,7 @@ export function PrintQueue() {
 												</TableCell>
 												<TableCell>{printerNames.get(job.printer_id) ?? job.printer_id}</TableCell>
 												<TableCell className="wcpos:text-gray-600">
-													{job.template_id || '—'}
+													{templateNames.get(job.template_id) ?? (job.template_id || '—')}
 												</TableCell>
 												<TableCell>
 													<Chip variant={meta.variant} shape="pill" size="sm">
