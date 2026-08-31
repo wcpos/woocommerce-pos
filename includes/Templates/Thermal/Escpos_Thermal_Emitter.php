@@ -550,6 +550,11 @@ class Escpos_Thermal_Emitter {
 			return;
 		}
 
+		// Before the validation branch, not after: GS k only executes at the
+		// beginning of a line, and the rescue below centres its text against the
+		// full paper width, so both outcomes need the line closed first.
+		$this->close_open_line();
+
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		$height = max( Thermal_Bounds::BARCODE_HEIGHT_MIN, min( Thermal_Bounds::BARCODE_HEIGHT_MAX, $height ) );
@@ -559,9 +564,6 @@ class Escpos_Thermal_Emitter {
 
 			return;
 		}
-
-		// GS k only executes at the beginning of a line in standard mode.
-		$this->close_open_line();
 
 		$this->raw( array( 0x1d, 0x68, $height ) ); // GS h — barcode height.
 		$this->raw( array( 0x1d, 0x77, 0x02 ) );    // GS w — module width.

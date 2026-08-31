@@ -397,6 +397,34 @@ PHP;
 	}
 
 	/**
+	 * The unencodable-barcode rescue starts its own centered line.
+	 *
+	 * The rescue centres text against the full paper width, so running it while
+	 * a raw-text node still holds the line open would append its padding to that
+	 * text instead of centring the value.
+	 */
+	public function test_emit_invalid_barcode_rescue_after_inline_text_starts_a_new_line(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Total<barcode type="ean13">invalid</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Total' . "\x0a", $bytes );
+		$this->assertStringContainsString( "\x0a" . str_repeat( ' ', 20 ) . 'invalid', $bytes );
+	}
+
+	/**
+	 * A QR code after unterminated text starts on a fresh line.
+	 */
+	public function test_emit_qrcode_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Scan<qrcode>https://x.test</qrcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Scan' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Scan' . "\x1b\x1d\x79", $bytes );
+	}
+
+	/**
 	 * It splits an image taller than 24 dots into consecutive bands.
 	 */
 	public function test_emit_image_splits_into_twenty_four_dot_bands(): void {

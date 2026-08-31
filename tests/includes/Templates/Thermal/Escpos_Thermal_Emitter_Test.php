@@ -696,6 +696,42 @@ PHP;
 	}
 
 	/**
+	 * The unencodable-barcode rescue starts its own centered line.
+	 *
+	 * The rescue centres text against the full paper width, so running it while
+	 * a raw-text node still holds the line open would append its padding to that
+	 * text and push the value off the edge instead of centring it.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_barcode_rescue_after_inline_text_starts_a_new_line(): void {
+		// Arrange / Act. 'invalid' is not encodable as EAN-13, so it falls back.
+		$bytes = $this->render( '<receipt paper-width="48">Total<barcode type="ean13">invalid</barcode></receipt>' );
+
+		// Act.
+		$printable = $this->decode_printable_ascii( $bytes );
+
+		// Assert. The rescue is padded from column zero, not appended to 'Total'.
+		$this->assertStringContainsString( 'Total' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Total ', $printable );
+		$this->assertStringContainsString( "\x0a" . str_repeat( ' ', 20 ) . 'invalid', $bytes );
+	}
+
+	/**
+	 * A QR code after unterminated text starts on a fresh line.
+	 *
+	 * @return void
+	 */
+	public function test_qrcode_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Scan<qrcode>https://x.test</qrcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Scan' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Scan' . "\x1d\x28", $bytes );
+	}
+
+	/**
 	 * A solid black PNG as a data URI.
 	 *
 	 * @param int $width  Width in pixels.

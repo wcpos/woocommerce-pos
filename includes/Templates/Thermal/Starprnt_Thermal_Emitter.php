@@ -554,6 +554,11 @@ class Starprnt_Thermal_Emitter {
 			return;
 		}
 
+		// Before the validation branch, not after: ESC b starts a barcode block,
+		// and the rescue below centres its text against the full paper width, so
+		// both outcomes need the line closed first.
+		$this->close_open_line();
+
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		// The 8-dot floor is Star's, not the markup's: Thermal_Bounds allows a
@@ -566,9 +571,6 @@ class Starprnt_Thermal_Emitter {
 
 			return;
 		}
-
-		// ESC b starts a barcode block; close any open text line first.
-		$this->close_open_line();
 
 		$this->raw( array( 0x1b, 0x62, Barcode_Symbology::starprnt_id( $type ), 0x02, 0x02, $height ) );
 		$this->raw_string( Barcode_Symbology::starprnt_payload( $type, $value ) );
@@ -693,6 +695,9 @@ class Starprnt_Thermal_Emitter {
 		// Star's QR module size tops out at 8, half the ESC/POS ceiling in
 		// Thermal_Bounds::QRCODE_SIZE_MAX. Device-specific, so it stays here.
 		$size  = max( Thermal_Bounds::QRCODE_SIZE_MIN, min( 8, $size ) );
+
+		// ESC GS y prints a QR block; close any open text line first.
+		$this->close_open_line();
 
 		// Select model 2.
 		$this->raw( array( 0x1b, 0x1d, 0x79, 0x53, 0x30, 0x02 ) );
