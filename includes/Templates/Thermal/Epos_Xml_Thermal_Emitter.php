@@ -17,10 +17,12 @@
  *    across the paper width (consistent with the ESC/POS emitter) rather than a
  *    box-drawing glyph, so output is codepage-independent.
  *  - Paper cuts (`<cut>`), both full and partial, map to `<cut type="feed"/>`.
- *  - Images (`<image>`) are skipped entirely; server-side rasterization is out
- *    of scope, so the emitter writes nothing for image nodes.
- *  - Text is emitted as plain UTF-8 (Epson handles UTF-8); no ASCII
- *    normalization is applied.
+ *  - Images (`<image>`) are thresholded to 1-bit dots by Thermal_Bitmap and sent
+ *    as base64 in an `<image>` element.
+ *  - Text is emitted as plain UTF-8 (Epson handles UTF-8), but still passes
+ *    through Thermal_Text_Layout::normalize_text(): the typographic spaces and
+ *    dashes it folds are not in any printer character table, and a printer that
+ *    cannot map a codepoint substitutes `?` on the paper.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -285,7 +287,7 @@ class Epos_Xml_Thermal_Emitter {
 				$this->emit_qrcode( $node );
 				break;
 			case 'image':
-				// Skipped: server-side rasterization is out of scope.
+				$this->emit_image( $node );
 				break;
 			case 'cut':
 				$this->buffer .= '<cut type="feed"/>';
@@ -376,7 +378,56 @@ class Epos_Xml_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_text_element( string $content, ?string $align = null ): void {
+		// normalize_text() is a 1:1 character substitution, so it cannot change a
+		// display width the row/rule callers have already padded against.
+		$content       = Thermal_Text_Layout::normalize_text( $content );
 		$this->buffer .= '<text' . $this->style_transition( $align ) . '>' . $this->escape( $content ) . "\n" . '</text>';
+	}
+
+	/**
+	 * Emit a template `<image>` (in practice, the store logo).
+	 *
+	 * The dots go out as base64 raw raster — 1 bit per dot, MSB first, rows whole
+	 * bytes — not as an encoded PNG (ePOS-Print XML User's Manual, "Encoding
+	 * Graphic Data"). Thermal_Bitmap produces exactly that layout, and
+	 * resolves the src without an outbound request, which matters because this
+	 * runs inside the printer's job fetch.
+	 *
+	 * The image is centred unconditionally, ignoring any enclosing `<align>`.
+	 * That is the contract the other three renderers already keep — the preview
+	 * (thermal-renderer.ts), the PDF (Html_Thermal_Emitter::render_image()) and
+	 * the raster lane (Raster_Thermal_Emitter::draw_image()) all hard-centre an
+	 * `<image>` — and following the wrapper here instead would left-align the
+	 * bare `<image>` that the template editor inserts, which every one of those
+	 * three shows centred.
+	 *
+	 * A src that resolves to nothing (a remote URL, a missing file) emits
+	 * nothing: a receipt without its logo still prints, where a broken `<image>`
+	 * element risks the printer rejecting the whole job.
+	 *
+	 * @param array $node The image AST node.
+	 *
+	 * @return void
+	 */
+	private function emit_image( array $node ): void {
+		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->columns ) );
+		if ( null === $bitmap ) {
+			return;
+		}
+
+		// align is a documented <image> attribute, not borrowed from <text>:
+		// ePOS-Print XML User's Manual, chapter 4, lists left/center/right on this
+		// element and defaults it to "left".
+		$this->buffer .= '<image width="' . $bitmap->width() . '" height="' . $bitmap->height() . '"'
+			. ' align="center" color="color_1" mode="mono">'
+			. base64_encode( $bitmap->raster() )
+			. '</image>';
+
+		// The manual's note on <text align> — "the align setting specified in this
+		// element is also applied to <image>, <logo>, <barcode> and <symbol>" —
+		// runs both ways: this <image> has moved the printer's persistent
+		// alignment, so the tracked state can no longer be trusted.
+		$this->printer['align'] = null;
 	}
 
 	/**
@@ -577,7 +628,11 @@ class Epos_Xml_Thermal_Emitter {
 
 		$payload = Barcode_Symbology::epos_xml_payload( $type, $value );
 
-		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $payload ) . '</barcode>';
+		// hri="below" prints the value under the bars, as the preview, the PDF and
+		// the raster lane all do. Without it the merchant designs against a
+		// receipt that carries the order number and the printer hands the customer
+		// one that does not.
+		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="below" height="' . $height . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $payload ) . '</barcode>';
 		$this->printer['align'] = null;
 	}
 

@@ -350,7 +350,7 @@ PHP;
 		$xml = $this->render( $markup );
 
 		// Assert.
-		$this->assertStringContainsString( '<barcode type="code128" hri="none" height="40" align="center">', $xml );
+		$this->assertStringContainsString( '<barcode type="code128" hri="below" height="40" align="center">', $xml );
 		$this->assertStringContainsString( '<text align="left">Plain', $xml );
 	}
 
@@ -379,7 +379,7 @@ PHP;
 		$xml = $this->render( '<receipt><barcode type="jan13">4006381333931</barcode></receipt>' );
 
 		// Assert.
-		$this->assertStringContainsString( '<barcode type="jan13" hri="none" height="40" align="left">4006381333931</barcode>', $xml );
+		$this->assertStringContainsString( '<barcode type="jan13" hri="below" height="40" align="left">4006381333931</barcode>', $xml );
 		$this->assertStringNotContainsString( '{B', $xml );
 	}
 
@@ -436,11 +436,61 @@ PHP;
 	}
 
 	/**
-	 * Image nodes are skipped but surrounding text is preserved.
+	 * Typographic spaces and dashes are folded before they reach the printer.
+	 *
+	 * CLDR time patterns separate the hour from the day period with U+202F, and a
+	 * printer with no mapping for it substitutes `?` — an Epson Server Direct
+	 * Print receipt came back reading "1:09?PM". Every other command-set lane
+	 * already normalized; this one emitted UTF-8 straight through.
 	 *
 	 * @return void
 	 */
-	public function test_image_node_is_skipped(): void {
+	public function test_typographic_characters_are_normalized_before_emission(): void {
+		// Arrange.
+		$markup = '<receipt><text>1:09' . "\u{202F}" . 'PM ' . "\u{2014}" . ' ' . "\u{201C}" . 'ok' . "\u{201D}" . '</text></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		// The double quotes normalize_text() folds the smart pair into are then
+		// XML-escaped on their way into the <text> element.
+		$this->assertStringContainsString( '1:09 PM - &quot;ok&quot;', $xml );
+		$this->assertStringNotContainsString( "\u{202F}", $xml );
+		$this->assertStringNotContainsString( "\u{2014}", $xml );
+	}
+
+	/**
+	 * Row padding still lines up after normalization.
+	 *
+	 * normalize_text() is a 1:1 substitution, so a row padded against the raw
+	 * width stays padded correctly — this pins that, because a normalization that
+	 * changed a character count would silently break every price column.
+	 *
+	 * @return void
+	 */
+	public function test_row_columns_stay_aligned_through_normalization(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="20"><row>'
+			. '<col width="*">a' . "\u{2014}" . 'b</col>'
+			. '<col width="6" align="right">1.00</col>'
+			. '</row></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( 'a-b' . str_repeat( ' ', 11 ) . '  1.00', $xml );
+	}
+
+	/**
+	 * An unresolvable image src emits nothing, and the receipt still prints.
+	 *
+	 * A logo that cannot be read is worth losing; the receipt around it is not.
+	 *
+	 * @return void
+	 */
+	public function test_unresolvable_image_src_emits_no_image_element(): void {
 		// Arrange.
 		$markup = '<receipt><text>before</text><image src="x" width="64"/><text>after</text></receipt>';
 
@@ -452,6 +502,89 @@ PHP;
 		$this->assertStringNotContainsString( '<image', $xml );
 		$this->assertStringContainsString( 'before', $xml );
 		$this->assertStringContainsString( 'after', $xml );
+	}
+
+	/**
+	 * A resolvable image is emitted as base64 raster in an <image> element.
+	 *
+	 * The store logo reaching the paper is the whole point of the element: an
+	 * Epson Server Direct Print receipt used to arrive with the logo silently
+	 * dropped while the merchant's preview showed it.
+	 *
+	 * @return void
+	 */
+	public function test_image_node_is_emitted_as_base64_raster(): void {
+		// Arrange. A 16x8 solid black logo is 2 bytes per row over 8 rows.
+		$markup = '<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertNotFalse( simplexml_load_string( $xml ) );
+		$this->assertStringContainsString( '<image width="16" height="8"', $xml );
+		$this->assertStringContainsString( 'mode="mono"', $xml );
+		$this->assertStringContainsString( '>' . base64_encode( str_repeat( "\xff", 16 ) ) . '</image>', $xml );
+	}
+
+	/**
+	 * An image is centred with no align wrapper, matching the other renderers.
+	 *
+	 * The preview, the PDF and the raster lane all hard-centre an `<image>`
+	 * regardless of the enclosing `<align>`, so this lane does too.
+	 *
+	 * @return void
+	 */
+	public function test_image_is_centered_without_an_align_wrapper(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( 'align="center"', $xml );
+	}
+
+	/**
+	 * The image moves printer alignment, so the cached text alignment is dropped.
+	 *
+	 * The manual's note on <text align> — "the align setting specified in this
+	 * element is also applied to <image>, <logo>, <barcode> and <symbol>" — runs
+	 * both ways. A cached "the printer is already left-aligned" would leave the
+	 * line after the logo centred under it.
+	 *
+	 * @return void
+	 */
+	public function test_image_alignment_invalidates_the_cached_text_alignment(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48">'
+			. '<image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/>'
+			. '<text>after</text>'
+			. '</receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '<text align="left">after', $xml );
+	}
+
+	/**
+	 * A solid black PNG as a data URI.
+	 *
+	 * @param int $width  Width in pixels.
+	 * @param int $height Height in pixels.
+	 *
+	 * @return string The data URI.
+	 */
+	private function black_png_data_uri( int $width, int $height ): string {
+		$image = imagecreatetruecolor( $width, $height );
+		imagefilledrectangle( $image, 0, 0, $width - 1, $height - 1, imagecolorallocate( $image, 0, 0, 0 ) );
+		ob_start();
+		imagepng( $image );
+
+		return 'data:image/png;base64,' . base64_encode( (string) ob_get_clean() );
 	}
 
 	/**
