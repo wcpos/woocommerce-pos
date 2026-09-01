@@ -30,6 +30,29 @@ return array(
 		// QR code (→ SVG) — pure PHP.
 		Finder::create()->files()->in( 'vendor/chillerlan/php-qrcode/src' )->name( '*.php' ),
 		Finder::create()->files()->in( 'vendor/chillerlan/php-settings-container/src' )->name( '*.php' ),
+
+		// Sentry PHP SDK (consent-gated error reporting) + its runtime deps.
+		// sentry/sentry 4.x transports over ext-curl directly — no HTTP client
+		// abstraction packages must ever be added here.
+		Finder::create()->files()->in( 'vendor/sentry/sentry/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/guzzlehttp/psr7/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/psr/http-message/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/psr/http-factory/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/psr/log/Psr/Log' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/symfony/options-resolver' )->name( '*.php' ),
+		// Defines the global trigger_deprecation() that OptionsResolver calls; the
+		// scoper prefixes both the calls and this guarded definition, and
+		// woocommerce-pos.php requires the file eagerly (the generated classmap
+		// autoloader cannot load function-only files).
+		Finder::create()->files()->in( 'vendor/symfony/deprecation-contracts' )->name( 'function.php' ),
+		// Deliberately NOT shipped:
+		// - jean85/pretty-package-versions: referenced only by Sentry's
+		//   ModulesIntegration (never enabled here — default_integrations is
+		//   false), and it reads Composer\InstalledVersions, which does not
+		//   exist in a scoped build.
+		// - symfony/polyfill-php82: guzzle psr7 3.x needs it only for the
+		//   #[\SensitiveParameter] attribute, which PHP 7.4 parses as a comment
+		//   and newer PHP never reflects, so the class is never autoloaded.
 	),
 
 	'patchers' => array(
@@ -45,7 +68,12 @@ return array(
 		 * against the already-prefixed occurrences via a negative lookbehind.
 		 */
 		function ( string $filePath, string $prefix, string $content ) {
-			$namespaces = 'Dompdf|FontLib|Svg';
+			// Sentry rides the same patcher: FrameBuilder marks frames whose
+			// function name starts with the literal 'Sentry\\' as not-in-app, and
+			// Options validates 'integrations' against the string type
+			// 'Sentry\\Integration\\IntegrationInterface[]' — both are
+			// double-backslash string fragments the scoper cannot rewrite.
+			$namespaces = 'Dompdf|FontLib|Svg|Sentry';
 			$pattern    = '/(?<!Vendor\\\\\\\\)(' . $namespaces . ')\\\\\\\\/';
 
 			$patched = preg_replace_callback(
@@ -90,6 +118,26 @@ return array(
 					'return $class_parts[count($class_parts) - 2];',
 					$content
 				);
+			}
+
+			// OptionsResolver's trigger_deprecation() calls survive the scoper
+			// unqualified, so PHP's namespace fallback resolves them to the
+			// GLOBAL function — defined only when some other plugin happens to
+			// ship symfony/deprecation-contracts. Fully qualify them against the
+			// prefixed definition (vendor_prefixed/symfony/deprecation-contracts/
+			// function.php, required eagerly by woocommerce-pos.php) so the
+			// deprecation paths can never fatal. The definition file itself is
+			// left alone: the negative lookbehind skips declarations and
+			// already-qualified calls.
+			if ( false !== strpos( $filePath, 'symfony/options-resolver' ) ) {
+				$patched = preg_replace(
+					'/(?<![\\\\\\w])trigger_deprecation\\(/',
+					'\\WCPOS\\Vendor\\trigger_deprecation(',
+					$content
+				);
+				if ( null !== $patched ) {
+					$content = $patched;
+				}
 			}
 
 			return $content;
