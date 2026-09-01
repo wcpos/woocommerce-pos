@@ -119,6 +119,15 @@ class Logger {
 		}
 
 		self::write_log( $full_message );
+
+		// Forward after dedup so "repeated N times" remains one event.
+		if ( 'error' === self::$log_level || 'critical' === self::$log_level ) {
+			try {
+				\WCPOS\WooCommercePOS\Services\Error_Reporter::report_log_error( self::$log_level, $message, $context_string );
+			} catch ( \Throwable $t ) { // phpcs:ignore
+				// Reporting must never break logging.
+			}
+		}
 	}
 
 	/**

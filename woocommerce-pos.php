@@ -116,6 +116,12 @@ function wcpos_load_autoloaders(): void { // phpcs:ignore WordPress.NamingConven
 	}
 	if ( file_exists( $vendor_prefixed_autoload ) ) {
 		require_once $vendor_prefixed_autoload;
+		// Function-only file the generated classmap autoloader cannot load: defines
+		// the prefixed trigger_deprecation() that the bundled OptionsResolver calls.
+		$deprecation_functions = __DIR__ . '/vendor_prefixed/symfony/deprecation-contracts/function.php';
+		if ( file_exists( $deprecation_functions ) ) {
+			require_once $deprecation_functions;
+		}
 		require_once __DIR__ . '/includes/Vendor_Prefixed_Polyfills.php';
 	}
 }

@@ -224,6 +224,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'rest_api_init'                                         => array( 10, 20 ),
 			'rest_allowed_cors_headers'                             => array( 10 ),
 			'rest_pre_dispatch'                                     => array( 10 ),
+			'rest_request_after_callbacks'                          => array( 999 ),
 			// Both of these now come from Rest_Cors::register_hooks(), which the
 			// constructor calls. They are still registered during construction, so
 			// they belong in this set — but the wire contract is no longer Init's:

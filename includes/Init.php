@@ -84,6 +84,7 @@ class Init {
 	 * | 23 | `determine_current_user` | `Init::determine_current_user_early` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
 	 * | 24 | `admin_init` | `Services\Lifecycle_Events::flush_pending`, `::maybe_schedule_refresh` | 10 | irrelevant | Default. `admin_init` because both need a fully booted admin request: one sends install/upgrade events recorded before the plugin was loaded enough to send them, the other schedules row 25. Both check consent first and cost nothing on a site that opted out. |
 	 * | 25 | `wcpos_analytics_group_refresh` | `Services\Lifecycle_Events::refresh_group_properties` | 10 | irrelevant | Default; sole listener. Unlike row 11, this call does NOT schedule the event — scheduling lives in row 24 so that withdrawing consent unschedules it. |
+	 * | 26 | `rest_request_after_callbacks` | `Services\Error_Reporter::filter_rest_request_after_callbacks` | **999** | order-critical (by number) | Runs late so the response status it reports is the one the client receives. |
 	 *
 	 * ## The one pair where statement order is the whole mechanism
 	 *
@@ -212,6 +213,11 @@ class Init {
 		// above in statement order. Deliberately NOT before the pair above —
 		// rows 20 and 23 are decided by insertion order alone.
 		( new Services\Lifecycle_Events() )->register_hooks();
+
+		// Consent-gated Sentry error reporting (issue #1811). Registered last for
+		// the same reason as Lifecycle_Events: nothing orders against it. Its REST
+		// filter runs at 999 so the status it reports is the one the client receives.
+		Services\Error_Reporter::instance()->register_hooks();
 	}
 
 	/**
