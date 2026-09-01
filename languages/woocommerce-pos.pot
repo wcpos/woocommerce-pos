@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T12:58:55+00:00\n"
+"POT-Creation-Date: 2026-09-01T07:42:27+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -4021,6 +4021,6 @@ msgstr ""
 msgid "The WP Overnight packing slip document could not be rendered for this order."
 msgstr ""
 
-#: woocommerce-pos.php:147
+#: woocommerce-pos.php:159
 msgid "The WCPOS plugin failed to load correctly."
 msgstr ""
