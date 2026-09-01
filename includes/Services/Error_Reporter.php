@@ -37,6 +37,24 @@ class Error_Reporter {
 	const DEFAULT_DSN = 'https://39233e9d1e5046cbb67dae52f807de5f@o159038.ingest.sentry.io/1220733';
 
 	/**
+	 * Transient latched after a failed send.
+	 *
+	 * @var string
+	 */
+	const BACKOFF_TRANSIENT = 'wcpos_sentry_backoff';
+
+	/**
+	 * How long a failed send suppresses delivery, in seconds.
+	 *
+	 * Long enough that a Sentry outage costs a store one slow request per
+	 * window rather than one per error; short enough that a transient blip
+	 * does not hide a real incident for the rest of the day.
+	 *
+	 * @var int
+	 */
+	const BACKOFF_TTL = 15 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Singleton instance.
 	 *
 	 * @var null|self
@@ -65,11 +83,33 @@ class Error_Reporter {
 	private ?ClientInterface $client = null; // @phpstan-ignore-line -- Scoped SDK is excluded from analysis.
 
 	/**
-	 * Number of events captured during this request.
+	 * Number of non-fatal events captured during this request.
 	 *
 	 * @var int
 	 */
 	private int $events_sent = 0;
+
+	/**
+	 * Whether a fatal has already been captured during this request.
+	 *
+	 * Fatals get their own slot. They arrive last (shutdown), so sharing one
+	 * counter with the other two paths meant any earlier logged error or REST
+	 * 500 permanently consumed the budget and silently dropped the fatal —
+	 * the highest-value of the three signals.
+	 *
+	 * @var bool
+	 */
+	private bool $fatal_sent = false;
+
+	/**
+	 * Cached consent + environment answer for this request.
+	 *
+	 * Memoised because Logger forwards every error-level write, and Logger's
+	 * class contract forbids repeated option lookups from that path.
+	 *
+	 * @var null|bool
+	 */
+	private ?bool $enabled_cache = null;
 
 	/**
 	 * Whether this reporter is already handling an event.
@@ -96,19 +136,30 @@ class Error_Reporter {
 	 * Install a transport factory. Test seam only.
 	 *
 	 * Resetting the singleton deliberately does not clear this factory.
+	 * No-op outside the PHPUnit environment so shipped code cannot use it
+	 * to intercept event payloads.
 	 *
 	 * @param null|callable $factory Factory returning a Sentry transport.
 	 */
 	public static function set_transport_factory_for_testing( ?callable $factory ): void {
+		if ( ! \defined( 'WP_TESTS_DOMAIN' ) ) {
+			return;
+		}
 		self::$transport_factory = $factory;
 	}
 
 	/**
 	 * Override development-environment detection. Test seam only.
 	 *
+	 * No-op outside the PHPUnit environment: a production site must not be
+	 * able to lift the WP_DEBUG / WCPOS_DEV gate through this seam.
+	 *
 	 * @param null|bool $is_dev Forced answer, or null to use constants.
 	 */
 	public static function set_dev_override_for_testing( ?bool $is_dev ): void {
+		if ( ! \defined( 'WP_TESTS_DOMAIN' ) ) {
+			return;
+		}
 		self::$dev_override = $is_dev;
 	}
 
@@ -129,8 +180,21 @@ class Error_Reporter {
 
 	/** Whether reporting is allowed by consent and environment. */
 	public function is_enabled(): bool {
+		if ( null !== $this->enabled_cache ) {
+			return $this->enabled_cache;
+		}
+
+		$this->enabled_cache = $this->compute_enabled();
+
+		return $this->enabled_cache;
+	}
+
+	/** Resolve consent, environment and the host kill switch. */
+	private function compute_enabled(): bool {
 		try {
-			$consent_allowed = 'allowed' === Settings::instance()->tracking_consent();
+			// The PERSISTED value, not the filtered read view: a settings filter
+			// must not be able to manufacture consent the merchant never gave.
+			$consent_allowed = 'allowed' === Settings::instance()->raw_tracking_consent();
 			$enabled         = $consent_allowed && ! $this->is_dev_environment();
 
 			/**
@@ -169,6 +233,17 @@ class Error_Reporter {
 				);
 			}
 
+			// Message text is the one place merchant identity still leaks: a PHP
+			// fatal embeds absolute paths and a textual stack trace, and shared
+			// hosting bakes the store's domain into the docroot
+			// (/home/<domain>/public_html, /var/www/vhosts/<domain>/httpdocs).
+			// The `prefixes` option only rewrites stacktrace FRAMES, which are
+			// switched off here, so it never sees these strings.
+			$message = $event->getMessage();
+			if ( \is_string( $message ) && '' !== $message ) {
+				$event->setMessage( self::redact_paths( $message ) );
+			}
+
 			$event->setServerName( '' );
 			$event->setUser( UserDataBag::createFromUserIdentifier( Analytics::instance()->get_site_id() ) );
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
@@ -176,6 +251,49 @@ class Error_Reporter {
 		}
 
 		return $event;
+	}
+
+	/**
+	 * Replace local filesystem paths in free text with stable placeholders.
+	 *
+	 * Longest path first: WP_CONTENT_DIR usually sits inside ABSPATH, and the
+	 * parent of ABSPATH is the segment that carries the account or domain name
+	 * on cPanel-style hosting. A root-level path ('/' or '') is skipped — it
+	 * would match every slash in the string.
+	 *
+	 * @param string $text Text to redact.
+	 *
+	 * @return string Redacted text.
+	 */
+	private static function redact_paths( string $text ): string {
+		$normalized = str_replace( '\\', '/', $text );
+
+		$replacements = array();
+		if ( \defined( 'WP_CONTENT_DIR' ) ) {
+			$replacements[ untrailingslashit( str_replace( '\\', '/', WP_CONTENT_DIR ) ) ] = '<wp-content>';
+		}
+		if ( \defined( 'ABSPATH' ) ) {
+			$abspath                              = untrailingslashit( str_replace( '\\', '/', ABSPATH ) );
+			$replacements[ $abspath ]             = '<abspath>';
+			$replacements[ \dirname( $abspath ) ] = '<root>';
+		}
+
+		// Longest needle first so a nested path is not partially replaced by its
+		// own parent, which would leave the identifying segment behind.
+		uksort(
+			$replacements,
+			static function ( string $a, string $b ): int {
+				return \strlen( $b ) <=> \strlen( $a );
+			}
+		);
+
+		foreach ( $replacements as $path => $placeholder ) {
+			if ( \strlen( $path ) > 1 && '/' !== $path ) {
+				$normalized = str_replace( $path, $placeholder, $normalized );
+			}
+		}
+
+		return $normalized;
 	}
 
 	/**
@@ -191,11 +309,16 @@ class Error_Reporter {
 				return;
 			}
 
+			// Group on the bare message: the context routinely carries order ids,
+			// timestamps and paths, so folding it into the grouping key would make
+			// every occurrence its own Sentry issue.
+			$fingerprint = array( 'wcpos-log', $level, $message );
+
 			if ( '' !== $context ) {
 				$message .= ' | Context: ' . $context;
 			}
 
-			self::instance()->capture( $level, $message, array( 'source' => 'logger' ), array() );
+			self::instance()->capture( $level, $message, array( 'source' => 'logger' ), $fingerprint );
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Reporting must never break logging.
 		}
@@ -241,11 +364,16 @@ class Error_Reporter {
 					}
 
 					if ( 500 <= $status ) {
+						// $code can originate in a third-party response body (a
+						// relay or upstream error forwarded by a controller), so it
+						// is allow-listed before it becomes a grouping key or tag.
+						$code = self::safe_code( $code );
+
 						self::instance()->capture(
 							'error',
 							$message,
 							array(
-								'route'  => (string) $route,
+								'route'  => self::generalize_route( (string) $route ),
 								'method' => (string) $request->get_method(),
 								'status' => (string) $status,
 								'source' => 'rest',
@@ -260,6 +388,33 @@ class Error_Reporter {
 		}
 
 		return $response;
+	}
+
+	/**
+	 * Reduce an error code to a safe, low-cardinality identifier.
+	 *
+	 * @param string $code Raw error code.
+	 *
+	 * @return string Allow-listed code.
+	 */
+	private static function safe_code( string $code ): string {
+		return preg_match( '/^[A-Za-z0-9_.-]{1,64}$/', $code ) ? $code : 'unrecognized_code';
+	}
+
+	/**
+	 * Collapse resource ids in a route so the tag stays low-cardinality.
+	 *
+	 * `/wcpos/v1/products/12345` becomes `/wcpos/v1/products/{id}`; without
+	 * this every object id opens its own tag value, and the ids are store data.
+	 *
+	 * @param string $route Concrete requested route.
+	 *
+	 * @return string Generalized route.
+	 */
+	private static function generalize_route( string $route ): string {
+		$generalized = preg_replace( '#/\d+#', '/{id}', $route );
+
+		return \is_string( $generalized ) ? $generalized : $route;
 	}
 
 	/** Handle the last PHP error at shutdown. */
@@ -331,9 +486,16 @@ class Error_Reporter {
 			return false;
 		}
 
+		$is_fatal = 'critical' === $level;
+
 		$this->reporting = true;
 		try {
-			if ( 1 <= $this->events_sent || ! $this->is_enabled() ) {
+			// One non-fatal event per request, plus at most one fatal.
+			if ( $is_fatal ? $this->fatal_sent : 1 <= $this->events_sent ) {
+				return false;
+			}
+
+			if ( ! $this->is_enabled() || $this->is_backing_off() ) {
 				return false;
 			}
 
@@ -351,8 +513,24 @@ class Error_Reporter {
 			$event->setTags( array_merge( $this->get_default_tags(), $tags ) );
 			$event->setUser( UserDataBag::createFromUserIdentifier( Analytics::instance()->get_site_id() ) );
 
-			$client->captureEvent( $event );
-			++$this->events_sent;
+			$sent = $client->captureEvent( $event );
+
+			if ( $is_fatal ) {
+				$this->fatal_sent = true;
+			} else {
+				++$this->events_sent;
+			}
+
+			// captureEvent() returns null when the transport failed. The SDK's own
+			// rate limiter is built per transport, i.e. per request under PHP-FPM,
+			// so it forgets a 429 immediately and every erroring request would keep
+			// paying the full timeout. Latch a short backoff across requests
+			// instead: an outage costs one slow request per window, not all of them.
+			if ( null === $sent ) {
+				$this->start_backoff();
+
+				return false;
+			}
 
 			return true;
 		} catch ( Throwable $throwable ) {
@@ -386,6 +564,10 @@ class Error_Reporter {
 				'send_default_pii'     => false,
 				'attach_stacktrace'    => false,
 				'max_breadcrumbs'      => 0,
+				// The SDK stamps gethostname() onto every event before before_send
+				// runs. Blanking it here means the hostname is never placed on the
+				// event at all, so a throw inside scrub_event cannot ship it.
+				'server_name'          => '',
 				'http_connect_timeout' => 1,
 				'http_timeout'         => 2,
 				'prefixes'             => array( ABSPATH ),
@@ -403,6 +585,16 @@ class Error_Reporter {
 		} catch ( Throwable $throwable ) {
 			return null;
 		}
+	}
+
+	/** Whether a recent send failure is still suppressing delivery. */
+	private function is_backing_off(): bool {
+		return false !== get_transient( self::BACKOFF_TRANSIENT );
+	}
+
+	/** Suppress delivery for a short window after a failed send. */
+	private function start_backoff(): void {
+		set_transient( self::BACKOFF_TRANSIENT, 1, self::BACKOFF_TTL );
 	}
 
 	/** Get tags attached to every event. */

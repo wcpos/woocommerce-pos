@@ -609,6 +609,22 @@ class Settings {
 	}
 
 	/**
+	 * The PERSISTED tracking consent, ignoring the settings read filter.
+	 *
+	 * Use this — never `tracking_consent()` — to decide whether data may be
+	 * sent off-site. See General_Section::raw_tracking_consent().
+	 */
+	public function raw_tracking_consent(): string {
+		$section = $this->sections()->get( 'general' );
+
+		if ( $section instanceof General_Section ) {
+			return $section->raw_tracking_consent();
+		}
+
+		return '';
+	}
+
+	/**
 	 * Whether the JWT may be passed as a query parameter (Tools).
 	 */
 	public function use_jwt_as_param_enabled(): bool {

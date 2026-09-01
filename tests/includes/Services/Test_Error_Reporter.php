@@ -45,6 +45,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		);
 		Error_Reporter::set_dev_override_for_testing( false );
 		Logger::reset_dedup_state();
+		delete_transient( Error_Reporter::BACKOFF_TRANSIENT );
 	}
 
 	/**
@@ -54,6 +55,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		Error_Reporter::set_transport_factory_for_testing( null );
 		Error_Reporter::set_dev_override_for_testing( null );
 		Error_Reporter::reset_instance();
+		delete_transient( Error_Reporter::BACKOFF_TRANSIENT );
 
 		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'undecided';
@@ -264,6 +266,48 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A settings filter cannot manufacture consent the merchant never gave.
+	 *
+	 * `Settings::tracking_consent()` reads the filtered view, so gating on it
+	 * would let any plugin filtering woocommerce_pos_general_settings switch
+	 * reporting on for a store that declined.
+	 */
+	public function test_settings_filter_claiming_consent_sends_no_event(): void {
+		// Arrange.
+		$this->set_consent( 'denied' );
+		$claim_consent = static function ( $settings ) {
+			$settings['tracking_consent'] = 'allowed';
+
+			return $settings;
+		};
+		add_filter( 'woocommerce_pos_general_settings', $claim_consent );
+
+		// Act.
+		Logger::error( 'must not be reported' );
+
+		// Assert.
+		remove_filter( 'woocommerce_pos_general_settings', $claim_consent );
+		$this->assertSame( array(), $this->transport->events );
+		$this->assertFalse( Error_Reporter::instance()->is_initialized() );
+	}
+
+	/**
+	 * Consent recorded before the move out of the legacy `tools` option still counts.
+	 */
+	public function test_legacy_tools_consent_is_honoured_by_the_raw_read(): void {
+		// Arrange: general has no tracking_consent key at all.
+		update_option( 'woocommerce_pos_settings_general', array() );
+		update_option( 'woocommerce_pos_settings_tools', array( 'tracking_consent' => 'allowed' ) );
+
+		// Act.
+		$consent = SettingsService::instance()->raw_tracking_consent();
+
+		// Assert.
+		delete_option( 'woocommerce_pos_settings_tools' );
+		$this->assertSame( 'allowed', $consent );
+	}
+
+	/**
 	 * Scrubbing removes merchant host, query, headers, cookies, and environment.
 	 */
 	public function test_scrub_event_removes_request_pii_and_sets_site_user(): void {
@@ -312,6 +356,161 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A 500 outside the WCPOS namespaces is another plugin's problem.
+	 */
+	public function test_non_wcpos_route_500_sends_no_event(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$this->dispatch_stub_route( 'other/v1', '/boom', 500 );
+
+		// Assert.
+		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
+	 * A WCPOS client error is not a server fault and is never reported.
+	 */
+	public function test_wcpos_route_below_500_sends_no_event(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$this->dispatch_stub_route( 'wcpos/v1', '/client-error', 400 );
+
+		// Assert.
+		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
+	 * A fatal still reports after an earlier error consumed the normal slot.
+	 */
+	public function test_fatal_after_logger_error_still_sends_its_own_event(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		Logger::error( 'earlier error' );
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+
+		// Assert.
+		$this->assertCount( 2, $this->transport->events );
+		$this->assertSame( 'fatal', (string) $this->transport->events[1]->getLevel() );
+	}
+
+	/**
+	 * Only one fatal is reported per request.
+	 */
+	public function test_second_fatal_in_one_request_sends_no_event(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+	}
+
+	/**
+	 * Absolute paths never leave the server inside message text.
+	 *
+	 * Shared hosting bakes the store domain into the docroot, so a fatal's
+	 * textual stack trace is a hostname leak unless the paths are redacted.
+	 */
+	public function test_scrub_event_redacts_absolute_paths_from_the_message(): void {
+		// Arrange.
+		$event = Event::createEvent();
+		$event->setMessage(
+			'Uncaught TypeError in ' . PLUGIN_PATH . 'includes/Init.php:12'
+				. ' Stack trace: #0 ' . ABSPATH . 'wp-includes/class-wp-hook.php(324)'
+		);
+
+		// Act.
+		$scrubbed = Error_Reporter::scrub_event( $event );
+
+		// Assert.
+		$message = (string) $scrubbed->getMessage();
+		$this->assertStringNotContainsString( ABSPATH, $message );
+		$this->assertStringNotContainsString( untrailingslashit( WP_CONTENT_DIR ), $message );
+		$this->assertStringContainsString( '<wp-content>', $message );
+		$this->assertStringContainsString( 'includes/Init.php:12', $message );
+	}
+
+	/**
+	 * A site that suppressed WCPOS logging does not get remote egress instead.
+	 */
+	public function test_logging_filter_disabled_sends_no_event(): void {
+		// Arrange.
+		$this->enable_consent();
+		add_filter( 'woocommerce_pos_logging', '__return_false' );
+
+		// Act.
+		Logger::error( 'suppressed locally' );
+
+		// Assert.
+		remove_filter( 'woocommerce_pos_logging', '__return_false' );
+		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
+	 * Logger events group on the bare message, not the context.
+	 */
+	public function test_logger_event_fingerprint_excludes_the_context(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		Logger::error( 'recurring failure', array( 'order_id' => 4242 ) );
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame(
+			array( 'wcpos-log', 'error', 'recurring failure' ),
+			$this->transport->events[0]->getFingerprint()
+		);
+	}
+
+	/**
+	 * Resource ids are collapsed out of the route tag.
+	 */
+	public function test_rest_route_tag_collapses_resource_ids(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$this->dispatch_stub_route( 'wcpos/v1', '/things/4242', 500 );
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame( '/wcpos/v1/things/{id}', $this->transport->events[0]->getTags()['route'] );
+	}
+
+	/**
+	 * A failed send suppresses delivery for the rest of the backoff window.
+	 */
+	public function test_transport_failure_suppresses_the_next_request(): void {
+		// Arrange.
+		$this->enable_consent();
+		$this->transport->fail = true;
+
+		// Act: first request fails and latches the backoff.
+		Logger::error( 'first failing send' );
+
+		// A second request: fresh reporter, working transport.
+		Error_Reporter::reset_instance();
+		$this->transport       = new Stub_Transport();
+		$this->transport->fail = false;
+		Logger::reset_dedup_state();
+		Logger::error( 'second error' );
+
+		// Assert.
+		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
 	 * Save allowed tracking consent using the production settings service.
 	 */
 	private function enable_consent(): void {
@@ -330,17 +529,28 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Dispatch the stub WCPOS REST route through the real REST server.
+	 * Dispatch the stub WCPOS 500 route through the real REST server.
 	 */
 	private function dispatch_error_route(): void {
-		$register_route = static function (): void {
+		$this->dispatch_stub_route( 'wcpos/v1', '/error-reporter-500', 500 );
+	}
+
+	/**
+	 * Register and dispatch a stub route returning a WP_Error of one status.
+	 *
+	 * @param string $namespace REST namespace, e.g. 'wcpos/v1'.
+	 * @param string $route     Route path, e.g. '/boom'.
+	 * @param int    $status    HTTP status the route's WP_Error carries.
+	 */
+	private function dispatch_stub_route( string $namespace, string $route, int $status ): void {
+		$register_route = static function () use ( $namespace, $route, $status ): void {
 			register_rest_route(
-				'wcpos/v1',
-				'/error-reporter-500',
+				$namespace,
+				$route,
 				array(
 					'methods'             => 'GET',
-					'callback'            => static function (): WP_Error {
-						return new WP_Error( 'wcpos_test_boom', 'boom', array( 'status' => 500 ) );
+					'callback'            => static function () use ( $status ): WP_Error {
+						return new WP_Error( 'wcpos_test_boom', 'boom', array( 'status' => $status ) );
 					},
 					'permission_callback' => '__return_true',
 				)
@@ -351,7 +561,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		do_action( 'rest_api_init', rest_get_server() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook under test.
 		remove_action( 'rest_api_init', $register_route );
 
-		rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/wcpos/v1/error-reporter-500' ) );
+		rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/' . $namespace . $route ) );
 	}
 
 	/**

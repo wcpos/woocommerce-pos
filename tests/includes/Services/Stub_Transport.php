@@ -24,11 +24,25 @@ class Stub_Transport implements TransportInterface {
 	public array $events = array();
 
 	/**
+	 * Whether send() should report a delivery failure.
+	 *
+	 * @var bool
+	 */
+	public bool $fail = false;
+
+	/**
 	 * Capture an event.
+	 *
+	 * A failed result carries no event, which is how the SDK's Client signals
+	 * failure to callers: captureEvent() returns null.
 	 *
 	 * @param Event $event Event being sent.
 	 */
 	public function send( Event $event ): Result {
+		if ( $this->fail ) {
+			return new Result( ResultStatus::failed() );
+		}
+
 		$this->events[] = $event;
 
 		return new Result( ResultStatus::success(), $event );

@@ -39,13 +39,14 @@ return array(
 		Finder::create()->files()->in( 'vendor/psr/http-message/src' )->name( '*.php' ),
 		Finder::create()->files()->in( 'vendor/psr/http-factory/src' )->name( '*.php' ),
 		Finder::create()->files()->in( 'vendor/psr/log/Psr/Log' )->name( '*.php' ),
-		Finder::create()->files()->in( 'vendor/symfony/options-resolver' )->name( '*.php' ),
-		// Defines the global trigger_deprecation() that OptionsResolver calls; the
-		// scoper prefixes both the calls and this guarded definition, and
-		// woocommerce-pos.php requires the file eagerly (the generated classmap
-		// autoloader cannot load function-only files).
-		Finder::create()->files()->in( 'vendor/symfony/deprecation-contracts' )->name( 'function.php' ),
 		// Deliberately NOT shipped:
+		// - symfony/options-resolver + symfony/deprecation-contracts: composer
+		//   requires of sentry/sentry, but 4.x ships its OWN resolver
+		//   (Sentry\OptionsResolver) and Options.php instantiates that one. The
+		//   only "Symfony" token left in sentry/src is a comment, so vendoring
+		//   them added ~1,200 unreachable lines, a patcher for their
+		//   trigger_deprecation() calls, and an eager bootstrap require that
+		//   broke the Pro plugin's bootstrap-parity guard.
 		// - jean85/pretty-package-versions: referenced only by Sentry's
 		//   ModulesIntegration (never enabled here — default_integrations is
 		//   false), and it reads Composer\InstalledVersions, which does not
@@ -118,26 +119,6 @@ return array(
 					'return $class_parts[count($class_parts) - 2];',
 					$content
 				);
-			}
-
-			// OptionsResolver's trigger_deprecation() calls survive the scoper
-			// unqualified, so PHP's namespace fallback resolves them to the
-			// GLOBAL function — defined only when some other plugin happens to
-			// ship symfony/deprecation-contracts. Fully qualify them against the
-			// prefixed definition (vendor_prefixed/symfony/deprecation-contracts/
-			// function.php, required eagerly by woocommerce-pos.php) so the
-			// deprecation paths can never fatal. The definition file itself is
-			// left alone: the negative lookbehind skips declarations and
-			// already-qualified calls.
-			if ( false !== strpos( $filePath, 'symfony/options-resolver' ) ) {
-				$patched = preg_replace(
-					'/(?<![\\\\\\w])trigger_deprecation\\(/',
-					'\\WCPOS\\Vendor\\trigger_deprecation(',
-					$content
-				);
-				if ( null !== $patched ) {
-					$content = $patched;
-				}
 			}
 
 			return $content;
