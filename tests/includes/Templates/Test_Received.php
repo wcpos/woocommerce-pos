@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\Templates\Received;
 use WC_REST_Unit_Test_Case;
+use WP_Error;
 
 /**
  * Received template tests.
@@ -49,8 +50,98 @@ class Test_Received extends WC_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		wp_set_current_user( 0 );
+		delete_option( 'woocommerce_pos_settings_payment_gateways' );
 		remove_action( 'rest_api_init', array( $this, 'rest_api_init' ) );
 		parent::tearDown();
+	}
+
+	/**
+	 * Render the real received template without terminating PHPUnit.
+	 *
+	 * @param \WC_Order $order Order to render.
+	 *
+	 * @return string Rendered HTML.
+	 */
+	protected function render_received( \WC_Order $order ): string {
+		$template_filter = static function ( $path, $template ) {
+			return 'received.php' === $template ? __DIR__ . '/fixtures/received.php' : $path;
+		};
+		$original_get  = $_GET;
+		$buffer_level = ob_get_level();
+
+		add_filter( 'woocommerce_pos_locate_template', $template_filter, 10, 2 );
+		$_GET['key'] = $order->get_order_key();
+		ob_start();
+
+		try {
+			( new Received( $order->get_id() ) )->get_template();
+			return (string) ob_get_clean();
+		} finally {
+			if ( ob_get_level() > $buffer_level ) {
+				ob_end_clean();
+			}
+			$_GET = $original_get;
+			remove_filter( 'woocommerce_pos_locate_template', $template_filter, 10 );
+		}
+	}
+
+	/**
+	 * Paid orders emit their actual REST representation.
+	 */
+	public function test_paid_order_renders_received_script_with_order_payload(): void {
+		$order = OrderHelper::create_order( array( 'status' => 'processing' ) );
+
+		$output = $this->render_received( $order );
+
+		$this->assertStringContainsString( "action: 'wcpos-payment-received'", $output );
+		$this->assertSame( 1, preg_match( '/var order = (.+);/', $output, $matches ) );
+		$payload = json_decode( $matches[1], true );
+		$this->assertSame( $order->get_id(), $payload['id'] );
+		$this->assertSame( 'processing', $payload['status'] );
+	}
+
+	/**
+	 * Open POS orders must not use the gateway's configured completion status.
+	 */
+	public function test_pos_open_order_does_not_render_received_script_regardless_of_gateway_setting(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'gateways' => array(
+					'pos_cash' => array( 'order_status' => 'wc-completed' ),
+				),
+			)
+		);
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'pos_cash',
+				'status'         => 'pos-open',
+			)
+		);
+
+		$output = $this->render_received( $order );
+
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
+	 * A failed internal REST dispatch leaves the page renderable without emitting.
+	 */
+	public function test_dispatch_error_does_not_render_received_script_or_fatal(): void {
+		$order          = OrderHelper::create_order( array( 'status' => 'completed' ) );
+		$dispatch_error = static function () {
+			return new WP_Error( 'forced_dispatch_error', 'Forced dispatch error.', array( 'status' => 403 ) );
+		};
+		add_filter( 'rest_pre_dispatch', $dispatch_error );
+
+		try {
+			$output = $this->render_received( $order );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $dispatch_error );
+		}
+
+		$this->assertStringContainsString( '<!doctype html>', $output );
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
 	}
 
 	/**
