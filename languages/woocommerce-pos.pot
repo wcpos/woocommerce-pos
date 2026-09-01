@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-01T07:42:27+00:00\n"
+"POT-Creation-Date: 2026-09-01T10:37:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -94,31 +94,31 @@ msgstr ""
 
 #. translators: WordPress admin menu label for WCPOS.
 #. translators: Order channel filter value shown in WooCommerce admin for POS orders.
-#: includes/Admin/Menu.php:127
-#: includes/Admin/Menu.php:147
-#: includes/Admin/Menu.php:149
+#: includes/Admin/Menu.php:128
+#: includes/Admin/Menu.php:148
+#: includes/Admin/Menu.php:150
 #: includes/Admin/Orders/List_Orders.php:42
 msgid "POS"
 msgstr ""
 
 #. translators: WordPress admin menu label for WCPOS.
-#: includes/Admin/Menu.php:159
-#: includes/Admin/Menu.php:161
+#: includes/Admin/Menu.php:160
+#: includes/Admin/Menu.php:162
 msgid "View POS"
 msgstr ""
 
 #. translators: WordPress admin submenu label that opens WCPOS settings.
 #. translators: Plugin row action link that opens WCPOS settings.
-#: includes/Admin/Menu.php:169
-#: includes/Admin/Menu.php:171
+#: includes/Admin/Menu.php:170
+#: includes/Admin/Menu.php:172
 #: includes/Admin/Plugins.php:38
 msgid "Settings"
 msgstr ""
 
 #. translators: WordPress admin menu label for WCPOS.
 #. translators: Receipt template post type or template option label.
-#: includes/Admin/Menu.php:181
-#: includes/Admin/Menu.php:183
+#: includes/Admin/Menu.php:182
+#: includes/Admin/Menu.php:184
 #: includes/Templates.php:75
 #: includes/Templates.php:80
 msgid "Templates"
@@ -127,13 +127,13 @@ msgstr ""
 #. translators: WordPress admin menu label for WCPOS.
 #. translators: Plugin admin screen label or notice for WCPOS.
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
-#: includes/Admin/Menu.php:193
+#: includes/Admin/Menu.php:194
 #: includes/Admin/Plugins.php:54
 #: includes/Admin/Products/Single_Product.php:207
 msgid "Upgrade to Pro"
 msgstr ""
 
-#: includes/Admin/Menu.php:445
+#: includes/Admin/Menu.php:446
 msgid "You do not have permission to access this page."
 msgstr ""
 
