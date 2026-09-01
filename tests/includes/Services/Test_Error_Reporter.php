@@ -504,6 +504,29 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A logged `critical` must not consume the shutdown fatal's slot.
+	 *
+	 * `Logger::$log_level` is public, so anything can log at `critical`. If
+	 * that claimed the reserved slot, the real fatal arriving later in the
+	 * same request would be dropped — the starvation the second slot exists
+	 * to prevent.
+	 */
+	public function test_logged_critical_does_not_consume_the_fatal_slot(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		Logger::set_log_level( 'critical' );
+		Logger::log( 'critical but not a php fatal' );
+		Logger::set_log_level( 'info' );
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+
+		// Assert.
+		$this->assertCount( 2, $this->transport->events );
+		$this->assertSame( 'fatal', $this->transport->events[1]->getTags()['source'] );
+	}
+
+	/**
 	 * Only one fatal is reported per request.
 	 */
 	public function test_second_fatal_in_one_request_sends_no_event(): void {

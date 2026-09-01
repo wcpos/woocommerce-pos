@@ -475,7 +475,8 @@ class Error_Reporter {
 				'critical',
 				substr( (string) $error['message'], 0, 8 * 1024 ),
 				array( 'source' => 'fatal' ),
-				array( 'wcpos-fatal', $relative, $line )
+				array( 'wcpos-fatal', $relative, $line ),
+				true
 			);
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Fatal reporting must not create another fatal.
@@ -485,19 +486,26 @@ class Error_Reporter {
 	/**
 	 * Build and send one event, subject to consent and the request cap.
 	 *
-	 * @param string $level       Error level.
-	 * @param string $message     Event message.
-	 * @param array  $tags        Event tags.
-	 * @param array  $fingerprint Event fingerprint.
+	 * @param string $level           Error level.
+	 * @param string $message         Event message.
+	 * @param array  $tags            Event tags.
+	 * @param array  $fingerprint     Event fingerprint.
+	 * @param bool   $from_fatal_path Whether this came from the shutdown fatal
+	 *                                handler, which owns the reserved slot.
 	 *
 	 * @return bool Whether an event was handed to the client.
 	 */
-	private function capture( string $level, string $message, array $tags, array $fingerprint ): bool {
+	private function capture( string $level, string $message, array $tags, array $fingerprint, bool $from_fatal_path = false ): bool {
 		if ( $this->reporting ) {
 			return false;
 		}
 
-		$is_fatal = 'critical' === $level;
+		// The reserved slot belongs to the shutdown fatal PATH, not to a
+		// severity. `Logger::$log_level` is public, so anything may log at
+		// `critical`; letting that consume the fatal budget would silently drop
+		// the real fatal arriving later in the same request — the exact
+		// starvation the second slot exists to prevent.
+		$is_fatal = $from_fatal_path;
 
 		$this->reporting = true;
 		try {
