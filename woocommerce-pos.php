@@ -27,7 +27,19 @@ namespace WCPOS\WooCommercePOS;
 if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
 	\define( __NAMESPACE__ . '\VERSION', '1.10.5' );
 }
-require_once __DIR__ . '/includes/API/V2/Ping.php';
+
+/*
+ * Serve the lightweight ping before the rest of the stack loads.
+ *
+ * The class_exists() guard is load-bearing. Pro bundles this same class and may
+ * already have declared it from its own copy; require_once dedupes on resolved
+ * path, so requiring ours unconditionally re-declares it and fatals. That happens
+ * during the plugin include phase, which makes the Pro-is-active bail-out below
+ * too late to help and takes down every route on the site.
+ */
+if ( ! class_exists( API\V2\Ping::class, false ) ) {
+	require_once __DIR__ . '/includes/API/V2/Ping.php';
+}
 API\V2\Ping::maybe_serve();
 
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {

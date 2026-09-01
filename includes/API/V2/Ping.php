@@ -11,6 +11,14 @@ use WP_REST_Response;
 use const WCPOS\WooCommercePOS\VERSION;
 /**
  * Serves the lightweight public status response.
+ *
+ * Loaded cross-plugin: Pro bundles a copy of this file and, on a site running both
+ * plugins, whichever plugin loads first declares the class for BOTH. So the version
+ * of this class in memory may be older or newer than the bootstrap calling into it,
+ * and that call happens during the plugin include phase where a "Call to undefined
+ * method" is an unrecoverable site-wide fatal. Treat the public static entry points
+ * as a frozen ABI: add methods, never rename or change the signature of an existing
+ * one.
  */
 final class Ping {
 	private const ROUTE        = '/wcpos/v2/ping';
