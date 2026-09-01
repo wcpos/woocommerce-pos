@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
@@ -467,7 +468,8 @@ JS;
 		$profile    = new Landing_Profile();
 		$data       = $profile->get_functional_data();
 
-		$consent = Settings::instance()->tracking_consent();
+		// Send gate: the persisted answer, not the filtered read view.
+		$consent = Settings::instance()->raw_tracking_consent();
 		if ( 'allowed' === $consent ) {
 			$data = array_merge( $data, $profile->get_consented_data() );
 		}
@@ -475,8 +477,7 @@ JS;
 		$encoded = wp_json_encode( $data, $json_flags );
 
 		if ( false === $encoded ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( 'WCPOS landing data JSON encoding failed: ' . json_last_error_msg() );
+			Logger::error( 'Landing data JSON encoding failed: ' . json_last_error_msg() );
 			$encoded = '{}';
 		}
 

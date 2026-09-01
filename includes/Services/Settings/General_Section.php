@@ -57,14 +57,20 @@ class General_Section extends Abstract_Section {
 	 *
 	 * Display and UI reads keep using the filtered accessor.
 	 *
-	 * @return string One of allowed|denied|undecided, or '' when never set.
+	 * Falls back to the section default rather than an empty string: the value
+	 * is mirrored to the POS client, whose schema expects one of the three
+	 * states, and `undecided` is the fail-closed one.
+	 *
+	 * @return string One of allowed|denied|undecided.
 	 */
 	public function raw_tracking_consent(): string {
-		$raw = $this->migrate( $this->read_raw() );
+		$raw      = $this->migrate( $this->read_raw() );
+		$defaults = $this->defaults();
+		$fallback = \is_string( $defaults['tracking_consent'] ?? null ) ? $defaults['tracking_consent'] : 'undecided';
 
-		$consent = $raw['tracking_consent'] ?? '';
+		$consent = $raw['tracking_consent'] ?? $fallback;
 
-		return \is_string( $consent ) ? $consent : '';
+		return \is_string( $consent ) ? $consent : $fallback;
 	}
 
 	/**

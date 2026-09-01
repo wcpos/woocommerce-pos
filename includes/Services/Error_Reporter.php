@@ -312,7 +312,7 @@ class Error_Reporter {
 			// Group on the bare message: the context routinely carries order ids,
 			// timestamps and paths, so folding it into the grouping key would make
 			// every occurrence its own Sentry issue.
-			$fingerprint = array( 'wcpos-log', $level, $message );
+			$fingerprint = array( 'wcpos-log', $level, self::redact_paths( $message ) );
 
 			if ( '' !== $context ) {
 				$message .= ' | Context: ' . $context;
@@ -373,7 +373,7 @@ class Error_Reporter {
 							'error',
 							$message,
 							array(
-								'route'  => self::generalize_route( (string) $route ),
+								'route'  => self::generalize_route( (string) $route, $request->get_url_params() ),
 								'method' => (string) $request->get_method(),
 								'status' => (string) $status,
 								'source' => 'rest',
@@ -404,14 +404,25 @@ class Error_Reporter {
 	/**
 	 * Collapse resource ids in a route so the tag stays low-cardinality.
 	 *
-	 * `/wcpos/v1/products/12345` becomes `/wcpos/v1/products/{id}`; without
-	 * this every object id opens its own tag value, and the ids are store data.
+	 * Matched route parameters are removed first because printer-token routes
+	 * contain non-numeric credentials. Remaining numeric ids are then collapsed.
+	 * Without this, each resource id opens its own tag value and exposes store data.
 	 *
-	 * @param string $route Concrete requested route.
+	 * @param string $route      Concrete requested route.
+	 * @param array  $parameters Matched URL parameters.
 	 *
 	 * @return string Generalized route.
 	 */
-	private static function generalize_route( string $route ): string {
+	private static function generalize_route( string $route, array $parameters ): string {
+		foreach ( $parameters as $value ) {
+			if ( ! \is_scalar( $value ) || '' === (string) $value ) {
+				continue;
+			}
+
+			$redacted = preg_replace( '#/' . preg_quote( (string) $value, '#' ) . '(?=/|$)#', '/{param}', $route );
+			$route    = \is_string( $redacted ) ? $redacted : $route;
+		}
+
 		$generalized = preg_replace( '#/\d+#', '/{id}', $route );
 
 		return \is_string( $generalized ) ? $generalized : $route;
@@ -440,7 +451,7 @@ class Error_Reporter {
 				return;
 			}
 
-			$fatal_types = E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR;
+			$fatal_types = E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR;
 			if ( 0 === ( (int) $error['type'] & $fatal_types ) ) {
 				return;
 			}
@@ -549,6 +560,11 @@ class Error_Reporter {
 		try {
 			if ( ! \class_exists( '\WCPOS\Vendor\Sentry\ClientBuilder' ) ) {
 				return null;
+			}
+			foreach ( array( 'mb_detect_encoding', 'mb_convert_encoding', 'mb_strlen', 'mb_substr' ) as $function ) {
+				if ( ! \function_exists( $function ) ) {
+					return null;
+				}
 			}
 			if ( null === self::$transport_factory && ! \extension_loaded( 'curl' ) ) {
 				return null;

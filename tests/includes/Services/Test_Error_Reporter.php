@@ -77,6 +77,19 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Fatal error types recognized at shutdown.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public function fatal_error_type_provider(): array {
+		return array(
+			'engine fatal'      => array( E_ERROR ),
+			'user fatal'        => array( E_USER_ERROR ),
+			'recoverable fatal' => array( E_RECOVERABLE_ERROR ),
+		);
+	}
+
+	/**
 	 * No report path builds the SDK or sends an event without consent.
 	 *
 	 * @dataProvider consent_not_allowed_provider
@@ -127,33 +140,59 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A 500 WCPOS REST error groups by its stable error code.
+	 * WCPOS REST namespaces the reporter captures 500s from.
+	 *
+	 * Both lanes are exercised because the route check matches both. Covering
+	 * only the current one would let the `/wcpos/v1/` branch be deleted from
+	 * `filter_rest_request_after_callbacks()` with the suite still green.
+	 *
+	 * @return array<string, array{string}>
 	 */
-	public function test_rest_error_with_consent_sends_code_fingerprint_and_tags(): void {
+	public function wcpos_rest_namespace_provider(): array {
+		return array(
+			'v1 lane' => array( 'wcpos/v1' ),
+			'v2 lane' => array( 'wcpos/v2' ),
+		);
+	}
+
+	/**
+	 * A 500 WCPOS REST error groups by its stable error code.
+	 *
+	 * @dataProvider wcpos_rest_namespace_provider
+	 *
+	 * @param string $namespace REST namespace under test.
+	 */
+	public function test_rest_error_with_consent_sends_code_fingerprint_and_tags( string $namespace ): void {
 		// Arrange.
 		$this->enable_consent();
 
 		// Act.
-		$this->dispatch_error_route();
+		$this->dispatch_stub_route( $namespace, '/error-reporter-500', 500 );
 
 		// Assert.
 		$this->assertCount( 1, $this->transport->events );
 		$event = $this->transport->events[0];
 		$this->assertSame( array( 'wcpos-rest', 'wcpos_test_boom' ), $event->getFingerprint() );
-		$this->assertSame( '/wcpos/v1/error-reporter-500', $event->getTags()['route'] );
+		$this->assertSame( '/' . $namespace . '/error-reporter-500', $event->getTags()['route'] );
 		$this->assertSame( 'GET', $event->getTags()['method'] );
 		$this->assertSame( '500', $event->getTags()['status'] );
 	}
 
 	/**
 	 * An in-plugin fatal produces a fatal-level event with a stable fingerprint.
+	 *
+	 * @dataProvider fatal_error_type_provider
+	 *
+	 * @param int $type Fatal error type.
 	 */
-	public function test_in_plugin_fatal_with_consent_sends_fatal_event(): void {
+	public function test_in_plugin_fatal_with_consent_sends_fatal_event( int $type ): void {
 		// Arrange.
 		$this->enable_consent();
+		$error         = $this->fatal_error();
+		$error['type'] = $type;
 
 		// Act.
-		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+		Error_Reporter::instance()->report_fatal( $error );
 
 		// Assert.
 		$this->assertCount( 1, $this->transport->events );
@@ -292,6 +331,71 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * No send gate anywhere reads consent through the filtered settings view.
+	 *
+	 * `Settings::tracking_consent()` applies `woocommerce_pos_general_settings`,
+	 * so any gate deciding whether data LEAVES the site must call
+	 * `raw_tracking_consent()` instead. Hardening one gate and leaving the
+	 * others is no hardening at all — a filter simply picks another door. The
+	 * two allowed exceptions are the consent prompt's own visibility checks,
+	 * which are UI decisions a host may legitimately override.
+	 */
+	public function test_no_send_gate_reads_consent_through_the_settings_filter(): void {
+		// Arrange.
+		$includes = \dirname( __DIR__, 3 ) . '/includes';
+		$allowed  = array( 'Admin/Consent.php' );
+
+		// Act.
+		$offenders = array();
+		$iterator  = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $includes, \FilesystemIterator::SKIP_DOTS )
+		);
+		foreach ( $iterator as $file ) {
+			if ( ! $file instanceof \SplFileInfo || 'php' !== strtolower( $file->getExtension() ) ) {
+				continue;
+			}
+
+			$relative = str_replace( $includes . '/', '', $file->getPathname() );
+			if ( \in_array( $relative, $allowed, true ) || 0 === strpos( $relative, 'Services/Settings' ) ) {
+				continue;
+			}
+
+			$contents = (string) file_get_contents( $file->getPathname() );
+			if ( preg_match( '/(?<!raw_)tracking_consent\(\)/', $contents ) ) {
+				$offenders[] = $relative;
+			}
+		}
+		sort( $offenders );
+
+		// Assert.
+		$this->assertSame(
+			array(),
+			$offenders,
+			'These files gate on the FILTERED consent view. Use Settings::raw_tracking_consent() '
+				. 'for anything that decides whether data leaves the site, or add the file to $allowed '
+				. 'if it is genuinely a UI-only read: ' . implode( ', ', $offenders )
+		);
+	}
+
+	/**
+	 * An unset consent reads as `undecided`, not an empty string.
+	 *
+	 * The value is mirrored to the POS client, whose schema expects one of the
+	 * three states, so the raw read must fall back to the section default the
+	 * filtered accessor would have supplied.
+	 */
+	public function test_raw_consent_falls_back_to_undecided_when_never_set(): void {
+		// Arrange.
+		update_option( 'woocommerce_pos_settings_general', array() );
+
+		// Act.
+		$consent = SettingsService::instance()->raw_tracking_consent();
+
+		// Assert.
+		$this->assertSame( 'undecided', $consent );
+	}
+
+	/**
 	 * Consent recorded before the move out of the legacy `tools` option still counts.
 	 */
 	public function test_legacy_tools_consent_is_honoured_by_the_raw_read(): void {
@@ -316,7 +420,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		$event     = Event::createEvent();
 		$event->setRequest(
 			array(
-				'url'     => 'https://shop.example.com/wp-json/wcpos/v1/orders?secret=1',
+				'url'     => 'https://shop.example.com/wp-json/wcpos/v2/orders?secret=1',
 				'method'  => 'POST',
 				'cookies' => array( 'a' => 'b' ),
 				'headers' => array( 'Authorization' => 'Bearer x' ),
@@ -332,7 +436,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		$this->assertSame(
 			array(
 				'method' => 'POST',
-				'url'    => '/wp-json/wcpos/v1/orders',
+				'url'    => '/wp-json/wcpos/v2/orders',
 			),
 			$scrubbed->getRequest()
 		);
@@ -377,7 +481,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		$this->enable_consent();
 
 		// Act.
-		$this->dispatch_stub_route( 'wcpos/v1', '/client-error', 400 );
+		$this->dispatch_stub_route( 'wcpos/v2', '/client-error', 400 );
 
 		// Assert.
 		$this->assertSame( array(), $this->transport->events );
@@ -474,6 +578,24 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Logger fingerprints cannot retain an absolute server path.
+	 */
+	public function test_logger_event_fingerprint_redacts_absolute_paths(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		Logger::error( 'failure in ' . PLUGIN_PATH . 'includes/Init.php' );
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$fingerprint_message = $this->transport->events[0]->getFingerprint()[2];
+		$this->assertStringNotContainsString( untrailingslashit( WP_CONTENT_DIR ), $fingerprint_message );
+		$this->assertStringNotContainsString( ABSPATH, $fingerprint_message );
+		$this->assertStringContainsString( 'includes/Init.php', $fingerprint_message );
+	}
+
+	/**
 	 * Resource ids are collapsed out of the route tag.
 	 */
 	public function test_rest_route_tag_collapses_resource_ids(): void {
@@ -481,11 +603,89 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		$this->enable_consent();
 
 		// Act.
-		$this->dispatch_stub_route( 'wcpos/v1', '/things/4242', 500 );
+		$this->dispatch_stub_route( 'wcpos/v2', '/things/4242', 500 );
 
 		// Assert.
 		$this->assertCount( 1, $this->transport->events );
-		$this->assertSame( '/wcpos/v1/things/{id}', $this->transport->events[0]->getTags()['route'] );
+		$this->assertSame( '/wcpos/v2/things/{id}', $this->transport->events[0]->getTags()['route'] );
+	}
+
+	/**
+	 * Every regex-matched route value is removed from the off-site route tag.
+	 */
+	public function test_rest_route_tag_redacts_dynamic_printer_credentials(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$this->dispatch_stub_route(
+			'wcpos/v2',
+			'/print-jobs/cloudprnt/(?P<printer_id>[^/]+)/(?P<pt>[^/]+)',
+			500,
+			'/print-jobs/cloudprnt/printer-alpha/secret-token'
+		);
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame(
+			'/wcpos/v2/print-jobs/cloudprnt/{param}/{param}',
+			$this->transport->events[0]->getTags()['route']
+		);
+	}
+
+	/**
+	 * The SDK stays disabled when its serializer's mbstring functions are absent.
+	 */
+	public function test_missing_mbstring_functions_prevent_client_initialization(): void {
+		$script = <<<'PHP'
+<?php
+$root = getcwd();
+define( 'ABSPATH', $root . '/' );
+define( 'WP_CONTENT_DIR', $root . '/wp-content' );
+define( 'WP_TESTS_DOMAIN', 'example.test' );
+define( 'MINUTE_IN_SECONDS', 60 );
+define( 'WCPOS\\WooCommercePOS\\PLUGIN_PATH', $root . '/' );
+define( 'WCPOS\\WooCommercePOS\\VERSION', 'test' );
+require $root . '/vendor_prefixed/autoload.php';
+require $root . '/includes/Services/Error_Reporter.php';
+require $root . '/tests/includes/Services/Stub_Transport.php';
+
+use WCPOS\WooCommercePOS\Services\Error_Reporter;
+use WCPOS\WooCommercePOS\Tests\Services\Stub_Transport;
+
+Error_Reporter::set_transport_factory_for_testing(
+	static function (): Stub_Transport {
+		return new Stub_Transport();
+	}
+);
+$reporter = Error_Reporter::instance();
+$method   = new ReflectionMethod( $reporter, 'get_client' );
+$method->setAccessible( true );
+$method->invoke( $reporter );
+echo $reporter->is_initialized() ? 'initialized' : 'disabled';
+PHP;
+
+		$process = proc_open(
+			array( PHP_BINARY, '-d', 'disable_functions=mb_detect_encoding,mb_convert_encoding,mb_strlen,mb_substr' ),
+			array(
+				0 => array( 'pipe', 'r' ),
+				1 => array( 'pipe', 'w' ),
+				2 => array( 'pipe', 'w' ),
+			),
+			$pipes,
+			\dirname( __DIR__, 3 )
+		);
+
+		$this->assertIsResource( $process );
+		fwrite( $pipes[0], $script );
+		fclose( $pipes[0] );
+		$output = stream_get_contents( $pipes[1] );
+		$errors = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+
+		$this->assertSame( 0, proc_close( $process ), $errors );
+		$this->assertSame( 'disabled', $output );
 	}
 
 	/**
@@ -532,17 +732,18 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	 * Dispatch the stub WCPOS 500 route through the real REST server.
 	 */
 	private function dispatch_error_route(): void {
-		$this->dispatch_stub_route( 'wcpos/v1', '/error-reporter-500', 500 );
+		$this->dispatch_stub_route( 'wcpos/v2', '/error-reporter-500', 500 );
 	}
 
 	/**
 	 * Register and dispatch a stub route returning a WP_Error of one status.
 	 *
-	 * @param string $namespace REST namespace, e.g. 'wcpos/v1'.
-	 * @param string $route     Route path, e.g. '/boom'.
-	 * @param int    $status    HTTP status the route's WP_Error carries.
+	 * @param string      $namespace     REST namespace, e.g. 'wcpos/v2'.
+	 * @param string      $route         Route path, e.g. '/boom'.
+	 * @param int         $status        HTTP status the route's WP_Error carries.
+	 * @param null|string $request_route Concrete route to dispatch when registration uses a regex.
 	 */
-	private function dispatch_stub_route( string $namespace, string $route, int $status ): void {
+	private function dispatch_stub_route( string $namespace, string $route, int $status, ?string $request_route = null ): void {
 		$register_route = static function () use ( $namespace, $route, $status ): void {
 			register_rest_route(
 				$namespace,
@@ -561,7 +762,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		do_action( 'rest_api_init', rest_get_server() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook under test.
 		remove_action( 'rest_api_init', $register_route );
 
-		rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/' . $namespace . $route ) );
+		rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/' . $namespace . ( $request_route ?? $route ) ) );
 	}
 
 	/**
