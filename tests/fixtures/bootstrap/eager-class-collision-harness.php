@@ -77,30 +77,41 @@ function get_option( $option, $default_value = false ) {
 	return $default_value;
 }
 
+/**
+ * Every symbol kind a require can declare — interfaces and traits collide with a
+ * duplicate declaration exactly like classes do, so they are inventoried too.
+ */
+function wcpos_declared_symbols(): array {
+	return array_merge( get_declared_classes(), get_declared_interfaces(), get_declared_traits() );
+}
+
 if ( 'collide' === $wcpos_mode ) {
 	$wcpos_manifest = file( $argv[3], FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
 	foreach ( $wcpos_manifest as $wcpos_line ) {
+		// One manifest line per symbol; a shared source file repeats the same
+		// duplicate path, and require_once dedupes it — loading a duplicate
+		// twice would redeclare before the bootstrap even runs.
 		list( , $wcpos_duplicate ) = explode( '|', $wcpos_line, 2 );
 		require_once $wcpos_duplicate;
 	}
 }
 
-$wcpos_before = get_declared_classes();
+$wcpos_before = wcpos_declared_symbols();
 
 require_once $wcpos_bootstrap;
 
 $wcpos_plugin_dir = \dirname( $wcpos_bootstrap );
-foreach ( array_diff( get_declared_classes(), $wcpos_before ) as $wcpos_class ) {
-	$wcpos_file = ( new ReflectionClass( $wcpos_class ) )->getFileName();
+foreach ( array_diff( wcpos_declared_symbols(), $wcpos_before ) as $wcpos_symbol ) {
+	$wcpos_file = ( new ReflectionClass( $wcpos_symbol ) )->getFileName();
 	if ( \is_string( $wcpos_file ) && 0 === strpos( $wcpos_file, $wcpos_plugin_dir . '/' ) ) {
-		echo 'DECLARED=', $wcpos_class, '|', $wcpos_file, "\n";
+		echo 'DECLARED=', $wcpos_symbol, '|', $wcpos_file, "\n";
 	}
 }
 
 if ( 'collide' === $wcpos_mode ) {
 	foreach ( $wcpos_manifest as $wcpos_line ) {
-		list( $wcpos_class, $wcpos_duplicate ) = explode( '|', $wcpos_line, 2 );
-		echo 'RESOLVED=', $wcpos_class, '|', ( new ReflectionClass( $wcpos_class ) )->getFileName(), "\n";
+		list( $wcpos_symbol, $wcpos_duplicate ) = explode( '|', $wcpos_line, 2 );
+		echo 'RESOLVED=', $wcpos_symbol, '|', ( new ReflectionClass( $wcpos_symbol ) )->getFileName(), "\n";
 	}
 }
 

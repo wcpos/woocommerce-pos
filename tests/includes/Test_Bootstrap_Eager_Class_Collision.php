@@ -132,22 +132,35 @@ class Test_Bootstrap_Eager_Class_Collision extends WP_UnitTestCase {
 	 * @return array{0: string, 1: array<string, string>} Manifest file path, and FQCN => duplicate file.
 	 */
 	private function write_duplicate_manifest( array $manifest ): array {
-		$lines      = array();
-		$duplicates = array();
+		$lines       = array();
+		$duplicates  = array();
+		$by_original = array();
 		foreach ( $manifest as $class => $original ) {
-			$duplicate = $this->dupe_dir . '/' . md5( $class ) . '.php';
-			copy( $original, $duplicate );
+			/*
+			 * ONE duplicate per source file, keyed by resolved original path. A file
+			 * declaring several symbols yields several manifest rows pointing at the
+			 * SAME duplicate; copying it once per symbol would make the harness
+			 * require two distinct copies and redeclare before the bootstrap runs —
+			 * failing the test against a correctly guarded bootstrap.
+			 */
+			$original_real = (string) realpath( $original );
+			if ( ! isset( $by_original[ $original_real ] ) ) {
+				$duplicate = $this->dupe_dir . '/' . md5( $original_real ) . '.php';
+				copy( $original, $duplicate );
 
-			// realpath both sides: ReflectionClass::getFileName() reports resolved
-			// paths, and sys_get_temp_dir() is a symlink on macOS (/tmp -> /private/tmp).
-			$duplicate = (string) realpath( $duplicate );
-			$this->assertNotSame(
-				realpath( $original ),
-				$duplicate,
-				'The duplicate must be a distinct file, otherwise require_once dedupes and the collision never happens.'
-			);
-			$lines[]              = $class . '|' . $duplicate;
-			$duplicates[ $class ] = $duplicate;
+				// realpath both sides: ReflectionClass::getFileName() reports resolved
+				// paths, and sys_get_temp_dir() is a symlink on macOS (/tmp -> /private/tmp).
+				$duplicate = (string) realpath( $duplicate );
+				$this->assertNotSame(
+					$original_real,
+					$duplicate,
+					'The duplicate must be a distinct file, otherwise require_once dedupes and the collision never happens.'
+				);
+				$by_original[ $original_real ] = $duplicate;
+			}
+
+			$lines[]              = $class . '|' . $by_original[ $original_real ];
+			$duplicates[ $class ] = $by_original[ $original_real ];
 		}
 
 		$manifest_file = $this->dupe_dir . '/manifest.txt';
