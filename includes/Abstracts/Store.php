@@ -168,7 +168,9 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );
 		$this->set_prop( 'default_customer_is_cashier', Settings::instance()->default_customer_is_cashier() );
 		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );
-		$this->set_prop( 'tracking_consent', Settings::instance()->tracking_consent() );
+		// The POS client gates its OWN error reporting on this value, so it is a
+		// send gate one hop away: read the persisted answer, not the filtered view.
+		$this->set_prop( 'tracking_consent', Settings::instance()->raw_tracking_consent() );
 	}
 
 	/**

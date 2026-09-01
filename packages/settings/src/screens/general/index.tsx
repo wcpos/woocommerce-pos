@@ -221,7 +221,7 @@ function General() {
 					</Label>
 				</FormRow>
 				<p className="wcpos:text-sm wcpos:text-gray-500">
-					{t('settings.allow_anonymous_usage_data_tip_v2')}{' '}
+					{t('settings.allow_anonymous_usage_data_tip_v3')}{' '}
 					<button
 						type="button"
 						onClick={() => setPrivacyInfoOpen(true)}

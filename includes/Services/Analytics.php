@@ -129,7 +129,11 @@ class Analytics {
 			return $this->enabled_cache;
 		}
 
-		$consent             = Settings::instance()->tracking_consent();
+		// The PERSISTED consent, not the filtered read view — otherwise any
+		// plugin filtering woocommerce_pos_general_settings could switch
+		// telemetry on for a merchant who declined it. Same gate as
+		// Services\Error_Reporter.
+		$consent             = Settings::instance()->raw_tracking_consent();
 		$this->enabled_cache = ( 'allowed' === $consent );
 
 		return $this->enabled_cache;

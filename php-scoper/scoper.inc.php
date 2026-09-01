@@ -30,6 +30,30 @@ return array(
 		// QR code (→ SVG) — pure PHP.
 		Finder::create()->files()->in( 'vendor/chillerlan/php-qrcode/src' )->name( '*.php' ),
 		Finder::create()->files()->in( 'vendor/chillerlan/php-settings-container/src' )->name( '*.php' ),
+
+		// Sentry PHP SDK (consent-gated error reporting) + its runtime deps.
+		// sentry/sentry 4.x transports over ext-curl directly — no HTTP client
+		// abstraction packages must ever be added here.
+		Finder::create()->files()->in( 'vendor/sentry/sentry/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/guzzlehttp/psr7/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/psr/http-message/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/psr/http-factory/src' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/psr/log/Psr/Log' )->name( '*.php' ),
+		// Deliberately NOT shipped:
+		// - symfony/options-resolver + symfony/deprecation-contracts: composer
+		//   requires of sentry/sentry, but 4.x ships its OWN resolver
+		//   (Sentry\OptionsResolver) and Options.php instantiates that one. The
+		//   only "Symfony" token left in sentry/src is a comment, so vendoring
+		//   them added ~1,200 unreachable lines, a patcher for their
+		//   trigger_deprecation() calls, and an eager bootstrap require that
+		//   broke the Pro plugin's bootstrap-parity guard.
+		// - jean85/pretty-package-versions: referenced only by Sentry's
+		//   ModulesIntegration (never enabled here — default_integrations is
+		//   false), and it reads Composer\InstalledVersions, which does not
+		//   exist in a scoped build.
+		// - symfony/polyfill-php82: guzzle psr7 3.x needs it only for the
+		//   #[\SensitiveParameter] attribute, which PHP 7.4 parses as a comment
+		//   and newer PHP never reflects, so the class is never autoloaded.
 	),
 
 	'patchers' => array(
@@ -45,7 +69,12 @@ return array(
 		 * against the already-prefixed occurrences via a negative lookbehind.
 		 */
 		function ( string $filePath, string $prefix, string $content ) {
-			$namespaces = 'Dompdf|FontLib|Svg';
+			// Sentry rides the same patcher: FrameBuilder marks frames whose
+			// function name starts with the literal 'Sentry\\' as not-in-app, and
+			// Options validates 'integrations' against the string type
+			// 'Sentry\\Integration\\IntegrationInterface[]' — both are
+			// double-backslash string fragments the scoper cannot rewrite.
+			$namespaces = 'Dompdf|FontLib|Svg|Sentry';
 			$pattern    = '/(?<!Vendor\\\\\\\\)(' . $namespaces . ')\\\\\\\\/';
 
 			$patched = preg_replace_callback(

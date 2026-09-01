@@ -46,6 +46,34 @@ class General_Section extends Abstract_Section {
 	}
 
 	/**
+	 * The PERSISTED tracking consent, bypassing the read view.
+	 *
+	 * `read()` ends by applying `woocommerce_pos_general_settings`, so the
+	 * ordinary accessor lets any plugin filtering that hook manufacture a
+	 * consent the merchant never gave. Telemetry send-gates must ask the
+	 * database instead. Still runs `migrate()`, so a merchant whose choice
+	 * predates the move out of the legacy `tools` option is honoured rather
+	 * than silently switched off.
+	 *
+	 * Display and UI reads keep using the filtered accessor.
+	 *
+	 * Falls back to the section default rather than an empty string: the value
+	 * is mirrored to the POS client, whose schema expects one of the three
+	 * states, and `undecided` is the fail-closed one.
+	 *
+	 * @return string One of allowed|denied|undecided.
+	 */
+	public function raw_tracking_consent(): string {
+		$raw      = $this->migrate( $this->read_raw() );
+		$defaults = $this->defaults();
+		$fallback = \is_string( $defaults['tracking_consent'] ?? null ) ? $defaults['tracking_consent'] : 'undecided';
+
+		$consent = $raw['tracking_consent'] ?? $fallback;
+
+		return \is_string( $consent ) ? $consent : $fallback;
+	}
+
+	/**
 	 * Migrate tracking_consent from the legacy `tools` option if it was set
 	 * there before being moved to `general`. In-memory only — an explicit
 	 * general-level choice always wins, and the database is never written

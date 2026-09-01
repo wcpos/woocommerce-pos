@@ -161,7 +161,9 @@ class Analytics_Profile {
 			'restore_stock_on_delete'     => $settings->restore_stock_on_delete_enabled(),
 			'storefront_receipt_enabled'  => wp_validate_boolean( $settings->get_settings( 'general', 'storefront_receipt_enabled' ) ),
 			'barcode_field'               => $defaults['barcode_field'] === $settings->barcode_field() ? 'default' : 'custom',
-			'tracking_consent'            => $settings->tracking_consent(),
+			// Report the persisted answer, so the property cannot describe a
+			// consent state the merchant never chose.
+			'tracking_consent'            => $settings->raw_tracking_consent(),
 			'enabled_gateway_count'       => \count( (array) ( ( new Landing_Profile() )->get_metrics()['active_gateways'] ?? array() ) ),
 		);
 
