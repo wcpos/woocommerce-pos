@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.5
+Stable tag: 1.10.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,14 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.6 - 2026/09/01 =
+
+- **Installing WCPOS Pro on a site running the free plugin no longer takes the site down.** Affected 1.10.0 to 1.10.5.
+- **Cloud print: the store logo and the number under the barcode now print** on Epson Server Direct Print and Star receipts, and times no longer show a stray "?".
+- **The cloud print queue shows which receipt template each job used.**
+- **The receipt template gallery opens faster** on stores with many templates.
+- **Error reporting from the plugin for merchants who opted in** — off by default, nothing is sent without your consent.
 
 = 1.10.5 - 2026/08/30 =
 
