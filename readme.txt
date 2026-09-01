@@ -131,11 +131,18 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 = 1.10.6 - 2026/09/01 =
 
 - **Installing WCPOS Pro on a site running the free plugin no longer takes the site down.** Affected 1.10.0 to 1.10.5.
+- **The Orders screen no longer goes blank until reload.**
+- **Search finds accented names** -- "cafe" matches "café".
+- **Search works the moment the till opens** instead of wrongly saying "no products found".
+- **Variations no longer get stuck loading** in the product popover.
+- **One stalled sync request can no longer stop products from loading.**
+- **The product grid fills its first page on large screens.**
+- **The till now repairs more kinds of local database damage at startup.**
 - **Cloud print: the store logo and the number under the barcode now print** on Epson Server Direct Print and Star CloudPRNT receipts.
 - **Epson Server Direct Print receipts no longer show "?" in the time.**
 - **The cloud print queue shows which receipt template each job used.**
 - **The receipt template gallery opens faster** on stores with many templates.
-- **Error reporting from the plugin for merchants who opted in** — off by default, nothing is sent without your consent.
+- **Optional error reporting** -- off by default, sent only with your consent -- and updated translations.
 
 = 1.10.5 - 2026/08/30 =
 
