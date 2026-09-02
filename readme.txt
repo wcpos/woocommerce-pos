@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.6
+Stable tag: 1.10.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,15 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.7 - 2026/09/02 =
+
+- **Paid orders no longer stay open on the till after a gateway payment.** Mostly affected stores that don't use HPOS.
+- **Orders paid by cheque, bank transfer or a gateway with its own order status now complete on the till** instead of staying open.
+- **The payment-received page only reports success once the order is actually paid.**
+- **A failed order lookup after payment no longer breaks the payment-received page.**
+- **The Logs screen explains "Storage call has not returned" and failed search rebuilds** instead of showing a raw message.
+- Updated translations.
 
 = 1.10.6 - 2026/09/01 =
 
