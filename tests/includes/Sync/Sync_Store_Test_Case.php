@@ -39,6 +39,10 @@ abstract class Sync_Store_Test_Case extends WP_UnitTestCase {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		// The observers coalesce writes per request in static state that only a
+		// real `shutdown` clears; the single PHPUnit process never gets one.
+		Sync_Journal::reset_request_state();
+		Integrity_Digest::reset_request_state();
 		$this->empty_sync_tables();
 		delete_option( Api::SCHEMA_OPTION );
 		delete_option( Sync_Journal::EPOCH_OPTION );
