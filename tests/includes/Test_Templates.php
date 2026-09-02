@@ -966,7 +966,10 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test that default template categories are registered.
 	 */
 	public function test_default_categories_registered(): void {
-		// Re-trigger registration to insert terms within this test's transaction.
+		// Re-trigger seeding to insert terms within this test's transaction:
+		// construction only seeds when the DEFAULT_TERMS_VERSION latch is below
+		// the current version (Test_Templates_Default_Terms pins that).
+		delete_option( Templates::DEFAULT_TERMS_OPTION );
 		new Templates();
 
 		$receipt = term_exists( 'receipt', 'wcpos_template_category' );

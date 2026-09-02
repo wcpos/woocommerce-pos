@@ -322,7 +322,10 @@ final class Config_Fingerprint {
 			delete_option( self::LEGACY_PROACTIVE_OPTION_PREFIX . $collection );
 		}
 
-		update_option( self::CLEANUP_VERSION_OPTION, self::CLEANUP_VERSION, false );
+		// Autoloaded: the Init constructor reads this latch on every request.
+		// Existing rows from older releases are flipped by
+		// Activator::autoload_request_latches() on upgrade.
+		update_option( self::CLEANUP_VERSION_OPTION, self::CLEANUP_VERSION, true );
 	}
 
 	/** Collections whose served representation depends on the barcode setting. */

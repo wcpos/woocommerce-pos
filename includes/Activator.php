@@ -103,6 +103,17 @@ class Activator {
 	public function single_activate( bool $install_sync_schema = true ): void {
 		$role_capabilities = self::role_capability_definition();
 
+		// Reseed the default template terms on the next request: (re)activation
+		// is the repair a merchant reaches for after deleting a term by hand.
+		// This also runs once per upgrade (version_check re-activates to sync
+		// role caps), so one post-upgrade request pays the ~18 seeding queries.
+		delete_option( Templates::DEFAULT_TERMS_OPTION );
+
+		// Second, merchant-reachable trigger for the autoload repair: db_upgrade()
+		// only runs when version_check() trips on an admin load that reaches
+		// woocommerce_init, and a miss there is permanent once bump_versions() ran.
+		self::autoload_request_latches();
+
 		// create POS specific roles.
 		$this->create_pos_roles();
 
@@ -194,7 +205,10 @@ class Activator {
 			return;
 		}
 
-		update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, false );
+		// Autoloaded: the Init constructor reads this latch on every request.
+		// This flips an existing row only on WP 6.4+; older rows are flipped by
+		// autoload_request_latches() on upgrade.
+		update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, true );
 
 		if ( null !== $previous_schema && version_compare( (string) $previous_schema, Sync_Api::SCHEMA_VERSION, '<' ) ) {
 			global $wpdb;
@@ -575,6 +589,58 @@ class Activator {
 		if ( Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
 			$this->install_sync_schema();
 		}
+
+		// Installs that predate 2026-09 wrote the per-request latches with
+		// autoload off; every upgrade re-asserts autoload so the flip is
+		// idempotent and needs no versioned update file.
+		self::autoload_request_latches();
+	}
+
+	/**
+	 * The closed set of rows that releases before 2026-09 wrote with autoload off
+	 * although the Init constructor reads them on EVERY request.
+	 *
+	 * Historical, not a registry: a new per-request option is simply written
+	 * autoloaded by its own writer. Without a persistent object cache each of
+	 * these cost one `SELECT option_value` per page load (3 of the 31 queries the
+	 * plugin added to every storefront page, measured 2026-09-03 on dev-next).
+	 *
+	 * @return string[]
+	 */
+	private static function legacy_non_autoloaded_latches(): array {
+		return array(
+			Sync_Api::SCHEMA_OPTION,
+			\WCPOS\WooCommercePOS\Sync\Visibility_Observer::SEED_VERSION_OPTION,
+			\WCPOS\WooCommercePOS\Sync\Config_Fingerprint::CLEANUP_VERSION_OPTION,
+		);
+	}
+
+	/**
+	 * Flip the legacy latches to autoload in place, leaving absent ones absent.
+	 *
+	 * One UPDATE on the flag column: never delete-and-recreate, because
+	 * `Sync_Api::SCHEMA_OPTION` gates the sync observers on every request and a
+	 * request landing in that gap would run with journaling off. 'yes' is
+	 * accepted by every core version (6.6+ maps it alongside 'on'). Idempotent:
+	 * already-autoloaded rows match nothing.
+	 */
+	public static function autoload_request_latches(): void {
+		global $wpdb;
+		$options      = self::legacy_non_autoloaded_latches();
+		$placeholders = implode( ', ', array_fill( 0, \count( $options ), '%s' ) );
+		$flipped      = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the flag column is the target; caches are cleared below.
+			$wpdb->prepare(
+				"UPDATE {$wpdb->options} SET autoload = 'yes' WHERE option_name IN ({$placeholders}) AND autoload NOT IN ('yes', 'on', 'auto-on')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders are generated for the prepared values.
+				$options
+			)
+		);
+		if ( ! $flipped ) {
+			return;
+		}
+		foreach ( $options as $option ) {
+			wp_cache_delete( $option, 'options' );
+		}
+		wp_cache_delete( 'alloptions', 'options' );
 	}
 
 	/**
