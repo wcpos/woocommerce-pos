@@ -161,6 +161,20 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertContains( 'pos-open', $pending );
 		$this->assertContains( 'pos-partial', $pending );
 		$this->assertContains( 'pending', $pending, 'core statuses are preserved' );
+
+		$inputs = array(
+			array( 'pending', 'pos-open' ),
+			array( 'pending', 'pos-partial' ),
+			array( 'pending', 'pos-open', 'pos-partial' ),
+		);
+
+		foreach ( $inputs as $statuses ) {
+			$pending = apply_filters( 'woocommerce_order_is_pending_statuses', $statuses );
+
+			$this->assertContains( 'pending', $pending, 'core statuses are preserved' );
+			$this->assertSame( 1, \count( array_keys( $pending, 'pos-open', true ) ) );
+			$this->assertSame( 1, \count( array_keys( $pending, 'pos-partial', true ) ) );
+		}
 	}
 
 	/**
@@ -172,6 +186,21 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertContains( 'pos-open', $allowed );
 		$this->assertContains( 'pos-partial', $allowed );
 		$this->assertCount( 4, $allowed, 'each status is added once' );
+
+		$inputs = array(
+			array( 'pending', 'failed', 'pos-open' ),
+			array( 'pending', 'failed', 'pos-partial' ),
+			array( 'pending', 'failed', 'pos-open', 'pos-partial' ),
+		);
+
+		foreach ( $inputs as $statuses ) {
+			$allowed = apply_filters( 'wc_stripe_allowed_payment_processing_statuses', $statuses );
+
+			$this->assertContains( 'pending', $allowed, 'core statuses are preserved' );
+			$this->assertContains( 'failed', $allowed, 'core statuses are preserved' );
+			$this->assertSame( 1, \count( array_keys( $allowed, 'pos-open', true ) ) );
+			$this->assertSame( 1, \count( array_keys( $allowed, 'pos-partial', true ) ) );
+		}
 	}
 
 	/**

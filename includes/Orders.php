@@ -140,9 +140,9 @@ class Orders {
 	}
 
 	/**
-	 * Treat the POS statuses as "pending" wherever core asks.
+	 * Treat the WCPOS statuses as "pending" wherever core asks.
 	 *
-	 * wc_get_is_pending_statuses() is what the order-pay page, the Store API and
+	 * The wc_get_is_pending_statuses() function is what the order-pay page, the Store API and
 	 * WooPayments' duplicate-prevention use to decide that stock is already held;
 	 * a pos-open order failing that test is re-validated as if it were a failed order.
 	 *
@@ -155,7 +155,7 @@ class Orders {
 	}
 
 	/**
-	 * Let Stripe finish asynchronous payments on POS orders.
+	 * Let Stripe finish asynchronous payments on WCPOS orders.
 	 *
 	 * Stripe refuses 3DS returns, redirect methods and webhook completions for any
 	 * order outside this list (default: pending, failed) — the money is taken and
@@ -170,7 +170,7 @@ class Orders {
 	}
 
 	/**
-	 * Append the POS statuses to a status list without duplicating them.
+	 * Append the WCPOS statuses to a status list without duplicating them.
 	 *
 	 * @param array $statuses Statuses without the wc- prefix.
 	 *
