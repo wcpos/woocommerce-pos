@@ -292,11 +292,11 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_get_items_filters_display_templates_by_type(): void {
 		$post_id = $this->create_template( 'Customer Display', 'display' );
 
-		$display_request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$display_request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
 		$display_request->set_param( 'type', 'display' );
 		$display_response = $this->server->dispatch( $display_request );
 
-		$receipt_request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$receipt_request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
 		$receipt_request->set_param( 'type', 'receipt' );
 		$receipt_response = $this->server->dispatch( $receipt_request );
 
@@ -311,7 +311,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_get_item_returns_display_template(): void {
 		$post_id = $this->create_template( 'Customer Display', 'display' );
-		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $post_id );
 		$request->set_param( 'type', 'display' );
 		$response = $this->server->dispatch( $request );
 
@@ -924,7 +924,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_batch_reorder_saves_display_order(): void {
 		$post_id = $this->create_template( 'Display Order', 'display' );
-		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
 		$request->set_body_params(
 			array(
 				'type'  => 'display',
