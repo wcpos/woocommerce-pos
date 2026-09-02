@@ -41,6 +41,36 @@ Time attributed inside the wrapped callbacks was 11–13 ms per request; the res
 
 So the plugin adds roughly **17 % more queries and ~100 ms** to an online checkout, and writes **12 sync-journal rows for one order**. The order itself is untouched: no `_pos_*`/uuid meta was stamped, status and totals matched the control.
 
+### Realistic online checkout (added later the same night)
+
+The first checkout above used a product without stock management, no coupon and no account. `footprint-battery2.sh` (alongside this note) repeats it with a stock-managed product ×2, a 10 % coupon and `create_account: true`, still COD, 3 iterations per mode. Pro lane:
+
+| Mode | Server ms (median) | Queries | POS-attributed |
+|---|---|---|---|
+| off | 1420 | 808 | – |
+| plain | 1751 | 941 | – |
+| on | 1738 | 941 | 171 ms · 142 q · 66 callbacks / 138 calls |
+
+So on a realistic order the plugin adds **~330 ms (+23 %) and 133 queries**. Breakdown of the attributed 171 ms: order journal ×11 = 66 ms/45 q; order digest ×11 = 35 ms/22 q; order create journal+digest = 13 ms; seven customer journal/digest writes for the new account ≈ 25 ms/20 q; product stock journal + digest + `Products::product_set_stock` (which does a `wp_posts` UPDATE to bump `post_modified`) ≈ 9 ms; Init loaders ≈ 11 ms. The remaining ~150 ms of the plain-vs-off delta is not inside wrapped callbacks (plugin file loading and service construction; within run-to-run variance of ±100 ms). A WooCommerce fact surfaced by the journal rows: the Store API saves the order as a `checkout-draft` **eight times before `woocommerce_new_order` fires**, so the 12 rows were 8 × update, create, 3 × update.
+
+The same battery on the **free** lane (dev-next's lane-variant header): off 1379 ms / 808 q, plain 1551 ms / 935 q → +173 ms / +127 q, POS-attributed 131 ms / 136 q.
+
+Every functional filter that fired on the checkout was also read for its gate: all check `woocommerce_pos_request()`, `woocommerce_pos_is_pos_order()` or the prevent-overselling setting, and the POS gateways are hard-coded `enabled = 'no'`. The interference is cost, not behavior.
+
+### Fix applied for the checkout path (PR #1841, `fix/journal-order-write-coalescing`)
+
+`Sync_Journal::record_order_updated` now only marks the order dirty and keeps the hook's order object; one `hook:update` row lands on `flush_pending_order_updates()` at `shutdown` (last, after WooCommerce's own customer/session saves), before any other-origin row for that order, or when a different order is saved; a `hook:create` row drops the owed update. `Integrity_Digest` order/customer upserts are coalesced likewise (bounded at 50 distinct records) and flushed at `shutdown` or before any `Digest_Index::read_digests()`. Hotpatched onto the dev-next free lane and re-measured with the same battery:
+
+| Free lane, realistic checkout | off | before | after |
+|---|---|---|---|
+| server ms | 1379 | 1551 (+173) | 1393 (+67) |
+| queries | 808 | 935 (+127) | 867 (+59) |
+| POS-attributed | – | 131 ms / 136 q | 57 ms / 60 q |
+| journal rows per order | – | 12 | 3 (2 with the create-drops-update rule that landed after this run) |
+| per-save observer cost ×11 | – | ~9 ms / 6 q each | 0.03 ms / 0 q each |
+
+The hotpatch was reverted afterwards (dev-next back on `main`); 351 journal rows for the deleted probe orders remain for the purge cron to sweep. What remains per checkout is the create row, the customer create rows, the product stock journal/digest and `Products::product_set_stock`'s `wp_posts` UPDATE.
+
 ## Where the cost is
 
 **Every request (31 queries, ~11 ms) — all from eager loading in `Init`:**
