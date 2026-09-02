@@ -78,6 +78,24 @@ final class Product_Search {
 	}
 
 	/**
+	 * Rank exact SKU or barcode matches ahead of substring matches.
+	 *
+	 * @param string   $orderby ORDER BY SQL.
+	 * @param WP_Query $query   Query instance.
+	 */
+	public static function posts_orderby( string $orderby, WP_Query $query ): string {
+		global $wpdb;
+		if ( ! self::is_searching( $query ) ) {
+			return $orderby;
+		}
+		$keys = Barcode_Field::search_keys();
+		return $wpdb->prepare(
+			'MIN(CASE WHEN pm1.meta_key IN (' . implode( ', ', array_fill( 0, count( $keys ), '%s' ) ) . ') AND pm1.meta_value = %s THEN 0 ELSE 1 END) ASC',
+			array_merge( $keys, array( trim( (string) $query->query_vars['s'] ) ) )
+		) . ', ' . ( '' === trim( $orderby ) ? "{$wpdb->posts}.ID DESC" : $orderby );
+	}
+
+	/**
 	 * Whether the query carries a search term. Not empty(): the literal term "0" is a search.
 	 *
 	 * @param WP_Query $query Query instance.
