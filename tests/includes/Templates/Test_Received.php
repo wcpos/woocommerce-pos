@@ -125,6 +125,17 @@ class Test_Received extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A zero-total failed order is still unpaid even though it needs no payment.
+	 */
+	public function test_zero_total_failed_order_does_not_render_received_script(): void {
+		$order = OrderHelper::create_order( array( 'status' => 'failed', 'total' => '0' ) );
+
+		$output = $this->render_received( $order );
+
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
 	 * Open POS orders must not use the gateway's configured completion status.
 	 */
 	public function test_pos_open_order_does_not_render_received_script_regardless_of_gateway_setting(): void {

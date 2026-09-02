@@ -94,14 +94,10 @@ class Received {
 			}
 
 			$order_json = $this->get_order_json( $order->get_id() );
-			// Emit only when the order is genuinely beyond payment. needs_payment() covers
-			// every status WooCommerce or a gateway still considers payable — pending, failed,
-			// and (via our own woocommerce_valid_order_statuses_for_payment filter) pos-open /
-			// pos-partial — so an async gateway that redirects before the provider confirms
-			// emits nothing. The explicit POS-status exclusion stays because needs_payment()
-			// is false for a ZERO-TOTAL order regardless of status: a parked zero-total cart
-			// must not report itself as a completed payment.
-			$order_complete = ! $order->needs_payment() && ! \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true );
+			// Emit only after WooCommerce recognizes the order as paid. A negative
+			// needs_payment() check is insufficient because zero-total failed orders do not
+			// need payment. Keep the POS exclusions so parked carts never report success.
+			$order_complete = $order->is_paid() && ! \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true );
 
 			if ( false === $order_json ) {
 				$order_complete = false;
