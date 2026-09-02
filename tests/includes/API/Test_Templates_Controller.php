@@ -55,6 +55,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		parent::tearDown();
 		delete_option( 'wcpos_template_order_receipt' );
 		delete_option( 'wcpos_template_order_report' );
+		delete_option( 'wcpos_template_order_display' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
 		remove_role( 'pos_cashier_test' );
@@ -286,6 +287,41 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test display templates are isolated from receipt listings.
+	 */
+	public function test_get_items_filters_display_templates_by_type(): void {
+		$post_id = $this->create_template( 'Customer Display', 'display' );
+
+		$display_request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$display_request->set_param( 'type', 'display' );
+		$display_response = $this->server->dispatch( $display_request );
+
+		$receipt_request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$receipt_request->set_param( 'type', 'receipt' );
+		$receipt_response = $this->server->dispatch( $receipt_request );
+
+		$this->assertContains( $post_id, array_column( $display_response->get_data(), 'id' ) );
+		$this->assertNotContains( $post_id, array_column( $receipt_response->get_data(), 'id' ) );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test a display template can be retrieved by ID.
+	 */
+	public function test_get_item_returns_display_template(): void {
+		$post_id = $this->create_template( 'Customer Display', 'display' );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$request->set_param( 'type', 'display' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'display', $response->get_data()['type'] );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
 	 * Test get_items with invalid type filter returns error.
 	 */
 	public function test_get_items_with_invalid_type(): void {
@@ -463,7 +499,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_type_enum_values(): void {
 		$params = $this->endpoint->get_collection_params();
 
-		$this->assertEquals( array( 'receipt', 'report' ), $params['type']['enum'] );
+		$this->assertEquals( array( 'receipt', 'report', 'display' ), $params['type']['enum'] );
 	}
 
 	/**
@@ -881,6 +917,26 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		wp_delete_post( $id1, true );
 		wp_delete_post( $id2, true );
+	}
+
+	/**
+	 * Test display batch ordering uses the display-specific option.
+	 */
+	public function test_batch_reorder_saves_display_order(): void {
+		$post_id = $this->create_template( 'Display Order', 'display' );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'type'  => 'display',
+				'order' => array( $post_id ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array( $post_id ), get_option( 'wcpos_template_order_display' ) );
+
+		wp_delete_post( $post_id, true );
 	}
 
 	/**

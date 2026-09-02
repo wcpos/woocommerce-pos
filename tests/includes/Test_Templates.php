@@ -627,6 +627,35 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test display virtual templates require a corresponding display file.
+	 */
+	public function test_core_display_virtual_template_returns_null_without_file(): void {
+		$this->assertNull( Templates::get_virtual_template( Templates::TEMPLATE_PLUGIN_CORE, 'display' ) );
+	}
+
+	/**
+	 * Test the Pro display virtual template title when a Pro display file is available.
+	 */
+	public function test_pro_display_virtual_template_uses_display_title(): void {
+		$template = Templates::get_virtual_template( Templates::TEMPLATE_PLUGIN_PRO, 'display' );
+		if ( ! $template ) {
+			$this->markTestSkipped( 'No active Pro display template path available.' );
+		}
+
+		$this->assertEquals( 'Pro Display', $template['title'] );
+		$this->assertEquals( '', $template['category'] );
+	}
+
+	/**
+	 * Test display fallback titles never use receipt wording.
+	 */
+	public function test_display_fallback_title_uses_display_wording(): void {
+		$this->assertSame( 'Display Template #42', Templates::get_fallback_template_title( 42, 'display', 'logicless' ) );
+		$this->assertSame( 'Display Template #42', Templates::get_fallback_template_title( 42, 'display', 'thermal', '80mm' ) );
+		$this->assertStringNotContainsString( 'Receipt', Templates::get_fallback_template_title( 42, 'display' ) );
+	}
+
+	/**
 	 * Test WP Overnight templates are not listed when the integration is unavailable.
 	 */
 	public function test_wp_overnight_templates_not_detected_when_integration_unavailable(): void {
@@ -960,6 +989,18 @@ class Test_Templates extends WP_UnitTestCase {
 	 */
 	public function test_template_category_taxonomy_exists(): void {
 		$this->assertTrue( taxonomy_exists( 'wcpos_template_category' ) );
+	}
+
+	/**
+	 * Test the display template type term is registered.
+	 */
+	public function test_display_template_type_registered(): void {
+		new Templates();
+
+		$term = get_term_by( 'slug', 'display', 'wcpos_template_type' );
+
+		$this->assertEquals( 'Display', $term->name );
+		$this->assertEquals( 'Customer-facing display templates', $term->description );
 	}
 
 	/**

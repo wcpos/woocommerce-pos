@@ -77,7 +77,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description' => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'default'     => 'receipt',
-						'enum'        => array( 'receipt', 'report' ),
+						'enum'        => array( 'receipt', 'report', 'display' ),
 					),
 				),
 			)
@@ -121,7 +121,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type for ordering.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report' ),
+						'enum'              => array( 'receipt', 'report', 'display' ),
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -207,7 +207,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report' ),
+						'enum'              => array( 'receipt', 'report', 'display' ),
 						'sanitize_callback' => 'sanitize_key',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -272,6 +272,14 @@ class Templates_Controller extends WP_REST_Controller {
 						'description' => /* translators: REST API schema field label or error message. */ __( 'Template ID to preview.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'required'    => true,
+					),
+					'type'     => array(
+						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'default'           => 'receipt',
+						'enum'              => array( 'receipt', 'report', 'display' ),
+						'sanitize_callback' => 'sanitize_key',
+						'validate_callback' => 'rest_validate_request_arg',
 					),
 					'order_id'  => array(
 						'description' => __( 'Order ID or "latest" for most recent POS order. Omit for sample data.', 'woocommerce-pos' ),
@@ -1198,10 +1206,10 @@ class Templates_Controller extends WP_REST_Controller {
 	 * Uses the URL namespace with a wcpos-specific prefix so the same
 	 * template ID + type always produces the same UUID across installations.
 	 * Type is included because the same ID (e.g. 'plugin-core') can exist
-	 * for both 'receipt' and 'report' template types.
+	 * across receipt, report, and display template types.
 	 *
 	 * @param string $template_id Virtual template ID (e.g. 'plugin-core').
-	 * @param string $type        Template type (e.g. 'receipt', 'report').
+	 * @param string $type        Template type (e.g. 'receipt', 'report', 'display').
 	 *
 	 * @return string UUID v5 string.
 	 */
@@ -1278,7 +1286,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'default'           => 'receipt',
-				'enum'              => array( 'receipt', 'report' ),
+				'enum'              => array( 'receipt', 'report', 'display' ),
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
