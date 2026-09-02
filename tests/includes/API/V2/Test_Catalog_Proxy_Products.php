@@ -192,6 +192,77 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * An exact SKU match must not fall behind a full first page of title matches.
+	 */
+	public function test_product_search_ranks_exact_sku_first(): void {
+		$exact = ProductHelper::create_simple_product( array( 'sku' => 'red' ) );
+		$this->create_red_title_matches();
+
+		$rows = $this->read(
+			array(
+				'search'   => 'red',
+				'per_page' => 20,
+				'orderby'  => 'id',
+				'order'    => 'desc',
+			)
+		);
+
+		$this->assertCount( 20, $rows );
+		$this->assertSame( $exact->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * An exact configured-barcode match must rank ahead of title matches.
+	 */
+	public function test_product_search_ranks_exact_barcode_first(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$exact = ProductHelper::create_simple_product();
+		$exact->update_meta_data( '_barcode', 'red' );
+		$exact->save_meta_data();
+		$this->create_red_title_matches();
+
+		$rows = $this->read(
+			array(
+				'search'   => 'red',
+				'per_page' => 20,
+				'orderby'  => 'id',
+				'order'    => 'desc',
+			)
+		);
+
+		$this->assertCount( 20, $rows );
+		$this->assertSame( $exact->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * A claimed POS sort must retain the exact-carrier rank ahead of its own order.
+	 */
+	public function test_product_search_exact_rank_precedes_claimed_sku_sort(): void {
+		$exact = ProductHelper::create_simple_product( array( 'sku' => 'red' ) );
+		$this->create_red_title_matches( true );
+
+		$rows = $this->read(
+			array(
+				'search'   => 'red',
+				'per_page' => 20,
+				'orderby'  => 'sku',
+				'order'    => 'asc',
+			)
+		);
+
+		$this->assertCount( 20, $rows );
+		$this->assertSame( $exact->get_id(), $rows[0]['id'] );
+	}
+
+	/**
 	 * Regression: wcpos/v2 search must not match product descriptions.
 	 */
 	public function test_product_search_does_not_match_description(): void {
@@ -425,6 +496,21 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		wp_cache_flush();
 
 		return $product->get_id();
+	}
+
+	/**
+	 * Create enough title matches to fill the requested search page.
+	 *
+	 * @param bool $with_skus Whether to give the matches SKUs that sort before "red".
+	 */
+	private function create_red_title_matches( bool $with_skus = false ): void {
+		for ( $i = 0; $i < 25; ++$i ) {
+			$args = array( 'name' => 'Red Widget ' . $i );
+			if ( $with_skus ) {
+				$args['sku'] = 'aaa-' . $i;
+			}
+			ProductHelper::create_simple_product( $args );
+		}
 	}
 
 	/**

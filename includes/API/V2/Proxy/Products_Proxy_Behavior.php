@@ -106,12 +106,18 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 			$search  = array( Product_Search::class, 'posts_search' );
 			$join    = array( Product_Search::class, 'posts_join' );
 			$groupby = array( Product_Search::class, 'posts_groupby' );
+			$orderby = static function ( $clauses, $query ) {
+				$clauses['orderby'] = Product_Search::posts_orderby( (string) ( $clauses['orderby'] ?? '' ), $query );
+				return $clauses;
+			};
 			add_filter( 'posts_search', $search, 10, 2 );
 			add_filter( 'posts_join', $join, 10, 2 );
 			add_filter( 'posts_groupby', $groupby, 10, 2 );
+			add_filter( 'posts_clauses', $orderby, 20, 2 );
 			$bindings[] = array( 'posts_search', $search, 10 );
 			$bindings[] = array( 'posts_join', $join, 10 );
 			$bindings[] = array( 'posts_groupby', $groupby, 10 );
+			$bindings[] = array( 'posts_clauses', $orderby, 20 );
 		}
 
 		$visibility = new Pos_Visibility();
