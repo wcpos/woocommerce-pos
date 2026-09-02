@@ -33,6 +33,7 @@ class Checkout_State_Repository {
 
 		$order->update_meta_data( self::META_KEY, $state );
 		$order->save_meta_data();
+		\WCPOS\WooCommercePOS\Sync\Order_Modified_Date::touch( $order_id );
 	}
 
 	/**
