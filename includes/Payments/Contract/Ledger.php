@@ -1,5 +1,9 @@
 <?php
-/** WCPOS order payment ledger. */
+/**
+ * WCPOS order payment ledger.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
 
 namespace WCPOS\WooCommercePOS\Payments\Contract;
 
@@ -21,10 +25,18 @@ class Ledger {
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
 	public const SOURCES = array( 'app', 'webview' );
 
-	/** @var self|null */
+	/**
+	 * Shared instance.
+	 *
+	 * @var self|null
+	 */
 	private static $instance = null;
 
-	/** @var array<int, bool> */
+	/**
+	 * Ledgers already logged as invalid.
+	 *
+	 * @var array<int, bool>
+	 */
 	private $logged_invalid_ledgers = array();
 
 	/** Get the shared ledger. */
@@ -35,7 +47,11 @@ class Ledger {
 		return self::$instance;
 	}
 
-	/** @var bool True while derive() is running payment_complete() — lets hooks skip re-entry. */
+	/**
+	 * Whether order state is currently being derived.
+	 *
+	 * @var bool True while derive() is running payment_complete() — lets hooks skip re-entry.
+	 */
 	private static $deriving = false;
 
 	/** Whether the ledger is currently deriving order state (inside payment_complete()). */
@@ -43,7 +59,11 @@ class Ledger {
 		return self::$deriving;
 	}
 
-	/** Read stored payment rows. An order without a ledger reads as empty, silently. */
+	/**
+	 * Read stored payment rows. An order without a ledger reads as empty, silently.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
 	public function read( WC_Order $order ): array {
 		$raw = $order->get_meta( self::META_KEY, true );
 		if ( ! is_string( $raw ) || '' === $raw ) {
@@ -61,18 +81,27 @@ class Ledger {
 		return $decoded['payments'];
 	}
 
-	/** Find a payment row by UUID. */
+	/**
+	 * Find a payment row by UUID.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param string   $id    Payment ID.
+	 */
 	public function find( WC_Order $order, string $id ): ?array {
 		$id = strtolower( $id );
 		foreach ( $this->read( $order ) as $row ) {
-			if ( $id === ( $row['id'] ?? null ) ) {
+			if ( ( $row['id'] ?? null ) === $id ) {
 				return $row;
 			}
 		}
 		return null;
 	}
 
-	/** Sum authorized and captured rows. */
+	/**
+	 * Sum authorized and captured rows.
+	 *
+	 * @param array $rows Payment rows.
+	 */
 	public function paid( array $rows ): string {
 		$paid = 0;
 		foreach ( $rows as $row ) {
@@ -83,13 +112,23 @@ class Ledger {
 		return Money::format( $paid );
 	}
 
-	/** Calculate the non-negative order balance. */
+	/**
+	 * Calculate the non-negative order balance.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
 	public function balance( WC_Order $order, array $rows ): string {
 		$balance = Money::minor( $order->get_total() ) - Money::minor( $this->paid( $rows ) );
 		return Money::format( max( 0, $balance ) );
 	}
 
-	/** Build the ledger-backed order summary. */
+	/**
+	 * Build the ledger-backed order summary.
+	 *
+	 * @param WC_Order   $order Order object.
+	 * @param array|null $rows  Payment rows.
+	 */
 	public function summary( WC_Order $order, ?array $rows = null ): array {
 		$rows = null === $rows ? $this->read( $order ) : $rows;
 		return array(
@@ -102,7 +141,15 @@ class Ledger {
 		);
 	}
 
-	/** Validate and record money already taken. */
+	/**
+	 * Validate and record money already taken.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param array    $input   Payment input.
+	 * @param array    $context Payment context.
+	 *
+	 * @return array|\WP_Error
+	 */
 	public function record( WC_Order $order, array $input, array $context = array() ) {
 		if ( ! Pos_Uuid::is_uuid( $input['id'] ?? null ) ) {
 			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
@@ -159,12 +206,19 @@ class Ledger {
 		$stored = $this->find_in_rows( $rows, $row['id'] );
 		if ( $stored ) {
 			foreach ( array( 'method_id', 'amount', 'kind', 'capture_mode', 'currency' ) as $field ) {
-				if ( $row[ $field ] !== ( $stored[ $field ] ?? null ) ) {
-					return new WP_Error( 'wcpos_payment_conflict', __( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ), array( 'status' => 409, 'payment' => $stored ) );
+				if ( ( $stored[ $field ] ?? null ) !== $row[ $field ] ) {
+					return new WP_Error(
+						'wcpos_payment_conflict',
+						__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
+						array(
+							'status' => 409,
+							'payment' => self::to_wire( $stored ),
+						)
+					);
 				}
 			}
 			$refusal = $this->refusal_error( $stored, $order );
-			return $refusal ?: $stored;
+			return $refusal ? $refusal : $stored;
 		}
 
 		$balance = Money::minor( $this->balance( $order, $rows ) );
@@ -184,7 +238,12 @@ class Ledger {
 		return $row;
 	}
 
-	/** Rebuild a stored overpay refusal. */
+	/**
+	 * Rebuild a stored overpay refusal.
+	 *
+	 * @param array    $row   Payment row.
+	 * @param WC_Order $order Order object.
+	 */
 	public function refusal_error( array $row, WC_Order $order ): ?WP_Error {
 		$reason = 'failed' === ( $row['status'] ?? '' ) ? ( $row['failure_reason'] ?? '' ) : '';
 		if ( ! in_array( $reason, array( 'order_already_paid', 'amount_exceeds_balance' ), true ) ) {
@@ -194,11 +253,22 @@ class Ledger {
 		return new WP_Error(
 			$already ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance',
 			$already ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ),
-			array( 'status' => $already ? 409 : 400, 'payment' => $row, 'order' => $this->summary( $order ) )
+			array(
+				'status' => $already ? 409 : 400,
+				'payment' => self::to_wire( $row ),
+				'order' => $this->summary( $order ),
+			)
 		);
 	}
 
-	/** Refresh one row through its capture-mode handler. */
+	/**
+	 * Refresh one row through its capture-mode handler.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param string   $id    Payment ID.
+	 *
+	 * @return array|\WP_Error
+	 */
 	public function status( WC_Order $order, string $id ) {
 		$rows = $this->read( $order );
 		$row  = $this->find_in_rows( $rows, strtolower( $id ) );
@@ -220,7 +290,15 @@ class Ledger {
 		return $applied;
 	}
 
-	/** Void a pending or authorized row. */
+	/**
+	 * Void a pending or authorized row.
+	 *
+	 * @param WC_Order $order  Order object.
+	 * @param string   $id     Payment ID.
+	 * @param string   $reason Void reason.
+	 *
+	 * @return array|\WP_Error
+	 */
 	public function void( WC_Order $order, string $id, string $reason ) {
 		$rows = $this->read( $order );
 		$row  = $this->find_in_rows( $rows, strtolower( $id ) );
@@ -253,11 +331,21 @@ class Ledger {
 		return $applied;
 	}
 
-	/** Apply handler-owned fields while enforcing the one-way lifecycle. */
+	/**
+	 * Apply handler-owned fields while enforcing the one-way lifecycle.
+	 *
+	 * @param array $row Payment row.
+	 * @param array $new Updated payment row.
+	 *
+	 * @return array|\WP_Error
+	 */
 	public function apply_transition( array $row, array $new ) {
 		$from    = $row['status'] ?? '';
 		$to      = $new['status'] ?? $from;
-		$allowed = array( 'pending' => array( 'authorized', 'captured', 'failed', 'voided' ), 'authorized' => array( 'captured', 'voided' ) );
+		$allowed = array(
+			'pending' => array( 'authorized', 'captured', 'failed', 'voided' ),
+			'authorized' => array( 'captured', 'voided' ),
+		);
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
@@ -269,22 +357,27 @@ class Ledger {
 		return $row;
 	}
 
-	/** Normalize, persist, index, and derive a ledger. */
+	/**
+	 * Normalize, persist, index, and derive a ledger.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
 	public function save( WC_Order $order, array $rows ): void {
 		$normalized = array();
 		foreach ( $rows as $row ) {
 			$normalized[] = $this->normalize_row( $order, $row );
 		}
-		$wire = $normalized;
-		foreach ( $wire as &$row ) {
-			foreach ( array( 'provider_refs', 'receipt' ) as $field ) {
-				if ( empty( $row[ $field ] ) ) {
-					$row[ $field ] = new \stdClass();
-				}
-			}
-		}
-		unset( $row );
-		$order->update_meta_data( self::META_KEY, wp_json_encode( array( 'schema' => self::SCHEMA, 'payments' => $wire ) ) );
+		$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
+		$order->update_meta_data(
+			self::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => self::SCHEMA,
+					'payments' => $wire,
+				)
+			)
+		);
 		$order->delete_meta_data( self::INDEX_META_KEY );
 		$indexed = array();
 		foreach ( $normalized as $row ) {
@@ -297,20 +390,35 @@ class Ledger {
 		$order->save();
 	}
 
-	/** Derive WooCommerce fields without changing the order total. */
+	/**
+	 * Derive WooCommerce fields without changing the order total.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
 	public function derive( WC_Order $order, array $rows ): void {
-		$counting = array_values( array_filter( $rows, static function ( array $row ): bool {
-			return in_array( $row['status'] ?? '', self::COUNTING_STATUSES, true );
-		} ) );
-		$candidates = array_values( array_filter( $counting, static function ( array $row ): bool {
-			return 'stored_value' !== ( $row['kind'] ?? '' );
-		} ) );
-		$candidates = $candidates ?: $counting;
+		$counting = array_values(
+			array_filter(
+				$rows,
+				static function ( array $row ): bool {
+					return in_array( $row['status'] ?? '', self::COUNTING_STATUSES, true );
+				}
+			)
+		);
+		$candidates = array_values(
+			array_filter(
+				$counting,
+				static function ( array $row ): bool {
+					return 'stored_value' !== ( $row['kind'] ?? '' );
+				}
+			)
+		);
+		$candidates = $candidates ? $candidates : $counting;
 		$selected   = null;
 		foreach ( $candidates as $row ) {
 			$amount = Money::minor( $row['amount'] );
 			$time   = $this->timestamp( $row['captured_at_gmt'] ?? null );
-			if ( null === $selected || $amount > Money::minor( $selected['amount'] ) || ( $amount === Money::minor( $selected['amount'] ) && $time < $this->timestamp( $selected['captured_at_gmt'] ?? null ) ) ) {
+			if ( null === $selected || $amount > Money::minor( $selected['amount'] ) || ( Money::minor( $selected['amount'] ) === $amount && $time < $this->timestamp( $selected['captured_at_gmt'] ?? null ) ) ) {
 				$selected = $row;
 			}
 		}
@@ -351,30 +459,69 @@ class Ledger {
 			}
 			return;
 		}
-		$pending = (bool) array_filter( $rows, static function ( array $row ): bool {
-			return 'pending' === ( $row['status'] ?? '' );
-		} );
+		$pending = (bool) array_filter(
+			$rows,
+			static function ( array $row ): bool {
+				return 'pending' === ( $row['status'] ?? '' );
+			}
+		);
 		$order->set_status( $pending ? 'pending' : ( $paid > 0 ? 'pos-partial' : 'pos-open' ) );
 	}
 
-	/** Normalize every required row field while preserving extras. */
+	/**
+	 * Shape a row for JSON: the two open maps encode as `{}` when empty, never `[]`.
+	 *
+	 * @param array $row Normalized row.
+	 *
+	 * @return array
+	 */
+	public static function to_wire( array $row ): array {
+		foreach ( array( 'provider_refs', 'receipt' ) as $field ) {
+			if ( empty( $row[ $field ] ) ) {
+				$row[ $field ] = new \stdClass();
+			}
+		}
+		return $row;
+	}
+
+	/**
+	 * Normalize every required row field while preserving extras.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $row   Payment row.
+	 */
 	private function normalize_row( WC_Order $order, array $row ): array {
 		$now      = gmdate( 'c' );
 		$status   = in_array( $row['status'] ?? '', self::STATUSES, true ) ? $row['status'] : 'failed';
 		$amount   = Money::normalize( $row['amount'] ?? 0 );
 		$tendered = $this->nullable_money( $row['tendered'] ?? null );
 		$defaults = array(
-			'id' => '', 'source' => 'app', 'order_id' => $order->get_id(), 'method_id' => '', 'provider' => null,
-			'kind' => 'other', 'capture_mode' => '', 'transport' => null, 'recorded_offline' => false,
-			'amount' => $amount, 'currency' => $order->get_currency(), 'tendered' => $tendered,
+			'id' => '',
+			'source' => 'app',
+			'order_id' => $order->get_id(),
+			'method_id' => '',
+			'provider' => null,
+			'kind' => 'other',
+			'capture_mode' => '',
+			'transport' => null,
+			'recorded_offline' => false,
+			'amount' => $amount,
+			'currency' => $order->get_currency(),
+			'tendered' => $tendered,
 			'change' => null === $tendered ? null : Money::format( Money::minor( $tendered ) - Money::minor( $amount ) ),
-			'tip' => $this->nullable_money( $row['tip'] ?? null ), 'status' => $status, 'failure_reason' => null,
-			'refunded_amount' => Money::normalize( $row['refunded_amount'] ?? 0 ), 'refunds' => array(),
-			'provider_refs' => array(), 'receipt' => array(), 'cashier_id' => 0, 'store_id' => null,
-			'created_at_gmt' => $this->valid_time( $row['created_at_gmt'] ?? null ) ?: $now,
+			'tip' => $this->nullable_money( $row['tip'] ?? null ),
+			'status' => $status,
+			'failure_reason' => null,
+			'refunded_amount' => Money::normalize( $row['refunded_amount'] ?? 0 ),
+			'refunds' => array(),
+			'provider_refs' => array(),
+			'receipt' => array(),
+			'cashier_id' => 0,
+			'store_id' => null,
+			'created_at_gmt' => $this->valid_time( $row['created_at_gmt'] ?? null ) ? $this->valid_time( $row['created_at_gmt'] ?? null ) : $now,
 			// Keep a valid captured_at_gmt across later transitions (a voided authorized leg
 			// keeps the time the reader approved it); default to now only when the row counts.
-			'captured_at_gmt' => $this->valid_time( $row['captured_at_gmt'] ?? null ) ?: ( in_array( $status, self::COUNTING_STATUSES, true ) ? $now : null ),
+			'captured_at_gmt' => $this->valid_time( $row['captured_at_gmt'] ?? null ) ? $this->valid_time( $row['captured_at_gmt'] ?? null ) : ( in_array( $status, self::COUNTING_STATUSES, true ) ? $now : null ),
 			'updated_at_gmt' => $now,
 		);
 		$row = array_merge( $defaults, $row );
@@ -397,17 +544,28 @@ class Ledger {
 		return $row;
 	}
 
-	/** Find a row without reading storage again. */
+	/**
+	 * Find a row without reading storage again.
+	 *
+	 * @param array  $rows Payment rows.
+	 * @param string $id   Payment ID.
+	 */
 	private function find_in_rows( array $rows, string $id ): ?array {
 		foreach ( $rows as $row ) {
-			if ( $id === ( $row['id'] ?? null ) ) {
+			if ( ( $row['id'] ?? null ) === $id ) {
 				return $row;
 			}
 		}
 		return null;
 	}
 
-	/** Replace a row and persist the ledger. */
+	/**
+	 * Replace a row and persist the ledger.
+	 *
+	 * @param WC_Order $order       Order object.
+	 * @param array    $rows        Payment rows.
+	 * @param array    $replacement Replacement payment row.
+	 */
 	private function replace_and_save( WC_Order $order, array $rows, array $replacement ): void {
 		foreach ( $rows as &$row ) {
 			if ( $row['id'] === $replacement['id'] ) {
@@ -419,24 +577,40 @@ class Ledger {
 		$this->save( $order, $rows );
 	}
 
-	/** Normalize optional money, dropping invalid values. */
+	/**
+	 * Normalize optional money, dropping invalid values.
+	 *
+	 * @param mixed $value Money value.
+	 */
 	private function nullable_money( $value ): ?string {
 		$value = null === $value ? '' : wc_format_decimal( $value, wc_get_price_decimals() );
 		return '' !== $value && is_numeric( $value ) ? Money::normalize( $value ) : null;
 	}
 
-	/** Return an ISO time only when parseable. */
+	/**
+	 * Return an ISO time only when parseable.
+	 *
+	 * @param mixed $value Time value.
+	 */
 	private function valid_time( $value ): ?string {
 		return is_string( $value ) && false !== strtotime( $value ) ? $value : null;
 	}
 
-	/** Sort missing timestamps after real timestamps. */
+	/**
+	 * Sort missing timestamps after real timestamps.
+	 *
+	 * @param mixed $value Time value.
+	 */
 	private function timestamp( $value ): int {
 		$timestamp = is_string( $value ) ? strtotime( $value ) : false;
 		return false === $timestamp ? PHP_INT_MAX : $timestamp;
 	}
 
-	/** Standard invalid input response. */
+	/**
+	 * Standard invalid input response.
+	 *
+	 * @param string $message Error message.
+	 */
 	private function invalid( string $message ): WP_Error {
 		return new WP_Error( 'rest_invalid_param', $message, array( 'status' => 400 ) );
 	}

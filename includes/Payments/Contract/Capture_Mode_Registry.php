@@ -1,5 +1,9 @@
 <?php
-/** Payment capture-mode registry. */
+/**
+ * Payment capture-mode registry.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
 
 namespace WCPOS\WooCommercePOS\Payments\Contract;
 
@@ -9,13 +13,25 @@ use WCPOS\WooCommercePOS\Logger;
 
 /** Registers and lazily instantiates capture-mode handlers. */
 class Capture_Mode_Registry {
-	/** @var self|null */
+	/**
+	 * Shared instance.
+	 *
+	 * @var self|null
+	 */
 	private static $instance = null;
 
-	/** @var array<string, string> */
+	/**
+	 * Registered handler classes by mode.
+	 *
+	 * @var array<string, string>
+	 */
 	private $handlers = array();
 
-	/** @var array<string, Capture_Mode_Handler_Interface> */
+	/**
+	 * Instantiated handlers by mode.
+	 *
+	 * @var array<string, Capture_Mode_Handler_Interface>
+	 */
 	private $instances = array();
 
 	/** Register Free's built-in handlers on first use. */
@@ -33,7 +49,12 @@ class Capture_Mode_Registry {
 		return self::$instance;
 	}
 
-	/** Register a handler class, replacing an earlier class for the mode. */
+	/**
+	 * Register a handler class, replacing an earlier class for the mode.
+	 *
+	 * @param string $mode  Capture mode.
+	 * @param string $class Handler class name.
+	 */
 	public function register( string $mode, string $class ): void {
 		if ( ! class_exists( $class ) || ! is_subclass_of( $class, Capture_Mode_Handler_Interface::class ) ) {
 			Logger::log( sprintf( 'Ignored invalid WCPOS capture-mode handler "%s" for mode "%s".', $class, $mode ) );
@@ -48,12 +69,20 @@ class Capture_Mode_Registry {
 		unset( $this->instances[ $mode ] );
 	}
 
-	/** Whether a mode has a registered handler. */
+	/**
+	 * Whether a mode has a registered handler.
+	 *
+	 * @param string $mode Capture mode.
+	 */
 	public function has( string $mode ): bool {
 		return isset( $this->handlers[ $mode ] );
 	}
 
-	/** Get the shared handler instance for a mode. */
+	/**
+	 * Get the shared handler instance for a mode.
+	 *
+	 * @param string $mode Capture mode.
+	 */
 	public function get( string $mode ): ?Capture_Mode_Handler_Interface {
 		if ( ! $this->has( $mode ) ) {
 			return null;

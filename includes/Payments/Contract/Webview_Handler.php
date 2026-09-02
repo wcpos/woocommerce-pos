@@ -1,5 +1,9 @@
 <?php
-/** Webview payment capture handler. */
+/**
+ * Webview payment capture handler.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
 
 namespace WCPOS\WooCommercePOS\Payments\Contract;
 
@@ -7,7 +11,11 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 /** Describes legacy order-pay webview capture. */
 class Webview_Handler extends Abstract_Capture_Mode_Handler {
-	/** Describe webview capture. */
+	/**
+	 * Describe webview capture.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway instance.
+	 */
 	public function describe( \WC_Payment_Gateway $gateway ): array {
 		$supports_refunds = (bool) $gateway->supports( 'refunds' );
 
@@ -33,7 +41,14 @@ class Webview_Handler extends Abstract_Capture_Mode_Handler {
 		);
 	}
 
-	/** Webview payments cannot be voided through the contract. */
+	/**
+	 * Webview payments cannot be voided through the contract.
+	 *
+	 * @param array  $row    Payment row.
+	 * @param string $reason Void reason.
+	 *
+	 * @return array|\WP_Error
+	 */
 	public function void( array $row, string $reason ) {
 		return new \WP_Error(
 			'wcpos_invalid_transition',

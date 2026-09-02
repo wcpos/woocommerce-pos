@@ -1,5 +1,9 @@
 <?php
-/** Manual payment capture handler. */
+/**
+ * Manual payment capture handler.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
 
 namespace WCPOS\WooCommercePOS\Payments\Contract;
 
@@ -7,7 +11,11 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 /** Describes payments recorded manually at the till. */
 class Manual_Handler extends Abstract_Capture_Mode_Handler {
-	/** Describe manual capture. */
+	/**
+	 * Describe manual capture.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway instance.
+	 */
 	public function describe( \WC_Payment_Gateway $gateway ): array {
 		return array(
 			'capture'      => array(
@@ -19,7 +27,10 @@ class Manual_Handler extends Abstract_Capture_Mode_Handler {
 			'capabilities' => array(
 				'amount'   => array( 'partial' => true ),
 				'change'   => 'cash' === Descriptor_Builder::resolve_kind( $gateway ),
-				'refunds'  => array( 'via' => 'manual', 'partial' => true ),
+				'refunds'  => array(
+					'via' => 'manual',
+					'partial' => true,
+				),
 				'tips'     => 'none',
 				'offline'  => 'record',
 				'void'     => true,

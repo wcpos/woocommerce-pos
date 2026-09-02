@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
@@ -23,6 +24,73 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
+	/** Split ledger rows become ordered receipt payment entries and totals. */
+	public function test_build_payments_reads_split_ledger_rows(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_total( '92.95' );
+		$order->save();
+		Ledger::instance()->record(
+			$order,
+			array(
+				'id'        => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount'    => '30.00',
+				'currency'  => 'USD',
+				'tendered'  => '35.00',
+			)
+		);
+		Ledger::instance()->record(
+			$order,
+			array(
+				'id'        => wp_generate_uuid4(),
+				'method_id' => 'pos_card',
+				'amount'    => '62.95',
+				'currency'  => 'USD',
+			)
+		);
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$this->assertCount( 2, $payload['payments'] );
+		$this->assertSame( 'pos_cash', $payload['payments'][0]['method_id'] );
+		$this->assertSame( 30.0, $payload['payments'][0]['amount'] );
+		$this->assertSame( 35.0, $payload['payments'][0]['tendered'] );
+		$this->assertSame( 5.0, $payload['payments'][0]['change'] );
+		$this->assertSame( 'pos_card', $payload['payments'][1]['method_id'] );
+		$this->assertSame( 62.95, $payload['payments'][1]['amount'] );
+		$this->assertSame( 92.95, $payload['totals']['paid_total'] );
+		$this->assertSame( 5.0, $payload['totals']['change_total'] );
+	}
+
+	/** Orders without counting ledger rows keep the legacy single payment. */
+	public function test_build_payments_falls_back_to_order_fields_without_ledger(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_payment_method( 'pos_cash' );
+		$order->set_payment_method_title( 'Cash' );
+		$order->set_transaction_id( 'txn_123' );
+		$order->update_meta_data( '_pos_cash_amount_tendered', '100.00' );
+		$order->update_meta_data( '_pos_cash_change', '7.05' );
+		$order->save();
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$this->assertCount( 1, $payload['payments'] );
+		$this->assertSame( 'pos_cash', $payload['payments'][0]['method_id'] );
+		$this->assertSame( 'Cash', $payload['payments'][0]['method_title'] );
+		$this->assertSame( (float) $order->get_total(), $payload['payments'][0]['amount'] );
+		$this->assertSame( 100.0, $payload['payments'][0]['tendered'] );
+		$this->assertSame( 7.05, $payload['payments'][0]['change'] );
+		$this->assertSame( 'txn_123', $payload['payments'][0]['transaction_id'] );
+	}
+
 	/**
 	 * Builder instance.
 	 *

@@ -1,5 +1,9 @@
 <?php
-/** Payment method descriptor builder. */
+/**
+ * Payment method descriptor builder.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
 
 namespace WCPOS\WooCommercePOS\Payments\Contract;
 
@@ -10,10 +14,18 @@ use WCPOS\WooCommercePOS\Logger;
 
 /** Builds the v1 payment method contract from registered gateways. */
 class Descriptor_Builder {
-	/** @var self|null */
+	/**
+	 * Shared instance.
+	 *
+	 * @var self|null
+	 */
 	private static $instance = null;
 
-	/** @var array<string, bool> */
+	/**
+	 * Modes already logged as missing.
+	 *
+	 * @var array<string, bool>
+	 */
 	private static $logged_missing_modes = array();
 
 	/** Get the shared builder. */
@@ -43,25 +55,47 @@ class Descriptor_Builder {
 			}
 		);
 
-		return array( 'schema' => 1, 'contract' => '1.0', 'methods' => $methods );
+		return array(
+			'schema' => 1,
+			'contract' => '1.0',
+			'methods' => $methods,
+		);
 	}
 
-	/** Build one gateway descriptor. */
+	/**
+	 * Build one gateway descriptor.
+	 *
+	 * @param string $gateway_id Gateway ID.
+	 */
 	public function get( string $gateway_id ): ?array {
 		$gateway = $this->gateway( $gateway_id );
 		return $gateway ? $this->build( $gateway, (array) wcpos_get_settings( 'payment_gateways' ) ) : null;
 	}
 
-	/** Look up a registered gateway. */
+	/**
+	 * Look up a registered gateway.
+	 *
+	 * @param string $id Gateway ID.
+	 */
 	public function gateway( string $id ): ?WC_Payment_Gateway {
 		WC()->payment_gateways();
 		$gateways = WC()->payment_gateways->payment_gateways();
 		return isset( $gateways[ $id ] ) && $gateways[ $id ] instanceof WC_Payment_Gateway ? $gateways[ $id ] : null;
 	}
 
-	/** Resolve and validate a gateway kind. */
+	/**
+	 * Resolve and validate a gateway kind.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway instance.
+	 */
 	public static function resolve_kind( WC_Payment_Gateway $gateway ): string {
-		$map  = array( 'pos_cash' => 'cash', 'pos_card' => 'card', 'cod' => 'cash', 'bacs' => 'bank_transfer', 'cheque' => 'other' );
+		$map  = array(
+			'pos_cash' => 'cash',
+			'pos_card' => 'card',
+			'cod' => 'cash',
+			'bacs' => 'bank_transfer',
+			'cheque' => 'other',
+		);
 		$kind = $map[ $gateway->id ] ?? 'other';
 
 		/**
@@ -73,7 +107,9 @@ class Descriptor_Builder {
 		 * @param string             $kind    Payment method kind.
 		 * @param WC_Payment_Gateway $gateway Gateway instance.
 		 */
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS payments contract filter.
 		$kind = apply_filters( 'wcpos_payment_method_kind', $kind, $gateway );
+		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 		if ( ! is_string( $kind ) || ! in_array( $kind, Ledger::KINDS, true ) ) {
 			Logger::log( sprintf( 'Unknown WCPOS payment method kind returned for gateway "%s"; using "other".', $gateway->id ) );
 			return 'other';
@@ -82,7 +118,11 @@ class Descriptor_Builder {
 		return $kind;
 	}
 
-	/** Resolve a gateway capture mode. */
+	/**
+	 * Resolve a gateway capture mode.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway instance.
+	 */
 	public static function resolve_mode( WC_Payment_Gateway $gateway ): string {
 		$manual = array( 'pos_cash', 'pos_card', 'cod', 'bacs', 'cheque' );
 		$mode   = in_array( $gateway->id, $manual, true ) ? 'manual' : 'webview';
@@ -96,10 +136,17 @@ class Descriptor_Builder {
 		 * @param string             $mode    Capture mode.
 		 * @param WC_Payment_Gateway $gateway Gateway instance.
 		 */
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS payments contract filter.
 		return (string) apply_filters( 'wcpos_payment_method_capture_mode', $mode, $gateway );
+		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 
-	/** Assemble one descriptor in wire-key order. */
+	/**
+	 * Assemble one descriptor in wire-key order.
+	 *
+	 * @param WC_Payment_Gateway $gateway  Gateway instance.
+	 * @param array              $settings Payment gateway settings.
+	 */
 	private function build( WC_Payment_Gateway $gateway, array $settings ): array {
 		$gateway_settings = (array) ( $settings['gateways'][ $gateway->id ] ?? array() );
 		$kind             = self::resolve_kind( $gateway );
@@ -155,7 +202,11 @@ class Descriptor_Builder {
 				'offline' => (string) ( $capabilities['offline'] ?? 'none' ),
 				'void'    => (bool) ( $capabilities['void'] ?? false ),
 			),
-			'defaults'      => array( 'order_status' => $order_status ?: 'completed', 'rounding' => null, 'open_drawer' => 'cash' === $kind ),
+			'defaults'      => array(
+				'order_status' => $order_status ? $order_status : 'completed',
+				'rounding' => null,
+				'open_drawer' => 'cash' === $kind,
+			),
 			'provider_data' => empty( $provider_data ) ? new \stdClass() : $provider_data,
 		);
 	}
