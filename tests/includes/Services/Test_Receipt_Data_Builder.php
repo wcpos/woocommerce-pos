@@ -1844,6 +1844,58 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test extensions can reshape the receipt payload through woocommerce_pos_receipt_data.
+	 */
+	public function test_build_applies_receipt_data_filter_with_order_and_mode(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Item' );
+		$product->set_regular_price( '50.00' );
+		$product->save();
+
+		$coupon = new \WC_Coupon();
+		$coupon->set_code( 'FIXED5' );
+		$coupon->set_amount( 5 );
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->apply_coupon( 'FIXED5' );
+		$order->calculate_totals();
+		$order->save();
+
+		$seen   = array();
+		$filter = static function ( array $data, $filtered_order, string $mode ) use ( &$seen ): array {
+			$seen = array(
+				'order_id' => $filtered_order->get_id(),
+				'mode'     => $mode,
+			);
+			$data['discounts'][0]['gift_card'] = true;
+			$data['discounts'][0]['label']     = 'Gift Card';
+
+			return $data;
+		};
+
+		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		try {
+			$payload = $this->builder->build( $order, 'fiscal' );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+		}
+
+		$this->assertSame(
+			array(
+				'order_id' => $order->get_id(),
+				'mode'     => 'fiscal',
+			),
+			$seen
+		);
+		$this->assertTrue( $payload['discounts'][0]['gift_card'] );
+		$this->assertSame( 'Gift Card', $payload['discounts'][0]['label'] );
+		$this->assertSame( 'fixed_cart', $payload['discounts'][0]['discount_type'] );
+	}
+
+	/**
 	 * Test shipping emits one row per shipping method, with method_id, taxes and meta.
 	 */
 	public function test_build_emits_per_shipping_method_rows(): void {

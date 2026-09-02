@@ -26,8 +26,6 @@ class Receipt_Data_Builder {
 	 * @return array
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		unset( $mode );
-
 		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
 		$status_label = '';
 		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
@@ -392,7 +390,7 @@ class Receipt_Data_Builder {
 			)
 		);
 
-		return Receipt_Payload_Assembler::assemble(
+		$data = Receipt_Payload_Assembler::assemble(
 			array(
 				'order'              => $order_data,
 				'store'              => $store,
@@ -411,6 +409,25 @@ class Receipt_Data_Builder {
 				'presentation_hints' => $presentation_hints,
 			)
 		);
+
+		/**
+		 * Filters the canonical receipt data before it is rendered or snapshotted.
+		 *
+		 * Runs for every receipt this builder produces: live receipts, fiscal
+		 * snapshots captured at payment time, PDF downloads and legacy PHP
+		 * templates. Extensions can add their own keys to any section (for
+		 * example a flag on a `discounts[]` row) or adjust labels. Keys defined
+		 * by Receipt_Data_Schema should keep their documented types.
+		 *
+		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
+		 * @param WC_Abstract_Order $order Order the receipt is for.
+		 * @param string            $mode  Receipt mode: 'live' or 'fiscal'.
+		 *
+		 * @since 1.10.8
+		 *
+		 * @hook woocommerce_pos_receipt_data
+		 */
+		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
 	}
 
 
