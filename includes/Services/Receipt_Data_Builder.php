@@ -244,15 +244,17 @@ class Receipt_Data_Builder {
 			if ( ! $coupon_item instanceof \WC_Order_Item_Coupon ) {
 				continue;
 			}
+			$coupon      = $this->get_order_coupon( $coupon_item );
 			$coupon_excl = (float) $coupon_item->get_discount();
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
 			$discounts[] = array(
-				'label'      => $this->get_coupon_label( $coupon_item ),
-				'code'       => $coupon_item->get_code(),
-				'total'      => $display_incl ? $coupon_incl : $coupon_excl,
-				'total_incl' => $coupon_incl,
-				'total_excl' => $coupon_excl,
+				'label'         => $this->get_coupon_label( $coupon_item, $coupon ),
+				'code'          => $coupon_item->get_code(),
+				'discount_type' => $coupon ? (string) $coupon->get_discount_type() : '',
+				'total'         => $display_incl ? $coupon_incl : $coupon_excl,
+				'total_incl'    => $coupon_incl,
+				'total_excl'    => $coupon_excl,
 			);
 		}
 
@@ -618,6 +620,31 @@ class Receipt_Data_Builder {
 	}
 
 	/**
+	 * Load the WooCommerce coupon behind an order coupon line, if it still exists.
+	 *
+	 * Order coupon lines only store the code; the coupon post may have been
+	 * deleted since the order was placed, in which case templates fall back to
+	 * the code alone.
+	 *
+	 * @param \WC_Order_Item_Coupon $coupon_item Coupon order item.
+	 * @return \WC_Coupon|null
+	 */
+	private function get_order_coupon( \WC_Order_Item_Coupon $coupon_item ): ?\WC_Coupon {
+		$code = (string) $coupon_item->get_code();
+		if ( '' === $code ) {
+			return null;
+		}
+
+		try {
+			$coupon = new \WC_Coupon( $code );
+		} catch ( \Exception $exception ) {
+			return null;
+		}
+
+		return $coupon->get_id() ? $coupon : null;
+	}
+
+	/**
 	 * Resolve an optional human-facing coupon label for a receipt discount row.
 	 *
 	 * Coupons are identified by code; the code is already exposed as
@@ -625,21 +652,12 @@ class Receipt_Data_Builder {
 	 * fall back to the code so templates that render `label` always have text.
 	 *
 	 * @param \WC_Order_Item_Coupon $coupon_item Coupon order item.
+	 * @param \WC_Coupon|null       $coupon      Coupon behind the line, when it still exists.
 	 * @return string
 	 */
-	private function get_coupon_label( \WC_Order_Item_Coupon $coupon_item ): string {
+	private function get_coupon_label( \WC_Order_Item_Coupon $coupon_item, ?\WC_Coupon $coupon ): string {
 		$code = (string) $coupon_item->get_code();
-		if ( '' === $code ) {
-			return '';
-		}
-
-		try {
-			$coupon = new \WC_Coupon( $code );
-		} catch ( \Exception $exception ) {
-			return $code;
-		}
-
-		if ( ! $coupon->get_id() ) {
+		if ( null === $coupon ) {
 			return $code;
 		}
 

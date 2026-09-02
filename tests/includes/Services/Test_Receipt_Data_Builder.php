@@ -1784,6 +1784,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertCount( 3, $payload['discounts'] );
 		foreach ( $payload['discounts'] as $discount ) {
 			$this->assertArrayHasKey( 'code', $discount );
+			$this->assertArrayHasKey( 'discount_type', $discount );
 			$this->assertArrayNotHasKey( 'codes', $discount );
 		}
 
@@ -1794,6 +1795,52 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'Band discount 25–75', $discounts_by_code[ wc_format_coupon_code( 'CODE_A' ) ]['label'] );
 		$this->assertSame( wc_format_coupon_code( 'CODE_B' ), $discounts_by_code[ wc_format_coupon_code( 'CODE_B' ) ]['label'] );
 		$this->assertSame( wc_format_coupon_code( 'CODE_C' ), $discounts_by_code[ wc_format_coupon_code( 'CODE_C' ) ]['label'] );
+	}
+
+	/**
+	 * Test discount rows expose the WooCommerce coupon type, or an empty string once the coupon is gone.
+	 */
+	public function test_build_exposes_discount_type_per_coupon_row(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Item' );
+		$product->set_regular_price( '50.00' );
+		$product->save();
+
+		$fixed = new \WC_Coupon();
+		$fixed->set_code( 'FIXED5' );
+		$fixed->set_amount( 5 );
+		$fixed->set_discount_type( 'fixed_cart' );
+		$fixed->save();
+
+		$percent = new \WC_Coupon();
+		$percent->set_code( 'TEN_PERCENT' );
+		$percent->set_amount( 10 );
+		$percent->set_discount_type( 'percent' );
+		$percent->save();
+
+		$deleted = new \WC_Coupon();
+		$deleted->set_code( 'GONE' );
+		$deleted->set_amount( 1 );
+		$deleted->set_discount_type( 'fixed_cart' );
+		$deleted->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->apply_coupon( 'FIXED5' );
+		$order->apply_coupon( 'TEN_PERCENT' );
+		$order->apply_coupon( 'GONE' );
+		$order->calculate_totals();
+		$order->save();
+
+		$deleted->delete( true );
+
+		$payload           = $this->builder->build( $order, 'live' );
+		$discounts_by_code = array_column( $payload['discounts'], null, 'code' );
+
+		$this->assertSame( 'fixed_cart', $discounts_by_code[ wc_format_coupon_code( 'FIXED5' ) ]['discount_type'] );
+		$this->assertSame( 'percent', $discounts_by_code[ wc_format_coupon_code( 'TEN_PERCENT' ) ]['discount_type'] );
+		$this->assertSame( '', $discounts_by_code[ wc_format_coupon_code( 'GONE' ) ]['discount_type'] );
+		$this->assertSame( wc_format_coupon_code( 'GONE' ), $discounts_by_code[ wc_format_coupon_code( 'GONE' ) ]['label'] );
 	}
 
 	/**
