@@ -101,6 +101,30 @@ class Test_Received extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * An async gateway can redirect to the received page before the provider
+	 * confirms — the order is still `pending`. Emitting here would let the app
+	 * adopt an unpaid order as a successful payment.
+	 */
+	public function test_pending_order_does_not_render_received_script(): void {
+		$order = OrderHelper::create_order( array( 'status' => 'pending', 'total' => '50' ) );
+
+		$output = $this->render_received( $order );
+
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
+	 * A failed payment that lands on the received page must not report success.
+	 */
+	public function test_failed_order_does_not_render_received_script(): void {
+		$order = OrderHelper::create_order( array( 'status' => 'failed', 'total' => '50' ) );
+
+		$output = $this->render_received( $order );
+
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
 	 * Open POS orders must not use the gateway's configured completion status.
 	 */
 	public function test_pos_open_order_does_not_render_received_script_regardless_of_gateway_setting(): void {
