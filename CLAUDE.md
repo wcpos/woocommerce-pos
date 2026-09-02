@@ -102,8 +102,11 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 
 ## Branch lanes
 
-**`main` is the only trunk.** 1.10.0 ships from it, and all work branches from and targets it.
+Two trunks, since 2026-08-28 (revived for 1.11):
 
-Never commit directly to `main` — branch off it in a worktree and target the PR's base at `main`.
+- **`main`** — the stable, released line. 1.10.x patches branch from and target `main`.
+- **`next`** — the **1.11.0** line: the checkout/payments rebuild and everything decided on the payments wayfinder map (wcpos/roadmap#97), plus the customer display. Anything for 1.11 — including bug fixes that only matter because of that work — branches from `origin/next` and targets `next`. Do not argue main vs next per PR; if it is 1.11 work, it is `next`.
 
-`next` is dead and is being deleted. It was the in-development trunk while `main` carried the 1.9.x stable line, but that split has ended: `main` is now ahead of `next` by a wide margin, and most of what remains on `next` is merge commits pulling `main` into it. Do not branch from it, do not target it, and do not ask "main or next?" — the answer is `main`. This note exists because the previous two-trunk wording kept sending agents to a branch that no longer carries the release.
+`main` moves daily, so `next` is fast-forwarded from `main` before every landing (`git push origin origin/main:refs/heads/next` while `next` is strictly behind; verify with `gh api repos/wcpos/woocommerce-pos/compare/next...main`).
+
+Never commit directly to either trunk — branch off the right one in a worktree and target the PR's base at the same lane.
