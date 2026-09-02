@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Action: woocommerce_pos_content_security_policy - 10up Distributor Hook Docs</title>
+    <title>Action: woocommerce_pos_receipt_data - 10up Distributor Hook Docs</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -21,7 +21,7 @@
 <div id="main">
 
 	
-    <h1 class="page-title">Action: woocommerce_pos_content_security_policy</h1>
+    <h1 class="page-title">Action: woocommerce_pos_receipt_data</h1>
 	
 
     
@@ -43,17 +43,19 @@
 
     
 
-    <h4 class="name" id="woocommerce_pos_content_security_policy">do_action( 'woocommerce_pos_content_security_policy', <span class="signature">string )</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="woocommerce_pos_receipt_data">do_action( 'woocommerce_pos_receipt_data', <span class="signature">array, WC_Abstract_Order, string )</span><span class="type-signature"></span></h4>
 
     
 
 
 
 <div class="description">
-    <p>Filters the Content-Security-Policy header value for POS pages.</p>
-<p>By default no CSP header is set, which avoids breaking payment gateway scripts
-that load from unpredictable domains. Return a non-empty policy string to set
-a custom CSP header.</p>
+    <p>Filters the canonical receipt data before it is rendered or snapshotted.</p>
+<p>Runs for every receipt this builder produces: live receipts, fiscal
+snapshots captured at payment time, PDF downloads and legacy PHP
+templates. Extensions can add their own keys to any section (for
+example a flag on a <code>discounts[]</code> row) or adjust labels. Keys defined
+by Receipt_Data_Schema should keep their documented types.</p>
 </div>
 
 
@@ -87,6 +89,42 @@ a custom CSP header.</p>
 
         <tr>
             
+                <td class="name"><code>array</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>$data  Receipt data (see Receipt_Data_Schema).</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>WC_Abstract_Order</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>$order Order the receipt is for.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
                 <td class="name"><code>string</code></td>
             
 
@@ -98,7 +136,7 @@ a custom CSP header.</p>
 
             
 
-            <td class="description last"><p>$policy The CSP policy string. Default empty (no CSP set).</p></td>
+            <td class="description last"><p>$mode  Receipt mode: 'live' or 'fiscal'.</p></td>
         </tr>
 
     
@@ -116,7 +154,7 @@ a custom CSP header.</p>
 
     
     <dt class="tag-since">Since:</dt>
-    <dd class="tag-since"><ul class="dummy"><li>1.9.0</li></ul></dd>
+    <dd class="tag-since"><ul class="dummy"><li>1.10.8</li></ul></dd>
     
 
     
@@ -142,7 +180,7 @@ a custom CSP header.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="Template_Router.php.html">Template_Router.php</a>, <a href="Template_Router.php.html#line271">line 271</a>
+        <a href="Services_Receipt_Data_Builder.php.html">Services/Receipt_Data_Builder.php</a>, <a href="Services_Receipt_Data_Builder.php.html#line413">line 413</a>
     </li></ul></dd>
     
 
