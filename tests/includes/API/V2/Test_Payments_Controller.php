@@ -150,10 +150,24 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** Captured rows cannot be voided. */
-	public function test_void_captured_row_returns_409_invalid_transition(): void {
-		// Arrange.
+	public function test_void_captured_cash_leg_mid_split_returns_200_voided(): void {
+		// Arrange: a partial cash leg on an order still in progress (cancel mid-split).
 		$order   = $this->create_pos_order();
 		$payment = $this->payment( 'pos_cash', '20.00' );
+		$this->record( $order, $payment );
+
+		// Act.
+		$response = $this->void( $order, $payment['id'] );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'voided', $response->get_data()['status'] );
+	}
+
+	public function test_void_captured_cash_leg_on_completed_order_returns_409(): void {
+		// Arrange: cash covering the whole order completes it; a void is no longer the path.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', (string) $order->get_total() );
 		$this->record( $order, $payment );
 
 		// Act.
