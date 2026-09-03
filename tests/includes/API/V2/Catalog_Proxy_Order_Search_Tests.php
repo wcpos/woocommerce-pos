@@ -102,6 +102,22 @@ trait Catalog_Proxy_Order_Search_Tests {
 		);
 	}
 
+	/** A pasted non-breaking space separates terms like a space does. */
+	public function test_order_search_splits_unicode_whitespace(): void {
+		$this->assert_order_search_finds_target( "QuillonProbe\u{00A0}AureliaProbe" );
+	}
+
+	/** A non-string search stays on the forward, so wc/v3 rejects it as before. */
+	public function test_order_search_rejects_an_array_search_param(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params( array( 'search' => array( 'AureliaProbe' ) ) );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
 	/** Billing company and phone participate in order search. */
 	public function test_order_search_matches_billing_company_and_phone(): void {
 		$this->target_order->set_billing_company( 'WidgetCoProbe' );

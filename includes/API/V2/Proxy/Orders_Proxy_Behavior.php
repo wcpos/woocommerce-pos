@@ -63,8 +63,12 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	public function forwarded_params( array $params, WP_REST_Request $request ): array {
 		$this->plan = Collection_Rules::for_request( 'orders', $request, self::PARAM_MAP );
 		$params     = $this->plan->forwarded_params( $params );
-		if ( isset( $params['search'] ) && '' !== trim( (string) $params['search'] ) ) {
-			$this->search = (string) $params['search'];
+		// Claim only a string with at least one term. Anything else (an array from
+		// `search[]=`, whitespace only) stays on the forward so wc/v3's own schema
+		// validation answers it, as it did before.
+		$search = $params['search'] ?? null;
+		if ( is_string( $search ) && array() !== Order_Search::terms( $search ) ) {
+			$this->search = $search;
 			unset( $params['search'] );
 		}
 		$params['dp'] = '6';
@@ -83,7 +87,9 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		}
 
 		$search = $this->search;
-		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		// The class arrived after the declared WooCommerce minimum (5.3); without it the
+		// store is on post storage. Same guard as Collection_Rules::detect_storage().
+		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 			$filter = static function ( $clauses, $query ) use ( $search ) {
 				$clauses['where'] .= ' AND ' . Order_Search::hpos_where( $search, $query );
 				return $clauses;
