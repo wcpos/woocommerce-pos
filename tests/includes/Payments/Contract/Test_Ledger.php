@@ -238,6 +238,29 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( $order ) );
 	}
 
+	/** The app writes the ledger as a typed-meta object; an already-decoded array reads the same as JSON. */
+	public function test_read_accepts_array_form_ledger_meta(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = array(
+			'id'           => 'a1b2c3d4-0000-4000-8000-000000000001',
+			'method_id'    => 'pos_cash',
+			'kind'         => 'cash',
+			'capture_mode' => 'manual',
+			'amount'       => '10.00',
+			'status'       => 'captured',
+		);
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) );
+		$order->save();
+
+		// Act.
+		$rows = Ledger::instance()->read( $order );
+
+		// Assert.
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'pos_cash', $rows[0]['method_id'] );
+	}
+
 	/** The multi-valued index meta as a plain list of method ids, in write order. */
 	private function index_values( \WC_Order $order ): array {
 		return array_values( wp_list_pluck( $order->get_meta( Ledger::INDEX_META_KEY, false ), 'value' ) );

@@ -66,10 +66,15 @@ class Ledger {
 	 */
 	public function read( WC_Order $order ): array {
 		$raw = $order->get_meta( self::META_KEY, true );
-		if ( ! is_string( $raw ) || '' === $raw ) {
+		// The app sends the ledger as a typed-meta object on order writes, so the value may
+		// arrive already decoded (array) rather than as the JSON string this class stores.
+		if ( is_array( $raw ) ) {
+			$decoded = $raw;
+		} elseif ( is_string( $raw ) && '' !== $raw ) {
+			$decoded = json_decode( $raw, true );
+		} else {
 			return array();
 		}
-		$decoded = json_decode( $raw, true );
 		if ( ! is_array( $decoded ) || self::SCHEMA !== ( $decoded['schema'] ?? null ) || ! isset( $decoded['payments'] ) || ! is_array( $decoded['payments'] ) ) {
 			$id = $order->get_id();
 			if ( empty( $this->logged_invalid_ledgers[ $id ] ) ) {
