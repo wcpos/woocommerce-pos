@@ -14,10 +14,33 @@ use WCPOS\WooCommercePOS\Logger;
 
 /** Mints the server-owned ledger row for legacy webview payments. */
 class Webview_Passthrough {
+	/**
+	 * Order whose order-pay form WooCommerce is currently running a gateway against.
+	 *
+	 * @var int
+	 */
+	private static $paying_order_id = 0;
+
 	/** Register payment completion hooks. */
 	public static function register_hooks(): void {
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 10, 1 );
+		add_action( 'woocommerce_before_pay_action', array( __CLASS__, 'on_before_pay_action' ), 10, 1 );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 10, 3 );
+	}
+
+	/**
+	 * Remember the order WooCommerce is about to hand to a gateway.
+	 *
+	 * WC_Form_Handler::pay_action() fires this after verifying the pay nonce and the
+	 * order key and immediately before calling the gateway's process_payment(). It is
+	 * the only payment signal the offline gateways (BACS, cheque, COD) give us — they
+	 * land a status instead of calling payment_complete() — and it is what separates a
+	 * real tender from an ordinary status edit made during a POS request.
+	 *
+	 * @param mixed $order Order being paid.
+	 */
+	public static function on_before_pay_action( $order ): void {
+		self::$paying_order_id = $order instanceof WC_Order ? $order->get_id() : 0;
 	}
 
 	/**
@@ -47,22 +70,29 @@ class Webview_Passthrough {
 	}
 
 	/**
-	 * Mint when a POS webview offline gateway reaches a paid status.
+	 * Mint when an offline gateway's process_payment() lands a paid status.
+	 *
+	 * A status change on its own is never evidence of payment — an ordinary workflow
+	 * edit during a POS request must not fabricate a captured tender — so this only
+	 * runs for the order the order-pay form is paying right now.
 	 *
 	 * @param int    $order_id Order ID.
 	 * @param string $from     Previous order status.
 	 * @param string $to       New order status.
 	 */
 	public static function on_status_changed( $order_id, $from, $to ): void {
-		$order_pay_id = isset( $GLOBALS['wp']->query_vars['order-pay'] ) ? absint( $GLOBALS['wp']->query_vars['order-pay'] ) : 0;
-		// WooCommerce verifies the order-pay nonce before the gateway changes status.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$is_payment_submission = isset( $_POST['woocommerce_pay'] );
-		if ( ! wcpos_request() || $order_pay_id !== (int) $order_id || ! $is_payment_submission ) {
+		if ( ! wcpos_request() || self::$paying_order_id !== (int) $order_id ) {
+			return;
+		}
+		// Only a paid status is money. BACS and cheque land on-hold where the merchant
+		// configures it that way, and on-hold means "awaiting payment", not a captured
+		// row. wc_get_is_paid_statuses() carries anything a site filters in; WCPOS's own
+		// pos-open and pos-partial are deliberately not among them.
+		if ( ! in_array( (string) $to, wc_get_is_paid_statuses(), true ) ) {
 			return;
 		}
 		$order = wc_get_order( (int) $order_id );
-		if ( ! $order instanceof WC_Order || ! $order->is_paid() || '' === $order->get_payment_method() ) {
+		if ( ! $order instanceof WC_Order || '' === $order->get_payment_method() ) {
 			return;
 		}
 
@@ -103,8 +133,11 @@ class Webview_Passthrough {
 			$change         = '' === $cash_change ? null : $cash_change;
 		}
 		$transaction_id = $order->get_transaction_id();
-		$cashier_id     = $order->get_meta( '_pos_user' );
-		$now            = gmdate( 'c' );
+		// The order writer records who rang up the sale in `_pos_user` (Orders_Controller);
+		// the order-pay POST runs as the order's customer, so the current user is only a
+		// fallback for an order that never went through the POS writer.
+		$cashier_id = (int) $order->get_meta( '_pos_user' );
+		$now        = gmdate( 'c' );
 		$rows[] = array(
 			'id'               => wp_generate_uuid4(),
 			'source'           => 'webview',
@@ -122,7 +155,7 @@ class Webview_Passthrough {
 			'status'           => 'captured',
 			'provider_refs'    => array( 'transaction_id' => '' !== $transaction_id ? $transaction_id : null ),
 			'receipt'          => array(),
-			'cashier_id'       => '' === (string) $cashier_id ? get_current_user_id() : (int) $cashier_id,
+			'cashier_id'       => $cashier_id > 0 ? $cashier_id : get_current_user_id(),
 			'store_id'         => '' === (string) $order->get_meta( '_pos_store' ) ? null : (int) $order->get_meta( '_pos_store' ),
 			'created_at_gmt'   => $now,
 			'captured_at_gmt'  => $now,

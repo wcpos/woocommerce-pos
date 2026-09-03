@@ -125,7 +125,12 @@ class Ledger {
 	 */
 	public function balance( WC_Order $order, array $rows ): string {
 		$paid = Money::minor( $this->paid( $rows ) );
-		if ( 0 === $paid && $order->is_paid() ) {
+		// An order paid before this ledger existed — an upgraded store, or a legacy
+		// webview sale — has no rows to sum, so the ledger alone would report the whole
+		// total as outstanding and let a second tender be recorded against money that
+		// was already taken. Woo's own paid state is the fallback truth while the
+		// ledger is empty; once there is a row the ledger is authoritative.
+		if ( 0 === $paid && ( $order->is_paid() || $order->get_date_paid() ) ) {
 			return Money::format( 0 );
 		}
 		$balance = Money::minor( $order->get_total() ) - $paid;
@@ -203,8 +208,12 @@ class Ledger {
 		if ( ! $descriptor ) {
 			return new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
-		if ( ! in_array( $descriptor['capabilities']['offline'], array( 'record', 'queue' ), true ) ) {
-			return $this->invalid( __( 'Payment method does not support offline recording.', 'woocommerce-pos' ) );
+		if ( ! $this->is_recordable( $descriptor ) ) {
+			return new WP_Error(
+				'wcpos_method_not_recordable',
+				__( 'This payment method cannot be recorded; it has to run its own payment leg.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
 		}
 		$status = isset( $input['status'] ) ? (string) $input['status'] : 'captured';
 		if ( ! in_array( $status, array( 'captured', 'authorized' ), true ) ) {
@@ -565,6 +574,26 @@ class Ledger {
 		$row['refunds']          = is_array( $row['refunds'] ) ? $row['refunds'] : array();
 		$row['updated_at_gmt']   = $now;
 		return $row;
+	}
+
+	/**
+	 * Whether a descriptor may be recorded through `POST orders/{id}/payments`.
+	 *
+	 * Record asserts money that was already taken, so it is only for methods that take
+	 * it away from the server: `manual` methods handed over at the till, and `device`
+	 * methods settling the offline (`queue`) rows and replays that ride the order write
+	 * (routes.md §4.2). Everything else — a webview gateway, a server-mode provider —
+	 * has to run its own leg through `intent`/`capture`, so a caller-asserted captured
+	 * row here would mark the order paid with no provider transaction behind it.
+	 *
+	 * @param array $descriptor Payment method descriptor.
+	 */
+	private function is_recordable( array $descriptor ): bool {
+		if ( 'manual' === ( $descriptor['capture']['mode'] ?? '' ) ) {
+			return true;
+		}
+
+		return in_array( (string) ( $descriptor['capabilities']['offline'] ?? 'none' ), array( 'record', 'queue' ), true );
 	}
 
 	/**

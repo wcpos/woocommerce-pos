@@ -40,24 +40,29 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 	/** Ledger-driven completion does not mint a duplicate webview row. */
 	public function test_payment_complete_after_ledger_record_does_not_duplicate(): void {
-		// Arrange.
+		// Arrange: a live row that leaves the order short of its total, so the order is
+		// still payable and payment_complete() actually fires the passthrough hook.
 		$order = $this->create_order( true );
-
-		// Act.
 		Ledger::instance()->record(
 			$order,
 			array(
 				'id'        => wp_generate_uuid4(),
 				'method_id' => 'pos_cash',
-				'amount'    => '92.95',
-				'currency'  => 'USD',
+				'amount'    => '50.00',
 			)
 		);
+
+		// Act.
+		$order->payment_complete();
+		$order = wc_get_order( $order->get_id() );
 		$order->payment_complete();
 		$order = wc_get_order( $order->get_id() );
 
 		// Assert.
-		$this->assertCount( 1, Ledger::instance()->read( $order ) );
+		$rows = Ledger::instance()->read( $order );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'pos_cash', $rows[0]['method_id'] );
+		$this->assertSame( 'app', $rows[0]['source'] );
 	}
 
 	/** Non-POS payment completion is ignored. */
@@ -75,74 +80,81 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( $order ) );
 	}
 
-	/** A generic POS request changing status is not evidence of payment. */
+	/** A status edit during a POS request is not evidence of payment. */
 	public function test_status_change_outside_order_pay_does_not_mint_webview_row(): void {
 		// Arrange.
 		$order = $this->create_order( true );
 		$order->set_payment_method( 'bacs' );
 		$order->save();
-		$previous_query_vars = $GLOBALS['wp']->query_vars;
-		$GLOBALS['wp']->query_vars['wcpos'] = 1;
 
-		try {
-			// Act.
-			$order->set_status( 'processing' );
-			$order->save();
+		$this->in_pos_request(
+			function () use ( $order ): void {
+				// Act.
+				$order->set_status( 'processing' );
+				$order->save();
 
-			// Assert.
-			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
-		} finally {
-			$GLOBALS['wp']->query_vars = $previous_query_vars;
-		}
+				// Assert.
+				$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			}
+		);
 	}
 
-	/** An offline gateway status transition from the matching order-pay form is captured. */
+	/** An offline gateway landing a paid status from the order-pay form is captured. */
 	public function test_order_pay_status_change_mints_webview_row(): void {
 		// Arrange.
 		$order = $this->create_order( true );
 		$order->set_payment_method( 'bacs' );
 		$order->save();
-		$previous_query_vars = $GLOBALS['wp']->query_vars;
-		$previous_post       = $_POST;
-		$GLOBALS['wp']->query_vars['wcpos']     = 1;
-		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
-		$_POST['woocommerce_pay']               = '1';
 
-		try {
-			// Act.
-			$order->set_status( 'processing' );
-			$order->save();
+		$this->in_pos_request(
+			function () use ( $order ): void {
+				// Act: WooCommerce fires this after the pay nonce and order key check,
+				// immediately before it calls the gateway's process_payment().
+				do_action( 'woocommerce_before_pay_action', $order );
+				$order->set_status( 'processing' );
+				$order->save();
 
-			// Assert.
-			$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
-		} finally {
-			$GLOBALS['wp']->query_vars = $previous_query_vars;
-			$_POST                       = $previous_post;
-		}
+				// Assert.
+				$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+				$this->assertCount( 1, $rows );
+				$this->assertSame( 'webview', $rows[0]['source'] );
+			}
+		);
 	}
 
-	/** An order-pay transition that is not paid does not mint a captured row. */
+	/** An order-pay transition to an unpaid status does not mint a captured row. */
 	public function test_order_pay_on_hold_status_does_not_mint_webview_row(): void {
 		// Arrange.
 		$order = $this->create_order( true );
 		$order->set_payment_method( 'bacs' );
 		$order->save();
-		$previous_query_vars = $GLOBALS['wp']->query_vars;
-		$previous_post       = $_POST;
-		$GLOBALS['wp']->query_vars['wcpos']     = 1;
-		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
-		$_POST['woocommerce_pay']               = '1';
+
+		$this->in_pos_request(
+			function () use ( $order ): void {
+				// Act.
+				do_action( 'woocommerce_before_pay_action', $order );
+				$order->set_status( 'on-hold' );
+				$order->save();
+
+				// Assert.
+				$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			}
+		);
+	}
+
+	/**
+	 * Run a callback with the POS request query var set.
+	 *
+	 * @param callable $callback Act and assert steps.
+	 */
+	private function in_pos_request( callable $callback ): void {
+		$previous_query_vars                = $GLOBALS['wp']->query_vars;
+		$GLOBALS['wp']->query_vars['wcpos'] = 1;
 
 		try {
-			// Act.
-			$order->set_status( 'on-hold' );
-			$order->save();
-
-			// Assert.
-			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			$callback();
 		} finally {
 			$GLOBALS['wp']->query_vars = $previous_query_vars;
-			$_POST                       = $previous_post;
 		}
 	}
 

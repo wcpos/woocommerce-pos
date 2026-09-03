@@ -195,8 +195,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Methods without offline recording capability cannot use the record route. */
-	public function test_record_rejects_method_without_offline_recording_capability(): void {
+	/** Only manual and offline-recordable methods may use the record route. */
+	public function test_record_rejects_method_that_cannot_be_recorded(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
 		$filter = static function ( string $mode, $gateway ): string {
@@ -210,8 +210,9 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 			// Assert.
 			$this->assertWPError( $error );
-			$this->assertSame( 'rest_invalid_param', $error->get_error_code() );
+			$this->assertSame( 'wcpos_method_not_recordable', $error->get_error_code() );
 			$this->assertSame( 400, $error->get_error_data()['status'] );
+			$this->assertSame( array(), Ledger::instance()->read( $order ) );
 		} finally {
 			remove_filter( 'wcpos_payment_method_capture_mode', $filter, 10 );
 		}
