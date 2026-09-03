@@ -161,7 +161,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 'voided', $response->get_data()['status'] );
+		$this->assertSame( 'voided', $response->get_data()['payment']['status'] );
 	}
 
 	public function test_void_captured_cash_leg_on_completed_order_returns_409(): void {
