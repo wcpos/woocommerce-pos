@@ -144,6 +144,22 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'links', $data[0] );
 	}
 
+	/** Order search falls back to posts storage when OrderUtil is unavailable. */
+	public function test_order_behavior_falls_back_without_order_util(): void {
+		$command = sprintf(
+			'%s %s 2>&1',
+			escapeshellarg( PHP_BINARY ),
+			escapeshellarg( \dirname( __DIR__, 3 ) . '/fixtures/order-proxy-without-order-util.php' )
+		);
+		$output    = array();
+		$exit_code = 0;
+
+		exec( $command, $output, $exit_code );
+
+		$this->assertSame( 0, $exit_code, implode( "\n", $output ) );
+		$this->assertSame( 'posts_where', implode( "\n", $output ) );
+	}
+
 	/**
 	 * Product visibility is installed for one forward and removed afterward.
 	 */
