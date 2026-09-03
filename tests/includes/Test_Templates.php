@@ -64,6 +64,9 @@ class Test_Templates extends WP_UnitTestCase {
 		delete_option( 'wcpos_template_order_report' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
+		// The default-term latch survives between test classes while terms do
+		// not; clearing it lets a later class reseed the terms it relies on.
+		delete_option( Templates::DEFAULT_TERMS_OPTION );
 		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled' );
 		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_document' );
 	}
@@ -966,7 +969,10 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test that default template categories are registered.
 	 */
 	public function test_default_categories_registered(): void {
-		// Re-trigger registration to insert terms within this test's transaction.
+		// Re-trigger seeding to insert terms within this test's transaction:
+		// construction only seeds when the DEFAULT_TERMS_VERSION latch is below
+		// the current version (Test_Templates_Default_Terms pins that).
+		delete_option( Templates::DEFAULT_TERMS_OPTION );
 		new Templates();
 
 		$receipt = term_exists( 'receipt', 'wcpos_template_category' );

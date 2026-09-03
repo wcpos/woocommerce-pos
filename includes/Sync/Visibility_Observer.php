@@ -134,7 +134,10 @@ final class Visibility_Observer {
 
 		// Latched even when the hidden set is empty — otherwise every request on a store that hides
 		// nothing would resolve the set again forever.
-		update_option( self::SEED_VERSION_OPTION, self::SEED_VERSION, false );
+		// Autoloaded: the Init constructor reads this latch on every request.
+		// Existing rows from older releases are flipped by
+		// Activator::autoload_request_latches() on upgrade.
+		update_option( self::SEED_VERSION_OPTION, self::SEED_VERSION, true );
 	}
 
 	/**
