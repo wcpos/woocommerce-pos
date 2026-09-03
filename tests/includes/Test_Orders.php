@@ -153,6 +153,57 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that POS statuses count as pending for core's held-stock check.
+	 */
+	public function test_pos_statuses_are_pending_statuses(): void {
+		$pending = apply_filters( 'woocommerce_order_is_pending_statuses', array( 'pending' ) );
+
+		$this->assertContains( 'pos-open', $pending );
+		$this->assertContains( 'pos-partial', $pending );
+		$this->assertContains( 'pending', $pending, 'core statuses are preserved' );
+
+		$inputs = array(
+			array( 'pending', 'pos-open' ),
+			array( 'pending', 'pos-partial' ),
+			array( 'pending', 'pos-open', 'pos-partial' ),
+		);
+
+		foreach ( $inputs as $statuses ) {
+			$pending = apply_filters( 'woocommerce_order_is_pending_statuses', $statuses );
+
+			$this->assertContains( 'pending', $pending, 'core statuses are preserved' );
+			$this->assertSame( 1, \count( array_keys( $pending, 'pos-open', true ) ) );
+			$this->assertSame( 1, \count( array_keys( $pending, 'pos-partial', true ) ) );
+		}
+	}
+
+	/**
+	 * Test that Stripe may process asynchronous payments on POS orders.
+	 */
+	public function test_pos_statuses_allowed_for_stripe_payment_processing(): void {
+		$allowed = apply_filters( 'wc_stripe_allowed_payment_processing_statuses', array( 'pending', 'failed' ) );
+
+		$this->assertContains( 'pos-open', $allowed );
+		$this->assertContains( 'pos-partial', $allowed );
+		$this->assertCount( 4, $allowed, 'each status is added once' );
+
+		$inputs = array(
+			array( 'pending', 'failed', 'pos-open' ),
+			array( 'pending', 'failed', 'pos-partial' ),
+			array( 'pending', 'failed', 'pos-open', 'pos-partial' ),
+		);
+
+		foreach ( $inputs as $statuses ) {
+			$allowed = apply_filters( 'wc_stripe_allowed_payment_processing_statuses', $statuses );
+
+			$this->assertContains( 'pending', $allowed, 'core statuses are preserved' );
+			$this->assertContains( 'failed', $allowed, 'core statuses are preserved' );
+			$this->assertSame( 1, \count( array_keys( $allowed, 'pos-open', true ) ) );
+			$this->assertSame( 1, \count( array_keys( $allowed, 'pos-partial', true ) ) );
+		}
+	}
+
+	/**
 	 * Test that pos-open status is valid for payment complete.
 	 */
 	public function test_pos_open_valid_for_payment_complete(): void {

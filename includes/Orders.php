@@ -58,6 +58,8 @@ class Orders {
 		add_filter( 'woocommerce_order_needs_payment', array( $this, 'order_needs_payment' ), 10, 3 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( $this, 'valid_order_statuses_for_payment' ), 10, 2 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
+		add_filter( 'woocommerce_order_is_pending_statuses', array( $this, 'order_is_pending_statuses' ), 10, 1 );
+		add_filter( 'wc_stripe_allowed_payment_processing_statuses', array( $this, 'stripe_allowed_payment_processing_statuses' ), 10, 1 );
 		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
 		add_filter( 'woocommerce_bacs_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cheque_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
@@ -135,6 +137,53 @@ class Orders {
 		$order_statuses[] = 'pos-partial';
 
 		return $order_statuses;
+	}
+
+	/**
+	 * Treat the WCPOS statuses as "pending" wherever core asks.
+	 *
+	 * The wc_get_is_pending_statuses() function is what the order-pay page, the Store API and
+	 * WooPayments' duplicate-prevention use to decide that stock is already held;
+	 * a pos-open order failing that test is re-validated as if it were a failed order.
+	 *
+	 * @param array $statuses Pending statuses (without the wc- prefix).
+	 *
+	 * @return array
+	 */
+	public function order_is_pending_statuses( array $statuses ): array {
+		return $this->add_pos_statuses( $statuses );
+	}
+
+	/**
+	 * Let Stripe finish asynchronous payments on WCPOS orders.
+	 *
+	 * Stripe refuses 3DS returns, redirect methods and webhook completions for any
+	 * order outside this list (default: pending, failed) — the money is taken and
+	 * the order stays pos-open. Same extension point Stripe's own voucher methods use.
+	 *
+	 * @param array $statuses Statuses Stripe will process a payment for.
+	 *
+	 * @return array
+	 */
+	public function stripe_allowed_payment_processing_statuses( array $statuses ): array {
+		return $this->add_pos_statuses( $statuses );
+	}
+
+	/**
+	 * Append the WCPOS statuses to a status list without duplicating them.
+	 *
+	 * @param array $statuses Statuses without the wc- prefix.
+	 *
+	 * @return array
+	 */
+	private function add_pos_statuses( array $statuses ): array {
+		foreach ( array( 'pos-open', 'pos-partial' ) as $status ) {
+			if ( ! \in_array( $status, $statuses, true ) ) {
+				$statuses[] = $status;
+			}
+		}
+
+		return $statuses;
 	}
 
 	/**

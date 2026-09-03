@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Fixed: Stripe could not complete a POS order paid by a card that required 3D Secure, a redirect payment method, or a delayed webhook confirmation — Stripe took the money but refused to update the order because its status was `POS - Open` rather than `Pending payment`, so the order stayed open at the till. WCPOS now tells Stripe (and WooCommerce's own order-pay and Store API stock checks) to treat `POS - Open` and `POS - Partial Payment` exactly like `Pending payment`.
 - Added: receipt discount rows now expose `discount_type`, the WooCommerce coupon type behind each row (`fixed_cart`, `percent`, `fixed_product`, or a type registered by another plugin), so templates and extensions can tell different kinds of coupon apart. Receipt Data schema version is now 1.2.0. Fiscal snapshots captured before this version do not carry the field.
 - Added: `woocommerce_pos_receipt_data` filter on the canonical receipt payload, applied for live receipts, fiscal snapshots, PDF downloads and legacy PHP templates alike. Extensions can add their own keys to any section or adjust labels — the way WooCommerce lets plugins filter order item totals — instead of WCPOS carrying vendor-specific fields. The filter receives the payload, the order and the receipt mode.
 - Fixed: exact SKU and configured-barcode matches now rank ahead of partial matches in POS product search.
