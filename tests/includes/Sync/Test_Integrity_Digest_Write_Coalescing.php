@@ -108,7 +108,8 @@ class Test_Integrity_Digest_Write_Coalescing extends Sync_Store_Test_Case {
 			array_filter(
 				$this->digest_inserts,
 				static function ( string $sql ) use ( $product_id ): bool {
-					return false !== strpos( $sql, 'p.ID = ' . $product_id );
+					// Word boundary: under CPT order storage the order digest SELECT also says `p.ID = <order id>`.
+					return 1 === preg_match( '/\\bp\\.ID = ' . $product_id . '\\b/', $sql ) && false === strpos( $sql, "'order'" );
 				}
 			)
 		);

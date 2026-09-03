@@ -18,14 +18,18 @@ use RuntimeException;
 /**
  * Hash-backed range-checksum support: stored per-record content digests.
  *
- * STORES a digest of each product/variation's raw DB row at hook time (the
- * same save/delete hooks class-change-log.php uses), so the integrity scan
+ * STORES a digest of each product/variation's raw DB row, marked dirty by the
+ * same save/delete hooks class-change-log.php uses and written at the request
+ * boundary (see $pending_digests), so the integrity scan
  * can compare — entirely in SQL — the aggregate of CURRENT raw-row digests
  * against the aggregate of STORED digests per id-range bucket. If hooks
  * fired for every write, stored == current (and sequence-log already
  * reported the change); a bucket mismatch therefore means exactly "content
  * changed without hooks firing" — the sql-bypass signature — at GROUP BY
- * prices instead of revision-hash's full-hydration prices.
+ * prices instead of revision-hash's full-hydration prices. Because the write
+ * lands at the boundary, a hook-less write later in the SAME request is
+ * absorbed into that request's digest; the scan catches bypasses between
+ * requests, which is where they happen (a direct SQL job, an importer).
  *
  * The digest basis is deliberately the RAW DB ROW, NOT the filtered REST
  * payload: this signal is detection-only (discovery of WHERE drift
@@ -204,7 +208,7 @@ final class Integrity_Digest {
 		// order's digest is never recreated and integrity scans treat it as
 		// deleted forever.
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_order_untrashed' ), 10, 1 );
-		// Request boundary for the coalesced order/customer upserts (see
+		// Request boundary for the coalesced digest upserts (see
 		// $pending_digests). LAST on shutdown: WooCommerce saves the customer at
 		// 10 and the session at 20. Zero accepted args: do_action( 'shutdown' )
 		// passes an empty string otherwise.
@@ -353,7 +357,7 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Queue one order/customer upsert, or write it now if the boundary has passed.
+	 * Queue one digest upsert, or write it now if the boundary has passed.
 	 *
 	 * @param string $type 'order' or 'customer'.
 	 * @param int    $id   Record id.
@@ -388,7 +392,7 @@ final class Integrity_Digest {
 				} elseif ( 'order' === $type ) {
 					$this->upsert_order_digest( $id );
 				} else {
-					// product | variation: the SQL derives the stored type from the row.
+					// 'post' (product or variation): the SQL derives the stored type from the row.
 					$this->upsert_digest( $id );
 				}
 			}
@@ -396,7 +400,7 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Write every owed order/customer digest.
+	 * Write every owed digest.
 	 *
 	 * Called from the shutdown flush, from {@see Digest_Index::read_digests()}
 	 * before it reads, and when the queue reaches its threshold. Writes go
@@ -546,17 +550,24 @@ final class Integrity_Digest {
 		}
 	}
 
-	/** Owe the product's or variation's digest; it is written once, on flush (see $pending_digests). */
+	/**
+	 * Owe the product's or variation's digest; it is written once, on flush (see
+	 * $pending_digests). The queue type is 'post' for both: the upsert's SQL
+	 * derives the stored object_type from the row, so nothing here needs to.
+	 */
 	public function record_post_saved( int $post_id ): void {
-		$this->defer( 'product_variation' === get_post_type( $post_id ) ? 'variation' : 'product', $post_id );
+		$this->defer( 'post', $post_id );
 	}
 
 	public function record_post_untrashed( int $post_id ): void {
-		if ( 'shop_order' === get_post_type( $post_id ) ) {
+		$post_type = get_post_type( $post_id );
+		if ( 'shop_order' === $post_type ) {
 			$this->record_order_saved( $post_id );
 			return;
 		}
-		$this->record_post_saved( $post_id );
+		if ( in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
+			$this->record_post_saved( $post_id );
+		}
 	}
 
 	public function record_post_deleted( int $post_id ): void {
@@ -565,7 +576,7 @@ final class Integrity_Digest {
 			return;
 		}
 		// A pending upsert for a record that is leaving must not be written after the fact.
-		unset( self::$pending_digests[ self::pending_key( 'product_variation' === $post_type ? 'variation' : 'product', $post_id ) ] );
+		unset( self::$pending_digests[ self::pending_key( 'post', $post_id ) ] );
 		$this->observe(
 			function () use ( $post_id, $post_type ): void {
 				$this->delete_post_digest( $post_id, $post_type );

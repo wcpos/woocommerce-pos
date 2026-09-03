@@ -47,9 +47,9 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$product  = ProductHelper::create_simple_product();
 		$customer = $this->factory->user->create( array( 'role' => 'customer' ) );
 
-		// Customer digests are coalesced per request and land at the request
-		// boundary (Test_Integrity_Digest_Write_Coalescing pins that); product
-		// digests stay immediate. Flush stands in for shutdown here.
+		// Digests are coalesced per request and land at the request boundary
+		// (Test_Integrity_Digest_Write_Coalescing pins that). Flush stands in
+		// for shutdown here.
 		Integrity_Digest::flush_pending_digests();
 		$rows = $wpdb->get_results( 'SELECT object_type, object_id, digest FROM ' . $this->integrity_digest->table_name() . ' ORDER BY object_type, object_id', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$this->assertContains( 'product', array_column( $rows, 'object_type' ) );
@@ -73,6 +73,8 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		add_filter( 'query', $break_digest );
 		try {
 			$product = ProductHelper::create_simple_product();
+			// The upsert lands at the request boundary; flush while the store is still broken.
+			Integrity_Digest::flush_pending_digests();
 		} finally {
 			remove_filter( 'query', $break_digest );
 			$wpdb->suppress_errors( $previous_suppress_errors );
