@@ -212,7 +212,8 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertContains( 'pos-open', $excluded, 'an open cart must not count as a sale' );
 		$this->assertContains( 'pos-partial', $excluded, 'a half-paid order must not count as a sale' );
 		$this->assertContains( 'pending', $excluded, 'core exclusions are preserved' );
-		$this->assertCount( 5, $excluded, 'each status is added once' );
+		$this->assertSame( 1, \count( array_keys( $excluded, 'pos-open', true ) ), 'pos-open is added exactly once' );
+		$this->assertSame( 1, \count( array_keys( $excluded, 'pos-partial', true ) ), 'pos-partial is added exactly once' );
 		$this->assertSame( $excluded, apply_filters( 'woocommerce_analytics_excluded_order_statuses', $excluded ), 'applying the filter again changes nothing' );
 	}
 
