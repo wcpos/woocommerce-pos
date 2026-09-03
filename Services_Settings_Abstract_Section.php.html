@@ -154,6 +154,23 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 	}
 
 	/**
+	 * The wp_options key the upgrade-time autoload flip must target.
+	 *
+	 * A public accessor rather than a public option_name(): Pro's License
+	 * section overrides option_name() at protected visibility (its key is
+	 * Pro-prefixed), and a child cannot narrow a public parent method — making
+	 * option_name() public fatalled every Pro site (#1846/#1849). Deriving the
+	 * key from id() instead flipped the wrong row for that section and seeded a
+	 * stray `woocommerce_pos_settings_license` (measured 2026-09-03 on dev-pro:
+	 * one query per page for the license row).
+	 *
+	 * @return string
+	 */
+	public function autoload_option_name(): string {
+		return $this->option_name();
+	}
+
+	/**
 	 * Whether this section's option rides in alloptions.
 	 *
 	 * Off by default: byte-compatible with the legacy save path, and most
