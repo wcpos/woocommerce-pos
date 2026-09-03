@@ -153,12 +153,10 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		$this->assertSame( 1, $this->stored_digests( 'customer', $customer ) );
 		$this->assertCount( 1, $this->digest_inserts_for( 'order', $order_id ), 'Seven order saves collapsed to ONE order digest write.' );
 		$this->assertCount( 1, $this->digest_inserts_for( 'customer', $customer ), 'Two customer saves in the request collapsed to ONE customer digest upsert.' );
-		// Product digests are still written per save: wc_reduce_stock_levels()
-		// saves the product twice (quantity, then stock status), so the one
-		// purchased product costs two INSERT…SELECT statements. Pinned here so
-		// the remaining amplification is visible; coalescing it is separate work.
-		$this->assertCount( 2, $this->digest_inserts_for( 'product', $product->get_id() ), 'Stock reduction writes the product digest once per product save.' );
-		$this->assertCount( 4, $this->digest_inserts, 'No digest statement for anything else: ' . implode( "\n", $this->digest_inserts ) );
+		// wc_reduce_stock_levels() saves the purchased product twice (quantity,
+		// then stock status); both saves collapse to one product digest write.
+		$this->assertCount( 1, $this->digest_inserts_for( 'product', $product->get_id() ), 'Two product saves collapsed to ONE product digest write.' );
+		$this->assertCount( 3, $this->digest_inserts, 'One digest statement per touched object and nothing else: ' . implode( "\n", $this->digest_inserts ) );
 
 		// The order itself is untouched by the POS.
 		$order = wc_get_order( $order_id );
