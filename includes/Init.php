@@ -458,6 +458,7 @@ class Init {
 		new Gateways();
 		new Products();
 		new Orders();
+		Payments\Contract\Webview_Passthrough::register_hooks();
 		new Emails();
 		new Templates();
 		Services\Stock_Validator::instance();

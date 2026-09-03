@@ -10,6 +10,7 @@
 
 use WCPOS\WooCommercePOS\Admin\Permalink;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Template_Router;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
@@ -213,6 +214,20 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
 		$settings_service = Settings::instance();
 
 		return $settings_service->get_settings( $id, $key );
+	}
+}
+
+if ( ! \function_exists( 'wcpos_register_capture_mode' ) ) {
+	/**
+	 * Register a payment capture-mode handler.
+	 *
+	 * @since 1.11.0
+	 *
+	 * @param string $mode          Capture mode identifier.
+	 * @param string $handler_class Handler class name.
+	 */
+	function wcpos_register_capture_mode( string $mode, string $handler_class ): void { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		Capture_Mode_Registry::instance()->register( $mode, $handler_class );
 	}
 }
 

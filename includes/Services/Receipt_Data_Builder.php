@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WC_Abstract_Order;
 
 /**
@@ -370,6 +372,36 @@ class Receipt_Data_Builder {
 				'change'         => (float) $order->get_meta( '_pos_cash_change' ),
 			),
 		);
+		$ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : array();
+		$counting     = array_values(
+			array_filter(
+				$ledger_rows,
+				static function ( array $row ): bool {
+					return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
+				}
+			)
+		);
+		if ( $ledger_rows ) {
+			$payments   = array();
+			$change_sum = 0.0;
+			foreach ( $counting as $row ) {
+				$method_id = (string) ( $row['method_id'] ?? '' );
+				$descriptor = Descriptor_Builder::instance()->get( $method_id );
+				$refs       = is_array( $row['provider_refs'] ?? null ) ? $row['provider_refs'] : array();
+				$change     = (float) ( $row['change'] ?? 0 );
+				$payments[] = array(
+					'method_id'      => $method_id,
+					'method_title'   => $descriptor ? $descriptor['title'] : $method_id,
+					'amount'         => (float) ( $row['amount'] ?? 0 ),
+					'transaction_id' => (string) ( $refs['payment_intent'] ?? $refs['transaction_id'] ?? '' ),
+					'tendered'       => (float) ( $row['tendered'] ?? 0 ),
+					'change'         => $change,
+				);
+				$change_sum += $change;
+			}
+			$totals['paid_total']   = (float) Ledger::instance()->paid( $ledger_rows );
+			$totals['change_total'] = $change_sum;
+		}
 
 		$tax_summary = $this->get_tax_summary( $order );
 
