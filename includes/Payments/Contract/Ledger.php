@@ -124,7 +124,11 @@ class Ledger {
 	 * @param array    $rows  Payment rows.
 	 */
 	public function balance( WC_Order $order, array $rows ): string {
-		$balance = Money::minor( $order->get_total() ) - Money::minor( $this->paid( $rows ) );
+		$paid = Money::minor( $this->paid( $rows ) );
+		if ( 0 === $paid && $order->is_paid() ) {
+			return Money::format( 0 );
+		}
+		$balance = Money::minor( $order->get_total() ) - $paid;
 		return Money::format( max( 0, $balance ) );
 	}
 
@@ -159,11 +163,10 @@ class Ledger {
 		if ( ! Pos_Uuid::is_uuid( $input['id'] ?? null ) ) {
 			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
 		}
-		$descriptor = Descriptor_Builder::instance()->get( (string) ( $input['method_id'] ?? '' ) );
-		if ( ! $descriptor ) {
-			return new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		if ( ! isset( $input['amount'] ) || ! is_scalar( $input['amount'] ) ) {
+			return $this->invalid( __( 'Payment amount must be positive.', 'woocommerce-pos' ) );
 		}
-		$amount = wc_format_decimal( $input['amount'] ?? '', wc_get_price_decimals() );
+		$amount = wc_format_decimal( $input['amount'], wc_get_price_decimals() );
 		if ( '' === $amount || ! is_numeric( $amount ) || Money::minor( $amount ) <= 0 ) {
 			return $this->invalid( __( 'Payment amount must be positive.', 'woocommerce-pos' ) );
 		}
@@ -172,12 +175,46 @@ class Ledger {
 		if ( $currency !== $order->get_currency() ) {
 			return $this->invalid( __( 'Payment currency must match the order.', 'woocommerce-pos' ) );
 		}
+		$rows   = $this->read( $order );
+		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
+		if ( $stored ) {
+			$requested = array(
+				'method_id' => (string) ( $input['method_id'] ?? '' ),
+				'amount'    => $amount,
+				'currency'  => $currency,
+			);
+			foreach ( $requested as $field => $value ) {
+				if ( ( $stored[ $field ] ?? null ) !== $value ) {
+					return new WP_Error(
+						'wcpos_payment_conflict',
+						__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
+						array(
+							'status' => 409,
+							'payment' => self::to_wire( $stored ),
+						)
+					);
+				}
+			}
+			$refusal = $this->refusal_error( $stored, $order );
+			return $refusal ? $refusal : $stored;
+		}
+
+		$descriptor = Descriptor_Builder::instance()->get( (string) ( $input['method_id'] ?? '' ) );
+		if ( ! $descriptor ) {
+			return new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
+		if ( ! in_array( $descriptor['capabilities']['offline'], array( 'record', 'queue' ), true ) ) {
+			return $this->invalid( __( 'Payment method does not support offline recording.', 'woocommerce-pos' ) );
+		}
 		$status = isset( $input['status'] ) ? (string) $input['status'] : 'captured';
 		if ( ! in_array( $status, array( 'captured', 'authorized' ), true ) ) {
 			return $this->invalid( __( 'Recorded payments must be captured or authorized.', 'woocommerce-pos' ) );
 		}
 		$tendered = null;
 		if ( array_key_exists( 'tendered', $input ) && null !== $input['tendered'] ) {
+			if ( ! is_scalar( $input['tendered'] ) ) {
+				return $this->invalid( __( 'Tendered amount is invalid for this payment method.', 'woocommerce-pos' ) );
+			}
 			$value = wc_format_decimal( $input['tendered'], wc_get_price_decimals() );
 			if ( 'cash' !== $descriptor['kind'] || empty( $descriptor['capabilities']['change'] ) || '' === $value || ! is_numeric( $value ) || Money::minor( $value ) < Money::minor( $amount ) ) {
 				return $this->invalid( __( 'Tendered amount is invalid for this payment method.', 'woocommerce-pos' ) );
@@ -185,12 +222,11 @@ class Ledger {
 			$tendered = Money::normalize( $value );
 		}
 
-		$rows = $this->read( $order );
-		$row  = array_merge(
+		$row = array_merge(
 			$input,
 			array(
 				'id'              => strtolower( $input['id'] ),
-				'source'          => in_array( $input['source'] ?? 'app', self::SOURCES, true ) ? $input['source'] ?? 'app' : 'app',
+				'source'          => 'app',
 				'order_id'        => $order->get_id(),
 				'method_id'       => $descriptor['id'],
 				'provider'        => $descriptor['capture']['provider'],
@@ -207,24 +243,6 @@ class Ledger {
 				'store_id'        => isset( $context['store_id'] ) ? (int) $context['store_id'] : null,
 			)
 		);
-
-		$stored = $this->find_in_rows( $rows, $row['id'] );
-		if ( $stored ) {
-			foreach ( array( 'method_id', 'amount', 'kind', 'capture_mode', 'currency' ) as $field ) {
-				if ( ( $stored[ $field ] ?? null ) !== $row[ $field ] ) {
-					return new WP_Error(
-						'wcpos_payment_conflict',
-						__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
-						array(
-							'status' => 409,
-							'payment' => self::to_wire( $stored ),
-						)
-					);
-				}
-			}
-			$refusal = $this->refusal_error( $stored, $order );
-			return $refusal ? $refusal : $stored;
-		}
 
 		$balance = Money::minor( $this->balance( $order, $rows ) );
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
@@ -280,7 +298,7 @@ class Ledger {
 		if ( ! $row ) {
 			return $this->not_found();
 		}
-		$handler = Capture_Mode_Registry::instance()->get( $row['capture_mode'] );
+		$handler = Capture_Mode_Registry::instance()->get( (string) ( $row['capture_mode'] ?? '' ) );
 		if ( ! $handler ) {
 			return $this->unsupported();
 		}
@@ -310,10 +328,10 @@ class Ledger {
 		if ( ! $row ) {
 			return $this->not_found();
 		}
-		if ( ! in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+		if ( ! in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) ) {
 			return $this->invalid_transition();
 		}
-		$handler = Capture_Mode_Registry::instance()->get( $row['capture_mode'] );
+		$handler = Capture_Mode_Registry::instance()->get( (string) ( $row['capture_mode'] ?? '' ) );
 		if ( ! $handler ) {
 			return $this->unsupported();
 		}

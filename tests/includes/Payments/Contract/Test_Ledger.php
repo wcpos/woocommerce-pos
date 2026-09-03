@@ -108,6 +108,23 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'pos_cash' ), $this->index_values( $order ) );
 	}
 
+	/** A paid legacy order without a ledger cannot accept another tender. */
+	public function test_record_refuses_payment_for_paid_order_without_ledger(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_status( 'completed' );
+		$order->save();
+
+		// Act.
+		$error = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_order_already_paid', $error->get_error_code() );
+		$this->assertSame( '0.00', $error->get_error_data()['order']['balance'] );
+		$this->assertSame( 'completed', $order->get_status() );
+	}
+
 	/** Amounts above the current balance are refused and retained. */
 	public function test_record_refuses_amount_above_balance(): void {
 		// Arrange.
@@ -153,6 +170,93 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertWPError( $error );
 		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
 		$this->assertSame( 409, $error->get_error_data()['status'] );
+	}
+
+	/** A stored UUID replay does not depend on the gateway's current capture mode. */
+	public function test_record_replay_returns_stored_row_after_capture_mode_changes(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$first = Ledger::instance()->record( $order, $input );
+		$filter = static function ( string $mode, $gateway ): string {
+			return 'pos_card' === $gateway->id ? 'webview' : $mode;
+		};
+		add_filter( 'wcpos_payment_method_capture_mode', $filter, 10, 2 );
+
+		try {
+			// Act.
+			$replay = Ledger::instance()->record( $order, $input );
+
+			// Assert.
+			$this->assertSame( $first, $replay );
+			$this->assertCount( 1, Ledger::instance()->read( $order ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_mode', $filter, 10 );
+		}
+	}
+
+	/** Methods without offline recording capability cannot use the record route. */
+	public function test_record_rejects_method_without_offline_recording_capability(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$filter = static function ( string $mode, $gateway ): string {
+			return 'pos_card' === $gateway->id ? 'webview' : $mode;
+		};
+		add_filter( 'wcpos_payment_method_capture_mode', $filter, 10, 2 );
+
+		try {
+			// Act.
+			$error = Ledger::instance()->record( $order, $this->payment( 'pos_card', '20.00' ) );
+
+			// Assert.
+			$this->assertWPError( $error );
+			$this->assertSame( 'rest_invalid_param', $error->get_error_code() );
+			$this->assertSame( 400, $error->get_error_data()['status'] );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_mode', $filter, 10 );
+		}
+	}
+
+	/** Structured amounts return a validation error instead of reaching the formatter. */
+	public function test_record_rejects_non_scalar_amount(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_cash', '92.95' );
+		$input['amount'] = array( '92.95' );
+
+		// Act.
+		$error = Ledger::instance()->record( $order, $input );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'rest_invalid_param', $error->get_error_code() );
+		$this->assertSame( 400, $error->get_error_data()['status'] );
+	}
+
+	/** Structured tendered values return the same validation error as other invalid tender input. */
+	public function test_record_rejects_non_scalar_tendered_amount(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+
+		// Act.
+		$error = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '92.95', array( 'tendered' => array( '100.00' ) ) ) );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'rest_invalid_param', $error->get_error_code() );
+		$this->assertSame( 400, $error->get_error_data()['status'] );
+	}
+
+	/** The manual record route always stores its server-owned app source. */
+	public function test_record_ignores_client_source(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+
+		// Act.
+		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00', array( 'source' => 'webview' ) ) );
+
+		// Assert.
+		$this->assertSame( 'app', $row['source'] );
 	}
 
 	/** Tendered is cash-only. */
@@ -259,6 +363,60 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'pos_cash', $rows[0]['method_id'] );
+	}
+
+	/** A stored row without a capture mode returns the contract error from status. */
+	public function test_status_rejects_row_without_capture_mode(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->payment( 'pos_card', '20.00', array( 'status' => 'pending' ) );
+		unset( $row['capture_mode'] );
+		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) ) );
+		$order->save();
+
+		// Act.
+		$error = Ledger::instance()->status( $order, $row['id'] );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_capture_mode_unsupported', $error->get_error_code() );
+		$this->assertSame( 501, $error->get_error_data()['status'] );
+	}
+
+	/** A stored row without a status cannot be voided. */
+	public function test_void_rejects_row_without_status(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->payment( 'pos_card', '20.00', array( 'capture_mode' => 'manual' ) );
+		unset( $row['status'] );
+		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) ) );
+		$order->save();
+
+		// Act.
+		$error = Ledger::instance()->void( $order, $row['id'], 'Malformed row' );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_invalid_transition', $error->get_error_code() );
+		$this->assertSame( 409, $error->get_error_data()['status'] );
+	}
+
+	/** A voidable stored row without a capture mode returns the contract error. */
+	public function test_void_rejects_row_without_capture_mode(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->payment( 'pos_card', '20.00', array( 'status' => 'pending' ) );
+		unset( $row['capture_mode'] );
+		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) ) );
+		$order->save();
+
+		// Act.
+		$error = Ledger::instance()->void( $order, $row['id'], 'Malformed row' );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_capture_mode_unsupported', $error->get_error_code() );
+		$this->assertSame( 501, $error->get_error_data()['status'] );
 	}
 
 	/** The multi-valued index meta as a plain list of method ids, in write order. */

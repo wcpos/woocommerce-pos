@@ -91,6 +91,34 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'txn_123', $payload['payments'][0]['transaction_id'] );
 	}
 
+	/** A ledger with no counting rows suppresses legacy payment projections. */
+	public function test_build_payments_does_not_fall_back_when_ledger_has_only_failed_rows(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_payment_method( 'pos_cash' );
+		$order->set_payment_method_title( 'Cash' );
+		$order->set_total( '92.95' );
+		$order->save();
+		Ledger::instance()->save(
+			$order,
+			array(
+				array(
+					'id'        => wp_generate_uuid4(),
+					'method_id' => 'pos_cash',
+					'amount'    => '92.95',
+					'status'    => 'failed',
+				),
+			)
+		);
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$this->assertSame( array(), $payload['payments'] );
+		$this->assertSame( 0.0, $payload['totals']['paid_total'] );
+	}
+
 	/**
 	 * Builder instance.
 	 *

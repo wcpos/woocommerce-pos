@@ -381,7 +381,7 @@ class Receipt_Data_Builder {
 				}
 			)
 		);
-		if ( $counting ) {
+		if ( $ledger_rows ) {
 			$payments   = array();
 			$change_sum = 0.0;
 			foreach ( $counting as $row ) {

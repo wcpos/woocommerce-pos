@@ -54,11 +54,15 @@ class Webview_Passthrough {
 	 * @param string $to       New order status.
 	 */
 	public static function on_status_changed( $order_id, $from, $to ): void {
-		if ( ! wcpos_request() || in_array( $to, array( 'pos-open', 'pos-partial', 'pending', 'cancelled', 'failed', 'refunded', 'checkout-draft', 'trash' ), true ) ) {
+		$order_pay_id = isset( $GLOBALS['wp']->query_vars['order-pay'] ) ? absint( $GLOBALS['wp']->query_vars['order-pay'] ) : 0;
+		// WooCommerce verifies the order-pay nonce before the gateway changes status.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$is_payment_submission = isset( $_POST['woocommerce_pay'] );
+		if ( ! wcpos_request() || $order_pay_id !== (int) $order_id || ! $is_payment_submission ) {
 			return;
 		}
 		$order = wc_get_order( (int) $order_id );
-		if ( ! $order instanceof WC_Order || '' === $order->get_payment_method() ) {
+		if ( ! $order instanceof WC_Order || ! $order->is_paid() || '' === $order->get_payment_method() ) {
 			return;
 		}
 
@@ -99,6 +103,7 @@ class Webview_Passthrough {
 			$change         = '' === $cash_change ? null : $cash_change;
 		}
 		$transaction_id = $order->get_transaction_id();
+		$cashier_id     = $order->get_meta( '_pos_user' );
 		$now            = gmdate( 'c' );
 		$rows[] = array(
 			'id'               => wp_generate_uuid4(),
@@ -117,7 +122,7 @@ class Webview_Passthrough {
 			'status'           => 'captured',
 			'provider_refs'    => array( 'transaction_id' => '' !== $transaction_id ? $transaction_id : null ),
 			'receipt'          => array(),
-			'cashier_id'       => get_current_user_id(),
+			'cashier_id'       => '' === (string) $cashier_id ? get_current_user_id() : (int) $cashier_id,
 			'store_id'         => '' === (string) $order->get_meta( '_pos_store' ) ? null : (int) $order->get_meta( '_pos_store' ),
 			'created_at_gmt'   => $now,
 			'captured_at_gmt'  => $now,

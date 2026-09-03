@@ -19,6 +19,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_order( true );
 		$order->set_payment_method( 'pos_card' );
 		$order->set_transaction_id( 'ch_123' );
+		$order->update_meta_data( '_pos_user', 123 );
 		$order->save();
 
 		// Act.
@@ -32,6 +33,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'webview', $rows[0]['source'] );
 		$this->assertSame( 'webview', $rows[0]['capture_mode'] );
 		$this->assertSame( '92.95', $rows[0]['amount'] );
+		$this->assertSame( 123, $rows[0]['cashier_id'] );
 		$this->assertSame( 'ch_123', $rows[0]['provider_refs']['transaction_id'] );
 		$this->assertSame( array( 'pos_card' ), array_values( wp_list_pluck( $order->get_meta( Ledger::INDEX_META_KEY, false ), 'value' ) ) );
 	}
@@ -51,6 +53,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				'currency'  => 'USD',
 			)
 		);
+		$order->payment_complete();
+		$order = wc_get_order( $order->get_id() );
 
 		// Assert.
 		$this->assertCount( 1, Ledger::instance()->read( $order ) );
@@ -65,9 +69,81 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		$order->payment_complete();
+		$order = wc_get_order( $order->get_id() );
 
 		// Assert.
 		$this->assertSame( array(), Ledger::instance()->read( $order ) );
+	}
+
+	/** A generic POS request changing status is not evidence of payment. */
+	public function test_status_change_outside_order_pay_does_not_mint_webview_row(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+		$previous_query_vars = $GLOBALS['wp']->query_vars;
+		$GLOBALS['wp']->query_vars['wcpos'] = 1;
+
+		try {
+			// Act.
+			$order->set_status( 'processing' );
+			$order->save();
+
+			// Assert.
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		} finally {
+			$GLOBALS['wp']->query_vars = $previous_query_vars;
+		}
+	}
+
+	/** An offline gateway status transition from the matching order-pay form is captured. */
+	public function test_order_pay_status_change_mints_webview_row(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+		$previous_query_vars = $GLOBALS['wp']->query_vars;
+		$previous_post       = $_POST;
+		$GLOBALS['wp']->query_vars['wcpos']     = 1;
+		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
+		$_POST['woocommerce_pay']               = '1';
+
+		try {
+			// Act.
+			$order->set_status( 'processing' );
+			$order->save();
+
+			// Assert.
+			$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		} finally {
+			$GLOBALS['wp']->query_vars = $previous_query_vars;
+			$_POST                       = $previous_post;
+		}
+	}
+
+	/** An order-pay transition that is not paid does not mint a captured row. */
+	public function test_order_pay_on_hold_status_does_not_mint_webview_row(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+		$previous_query_vars = $GLOBALS['wp']->query_vars;
+		$previous_post       = $_POST;
+		$GLOBALS['wp']->query_vars['wcpos']     = 1;
+		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
+		$_POST['woocommerce_pay']               = '1';
+
+		try {
+			// Act.
+			$order->set_status( 'on-hold' );
+			$order->save();
+
+			// Assert.
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		} finally {
+			$GLOBALS['wp']->query_vars = $previous_query_vars;
+			$_POST                       = $previous_post;
+		}
 	}
 
 	/**
