@@ -117,29 +117,9 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * @return bool
 	 */
 	public static function is_maintenance_request(): bool {
-		if ( is_admin() || wp_doing_cron() || ( \defined( 'WP_CLI' ) && WP_CLI ) ) {
-			return true;
-		}
-		if ( \function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) {
-			return true;
-		}
-		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only inspected for a prefix.
-		if ( '' === $uri ) {
-			return false;
-		}
-		if ( 1 === preg_match( '#(?:\?|&)' . preg_quote( SHORT_NAME, '#' ) . '=1(?:&|$)#', $uri ) ) {
-			return true;
-		}
-		if ( false !== strpos( $uri, '/' . rest_get_url_prefix() . '/' ) || false !== strpos( $uri, 'rest_route=' ) ) {
-			return true;
-		}
-		$path      = (string) wp_parse_url( $uri, PHP_URL_PATH );
-		$home_path = trailingslashit( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ) );
-		if ( '/' !== $home_path && 0 === strpos( trailingslashit( $path ), $home_path ) ) {
-			$path = (string) substr( $path, strlen( untrailingslashit( $home_path ) ) );
-		}
-		$slug = Admin\Permalink::get_slug();
-		return 1 === preg_match( '#^/(?:index\.php/)?(' . preg_quote( $slug, '#' ) . '|wcpos-[a-z-]+)(/|$)#i', $path );
+		// The lane classifier owns the detection (it moved there when the same
+		// question started deciding which services a request constructs).
+		return ! Services\Request_Lane::is_storefront();
 	}
 
 	/**

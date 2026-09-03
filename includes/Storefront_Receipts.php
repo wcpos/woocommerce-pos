@@ -32,6 +32,9 @@ class Storefront_Receipts {
 	 * @return string Receipt link or an empty string when no permitted order is available.
 	 */
 	public function receipt_shortcode( $attributes ): string {
+		// Rendering a receipt needs the template services, which a storefront
+		// request does not construct until something asks for them.
+		Init::ensure_order_services();
 		$attributes = shortcode_atts(
 			array(
 				'order_id' => '',

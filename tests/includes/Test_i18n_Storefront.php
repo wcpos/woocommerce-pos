@@ -19,6 +19,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Admin\Permalink;
 use WCPOS\WooCommercePOS\i18n;
+use WCPOS\WooCommercePOS\Services\Request_Lane;
 use WC_Unit_Test_Case;
 
 /**
@@ -219,10 +220,12 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 		set_current_screen( 'front' );
 
 		$restore = $arrange();
+		Request_Lane::reset();
 		$actual  = i18n::is_maintenance_request();
 		if ( \is_callable( $restore ) ) {
 			$restore();
 		}
+		Request_Lane::reset();
 
 		$_GET = $previous_get; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- restoring the test environment.
 		if ( null === $previous_uri ) {
