@@ -71,6 +71,22 @@ Every functional filter that fired on the checkout was also read for its gate: a
 
 The hotpatch was reverted afterwards (dev-next back on `main`); 351 journal rows for the deleted probe orders remain for the purge cron to sweep. What remains per checkout is the create row, the customer create rows, the product stock journal/digest and `Products::product_set_stock`'s `wp_posts` UPDATE.
 
+### Per-request fixes (PRs #1842 and the i18n/settings PR)
+
+Measured on **dev-free** (free plugin on `main`, French locale, 5 × 4 storefront pages, cache-busted — dev-free fronts anonymous GETs with a 60 s page cache, so a unique query string per request is required or the probe sees only uncacheable pages). Plugin-attributed queries per storefront page:
+
+| state | plugin queries | `Init::init` | `Activator::init` | page queries on vs off |
+|---|---|---|---|---|
+| `main` after #1842 (latches not yet flipped on this site) | 10–12 | 7 | 3 | 62 vs 52 |
+| + i18n storefront path, `general`/`visibility`/permalink autoloaded | 4 | 0 | 3 | 55 vs 52 |
+| + the upgrade-time latch flip | **1** | 0 | 0 | **52 vs 52** |
+
+The last query is WooCommerce's own `wc_installing` transient read inside `FeaturesUtil::declare_compatibility()`. Two facts surfaced on the way: an **absent** option (the permalink row on a store that never set a slug) costs a query on every request just like a non-autoloaded one, because notoptions is per-request; and `visibility` settings are read on every storefront query by the product-hiding filter, not only by POS requests.
+
+What remains structurally is the ~80 files and 22 objects a storefront page constructs; `2026-09-03-lazy-service-construction-spec.md` is the proposal.
+
+**Incident while measuring (2026-09-03 ~11:02–11:08):** deploying a second, host-gated copy of the probe mu-plugin beside the first fatalled every site sharing `/data/wordpress/mu-plugins/` — PHP hoists the class declaration regardless of the early host-mismatch return. One copy, host allowlist inside, and curl every site after touching that directory.
+
 ## Where the cost is
 
 **Every request (31 queries, ~11 ms) — all from eager loading in `Init`:**
