@@ -81,6 +81,12 @@ class Test_Request_Settings_Autoload extends WP_UnitTestCase {
 		$this->assertTrue( $this->is_autoloaded( self::PERMALINK ) );
 	}
 
+	public function test_permalink_slug_zero_is_not_treated_as_missing(): void {
+		update_option( self::PERMALINK, '0', true );
+
+		$this->assertSame( '0', Permalink::get_slug() );
+	}
+
 	public function test_a_missing_permalink_row_is_seeded_empty_and_autoloaded_and_a_custom_one_is_kept(): void {
 		// An absent option is queried on every request (notoptions is per request),
 		// so a store that never customised the slug paid for it on every page. The

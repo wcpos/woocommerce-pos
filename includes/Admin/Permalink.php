@@ -61,7 +61,7 @@ class Permalink {
 	public static function get_slug(): string {
 		$slug = get_option( self::DB_KEY );
 
-		return empty( $slug ) ? self::DEFAULT_SLUG : sanitize_text_field( $slug );
+		return false === $slug || '' === $slug ? self::DEFAULT_SLUG : sanitize_text_field( $slug );
 	}
 
 	/**
