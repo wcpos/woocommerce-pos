@@ -110,14 +110,51 @@ The remaining ~40 POS callbacks on the checkout path (`Orders::*`, `Gateways::*`
 
 The POS does not change what the online store does — no order fields, meta, stock or status differ with the plugin on. But "almost none of the POS code runs" is not true today: every storefront hit loads ~100 plugin files, constructs the full service graph and spends 31 queries on seeding and un-autoloaded options; every online order pays ~95 extra queries because two observers write on every intermediate save instead of once. On a host with Redis/Memcached items 2–4 vanish; items 1, 5 and 6 do not.
 
-## Suggested follow-ups (not done here)
+## Suggested follow-ups (status as of the evening re-measure below)
 
-- Move `Templates` default-term seeding to activation/upgrade behind a version latch; keep `register_taxonomy()` itself cheap. (**biggest per-request win**)
-- Coalesce `Sync_Journal`/`Integrity_Digest` order writes to one per request; pass the order object through instead of re-reading. (**biggest per-checkout win**)
-- Autoload the per-request latch options; collapse the i18n transients.
-- Consider deferring `init_common()` service construction that is only meaningful for POS/admin/REST requests (receipts, cloud print, stock validator) so a plain storefront GET loads a fraction of the 98 files.
-- Add this battery to `wcpos-wordpress/scripts/perf` as an online-store scenario (`k6 checkout.js` currently drives the **POS** checkout only) so the numbers above become a regression bar.
+- ✅ Move `Templates` default-term seeding to activation/upgrade behind a version latch; keep `register_taxonomy()` itself cheap. — #1842
+- ✅ Coalesce `Sync_Journal`/`Integrity_Digest` order writes to one per request. — #1841 (orders, customers digests), #1854 (product digests)
+- ✅ Autoload the per-request latch options; collapse the i18n transients. — #1846, #1849
+- ✅ Defer `init_common()` service construction that is only meaningful for POS/admin/REST requests. — #1853 (free), Pro #519
+- ⬜ Add this battery to `wcpos-wordpress/scripts/perf` as an online-store scenario so the numbers become a regression bar. Not done; `tests/includes/Sync/Test_Online_Checkout_Journal_Shape.php` (#1851) pins the journal/digest shape of an online checkout in the PHP suite instead.
 
 ## Cleanup performed
 
 Probe mu-plugin removed from `/data/wordpress/mu-plugins/`, `/tmp/wcpos-footprint.jsonl` deleted, COD gateway disabled again, the nine probe orders (98046–98054, `created_via=store-api`, customer note "WCPOS footprint probe") force-deleted.
+
+## Live re-measure after the merges (2026-09-03, evening)
+
+Same probe, same batteries, against the deployed build: free `main` at #1854 (#1841, #1842, #1846, #1849, #1851, #1853, #1854) on **dev-free**, and Pro `main` at #519 with that free vendored on **dev-pro** (both via Pro's deploy-dev). dev-next is the `next`-lane target and is not deployed by deploy-dev; it still ran the morning's build and reproduced the baseline numbers exactly (30 plugin queries, 101 files, 21 callbacks), so it is left out below.
+
+### Storefront pages (medians of 5)
+
+| Site | Request | Queries off → on | POS queries | POS files | POS callbacks fired | POS ms |
+|---|---|---|---|---|---|---|
+| dev-free (free) | `GET /` | 52 → 53 | 2 | 66 | 8 | 1.7 |
+| dev-free (free) | `GET /shop/` | 62 → 64 | 3 | 66 | 8 | 2.0 |
+| dev-free (free) | `GET /product/…` | 48 → 50 | 3 | 66 | 8 | 2.6 |
+| dev-pro (Pro) | `GET /` | 56 → 62 | 6 | 82 | 13 | 3.4 |
+| dev-pro (Pro) | `GET /shop/` | 66 → 73 | 7 | 82 | 13 | 3.5 |
+| dev-pro (Pro) | `GET /product/…` | 61 → 68 | 7 | 82 | 13 | 3.9 |
+
+Baseline (morning, Pro lane on dev-next): +30 queries, 98–101 files, 17–21 callbacks, 12–19 ms per page.
+
+What the remaining queries are:
+
+- **dev-free**: WooCommerce's own `wc_installing` transient read on `before_woocommerce_init` (1); the visibility settings row on shop/product pages (1, autoload deliberately off — it can hold unbounded id lists); and one i18n `_active_path` transient read that only happens when BOTH the primary and the uploads translation files exist (designed: the active uploads copy beats a stale primary copy; dev-free is in that transitional state after the day's hotpatches — ordinary sites have one file or the other).
+- **dev-pro**: the same, plus five rows the upgrade-time flip (`Activator::autoload_request_latches()`) has not run for on this site — `woocommerce_pos_settings_general`, `_permalink` and the three sync latches — because deploy-dev ships the same version number and the flip runs on `db_upgrade()` / activation. Merchants get it on the next release. Plus Pro's `woocommerce_pos_pro_settings_license`, which Pro's License section writes with autoload off and the flip could not reach (it derived the key from `id()`, and the License key is Pro-prefixed). Fixed in the PR that carries this note (free: the flip asks the section for its key) and its Pro companion (License section declares `autoload()`).
+
+### Realistic online checkout (dev-pro, medians of 3, stock-managed product ×2, coupon, account created, COD)
+
+| Mode | Server ms | Queries | POS-attributed |
+|---|---|---|---|
+| off | 1421 | 840 | – |
+| on | 1898 | 876 | 53 ms · 39 q · 70 callbacks |
+
+Baseline Pro lane: 941 queries (+133), 171 ms · 142 q · 66 callbacks. Server milliseconds on this box are noise at this level (the `plain` run was 1988 ms, slower than `on`); queries are the reliable axis: **+36 against +133**.
+
+Journal rows per online order: create + 1–2 coalesced updates (2–3 rows; was 12). Product digest: one write per purchased product (was 2). Of the 39 attributed queries, ~15 come from creating the customer account: `user_register`, `woocommerce_created_customer`, `profile_update` and the role hooks each write their own customer journal row (4 rows per new customer). Customer journal rows are not coalesced — left as is: it happens once per new customer, and WooCommerce's own customer save on `shutdown` is exactly the ordering edge the digest coalescing already has to work around. The remaining ~10 are the `init`-time option reads listed above and the stock-change observers.
+
+### Cleanup performed
+
+Probe mu-plugin removed (0 copies left), the three containers' `/tmp/wcpos-footprint.jsonl` deleted, the nine dev-pro probe orders, nine probe customers, the probe product and coupon deleted; all four sites verified 200 afterwards. dev-next was not touched.

@@ -623,7 +623,7 @@ class Activator {
 		);
 		foreach ( Services\Settings::instance()->sections()->all() as $section ) {
 			if ( $section instanceof Services\Settings\Abstract_Section && $section->autoload() ) {
-				$names[] = Services\Settings\Abstract_Section::DB_PREFIX . $section->id();
+				$names[] = $section->autoload_option_name();
 			}
 		}
 		return $names;
@@ -646,15 +646,14 @@ class Activator {
 	 */
 	public static function autoload_request_latches(): void {
 		global $wpdb;
-		// option_name() stays protected — Pro's License_Section overrides it at
-		// that visibility, and a child cannot narrow a public parent method
-		// (#1846 briefly made it public and fatalled every Pro site). The name
-		// is derived from the public id() instead.
+		// The key comes from the section itself (autoload_option_name()): Pro's
+		// License section stores under a Pro-prefixed key, so deriving it from
+		// id() flipped nothing for that row and seeded a stray free-prefixed one.
 		foreach ( Services\Settings::instance()->sections()->all() as $section ) {
 			if ( ! $section instanceof Services\Settings\Abstract_Section || ! $section->autoload() ) {
 				continue;
 			}
-			$option_name = Services\Settings\Abstract_Section::DB_PREFIX . $section->id();
+			$option_name = $section->autoload_option_name();
 			if ( false === get_option( $option_name ) ) {
 				$value = $section instanceof Services\Settings\General_Section
 					? array( 'tracking_consent' => $section->raw_tracking_consent() )
