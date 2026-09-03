@@ -34,7 +34,7 @@ class Templates {
 	/**
 	 * Supported template types.
 	 */
-	const SUPPORTED_TYPES = array( 'receipt', 'report' );
+	const SUPPORTED_TYPES = array( 'receipt', 'report', 'display' );
 
 	/**
 	 * Engines that support offline (client-side) rendering.
@@ -290,6 +290,12 @@ class Templates {
 			return sprintf( __( 'Report Template #%d', 'woocommerce-pos' ), $template_id );
 		}
 
+		if ( 'display' === $type ) {
+			// A display is a screen, never a printer: engine and paper width do not name it.
+			/* translators: %d: template post ID. */
+			return sprintf( __( 'Display Template #%d', 'woocommerce-pos' ), $template_id );
+		}
+
 		if ( 'thermal' === $engine ) {
 			if ( '' !== $paper_width ) {
 				/* translators: 1: thermal paper width, 2: template post ID. */
@@ -404,7 +410,7 @@ class Templates {
 	 * Get a virtual (filesystem) template by ID.
 	 *
 	 * @param string $template_id Virtual template ID (theme, plugin-pro, plugin-core).
-	 * @param string $type        Template type (receipt, report).
+	 * @param string $type        Template type (receipt, report, display).
 	 *
 	 * @return null|array Template data or null if not found.
 	 */
@@ -415,21 +421,22 @@ class Templates {
 			return null;
 		}
 
-		$metadata = array(
+		$is_display = 'display' === $type;
+		$metadata   = array(
 			self::TEMPLATE_THEME                     => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
+				'title'       => $is_display ? __( 'Theme Display', 'woocommerce-pos' ) : /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
 				'description' => '',
-				'category'    => 'receipt',
+				'category'    => $is_display ? '' : 'receipt',
 			),
 			self::TEMPLATE_PLUGIN_PRO                => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Pro Receipt Template', 'woocommerce-pos' ),
+				'title'       => $is_display ? __( 'Pro Display', 'woocommerce-pos' ) : /* translators: Receipt template post type or template option label. */ __( 'Pro Receipt Template', 'woocommerce-pos' ),
 				'description' => '',
-				'category'    => 'receipt',
+				'category'    => $is_display ? '' : 'receipt',
 			),
 			self::TEMPLATE_PLUGIN_CORE               => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Legacy PHP Template', 'woocommerce-pos' ),
+				'title'       => $is_display ? __( 'Core Display', 'woocommerce-pos' ) : /* translators: Receipt template post type or template option label. */ __( 'Legacy PHP Template', 'woocommerce-pos' ),
 				'description' => '',
-				'category'    => 'receipt',
+				'category'    => $is_display ? '' : 'receipt',
 			),
 			self::TEMPLATE_WP_OVERNIGHT_INVOICE      => array(
 				'title'       => __( 'Invoice (WP Overnight)', 'woocommerce-pos' ),
@@ -574,7 +581,7 @@ class Templates {
 	 * Detect all available filesystem templates for a type.
 	 * Returns templates in priority order: Theme > Pro > Core.
 	 *
-	 * @param string $type Template type (receipt, report).
+	 * @param string $type Template type (receipt, report, display).
 	 *
 	 * @return array Array of available virtual templates.
 	 */
@@ -603,7 +610,7 @@ class Templates {
 	/**
 	 * Get the default (highest priority) filesystem template for a type.
 	 *
-	 * @param string $type Template type (receipt, report).
+	 * @param string $type Template type (receipt, report, display).
 	 *
 	 * @return null|array Default template data or null if none found.
 	 */
@@ -615,7 +622,7 @@ class Templates {
 	/**
 	 * Get the ID of the active template for a type.
 	 *
-	 * @param string $type Template type (receipt, report).
+	 * @param string $type Template type (receipt, report, display).
 	 *
 	 * @return null|int|string Active template ID (int for database, string for virtual), or null.
 	 */
@@ -647,7 +654,7 @@ class Templates {
 	 * Get active template for a specific type.
 	 * Returns the full template data.
 	 *
-	 * @param string $type Template type (receipt, report).
+	 * @param string $type Template type (receipt, report, display).
 	 *
 	 * @return null|array Active template data or null if not found.
 	 */
@@ -671,7 +678,7 @@ class Templates {
 	 * Set the active template by ID.
 	 *
 	 * @param int|string $template_id Template ID (int for database, string for virtual).
-	 * @param string     $type        Template type (receipt, report).
+	 * @param string     $type        Template type (receipt, report, display).
 	 *
 	 * @return bool True on success, false on failure.
 	 */
@@ -711,7 +718,7 @@ class Templates {
 	/**
 	 * Get the stored display order for templates of a given type.
 	 *
-	 * @param string $type Template type (receipt, report).
+	 * @param string $type Template type (receipt, report, display).
 	 *
 	 * @return array Ordered array of template IDs (int for database, string for virtual).
 	 */
@@ -729,7 +736,7 @@ class Templates {
 	 * Save the display order for templates of a given type.
 	 *
 	 * @param array  $order Array of template IDs in display order.
-	 * @param string $type  Template type (receipt, report).
+	 * @param string $type  Template type (receipt, report, display).
 	 *
 	 * @return bool True on success.
 	 */
@@ -753,7 +760,7 @@ class Templates {
 	/**
 	 * Get the list of disabled virtual template IDs for a given type.
 	 *
-	 * @param string $type Template type (receipt, report).
+	 * @param string $type Template type (receipt, report, display).
 	 *
 	 * @return string[] Array of disabled virtual template IDs.
 	 */
@@ -771,7 +778,7 @@ class Templates {
 	 * Check if a virtual template is disabled.
 	 *
 	 * @param string $template_id Virtual template ID.
-	 * @param string $type        Template type (receipt, report).
+	 * @param string $type        Template type (receipt, report, display).
 	 *
 	 * @return bool True if disabled.
 	 */
@@ -786,7 +793,7 @@ class Templates {
 	 *
 	 * @param string $template_id Virtual template ID.
 	 * @param bool   $disabled    True to disable, false to enable.
-	 * @param string $type        Template type (receipt, report).
+	 * @param string $type        Template type (receipt, report, display).
 	 *
 	 * @return bool True on success.
 	 */
@@ -1291,7 +1298,7 @@ class Templates {
 	}
 
 	/**
-	 * Register default template types (receipt, report).
+	 * Register default template types (receipt, report, display).
 	 *
 	 * @return void
 	 */
@@ -1315,6 +1322,17 @@ class Templates {
 				array(
 					'slug'        => 'report',
 					'description' => __( 'Report templates for analytics', 'woocommerce-pos' ),
+				)
+			);
+		}
+
+		if ( ! term_exists( 'display', 'wcpos_template_type' ) ) {
+			wp_insert_term(
+				'Display',
+				'wcpos_template_type',
+				array(
+					'slug'        => 'display',
+					'description' => __( 'Customer-facing display templates', 'woocommerce-pos' ),
 				)
 			);
 		}
