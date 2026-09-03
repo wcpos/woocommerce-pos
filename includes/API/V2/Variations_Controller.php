@@ -158,8 +158,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		 * WooCommerce maps `search` onto `s`, which searches post_title/content — useless for a
 		 * variation, whose title is a generated attribute string. The POS searches what a cashier
 		 * actually types or scans: the SKU and whichever meta key the store configured as its
-		 * barcode field (`Barcode_Field::search_keys()`). Any term matching any carrier wins,
-		 * which is the semantics the previous hand-rolled SQL had and the specs pin.
+		 * barcode field (`Barcode_Field::search_keys()`). Every term must match a carrier.
 		 *
 		 * `sku` is left to WooCommerce: its own exact/comma-list handling is what the
 		 * sku-beats-search precedence rule relies on.
@@ -173,15 +172,17 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		if ( '' !== $search && '' === $sku ) {
 			unset( $args['s'] );
 			$args['wcpos_variation_search'] = true;
-			$carriers = array( 'relation' => 'OR' );
+			$carriers = array( 'relation' => 'AND' );
 			foreach ( (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY ) as $term ) {
+				$term_carriers = array( 'relation' => 'OR' );
 				foreach ( Barcode_Field::search_keys() as $key ) {
-					$carriers[] = array(
+					$term_carriers[] = array(
 						'key'     => $key,
 						'value'   => $term,
 						'compare' => 'LIKE',
 					);
 				}
+				$carriers[] = $term_carriers;
 			}
 			if ( 1 < \count( $carriers ) ) {
 				$args['meta_query'] = $this->add_meta_query( $args, $carriers ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
