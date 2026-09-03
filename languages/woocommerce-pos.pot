@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-03T17:06:57+00:00\n"
+"POT-Creation-Date: 2026-09-03T21:42:37+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -69,7 +69,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:706
+#: includes/Activator.php:705
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -3217,7 +3217,7 @@ msgid "Settings with id %s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'.
-#: includes/Services/Settings/Abstract_Section.php:236
+#: includes/Services/Settings/Abstract_Section.php:253
 #, php-format
 msgid "Can not save settings with id %s"
 msgstr ""
