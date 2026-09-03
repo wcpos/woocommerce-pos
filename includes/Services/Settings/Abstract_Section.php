@@ -116,7 +116,7 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 	 *
 	 * @return string
 	 */
-	public function option_name(): string {
+	protected function option_name(): string {
 		return self::DB_PREFIX . $this->id();
 	}
 
