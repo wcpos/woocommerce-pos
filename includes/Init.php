@@ -444,39 +444,157 @@ class Init {
 	}
 
 	/**
-	 * Common initializations.
+	 * Groups constructed so far in this request (test seam; see constructed_groups()).
+	 *
+	 * @var array<string, bool>
+	 */
+	private static array $constructed = array();
+
+	/**
+	 * Common initializations, by request lane.
+	 *
+	 * Every request gets the services whose hooks WooCommerce consults on a
+	 * plain shopper page BEFORE any order exists: translations, the product
+	 * visibility filters, the order statuses and the read-side order filters
+	 * (My Account renders POS orders), the gateway registration (WooCommerce
+	 * builds its gateway list on cart pages) and the reserved-stock filter
+	 * (POS drafts must reduce online availability at add-to-cart time).
+	 *
+	 * Everything else is constructed only on the lanes that use it, and the
+	 * order-event services additionally on the first order write of ANY request
+	 * ({@see ensure_order_services()}), so the lane classifier is an
+	 * optimisation rather than a correctness gate. Measured 2026-09-03: a
+	 * storefront page loaded ~80 plugin files and 22 objects for hooks that
+	 * never fire there (see .claude/research/2026-09-03-lazy-service-construction-spec.md).
 	 */
 	private function init_common(): void {
+		self::$constructed['always'] = true;
+
 		// init the Services.
 		SettingsService::instance();
 		AuthService::instance();
-		Extensions::instance();
-		Receipt_Snapshot_Store::instance();
 
-		// init other functionality needed by both frontend and admin.
+		// Needed on every lane, including a plain storefront page.
 		new i18n();
 		new Gateways();
 		new Products();
 		new Orders();
-		new Emails();
-		new Templates();
 		Services\Stock_Validator::instance();
+
+		if ( Services\Request_Lane::is_storefront() ) {
+			// Order-event services arrive on the first order write, if any.
+			self::arm_order_services();
+			return;
+		}
+
+		self::ensure_order_services();
+		self::construct_pos_services();
+	}
+
+	/**
+	 * Services only POS, admin, REST, cron and CLI requests use.
+	 */
+	private static function construct_pos_services(): void {
+		if ( isset( self::$constructed['pos'] ) ) {
+			return;
+		}
+		self::$constructed['pos'] = true;
+		Extensions::instance();
 		new Services\Decimal_Quantities();
 		new Services\Customer_Meta_Parity();
+	}
+
+	/**
+	 * Hook the order-event services to the first order write of the request.
+	 *
+	 * Every WooCommerce order write — create, update, status transition,
+	 * `payment_complete()`, refund — goes through `WC_Abstract_Order::save()`,
+	 * which fires `woocommerce_before_order_object_save` before the data store
+	 * writes and before `woocommerce_new_order` / `woocommerce_order_status_changed`
+	 * / `woocommerce_payment_complete` fire. Priority 0 there means every
+	 * observer exists before any order is written — on a webhook, a cron
+	 * spawned from a page view, a third-party plugin creating an order on
+	 * `template_redirect`, or a lane the classifier got wrong. Nothing in the
+	 * order group listens to trash or delete, so those need no arming.
+	 */
+	private static function arm_order_services(): void {
+		add_action( 'woocommerce_before_order_object_save', array( self::class, 'ensure_order_services' ), 0, 0 );
+	}
+
+	/**
+	 * Construct the order-event services exactly once per request.
+	 *
+	 * Idempotent and safe to call after `init`; each service handles its own
+	 * late registration. Fires `woocommerce_pos_order_services_ready` once so
+	 * Pro and extensions can construct their own order-event services at the
+	 * same moment on every lane.
+	 */
+	public static function ensure_order_services(): void {
+		if ( isset( self::$constructed['order'] ) ) {
+			return;
+		}
+		self::$constructed['order'] = true;
+
+		Receipt_Snapshot_Store::instance();
+		new Emails();
+		new Templates();
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();
 		new Services\Cloud_Print_Relay_Service();
+
+		/**
+		 * Fires once per request when the POS order-event services exist:
+		 * eagerly on POS, admin, REST, cron and CLI requests (from this
+		 * plugin's `init` callback at priority 10), and on a storefront
+		 * request the moment the first order is about to be written.
+		 *
+		 * Because the eager firing happens at `init` priority 10, a listener
+		 * added later than that (for example from another plugin's `init`
+		 * callback at priority 20) must check `did_action()` first and
+		 * construct immediately when the action has already fired.
+		 *
+		 * @since 1.10.8
+		 */
+		do_action( 'woocommerce_pos_order_services_ready' );
+	}
+
+	/**
+	 * Which service groups this request has constructed: 'always', 'order', 'pos'.
+	 *
+	 * @internal Test seam.
+	 *
+	 * @return string[]
+	 */
+	public static function constructed_groups(): array {
+		return array_keys( self::$constructed );
+	}
+
+	/**
+	 * Forget which groups were constructed. Tests only.
+	 *
+	 * @internal
+	 */
+	public static function reset_request_state(): void {
+		self::$constructed = array();
+		Services\Request_Lane::reset();
 	}
 
 	/**
 	 * Frontend specific initializations.
 	 */
 	private function init_frontend(): void {
-		if ( ! is_admin() ) {
+		if ( is_admin() ) {
+			return;
+		}
+		// The public receipt shortcode and the My Account receipt action are
+		// storefront features; they construct the template services when used.
+		new Storefront_Receipts();
+		if ( ! Services\Request_Lane::is_storefront() ) {
+			// The POS routes (rewrite rules, checkout context, order-pay and
+			// coupon forms) only matter on requests the classifier saw as POS.
 			new Template_Router();
 			new Form_Handler();
-			new Storefront_Receipts();
 		}
 	}
 
@@ -513,6 +631,9 @@ class Init {
 
 		// wePOS alters the WooCommerce REST API, breaking the expected schema
 		// It's very bad form on their part, but we need to work around it.
-		new Integrations\WePOS();
+		// Its only hook is admin_init (a conflict notice), so admin lane only.
+		if ( is_admin() ) {
+			new Integrations\WePOS();
+		}
 	}
 }
