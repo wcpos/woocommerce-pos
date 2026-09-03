@@ -156,6 +156,46 @@ class Test_Request_Settings_Autoload extends WP_UnitTestCase {
 		$this->assertSame( 'legacy', get_option( self::GENERAL )['store_name'] );
 	}
 
+	/**
+	 * Pro's License section stores under a Pro-prefixed key (option_name()
+	 * overridden at protected visibility). Deriving the key from id() flipped
+	 * nothing for it and seeded a stray free-prefixed row; the flip must ask the
+	 * section for its key.
+	 */
+	public function test_the_upgrade_flip_uses_the_section_own_option_key(): void {
+		$section = new class() extends Abstract_Section {
+			const KEY = 'woocommerce_pos_probe_custom_key';
+			public function id(): string {
+				return 'probe_custom';
+			}
+			public function defaults(): array {
+				return array();
+			}
+			public function autoload(): bool {
+				return true;
+			}
+			protected function option_name(): string {
+				return self::KEY;
+			}
+		};
+		\WCPOS\WooCommercePOS\Services\Settings::instance()->sections()->register( $section );
+		update_option( $section::KEY, array( 'key' => 'abc' ), false );
+		$this->assertFalse( $this->is_autoloaded( $section::KEY ) );
+
+		try {
+			Activator::autoload_request_latches();
+
+			$this->assertTrue( $this->is_autoloaded( $section::KEY ), 'The section-declared key is flipped.' );
+			$this->assertSame( 'abc', get_option( $section::KEY )['key'] );
+			$this->assertFalse( get_option( Abstract_Section::DB_PREFIX . 'probe_custom' ), 'No stray row under the id-derived key.' );
+		} finally {
+			delete_option( $section::KEY );
+			delete_option( Abstract_Section::DB_PREFIX . 'probe_custom' );
+			// The registry is process-wide; drop the probe section so later tests do not seed its row.
+			\WCPOS\WooCommercePOS\Services\Settings::instance()->reset_sections_for_testing();
+		}
+	}
+
 	private function is_autoloaded( string $option ): bool {
 		global $wpdb;
 		$autoload = $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", $option ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- reading the stored flag is the point.
