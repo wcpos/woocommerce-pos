@@ -67,10 +67,17 @@ class Print_Job_Service {
 	const STATUS_CANCELLED = 'cancelled';
 
 	/**
-	 * Constructor — register the CPT on init.
+	 * Constructor — register the CPT on init, or at once when init has passed.
+	 *
+	 * On a storefront request this service is constructed lazily by the first
+	 * order write, long after `init`; a hook added then would never fire.
 	 */
 	public function __construct() {
-		add_action( 'init', array( $this, 'register_post_type' ) );
+		if ( did_action( 'init' ) ) {
+			$this->register_post_type();
+		} else {
+			add_action( 'init', array( $this, 'register_post_type' ) );
+		}
 		// A static callback: several services construct Print_Job_Service on
 		// every request, and WordPress dedupes identical static callbacks, so
 		// the purge runs exactly once per cron event.

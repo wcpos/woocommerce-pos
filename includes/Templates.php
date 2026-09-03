@@ -78,6 +78,25 @@ class Templates {
 	}
 
 	/**
+	 * Make sure the template post type and taxonomies exist on this request.
+	 *
+	 * A storefront request constructs Templates only on its first order write
+	 * (see Init::ensure_order_services()), but the static readers below are
+	 * also reached from a plain page — the My Account order actions read the
+	 * active receipt template. A tax_query against an unregistered taxonomy
+	 * matches nothing, and get_active_template_id() would then treat the
+	 * merchant's custom template as gone and delete the active-template
+	 * option. Registration itself costs no queries (the default terms are
+	 * behind an autoloaded latch), so every static reader calls this first.
+	 */
+	public static function ensure_registered(): void {
+		if ( taxonomy_exists( 'wcpos_template_type' ) && post_type_exists( 'wcpos_template' ) ) {
+			return;
+		}
+		new self();
+	}
+
+	/**
 	 * Seed the default template types and categories once per DEFAULT_TERMS_VERSION.
 	 *
 	 * The latch is set only once every default term verifiably exists, so a
@@ -371,6 +390,7 @@ class Templates {
 	 * @return null|array Template data or null if not found.
 	 */
 	public static function get_template( int $template_id ): ?array {
+		self::ensure_registered();
 		$post = get_post( $template_id );
 
 		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
@@ -943,6 +963,7 @@ class Templates {
 	 * @return array Array of template data arrays.
 	 */
 	public static function get_enabled_templates( string $type = 'receipt' ): array {
+		self::ensure_registered();
 		$disabled_virtual = self::get_disabled_virtual_templates( $type );
 		$order            = self::get_template_order( $type );
 		$templates        = array();
