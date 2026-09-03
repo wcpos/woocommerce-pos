@@ -80,6 +80,59 @@ class Test_Integrity_Digest_Write_Coalescing extends Sync_Store_Test_Case {
 		$this->assertCount( 1, $this->digest_inserts );
 	}
 
+	public function test_repeated_product_saves_upsert_the_stored_digest_once_at_flush(): void {
+		$product    = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 10,
+				'price' => 10,
+				'manage_stock' => true,
+				'stock_quantity' => 20,
+			)
+		);
+		$product_id = $product->get_id();
+		$this->digest_inserts = array();
+
+		// The checkout sequence: wc_reduce_stock_levels() saves the quantity and
+		// then the stock status — two saves of one product in one request.
+		$order = wc_create_order();
+		$order->add_product( $product, 2 );
+		$order->save();
+		wc_reduce_stock_levels( $order->get_id() );
+		wc_update_product_stock( $product_id, 17 );
+
+		$this->assertSame( array(), $this->digest_inserts, 'Product digest upserts must be deferred to the flush, not run per save.' );
+
+		Integrity_Digest::flush_pending_digests();
+
+		$product_inserts = array_values(
+			array_filter(
+				$this->digest_inserts,
+				static function ( string $sql ) use ( $product_id ): bool {
+					return false !== strpos( $sql, 'p.ID = ' . $product_id );
+				}
+			)
+		);
+		$this->assertCount( 1, $product_inserts, 'Three product saves collapsed to one INSERT…SELECT: ' . implode( "\n", $this->digest_inserts ) );
+		$this->assertSame( 1, $this->stored_rows( 'product', $product_id ) );
+	}
+
+	public function test_deleting_a_product_drops_its_pending_upsert(): void {
+		$product    = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+		$product_id = $product->get_id();
+		Integrity_Digest::flush_pending_digests();
+		$this->digest_inserts = array();
+
+		$product->set_name( 'renamed' );
+		$product->save();
+		$this->assertSame( array(), $this->digest_inserts );
+
+		wp_delete_post( $product_id, true );
+		Integrity_Digest::flush_pending_digests();
+
+		$this->assertSame( array(), $this->digest_inserts, 'A deleted product must not be digested after the fact.' );
+		$this->assertSame( 0, $this->stored_rows( 'product', $product_id ) );
+	}
+
 	public function test_reading_digests_flushes_pending_upserts_first(): void {
 		$order    = wc_create_order();
 		$order_id = $order->get_id();

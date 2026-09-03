@@ -94,9 +94,13 @@ final class Integrity_Digest {
 	 * has run, later saves write immediately. Static so the read path can
 	 * flush without holding the observer instance; each entry keeps its blog id
 	 * so a multisite `switch_to_blog()` between save and flush still writes the
-	 * originating site's table. Product digests are NOT deferred: the
-	 * per-object serializer stamps them inside the same write request, and
-	 * they fire once per save anyway.
+	 * originating site's table. Product and variation digests ride the same
+	 * queue: WooCommerce saves a product more than once per request too
+	 * (`wc_reduce_stock_levels()` saves the quantity, then the stock status —
+	 * two INSERT…SELECT statements per purchased product at checkout, measured
+	 * 2026-09-03), and the v2 write lane reads digests back through
+	 * {@see Digest_Index::read_digests()}, which flushes first, so the
+	 * serializer still stamps the fresh `_rxdb_digest` in the same request.
 	 *
 	 * @var array<string, array{0: int, 1: string, 2: int}> "blog:type:id" => [blog, type, id]
 	 */
@@ -381,8 +385,11 @@ final class Integrity_Digest {
 			function () use ( $type, $id ): void {
 				if ( 'customer' === $type ) {
 					$this->upsert_customer_digest( $id );
-				} else {
+				} elseif ( 'order' === $type ) {
 					$this->upsert_order_digest( $id );
+				} else {
+					// product | variation: the SQL derives the stored type from the row.
+					$this->upsert_digest( $id );
 				}
 			}
 		);
@@ -539,12 +546,9 @@ final class Integrity_Digest {
 		}
 	}
 
+	/** Owe the product's or variation's digest; it is written once, on flush (see $pending_digests). */
 	public function record_post_saved( int $post_id ): void {
-		$this->observe(
-			function () use ( $post_id ): void {
-				$this->upsert_digest( $post_id );
-			}
-		);
+		$this->defer( 'product_variation' === get_post_type( $post_id ) ? 'variation' : 'product', $post_id );
 	}
 
 	public function record_post_untrashed( int $post_id ): void {
@@ -560,6 +564,8 @@ final class Integrity_Digest {
 		if ( ! in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
 			return;
 		}
+		// A pending upsert for a record that is leaving must not be written after the fact.
+		unset( self::$pending_digests[ self::pending_key( 'product_variation' === $post_type ? 'variation' : 'product', $post_id ) ] );
 		$this->observe(
 			function () use ( $post_id, $post_type ): void {
 				$this->delete_post_digest( $post_id, $post_type );
