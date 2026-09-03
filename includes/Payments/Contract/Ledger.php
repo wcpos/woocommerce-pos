@@ -323,7 +323,12 @@ class Ledger {
 	}
 
 	/**
-	 * Void a pending or authorized row.
+	 * Void a pending or authorized row — or a captured manual row.
+	 *
+	 * A manual (cash, dummy card) row is captured the moment it is recorded, so
+	 * cancelling a split mid-way has to void a captured row: the cashier hands the
+	 * cash back and nothing at a provider needs reversing (wcpos/roadmap#107 rule 6).
+	 * Provider-captured rows are never voided; they are refunded.
 	 *
 	 * @param WC_Order $order  Order object.
 	 * @param string   $id     Payment ID.
@@ -337,7 +342,7 @@ class Ledger {
 		if ( ! $row ) {
 			return $this->not_found();
 		}
-		if ( ! in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) ) {
+		if ( ! $this->is_voidable( $row ) ) {
 			return $this->invalid_transition();
 		}
 		$handler = Capture_Mode_Registry::instance()->get( (string) ( $row['capture_mode'] ?? '' ) );
@@ -364,6 +369,19 @@ class Ledger {
 	}
 
 	/**
+	 * Whether a row may be voided: pending or authorized always; captured only when manual.
+	 *
+	 * @param array $row Payment row.
+	 */
+	private function is_voidable( array $row ): bool {
+		$status = $row['status'] ?? '';
+		if ( in_array( $status, array( 'pending', 'authorized' ), true ) ) {
+			return true;
+		}
+		return 'captured' === $status && 'manual' === ( $row['capture_mode'] ?? '' );
+	}
+
+	/**
 	 * Apply handler-owned fields while enforcing the one-way lifecycle.
 	 *
 	 * @param array $row Payment row.
@@ -377,6 +395,7 @@ class Ledger {
 		$allowed = array(
 			'pending' => array( 'authorized', 'captured', 'failed', 'voided' ),
 			'authorized' => array( 'captured', 'voided' ),
+			'captured' => 'manual' === ( $row['capture_mode'] ?? '' ) ? array( 'voided' ) : array(),
 		);
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
