@@ -19,6 +19,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services\Settings;
 
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Admin\Permalink;
+use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Visibility_Section;
@@ -60,12 +61,12 @@ class Test_Request_Settings_Autoload extends WP_UnitTestCase {
 		// alloptions budget; Checkout is only read on POS requests. Both keep the
 		// legacy byte-compatible write path.
 		foreach ( array( new Visibility_Section(), new Checkout_Section() ) as $section ) {
-			delete_option( $section->option_name() );
+			delete_option( Abstract_Section::DB_PREFIX . $section->id() );
 			$this->assertFalse( $section->autoload() );
 
 			$section->write( $section->defaults() );
 
-			$this->assertFalse( $this->is_autoloaded( $section->option_name() ), $section->id() );
+			$this->assertFalse( $this->is_autoloaded( Abstract_Section::DB_PREFIX . $section->id() ), $section->id() );
 		}
 	}
 
