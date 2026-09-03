@@ -88,7 +88,7 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 				$clauses['where'] .= ' AND ' . Order_Search::hpos_where( $search, $query );
 				return $clauses;
 			};
-			add_filter( 'woocommerce_orders_table_query_clauses', $filter, 10, 3 );
+			add_filter( 'woocommerce_orders_table_query_clauses', $filter, 10, 2 );
 			return array( array( 'woocommerce_orders_table_query_clauses', $filter, 10 ) );
 		}
 
