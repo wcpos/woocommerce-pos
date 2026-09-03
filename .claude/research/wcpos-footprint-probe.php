@@ -197,20 +197,29 @@ final class WCPOS_Footprint_Probe {
 		$q0 = $wpdb->num_queries;
 		$i0 = is_array( $wpdb->queries ) ? count( $wpdb->queries ) : 0;
 		$t0 = hrtime( true );
-		self::$stack[] = array( 'key' => $key, 'child_ns' => 0, 'child_q' => 0 );
+		// child_ranges: [start, end) index ranges of $wpdb->queries consumed by
+		// nested wrapped callbacks, so the SQL list stays exclusive like the counts.
+		self::$stack[] = array( 'key' => $key, 'child_ns' => 0, 'child_q' => 0, 'child_ranges' => array() );
 		try {
 			return $fn( ...$args );
 		} finally {
 			$dt    = hrtime( true ) - $t0;
 			$dq    = $wpdb->num_queries - $q0;
+			$i1    = is_array( $wpdb->queries ) ? count( $wpdb->queries ) : 0;
 			$frame = array_pop( self::$stack );
 			$s     = &self::$stats[ $key ];
 			$s['calls']++;
 			$s['incl_ns'] += $dt;
 			$s['excl_ns'] += $dt - $frame['child_ns'];
 			$s['queries'] += $dq - $frame['child_q'];
-			if ( $dq > 0 && is_array( $wpdb->queries ) && count( $s['sql'] ) < 40 ) {
-				foreach ( array_slice( $wpdb->queries, $i0, $dq ) as $q ) {
+			if ( $i1 > $i0 && is_array( $wpdb->queries ) && count( $s['sql'] ) < 40 ) {
+				for ( $i = $i0; $i < $i1; $i++ ) {
+					foreach ( $frame['child_ranges'] as $range ) {
+						if ( $i >= $range[0] && $i < $range[1] ) {
+							continue 2;
+						}
+					}
+					$q          = $wpdb->queries[ $i ];
 					$s['sql'][] = array( 'q' => substr( preg_replace( '/\s+/', ' ', $q[0] ), 0, 300 ), 'ms' => round( $q[1] * 1000, 2 ) );
 				}
 			}
@@ -219,6 +228,7 @@ final class WCPOS_Footprint_Probe {
 				$p = count( self::$stack ) - 1;
 				self::$stack[ $p ]['child_ns'] += $dt;
 				self::$stack[ $p ]['child_q']  += $dq;
+				self::$stack[ $p ]['child_ranges'][] = array( $i0, $i1 );
 			}
 		}
 	}

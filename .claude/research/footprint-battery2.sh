@@ -1,18 +1,30 @@
 #!/bin/bash
 # Realistic online checkout on dev-next: stock-managed product x2, coupon, account created at checkout, COD.
-# Usage: battery2.sh <outdir>
+# Usage: footprint-battery2.sh <outdir>   (set EXTRA_HDR="X-WCPOS-Lane-Variant: <token>" to run the FREE lane)
 set -u
-OUT=$1; mkdir -p "$OUT"
+OUT=${1:?usage: footprint-battery2.sh <outdir>}
+mkdir -p "$OUT"
 BASE=https://dev-next.wcpos.com
 TOK="X-WCPOS-Footprint: REPLACE-WITH-A-FRESH-TOKEN"
-PHP=php-wvos4z8i4h42k7vycxwr9fdm-073211564552
 SSH="ssh -o ConnectTimeout=15 root@213.239.218.130"
 RUN=$(date +%s)
-# Optional extra header for every probed request, e.g. the dev-next lane-variant swap to run the FREE plugin.
 EXTRA=()
 [ -n "${EXTRA_HDR:-}" ] && EXTRA=(-H "$EXTRA_HDR")
 
-# --- setup: product, coupon, options ---
+# Resolve the dev-next PHP container by its mount, not by the Coolify-generated name (which changes on redeploy).
+PHP=$($SSH 'for N in $(docker ps --format "{{.Names}}" | grep "^php-"); do docker inspect "$N" --format "{{range .Mounts}}{{.Source}}{{\"\n\"}}{{end}}" 2>/dev/null | grep -q "/data/wordpress/dev-next/" && echo "$N" && break; done')
+[ -z "$PHP" ] && { echo "dev-next PHP container not found"; exit 1; }
+echo "php container=$PHP"
+
+# Remember the settings this run changes and restore them on every exit path.
+COD_WAS=$($SSH "docker exec $PHP wp wc payment_gateway get cod --user=1 --field=enabled --allow-root" | tr -d '[:space:]')
+SIGNUP_WAS=$($SSH "docker exec $PHP wp option get woocommerce_enable_signup_and_login_from_checkout --allow-root" | tr -d '[:space:]')
+restore_settings() {
+  $SSH "docker exec $PHP wp wc payment_gateway update cod --enabled=${COD_WAS:-false} --user=1 --allow-root >/dev/null; docker exec $PHP wp option update woocommerce_enable_signup_and_login_from_checkout ${SIGNUP_WAS:-no} --allow-root >/dev/null" && echo "settings restored (cod=${COD_WAS:-false}, signup=${SIGNUP_WAS:-no})"
+}
+trap restore_settings EXIT
+
+# --- setup: log removed (not truncated, so php-fpm can recreate it), product, coupon, options ---
 $SSH "docker exec $PHP sh -c 'rm -f /tmp/wcpos-footprint.jsonl';
 docker exec $PHP wp wc product create --name='Footprint probe stock product' --type=simple --regular_price=10 --manage_stock=true --stock_quantity=1000 --status=publish --user=1 --porcelain --allow-root;
 docker exec $PHP wp wc shop_coupon create --code=probe10-$RUN --discount_type=percent --amount=10 --user=1 --porcelain --allow-root;
@@ -37,9 +49,7 @@ for i in 1 2 3; do
   done
 done
 
-# --- teardown: options back, pull log, list what to delete ---
-$SSH "docker exec $PHP wp option update woocommerce_enable_signup_and_login_from_checkout no --allow-root >/dev/null;
-docker exec $PHP wp wc payment_gateway update cod --enabled=false --user=1 --allow-root >/dev/null;
-docker exec $PHP cat /tmp/wcpos-footprint.jsonl" > "$OUT/footprint.jsonl"
+$SSH "docker exec $PHP cat /tmp/wcpos-footprint.jsonl" > "$OUT/footprint.jsonl"
 echo "log lines: $(wc -l < "$OUT/footprint.jsonl")"
 echo "$PID" > "$OUT/product_id"; echo "$CID" > "$OUT/coupon_id"; echo "$RUN" > "$OUT/run_id"
+echo "Remember to delete the probe orders (customer note 'WCPOS footprint probe'), the footprint-* users, product $PID and coupon $CID afterwards."
