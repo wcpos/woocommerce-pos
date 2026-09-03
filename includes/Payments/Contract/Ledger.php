@@ -22,6 +22,13 @@ class Ledger {
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
 	public const STATUSES = array( 'pending', 'authorized', 'captured', 'failed', 'voided' );
+
+	/**
+	 * Order statuses the ledger still projects. Once an order has completed (or is
+	 * processing / on-hold / refunded) a ledger write never pulls it back — so that is
+	 * also the boundary past which a captured cash leg is refunded rather than voided.
+	 */
+	public const IN_PROGRESS_STATUSES = array( 'pos-open', 'pos-partial', 'pending', 'failed' );
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
 	public const SOURCES = array( 'app', 'webview' );
 
@@ -323,7 +330,12 @@ class Ledger {
 	}
 
 	/**
-	 * Void a pending or authorized row.
+	 * Void a pending or authorized row — or a captured manual row.
+	 *
+	 * A manual (cash, dummy card) row is captured the moment it is recorded, so
+	 * cancelling a split mid-way has to void a captured row: the cashier hands the
+	 * cash back and nothing at a provider needs reversing (wcpos/roadmap#107 rule 6).
+	 * Provider-captured rows are never voided; they are refunded.
 	 *
 	 * @param WC_Order $order  Order object.
 	 * @param string   $id     Payment ID.
@@ -337,7 +349,7 @@ class Ledger {
 		if ( ! $row ) {
 			return $this->not_found();
 		}
-		if ( ! in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) ) {
+		if ( ! $this->is_voidable( $row, $order ) ) {
 			return $this->invalid_transition();
 		}
 		$handler = Capture_Mode_Registry::instance()->get( (string) ( $row['capture_mode'] ?? '' ) );
@@ -364,6 +376,24 @@ class Ledger {
 	}
 
 	/**
+	 * Whether a row may be voided: pending or authorized always; captured only when it is a
+	 * manual row on an order still in progress (cancelling a split mid-way). Once the order
+	 * has completed, derive() will not unwind it, so a captured cash leg is refunded instead.
+	 *
+	 * @param array    $row   Payment row.
+	 * @param WC_Order $order Order object.
+	 */
+	private function is_voidable( array $row, WC_Order $order ): bool {
+		$status = $row['status'] ?? '';
+		if ( in_array( $status, array( 'pending', 'authorized' ), true ) ) {
+			return true;
+		}
+		return 'captured' === $status
+			&& 'manual' === ( $row['capture_mode'] ?? '' )
+			&& in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true );
+	}
+
+	/**
 	 * Apply handler-owned fields while enforcing the one-way lifecycle.
 	 *
 	 * @param array $row Payment row.
@@ -377,6 +407,8 @@ class Ledger {
 		$allowed = array(
 			'pending' => array( 'authorized', 'captured', 'failed', 'voided' ),
 			'authorized' => array( 'captured', 'voided' ),
+			// captured → voided is gated by is_voidable() (manual row, order in progress).
+			'captured' => 'manual' === ( $row['capture_mode'] ?? '' ) ? array( 'voided' ) : array(),
 		);
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
@@ -472,7 +504,7 @@ class Ledger {
 
 		// Only the ledger-managed states are projected; a completed/processing/on-hold/refunded
 		// order is never pulled back by a later ledger write (a refused row, a void of a leg).
-		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'failed' ), true ) ) {
+		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) ) {
 			return;
 		}
 		$paid  = Money::minor( $this->paid( $rows ) );

@@ -290,11 +290,45 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->index_values( $order ) );
 	}
 
-	/** Captured money cannot be voided. */
-	public function test_void_captured_row_is_invalid_transition(): void {
+	/** Cancelling a split mid-way voids a captured cash row: the cashier hands the cash back. */
+	public function test_void_captured_manual_row_returns_order_to_open(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
 		$row   = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$this->assertSame( 'captured', $row['status'] );
+		$this->assertSame( 'pos-partial', $order->get_status() );
+
+		// Act.
+		$voided = Ledger::instance()->void( $order, $row['id'], 'Customer cancelled' );
+
+		// Assert.
+		$this->assertSame( 'voided', $voided['status'] );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertSame( array(), $this->index_values( $order ) );
+	}
+
+	/** Once the order has completed, a captured cash leg is refunded, never voided. */
+	public function test_void_captured_manual_row_on_completed_order_is_invalid_transition(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = Ledger::instance()->record( $order, $this->payment( 'pos_cash', (string) $order->get_total() ) );
+		$this->assertTrue( $order->is_paid() );
+
+		// Act.
+		$error = Ledger::instance()->void( $order, $row['id'], 'Too late' );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_invalid_transition', $error->get_error_code() );
+		$this->assertSame( 'captured', Ledger::instance()->find( $order, $row['id'] )['status'] );
+	}
+
+	/** Money captured at a provider is refunded, never voided. */
+	public function test_void_captured_provider_row_is_invalid_transition(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->payment( 'stripe_terminal', '20.00', array( 'status' => 'captured', 'kind' => 'card', 'capture_mode' => 'device' ) );
+		Ledger::instance()->save( $order, array( $row ) );
 
 		// Act.
 		$error = Ledger::instance()->void( $order, $row['id'], 'Too late' );
