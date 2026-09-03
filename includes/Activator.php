@@ -113,6 +113,7 @@ class Activator {
 		// only runs when version_check() trips on an admin load that reaches
 		// woocommerce_init, and a miss there is permanent once bump_versions() ran.
 		self::autoload_request_latches();
+		Admin\Permalink::ensure_default();
 
 		// create POS specific roles.
 		$this->create_pos_roles();
@@ -594,39 +595,66 @@ class Activator {
 		// autoload off; every upgrade re-asserts autoload so the flip is
 		// idempotent and needs no versioned update file.
 		self::autoload_request_latches();
+		Admin\Permalink::ensure_default();
 	}
 
 	/**
-	 * The closed set of rows that releases before 2026-09 wrote with autoload off
-	 * although the Init constructor reads them on EVERY request.
+	 * Every option row that is read on EVERY request and must therefore ride in
+	 * alloptions: the three sync latches the Init constructor reads, the permalink
+	 * slug Template_Router reads, and each registered settings section that
+	 * declares {@see Services\Settings\Abstract_Section::autoload()} — the
+	 * sections are the extension point, so Pro's and extensions' sections join
+	 * the repair by declaring it, without touching this file.
 	 *
-	 * Historical, not a registry: a new per-request option is simply written
-	 * autoloaded by its own writer. Without a persistent object cache each of
-	 * these cost one `SELECT option_value` per page load (3 of the 31 queries the
-	 * plugin added to every storefront page, measured 2026-09-03 on dev-next).
+	 * Needed because core's update_option() returns early on an unchanged value
+	 * WITHOUT touching the autoload column, so a writer alone never repairs a row
+	 * an older release wrote with autoload off. Without a persistent object cache
+	 * each such row cost one `SELECT option_value` per page load (measured
+	 * 2026-09-03 on dev-next and dev-free).
 	 *
 	 * @return string[]
 	 */
-	private static function legacy_non_autoloaded_latches(): array {
-		return array(
+	private static function request_option_names(): array {
+		$names = array(
 			Sync_Api::SCHEMA_OPTION,
 			\WCPOS\WooCommercePOS\Sync\Visibility_Observer::SEED_VERSION_OPTION,
 			\WCPOS\WooCommercePOS\Sync\Config_Fingerprint::CLEANUP_VERSION_OPTION,
+			Admin\Permalink::DB_KEY,
 		);
+		foreach ( Services\Settings::instance()->sections()->all() as $section ) {
+			if ( $section instanceof Services\Settings\Abstract_Section && $section->autoload() ) {
+				$names[] = $section->option_name();
+			}
+		}
+		return $names;
 	}
 
 	/**
-	 * Flip the legacy latches to autoload in place, leaving absent ones absent.
+	 * Flip the per-request rows to autoload in place, and seed the settings
+	 * sections that are absent.
 	 *
 	 * One UPDATE on the flag column: never delete-and-recreate, because
 	 * `Sync_Api::SCHEMA_OPTION` gates the sync observers on every request and a
 	 * request landing in that gap would run with journaling off. 'yes' is
 	 * accepted by every core version (6.6+ maps it alongside 'on'). Idempotent:
-	 * already-autoloaded rows match nothing.
+	 * already-autoloaded rows match nothing. Latches that were never written
+	 * stay absent (their absence is the signal). An autoloaded settings section
+	 * that was never saved is seeded as an autoloaded row — an absent option is
+	 * queried on every request too. General also persists its migrated consent
+	 * so the legacy row does not remain on the read path; other defaults stay
+	 * dynamic.
 	 */
 	public static function autoload_request_latches(): void {
 		global $wpdb;
-		$options      = self::legacy_non_autoloaded_latches();
+		foreach ( Services\Settings::instance()->sections()->all() as $section ) {
+			if ( $section instanceof Services\Settings\Abstract_Section && $section->autoload() && false === get_option( $section->option_name() ) ) {
+				$value = $section instanceof Services\Settings\General_Section
+					? array( 'tracking_consent' => $section->raw_tracking_consent() )
+					: array();
+				add_option( $section->option_name(), $value, '', true );
+			}
+		}
+		$options      = self::request_option_names();
 		$placeholders = implode( ', ', array_fill( 0, \count( $options ), '%s' ) );
 		$flipped      = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the flag column is the target; caches are cleared below.
 			$wpdb->prepare(

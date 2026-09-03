@@ -80,12 +80,130 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * @param string|null $languages_path Optional languages path override.
 	 */
 	public function __construct( ?string $text_domain = null, ?string $version = null, ?string $languages_path = null ) {
-		$this->text_domain    = $text_domain ?? 'woocommerce-pos';
-		$this->version        = $version ?? TRANSLATION_VERSION;
-		$this->transient_key  = 'wcpos_i18n_' . $this->text_domain;
+		$this->text_domain   = $text_domain ?? 'woocommerce-pos';
+		$this->version       = $version ?? TRANSLATION_VERSION;
+		$this->transient_key = 'wcpos_i18n_' . $this->text_domain;
+
+		if ( ! $this->maintain() ) {
+			// A shopper's page only needs the file already on disk. Resolving the
+			// active path, checking versions, downloading and repairing are
+			// maintenance work (see is_maintenance_request()) — and each of them
+			// cost a query on EVERY storefront request without an object cache.
+			$this->languages_path = $languages_path ?? WP_LANG_DIR . '/plugins/';
+			$this->load_existing_translation( null === $languages_path );
+			return;
+		}
+
 		$this->languages_path = $languages_path ?? $this->resolve_languages_path();
 
 		$this->load_translations();
+	}
+
+	/**
+	 * Whether this request keeps the translation files fresh, or only reads them.
+	 *
+	 * Admin, POS, REST (the Store API included), cron and WP-CLI requests
+	 * maintain: they check the version markers and download. A plain storefront
+	 * request loads whatever file exists and touches nothing else.
+	 *
+	 * Detection runs on `init`, before `REST_REQUEST` is defined and before the
+	 * rewrite rules populate the POS query vars, so REST and the browser-loaded
+	 * POS routes (`/<slug>/`, `/wcpos-auth/`, `/wcpos-checkout/…`) are matched
+	 * from the request path. `wc-ajax` (add to cart, cart fragments, the classic
+	 * checkout) is shopper traffic: WooCommerce marks it DOING_AJAX, which is
+	 * why `wp_doing_ajax()` is deliberately not consulted — admin-ajax.php is
+	 * already covered by `is_admin()`.
+	 *
+	 * @return bool
+	 */
+	public static function is_maintenance_request(): bool {
+		if ( is_admin() || wp_doing_cron() || ( \defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return true;
+		}
+		if ( \function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) {
+			return true;
+		}
+		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only inspected for a prefix.
+		if ( '' === $uri ) {
+			return false;
+		}
+		if ( 1 === preg_match( '#(?:\?|&)' . preg_quote( SHORT_NAME, '#' ) . '=1(?:&|$)#', $uri ) ) {
+			return true;
+		}
+		if ( false !== strpos( $uri, '/' . rest_get_url_prefix() . '/' ) || false !== strpos( $uri, 'rest_route=' ) ) {
+			return true;
+		}
+		$path      = (string) wp_parse_url( $uri, PHP_URL_PATH );
+		$home_path = trailingslashit( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ) );
+		if ( '/' !== $home_path && 0 === strpos( trailingslashit( $path ), $home_path ) ) {
+			$path = (string) substr( $path, strlen( untrailingslashit( $home_path ) ) );
+		}
+		$slug = Admin\Permalink::get_slug();
+		return 1 === preg_match( '#^/(?:index\.php/)?(' . preg_quote( $slug, '#' ) . '|wcpos-[a-z-]+)(/|$)#i', $path );
+	}
+
+	/**
+	 * The maintenance decision, filterable so tests and hosts can force either path.
+	 *
+	 * @return bool
+	 */
+	protected function maintain(): bool {
+		/**
+		 * Filters whether this request maintains the translation files (version
+		 * checks and downloads) or only loads an existing one.
+		 *
+		 * @param bool $maintain Default from {@see i18n::is_maintenance_request()}.
+		 */
+		return (bool) apply_filters( 'woocommerce_pos_i18n_maintain', self::is_maintenance_request() );
+	}
+
+	/**
+	 * Load the first existing translation file for the locale candidates, reading nothing else.
+	 *
+	 * @param bool $also_uploads Whether to also look in the uploads fallback directory
+	 *                           (the default when no explicit path was given).
+	 */
+	protected function load_existing_translation( bool $also_uploads ): void {
+		$locale = determine_locale();
+		if ( 'en_US' === $locale || empty( $locale ) ) {
+			return;
+		}
+		$primary  = $this->languages_path;
+		$fallback = null; // Resolved lazily: wp_upload_dir() is not free.
+		foreach ( $this->get_locale_candidates( $locale ) as $candidate_locale ) {
+			$name         = $this->text_domain . '-' . $candidate_locale . '.l10n.php';
+			$primary_file = $primary . $name;
+			if ( $also_uploads && file_exists( $primary_file ) ) {
+				$fallback      = $fallback ?? $this->get_fallback_languages_path();
+				$fallback_file = $fallback . $name;
+				if ( file_exists( $fallback_file ) && 'uploads' === get_transient( $this->transient_key . '_active_path' ) ) {
+					$this->languages_path = $fallback;
+					if ( $this->load_translation_file( $candidate_locale, $fallback_file, false ) ) {
+						return;
+					}
+				}
+			}
+			if ( file_exists( $primary_file ) ) {
+				$this->languages_path = $primary;
+				if ( $this->load_translation_file( $candidate_locale, $primary_file, false ) ) {
+					return;
+				}
+			}
+			if ( ! $also_uploads ) {
+				continue;
+			}
+			if ( null === $fallback ) {
+				$fallback = $this->get_fallback_languages_path();
+			}
+			if ( file_exists( $fallback . $name ) ) {
+				// load_translation_file() derives the .mo path WordPress expects from
+				// languages_path, so it must point at the directory the file is in.
+				$this->languages_path = $fallback;
+				if ( $this->load_translation_file( $candidate_locale, $fallback . $name, false ) ) {
+					return;
+				}
+			}
+		}
 	}
 
 	/**
@@ -223,8 +341,28 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 *
 	 * @param string $locale Locale code for the file.
 	 * @param string $file   Path to the l10n PHP file.
+	 * @param bool   $repair Whether a flat-format file may be converted and a corrupt one
+	 *                       deleted (maintenance requests). The storefront path passes
+	 *                       false and only loads a file that is already valid.
+	 *
+	 * @return bool Whether the translation file was loaded.
 	 */
-	protected function load_translation_file( string $locale, string $file ): void {
+	protected function load_translation_file( string $locale, string $file, bool $repair = true ): bool {
+		if ( ! $repair ) {
+			// Storefront path: read-only. A file in the old flat format or one
+			// that does not parse is simply not loaded; the next maintenance
+			// request converts or replaces it.
+			try {
+				$data = include $file;
+			} catch ( \ParseError $e ) {
+				return false;
+			}
+			if ( ! \is_array( $data ) || ! isset( $data['messages'] ) ) {
+				return false;
+			}
+			return load_textdomain( $this->text_domain, $this->languages_path . $this->text_domain . '-' . $locale . '.mo' );
+		}
+
 		try {
 			$this->maybe_convert_file_format( $file );
 		} catch ( \ParseError $e ) {
@@ -233,12 +371,12 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			wp_delete_file( $file );
 			delete_transient( $this->transient_key . '_' . $locale );
 
-			return;
+			return false;
 		}
 
 		// Pass the .mo path — WordPress internally looks for .l10n.php first.
 		$mofile = $this->languages_path . $this->text_domain . '-' . $locale . '.mo';
-		load_textdomain( $this->text_domain, $mofile );
+		return load_textdomain( $this->text_domain, $mofile );
 	}
 
 	/**
