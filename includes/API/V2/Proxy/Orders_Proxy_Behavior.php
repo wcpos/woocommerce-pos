@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Proxy;
 
+use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\API\Order_Search;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WP_REST_Request;
@@ -15,6 +17,13 @@ use WP_REST_Request;
  * Applies the order Collection Rules plan and v2 order wire shape.
  */
 final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
+	/**
+	 * Search text removed from the forwarded request.
+	 *
+	 * @var string
+	 */
+	private $search = '';
+
 	/**
 	 * Proxy request keys claimed by the order Collection Rules plan.
 	 */
@@ -54,9 +63,44 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	public function forwarded_params( array $params, WP_REST_Request $request ): array {
 		$this->plan = Collection_Rules::for_request( 'orders', $request, self::PARAM_MAP );
 		$params     = $this->plan->forwarded_params( $params );
+		if ( isset( $params['search'] ) && '' !== trim( (string) $params['search'] ) ) {
+			$this->search = (string) $params['search'];
+			unset( $params['search'] );
+		}
 		$params['dp'] = '6';
 
 		return $params;
+	}
+
+	/**
+	 * Install the storage-specific POS order search filter.
+	 *
+	 * @return array<int, array{0: string, 1: callable, 2: int}>
+	 */
+	protected function install(): array {
+		if ( '' === $this->search ) {
+			return array();
+		}
+
+		$search = $this->search;
+		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$filter = static function ( $clauses, $query ) use ( $search ) {
+				$clauses['where'] .= ' AND ' . Order_Search::hpos_where( $search, $query );
+				return $clauses;
+			};
+			add_filter( 'woocommerce_orders_table_query_clauses', $filter, 10, 3 );
+			return array( array( 'woocommerce_orders_table_query_clauses', $filter, 10 ) );
+		}
+
+		$filter = static function ( $where, $query ) use ( $search ) {
+			$post_type = is_object( $query ) ? ( $query->query_vars['post_type'] ?? null ) : null;
+			if ( 'shop_order' !== $post_type && ( ! is_array( $post_type ) || ! in_array( 'shop_order', $post_type, true ) ) ) {
+				return $where;
+			}
+			return $where . ' AND ' . Order_Search::posts_where( $search );
+		};
+		add_filter( 'posts_where', $filter, 10, 2 );
+		return array( array( 'posts_where', $filter, 10 ) );
 	}
 
 	/**

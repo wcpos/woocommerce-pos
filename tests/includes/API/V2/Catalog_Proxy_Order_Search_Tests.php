@@ -88,6 +88,40 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->assert_order_search_finds_target( 'aurelia.order.probe' );
 	}
 
+	/** Search terms match independently of their order. */
+	public function test_order_search_matches_terms_in_any_order(): void {
+		$this->assert_order_search_finds_target( 'QuillonProbe AureliaProbe' );
+	}
+
+	/** Every search term must match one of the indexed billing fields. */
+	public function test_order_search_ands_terms_across_fields(): void {
+		$this->assert_order_search_finds_target( 'AureliaProbe aurelia.order.probe' );
+		$this->assertSame(
+			array(),
+			$this->order_ids_for_query( array( 'search' => 'AureliaProbe RenshawProbe' ) )
+		);
+	}
+
+	/** Billing company and phone participate in order search. */
+	public function test_order_search_matches_billing_company_and_phone(): void {
+		$this->target_order->set_billing_company( 'WidgetCoProbe' );
+		$this->target_order->set_billing_phone( 'WooPhoneProbe' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'WidgetCoProbe WooPhoneProbe' );
+	}
+
+	/** Numeric ids can be combined with billing-field terms. */
+	public function test_order_search_by_id_and_name(): void {
+		$order_id = (string) $this->target_order->get_id();
+
+		$this->assert_order_search_finds_target( $order_id . ' QuillonProbe' );
+		$this->assertSame(
+			array(),
+			$this->order_ids_for_query( array( 'search' => $order_id . ' RenshawProbe' ) )
+		);
+	}
+
 	/**
 	 * Search is intersected with include and reduced by exclude, matching V1.
 	 */
@@ -384,7 +418,10 @@ trait Catalog_Proxy_Order_Search_Tests {
 			},
 			$orders
 		);
-		foreach ( array( 'asc' => $ascending, 'desc' => array_reverse( $ascending ) ) as $order => $expected ) {
+		foreach ( array(
+			'asc' => $ascending,
+			'desc' => array_reverse( $ascending ),
+		) as $order => $expected ) {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
 			$request->set_query_params(
 				array(
