@@ -204,6 +204,23 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that POS statuses are excluded from WooCommerce Analytics.
+	 */
+	public function test_pos_statuses_excluded_from_analytics(): void {
+		$excluded = apply_filters( 'woocommerce_analytics_excluded_order_statuses', array( 'pending', 'failed', 'cancelled' ) );
+
+		$this->assertContains( 'pos-open', $excluded, 'an open cart must not count as a sale' );
+		$this->assertContains( 'pos-partial', $excluded, 'a half-paid order must not count as a sale' );
+		$this->assertContains( 'pending', $excluded, 'core exclusions are preserved' );
+		$this->assertSame( 1, \count( array_keys( $excluded, 'pos-open', true ) ), 'pos-open is added exactly once' );
+		$this->assertSame( 1, \count( array_keys( $excluded, 'pos-partial', true ) ), 'pos-partial is added exactly once' );
+		// Feeding the result back in must not duplicate the POS statuses (other callbacks may add their own).
+		$again = apply_filters( 'woocommerce_analytics_excluded_order_statuses', $excluded );
+		$this->assertSame( 1, \count( array_keys( $again, 'pos-open', true ) ) );
+		$this->assertSame( 1, \count( array_keys( $again, 'pos-partial', true ) ) );
+	}
+
+	/**
 	 * Test that pos-open status is valid for payment complete.
 	 */
 	public function test_pos_open_valid_for_payment_complete(): void {

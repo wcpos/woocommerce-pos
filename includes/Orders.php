@@ -60,6 +60,7 @@ class Orders {
 		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
 		add_filter( 'woocommerce_order_is_pending_statuses', array( $this, 'order_is_pending_statuses' ), 10, 1 );
 		add_filter( 'wc_stripe_allowed_payment_processing_statuses', array( $this, 'stripe_allowed_payment_processing_statuses' ), 10, 1 );
+		add_filter( 'woocommerce_analytics_excluded_order_statuses', array( $this, 'analytics_excluded_order_statuses' ), 10, 1 );
 		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
 		add_filter( 'woocommerce_bacs_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cheque_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
@@ -166,6 +167,21 @@ class Orders {
 	 * @return array
 	 */
 	public function stripe_allowed_payment_processing_statuses( array $statuses ): array {
+		return $this->add_pos_statuses( $statuses );
+	}
+
+	/**
+	 * Keep open carts and half-paid orders out of WooCommerce Analytics.
+	 *
+	 * Analytics counts every status that is not excluded, and core excludes only
+	 * pending/failed/cancelled, so without this an order still sitting in the till
+	 * is reported as a full sale.
+	 *
+	 * @param array $statuses Statuses excluded from Analytics (without the wc- prefix).
+	 *
+	 * @return array
+	 */
+	public function analytics_excluded_order_statuses( array $statuses ): array {
 		return $this->add_pos_statuses( $statuses );
 	}
 
