@@ -407,7 +407,7 @@ class Templates {
 	}
 
 	/**
-	 * Get a virtual (filesystem) template by ID.
+	 * Get a virtual PHP or HTML template by ID.
 	 *
 	 * @param string $template_id Virtual template ID (theme, plugin-pro, plugin-core).
 	 * @param string $type        Template type (receipt, report, display).
@@ -457,9 +457,9 @@ class Templates {
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
 			'category'          => 'receipt' === $type ? ( $metadata[ $template_id ]['category'] ?? 'receipt' ) : '',
-			'language'          => 'php',
+			'language'          => $is_display ? 'html' : 'php',
 			'file_path'         => $file_path,
-			'engine'            => 'legacy-php',
+			'engine'            => $is_display ? 'logicless' : 'legacy-php',
 			'output_type'       => 'html',
 			'paper_width'       => null,
 			'is_virtual'        => true,
@@ -482,7 +482,7 @@ class Templates {
 	}
 
 	/**
-	 * Get the file path for a virtual template.
+	 * Get the file path for a virtual PHP or HTML template.
 	 *
 	 * @param string $template_id Virtual template ID.
 	 * @param string $type        Template type.
@@ -494,7 +494,7 @@ class Templates {
 			return null;
 		}
 
-		$file_name = $type . '.php';
+		$file_name = $type . ( 'display' === $type ? '.html' : '.php' );
 		$directory = null;
 		$path      = null;
 
