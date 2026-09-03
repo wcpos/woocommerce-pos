@@ -449,6 +449,24 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Every variation search term must match a searchable carrier.
+	 */
+	public function test_variation_search_matches_every_term(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
+		$sku     = wp_generate_password( 8, false );
+		$barcode = wp_generate_password( 8, false );
+		$match   = $this->create_variation( $sku );
+		$match->update_meta_data( '_barcode', $barcode );
+		$match->save_meta_data();
+		$other = $this->create_variation( wp_generate_password( 8, false ) );
+		update_post_meta( $other->get_id(), '_sku', $sku );
+		update_post_meta( $other->get_id(), '_barcode', wp_generate_password( 8, false ) );
+
+		$this->assertSame( array( $match->get_id() ), $this->variation_ids( array( 'search' => $sku . ' ' . $barcode ) ) );
+		$this->assertSame( array(), $this->variation_ids( array( 'search' => $sku . ' zzzz' ) ) );
+	}
+
+	/**
 	 * Search includes the configured custom barcode meta field.
 	 */
 	public function test_search_matches_configured_barcode_field(): void {
