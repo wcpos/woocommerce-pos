@@ -99,7 +99,7 @@ class Test_Request_Lane extends WP_UnitTestCase {
 				Request_Lane::CRON,
 			),
 			'Store API'                    => array( 'REST, the Store API included.', $uri( '/wp-json/wc/store/v1/checkout' ), Request_Lane::REST ),
-			'plain-permalink REST'         => array( 'REST via rest_route.', $uri( '/?rest_route=/wcpos/v1/products' ), Request_Lane::REST ),
+			'plain-permalink REST'         => array( 'REST via rest_route.', $uri( '/?rest_route=/wcpos/v2/products' ), Request_Lane::REST ),
 			'raw POS marker'               => array( 'The pre-rewrite ?wcpos=1 marker.', $uri( '/?wcpos=1' ), Request_Lane::POS ),
 			'POS app route'                => array( 'The browser-loaded POS page.', $uri( '/' . Permalink::get_slug() . '/' ), Request_Lane::POS ),
 			'POS login route'              => array( 'The POS login route.', $uri( '/wcpos-auth/?redirect_uri=x' ), Request_Lane::POS ),
