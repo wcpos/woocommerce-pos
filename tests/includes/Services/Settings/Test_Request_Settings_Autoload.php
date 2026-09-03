@@ -191,6 +191,8 @@ class Test_Request_Settings_Autoload extends WP_UnitTestCase {
 		} finally {
 			delete_option( $section::KEY );
 			delete_option( Abstract_Section::DB_PREFIX . 'probe_custom' );
+			// The registry is process-wide; drop the probe section so later tests do not seed its row.
+			\WCPOS\WooCommercePOS\Services\Settings::instance()->reset_sections_for_testing();
 		}
 	}
 
