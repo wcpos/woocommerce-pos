@@ -639,15 +639,19 @@ class Activator {
 	 * accepted by every core version (6.6+ maps it alongside 'on'). Idempotent:
 	 * already-autoloaded rows match nothing. Latches that were never written
 	 * stay absent (their absence is the signal). An autoloaded settings section
-	 * that was never saved is seeded as an EMPTY autoloaded row — an absent
-	 * option is queried on every request too, and the section's read() merges
-	 * defaults over whatever is stored, so nothing is frozen.
+	 * that was never saved is seeded as an autoloaded row — an absent option is
+	 * queried on every request too. General also persists its migrated consent
+	 * so the legacy row does not remain on the read path; other defaults stay
+	 * dynamic.
 	 */
 	public static function autoload_request_latches(): void {
 		global $wpdb;
 		foreach ( Services\Settings::instance()->sections()->all() as $section ) {
 			if ( $section instanceof Services\Settings\Abstract_Section && $section->autoload() && false === get_option( $section->option_name() ) ) {
-				add_option( $section->option_name(), array(), '', true );
+				$value = $section instanceof Services\Settings\General_Section
+					? array( 'tracking_consent' => $section->raw_tracking_consent() )
+					: array();
+				add_option( $section->option_name(), $value, '', true );
 			}
 		}
 		$options      = self::request_option_names();

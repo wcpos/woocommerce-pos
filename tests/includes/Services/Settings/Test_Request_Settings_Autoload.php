@@ -34,12 +34,14 @@ class Test_Request_Settings_Autoload extends WP_UnitTestCase {
 	private const VISIBILITY = 'woocommerce_pos_settings_visibility';
 	private const CHECKOUT   = 'woocommerce_pos_settings_checkout';
 	private const PERMALINK  = Permalink::DB_KEY;
+	private const TOOLS      = 'woocommerce_pos_settings_tools';
 
 	public function tearDown(): void {
 		delete_option( self::GENERAL );
 		delete_option( self::VISIBILITY );
 		delete_option( self::CHECKOUT );
 		delete_option( self::PERMALINK );
+		delete_option( self::TOOLS );
 		parent::tearDown();
 	}
 
@@ -96,19 +98,30 @@ class Test_Request_Settings_Autoload extends WP_UnitTestCase {
 		$this->assertSame( 'till', get_option( self::PERMALINK ), 'A customised slug is never overwritten.' );
 	}
 
-	public function test_a_missing_autoloaded_section_is_seeded_empty_and_reads_its_defaults(): void {
+	public function test_a_missing_autoloaded_section_is_seeded_and_reads_its_defaults(): void {
 		// A fresh install has never saved General; the Settings service reads it
-		// on every request regardless. The seed is an empty row: read() merges
-		// defaults over it, so nothing is frozen at seed time.
+		// on every request regardless. Only consent is persisted so its legacy
+		// lookup leaves the hot path; read() still merges the other defaults.
 		delete_option( self::GENERAL );
 
 		Activator::autoload_request_latches();
 
-		$this->assertSame( array(), get_option( self::GENERAL ) );
+		$this->assertSame( array( 'tracking_consent' => 'undecided' ), get_option( self::GENERAL ) );
 		$this->assertTrue( $this->is_autoloaded( self::GENERAL ) );
 		$section = new General_Section();
 		$this->assertSame( $section->defaults()['barcode_field'], $section->read()['barcode_field'] );
 		$this->assertFalse( get_option( self::CHECKOUT ), 'Only sections that declare autoload() are seeded.' );
+	}
+
+	public function test_seeding_general_persists_legacy_tracking_consent(): void {
+		delete_option( self::GENERAL );
+		update_option( self::TOOLS, array( 'tracking_consent' => 'allowed' ), false );
+
+		Activator::autoload_request_latches();
+		delete_option( self::TOOLS );
+
+		$this->assertSame( array( 'tracking_consent' => 'allowed' ), get_option( self::GENERAL ) );
+		$this->assertSame( 'allowed', ( new General_Section() )->read()['tracking_consent'] );
 	}
 
 	public function test_reactivation_seeds_the_permalink_row_and_the_general_row(): void {

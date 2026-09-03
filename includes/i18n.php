@@ -127,10 +127,17 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		if ( '' === $uri ) {
 			return false;
 		}
+		if ( 1 === preg_match( '#(?:\?|&)' . preg_quote( SHORT_NAME, '#' ) . '=1(?:&|$)#', $uri ) ) {
+			return true;
+		}
 		if ( false !== strpos( $uri, '/' . rest_get_url_prefix() . '/' ) || false !== strpos( $uri, 'rest_route=' ) ) {
 			return true;
 		}
-		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
+		$path      = (string) wp_parse_url( $uri, PHP_URL_PATH );
+		$home_path = trailingslashit( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ) );
+		if ( '/' !== $home_path && 0 === strpos( trailingslashit( $path ), $home_path ) ) {
+			$path = (string) substr( $path, strlen( untrailingslashit( $home_path ) ) );
+		}
 		$slug = Admin\Permalink::get_slug();
 		return 1 === preg_match( '#^/(?:index\.php/)?(' . preg_quote( $slug, '#' ) . '|wcpos-[a-z-]+)(/|$)#i', $path );
 	}
@@ -162,13 +169,25 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return;
 		}
 		$primary  = $this->languages_path;
-		$fallback = null; // resolved only on a primary miss: wp_upload_dir() is not free.
+		$fallback = null; // Resolved lazily: wp_upload_dir() is not free.
 		foreach ( $this->get_locale_candidates( $locale ) as $candidate_locale ) {
-			$name = $this->text_domain . '-' . $candidate_locale . '.l10n.php';
-			if ( file_exists( $primary . $name ) ) {
+			$name         = $this->text_domain . '-' . $candidate_locale . '.l10n.php';
+			$primary_file = $primary . $name;
+			if ( $also_uploads && file_exists( $primary_file ) ) {
+				$fallback      = $fallback ?? $this->get_fallback_languages_path();
+				$fallback_file = $fallback . $name;
+				if ( file_exists( $fallback_file ) && 'uploads' === get_transient( $this->transient_key . '_active_path' ) ) {
+					$this->languages_path = $fallback;
+					if ( $this->load_translation_file( $candidate_locale, $fallback_file, false ) ) {
+						return;
+					}
+				}
+			}
+			if ( file_exists( $primary_file ) ) {
 				$this->languages_path = $primary;
-				$this->load_translation_file( $candidate_locale, $primary . $name, false );
-				return;
+				if ( $this->load_translation_file( $candidate_locale, $primary_file, false ) ) {
+					return;
+				}
 			}
 			if ( ! $also_uploads ) {
 				continue;
@@ -180,8 +199,9 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 				// load_translation_file() derives the .mo path WordPress expects from
 				// languages_path, so it must point at the directory the file is in.
 				$this->languages_path = $fallback;
-				$this->load_translation_file( $candidate_locale, $fallback . $name, false );
-				return;
+				if ( $this->load_translation_file( $candidate_locale, $fallback . $name, false ) ) {
+					return;
+				}
 			}
 		}
 	}
@@ -324,8 +344,10 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * @param bool   $repair Whether a flat-format file may be converted and a corrupt one
 	 *                       deleted (maintenance requests). The storefront path passes
 	 *                       false and only loads a file that is already valid.
+	 *
+	 * @return bool Whether the translation file was loaded.
 	 */
-	protected function load_translation_file( string $locale, string $file, bool $repair = true ): void {
+	protected function load_translation_file( string $locale, string $file, bool $repair = true ): bool {
 		if ( ! $repair ) {
 			// Storefront path: read-only. A file in the old flat format or one
 			// that does not parse is simply not loaded; the next maintenance
@@ -333,13 +355,12 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			try {
 				$data = include $file;
 			} catch ( \ParseError $e ) {
-				return;
+				return false;
 			}
 			if ( ! \is_array( $data ) || ! isset( $data['messages'] ) ) {
-				return;
+				return false;
 			}
-			load_textdomain( $this->text_domain, $this->languages_path . $this->text_domain . '-' . $locale . '.mo' );
-			return;
+			return load_textdomain( $this->text_domain, $this->languages_path . $this->text_domain . '-' . $locale . '.mo' );
 		}
 
 		try {
@@ -350,12 +371,12 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			wp_delete_file( $file );
 			delete_transient( $this->transient_key . '_' . $locale );
 
-			return;
+			return false;
 		}
 
 		// Pass the .mo path — WordPress internally looks for .l10n.php first.
 		$mofile = $this->languages_path . $this->text_domain . '-' . $locale . '.mo';
-		load_textdomain( $this->text_domain, $mofile );
+		return load_textdomain( $this->text_domain, $mofile );
 	}
 
 	/**

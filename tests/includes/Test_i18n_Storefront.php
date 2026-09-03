@@ -119,6 +119,55 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 		$this->assertSame( array(), $this->marker_queries );
 	}
 
+	public function test_storefront_request_prefers_the_active_uploads_copy_over_a_stale_primary_copy(): void {
+		$text_domain = 'wcpos-i18n-active-path-test';
+		$name        = $text_domain . '-de_DE.l10n.php';
+		$primary     = WP_LANG_DIR . '/plugins/';
+		wp_mkdir_p( $primary );
+		wp_mkdir_p( $this->fallback_dir() );
+		file_put_contents( $primary . $name, "<?php\nreturn array('messages' => array('Receipt' => 'Beleg (stale)'));" );
+		file_put_contents( $this->fallback_dir() . $name, "<?php\nreturn array('messages' => array('Receipt' => 'Beleg (uploads)'));" );
+		set_transient( 'wcpos_i18n_' . $text_domain . '_active_path', 'uploads', MONTH_IN_SECONDS );
+
+		try {
+			new i18n( $text_domain, '1.8.7' );
+
+			$this->assertSame( 'Beleg (uploads)', __( 'Receipt', $text_domain ) ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralDomain -- isolated test domain prevents overwriting a real translation.
+		} finally {
+			wp_delete_file( $primary . $name );
+			delete_transient( 'wcpos_i18n_' . $text_domain . '_active_path' );
+			unload_textdomain( $text_domain, true );
+		}
+	}
+
+	public function test_storefront_request_skips_a_corrupt_primary_file_for_the_uploads_copy(): void {
+		$text_domain = 'wcpos-i18n-candidate-test';
+		$name        = $text_domain . '-de_DE.l10n.php';
+		$primary     = WP_LANG_DIR . '/plugins/';
+		wp_mkdir_p( $primary );
+		wp_mkdir_p( $this->fallback_dir() );
+		file_put_contents( $primary . $name, "<?php\nreturn array('messages' => array(" );
+		file_put_contents( $this->fallback_dir() . $name, "<?php\nreturn array('messages' => array('Receipt' => 'Beleg (uploads)'));" );
+
+		try {
+			new i18n( $text_domain, '1.8.7' );
+
+			$this->assertSame( 'Beleg (uploads)', __( 'Receipt', $text_domain ) ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralDomain -- isolated test domain prevents overwriting a real translation.
+		} finally {
+			wp_delete_file( $primary . $name );
+			unload_textdomain( $text_domain, true );
+		}
+	}
+
+	public function test_storefront_request_skips_an_old_format_regional_file_for_the_base_locale(): void {
+		file_put_contents( $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php', "<?php\nreturn array('Receipt' => 'Beleg (flat)');" );
+		file_put_contents( $this->temp_lang_dir . 'woocommerce-pos-de.l10n.php', "<?php\nreturn array('messages' => array('Receipt' => 'Beleg (de)'));" );
+
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertSame( 'Beleg (de)', __( 'Receipt', 'woocommerce-pos' ) );
+	}
+
 	public function test_storefront_request_leaves_an_old_format_file_alone(): void {
 		// The flat pre-6.5 format needs converting; that is a write, so it is
 		// maintenance work. The storefront path neither converts nor loads it.
@@ -204,7 +253,8 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 				true,
 			),
 			'REST incl. Store API'          => array( 'REST (the Store API included) is.', $uri( '/wp-json/wc/store/v1/cart' ), true ),
-			'REST via rest_route'           => array( 'Plain-permalink REST is.', $uri( '/?rest_route=/wcpos/v1/products' ), true ),
+			'REST via rest_route'           => array( 'Plain-permalink REST is.', $uri( '/?rest_route=/wcpos/v2/products' ), true ),
+			'raw POS query marker'           => array( 'The pre-rewrite wcpos query marker is.', $uri( '/?wcpos=1' ), true ),
 			'cron'                          => array(
 				'Cron is.',
 				static function () {
@@ -228,6 +278,20 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 				false,
 			),
 			'browser-loaded POS route'      => array( 'The POS app page (rewrite rules not yet parsed at init) is.', $uri( '/' . Permalink::get_slug() . '/' ), true ),
+			'browser-loaded POS route under a subdirectory home' => array(
+				'The POS app page under a subdirectory home is.',
+				static function () {
+					$_SERVER['REQUEST_URI'] = '/shop/' . Permalink::get_slug() . '/';
+					$home_url_filter        = static function ( string $url ): string {
+						return rtrim( $url, '/' ) . '/shop';
+					};
+					add_filter( 'home_url', $home_url_filter );
+					return static function () use ( $home_url_filter ) {
+						remove_filter( 'home_url', $home_url_filter );
+					};
+				},
+				true,
+			),
 			'browser-loaded wcpos-auth'     => array( 'The POS login route is.', $uri( '/wcpos-auth/?redirect_uri=x' ), true ),
 			'browser-loaded wcpos-checkout' => array( 'The POS checkout route is.', $uri( '/wcpos-checkout/order-pay/12/' ), true ),
 			'a product that starts with the slug' => array( 'A storefront path that merely starts with the letters is not.', $uri( '/' . Permalink::get_slug() . 'tcards/' ), false ),
