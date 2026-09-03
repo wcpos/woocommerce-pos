@@ -12,6 +12,10 @@
  * against BOTH observers at once and asserts the totals a merchant's
  * database would show after the request boundary.
  *
+ * Runs against the posts order store here and against HPOS in
+ * Test_Online_Checkout_Journal_Shape_HPOS (the regression was measured on
+ * an HPOS store).
+ *
  * @package WCPOS\WooCommercePOS\Tests\Sync
  */
 
@@ -36,6 +40,17 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 	/** @var Integrity_Digest */
 	private $digest;
 
+	/** @var string[] Digest-table INSERT statements observed since setUp. */
+	private $digest_inserts = array();
+
+	/** @var callable */
+	private $query_spy;
+
+	/**
+	 * Install both sync tables empty and attach both observers, with a spy on
+	 * every digest-table INSERT so write counts are asserted, not inferred
+	 * from stored rows (the table's primary key hides repeated upserts).
+	 */
 	public function setUp(): void {
 		parent::setUp();
 		global $wpdb;
@@ -47,9 +62,23 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		$wpdb->query( 'DELETE FROM ' . $this->digest->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$this->journal->register_hooks();
 		$this->digest->register_hooks();
+
+		$table                = $this->digest->table_name();
+		$this->digest_inserts = array();
+		$this->query_spy      = function ( $query ) use ( $table ) {
+			if ( 0 === stripos( ltrim( (string) $query ), 'INSERT INTO ' . $table ) ) {
+				$this->digest_inserts[] = (string) $query;
+			}
+			return $query;
+		};
+		add_filter( 'query', $this->query_spy );
 	}
 
+	/**
+	 * Detach the spy and both observers, and forget per-request state.
+	 */
 	public function tearDown(): void {
+		remove_filter( 'query', $this->query_spy );
 		Sync_Journal::reset_request_state();
 		Integrity_Digest::reset_request_state();
 		$this->remove_observer_callbacks( array( $this->journal, $this->digest ) );
@@ -57,8 +86,11 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		parent::tearDown();
 	}
 
+	/**
+	 * Every save WooCommerce performs during an online checkout collapses to
+	 * one journal update row and one digest write per object.
+	 */
 	public function test_a_full_online_checkout_lifecycle_leaves_two_journal_rows_one_digest_and_no_pos_meta(): void {
-		global $wpdb;
 		$product  = ProductHelper::create_simple_product(
 			array(
 				'regular_price' => 10,
@@ -97,6 +129,8 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		$wc_customer = new \WC_Customer( $customer );
 		$wc_customer->set_billing_first_name( 'Footprint' );
 		$wc_customer->save();
+		$wc_customer->set_billing_last_name( 'Probe' );
+		$wc_customer->save();
 		remove_action( 'woocommerce_update_order', $counter, 5 );
 
 		$order_id = $order->get_id();
@@ -106,6 +140,8 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		$before = $this->origins_for( 'order', $order_id, $cursor );
 		$this->assertSame( array( 'hook:create' ), array_values( array_unique( $before ) ), 'Only the create row may land before the flush.' );
 		$this->assertSame( 0, $this->stored_digests( 'order', $order_id ), 'The order digest is written at the boundary, not per save.' );
+		$this->assertSame( array(), $this->digest_inserts_for( 'order', $order_id ), 'No order digest statement runs before the boundary.' );
+		$this->assertSame( array(), $this->digest_inserts_for( 'customer', $customer ), 'No customer digest statement runs before the boundary.' );
 
 		// The request boundary.
 		$this->journal->flush_pending_order_updates_at_shutdown();
@@ -114,7 +150,15 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		// The coalesced shape a merchant's database shows for one online order.
 		$this->assertSame( array( 'hook:create', 'hook:update' ), $this->origins_for( 'order', $order_id, $cursor ), 'One create row and ONE update row, regardless of how many saves WooCommerce performed.' );
 		$this->assertSame( 1, $this->stored_digests( 'order', $order_id ) );
-		$this->assertSame( 1, $this->stored_digests( 'customer', $customer ), 'Every customer save in the request collapsed to one digest write.' );
+		$this->assertSame( 1, $this->stored_digests( 'customer', $customer ) );
+		$this->assertCount( 1, $this->digest_inserts_for( 'order', $order_id ), 'Seven order saves collapsed to ONE order digest write.' );
+		$this->assertCount( 1, $this->digest_inserts_for( 'customer', $customer ), 'Two customer saves in the request collapsed to ONE customer digest upsert.' );
+		// Product digests are still written per save: wc_reduce_stock_levels()
+		// saves the product twice (quantity, then stock status), so the one
+		// purchased product costs two INSERT…SELECT statements. Pinned here so
+		// the remaining amplification is visible; coalescing it is separate work.
+		$this->assertCount( 2, $this->digest_inserts_for( 'product', $product->get_id() ), 'Stock reduction writes the product digest once per product save.' );
+		$this->assertCount( 4, $this->digest_inserts, 'No digest statement for anything else: ' . implode( "\n", $this->digest_inserts ) );
 
 		// The order itself is untouched by the POS.
 		$order = wc_get_order( $order_id );
@@ -123,13 +167,20 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		$pos_meta = array_filter(
 			$order->get_meta_data(),
 			static function ( $meta ): bool {
-				return 0 === strpos( (string) $meta->key, '_pos_' ) || 0 === strpos( (string) $meta->key, '_woocommerce_pos' );
+				$key = (string) $meta->key;
+				// `_pos` is the legacy marker wcpos_is_pos_order() still honours.
+				return '_pos' === $key || 0 === strpos( $key, '_pos_' ) || 0 === strpos( $key, '_woocommerce_pos' );
 			}
 		);
 		$this->assertSame( array(), array_values( $pos_meta ), 'An online order carries no POS meta.' );
+		$this->assertFalse( wcpos_is_pos_order( $order ), 'WooCommerce classifies its own checkout as an online order.' );
 		$this->assertSame( 18, wc_get_product( $product->get_id() )->get_stock_quantity(), 'Stock reduced exactly once, by WooCommerce.' );
 	}
 
+	/**
+	 * The Store API's checkout-draft saves must not leak update rows before
+	 * the create row; the draft lifecycle is exactly create then one update.
+	 */
 	public function test_a_store_api_draft_that_becomes_an_order_yields_create_then_one_update(): void {
 		// The Store API saves a checkout-draft several times before WooCommerce
 		// fires woocommerce_new_order on the draft-to-pending transition.
@@ -151,12 +202,16 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 
 		$this->journal->flush_pending_order_updates_at_shutdown();
 
-		$origins = $this->origins_for( 'order', $order->get_id(), $cursor );
-		$this->assertSame( 1, \count( array_keys( $origins, 'hook:create', true ) ), 'Exactly one create row: ' . implode( ',', $origins ) );
-		$this->assertLessThanOrEqual( 3, \count( $origins ), 'At most one coalesced update row on either side of the create row: ' . implode( ',', $origins ) );
-		$this->assertSame( 'hook:update', end( $origins ), 'The stream ends on the settled state.' );
+		$this->assertSame(
+			array( 'hook:create', 'hook:update' ),
+			$this->origins_for( 'order', $order->get_id(), $cursor ),
+			'The draft saves are discarded by the create row; the settled state follows as one coalesced update.'
+		);
 	}
 
+	/**
+	 * Journal origins for one object since a sequence cursor, oldest first.
+	 */
 	private function origins_for( string $type, int $id, int $since ): array {
 		global $wpdb;
 		return array_map(
@@ -174,6 +229,9 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 		);
 	}
 
+	/**
+	 * Digest rows stored for one object (0 or 1: the pair is the primary key).
+	 */
 	private function stored_digests( string $type, int $id ): int {
 		global $wpdb;
 		return (int) $wpdb->get_var(
@@ -181,6 +239,25 @@ class Test_Online_Checkout_Journal_Shape extends Sync_Store_Test_Case {
 				'SELECT COUNT(*) FROM ' . $this->digest->table_name() . ' WHERE object_type = %s AND object_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table with prepared placeholders.
 				$type,
 				$id
+			)
+		);
+	}
+
+	/**
+	 * Digest INSERT statements observed for one object.
+	 *
+	 * Every digest write is `INSERT INTO <table> (object_type, object_id, …)`
+	 * with the type prepared as a quoted literal and the id as an integer.
+	 *
+	 * @return string[]
+	 */
+	private function digest_inserts_for( string $type, int $id ): array {
+		return array_values(
+			array_filter(
+				$this->digest_inserts,
+				static function ( string $sql ) use ( $type, $id ): bool {
+					return false !== strpos( $sql, "'" . $type . "'" ) && 1 === preg_match( '/\b' . $id . '\b/', $sql );
+				}
 			)
 		);
 	}
