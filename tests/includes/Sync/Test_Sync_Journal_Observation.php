@@ -322,6 +322,9 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$cursor = $this->journal->head_sequence();
 		$order->set_customer_note( 'journal update' );
 		$order->save();
+		// Update rows are coalesced per request and land at the request boundary
+		// (Test_Sync_Journal_Order_Write_Coalescing pins that); flush stands in for shutdown here.
+		$this->journal->flush_pending_order_updates();
 		$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:update', false );
 
 		$cursor = $this->journal->head_sequence();
@@ -389,7 +392,9 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 			$wpdb->get_var( $wpdb->prepare( "SELECT post_modified_gmt FROM {$wpdb->posts} WHERE ID = %d", $order_id ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		);
 		// The date never moved, yet the hook-based journal recorded the edit —
-		// the property date-based change detection cannot provide.
+		// the property date-based change detection cannot provide. (The row is
+		// coalesced per request; flush stands in for shutdown.)
+		$this->journal->flush_pending_order_updates();
 		$this->assert_order_row( $this->latest_row( 'order', $order_id, $cursor ), 'hook:update', false );
 	}
 

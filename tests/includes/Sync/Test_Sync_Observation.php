@@ -47,6 +47,10 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$product  = ProductHelper::create_simple_product();
 		$customer = $this->factory->user->create( array( 'role' => 'customer' ) );
 
+		// Customer digests are coalesced per request and land at the request
+		// boundary (Test_Integrity_Digest_Write_Coalescing pins that); product
+		// digests stay immediate. Flush stands in for shutdown here.
+		Integrity_Digest::flush_pending_digests();
 		$rows = $wpdb->get_results( 'SELECT object_type, object_id, digest FROM ' . $this->integrity_digest->table_name() . ' ORDER BY object_type, object_id', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$this->assertContains( 'product', array_column( $rows, 'object_type' ) );
 		$this->assertContains( (string) $product->get_id(), array_column( $rows, 'object_id' ) );
@@ -124,6 +128,8 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$user    = get_user_by( 'id', $user_id );
 		$customer_digests = function () use ( $wpdb ) {
+			// Coalesced per request; flush stands in for shutdown.
+			Integrity_Digest::flush_pending_digests();
 			return $wpdb->get_col( 'SELECT object_id FROM ' . $this->integrity_digest->table_name() . " WHERE object_type = 'customer'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		};
 

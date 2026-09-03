@@ -353,6 +353,11 @@ final class Digest_Index {
 	 */
 	public function read_digests( string $collection, array $ids ): array {
 		global $wpdb;
+		// Order/customer upserts are coalesced per request and land at shutdown
+		// (see Integrity_Digest::$pending_digests). A read inside the same
+		// request — the pull lane stamping `_rxdb_digest` after a write — must
+		// see the settled digest, so land what is owed before reading.
+		Integrity_Digest::flush_pending_digests();
 		$object_types = self::digest_object_types( $collection );
 		if ( array() === $object_types ) {
 			return array();
