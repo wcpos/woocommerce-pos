@@ -505,27 +505,27 @@ class Init {
 	}
 
 	/**
-	 * Hook the order-event services to the earliest generic order signals.
+	 * Hook the order-event services to the first order write of the request.
 	 *
-	 * `woocommerce_before_order_object_save` at priority 0 runs before the data
-	 * store writes and before `woocommerce_new_order` / `woocommerce_update_order`
-	 * / `woocommerce_order_status_changed` / `woocommerce_payment_complete`
-	 * fire, so every observer exists before any order is written — on a
-	 * webhook, a cron spawned from a page view, a third-party plugin creating an
-	 * order on `template_redirect`, or a lane the classifier got wrong.
+	 * Every WooCommerce order write — create, update, status transition,
+	 * `payment_complete()`, refund — goes through `WC_Abstract_Order::save()`,
+	 * which fires `woocommerce_before_order_object_save` before the data store
+	 * writes and before `woocommerce_new_order` / `woocommerce_order_status_changed`
+	 * / `woocommerce_payment_complete` fire. Priority 0 there means every
+	 * observer exists before any order is written — on a webhook, a cron
+	 * spawned from a page view, a third-party plugin creating an order on
+	 * `template_redirect`, or a lane the classifier got wrong. Nothing in the
+	 * order group listens to trash or delete, so those need no arming.
 	 */
 	private static function arm_order_services(): void {
-		foreach ( array( 'woocommerce_before_order_object_save', 'woocommerce_new_order', 'woocommerce_order_status_changed', 'woocommerce_payment_complete', 'woocommerce_before_trash_order', 'woocommerce_before_delete_order' ) as $hook ) {
-			add_action( $hook, array( self::class, 'ensure_order_services' ), 0, 0 );
-		}
+		add_action( 'woocommerce_before_order_object_save', array( self::class, 'ensure_order_services' ), 0, 0 );
 	}
 
 	/**
 	 * Construct the order-event services exactly once per request.
 	 *
-	 * Idempotent and safe to call late: `Print_Job_Service` registers its post
-	 * type on `init`, so when `init` has already run the registration is
-	 * performed directly. Fires `woocommerce_pos_order_services_ready` once so
+	 * Idempotent and safe to call after `init`; each service handles its own
+	 * late registration. Fires `woocommerce_pos_order_services_ready` once so
 	 * Pro and extensions can construct their own order-event services at the
 	 * same moment on every lane.
 	 */
@@ -538,18 +538,21 @@ class Init {
 		Receipt_Snapshot_Store::instance();
 		new Emails();
 		new Templates();
-		$print_jobs = new Services\Print_Job_Service();
-		if ( did_action( 'init' ) ) {
-			$print_jobs->register_post_type();
-		}
+		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();
 		new Services\Cloud_Print_Relay_Service();
 
 		/**
 		 * Fires once per request when the POS order-event services exist:
-		 * eagerly on POS, admin, REST, cron and CLI requests, and on a
-		 * storefront request the moment an order is about to be written.
+		 * eagerly on POS, admin, REST, cron and CLI requests (from this
+		 * plugin's `init` callback at priority 10), and on a storefront
+		 * request the moment the first order is about to be written.
+		 *
+		 * Because the eager firing happens at `init` priority 10, a listener
+		 * added later than that (for example from another plugin's `init`
+		 * callback at priority 20) must check `did_action()` first and
+		 * construct immediately when the action has already fired.
 		 *
 		 * @since 1.10.8
 		 */
@@ -558,6 +561,8 @@ class Init {
 
 	/**
 	 * Which service groups this request has constructed: 'always', 'order', 'pos'.
+	 *
+	 * @internal Test seam.
 	 *
 	 * @return string[]
 	 */

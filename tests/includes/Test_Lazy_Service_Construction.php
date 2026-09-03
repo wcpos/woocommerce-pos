@@ -18,10 +18,12 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Services\Request_Lane;
+use WCPOS\WooCommercePOS\Templates;
 use WC_Unit_Test_Case;
 
 /**
  * @covers \WCPOS\WooCommercePOS\Init
+ * @covers \WCPOS\WooCommercePOS\Templates::ensure_registered
  */
 class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 	/** @var array<string, \WP_Hook> */
@@ -39,9 +41,9 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 
 	public function tearDown(): void {
 		global $wp_filter;
+		// Also puts back the suite's default-lane filter that force_lane() removed.
 		$wp_filter = $this->wp_filter_snapshot; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the registry a second Init mutated.
 		Init::reset_request_state();
-		remove_all_filters( 'woocommerce_pos_request_lane' );
 		parent::tearDown();
 	}
 
@@ -85,6 +87,60 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Every WooCommerce order write goes through save(), so a single armed hook
+	 * covers the paths that carry no create: refunds and status transitions on
+	 * an order that already existed when the request began.
+	 *
+	 * @dataProvider order_writes_without_a_create
+	 */
+	public function test_any_order_write_on_a_storefront_request_constructs_the_order_services( string $label, callable $write ): void {
+		// Pending: payment_complete() only saves (and only fires) from an unpaid status.
+		$order = wc_create_order();
+		$order->set_status( 'pending' );
+		$order->save();
+
+		$this->force_lane( Request_Lane::STOREFRONT );
+		$this->run_init();
+		$this->assertSame( array( 'always' ), Init::constructed_groups(), $label );
+		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+
+		$write( $order );
+
+		$this->assertContains( 'order', Init::constructed_groups(), $label );
+		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), $label );
+		$this->assertGreaterThan( 0, $this->callback_count( 'woocommerce_pos_print_job_created' ), $label . ': the cloud-print relay observer is present.' );
+	}
+
+	public function order_writes_without_a_create(): array {
+		return array(
+			'status transition' => array(
+				'update_status()',
+				static function ( \WC_Order $order ): void {
+					$order->update_status( 'completed' );
+				},
+			),
+			'payment complete'  => array(
+				'payment_complete()',
+				static function ( \WC_Order $order ): void {
+					$order->payment_complete( 'txn' );
+				},
+			),
+			'refund'            => array(
+				'wc_create_refund()',
+				static function ( \WC_Order $order ): void {
+					wc_create_refund(
+						array(
+							'order_id' => $order->get_id(),
+							'amount'   => 0,
+							'reason'   => 'lane test',
+						)
+					);
+				},
+			),
+		);
+	}
+
+	/**
 	 * @dataProvider eager_lanes
 	 */
 	public function test_non_storefront_lanes_construct_every_group_eagerly( string $lane ): void {
@@ -107,14 +163,39 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 		);
 	}
 
-	public function test_the_receipt_shortcode_constructs_the_template_services_on_demand(): void {
+	/**
+	 * Regression: My Account renders on the storefront lane and reads the active
+	 * receipt template through Templates' static API. Without the post type and
+	 * taxonomy registered, the enabled-templates query matched nothing and
+	 * get_active_template_id() deleted the merchant's active-template option.
+	 */
+	public function test_reading_the_active_template_on_a_request_that_never_constructed_templates_keeps_it(): void {
+		$template_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'publish',
+				'post_title'   => 'Custom receipt',
+				'post_content' => '<p>{{order.number}}</p>',
+			)
+		);
+		wp_set_object_terms( $template_id, 'receipt', 'wcpos_template_type' );
+		update_option( 'wcpos_active_template_receipt', $template_id );
+
+		// A storefront request: Templates was never constructed, so nothing
+		// registered its types. The suite's bootstrap did; undo that here.
+		unregister_taxonomy( 'wcpos_template_type' );
+		unregister_taxonomy( 'wcpos_template_category' );
+		unregister_post_type( 'wcpos_template' );
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$this->run_init();
 		$this->assertSame( array( 'always' ), Init::constructed_groups() );
 
-		do_shortcode( '[wcpos_receipt order_id="0"]' );
+		$active = Templates::get_active_template_id( 'receipt' );
 
-		$this->assertContains( 'order', Init::constructed_groups(), 'Rendering a receipt needs Templates; the shortcode asks for it.' );
+		$this->assertSame( $template_id, $active, 'The custom template is still the active one.' );
+		$this->assertSame( (string) $template_id, (string) get_option( 'wcpos_active_template_receipt' ), 'The active-template option survived the read.' );
+		$this->assertTrue( taxonomy_exists( 'wcpos_template_type' ), 'The static reader registered the types it needs.' );
+		$this->assertSame( array( 'always' ), Init::constructed_groups(), 'Reading a template does not construct the order-event group.' );
 	}
 
 	public function test_ensure_order_services_is_idempotent_when_called_directly(): void {

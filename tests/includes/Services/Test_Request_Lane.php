@@ -28,6 +28,8 @@ class Test_Request_Lane extends WP_UnitTestCase {
 		$this->previous_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- stored only to restore the test environment's value.
 		$this->previous_get = $_GET;
 		set_current_screen( 'front' );
+		// The suite pins the REST lane (tests/bootstrap.php); this file tests detection.
+		remove_filter( 'woocommerce_pos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
 		Request_Lane::reset();
 	}
 
@@ -43,6 +45,7 @@ class Test_Request_Lane extends WP_UnitTestCase {
 		remove_all_filters( 'wp_doing_cron' );
 		remove_all_filters( 'wp_doing_ajax' );
 		remove_all_filters( 'home_url' );
+		add_filter( 'woocommerce_pos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
 		Request_Lane::reset();
 		parent::tearDown();
 	}
@@ -74,6 +77,11 @@ class Test_Request_Lane extends WP_UnitTestCase {
 					$_GET['wc-ajax']        = 'add_to_cart';
 					add_filter( 'wp_doing_ajax', '__return_true' );
 				},
+				Request_Lane::STOREFRONT,
+			),
+			'wc-api webhook'               => array(
+				'A gateway webhook / IPN is storefront by design: the order write itself constructs the order services.',
+				$uri( '/wc-api/WC_Gateway_Paypal/?ipn=1' ),
 				Request_Lane::STOREFRONT,
 			),
 			'wp-admin'                     => array(
