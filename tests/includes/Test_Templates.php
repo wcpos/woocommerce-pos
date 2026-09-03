@@ -30,6 +30,13 @@ class Test_Templates extends WP_UnitTestCase {
 	private $test_templates_dir;
 
 	/**
+	 * Stylesheet directory filter registered for the test theme.
+	 *
+	 * @var callable
+	 */
+	private $stylesheet_directory_filter;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -40,6 +47,11 @@ class Test_Templates extends WP_UnitTestCase {
 		if ( ! file_exists( $this->test_templates_dir ) ) {
 			mkdir( $this->test_templates_dir, 0755, true );
 		}
+
+		$this->stylesheet_directory_filter = function () {
+			return $this->test_templates_dir;
+		};
+		add_filter( 'stylesheet_directory', $this->stylesheet_directory_filter );
 
 		// Clean up any active template options.
 		delete_option( 'wcpos_active_template_receipt' );
@@ -66,6 +78,7 @@ class Test_Templates extends WP_UnitTestCase {
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
 		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled' );
 		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_document' );
+		remove_filter( 'stylesheet_directory', $this->stylesheet_directory_filter );
 	}
 
 	/**
@@ -624,6 +637,49 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertNotNull( $path );
 		$this->assertStringEndsWith( 'templates/receipt.php', $path );
 		$this->assertTrue( file_exists( $path ) );
+	}
+
+	/**
+	 * Test display virtual templates resolve theme HTML files as logicless templates.
+	 */
+	public function test_theme_display_virtual_template_resolves_html_file(): void {
+		$template_dir = $this->test_templates_dir . '/woocommerce-pos';
+		mkdir( $template_dir, 0755, true );
+		file_put_contents( $template_dir . '/display.html', '<main>{{store.name}}</main>' );
+
+		$template = Templates::get_virtual_template( Templates::TEMPLATE_THEME, 'display' );
+
+		$this->assertIsArray( $template );
+		$this->assertSame( '<main>{{store.name}}</main>', $template['content'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( 'html', $template['language'] );
+		$this->assertSame( 'display', $template['type'] );
+	}
+
+	/**
+	 * Test display virtual templates do not resolve legacy PHP files.
+	 */
+	public function test_theme_display_virtual_template_does_not_resolve_php_file(): void {
+		$template_dir = $this->test_templates_dir . '/woocommerce-pos';
+		mkdir( $template_dir, 0755, true );
+		file_put_contents( $template_dir . '/display.php', '<?php echo "legacy"; ?>' );
+
+		$this->assertNull( Templates::get_virtual_template_path( Templates::TEMPLATE_THEME, 'display' ) );
+	}
+
+	/**
+	 * Test receipt virtual templates continue to resolve theme PHP files.
+	 */
+	public function test_theme_receipt_virtual_template_still_resolves_php_file(): void {
+		$template_dir = $this->test_templates_dir . '/woocommerce-pos';
+		mkdir( $template_dir, 0755, true );
+		file_put_contents( $template_dir . '/receipt.php', '<main>Receipt</main>' );
+
+		$template = Templates::get_virtual_template( Templates::TEMPLATE_THEME, 'receipt' );
+
+		$this->assertIsArray( $template );
+		$this->assertSame( 'legacy-php', $template['engine'] );
+		$this->assertStringEndsWith( '/woocommerce-pos/receipt.php', $template['file_path'] );
 	}
 
 	/**
