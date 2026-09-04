@@ -75,6 +75,28 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 426, $response->get_status() );
 	}
 
+	/** The header protocol wins when a newer query-twin protocol is also present. */
+	public function test_gate_prefers_stale_header_over_current_query_twin(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_header( 'X-WCPOS-Protocol', '1' );
+		$request->set_query_params( array( 'wcpos_protocol' => '2' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 426, $response->get_status() );
+	}
+
+	/** The header protocol wins when an older query-twin protocol is also present. */
+	public function test_gate_prefers_current_header_over_stale_query_twin(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_query_params( array( 'wcpos_protocol' => '1' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
 	/**
 	 * Carve-outs are served without a signal.
 	 *
@@ -156,6 +178,17 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 426, $response->get_status() );
 	}
 
+	/** Only the documented literal wcpos=1 marks a query-twin request. */
+	public function test_gate_leaves_non_literal_query_marker_alone(): void {
+		// Arrange.
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
+		$request->set_query_params( array( 'wcpos' => 'false' ) );
+		// Act.
+		$response = rest_get_server()->dispatch( $request );
+		// Assert.
+		$this->assertNotSame( 426, $response->get_status() );
+	}
+
 	/**
 	 * The ambient query var belongs to the served request, never to a nested dispatch.
 	 *
@@ -184,10 +217,14 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->remove_header( 'X-WCPOS-Protocol' );
+		$v2_request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$v2_request->remove_header( 'X-WCPOS-Protocol' );
 		// Act.
 		$response = rest_get_server()->dispatch( $request );
+		$v2_response = rest_get_server()->dispatch( $v2_request );
 		// Assert.
 		$this->assertNotSame( 426, $response->get_status() );
+		$this->assertSame( 426, $v2_response->get_status() );
 	}
 
 	/** OPTIONS preflights return before the protocol gate. */

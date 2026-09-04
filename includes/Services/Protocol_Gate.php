@@ -82,6 +82,8 @@ final class Protocol_Gate {
 
 		$params = $request->get_query_params();
 
-		return ! empty( $params['wcpos'] );
+		return isset( $params['wcpos'] )
+			&& \is_scalar( $params['wcpos'] )
+			&& '1' === trim( (string) $params['wcpos'] );
 	}
 }
