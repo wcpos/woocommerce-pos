@@ -380,6 +380,10 @@ class API {
 	 * Priority 50: after the plugin's callback, and after our own priority-10
 	 * permission gate, whose `woocommerce_pos_rest_*` errors must pass through untouched.
 	 *
+	 * Unlike rest_authentication_errors(), this never switches the current user: the
+	 * priority-10 gate and the core-order audit guard have already judged the user in
+	 * scope, so the error is cleared only when our token resolves to that same user.
+	 *
 	 * @param mixed           $result  Dispatch result, or null to not hijack the request.
 	 * @param WP_REST_Server  $server  Server instance.
 	 * @param WP_REST_Request $request Request used to generate the response.
@@ -387,11 +391,18 @@ class API {
 	 * @return mixed
 	 */
 	public function clear_third_party_jwt_error( $result, $server, $request ) {
-		if ( $this->is_third_party_jwt_error( $result ) && $this->ensure_authenticated_via_wcpos() ) {
-			return null;
+		if ( ! $this->is_third_party_jwt_error( $result ) ) {
+			return $result;
 		}
 
-		return $result;
+		if ( ! $this->authenticated_via_wcpos ) {
+			$user_id = $this->authenticate( false );
+			if ( $user_id && ! is_wp_error( $user_id ) && get_current_user_id() === (int) $user_id ) {
+				$this->authenticated_via_wcpos = true;
+			}
+		}
+
+		return $this->authenticated_via_wcpos ? null : $result;
 	}
 
 	/**

@@ -137,7 +137,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'determine_current_user', $this->sim_determine_cb, 10 );
 
 		$this->sim_pre_dispatch_cb = function ( $result, $server, $request ) use ( &$stored_error ) {
-			if ( is_wp_error( $stored_error ) ) {
+			if ( is_wp_error( $stored_error ) && $stored_error->has_errors() ) {
 				return $stored_error;
 			}
 
@@ -208,6 +208,35 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'jwt_auth_invalid_token', $response->as_error()->get_error_code() );
+	}
+
+	/**
+	 * Clearing the JWT plugin's error must never switch the user the priority-10
+	 * gate already approved: a request running as cookie-authenticated user A that
+	 * carries a WCPOS token for user B keeps the plugin's rejection and stays A.
+	 */
+	public function test_jwt_plugin_error_is_not_cleared_when_wcpos_token_belongs_to_another_user(): void {
+		$other_admin = $this->factory->user->create( array( 'role' => 'administrator' ) );
+
+		$jwt_plugin_error = new WP_Error();
+		$this->simulate_conflicting_jwt_plugin_rest_pre_dispatch( $jwt_plugin_error );
+		// The plugin already stored its rejection of the Bearer token during init.
+		$jwt_plugin_error = new WP_Error( 'jwt_auth_invalid_token', 'Signature verification failed', array( 'status' => 403 ) );
+
+		$access_token = Auth::instance()->generate_access_token( get_user_by( 'id', $other_admin ) );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		// Cookie-authenticated as the primary admin, who passes the POS capability gate.
+		wp_set_current_user( $this->user );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'jwt_auth_invalid_token', $response->as_error()->get_error_code() );
+		$this->assertSame( $this->user, get_current_user_id(), 'Clearing must not switch the current user to the token owner' );
+
+		wp_delete_user( $other_admin );
 	}
 
 	/**
