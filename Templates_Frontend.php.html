@@ -188,6 +188,16 @@ class Frontend {
 		// Default to the plugin's own major.minor so the stable lane tracks the
 		// version automatically: a 1.9.x plugin loads `@1.9`, a 1.10.x plugin loads
 		// `@1.10`, etc. — no edit needed as versions roll.
+
+		/*
+		 * One jsDelivr ref per lane, named after the lane (owner ruling, 2026-09-04):
+		 *   released lane → `@&lt;major.minor>` (this default; the tag is cut at release)
+		 *   next lane     → `@next` — the `next` BRANCH of wcpos/web-bundle IS the dev
+		 *                   lane's tag. There is no versioned/prerelease tag for `next`.
+		 *                   dev-next sets WCPOS_WEB_BUNDLE_REF=next to load it.
+		 */
+		// When `next` becomes `main`, the released ref simply becomes the new
+		// major.minor (e.g. `@1.11`) via this default.
 		$default_bundle_ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
 
 		/**
@@ -195,8 +205,10 @@ class Frontend {
 		 *
 		 * Override via the WCPOS_WEB_BUNDLE_REF constant / env var or this filter to
 		 * point a site at another lane for testing the in-development build locally
-		 * or on staging: a branch (e.g. `next`), a tag, a commit, or a full base URL
-		 * (anything containing `://`, e.g. a local dev server or an EAS preview).
+		 * or on staging: the `next` lane's ref is the branch `next`
+		 * (https://cdn.jsdelivr.net/gh/wcpos/web-bundle@next); a tag, a commit, or a
+		 * full base URL (anything containing `://`, e.g. a local dev server or an EAS
+		 * preview) also work.
 		 *
 		 * @hook woocommerce_pos_web_bundle_ref
 		 */
