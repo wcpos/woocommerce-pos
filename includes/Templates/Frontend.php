@@ -155,12 +155,14 @@ class Frontend {
 		// Default to the plugin's own major.minor so the stable lane tracks the
 		// version automatically: a 1.9.x plugin loads `@1.9`, a 1.10.x plugin loads
 		// `@1.10`, etc. — no edit needed as versions roll.
-		//
-		// One jsDelivr ref per lane, named after the lane (owner ruling, 2026-09-04):
-		//   released lane → `@<major.minor>` (this default; the tag is cut at release)
-		//   next lane     → `@next` — the `next` BRANCH of wcpos/web-bundle IS the dev
-		//                   lane's tag. There is no versioned/prerelease tag for `next`.
-		//                   dev-next sets WCPOS_WEB_BUNDLE_REF=next to load it.
+
+		/*
+		 * One jsDelivr ref per lane, named after the lane (owner ruling, 2026-09-04):
+		 *   released lane → `@<major.minor>` (this default; the tag is cut at release)
+		 *   next lane     → `@next` — the `next` BRANCH of wcpos/web-bundle IS the dev
+		 *                   lane's tag. There is no versioned/prerelease tag for `next`.
+		 *                   dev-next sets WCPOS_WEB_BUNDLE_REF=next to load it.
+		 */
 		// When `next` becomes `main`, the released ref simply becomes the new
 		// major.minor (e.g. `@1.11`) via this default.
 		$default_bundle_ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
