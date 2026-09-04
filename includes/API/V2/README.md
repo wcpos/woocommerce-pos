@@ -3,6 +3,22 @@
 This directory contains the controllers for the `wcpos/v2` sync REST surface.
 The sync engine and shared domain services remain under `includes/Sync`.
 
+## Protocol gate (1.11.0)
+
+A POS-client request (one carrying the `X-WCPOS` / `wcpos=1` marker) under
+`/wcpos/v2/` must carry a client protocol signal of 2 or newer
+(`X-WCPOS-Protocol` header, or its `wcpos_protocol` query twin on hosts that
+strip headers). Anything older is refused with HTTP 426 and the stable
+`wcpos_update_required` envelope (`Services\Protocol_Gate`); the client keys on
+the body `code`, never the status. Carve-outs are one rule in
+`Route_Classifier::is_protocol_exempt()`: every `public` route (the pre-login
+connect probes: echo, ping, site, the relay callback) and every `printer_token`
+route (printer polls carry no client signal) is exempt by derivation; anything
+else must be declared in the `protocol_exempt` group, where an entry covers
+itself and every route below it — today `/status` and the `/auth/` family.
+`server_protocol` stays 2: every 1.11.0 wire change is one the protocol-2
+client already tolerates (free#1752).
+
 ## Version-skew stance for the sync journal (decided 2026-08-22, free#1560)
 
 **1.10.0 is a hard cutover for this protocol, not a compatibility window.**

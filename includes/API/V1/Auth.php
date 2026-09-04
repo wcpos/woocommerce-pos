@@ -48,10 +48,11 @@ class Auth extends WP_REST_Controller {
 	 */
 	public function wcpos_route_classifications(): array {
 		return array(
-			'public' => array(
+			'public'          => array(
 				"/{$this->namespace}/{$this->rest_base}/test",
 				"/{$this->namespace}/{$this->rest_base}/refresh",
 			),
+			'protocol_exempt' => array( "/{$this->namespace}/{$this->rest_base}/" ),
 		);
 	}
 
