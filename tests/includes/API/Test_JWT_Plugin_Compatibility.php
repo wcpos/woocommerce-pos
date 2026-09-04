@@ -162,7 +162,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		wp_get_current_user();
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
@@ -181,7 +181,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		wp_get_current_user();
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 401, $response->get_status() );
@@ -229,7 +229,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		// Cookie-authenticated as the primary admin, who passes the POS capability gate.
 		wp_set_current_user( $this->user );
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -261,7 +261,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		wp_get_current_user();
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 503, $response->get_status() );
