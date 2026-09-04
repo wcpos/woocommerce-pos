@@ -12,10 +12,10 @@
  *    an internal WP_Error, and returns false.
  * 2. WCPOS hooks determine_current_user at priority 20, gets false,
  *    validates the Bearer token as its own JWT — succeeds, returns user_id.
- * 3. The JWT plugin hooks rest_authentication_errors (at default priority 10),
- *    sees its stored error, and returns it — blocking the request.
- * 4. WCPOS hooks rest_authentication_errors at priority 50, sees !empty($errors),
- *    and passes the JWT plugin's error through — request blocked with 403.
+ * 3. Some JWT plugins return that error through rest_authentication_errors;
+ *    jwt-authentication-for-wp-rest-api returns it through rest_pre_dispatch.
+ * 4. WCPOS clears either stale JWT error only after its own token succeeds,
+ *    allowing the authenticated request to continue.
  *
  * @package WCPOS\WooCommercePOS\Tests\API
  */
@@ -50,6 +50,14 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	private $sim_auth_errors_cb = null;
 
 	/**
+	 * Closure registered on rest_pre_dispatch during the test, kept so
+	 * tearDown can remove it explicitly.
+	 *
+	 * @var callable|null
+	 */
+	private $sim_pre_dispatch_cb = null;
+
+	/**
 	 * Tear down: remove any filters added by the simulation and clean up the
 	 * Authorization header so state does not leak between tests.
 	 */
@@ -61,6 +69,10 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		if ( null !== $this->sim_auth_errors_cb ) {
 			remove_filter( 'rest_authentication_errors', $this->sim_auth_errors_cb, 10 );
 			$this->sim_auth_errors_cb = null;
+		}
+		if ( null !== $this->sim_pre_dispatch_cb ) {
+			remove_filter( 'rest_pre_dispatch', $this->sim_pre_dispatch_cb, 9 );
+			$this->sim_pre_dispatch_cb = null;
 		}
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
 		parent::tearDown();
@@ -101,6 +113,159 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 			return $error;
 		};
 		add_filter( 'rest_authentication_errors', $this->sim_auth_errors_cb, 10 );
+	}
+
+	/**
+	 * Simulate a JWT plugin that stores its determine_current_user error and
+	 * returns it later from rest_pre_dispatch.
+	 *
+	 * @param WP_Error $stored_error Reference to variable that stores the plugin's error.
+	 */
+	private function simulate_conflicting_jwt_plugin_rest_pre_dispatch( WP_Error &$stored_error ): void {
+		$this->sim_determine_cb = function ( $user_id ) use ( &$stored_error ) {
+			$auth = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) ) : '';
+			if ( 0 === strpos( $auth, 'Bearer ' ) ) {
+				$stored_error = new WP_Error(
+					'jwt_auth_invalid_token',
+					'Signature verification failed',
+					array( 'status' => 403 )
+				);
+			}
+
+			return $user_id;
+		};
+		add_filter( 'determine_current_user', $this->sim_determine_cb, 10 );
+
+		$this->sim_pre_dispatch_cb = function ( $result, $server, $request ) use ( &$stored_error ) {
+			if ( is_wp_error( $stored_error ) && $stored_error->has_errors() ) {
+				return $stored_error;
+			}
+
+			return $result;
+		};
+		add_filter( 'rest_pre_dispatch', $this->sim_pre_dispatch_cb, 9, 3 );
+	}
+
+	/**
+	 * A valid WCPOS token should override a stale JWT plugin pre-dispatch error.
+	 */
+	public function test_wcpos_bearer_token_works_when_jwt_plugin_errors_via_rest_pre_dispatch(): void {
+		$jwt_plugin_error = new WP_Error();
+		$this->simulate_conflicting_jwt_plugin_rest_pre_dispatch( $jwt_plugin_error );
+
+		$user         = get_user_by( 'id', $this->user );
+		$auth_service = Auth::instance();
+		$access_token = $auth_service->generate_access_token( $user );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_get_current_user();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * An invalid WCPOS token should still be rejected by the permission gate.
+	 */
+	public function test_invalid_bearer_token_is_still_rejected_when_jwt_plugin_errors_via_rest_pre_dispatch(): void {
+		$jwt_plugin_error = new WP_Error();
+		$this->simulate_conflicting_jwt_plugin_rest_pre_dispatch( $jwt_plugin_error );
+
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer this.is.not.a.valid.token'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_get_current_user();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 401, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $response->as_error()->get_error_code() );
+	}
+
+	/**
+	 * Outside the WCPOS namespace there is no WCPOS permission gate to replace the
+	 * JWT plugin's error, so this is the only path where clear_third_party_jwt_error()
+	 * itself decides: with a token WCPOS cannot validate, the plugin's rejection stands.
+	 */
+	public function test_jwt_plugin_error_survives_on_core_route_when_wcpos_cannot_validate_token(): void {
+		$jwt_plugin_error = new WP_Error();
+		$this->simulate_conflicting_jwt_plugin_rest_pre_dispatch( $jwt_plugin_error );
+
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer this.is.not.a.valid.token'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_get_current_user();
+
+		$request  = $this->wp_rest_get_request( '/wp/v2/posts' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'jwt_auth_invalid_token', $response->as_error()->get_error_code() );
+	}
+
+	/**
+	 * Clearing the JWT plugin's error must never switch the user the priority-10
+	 * gate already approved: a request running as cookie-authenticated user A that
+	 * carries a WCPOS token for user B keeps the plugin's rejection and stays A.
+	 */
+	public function test_jwt_plugin_error_is_not_cleared_when_wcpos_token_belongs_to_another_user(): void {
+		$other_admin = $this->factory->user->create( array( 'role' => 'administrator' ) );
+
+		$jwt_plugin_error = new WP_Error();
+		$this->simulate_conflicting_jwt_plugin_rest_pre_dispatch( $jwt_plugin_error );
+		// The plugin already stored its rejection of the Bearer token during init.
+		$jwt_plugin_error = new WP_Error( 'jwt_auth_invalid_token', 'Signature verification failed', array( 'status' => 403 ) );
+
+		$access_token = Auth::instance()->generate_access_token( get_user_by( 'id', $other_admin ) );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		// Cookie-authenticated as the primary admin, who passes the POS capability gate.
+		wp_set_current_user( $this->user );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'jwt_auth_invalid_token', $response->as_error()->get_error_code() );
+		$this->assertSame( $this->user, get_current_user_id(), 'Clearing must not switch the current user to the token owner' );
+
+		wp_delete_user( $other_admin );
+	}
+
+	/**
+	 * A non-JWT pre-dispatch error must survive successful WCPOS authentication.
+	 */
+	public function test_non_jwt_rest_pre_dispatch_errors_are_not_cleared_when_wcpos_auth_succeeds(): void {
+		$this->sim_pre_dispatch_cb = function ( $result, $server, $request ) {
+			return new WP_Error(
+				'maintenance_mode_lock',
+				'Maintenance lock active.',
+				array( 'status' => 503 )
+			);
+		};
+		add_filter( 'rest_pre_dispatch', $this->sim_pre_dispatch_cb, 9, 3 );
+
+		$user         = get_user_by( 'id', $this->user );
+		$auth_service = Auth::instance();
+		$access_token = $auth_service->generate_access_token( $user );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_get_current_user();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/changes/tick' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 503, $response->get_status() );
+		$this->assertSame( 'maintenance_mode_lock', $response->get_data()['code'] );
 	}
 
 	/**

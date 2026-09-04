@@ -85,6 +85,7 @@ class API {
 		// These filters allow changes to the WC REST API response.
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+		add_filter( 'rest_pre_dispatch', array( $this, 'clear_third_party_jwt_error' ), 50, 3 );
 		add_filter( 'rest_post_dispatch', array( $this, 'rest_post_dispatch' ), 10, 3 );
 	}
 
@@ -330,11 +331,12 @@ class API {
 	 *    WordPress has already cached the current user. We attempt auth here as a
 	 *    fallback.
 	 *
-	 * 2. JWT plugin conflict: a third-party JWT plugin (e.g. jwt-authentication-for-wp-rest-api)
-	 *    sees our Bearer token, fails to validate it with its own secret, and returns
-	 *    a WP_Error via rest_authentication_errors at priority 10. We run at priority 50
-	 *    and attempt our own Bearer-token validation. If it succeeds, we clear the
-	 *    stale error — our authentication wins.
+	 * 2. JWT plugin conflict: a third-party JWT plugin sees our Bearer token, fails
+	 *    to validate it with its own secret, and returns a WP_Error via
+	 *    rest_authentication_errors at priority 10. We run at priority 50 and attempt
+	 *    our own Bearer-token validation. If it succeeds, we clear the stale error —
+	 *    our authentication wins. (jwt-authentication-for-wp-rest-api surfaces its
+	 *    error through rest_pre_dispatch instead; see clear_third_party_jwt_error().)
 	 *
 	 * @param mixed $errors Authentication errors.
 	 *
@@ -349,17 +351,7 @@ class API {
 			// Only clear errors that originate from JWT authentication plugins. Errors
 			// from other mechanisms (maintenance locks, IP restrictions, etc.) should
 			// be passed through even when the WCPOS Bearer token is valid.
-			$is_jwt_plugin_error = is_wp_error( $errors ) && 0 === strpos( $errors->get_error_code(), 'jwt_auth_' );
-
-			if ( $is_jwt_plugin_error && ! $this->authenticated_via_wcpos ) {
-				$user_id = $this->authenticate( false );
-				if ( $user_id && ! is_wp_error( $user_id ) ) {
-					wp_set_current_user( $user_id );
-					$this->authenticated_via_wcpos = true;
-				}
-			}
-
-			if ( $this->authenticated_via_wcpos && $is_jwt_plugin_error ) {
+			if ( $this->is_third_party_jwt_error( $errors ) && $this->ensure_authenticated_via_wcpos() ) {
 				return null;
 			}
 
@@ -367,18 +359,78 @@ class API {
 		}
 
 		// check if determine_current_user has been called.
-		if ( ! $this->is_auth_checked ) {
-			// Authentication hasn't occurred during `determine_current_user`, so check auth.
+		if ( ! $this->is_auth_checked && $this->ensure_authenticated_via_wcpos() ) {
+			// Authentication hadn't occurred during `determine_current_user`, but our token is valid.
+			return true;
+		}
+
+		return $errors;
+	}
+
+	/**
+	 * Clear a third-party JWT plugin's stale error from the dispatch result.
+	 *
+	 * The plugin jwt-authentication-for-wp-rest-api (verified at 1.5.0) validates every
+	 * Bearer token in determine_current_user (priority 10) with its own secret. Ours fails,
+	 * so it stores a `jwt_auth_invalid_token` WP_Error and returns the user untouched;
+	 * our priority-20 filter then authenticates the request. The plugin later returns
+	 * that stored error from rest_pre_dispatch (priority 10, registered at
+	 * plugins_loaded), which replaces the dispatch result with a 403.
+	 *
+	 * Priority 50: after the plugin's callback, and after our own priority-10
+	 * permission gate, whose `woocommerce_pos_rest_*` errors must pass through untouched.
+	 *
+	 * Unlike rest_authentication_errors(), this never switches the current user: the
+	 * priority-10 gate and the core-order audit guard have already judged the user in
+	 * scope, so the error is cleared only when our token resolves to that same user.
+	 *
+	 * @param mixed           $result  Dispatch result, or null to not hijack the request.
+	 * @param WP_REST_Server  $server  Server instance.
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return mixed
+	 */
+	public function clear_third_party_jwt_error( $result, $server, $request ) {
+		if ( ! $this->is_third_party_jwt_error( $result ) ) {
+			return $result;
+		}
+
+		if ( ! $this->authenticated_via_wcpos ) {
+			$user_id = $this->authenticate( false );
+			if ( $user_id && ! is_wp_error( $user_id ) && get_current_user_id() === (int) $user_id ) {
+				$this->authenticated_via_wcpos = true;
+			}
+		}
+
+		return $this->authenticated_via_wcpos ? null : $result;
+	}
+
+	/**
+	 * Whether a value is a WP_Error raised by a third-party JWT plugin (`jwt_auth_*`).
+	 *
+	 * @param mixed $maybe_error Value to inspect.
+	 *
+	 * @return bool
+	 */
+	private function is_third_party_jwt_error( $maybe_error ): bool {
+		return is_wp_error( $maybe_error ) && 0 === strpos( $maybe_error->get_error_code(), 'jwt_auth_' );
+	}
+
+	/**
+	 * Authenticate the request with its WCPOS Bearer token if that hasn't happened yet.
+	 *
+	 * @return bool True when the request is authenticated via a WCPOS-issued token.
+	 */
+	private function ensure_authenticated_via_wcpos(): bool {
+		if ( ! $this->authenticated_via_wcpos ) {
 			$user_id = $this->authenticate( false );
 			if ( $user_id && ! is_wp_error( $user_id ) ) {
 				wp_set_current_user( $user_id );
 				$this->authenticated_via_wcpos = true;
-
-				return true;
 			}
 		}
 
-		return $errors;
+		return $this->authenticated_via_wcpos;
 	}
 
 	/**
