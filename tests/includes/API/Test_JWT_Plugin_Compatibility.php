@@ -189,6 +189,28 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Outside the WCPOS namespace there is no WCPOS permission gate to replace the
+	 * JWT plugin's error, so this is the only path where clear_third_party_jwt_error()
+	 * itself decides: with a token WCPOS cannot validate, the plugin's rejection stands.
+	 */
+	public function test_jwt_plugin_error_survives_on_core_route_when_wcpos_cannot_validate_token(): void {
+		$jwt_plugin_error = new WP_Error();
+		$this->simulate_conflicting_jwt_plugin_rest_pre_dispatch( $jwt_plugin_error );
+
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer this.is.not.a.valid.token'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_get_current_user();
+
+		$request  = $this->wp_rest_get_request( '/wp/v2/posts' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'jwt_auth_invalid_token', $response->as_error()->get_error_code() );
+	}
+
+	/**
 	 * A non-JWT pre-dispatch error must survive successful WCPOS authentication.
 	 */
 	public function test_non_jwt_rest_pre_dispatch_errors_are_not_cleared_when_wcpos_auth_succeeds(): void {
