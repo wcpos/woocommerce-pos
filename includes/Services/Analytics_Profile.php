@@ -52,6 +52,13 @@ class Analytics_Profile {
 	const OVERFLOW_BAND = '1000+';
 
 	/**
+	 * Pro-fit thresholds — see pro_fit_segment() for where the numbers come from.
+	 */
+	const MULTI_REGISTER_MIN_POS_USERS   = 4;
+	const MULTI_GATEWAY_MIN_GATEWAYS     = 3;
+	const HIGH_VOLUME_ORDER_COUNT_BANDS  = array( '101-1000', '1000+' );
+
+	/**
 	 * Classes that indicate a multi-currency plugin is running.
 	 *
 	 * WooCommerce core has no multi-currency concept, so presence has to be
@@ -87,7 +94,14 @@ class Analytics_Profile {
 			'wc_version'         => $this->get_wc_version(),
 			'mysql_version'      => $this->get_mysql_version(),
 			'wcpos_version'      => PLUGIN_VERSION,
-			'wcpos_edition'      => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ) ? 'pro' : 'free',
+			'wcpos_edition'      => wcpos_is_pro_active() ? 'pro' : 'free',
+			'pro_license_active' => \WCPOS\WooCommercePOS\Templates::is_pro_license_active(),
+			'pro_fit_segment'    => self::pro_fit_segment(
+				wcpos_is_pro_active(),
+				(int) ( $metrics['pos_user_count'] ?? 0 ),
+				\count( (array) ( $metrics['active_gateways'] ?? array() ) ),
+				self::band( (int) ( $metrics['order_count'] ?? 0 ) )
+			),
 
 			// Locale and market.
 			'wc_country'         => $this->get_base_country(),
@@ -192,6 +206,39 @@ class Analytics_Profile {
 		}
 
 		return self::OVERFLOW_BAND;
+	}
+
+	/**
+	 * Classify a store by how closely it resembles the stores that buy Pro.
+	 *
+	 * One label per site, strongest signal wins. It exists so PostHog can
+	 * split free stores into a handful of named segments without anyone
+	 * re-deriving the cut-offs from raw properties in every insight.
+	 *
+	 * Thresholds come from a 2026-09-04 ClickHouse analysis of free-plugin sites
+	 * with a known domain (about 190 with profile data). Share of sites holding a
+	 * Pro license: 57-100% at pos_user_count >= 4 vs 11-18% below; 85-100% at
+	 * gateway_count >= 3 vs 24% at 2; 41-53% at order_count_band 101-1000 /
+	 * 1000+ vs 11-30% below. Baseline across all sites was about 9-17%.
+	 *
+	 * @param bool   $is_pro           Whether WCPOS Pro is active.
+	 * @param int    $pos_user_count   Number of POS users.
+	 * @param int    $gateway_count    Number of active gateways.
+	 * @param string $order_count_band Banded order count.
+	 *
+	 * @return string One of pro, multi_register, multi_gateway, high_volume, starter.
+	 */
+	public static function pro_fit_segment( bool $is_pro, int $pos_user_count, int $gateway_count, string $order_count_band ): string {
+		if ( $is_pro ) {
+			return 'pro';
+		}
+		if ( $pos_user_count >= self::MULTI_REGISTER_MIN_POS_USERS ) {
+			return 'multi_register';
+		}
+		if ( $gateway_count >= self::MULTI_GATEWAY_MIN_GATEWAYS ) {
+			return 'multi_gateway';
+		}
+		return \in_array( $order_count_band, self::HIGH_VOLUME_ORDER_COUNT_BANDS, true ) ? 'high_volume' : 'starter';
 	}
 
 	/**

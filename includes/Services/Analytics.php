@@ -419,7 +419,7 @@ class Analytics {
 	private function get_default_properties(): array {
 		return array(
 			'plugin_version' => PLUGIN_VERSION,
-			'pro_active'     => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			'pro_active'     => wcpos_is_pro_active(),
 			'locale'         => get_locale(),
 		);
 	}

@@ -587,7 +587,7 @@ JS;
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s, previewBaseUrl: %s }; wcpos.translationVersion = %s;',
-			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ), $json_encode_flags ),
+			wp_json_encode( wcpos_is_pro_active(), $json_encode_flags ),
 			wp_json_encode( untrailingslashit( admin_url() ), $json_encode_flags ),
 			wp_json_encode(
 				(bool) wc_get_orders(
