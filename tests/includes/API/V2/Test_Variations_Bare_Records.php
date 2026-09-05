@@ -179,6 +179,18 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			return $response;
 		};
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10, 3 );
+		// Every serialization the lanes perform passes this hook last. Record each one's
+		// hashed form and request params, so a divergence between the lane's own canonical
+		// reads is diffed field by field instead of surfacing as two sha256 strings.
+		$seen     = array();
+		$recorder = static function ( $response, $object, $request ) use ( &$seen ) {
+			$seen[] = array(
+				'params'    => $request->get_params(),
+				'canonical' => json_decode( wp_json_encode( Revision::canonicalize( Meta_Normalizer::normalize( $response->get_data() ) ) ), true ),
+			);
+			return $response;
+		};
+		add_filter( 'woocommerce_rest_prepare_product_variation_object', $recorder, PHP_INT_MAX, 3 );
 		try {
 			// Act: a no-op write keeps the canonical record unchanged.
 			$params = array( 'include' => array( $variation->get_id() ) );
@@ -188,8 +200,8 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			// instead of leaving two opaque hashes (CI saw exactly that once).
 			$serializer = new Product_Serializer();
 			$canonical  = static function () use ( $serializer, $variation ): array {
-				// Wire form: meta_data entries are WC_Meta_Data objects, compared by identity otherwise.
-				return json_decode( wp_json_encode( $serializer->bare_for_revision( wc_get_product( $variation->get_id() ) ) ), true );
+				// The hashed form: canonicalized (meta as an id-less set) and in wire shape.
+				return json_decode( wp_json_encode( Revision::canonicalize( $serializer->bare_for_revision( wc_get_product( $variation->get_id() ) ) ) ), true );
 			};
 			$before = $canonical();
 			$marked = $this->read( 'variations', $params )[0];
@@ -201,6 +213,21 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			// Assert.
 			$this->assertSame( $before, $between, 'the marked read changed the canonical record' );
 			$this->assertSame( $between, $after, 'the plain read changed the canonical record' );
+			// Every canonical (view-context, marker-less) serialization the lanes performed must
+			// have hashed the same form. The push's own wc/v3 write response is edit-context and
+			// legitimately differs (inherited tax_class serializes as 'parent' there).
+			$unmarked = array_values(
+				array_filter(
+					$seen,
+					static function ( array $entry ): bool {
+						return 1 !== (int) ( $entry['params']['marker'] ?? 0 ) && 'view' === ( $entry['params']['context'] ?? 'view' );
+					}
+				)
+			);
+			$this->assertGreaterThan( 1, \count( $unmarked ), 'the lanes should have serialized the canonical record more than once' );
+			foreach ( $unmarked as $index => $entry ) {
+				$this->assertSame( $unmarked[0]['canonical'], $entry['canonical'], 'canonical serialization #' . $index . ' differs; params: ' . wp_json_encode( $entry['params'] ) );
+			}
 			$this->assertSame( 'marker=1', $marked['description'] );
 			$this->assertNotSame( $plain['description'], $marked['description'] );
 			$this->assertSame( $plain['_rxdb_revision'], $marked['_rxdb_revision'] );
@@ -209,6 +236,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( $marked['_rxdb_revision'], $ack->get_data()['currentRevision'] );
 		} finally {
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10 );
+			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $recorder, PHP_INT_MAX );
 		}
 	}
 
@@ -323,6 +351,31 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( '_rxdb_revision', $bare );
 		// The stored uuid meta may ride the bare bytes; the recipe strips it, which the parity below proves.
 		$this->assertSame( Revision::compute_variation( $bare ), Revision::compute_variation( $stamped ) );
+	}
+
+	/**
+	 * Meta row ids and row order are storage facts, not content: a re-saved row
+	 * (new id, same key and value) and a reordered meta list hash identically,
+	 * while a changed value does not.
+	 */
+	public function test_revision_ignores_meta_row_ids_and_order(): void {
+		// Arrange.
+		$variation = $this->variation();
+		update_post_meta( $variation->get_id(), 'till_note', 'same' );
+		update_post_meta( $variation->get_id(), 'till_note_b', 'other' );
+		$before = $this->flat( $variation );
+		// Act: re-save the same key/value (new meta_id), which also changes row order.
+		delete_post_meta( $variation->get_id(), 'till_note' );
+		add_post_meta( $variation->get_id(), 'till_note', 'same' );
+		$resaved = $this->flat( $variation );
+		update_post_meta( $variation->get_id(), 'till_note', 'changed' );
+		$changed = $this->flat( $variation );
+		// Assert.
+		$this->assertSame( $before['_rxdb_revision'], $resaved['_rxdb_revision'] );
+		$this->assertNotSame( $resaved['_rxdb_revision'], $changed['_rxdb_revision'] );
+		$shuffled = $before;
+		$shuffled['meta_data'] = array_reverse( $before['meta_data'] );
+		$this->assertSame( Revision::compute_variation( $before ), Revision::compute_variation( $shuffled ) );
 	}
 
 	/** Meta-only and same-second edits must not collapse to a date revision. */

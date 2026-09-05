@@ -28,6 +28,9 @@ namespace WCPOS\WooCommercePOS\Sync;
  * the record via wc/v3 (which omits that protected meta), so the two must hash the
  * same bytes. Variations use a schema-scoped content hash (not a modified date);
  * their identity meta is also excluded so stamping cannot change the revision.
+ * `meta_data` is hashed as an id-less, order-independent set on every collection
+ * ({@see self::canonical_meta()}): meta row ids and row order are storage facts,
+ * not content.
  */
 class Revision {
 
@@ -127,9 +130,48 @@ class Revision {
 		return self::sort_keys_recursive( $data );
 	}
 
+	/**
+	 * `meta_data` hashes as an id-less SET of `{key, value}` pairs.
+	 *
+	 * A meta row's `id` is storage identity, not content: WooCommerce re-saves rows
+	 * (a plugin deleting and re-adding the same key, a migration), and a re-saved
+	 * row gets a new id while the record is unchanged. Row order is not content
+	 * either — it is whatever the meta cache or the query returned, and two reads
+	 * of the same record may not agree on it. Hashing either would make an
+	 * unchanged record look changed, or make two lanes disagree about one record
+	 * (a 409 with no edit behind it). Entries may be `WC_Meta_Data` objects or
+	 * arrays; both reduce to the same pair, so the hash no longer depends on how
+	 * WooCommerce serializes its meta objects. Applies at every depth: an order's
+	 * line-item meta is a set for the same reason.
+	 *
+	 * @param array $entries The record's `meta_data` list.
+	 * @return array<int, array{key: string, value: mixed}> Sorted by key, then by encoded value.
+	 */
+	private static function canonical_meta( array $entries ): array {
+		$pairs = array();
+		foreach ( $entries as $entry ) {
+			$value   = Meta_Entry::value( $entry );
+			$pairs[] = array(
+				'key'   => (string) Meta_Entry::key( $entry ),
+				'value' => is_array( $value ) ? self::sort_keys_recursive( $value ) : $value,
+			);
+		}
+		usort(
+			$pairs,
+			static function ( array $left, array $right ): int {
+				return array( $left['key'], (string) wp_json_encode( $left['value'] ) ) <=> array( $right['key'], (string) wp_json_encode( $right['value'] ) );
+			}
+		);
+		return $pairs;
+	}
+
 	private static function sort_keys_recursive( array $data ): array {
 		ksort( $data );
 		foreach ( $data as $key => $value ) {
+			if ( 'meta_data' === $key && is_array( $value ) && array_keys( $value ) === range( 0, count( $value ) - 1 ) ) {
+				$data[ $key ] = self::canonical_meta( $value );
+				continue;
+			}
 			if ( is_array( $value ) ) {
 				$data[ $key ] = self::sort_keys_recursive( $value );
 				// Taxonomy collections are sets; other lists retain semantic order.
