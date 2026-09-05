@@ -108,7 +108,10 @@ class Revision {
 				return $schema;
 			}
 		};
-		$fields = array_keys( $controller->get_item_schema()['properties'] );
+		$fields = array_diff(
+			array_keys( $controller->get_item_schema()['properties'] ),
+			array( 'date_created', 'date_created_gmt', 'date_modified', 'date_modified_gmt' )
+		);
 		if ( isset( $record['meta_data'] ) ) {
 			$record['meta_data'] = array_values(
 				array_filter(

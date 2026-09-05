@@ -105,6 +105,32 @@ class Test_Revision extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Generated creation and modification timestamps are not variation content.
+	 */
+	public function test_variation_revision_ignores_generated_dates(): void {
+		$before = array(
+			'name'              => 'Pants',
+			'date_created'      => '2026-09-05T19:14:30',
+			'date_created_gmt'  => '2026-09-05T19:14:30',
+			'date_modified'     => '2026-09-05T19:14:30',
+			'date_modified_gmt' => '2026-09-05T19:14:30',
+		);
+		$after = array_merge(
+			$before,
+			array(
+				'date_created'      => '2026-09-05T19:14:31',
+				'date_created_gmt'  => '2026-09-05T19:14:31',
+				'date_modified'     => '2026-09-05T19:14:31',
+				'date_modified_gmt' => '2026-09-05T19:14:31',
+			)
+		);
+
+		$this->assertSame( Revision::compute_variation( $before ), Revision::compute_variation( $after ) );
+		$after['name'] = 'Shirts';
+		$this->assertNotSame( Revision::compute_variation( $before ), Revision::compute_variation( $after ) );
+	}
+
+	/**
 	 * Taxonomy lists without an id on every entry retain their order.
 	 */
 	public function test_idless_taxonomy_term_order_changes_revision(): void {

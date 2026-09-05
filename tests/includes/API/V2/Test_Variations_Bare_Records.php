@@ -179,6 +179,10 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			return $response;
 		};
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10, 3 );
+		$exclude_generated_dates = static function ( $fields ) {
+			return array_merge( $fields, array( 'date_created', 'date_created_gmt', 'date_modified', 'date_modified_gmt' ) );
+		};
+		add_filter( 'woocommerce_pos_sync_revision_excluded_fields', $exclude_generated_dates );
 		// Every serialization the lanes perform passes this hook last. Record each one's
 		// hashed form and request params, so a divergence between the lane's own canonical
 		// reads is diffed field by field instead of surfacing as two sha256 strings.
@@ -237,6 +241,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10 );
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $recorder, PHP_INT_MAX );
+			remove_filter( 'woocommerce_pos_sync_revision_excluded_fields', $exclude_generated_dates );
 		}
 	}
 
