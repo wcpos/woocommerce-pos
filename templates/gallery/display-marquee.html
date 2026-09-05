@@ -84,7 +84,7 @@ html,body{margin:0;min-height:100%}
   <aside class="wcpos-mq__brand">
     {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
     {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
-    {{#customer.id}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.id}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
     <div class="wcpos-mq__promo"><b>Edit me</b>Your promo copy or images go here — this is plain HTML in the template.</div>
   </aside>
   <div class="wcpos-mq__list">
@@ -100,8 +100,10 @@ html,body{margin:0;min-height:100%}
     {{#totals.total_qty}}
     <div class="wcpos-mq__totals">
       <div class="wcpos-mq__total-row"><span>{{i18n.subtotal}}</span><span class="wcpos-mq__money">{{totals.subtotal_display}}</span></div>
+      {{#fees}}<div class="wcpos-mq__total-row"><span>{{label}}</span><span class="wcpos-mq__money">{{total_display}}</span></div>{{/fees}}
+      {{#shipping}}<div class="wcpos-mq__total-row"><span>{{label}}</span><span class="wcpos-mq__money">{{total_display}}</span></div>{{/shipping}}
       {{#discounts}}<div class="wcpos-mq__total-row"><span>{{#label}}{{label}}{{/label}}{{^label}}{{i18n.discount}}{{/label}}</span><span class="wcpos-mq__money">-{{total_display}}</span></div>{{/discounts}}
-      <div class="wcpos-mq__total-row"><span>{{i18n.total_tax}}</span><span class="wcpos-mq__money">{{totals.tax_total_display}}</span></div>
+      {{#totals.tax_total}}<div class="wcpos-mq__total-row"><span>{{#tax.display_excl}}{{i18n.total_tax}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</span><span class="wcpos-mq__money">{{totals.tax_total_display}}</span></div>{{/totals.tax_total}}
       <div class="wcpos-mq__total-row wcpos-mq__grand"><span>{{i18n.total}}</span><span class="wcpos-mq__money">{{totals.total_incl_display}}</span></div>
       {{#totals.total_saved}}<div class="wcpos-mq__saved">{{i18n.you_saved}} {{totals.total_saved_display}}</div>{{/totals.total_saved}}
     </div>
@@ -113,7 +115,7 @@ html,body{margin:0;min-height:100%}
   <aside class="wcpos-mq__brand">
     {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
     {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
-    {{#customer.id}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.id}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
   </aside>
   <div class="wcpos-mq__list">
     <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
@@ -131,7 +133,7 @@ html,body{margin:0;min-height:100%}
   <aside class="wcpos-mq__brand">
     {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
     {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
-    {{#customer.id}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.id}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
   </aside>
   <div class="wcpos-mq__list">
     <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
@@ -149,7 +151,7 @@ html,body{margin:0;min-height:100%}
   <aside class="wcpos-mq__brand">
     {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
     {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
-    {{#customer.id}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.id}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
   </aside>
   <div class="wcpos-mq__list">
     <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
@@ -167,8 +169,7 @@ html,body{margin:0;min-height:100%}
   <aside class="wcpos-mq__brand">
     {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
     {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
-    {{#customer.id}}<div class="wcpos-mq__greeting">{{i18n.thank_you}}, {{customer.first_name}}!</div>{{/customer.id}}
-    {{^customer.id}}<div class="wcpos-mq__greeting">{{i18n.thank_you}}!</div>{{/customer.id}}
+    <div class="wcpos-mq__greeting">{{i18n.thank_you}}{{#customer.id}}{{#customer.first_name}}, {{customer.first_name}}{{/customer.first_name}}{{/customer.id}}!</div>
   </aside>
   <div class="wcpos-mq__list">
     <div class="wcpos-mq__caption">{{i18n.your_items}}</div>

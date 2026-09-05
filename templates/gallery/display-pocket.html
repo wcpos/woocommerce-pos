@@ -45,7 +45,7 @@ html,body{margin:0;min-height:100%;background:var(--pk-bg)}
 @media (prefers-reduced-motion:reduce){.wcpos-pocket__spinner,.wcpos-pocket__row.wcpos-line-new{animation:none}}
 /* Landscape phone: header goes left, list right. */
 @media (orientation:landscape) and (max-height:500px){
-  .wcpos-pocket{flex-direction:row}
+  .wcpos-pocket:not(.wcpos-pocket--pay):not(.wcpos-pocket--idle){flex-direction:row}
   .wcpos-pocket__head{width:44%;display:flex;flex-direction:column;justify-content:center;padding:20px}
   .wcpos-pocket__total{flex-direction:column;align-items:flex-start;gap:2px}
   .wcpos-pocket__foot{display:none}
@@ -62,7 +62,7 @@ html,body{margin:0;min-height:100%;background:var(--pk-bg)}
   <header class="wcpos-pocket__head">
     <div class="wcpos-pocket__store">{{store.name}}</div>
     <div class="wcpos-pocket__total"><span class="wcpos-pocket__total-label">{{i18n.total}}</span><span class="wcpos-pocket__total-amount">{{totals.total_incl_display}}</span></div>
-    {{#customer.id}}<div class="wcpos-pocket__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.id}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-pocket__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
   </header>
   {{#totals.total_qty}}
   <div class="wcpos-pocket__list">
@@ -71,7 +71,9 @@ html,body{margin:0;min-height:100%;background:var(--pk-bg)}
   <footer class="wcpos-pocket__foot">
     <span>{{i18n.subtotal}} {{totals.subtotal_display}}</span>
     {{#discounts}}<span>{{#label}}{{label}}{{/label}}{{^label}}{{i18n.discount}}{{/label}} &minus;{{total_display}}</span>{{/discounts}}
-    <span>{{i18n.total_tax}} {{totals.tax_total_display}}</span>
+    {{#fees}}<span>{{label}} {{total_display}}</span>{{/fees}}
+    {{#shipping}}<span>{{label}} {{total_display}}</span>{{/shipping}}
+    {{#totals.tax_total}}<span>{{#tax.display_excl}}{{i18n.total_tax}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}} {{totals.tax_total_display}}</span>{{/totals.tax_total}}
     {{#totals.total_saved}}<b>{{i18n.you_saved}} {{totals.total_saved_display}}</b>{{/totals.total_saved}}
   </footer>
   {{/totals.total_qty}}
@@ -105,5 +107,5 @@ html,body{margin:0;min-height:100%;background:var(--pk-bg)}
   <div class="wcpos-pocket__title">{{i18n.paid_in_full}}</div>
   <div class="wcpos-pocket__amount">{{totals.total_incl_display}}</div>
   {{#ledger.change_raw}}<div class="wcpos-pocket__split"><span>{{i18n.change}}</span><span>{{ledger.change}}</span></div>{{/ledger.change_raw}}
-  <div class="wcpos-pocket__msg">{{i18n.thank_you}}{{#customer.id}}, {{customer.first_name}}{{/customer.id}}</div>
+  <div class="wcpos-pocket__msg">{{i18n.thank_you}}{{#customer.id}}{{#customer.first_name}}, {{customer.first_name}}{{/customer.first_name}}{{/customer.id}}</div>
 </section>

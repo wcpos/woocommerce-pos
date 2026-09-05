@@ -49,6 +49,7 @@
     "customer": {
       "id": 42,
       "name": "Sarah Johnson",
+      "first_name": "Sarah",
       "billing_address": {
         "first_name": "Sarah",
         "last_name": "Johnson",
