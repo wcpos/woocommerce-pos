@@ -202,7 +202,10 @@ describe('gallery template assets', () => {
 	it('maps every bundled gallery template to a committed preview image', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 
-		expect(DISPLAY_KEYS.size, 'display templates are bundled, so the exemption is live').toBeGreaterThan(0);
+		expect(
+			DISPLAY_KEYS.size,
+			'display templates are bundled, so the exemption is live'
+		).toBeGreaterThan(0);
 		for (const key of PREVIEWED_KEYS) {
 			expect(fs.existsSync(path.join(previewDir, `${key}.webp`)), key).toBe(true);
 			expect(getGalleryPreviewSrc(key), key).toBe(
