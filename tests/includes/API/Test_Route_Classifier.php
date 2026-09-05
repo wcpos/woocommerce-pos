@@ -172,7 +172,11 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$built_classifications['rewrite_exempt']
 		);
 		$this->assertSame(
-			array( 'public', 'printer_token', 'admin_op', 'permission_error_passthrough', 'rewrite_exempt' ),
+			array( '/wcpos/v1/auth/', '/wcpos/v2/status', '/wcpos/v2/auth/' ),
+			$built_classifications['protocol_exempt']
+		);
+		$this->assertSame(
+			array( 'public', 'printer_token', 'admin_op', 'permission_error_passthrough', 'rewrite_exempt', 'protocol_exempt' ),
 			array_keys( $built_classifications )
 		);
 	}
@@ -193,6 +197,13 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $classifier->is_admin_op( '/WCPOS/V2/uuid/BACKFILL' ) );
 		$this->assertTrue( $classifier->is_permission_error_passthrough( '/WCPOS/v1/RECEIPTS/123' ) );
 		$this->assertTrue( $classifier->is_rewrite_exempt( '/WCPOS/V2/anything' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/AUTH/refresh' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/ECHO' ), 'public routes derive their exemption' );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/print-jobs/RELAY-VERIFICATION' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/print-jobs/cloudprnt/printer-1/token' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/STATUS/detail' ), 'an entry covers the routes below it' );
+		$this->assertFalse( $classifier->is_protocol_exempt( '/WCPOS/V2/status-report' ), 'but not a sibling sharing its name prefix' );
+		$this->assertFalse( $classifier->is_protocol_exempt( '/WCPOS/V2/products' ) );
 		$this->assertFalse( $classifier->in_wcpos_namespace( '/wc/v3/products' ) );
 	}
 

@@ -37,6 +37,15 @@ final class Status_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Declare the route's protocol-gate classification.
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array( 'protocol_exempt' => array( '/wcpos/v2/status' ) );
+	}
+
+	/**
 	 * Get the current sync store health.
 	 *
 	 * @param WP_REST_Request $request Request object.

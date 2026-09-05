@@ -10,8 +10,18 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Closure;
 use ReflectionFunction;
 use ReflectionMethod;
+use WCPOS\WooCommercePOS\API;
+use WCPOS\WooCommercePOS\API\Route_Classifier;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
+
+/** API subclass exposing the live route classifier to drift tests. */
+class Route_Classifier_Sync_Drift_Test_API extends API {
+	/** Get the classifier populated during route registration. */
+	public function get_route_classifier(): Route_Classifier {
+		return $this->route_classifier;
+	}
+}
 
 /**
  * Sync admin operation classification drift guard.
@@ -24,6 +34,14 @@ use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
  * directions, turning that silent drift into a red test.
  */
 class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
+	/** @var Route_Classifier_Sync_Drift_Test_API */
+	private $api;
+
+	/** Register a testable API instance. */
+	public function rest_api_init(): void {
+		$this->api = new Route_Classifier_Sync_Drift_Test_API();
+	}
+
 	/**
 	 * Initialize REST routes before classification checks.
 	 */
@@ -138,6 +156,62 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Every declared v2 protocol carve-out resolves to a live route.
+	 * DRIFT CAUGHT: stale protocol-gate and telemetry ownership metadata.
+	 * WHEN IT FIRES: update or remove the controller's `protocol_exempt` entry.
+	 */
+	public function test_protocol_exempt_routes_are_registered(): void {
+		// Arrange.
+		$routes = rest_get_server()->get_routes( 'wcpos/v2' );
+		// Act / Assert.
+		foreach ( $this->api->get_route_classifier()->routes( 'protocol_exempt' ) as $exempt_route ) {
+			if ( 0 !== strpos( $exempt_route, '/wcpos/v2/' ) ) {
+				continue;
+			}
+			if ( '/' !== substr( $exempt_route, -1 ) ) {
+				$this->assertArrayHasKey( $exempt_route, $routes, $exempt_route );
+				continue;
+			}
+
+			$matches = preg_grep( '#^' . preg_quote( $exempt_route, '#' ) . '#i', array_keys( $routes ) );
+			$this->assertNotEmpty( $matches, $exempt_route );
+		}
+	}
+
+	/**
+	 * Every public and printer-token v2 route is exempt from the protocol gate.
+	 *
+	 * Pins the derivation in `Route_Classifier::is_protocol_exempt()`: pre-login
+	 * connect probes and printer/relay callers never carry a client protocol
+	 * signal, so their exemption must follow from their existing classification
+	 * rather than from a second hand-maintained list.
+	 *
+	 * DRIFT CAUGHT: a refactor of `is_protocol_exempt()` that stops deriving
+	 * from `public` / `printer_token`, leaving a connect probe or a printer poll
+	 * refused with "update required".
+	 *
+	 * WHEN IT FIRES: restore the derivation — do not add the route to
+	 * `protocol_exempt` by hand.
+	 */
+	public function test_public_and_printer_token_v2_routes_are_protocol_exempt(): void {
+		// Arrange.
+		$classifier = $this->api->get_route_classifier();
+		$checked    = 0;
+		// Act / Assert.
+		foreach ( array( 'public', 'printer_token' ) as $group ) {
+			foreach ( $classifier->routes( $group ) as $route ) {
+				if ( 0 !== strpos( $route, '/wcpos/v2/' ) ) {
+					continue;
+				}
+				++$checked;
+				$this->assertTrue( $classifier->is_protocol_exempt( $route ), $group . ': ' . $route );
+			}
+		}
+
+		$this->assertGreaterThan( 0, $checked, 'No public or printer-token wcpos/v2 routes were classified — the guard would pass vacuously.' );
 	}
 
 	/**

@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Client_Signal;
+use WCPOS\WooCommercePOS\Services\Protocol_Gate;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -448,17 +449,23 @@ class API {
 			return $result;
 		}
 
+		// The protocol gate's scope (free#1752, #1868): the wcpos/v2 surface minus
+		// the classifier's carve-outs. Computed once — the telemetry below and the
+		// gate itself must agree on exactly which requests are in play.
+		$is_gated_v2_route = 0 === stripos( $request->get_route(), '/' . Sync\Api::ROUTE_NAMESPACE . '/' )
+			&& ! $this->route_classifier->is_protocol_exempt( $request->get_route() );
+
 		// Marker-gated on purpose (query var or header, NOT the rest_route arm,
 		// which matches this namespace by construction): every real POS client,
 		// old or new, carries the marker, while unmarked scanner traffic would
 		// otherwise inflate the `channel: none` tail this telemetry exists to
-		// measure (free#1752). The echo and auth lanes are excluded for the same
-		// reason: they are the gate's carve-outs, and a protocol-2 client's
-		// connect-time probes deliberately carry no signal — counting them would
-		// stamp every modern client with a daily false `none` row.
-		if ( 0 === stripos( $request->get_route(), '/wcpos/v2/' )
-			&& 1 !== preg_match( '#^/wcpos/v2/(?:echo$|auth(?:/|$))#i', $request->get_route() )
-			&& ( wcpos_request( 'query_var' ) || wcpos_request( 'header' ) ) ) {
+		// measure (free#1752). The protocol gate's carve-outs are excluded for the
+		// same reason: a protocol-2 client's connect-time probes deliberately carry
+		// no signal — counting them would stamp every modern client with a daily
+		// false `none` row. The gate owns the marker predicate too, so the
+		// telemetry counts exactly the requests the gate can refuse, including the
+		// refused tail it exists to watch.
+		if ( $is_gated_v2_route && Protocol_Gate::is_marked( $request ) ) {
 			try {
 				Client_Signal::record( $request );
 			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- Telemetry failures are deliberately ignored.
@@ -481,6 +488,20 @@ class API {
 		// OPTIONS with route metadata and Rest_Cors::rest_pre_serve_request adds the CORS headers.
 		if ( 'OPTIONS' === $request->get_method() ) {
 			return $result;
+		}
+
+		// The 1.11.0 protocol gate: a POS client whose protocol signal predates the
+		// boundary gets a deliberate "update required" refusal instead of bytes it
+		// cannot parse. It runs BEFORE the permission gate: authentication has
+		// already been attempted by this point, and a stale client's only
+		// actionable answer is "update" whatever its auth state — a 401 would send
+		// it into token recovery instead. `/auth/*` is a carve-out, so refresh and
+		// login still work for a client that is about to be told to update.
+		if ( $is_gated_v2_route ) {
+			$refusal = Protocol_Gate::refusal( $request );
+			if ( null !== $refusal ) {
+				return $refusal;
+			}
 		}
 
 		// Baseline permission gate: POS endpoints require access_woocommerce_pos; the three
