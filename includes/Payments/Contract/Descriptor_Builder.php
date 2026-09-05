@@ -150,9 +150,13 @@ class Descriptor_Builder {
 	private function build( WC_Payment_Gateway $gateway, array $settings ): array {
 		$gateway_settings = (array) ( $settings['gateways'][ $gateway->id ] ?? array() );
 		$kind             = self::resolve_kind( $gateway );
-		$mode             = self::resolve_mode( $gateway );
+		// The filter may answer with a provider-scoped key (`device:stripe`); the
+		// wire mode stays bare and the provider only steers the handler lookup.
+		$mode_key         = self::resolve_mode( $gateway );
+		$mode_parts       = explode( ':', $mode_key, 2 );
+		$mode             = $mode_parts[0];
 		$registry         = Capture_Mode_Registry::instance();
-		$handler          = $registry->get( $mode );
+		$handler          = $registry->resolve( $mode, $mode_parts[1] ?? null );
 		if ( ! $handler ) {
 			if ( empty( self::$logged_missing_modes[ $mode ] ) ) {
 				Logger::log( sprintf( 'No WCPOS capture-mode handler registered for "%s"; using webview.', $mode ) );

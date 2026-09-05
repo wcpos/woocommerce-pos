@@ -221,13 +221,19 @@ if ( ! \function_exists( 'wcpos_register_capture_mode' ) ) {
 	/**
 	 * Register a payment capture-mode handler.
 	 *
+	 * The key is a bare mode for a mode one plugin owns (`'server'`), or
+	 * provider-scoped for a mode several providers share (`'device:stripe'`,
+	 * `'device:square'`). The `wcpos_payment_method_capture_mode` filter may
+	 * return the scoped key for a gateway; the descriptor still advertises the
+	 * bare mode.
+	 *
 	 * @since 1.11.0
 	 *
-	 * @param string $mode          Capture mode identifier.
+	 * @param string $key           Capture mode, or `<mode>:<provider>`.
 	 * @param string $handler_class Handler class name.
 	 */
-	function wcpos_register_capture_mode( string $mode, string $handler_class ): void { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
-		Capture_Mode_Registry::instance()->register( $mode, $handler_class );
+	function wcpos_register_capture_mode( string $key, string $handler_class ): void { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		Capture_Mode_Registry::instance()->register( $key, $handler_class );
 	}
 }
 

@@ -314,7 +314,7 @@ class Ledger {
 		if ( ! $row ) {
 			return $this->not_found();
 		}
-		$handler = Capture_Mode_Registry::instance()->get( (string) ( $row['capture_mode'] ?? '' ) );
+		$handler = Capture_Mode_Registry::instance()->resolve( (string) ( $row['capture_mode'] ?? '' ), isset( $row['provider'] ) ? (string) $row['provider'] : null );
 		if ( ! $handler ) {
 			return $this->unsupported();
 		}
@@ -352,7 +352,7 @@ class Ledger {
 		if ( ! $this->is_voidable( $row, $order ) ) {
 			return $this->invalid_transition();
 		}
-		$handler = Capture_Mode_Registry::instance()->get( (string) ( $row['capture_mode'] ?? '' ) );
+		$handler = Capture_Mode_Registry::instance()->resolve( (string) ( $row['capture_mode'] ?? '' ), isset( $row['provider'] ) ? (string) $row['provider'] : null );
 		if ( ! $handler ) {
 			return $this->unsupported();
 		}
