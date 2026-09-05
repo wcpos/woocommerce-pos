@@ -658,22 +658,56 @@ final class Integrity_Digest {
 		);
 	}
 
+	/**
+	 * MySQL/MariaDB error numbers a second attempt can clear: 1020 ER_CHECKREAD
+	 * ("Record has changed since last read"), 1205 ER_LOCK_WAIT_TIMEOUT, 1213
+	 * ER_LOCK_DEADLOCK. Two requests upserting the same digest row race on
+	 * the `INSERT … ON DUPLICATE KEY UPDATE`; the retry reads the updated row.
+	 */
+	private const TRANSIENT_CONTENTION_ERRNOS = array( 1020, 1205, 1213 );
+
+	/**
+	 * Message fallback for the same three errors, used only when the driver's
+	 * error number is unavailable (a wpdb without a live mysqli handle).
+	 */
+	private const TRANSIENT_CONTENTION_MESSAGES = array(
+		'Record has changed since last read',
+		'Lock wait timeout',
+		'Deadlock found',
+	);
+
 	/** Retry a contended upsert once, including both attempts in the hook timing. */
 	private function query_with_retry( string $sql, string $error_message, float $started ): void {
 		global $wpdb;
 		$result = $wpdb->query( $sql );
-		if ( false === $result ) {
-			foreach ( array( 'Record has changed since last read', 'Deadlock found', 'Lock wait timeout' ) as $error ) {
-				if ( false !== strpos( $wpdb->last_error, $error ) ) {
-					$result = $wpdb->query( $sql );
-					break;
-				}
-			}
+		if ( false === $result && $this->is_transient_contention( $wpdb ) ) {
+			$result = $wpdb->query( $sql );
 		}
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
 			throw new RuntimeException( $error_message . $wpdb->last_error );
 		}
+	}
+
+	/**
+	 * The error number is authoritative: server messages are localised
+	 * (`lc_messages`), so the English text is only a fallback for a handle-less
+	 * wpdb. `$wpdb->dbh` is reachable through wpdb's magic getter.
+	 */
+	private function is_transient_contention( \wpdb $wpdb ): bool {
+		$dbh = $wpdb->dbh;
+		if ( $dbh instanceof \mysqli ) {
+			$errno = mysqli_errno( $dbh ); // phpcs:ignore WordPress.DB.RestrictedFunctions -- reads the driver's last error number; no query is issued.
+			if ( 0 !== $errno ) {
+				return in_array( $errno, self::TRANSIENT_CONTENTION_ERRNOS, true );
+			}
+		}
+		foreach ( self::TRANSIENT_CONTENTION_MESSAGES as $message ) {
+			if ( false !== strpos( $wpdb->last_error, $message ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
