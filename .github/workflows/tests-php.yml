@@ -9,6 +9,9 @@ on:
       - "**.php"
       - "composer.json"
       - "composer.lock"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "patches/**"
       - ".github/test-matrix.json"
       - ".github/scripts/generate-matrix.sh"
       - ".github/scripts/get-woocommerce-stable-version.sh"
@@ -60,6 +63,13 @@ jobs:
               - '**.php'
               - 'composer.json'
               - 'composer.lock'
+              # The node manifest decides which @wordpress/env builds the test
+              # containers, and patches/ can rewrite it in place — both change what
+              # the PHP suite runs on. pnpm-lock.yaml is gitignored (CI resolves
+              # fresh), so it cannot be a trigger.
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - '.github/test-matrix.json'
               - '.github/scripts/generate-matrix.sh'
               - '.github/scripts/get-woocommerce-stable-version.sh'

@@ -18,3 +18,11 @@ overrides:
   "@asamuzakjp/css-color>lru-cache": "11.2.5"
   "@asamuzakjp/dom-selector>lru-cache": "11.2.5"
   "@asamuzakjp/nwsapi>lru-cache": "11.2.5"
+# @wordpress/env 11.14.0 cannot build the PHP 7.4 (Debian bullseye) images since
+# Debian 11 left the mirrors on 2026-08-31. The patch carries the upstream fix
+# (WordPress/gutenberg#82478, merged 2026-09-05, unreleased). Keyed to the exact
+# version CI resolves; allowUnusedPatches lets a later release that ships the fix
+# install without it. Delete both once @wordpress/env resolves past 11.14.0.
+patchedDependencies:
+  '@wordpress/env@11.14.0': patches/@wordpress__env@11.14.0.patch
+allowUnusedPatches: true
