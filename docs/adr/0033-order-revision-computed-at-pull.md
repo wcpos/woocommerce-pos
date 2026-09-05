@@ -1,5 +1,5 @@
 ---
-status: accepted — compute-at-pull landed (free#1745 landed the retirement; free#1746 landed compute-at-pull; the schema-scoped recipe rides the 1.11.0 gate)
+status: implemented — compute-at-pull landed (free#1745 landed the retirement; free#1746 landed compute-at-pull), and the schema-scoped recipe with its generated-date exclusion landed on `next` for 1.11.0 behind the protocol gate (free#1870)
 ---
 
 # Order revision: content hash, computed at pull time, never stored

@@ -120,15 +120,20 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'custom-pull', $document['sync']['source'] );
 		$this->assertFalse( $document['local']['dirty'] );
 
-		// F8 journal metadata surfaces on every batch.
-		$this->assertIsString( $data['epoch'] );
-		$this->assertNotSame( '', $data['epoch'] );
-		$this->assertGreaterThanOrEqual( 1, $data['head'] );
-		$this->assertSame( 0, $data['horizon'] );
+		// F8 journal metadata surfaces on every batch, inside the ONE checkpoint.
+		$this->assertIsString( $data['checkpoint']['epoch'] );
+		$this->assertNotSame( '', $data['checkpoint']['epoch'] );
+		$this->assertGreaterThanOrEqual( 1, $data['checkpoint']['head'] );
+		$this->assertSame( 0, $data['checkpoint']['horizon'] );
 		$this->assertSame(
-			array( 'documents', 'deletes', 'checkpoint', 'hasMore', 'epoch', 'head', 'horizon' ),
+			array( 'documents', 'deletes', 'checkpoint', 'complete' ),
 			array_keys( $data )
 		);
+		$this->assertSame(
+			array( 'updatedAtGmt', 'orderId', 'revision', 'sequence', 'epoch', 'head', 'horizon' ),
+			array_keys( $data['checkpoint'] )
+		);
+		$this->assertArrayNotHasKey( 'hasMore', $data );
 		$this->assertSame( $order->get_id(), $data['checkpoint']['orderId'] );
 	}
 
@@ -191,8 +196,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
 
-		$this->assertSame( $journal->prune_watermark( array( 'order' ) ), $data['horizon'] );
-		$this->assertSame( $tombstone_sequence, $data['horizon'] );
+		$this->assertSame( $journal->prune_watermark( array( 'order' ) ), $data['checkpoint']['horizon'] );
+		$this->assertSame( $tombstone_sequence, $data['checkpoint']['horizon'] );
 	}
 
 	/**
@@ -215,7 +220,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
 
 		// Assert.
-		$this->assertSame( 0, $data['horizon'] );
+		$this->assertSame( 0, $data['checkpoint']['horizon'] );
 		$this->assertSame( $catalogue_tombstone, $journal->prune_watermark( array( 'product' ) ) );
 	}
 
@@ -233,8 +238,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 		$data = ( new Orders_Controller() )->pull_orders( $this->request() )->get_data();
 
-		$this->assertSame( $order_head, $data['head'] );
-		$this->assertGreaterThan( $data['head'], $journal->head_sequence() );
+		$this->assertSame( $order_head, $data['checkpoint']['head'] );
+		$this->assertGreaterThan( $data['checkpoint']['head'], $journal->head_sequence() );
 	}
 
 	/**
@@ -473,7 +478,7 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array(), $data['documents'] );
 		$this->assertSame( array(), $data['deletes'] );
 		$this->assertSame( $page_sequence, $data['checkpoint']['sequence'] );
-		$this->assertTrue( $data['hasMore'] );
+		$this->assertFalse( $data['complete'] );
 	}
 
 	/**
@@ -536,8 +541,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 				'sequence' => $data['checkpoint']['sequence'],
 			);
 
-			$this->assertSame( count( $received_order_ids ) < $order_count, $data['hasMore'] );
-		} while ( $data['hasMore'] );
+			$this->assertSame( count( $received_order_ids ) >= $order_count, $data['complete'] );
+		} while ( ! $data['complete'] );
 
 		$this->assertCount( $order_count, array_unique( $received_order_ids ) );
 		$this->assertSame( $expected_order_ids, $received_order_ids );
