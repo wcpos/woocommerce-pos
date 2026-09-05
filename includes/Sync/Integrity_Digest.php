@@ -695,7 +695,7 @@ final class Integrity_Digest {
 	 * wpdb. `$wpdb->dbh` is reachable through wpdb's magic getter.
 	 */
 	private function is_transient_contention( \wpdb $wpdb ): bool {
-		$dbh = $wpdb->dbh;
+		$dbh = $wpdb->__get( 'dbh' );
 		if ( $dbh instanceof \mysqli ) {
 			$errno = mysqli_errno( $dbh ); // phpcs:ignore WordPress.DB.RestrictedFunctions -- reads the driver's last error number; no query is issued.
 			if ( 0 !== $errno ) {
