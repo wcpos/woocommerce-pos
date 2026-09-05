@@ -262,6 +262,9 @@ class Test_Templates extends WP_UnitTestCase {
 	 * grayscales it), and coloured fills must be near-white 50-tints that use
 	 * negligible toner. Any other chromatic value fails this test and needs a
 	 * deliberate palette decision, not an ad-hoc colour.
+	 *
+	 * Display-type gallery templates are screens, never printed, so they are
+	 * exempt: a customer display carries the brand accent and a dark idle state.
 	 */
 	public function test_gallery_html_templates_use_print_safe_palette(): void {
 		$neutral_ink = array(
@@ -319,7 +322,14 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertNotFalse( $templates );
 		$this->assertNotEmpty( $templates );
 
+		$registry = \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all();
+
 		foreach ( $templates as $template ) {
+			$key = pathinfo( $template, PATHINFO_FILENAME );
+			if ( 'display' === ( $registry[ $key ]['type'] ?? '' ) ) {
+				continue;
+			}
+
 			$content = file_get_contents( $template );
 			$label   = basename( $template );
 
@@ -1125,14 +1135,19 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test every gallery preview_data profile has a matching JSON fixture.
+	 * Test every non-null gallery preview_data profile has a matching JSON fixture.
 	 */
 	public function test_gallery_template_preview_data_profiles_have_fixture_files(): void {
 		$templates = Templates::get_gallery_templates();
 		$this->assertNotEmpty( $templates, 'Expected at least one gallery template.' );
 
 		foreach ( $templates as $template ) {
-			$profile = $template['preview_data'] ?? '';
+			$this->assertArrayHasKey( 'preview_data', $template );
+			$profile = $template['preview_data'];
+			if ( null === $profile ) {
+				continue;
+			}
+			$this->assertIsString( $profile );
 			$this->assertNotEmpty( $profile, $template['key'] . ' should declare preview_data.' );
 			$this->assertFileExists(
 				\WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/preview-data/' . $profile . '.json',

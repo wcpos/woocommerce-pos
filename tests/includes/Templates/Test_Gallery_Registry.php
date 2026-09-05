@@ -22,6 +22,8 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 	 */
 	private const EXPECTED_KEYS = array(
 		'detailed-receipt',
+		'display-marquee',
+		'display-pocket',
 		'gift-receipt',
 		'invoice',
 		'minimal-receipt',
@@ -65,6 +67,10 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 			$this->assertIsString( $entry['description'], "{$key} description must be a string" );
 			$this->assertNotEmpty( $entry['title'], "{$key} title must not be empty" );
 			$this->assertNotEmpty( $entry['description'], "{$key} description must not be empty" );
+			$this->assertTrue(
+				null === $entry['preview_data'] || is_string( $entry['preview_data'] ),
+				"{$key} preview_data must be a string or null"
+			);
 		}
 	}
 

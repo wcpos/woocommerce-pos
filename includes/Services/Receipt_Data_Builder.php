@@ -124,6 +124,7 @@ class Receipt_Data_Builder {
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
 			'name'             => $customer_name,
+			'first_name'       => (string) $order->get_billing_first_name(),
 			'billing_address'  => $order->get_address( 'billing' ),
 			'shipping_address' => $order->get_address( 'shipping' ),
 			// Structured TaxId[] — read fallback across the legacy meta-key inventory.

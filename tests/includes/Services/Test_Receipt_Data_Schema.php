@@ -513,6 +513,17 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Customer first names are available in the editor and canonical JSON schema.
+	 */
+	public function test_customer_first_name_is_exposed_as_string(): void {
+		$tree   = Receipt_Data_Schema::get_field_tree();
+		$schema = Receipt_Data_Schema::get_json_schema();
+
+		$this->assertSame( 'string', $tree['customer']['fields']['first_name']['type'] );
+		$this->assertSame( 'string', $schema['properties']['customer']['properties']['first_name']['type'] );
+	}
+
+	/**
 	 * Test get_field_tree excludes presentation_hints.
 	 */
 	public function test_get_field_tree_excludes_presentation_hints(): void {

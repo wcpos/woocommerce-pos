@@ -341,7 +341,14 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$html_files  = glob( $gallery_dir . '*.html' );
 		$this->assertNotEmpty( $html_files, 'Gallery should contain at least one HTML template.' );
 
+		$registry = \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all();
+
 		foreach ( $html_files as $path ) {
+			// Display-type templates are screens, never printed.
+			if ( 'display' === ( $registry[ pathinfo( $path, PATHINFO_FILENAME ) ]['type'] ?? '' ) ) {
+				continue;
+			}
+
 			$template = array(
 				'content' => file_get_contents( $path ),
 			);

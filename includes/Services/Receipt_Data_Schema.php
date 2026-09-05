@@ -457,6 +457,13 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer Name', 'woocommerce-pos' ),
 					),
+					'first_name'       => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __(
+							'Customer First Name',
+							'woocommerce-pos'
+						),
+					),
 					'billing_address'  => array(
 						'type'  => 'object',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Billing Address', 'woocommerce-pos' ),
