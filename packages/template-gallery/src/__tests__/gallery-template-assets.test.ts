@@ -27,6 +27,16 @@ const THERMAL_58MM_KEYS = new Set(['thermal-simple-58mm', 'thermal-detailed-58mm
 // All thermal templates (need a preview WebP sized to 58mm or 80mm).
 const THERMAL_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsWith('thermal-')));
 
+// Customer-display templates (`display-*`, PR #1882) are screens, not paper: the
+// preview generator only renders receipt payloads, so they ship without a gallery
+// preview until the Display tab lands them (wcpos/roadmap#157). The two print-only
+// gallery tests already skip display-type entries via the registry; the preview
+// pins do the same here. Remove this set when the display previews are committed.
+const DISPLAY_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsWith('display-')));
+
+// Templates that must ship a committed preview image today.
+const PREVIEWED_KEYS = getBundledGalleryKeys().filter((key) => !DISPLAY_KEYS.has(key));
+
 function findContentFile(key: string): string | null {
 	for (const ext of ['html', 'xml', 'php']) {
 		const candidate = path.join(galleryDir, `${key}.${ext}`);
@@ -192,7 +202,11 @@ describe('gallery template assets', () => {
 	it('maps every bundled gallery template to a committed preview image', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 
-		for (const key of getBundledGalleryKeys()) {
+		expect(
+			DISPLAY_KEYS.size,
+			'display templates are bundled, so the exemption is live'
+		).toBeGreaterThan(0);
+		for (const key of PREVIEWED_KEYS) {
 			expect(fs.existsSync(path.join(previewDir, `${key}.webp`)), key).toBe(true);
 			expect(getGalleryPreviewSrc(key), key).toBe(
 				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.webp`
@@ -201,7 +215,7 @@ describe('gallery template assets', () => {
 	});
 
 	it('ships high-resolution preview source images for clean browser downscaling', () => {
-		for (const key of getBundledGalleryKeys()) {
+		for (const key of PREVIEWED_KEYS) {
 			const expectedWidth = THERMAL_KEYS.has(key)
 				? (THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR
 				: A4_PREVIEW_CSS_WIDTH * PREVIEW_DEVICE_SCALE_FACTOR;
