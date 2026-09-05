@@ -380,6 +380,7 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           retry_wait_seconds: 10
+          on_retry_command: docker buildx prune --all --force
           command: pnpm run wp-env start
 
       - name: Check versions
@@ -551,6 +552,7 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           retry_wait_seconds: 10
+          on_retry_command: docker buildx prune --all --force
           command: pnpm run wp-env start
 
       - name: Check versions
@@ -670,6 +672,7 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           retry_wait_seconds: 10
+          on_retry_command: docker buildx prune --all --force
           command: pnpm run wp-env start --xdebug=coverage
 
       - name: Check coverage environment

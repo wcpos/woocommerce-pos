@@ -462,6 +462,59 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '', (string) $line->get_meta( '_sku', true ) );
 	}
 
+	/**
+	 * A removed VARIATION line is removed. The client tombstones a settled line by
+	 * re-posting the full line with `product_id: null` — acked `variation_id`, `sku`
+	 * and meta still on it. That shape read as an unchanged variation binding to the
+	 * identity dedupe, which dropped `product_id` from the forward, so wc/v3 never saw
+	 * its remove-this-line marker and the variation came back on every save (1.10.0+).
+	 */
+	public function test_removed_variation_line_posted_in_full_is_removed(): void {
+		$variable  = ProductHelper::create_variation_product();
+		$variation = wc_get_product( $variable->get_children()[0] );
+
+		$created = $this->push_envelope(
+			'create',
+			array(
+				'status'     => 'processing',
+				'line_items' => array(
+					array(
+						'product_id'   => $variable->get_id(),
+						'variation_id' => $variation->get_id(),
+						'quantity'     => 1,
+						'meta_data'    => array(
+							array(
+								'key'   => '_woocommerce_pos_uuid',
+								'value' => self::LINE_UUID,
+							),
+						),
+					),
+				),
+				'meta_data'  => $this->order_meta(),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$order_id = (int) $created->get_data()['document']['id'];
+		$acked    = $created->get_data()['document']['line_items'][0];
+		$this->assertSame( $variation->get_id(), (int) $acked['variation_id'] );
+
+		// The client's tombstone: the acked line, verbatim, with product_id nulled.
+		$tombstone               = $acked;
+		$tombstone['product_id'] = null;
+
+		$removed = $this->push_envelope(
+			'update',
+			array(
+				'line_items' => array( $tombstone ),
+				'meta_data'  => $this->order_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+		$this->assertSame( 200, $removed->get_status() );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
+		$this->assertCount( 0, $removed->get_data()['document']['line_items'] );
+	}
+
 	public function test_misc_line_survives_a_quantity_update_and_null_as_delete_still_works(): void {
 		$created = $this->push_envelope(
 			'create',
