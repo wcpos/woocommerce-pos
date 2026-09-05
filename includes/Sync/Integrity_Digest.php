@@ -613,7 +613,7 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * One round trip: the digest is computed in SQL from the raw row and
+	 * One statement: the digest is computed in SQL from the raw row and
 	 * upserted in the same statement — PHP never materializes the value.
 	 * No-op for rows outside the live predicate (the delete hook owns those).
 	 */
@@ -623,19 +623,17 @@ final class Integrity_Digest {
 		// (the raise runs inside the save hook — codex P3).
 		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
-		$result = $wpdb->query(
+		$this->query_with_retry(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 				. ' FROM (' . $this->index->row_digest_select_sql( 'p.ID = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$post_id
-			)
+			),
+			'upsert stored digest failed: ',
+			$started
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
-		if ( false === $result ) {
-			throw new RuntimeException( 'upsert stored digest failed: ' . $wpdb->last_error );
-		}
 	}
 
 	/**
@@ -647,18 +645,34 @@ final class Integrity_Digest {
 		global $wpdb;
 		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
-		$result = $wpdb->query(
+		$this->query_with_retry(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 				. ' FROM (' . $this->index->customer_digest_select_sql( 'u.ID = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$user_id
-			)
+			),
+			'upsert stored customer digest failed: ',
+			$started
 		);
+	}
+
+	/** Retry a contended upsert once, including both attempts in the hook timing. */
+	private function query_with_retry( string $sql, string $error_message, float $started ): void {
+		global $wpdb;
+		$result = $wpdb->query( $sql );
+		if ( false === $result ) {
+			foreach ( array( 'Record has changed since last read', 'Deadlock found', 'Lock wait timeout' ) as $error ) {
+				if ( false !== strpos( $wpdb->last_error, $error ) ) {
+					$result = $wpdb->query( $sql );
+					break;
+				}
+			}
+		}
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
-			throw new RuntimeException( 'upsert stored customer digest failed: ' . $wpdb->last_error );
+			throw new RuntimeException( $error_message . $wpdb->last_error );
 		}
 	}
 
