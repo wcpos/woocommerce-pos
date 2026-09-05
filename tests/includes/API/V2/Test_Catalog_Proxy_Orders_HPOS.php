@@ -29,6 +29,9 @@ class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	/**
 	 * Enable sync routes, HPOS, and create HPOS-backed fixtures.
+	 *
+	 * The order payload pins read through the production sync read lane — see
+	 * {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()}.
 	 */
 	public function setUp(): void {
 		parent::setUp();
@@ -36,6 +39,7 @@ class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
 		$this->toggle_cot_feature_and_usage( true );
+		$this->install_sync_read_lane();
 		$this->create_order_search_fixtures();
 	}
 
@@ -48,5 +52,6 @@ class Test_Catalog_Proxy_Orders_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 
 		parent::tearDown();
+		$this->uninstall_sync_read_lane();
 	}
 }

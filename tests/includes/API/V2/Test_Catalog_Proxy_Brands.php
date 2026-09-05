@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Ramsey\Uuid\Uuid;
 use WC_REST_Product_Brands_Controller;
-use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
+use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
@@ -26,14 +26,16 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 			$this->markTestSkipped( 'WooCommerce product brand taxonomy or REST controller is unavailable in this test environment.' );
 		}
 
-		Proxy_Uuid_Stamper::register_proxy_stampers();
+		// The identity stamper alone is not the lane a client reads through — see
+		// {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()}.
+		$this->install_sync_read_lane();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 	}
 
 	/** Remove sync state written outside the test transaction. */
 	public function tearDown(): void {
 		parent::tearDown();
-		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		$this->uninstall_sync_read_lane();
 	}
 
 	/**
@@ -107,19 +109,33 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertCount( 1, $rows );
 		/*
-		 * `meta_data` is the one key WCPOS adds, and it is load-bearing rather than
-		 * cosmetic: wc/v3 serves no meta on a term at all, so `Sync\Proxy_Uuid_Stamper`
-		 * injects the record's `_woocommerce_pos_uuid` here. Without it the uuid-native
-		 * client has no primary key for the row and throws. `_links` is appended by
+		 * `meta_data` is the one BUSINESS key WCPOS adds, and it is load-bearing
+		 * rather than cosmetic: wc/v3 serves no meta on a term at all, so
+		 * `Sync\Proxy_Uuid_Stamper` injects the record's `_woocommerce_pos_uuid`
+		 * here. Without it the uuid-native client has no primary key for the row
+		 * and throws. `_rxdb_revision` is transport metadata, stamped on every
+		 * proxied record by `Sync\Revision` at priority 9 (wired by
+		 * `Sync\Augmentation_Pipeline::install()`, as `Init::__construct()` does in
+		 * production). `_links` is appended by
 		 * `rest_get_server()->response_to_data()`, not by the schema.
 		 */
 		$this->assertEqualsCanonicalizing(
 			array_merge(
 				$this->view_context_fields( ( new WC_REST_Product_Brands_Controller() )->get_public_item_schema()['properties'] ),
-				array( 'meta_data', '_links' )
+				array( 'meta_data', '_rxdb_revision', '_links' )
 			),
 			array_keys( $rows[0] )
 		);
+		/*
+		 * Named rather than left to the set difference above: `_rxdb_digest` is
+		 * absent from this lane STRUCTURALLY, not because the fixture happens to
+		 * carry no stored digest. The brands registry row declares no digest group,
+		 * so `Integrity_Digest::stamp_digests()` returns the payload untouched
+		 * however full the digest index is — asserted from the registry so a row
+		 * gaining a group can never leave this claim quietly stale.
+		 */
+		$this->assertNull( Collections::row( 'brands' )['digest'] );
+		$this->assertArrayNotHasKey( '_rxdb_digest', $rows[0] );
 	}
 
 	/**

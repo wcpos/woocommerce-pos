@@ -5,6 +5,11 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
+use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
 use WP_User;
 
@@ -160,6 +165,48 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 				}
 			)
 		);
+	}
+
+	/**
+	 * Wire the sync read lane a deployed client actually reads through.
+	 *
+	 * Production installs this on EVERY request: `Init::__construct()` registers
+	 * `Meta_Normalizer` at priority 5 and calls `Sync\Augmentation_Pipeline::install()`
+	 * behind the schema latch. The phpunit run never gets there. `Init` is
+	 * constructed on `plugins_loaded`, and on the suite's only boot the latch is
+	 * still unset at that moment — `Activator::version_check()` defers the schema
+	 * install to `woocommerce_init`, which fires later. So `Init` reads an unset
+	 * latch, skips the whole read lane, and every proxy read in the suite is served
+	 * WITHOUT the revision and digest stamps. On a real site the NEXT request finds
+	 * the latch written and wires everything; a one-boot process never gets that
+	 * second request, which is what makes the gap invisible — the latch reads
+	 * healthy by the time a test body runs, so nothing looks disabled.
+	 *
+	 * A payload pin that runs without this asserts a row shape nobody receives,
+	 * and — the inverted signal this whole family exists to stop (#1712, #1717) —
+	 * would go RED the day the production wiring were restored.
+	 *
+	 * Call from `setUp()`, and {@see uninstall_sync_read_lane()} from `tearDown()`.
+	 */
+	protected function install_sync_read_lane(): void {
+		Meta_Normalizer::register_hooks();
+		Augmentation_Pipeline::install();
+	}
+
+	/**
+	 * Unwind every filter {@see install_sync_read_lane()} put up.
+	 *
+	 * `Augmentation_Pipeline::reset()` removes only the PROJECTIONS the pipeline
+	 * installed; the three batch-lane stampers it wires keep their own
+	 * `unregister_*` seams and have to be unwound by name, or they leak into every
+	 * test that runs after this one.
+	 */
+	protected function uninstall_sync_read_lane(): void {
+		Augmentation_Pipeline::reset();
+		Revision::unregister_proxy_stamps();
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		Integrity_Digest::unregister_proxy_digest_stampers();
+		Meta_Normalizer::unregister_hooks();
 	}
 
 	protected function setup_decimal_quantity_tests(): void {

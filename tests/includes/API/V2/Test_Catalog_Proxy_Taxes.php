@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
@@ -20,6 +21,10 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 
+		// Tax rates carry no POS identity, but they ARE a proxy resource, so the
+		// revision stamper reaches them like every other lane — see
+		// {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()}.
+		$this->install_sync_read_lane();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 	}
 
@@ -28,6 +33,7 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
+		$this->uninstall_sync_read_lane();
 	}
 
 	/**
@@ -63,6 +69,17 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotFalse( $row );
+		/*
+		 * `_rxdb_revision` is transport metadata, not a tax-rate field: `Sync\Revision`
+		 * stamps it at priority 9 onto every record whose proxy slug the registry
+		 * resolves. Tax rates carry no POS identity — their registry row declares no
+		 * `identity` group, so no uuid rides `meta_data` and wc/v3 serves no meta on a
+		 * rate at all — but they ARE a proxy resource, so the revision reaches them
+		 * like every other lane (wired by `Sync\Augmentation_Pipeline::install()`, as
+		 * `Init::__construct()` does in production). It was missing from this list
+		 * while the test ran without the production read lane, which made the pin
+		 * assert a row shape no deployed client receives (#1717).
+		 */
 		$this->assertEqualsCanonicalizing(
 			array(
 				'id',
@@ -79,10 +96,20 @@ class Test_Catalog_Proxy_Taxes extends WCPOS_REST_Unit_Test_Case {
 				'shipping',
 				'order',
 				'class',
+				'_rxdb_revision',
 				'_links',
 			),
 			array_keys( $row )
 		);
+		/*
+		 * Named rather than left to the set difference above: `_rxdb_digest` is
+		 * absent from this lane STRUCTURALLY. The tax_rates registry row declares no
+		 * digest group, so `Integrity_Digest::stamp_digests()` returns the payload
+		 * untouched however full the digest index is — asserted from the registry
+		 * so a row gaining a group can never leave this claim quietly stale.
+		 */
+		$this->assertNull( Collections::row( 'tax_rates' )['digest'] );
+		$this->assertArrayNotHasKey( '_rxdb_digest', $row );
 		$this->assertSame( $tax_id, $row['id'] );
 		$this->assertSame( 'NY Tax', $row['name'] );
 	}
