@@ -185,7 +185,10 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'wcpos' => 'false' ) );
 		// Act.
 		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
 		// Assert.
+		$code = \is_array( $data ) ? ( $data['code'] ?? null ) : null;
+		$this->assertNotSame( 'rest_no_route', $code );
 		$this->assertNotSame( 426, $response->get_status() );
 	}
 
@@ -222,7 +225,10 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$response = rest_get_server()->dispatch( $request );
 		$v2_response = rest_get_server()->dispatch( $v2_request );
+		$data        = $response->get_data();
 		// Assert.
+		$code = \is_array( $data ) ? ( $data['code'] ?? null ) : null;
+		$this->assertNotSame( 'rest_no_route', $code );
 		$this->assertNotSame( 426, $response->get_status() );
 		$this->assertSame( 426, $v2_response->get_status() );
 	}
