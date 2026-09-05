@@ -248,6 +248,10 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 	public function test_gate_refusal_still_records_client_signal_none(): void {
 		// Arrange.
 		$captures       = array();
+
+		$previous_settings = get_option( 'woocommerce_pos_settings_general', null );
+		$previous_uuid     = get_user_meta( $this->user, '_woocommerce_pos_uuid', true );
+
 		$intercept_http = static function ( $preempt, $parsed_args ) use ( &$captures ) {
 			$captures[] = json_decode( $parsed_args['body'], true );
 			return array(
@@ -271,6 +275,16 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->dispatch_product_request();
 		} finally {
 			remove_filter( 'pre_http_request', $intercept_http, 10 );
+			if ( null === $previous_settings ) {
+				delete_option( 'woocommerce_pos_settings_general' );
+			} else {
+				update_option( 'woocommerce_pos_settings_general', $previous_settings );
+			}
+			if ( '' === $previous_uuid ) {
+				delete_user_meta( $this->user, '_woocommerce_pos_uuid' );
+			} else {
+				update_user_meta( $this->user, '_woocommerce_pos_uuid', $previous_uuid );
+			}
 			Analytics::reset_instance();
 		}
 		// Assert.
@@ -278,6 +292,8 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $captures );
 		$this->assertSame( 'pos_client_signal', $captures[0]['event'] );
 		$this->assertSame( 'none', $captures[0]['properties']['channel'] );
+		$this->assertSame( $previous_settings, get_option( 'woocommerce_pos_settings_general', null ) );
+		$this->assertSame( $previous_uuid, get_user_meta( $this->user, '_woocommerce_pos_uuid', true ) );
 	}
 
 	/**
