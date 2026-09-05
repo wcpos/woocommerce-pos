@@ -440,7 +440,7 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A removed variation line keeps its wc/v3 deletion marker. The POS tombstones
+	 * A removed variation line keeps its wc/v3 deletion marker. The WCPOS client tombstones
 	 * a settled line by posting the FULL line with `product_id: null`, so the acked
 	 * `variation_id` (and sku) still ride along and the line reads as an unchanged
 	 * binding to the identity dedupe — which then dropped `product_id`, the very key

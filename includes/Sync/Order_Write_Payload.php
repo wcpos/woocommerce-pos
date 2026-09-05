@@ -377,7 +377,7 @@ final class Order_Write_Payload {
 				continue;
 			}
 			// wc/v3's remove-this-line marker is `product_id: null` (item_is_null). The
-			// POS posts it on the FULL settled line, acked variation_id and all, so a
+			// WCPOS client posts it on the FULL settled line, acked variation_id and all, so a
 			// removed variation line looks exactly like an unchanged binding from here.
 			// `isset()` is false for null, so the check below would let it through and
 			// unset the very key wc/v3 removes on — the line survived every save.
