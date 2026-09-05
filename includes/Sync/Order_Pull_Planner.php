@@ -34,7 +34,7 @@ use Generator;
  *    violation (Order_Document's single fail-closed reaction). The planner
  *    stops the page WITHOUT advancing — merely skipping would let a LATER
  *    order's emit advance the checkpoint past the unemitted one, losing it —
- *    and raises hasMore so the client retries from the last emitted position.
+ *    and clears `complete` so the client retries from the last emitted position.
  *
  * Pure: no REST, no WordPress state. Serialization and the fallback revision
  * are injected callables so the invariants unit-test against plain arrays.
@@ -59,7 +59,8 @@ final class Order_Pull_Planner {
 	 *
 	 *  - array{type:'document', orderId:int, payload:array, revision:string, checkpoint:array, sequence:int}
 	 *  - array{type:'tombstone', wooOrderId:int, checkpoint:array} (only when the client opted into deletes)
-	 *  - array{type:'complete', checkpoint:array, hasMore:bool} (EXACTLY ONE, always LAST)
+	 *  - array{type:'complete', checkpoint:array, complete:bool} (EXACTLY ONE, always LAST;
+	 *    `complete` is false when more rows remain — the /changes/* vocabulary)
 	 *
 	 * @param array    $change_rows       The sync-index page including its optional limit+1 probe row.
 	 * @param bool     $page_full         The limit+1 probe overflowed (more rows exist beyond this page).
@@ -127,8 +128,8 @@ final class Order_Pull_Planner {
 			try {
 				Order_Document::require_uuid( $payload, $id );
 			} catch ( Order_Uuid_Exception $exception ) {
-				// UUID STOP: end the page WITHOUT advancing; hasMore retries from
-				// the last emitted checkpoint.
+				// UUID STOP: end the page WITHOUT advancing; a cleared `complete`
+				// retries from the last emitted checkpoint.
 				$has_more = true;
 				break;
 			}
@@ -147,7 +148,7 @@ final class Order_Pull_Planner {
 		yield array(
 			'type' => 'complete',
 			'checkpoint' => $response_checkpoint,
-			'hasMore' => $has_more,
+			'complete' => ! $has_more,
 		);
 	}
 
