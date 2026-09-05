@@ -183,10 +183,23 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			// Act: a no-op write keeps the canonical record unchanged.
 			$params = array( 'include' => array( $variation->get_id() ) );
 			$params['marker'] = 1;
+			// The canonical bytes are sampled before, between and after the two reads and
+			// compared as ARRAYS, so a read with a side effect names the field it moved
+			// instead of leaving two opaque hashes (CI saw exactly that once).
+			$serializer = new Product_Serializer();
+			$canonical  = static function () use ( $serializer, $variation ): array {
+				// Wire form: meta_data entries are WC_Meta_Data objects, compared by identity otherwise.
+				return json_decode( wp_json_encode( $serializer->bare_for_revision( wc_get_product( $variation->get_id() ) ) ), true );
+			};
+			$before = $canonical();
 			$marked = $this->read( 'variations', $params )[0];
+			$between = $canonical();
 			$plain = $this->flat( $variation );
+			$after = $canonical();
 			$ack = $this->push( $variation, $marked['_rxdb_revision'], array( 'stock_quantity' => 10 ) );
 			// Assert.
+			$this->assertSame( $before, $between, 'the marked read changed the canonical record' );
+			$this->assertSame( $between, $after, 'the plain read changed the canonical record' );
 			$this->assertSame( 'marker=1', $marked['description'] );
 			$this->assertNotSame( $plain['description'], $marked['description'] );
 			$this->assertSame( $plain['_rxdb_revision'], $marked['_rxdb_revision'] );
