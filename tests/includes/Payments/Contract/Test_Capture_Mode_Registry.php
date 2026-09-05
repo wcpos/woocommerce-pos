@@ -46,6 +46,37 @@ class Test_Capture_Mode_Registry extends WP_UnitTestCase {
 	}
 
 	/** Invalid handler classes are ignored. */
+	public function test_provider_scoped_keys_coexist_and_resolve_to_their_own_handler(): void {
+		// Arrange.
+		$registry = Capture_Mode_Registry::instance();
+		wcpos_register_capture_mode( 'device:stripe', Registry_Test_Handler::class );
+		wcpos_register_capture_mode( 'device:square', Registry_Second_Test_Handler::class );
+
+		// Act / Assert.
+		$this->assertTrue( $registry->has( 'device:stripe' ) );
+		$this->assertTrue( $registry->has( 'device:square' ) );
+		$this->assertInstanceOf( Registry_Test_Handler::class, $registry->resolve( 'device', 'stripe' ) );
+		$this->assertInstanceOf( Registry_Second_Test_Handler::class, $registry->resolve( 'device', 'square' ) );
+	}
+
+	public function test_resolve_falls_back_to_the_bare_mode_or_null(): void {
+		// Arrange.
+		$registry = Capture_Mode_Registry::instance();
+		wcpos_register_capture_mode( 'device:stripe', Registry_Test_Handler::class );
+
+		// Act / Assert: no bare `device` → an unknown provider resolves to nothing.
+		$this->assertNull( $registry->resolve( 'device', 'unknown' ) );
+		$this->assertNull( $registry->resolve( 'device' ) );
+
+		// A bare registration is the fallback for any provider without its own.
+		wcpos_register_capture_mode( 'device', Registry_Second_Test_Handler::class );
+		$this->assertInstanceOf( Registry_Second_Test_Handler::class, $registry->resolve( 'device', 'unknown' ) );
+		$this->assertInstanceOf( Registry_Test_Handler::class, $registry->resolve( 'device', 'stripe' ) );
+
+		// Free's modes resolve without a provider.
+		$this->assertInstanceOf( Capture_Mode_Handler_Interface::class, $registry->resolve( 'manual' ) );
+	}
+
 	public function test_registry_ignores_class_without_interface(): void {
 		// Arrange / Act.
 		Capture_Mode_Registry::instance()->register( 'invalid', \stdClass::class );
@@ -57,6 +88,13 @@ class Test_Capture_Mode_Registry extends WP_UnitTestCase {
 
 /** Test-only capture mode handler. */
 class Registry_Test_Handler extends Abstract_Capture_Mode_Handler {
+	/** Return the minimal descriptor fragments needed by the interface. */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array();
+	}
+}
+
+class Registry_Second_Test_Handler extends Abstract_Capture_Mode_Handler {
 	/** Return the minimal descriptor fragments needed by the interface. */
 	public function describe( \WC_Payment_Gateway $gateway ): array {
 		return array();

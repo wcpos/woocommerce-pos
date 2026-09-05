@@ -11,7 +11,14 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Logger;
 
-/** Registers and lazily instantiates capture-mode handlers. */
+/**
+ * Registers and lazily instantiates capture-mode handlers.
+ *
+ * Keys are a bare mode (`manual`, `webview`) or, for modes several providers
+ * share, provider-scoped `<mode>:<provider>` (`device:stripe`, `device:square`)
+ * so two terminal integrations never fight over one slot. Dispatch resolves
+ * the scoped key first, then the bare mode.
+ */
 class Capture_Mode_Registry {
 	/**
 	 * Shared instance.
@@ -21,14 +28,14 @@ class Capture_Mode_Registry {
 	private static $instance = null;
 
 	/**
-	 * Registered handler classes by mode.
+	 * Registered handler classes by key (`<mode>` or `<mode>:<provider>`).
 	 *
 	 * @var array<string, string>
 	 */
 	private $handlers = array();
 
 	/**
-	 * Instantiated handlers by mode.
+	 * Instantiated handlers by key.
 	 *
 	 * @var array<string, Capture_Mode_Handler_Interface>
 	 */
@@ -100,7 +107,21 @@ class Capture_Mode_Registry {
 		return $this->instances[ $mode ];
 	}
 
-	/** Return registered mode names. */
+	/**
+	 * Resolve the handler for a mode, preferring a provider-scoped registration.
+	 *
+	 * @param string      $mode     Capture mode (bare, as the descriptor and the ledger row carry it).
+	 * @param string|null $provider Provider family, when known.
+	 */
+	public function resolve( string $mode, ?string $provider = null ): ?Capture_Mode_Handler_Interface {
+		if ( null !== $provider && '' !== $provider && $this->has( $mode . ':' . $provider ) ) {
+			return $this->get( $mode . ':' . $provider );
+		}
+
+		return $this->get( $mode );
+	}
+
+	/** Return registered keys. */
 	public function modes(): array {
 		return array_keys( $this->handlers );
 	}

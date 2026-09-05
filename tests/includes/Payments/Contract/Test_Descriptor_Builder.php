@@ -85,6 +85,31 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** Unknown kind filters are rejected. */
+	/** A provider-scoped key from the mode filter steers the handler; the wire mode stays bare. */
+	public function test_descriptor_provider_scoped_mode_key_uses_scoped_handler_and_bare_wire_mode(): void {
+		// Arrange.
+		wcpos_register_capture_mode( 'device:acme', Acme_Device_Test_Handler::class );
+		$filter = static function ( string $mode, \WC_Payment_Gateway $gateway ): string {
+			return 'pos_cash' === $gateway->id ? 'device:acme' : $mode;
+		};
+		add_filter( 'wcpos_payment_method_capture_mode', $filter, 10, 2 );
+
+		try {
+			// Act.
+			$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+
+			// Assert.
+			$this->assertSame( 'device', $descriptor['capture']['mode'] );
+			$this->assertSame( 'acme', $descriptor['capture']['provider'] );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_mode', $filter, 10 );
+			$reflection = new \ReflectionClass( \WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::class );
+			$property   = $reflection->getProperty( 'instance' );
+			$property->setAccessible( true );
+			$property->setValue( null, null );
+		}
+	}
+
 	public function test_descriptor_kind_filter_unknown_value_falls_back_to_other(): void {
 		// Arrange.
 		$filter = static function (): string {
@@ -126,5 +151,17 @@ class Webview_Test_Gateway extends WC_Payment_Gateway {
 		$this->title    = 'Webview Test';
 		$this->enabled  = 'yes';
 		$this->supports = array( 'products' );
+	}
+}
+
+class Acme_Device_Test_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler {
+	/** Describe a device-mode gateway for the Acme provider. */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array(
+			'capture' => array(
+				'mode'     => 'device',
+				'provider' => 'acme',
+			),
+		);
 	}
 }
