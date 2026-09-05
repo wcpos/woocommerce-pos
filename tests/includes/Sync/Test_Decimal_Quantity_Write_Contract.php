@@ -84,17 +84,13 @@ class Test_Decimal_Quantity_Write_Contract extends Sync_REST_Store_Test_Case {
 
 	/**
 	 * Compute the baseRevision the write path derives for a variation — the
-	 * serialized payload's date_modified_gmt (see Write_Controller::revision_for).
+	 * schema-scoped content hash (see Write_Controller::revision_for).
 	 *
 	 * @param int $variation_id Variation id.
 	 */
 	private function variation_revision( int $variation_id ): string {
-		$variation  = wc_get_product( $variation_id );
-		$controller = new \WC_REST_Products_Controller();
-		$response   = rest_ensure_response( $controller->prepare_object_for_response( $variation, new WP_REST_Request( 'GET', '/' ) ) );
-		$payload    = rest_get_server()->response_to_data( $response, false );
-
-		return (string) ( $payload['date_modified_gmt'] ?? $variation_id );
+		$payload = ( new \WCPOS\WooCommercePOS\Sync\Product_Serializer() )->serialize( $variation_id, null, false );
+		return Revision::compute_variation( $payload );
 	}
 
 	/**
@@ -207,7 +203,7 @@ class Test_Decimal_Quantity_Write_Contract extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		$this->assertEquals( 0.5, $response->get_data()['document']['payload']['stock_quantity'] );
+		$this->assertEquals( 0.5, $response->get_data()['document']['stock_quantity'] );
 		$this->assertEquals( 0.5, wc_get_product( $variation->get_id() )->get_stock_quantity() );
 	}
 

@@ -743,7 +743,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			'post_type' => 'product_variation',
 		);
 		$current  = $document->invoke( $controller, $meta, $variation->get_id() )->get_data();
-		$revision = (string) ( $current['payload']['date_modified_gmt'] ?? $variation->get_id() );
+		$revision = Revision::compute_variation( $current );
 
 		$fixture                                  = $this->fixture( 'variation-update' );
 		$fixture['envelope']['baseRevision']      = $revision;

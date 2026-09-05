@@ -84,7 +84,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$variation->save();
 
 		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
-		$payload  = $response->get_data()['documents'][0]['payload'];
+		$payload  = $response->get_data()[0];
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertEquals( 1.5, $payload['stock_quantity'] );
@@ -98,7 +98,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$variation = $this->create_variation( 'UUID-DOCUMENT-1456' );
 
 		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
-		$payload  = $response->get_data()['documents'][0]['payload'];
+		$payload  = $response->get_data()[0];
 		$uuids    = array_values(
 			array_filter(
 				$payload['meta_data'],
@@ -130,7 +130,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$variation = $this->create_variation( 'FIELD-SET-1456' );
 
 		$response = $this->variations_request( array( 'include' => array( $variation->get_id() ) ) );
-		$payload  = $response->get_data()['documents'][0]['payload'];
+		$payload  = $response->get_data()[0];
 
 		$this->assertSame( 200, $response->get_status() );
 
@@ -146,7 +146,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		 */
 		$emitted_but_undeclared = array( 'date_created_gmt', 'date_modified_gmt', 'name' );
 		// `_links` is appended by rest_get_server()->response_to_data(), not by the schema.
-		$expected = array_unique( array_merge( $schema_fields, $emitted_but_undeclared, array( '_links' ) ) );
+		$expected = array_unique( array_merge( $schema_fields, $emitted_but_undeclared, array( '_links', '_rxdb_revision' ) ) );
 
 		$this->assertEqualsCanonicalizing( $expected, array_keys( $payload ) );
 
@@ -185,7 +185,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$response = $this->variations_request( array( 'sku' => 'SHARED-SKU-CODE' ) );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $variation->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $variation->get_id() ), array_column( $response->get_data(), 'id' ) );
 
 		/*
 		 * The COUNT matters as much as the rows. Dropping a product from the served documents is
@@ -194,7 +194,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		 * receive, and the pager would chase a page that is always short. This assertion is what
 		 * makes the post_type narrowing load-bearing rather than decorative.
 		 */
-		$this->assertSame( 1, $response->get_data()['meta']['total'] );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
 		$this->assertSame( '1', (string) $response->get_headers()['X-WP-Total'] );
 	}
 
@@ -249,8 +249,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array(), array_column( $response->get_data()['documents'], 'id' ) );
-		$this->assertSame( 0, $response->get_data()['meta']['total'] );
+		$this->assertSame( array(), array_column( $response->get_data(), 'id' ) );
+		$this->assertSame( 0, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -269,8 +269,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( 1, $data['meta']['total'] );
+		$this->assertSame( array( $variation->get_id() ), array_column( $data, 'id' ) );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -295,8 +295,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $variation->get_id() ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( 1, $data['meta']['total'] );
+		$this->assertSame( array( $variation->get_id() ), array_column( $data, 'id' ) );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -317,7 +317,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		} finally {
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $strip, PHP_INT_MAX );
 		}
-		$payload = $response->get_data()['documents'][0]['payload'];
+		$payload = $response->get_data()[0];
 
 		$this->assertSame( $variation->get_parent_id(), $payload['parent_id'] );
 		$this->assertSame( wc_get_formatted_variation( $variation, true, false, false ), $payload['name'] );
@@ -337,8 +337,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array(), $data['documents'] );
-		$this->assertSame( 0, $data['meta']['total'] );
+		$this->assertSame( array(), $data );
+		$this->assertSame( 0, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -430,7 +430,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 
-		return wp_list_pluck( $response->get_data()['documents'], 'id' );
+		return wp_list_pluck( $response->get_data(), 'id' );
 	}
 
 	/**
@@ -444,8 +444,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $match->get_id() ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( 1, $data['meta']['total'] );
+		$this->assertSame( array( $match->get_id() ), array_column( $data, 'id' ) );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -460,7 +460,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$response = $this->variations_request( array( 'search' => 'needle' ) );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $match->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $match->get_id() ), array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
@@ -479,7 +479,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $exact->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $exact->get_id() ), array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
@@ -497,7 +497,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $match->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $match->get_id() ), array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
@@ -513,7 +513,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
 			array( $second->get_id(), $first->get_id() ),
-			array_column( $response->get_data()['documents'], 'id' )
+			array_column( $response->get_data(), 'id' )
 		);
 	}
 
@@ -535,10 +535,10 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$data = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $first->get_id() ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( 3, $data['meta']['total'] );
-		$this->assertSame( 2, $data['meta']['page'] );
-		$this->assertSame( 2, $data['meta']['per_page'] );
+		$this->assertSame( array( $first->get_id() ), array_column( $data, 'id' ) );
+		$this->assertSame( 3, (int) $response->get_headers()['X-WP-Total'] );
+		$this->assertCount( 1, $data );
+		$this->assertSame( '2', $response->get_headers()['X-WP-TotalPages'] );
 	}
 
 	/**
@@ -649,8 +649,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$response = $this->variations_request( array( 'search' => 'VISIBILITY-MATCH' ) );
 		$data     = $response->get_data();
 
-		$this->assertSame( array( $visible->get_id() ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( 1, $data['meta']['total'] );
+		$this->assertSame( array( $visible->get_id() ), array_column( $data, 'id' ) );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -662,8 +662,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$response = $this->variations_request( array( 'search' => 'STATUS-MATCH' ) );
 
-		$this->assertSame( array( $published->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
-		$this->assertSame( 1, $response->get_data()['meta']['total'] );
+		$this->assertSame( array( $published->get_id() ), array_column( $response->get_data(), 'id' ) );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
 	/**
@@ -691,7 +691,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		}
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $allowed_id ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $allowed_id ), array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
@@ -719,7 +719,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		}
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $allowed_id ), array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $allowed_id ), array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
@@ -740,16 +740,16 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$request->set_query_params( array( 'include' => $include_ids ) );
 
 		$response  = $this->server->dispatch( $request );
-		$documents = $response->get_data()['documents'];
+		$documents = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $include_ids, array_column( $documents, 'id' ) );
 		foreach ( $documents as $document ) {
 			$this->assertArrayHasKey( 'id', $document );
 			$this->assertArrayHasKey( 'parent_id', $document );
-			$this->assertArrayHasKey( 'payload', $document );
-			$this->assertArrayHasKey( 'image', $document['payload'] );
-			$this->assertArrayNotHasKey( 'images', $document['payload'] );
+			$this->assertArrayNotHasKey( 'payload', $document );
+			$this->assertArrayHasKey( 'image', $document );
+			$this->assertArrayNotHasKey( 'images', $document );
 		}
 	}
 
@@ -783,27 +783,24 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $include_ids, array_column( $response->get_data()['documents'], 'id' ) );
+		$this->assertSame( $include_ids, array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
-	 * Include mode retains its existing envelope without search metadata.
+	 * Include mode returns bare records without collection pagination headers.
 	 */
-	public function test_include_mode_still_returns_existing_shape(): void {
+	public function test_include_mode_returns_bare_records(): void {
 		$variation = $this->create_variation( 'INCLUDE-MODE' );
 
 		$response = $this->variations_request( array( 'include' => (string) $variation->get_id() ) );
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $variation->get_id(), $data['documents'][0]['id'] );
-		$this->assertSame( $variation->get_parent_id(), $data['documents'][0]['parent_id'] );
-		$this->assertArrayHasKey( 'payload', $data['documents'][0] );
-		$this->assertSame( 1, $data['meta']['requested'] );
-		$this->assertSame( 1, $data['meta']['returned'] );
-		$this->assertArrayNotHasKey( 'total', $data['meta'] );
-		$this->assertArrayNotHasKey( 'page', $data['meta'] );
-		$this->assertArrayNotHasKey( 'per_page', $data['meta'] );
+		$this->assertSame( $variation->get_id(), $data[0]['id'] );
+		$this->assertSame( $variation->get_parent_id(), $data[0]['parent_id'] );
+		$this->assertArrayNotHasKey( 'payload', $data[0] );
+		$this->assertCount( 1, $data );
+		$this->assertArrayNotHasKey( 'X-WP-Total', $response->get_headers() );
 	}
 
 	/**
@@ -845,12 +842,10 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $enabled->get_id() ), array_column( $response->get_data()['documents'], 'id' ) );
-		$this->assertSame( 1, $response->get_data()['meta']['returned'] );
-		// The accepted #1751 semantic shift, pinned: `requested` counts the
-		// query-eligible ask (1), not the raw ask (3) — the prune signal is
-		// absence from documents, not this counter.
-		$this->assertSame( 1, $response->get_data()['meta']['requested'] );
+		$this->assertSame( array( $enabled->get_id() ), array_column( $response->get_data(), 'id' ) );
+		$this->assertSame( 1, count( $response->get_data() ) );
+		// The prune signal remains absence from the bare records, not a counter.
+		$this->assertNotContains( $disabled->get_id(), array_column( $response->get_data(), 'id' ) );
 	}
 
 	/**
@@ -869,12 +864,12 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status(), 'A bare collection request must not 400.' );
-		$this->assertCount( 1, $data['documents'], 'per_page must bound the page.' );
+		$this->assertCount( 1, $data, 'per_page must bound the page.' );
 		// ProductHelper::create_variation_product() gives each parent its own variations, so the
 		// collection is wider than the two rows named here — assert the relationships, not a count.
 		$total = (int) $headers['X-WP-Total'];
 		$this->assertGreaterThanOrEqual( 2, $total );
-		$this->assertSame( $total, $data['meta']['total'], 'Header and envelope must agree.' );
+		$this->assertGreaterThanOrEqual( count( $data ), $total );
 		$this->assertSame(
 			(string) $total,
 			(string) $headers['X-WP-TotalPages'],
@@ -905,7 +900,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		$response = $this->variations_request( array( 'per_page' => 100 ) );
 		$data     = $response->get_data();
-		$ids      = array_column( $data['documents'], 'id' );
+		$ids      = array_column( $data, 'id' );
 
 		$this->assertContains( $countable->get_id(), $ids );
 		$this->assertNotContains( $disabled->get_id(), $ids, 'A disabled variation must not be listed.' );

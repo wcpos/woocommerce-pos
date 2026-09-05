@@ -26,7 +26,8 @@ namespace WCPOS\WooCommercePOS\Sync;
  * IMPORTANT: always compute over the BARE wc/v3 serialization — never a payload that
  * has had `_woocommerce_pos_uuid` re-injected — because the conflict check re-reads
  * the record via wc/v3 (which omits that protected meta), so the two must hash the
- * same bytes.
+ * same bytes. Variations use a schema-scoped content hash (not a modified date);
+ * their identity meta is also excluded so stamping cannot change the revision.
  */
 class Revision {
 
@@ -73,6 +74,49 @@ class Revision {
 
 	public static function compute( array $data ): string {
 		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::canonicalize( $data ) ) );
+	}
+
+	/**
+	 * Hash only the declared top-level fields, retaining canonical exclusions.
+	 *
+	 * @param array $record Bare serialized record.
+	 * @param array $fields Allowed top-level field names.
+	 */
+	public static function compute_scoped( array $record, array $fields ): string {
+		return self::compute( array_intersect_key( $record, array_flip( $fields ) ) );
+	}
+
+	/**
+	 * THE variation recipe for flat reads, write acknowledgements, barcode matches and CAS.
+	 *
+	 * Every site applies the same filters in the same runtime: site-local customisation
+	 * is safe; changing filter output causes one self-healing 409 per record.
+	 * Schema keys are rebuilt per call to reflect runtime feature settings. Registered REST fields are
+	 * excluded unless explicitly included by the variation-fields filter.
+	 * UUID identity lives inside the schema's meta_data, so strip it explicitly.
+	 *
+	 * @param array $record Bare serialized variation (transport stamps are ignored).
+	 */
+	public static function compute_variation( array $record ): string {
+		// WooCommerce merges register_rest_field additions inside get_item_schema().
+		$controller = new class() extends \WC_REST_Product_Variations_Controller {
+			/** Keep the core schema; extensions opt in through the revision-fields filter. */
+			protected function add_additional_fields_schema( $schema ) {
+				return $schema;
+			}
+		};
+		$fields = array_keys( $controller->get_item_schema()['properties'] );
+		if ( isset( $record['meta_data'] ) ) {
+			$record['meta_data'] = array_values(
+				array_filter(
+					$record['meta_data'],
+					static function ( $entry ): bool {
+						return Pos_Uuid::META_KEY !== Meta_Entry::key( $entry );
+					}
+				)
+			);
+		}
+		return self::compute_scoped( $record, (array) apply_filters( 'woocommerce_pos_sync_variation_revision_fields', $fields ) );
 	}
 
 	public static function canonicalize( array $data ): array {

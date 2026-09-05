@@ -37,3 +37,12 @@ onwards, any change to a journal row's shape, to the `head` / `horizon` /
 `epoch` checkpoint fields, or to their meaning needs an explicit compatibility
 plan in its PR: a dual-emit window, or a client-minimum gate. "No released
 client speaks this yet" stops being true the day 1.10.0 ships.
+
+## Bare variation records (1.11.0, free#1869)
+
+Behind the protocol gate (free#1868), variations are bare wc/v3 records on the flat list,
+write-ack and barcode lanes, with `_rxdb_revision`, `_rxdb_digest` (when indexed)
+and UUID metadata. `/resolve/barcode` returns a bare product or variation as
+`match`, not a wrapper. Variation revisions are schema-scoped content hashes,
+computed before transport stamps; `woocommerce_pos_sync_variation_revision_fields`
+allows site-local fields to participate in the same recipe on reads and CAS.

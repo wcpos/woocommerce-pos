@@ -11,14 +11,13 @@ namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WC_Product;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
-/** Enforces variation parents, nested routes, and wrapper documents. */
+/** Enforces variation parents, nested routes, and bare documents. */
 class Variation_Writer extends Null_Writer {
 	/** Prepare a nested variation create. */
 	public function prepare_create( array $meta, array $payload, callable $validate_tax_ids ) {
@@ -71,32 +70,20 @@ class Variation_Writer extends Null_Writer {
 		return $dispatch( $this->delete_request( $route, $id, true ) );
 	}
 
-	/** Build the targeted variation wrapper document. */
+	/** Build the bare targeted variation document, before any transport stamps. */
 	public function document( array $meta, int $id, callable $default_document ) {
 		$variation = $this->variation( $id );
 		if ( is_wp_error( $variation ) ) {
 			return $variation;
 		}
-		$payload  = ( new Product_Serializer() )->serialize( $variation, new WP_REST_Request( 'GET', '/' ) );
-		$document = array(
-			'id' => $id,
-			'parent_id' => (int) $variation->get_parent_id(),
-			'payload' => $payload,
-		);
-		if ( class_exists( Digest_Index::class ) ) {
-			$digests = ( new Digest_Index() )->read_digests( 'products', array( $id ) );
-			if ( isset( $digests[ $id ] ) ) {
-				$document['_rxdb_digest'] = $digests[ $id ];
-			}
-		}
-		return new WP_REST_Response( $document, 200 );
+		$bare = ( new Product_Serializer() )->bare_for_revision( $variation );
+		return new WP_REST_Response( $bare, 200 );
 	}
 
-	/** Put the stable UUID inside the variation payload wrapper. */
+	/** Stamp the bare variation only after the write controller computes its revision. */
 	public function build_response_document( array $bare, string $record_id, array $meta, int $id, callable $default_builder ): array {
-		$payload         = isset( $bare['payload'] ) && is_array( $bare['payload'] ) ? $bare['payload'] : array();
-		$bare['payload'] = Pos_Uuid::ensure_in_payload( $payload, $record_id );
-		return $bare;
+		$record = Product_Serializer::stamp_record( $bare, wc_get_product( $id ), new WP_REST_Request( 'GET', '/' ) );
+		return Pos_Uuid::ensure_in_payload( $record, $record_id );
 	}
 
 	/** Require a live variable parent for create. */

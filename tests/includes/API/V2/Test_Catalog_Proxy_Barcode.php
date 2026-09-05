@@ -70,7 +70,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$request->set_param( 'include', array( $variation_id ) );
 
 		$response  = $this->server->dispatch( $request );
-		$documents = $response->get_data()['documents'];
+		$documents = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $documents );
@@ -195,7 +195,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$variation_fallback->save();
 
 		$product_row       = $this->read_product( $product->get_id() );
-		$variation_payload = $this->read_variation( $variation->get_id() )['payload'];
+		$variation_payload = $this->read_variation( $variation->get_id() );
 		$product_resolved  = $this->resolve_barcode( 'CUSTOM-PRODUCT-1372' );
 		$variation_resolved = $this->resolve_barcode( 'CUSTOM-VARIATION-1372' );
 
@@ -204,7 +204,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $product_resolved->get_status() );
 		$this->assertTrue( $product_resolved->get_data()['found'] );
 		$this->assertSame( $product->get_id(), $product_resolved->get_data()['match']['id'] );
-		$this->assertSame( 'product', $product_resolved->get_data()['match']['type'] );
+		$this->assertSame( 'simple', $product_resolved->get_data()['match']['type'] );
 		$this->assertSame( array(), $product_resolved->get_data()['ambiguous'] );
 		$this->assertSame( 200, $variation_resolved->get_status() );
 		$this->assertTrue( $variation_resolved->get_data()['found'] );
@@ -232,7 +232,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( 'global_unique_id' ), $global_fields['products'] );
 		$this->assertSame( array( 'global_unique_id' ), $global_fields['variations'] );
 		$this->assertSame( '4006381333931', $product_row['global_unique_id'] );
-		$this->assertSame( '9780201379624', $variation_record['payload']['global_unique_id'] );
+		$this->assertSame( '9780201379624', $variation_record['global_unique_id'] );
 
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$sku_fields = $this->barcode_fields();
@@ -297,7 +297,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'PRODUCT-NEW-1372', $this->meta_data( $after )['_barcode'] );
 		$this->assertTrue( $resolved->get_data()['found'] );
 		$this->assertSame( $product->get_id(), $resolved->get_data()['match']['id'] );
-		$this->assertSame( 'product', $resolved->get_data()['match']['type'] );
+		$this->assertSame( 'simple', $resolved->get_data()['match']['type'] );
 	}
 
 	/**
@@ -326,7 +326,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '9780201379624', wc_get_product( $product->get_id() )->get_global_unique_id() );
 		$this->assertTrue( $resolved->get_data()['found'] );
 		$this->assertSame( $product->get_id(), $resolved->get_data()['match']['id'] );
-		$this->assertSame( 'product', $resolved->get_data()['match']['type'] );
+		$this->assertSame( 'simple', $resolved->get_data()['match']['type'] );
 	}
 
 	/**
@@ -344,14 +344,14 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$response = $this->push_barcode_update(
 			'variations',
 			$record_id,
-			$before['payload']['date_modified_gmt'],
+			$before['_rxdb_revision'],
 			'VARIATION-NEW-1372'
 		);
 		$after    = $this->read_variation( $variation->get_id() );
 		$resolved = $this->resolve_barcode( 'VARIATION-NEW-1372' );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 'VARIATION-NEW-1372', $this->meta_data( $after['payload'] )['_barcode'] );
+		$this->assertSame( 'VARIATION-NEW-1372', $this->meta_data( $after )['_barcode'] );
 		$this->assertTrue( $resolved->get_data()['found'] );
 		$this->assertSame( $variation->get_id(), $resolved->get_data()['match']['id'] );
 		$this->assertSame( 'variation', $resolved->get_data()['match']['type'] );
@@ -383,7 +383,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$response = $this->push_barcode_update(
 			'variations',
 			$record_id,
-			$before['payload']['date_modified_gmt'],
+			$before['_rxdb_revision'],
 			'9780201379624',
 			'global_unique_id'
 		);
@@ -391,7 +391,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$resolved = $this->resolve_barcode( '9780201379624' );
 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		$this->assertSame( '9780201379624', $after['payload']['global_unique_id'] );
+		$this->assertSame( '9780201379624', $after['global_unique_id'] );
 		$this->assertSame(
 			'9780201379624',
 			( new WC_Product_Variation( $variation->get_id() ) )->get_global_unique_id()
