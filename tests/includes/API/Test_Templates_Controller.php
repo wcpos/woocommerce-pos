@@ -116,7 +116,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/templates', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\w-]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/active', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/templates/gallery', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/templates/gallery', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/batch', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/install', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\d]+)', $routes );
@@ -1206,6 +1206,53 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Display gallery listings preserve the absence of a receipt preview profile.
+	 */
+	public function test_gallery_display_templates_have_null_preview_profiles(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
+		$request->set_param( 'type', 'display' );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$templates = $response->get_data();
+		$this->assertSame( array( 'display-marquee', 'display-pocket' ), array_column( $templates, 'key' ) );
+		foreach ( $templates as $template ) {
+			$this->assertSame( 'display', $template['type'] );
+			$this->assertSame( 'display', $template['category'] );
+			$this->assertArrayHasKey( 'preview_data', $template );
+			$this->assertNull( $template['preview_data'] );
+		}
+	}
+
+	/**
+	 * Gallery and installed display previews accept null profiles, including cache hits.
+	 */
+	public function test_preview_display_templates_with_null_profiles_returns_sample_data(): void {
+		foreach ( array( 'display-pocket', 'display-marquee' ) as $key ) {
+			$post_id = Templates::install_gallery_template( $key );
+			$this->assertIsInt( $post_id );
+
+			try {
+				foreach ( array( $key, $post_id, $post_id ) as $id ) {
+					$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $id . '/preview' );
+					$response = $this->server->dispatch( $request );
+
+					$this->assertSame( 200, $response->get_status() );
+					$data = $response->get_data();
+					$this->assertIsArray( $data['receipt_data'] );
+					$this->assertSame( 'logicless', $data['engine'] );
+				}
+				$template = Templates::get_template( $post_id );
+				$this->assertArrayHasKey( 'preview_data', $template );
+				$this->assertNull( $template['preview_data'] );
+			} finally {
+				wp_delete_post( $post_id, true );
+			}
+		}
+	}
+
+	/**
 	 * Test installed invoice preview keeps the gallery fixture profile.
 	 */
 	public function test_preview_installed_invoice_template_uses_unpaid_fixture_data(): void {
@@ -1756,7 +1803,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test gallery endpoint returns premade templates.
 	 */
 	public function test_gallery_endpoint_returns_premade_templates(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -1779,7 +1826,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test gallery includes both RTL templates with direction="rtl".
 	 */
 	public function test_gallery_includes_rtl_templates(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -1802,7 +1849,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test legacy gallery templates default to direction="ltr".
 	 */
 	public function test_gallery_legacy_templates_default_to_ltr_direction(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );

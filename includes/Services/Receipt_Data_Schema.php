@@ -43,7 +43,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Receipt data schema contract version.
 	 */
-	const SCHEMA_VERSION = '1.2.0';
+	const SCHEMA_VERSION = '1.3.0';
 
 	/**
 	 * Money keys that must be present in totals.
@@ -456,6 +456,13 @@ class Receipt_Data_Schema {
 					'name'             => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer Name', 'woocommerce-pos' ),
+					),
+					'first_name'       => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __(
+							'Customer First Name',
+							'woocommerce-pos'
+						),
 					),
 					'billing_address'  => array(
 						'type'  => 'object',

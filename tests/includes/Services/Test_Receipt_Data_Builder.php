@@ -24,6 +24,39 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
+	/**
+	 * Customer greetings use the billing first name, not the full name.
+	 */
+	public function test_build_customer_with_billing_first_name_returns_first_name(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_billing_first_name( 'Ada' );
+		$order->set_billing_last_name( 'Lovelace' );
+		$order->save();
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$this->assertSame( 'Ada', $payload['customer']['first_name'] );
+	}
+
+	/**
+	 * Missing billing first names remain empty for logicless greeting guards.
+	 */
+	public function test_build_customer_without_billing_first_name_returns_empty_string(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_billing_first_name( '' );
+		$order->save();
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$this->assertSame( '', $payload['customer']['first_name'] );
+	}
+
 	/** Split ledger rows become ordered receipt payment entries and totals. */
 	public function test_build_payments_reads_split_ledger_rows(): void {
 		// Arrange.

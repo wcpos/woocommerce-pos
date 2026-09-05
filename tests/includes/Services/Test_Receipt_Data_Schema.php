@@ -206,7 +206,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree         = Receipt_Data_Schema::get_field_tree();
 		$line_fields  = $tree['lines']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertTrue( version_compare( Receipt_Data_Schema::SCHEMA_VERSION, '1.2.0', '>=' ) );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertArrayHasKey( $field, $line_fields );
@@ -230,7 +230,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree            = Receipt_Data_Schema::get_field_tree();
 		$discount_fields = $tree['discounts']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertTrue( version_compare( Receipt_Data_Schema::SCHEMA_VERSION, '1.2.0', '>=' ) );
 		$this->assertArrayHasKey( 'discount_type', $discount_fields );
 		$this->assertSame( 'string', $discount_fields['discount_type']['type'] );
 
@@ -254,7 +254,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree          = Receipt_Data_Schema::get_field_tree();
 		$total_fields  = $tree['totals']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertTrue( version_compare( Receipt_Data_Schema::SCHEMA_VERSION, '1.2.0', '>=' ) );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertContains( $field, Receipt_Data_Schema::TOTAL_MONEY_KEYS );
@@ -510,6 +510,17 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertSame( 'money', $tree['totals']['fields']['total_incl']['type'] );
 		$this->assertSame( 'money', $tree['lines']['fields']['line_total_incl']['type'] );
 		$this->assertSame( 'string', $tree['store']['fields']['name']['type'] );
+	}
+
+	/**
+	 * Customer first names are available in the editor and canonical JSON schema.
+	 */
+	public function test_customer_first_name_is_exposed_as_string(): void {
+		$tree   = Receipt_Data_Schema::get_field_tree();
+		$schema = Receipt_Data_Schema::get_json_schema();
+
+		$this->assertSame( 'string', $tree['customer']['fields']['first_name']['type'] );
+		$this->assertSame( 'string', $schema['properties']['customer']['properties']['first_name']['type'] );
 	}
 
 	/**

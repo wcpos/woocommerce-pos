@@ -24,6 +24,44 @@ class Gallery_Registry {
 	 */
 	public static function all(): array {
 		return array(
+			'display-pocket' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __(
+					'Pocket',
+					'woocommerce-pos'
+				),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __(
+					'Customer display for small screens: a docked running total, the newest item on top, full-screen payment states. For a phone on a stand.',
+					'woocommerce-pos'
+				),
+				'type'          => 'display',
+				'category'      => 'display',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+			),
+			'display-marquee' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __(
+					'Marquee',
+					'woocommerce-pos'
+				),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __(
+					'Customer display for large screens: brand column with greeting and promo space, the just-added item as a hero, big totals. For a monitor or wide tablet.',
+					'woocommerce-pos'
+				),
+				'type'          => 'display',
+				'category'      => 'display',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+			),
 			'detailed-receipt' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
 				'title'         => __( 'Detailed Receipt', 'woocommerce-pos' ),

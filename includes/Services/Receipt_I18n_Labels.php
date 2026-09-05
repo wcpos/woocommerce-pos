@@ -235,6 +235,52 @@ class Receipt_I18n_Labels {
 			'completed'              => /* translators: Receipt status value meaning the order/document is completed. */ __( 'Completed', 'woocommerce-pos' ),
 			'printed'                => /* translators: Receipt status value meaning the document has been printed. */ __( 'Printed', 'woocommerce-pos' ),
 			'opening_hours'          => /* translators: Receipt label for the store business opening hours. */ __( 'Opening Hours', 'woocommerce-pos' ),
+
+			// Customer display.
+			'welcome'            => /* translators: Customer-facing display label welcoming the customer. */ __(
+				'Welcome',
+				'woocommerce-pos'
+			),
+			'greeting'           => /* translators: Customer-facing display label used before the first name, as in "Hi {first name}!". */ __(
+				'Hi',
+				'woocommerce-pos'
+			),
+			'your_items'         => /* translators: Customer-facing display label heading the item list. */ __(
+				'Your items',
+				'woocommerce-pos'
+			),
+			'items_appear_here'  => /* translators: Customer-facing display label for an empty item list. */ __(
+				'Your items will appear here',
+				'woocommerce-pos'
+			),
+			'you_saved'          => /* translators: Customer-facing display label before the savings amount, as in "You saved $15.00". */ __(
+				'You saved',
+				'woocommerce-pos'
+			),
+			'paid_so_far'        => /* translators: Customer-facing display label for the amount already paid. */ __(
+				'Paid so far',
+				'woocommerce-pos'
+			),
+			'present_card'       => /* translators: Customer-facing display label prompting card presentation. */ __(
+				'Please present your card',
+				'woocommerce-pos'
+			),
+			'approved'           => /* translators: Customer-facing display label for an approved payment. */ __(
+				'Approved',
+				'woocommerce-pos'
+			),
+			'declined'           => /* translators: Customer-facing display label for a declined payment. */ __(
+				'Declined',
+				'woocommerce-pos'
+			),
+			'try_another_card'   => /* translators: Customer-facing display label after a declined payment. */ __(
+				'Please try another card or ask staff',
+				'woocommerce-pos'
+			),
+			'paid_in_full'       => /* translators: Customer-facing display label confirming full payment. */ __(
+				'Paid in full',
+				'woocommerce-pos'
+			),
 		);
 	}
 

@@ -991,6 +991,7 @@ class Preview_Receipt_Builder {
 		return array(
 			'id'               => 42,
 			'name'             => $sample['first_name'] . ' ' . $sample['last_name'],
+			'first_name'       => $sample['first_name'],
 			'billing_address'  => $billing,
 			'shipping_address' => $shipping,
 			'tax_ids'          => $tax_ids,
