@@ -13,7 +13,6 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
-use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -833,21 +832,7 @@ class Write_Controller extends WP_REST_Controller {
 
 	/** Read and normalize a generic wc/v3 response document. */
 	private function default_document_for( array $meta, int $id, array $params = array() ) {
-		$request = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
-		Store_Scope::stamp( $request );
-		foreach ( $params as $key => $value ) {
-			$request->set_param( $key, $value );
-		}
-		$response = Store_Scope::in_v2_lane(
-			static function () use ( $request ) {
-				return rest_do_request( $request );
-			}
-		);
-		$data = $response->get_data();
-		if ( is_array( $data ) ) {
-			$response->set_data( Meta_Normalizer::normalize( $data ) );
-		}
-		return $response;
+		return Product_Serializer::dispatched_bare_read( $meta['route'] . '/' . $id, $params );
 	}
 
 	/** Apply generic product augmentation and inject the client UUID. */
@@ -905,32 +890,13 @@ class Write_Controller extends WP_REST_Controller {
 		return $this->respond( is_array( $bare ) ? $bare : array(), $record_id, $status ?? $document->get_status(), $meta, $id, $writer );
 	}
 
+	/**
+	 * Compute CAS over bare bytes: schema-scoped variation content, never dates or id fallbacks.
+	 * A constant or stamp-dependent revision could silently accept stale till stock writes.
+	 */
 	private function revision_for( array $meta, int $id, array $bare ): string {
 		if ( 'product_variation' === ( $meta['post_type'] ?? '' ) ) {
-			/*
-			 * A variation's revision is its `date_modified_gmt`, deliberately: the client's targeted
-			 * pull synthesizes exactly that as `sync.revision`, so both sides agree without the
-			 * variations lane needing a stamped `_rxdb_revision`.
-			 *
-			 * Read the date from WHEREVER it is — nested under `payload` in today's
-			 * `{ id, parent_id, payload }` wrapper, or top level once that wrapper is dropped.
-			 *
-			 * This used to read `$bare['payload']['date_modified_gmt']` only, with `$bare['id']` as
-			 * the fallback. Against a FLAT document that silently degrades to the variation's own
-			 * ID — a value that never changes again. The failure would be total and invisible:
-			 * the ack would hand the client the id as `currentRevision`, and from then on every
-			 * stale baseRevision would equal every recomputed one — the strict revision
-			 * comparison would pass every queued write. Two tills editing the same
-			 * variation hours apart would both pass the precondition; the per-record lock would
-			 * serialize them, so there would be no error — just a lost update, every time.
-			 *
-			 * The `$bare['id']` fallback is kept ONLY for a document carrying no date at all, and is
-			 * now unreachable for any real variation serialization.
-			 */
-			$payload = isset( $bare['payload'] ) && is_array( $bare['payload'] ) ? $bare['payload'] : array();
-			$date    = $payload['date_modified_gmt'] ?? $bare['date_modified_gmt'] ?? null;
-
-			return (string) ( $date ?? $bare['id'] ?? $id );
+			return Revision::compute_variation( $bare );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {
 			return Order_Serializer::canonical_revision( $bare );

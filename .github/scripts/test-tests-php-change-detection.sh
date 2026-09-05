@@ -80,4 +80,11 @@ if grep -Fq "github.event_name == 'pull_request' || github.ref == 'refs/heads/ma
   exit 1
 fi
 
+matrix_job="$(awk '/^  test-matrix:/{found=1} /^  coverage:/{found=0} found' "$WORKFLOW_FILE")"
+if ! grep -Fq "if: matrix.php == '7.4'" <<< "$matrix_job" ||
+  ! grep -Fq 'deb.debian.org/debian-security|security.debian.org/debian-security' <<< "$matrix_job"; then
+  echo "Expected $WORKFLOW_FILE to route PHP 7.4 images through Debian's security service" >&2
+  exit 1
+fi
+
 echo 'PHP test workflow tracks matrix config and generator changes'

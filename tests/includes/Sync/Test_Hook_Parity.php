@@ -305,10 +305,14 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		return Order_Serializer::canonical_revision( Order_Serializer::add_pos_links( $data, wc_get_order( $id ) ) );
 	}
 
+	/**
+	 * A variation's revision is the schema-scoped content hash of its bare wc/v3
+	 * read (free#1869) — the same recipe as products, not a modified date.
+	 */
 	private function variation_revision( int $parent_id, int $id ): string {
 		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/products/' . $parent_id . '/variations/' . $id ) );
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		return (string) $response->get_data()['date_modified_gmt'];
+		return Revision::compute_variation( Meta_Normalizer::normalize( $response->get_data() ) );
 	}
 
 	private function variation_fixture(): WC_Product_Variation {

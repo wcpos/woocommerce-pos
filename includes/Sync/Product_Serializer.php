@@ -12,6 +12,7 @@ use WC_Product_Variation;
 use WC_REST_Product_Variations_Controller;
 use WC_REST_Products_Controller;
 use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * THE product-record assembly line.
@@ -73,14 +74,15 @@ final class Product_Serializer {
 	private $default_request = null;
 
 	/**
-	 * Serialize one product or variation into its augmented REST representation.
+	 * Serialize one product or variation, optionally leaving it bare for revision computation.
 	 *
 	 * @param int|WC_Product       $product Product id, or an already-loaded product/variation object.
 	 * @param null|WP_REST_Request $request Serialization context. A bare `GET /` request is used when omitted.
+	 * @param bool                 $augment Apply response augmentations (false for pre-stamp bytes).
 	 *
-	 * @return array The augmented payload, or an empty array when the id does not resolve to a product.
+	 * @return array The serialized payload, or an empty array when the id does not resolve to a product.
 	 */
-	public function serialize( $product, ?WP_REST_Request $request = null ): array {
+	public function serialize( $product, ?WP_REST_Request $request = null, bool $augment = true ): array {
 		$object = $product instanceof WC_Product
 			? $product
 			: ( \function_exists( 'wc_get_product' ) ? wc_get_product( (int) $product ) : false );
@@ -129,7 +131,80 @@ final class Product_Serializer {
 			$payload = self::backfill_pre_wc83_variation_fields( $payload, $object );
 		}
 
-		return self::augment( \is_array( $payload ) ? $payload : array(), $object, $request );
+		$payload = \is_array( $payload ) ? $payload : array();
+		return $augment ? self::augment( $payload, $object, $request ) : Meta_Normalizer::normalize( $payload );
+	}
+
+	/**
+	 * Serialize context-free revision bytes so flat reads, write acknowledgements,
+	 * barcode matches and CAS agree regardless of the representation the client requested.
+	 *
+	 * Products use the dispatched wc/v3 GET shared with CAS, including request-sensitive
+	 * filters. Variations keep the undispatched GET / serializer path.
+	 *
+	 * @param WC_Product $object Product or variation backing the revision.
+	 *
+	 * @return array Canonical bare record, before augmentation or UUID injection.
+	 */
+	public function bare_for_revision( WC_Product $object ): array {
+		if ( ! $object instanceof WC_Product_Variation ) {
+			$data = self::dispatched_bare_read( '/wc/v3/products/' . $object->get_id() )->get_data();
+			return \is_array( $data ) ? $data : array();
+		}
+		return $this->serialize( $object, new WP_REST_Request( 'GET', '/' ), false );
+	}
+
+	/**
+	 * Read and normalize a bare wc/v3 document, preserving response status and headers.
+	 *
+	 * @param string $route  Full wc/v3 record route.
+	 * @param array  $params Optional request parameters.
+	 *
+	 * @return WP_REST_Response The dispatched response with normalized data.
+	 */
+	public static function dispatched_bare_read( string $route, array $params = array() ): WP_REST_Response {
+		$request = new WP_REST_Request( 'GET', $route );
+		Store_Scope::stamp( $request );
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+		$response = Store_Scope::in_v2_lane(
+			static function () use ( $request ) {
+				return rest_do_request( $request );
+			}
+		);
+		$data = $response->get_data();
+		if ( \is_array( $data ) ) {
+			$response->set_data( Meta_Normalizer::normalize( $data ) );
+		}
+		return $response;
+	}
+
+	/**
+	 * Stamp a bare read/ack record, hashing BEFORE augmentation or UUID injection.
+	 * Only variation GET / callers reuse canonical bytes; products always use a dispatched read.
+	 *
+	 * @param array                $bare    Bare serialized record.
+	 * @param WC_Product           $object  Product or variation backing it.
+	 * @param null|WP_REST_Request $request Serialization context.
+	 * @param null|array           $digests Preloaded products id-space digests, or null to read one.
+	 */
+	public static function stamp_record( array $bare, WC_Product $object, ?WP_REST_Request $request = null, ?array $digests = null ): array {
+		$canonical = $object instanceof WC_Product_Variation && null !== $request && 'GET' === $request->get_method() && '/' === $request->get_route() && array() === $request->get_params()
+			? $bare
+			: ( new self() )->bare_for_revision( $object );
+		$revision = $object instanceof WC_Product_Variation ? Revision::compute_variation( $canonical ) : Revision::compute( $canonical );
+		$record   = self::augment( $bare, $object, $request );
+		$record   = Pos_Uuid::stamp_serialized_record( $record, $object, $request );
+		$id       = $object->get_id();
+		if ( null === $digests ) {
+			$digests = class_exists( Digest_Index::class ) ? ( new Digest_Index() )->read_digests( 'products', array( $id ) ) : array();
+		}
+		if ( isset( $digests[ $id ] ) ) {
+			$record['_rxdb_digest'] = $digests[ $id ];
+		}
+		$record['_rxdb_revision'] = $revision;
+		return $record;
 	}
 
 	/**

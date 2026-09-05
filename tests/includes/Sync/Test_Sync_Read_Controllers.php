@@ -1080,8 +1080,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		);
 		$data = $response->get_data();
 
-		$this->assertSame( array( $variation_ids[0] ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( $product->get_id(), $data['documents'][0]['parent_id'] );
+		$this->assertSame( array( $variation_ids[0] ), array_column( $data, 'id' ) );
+		$this->assertSame( $product->get_id(), $data[0]['parent_id'] );
 	}
 
 	/**
@@ -1099,7 +1099,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertTrue( $data['found'] );
 		$this->assertSame( $product->get_id(), $data['match']['id'] );
-		$this->assertSame( 'product', $data['match']['type'] );
+		$this->assertSame( 'simple', $data['match']['type'] );
 	}
 
 	/**
@@ -1222,7 +1222,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$response = ( new Variations_Controller() )->get_variations(
 			$this->request( array( 'include' => $variation_ids ) )
 		);
-		$documents = $response->get_data()['documents'];
+		$documents = $response->get_data();
 
 		$this->assertNotEmpty( $documents );
 		foreach ( $documents as $document ) {
@@ -1498,7 +1498,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 			$this->request( array( 'include' => array( $product->get_id() ) ) )
 		);
 
-		$this->assertSame( array(), $response->get_data()['documents'] );
+		$this->assertSame( array(), $response->get_data() );
 		$this->assertNotInstanceOf( WC_Product_Variation::class, wc_get_product( $product->get_id() ) );
 	}
 

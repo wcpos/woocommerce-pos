@@ -108,14 +108,11 @@ class Resolve_Controller extends WP_REST_Controller {
 				// assembly line (Product_Serializer) — raw projections are never
 				// trusted (ADR 0003).
 				$serialization_request = new WP_REST_Request( 'GET', '/' );
-				$payload               = ( new Product_Serializer() )->serialize( $product, $serialization_request );
-				$type                  = (string) ( $first['type'] ?? 'product' );
-				$match                 = array(
-					'id'        => (int) ( $first['id'] ?? 0 ),
-					'type'      => $type,
-					'parent_id' => 'variation' === $type ? (int) $product->get_parent_id() : 0,
-					'payload'   => $payload,
-				);
+				// The RESPONSE body is the serializer's record (links included, like the
+				// collection lanes); stamp_record() takes the revision from the canonical
+				// read on its own, so the two never share bytes by accident.
+				$bare                  = ( new Product_Serializer() )->serialize( $product, $serialization_request, false );
+				$match                 = Product_Serializer::stamp_record( $bare, $product, $serialization_request );
 			}
 		}
 

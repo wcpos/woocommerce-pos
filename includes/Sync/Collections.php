@@ -105,7 +105,7 @@ final class Collections {
 			),
 			// No wcpos proxy lane, and that is principled (ADR 0034): the flat
 			// /variations route is both the per-id hydration lane AND the
-			// list/seed lane (bare collection pages for the idle trickle).
+			// list/seed lane (bare records, schema-scoped content revisions).
 			'proxy'       => null,
 			// Variations use WooCommerce's nested REST resource. The write controller
 			// takes the parent from create payloads and the stored object thereafter.

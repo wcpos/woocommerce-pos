@@ -47,8 +47,8 @@ use WP_REST_Server;
  * carries `images[]` instead of `image`, which blanked every variation thumbnail in the POS on
  * 1.10.0 and wrote the parent's image onto every order line (#1710).
  *
- * What stays ours, and only this: the sync document envelope the engine reads
- * (`documents[].{id,parent_id,payload,_rxdb_digest}`), POS visibility, the barcode carrier
+ * What stays ours, and only this: transport stamps on bare records,
+ * POS visibility, the barcode carrier
  * search, and the request bounds. Everything else is WooCommerce's.
  */
 class Variations_Controller extends WC_REST_Product_Variations_Controller {
@@ -252,7 +252,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 * the change-signal tombstone path, not here).
 	 */
 	public function get_variations( WP_REST_Request $request ) {
-		$started     = microtime( true );
 		$search_meta = null;
 		if ( $request->has_param( 'sku' ) || $request->has_param( 'search' ) ) {
 			$validation = $this->validate_search_request( $request );
@@ -361,40 +360,18 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			 * prepare_objects_query(). The query-level publish gate covers ALL lanes, including
 			 * `include`; this check only guards a status change between the id query and object load.
 			 *
-			 * `meta.requested` now counts the query-eligible ask: a disabled or query-filtered id is
+			 * The query-eligible ask excludes disabled or query-filtered ids: each is
 			 * absent from $ids. The client's targeted-pull shortfall — absence from documents — is
 			 * unchanged.
 			 */
 			if ( 'publish' !== $variation->get_status() ) {
 				continue;
 			}
-			$payload  = $serializer->serialize( $variation, $serialization_request );
-			$document = array(
-				'id'        => $id,
-				'parent_id' => (int) $variation->get_parent_id(),
-				'payload'   => $payload,
-			);
-			if ( isset( $digests[ $id ] ) ) {
-				$document['_rxdb_digest'] = $digests[ $id ];
-			}
-			$documents[] = $document;
+			$bare        = $serializer->serialize( $variation, $serialization_request, false );
+			$documents[] = Product_Serializer::stamp_record( $bare, $variation, $serialization_request, $digests );
 		}
 
-		$meta = array(
-			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-			'requested'   => \count( $ids ),
-			'returned'    => \count( $documents ),
-		);
-		if ( null !== $search_meta ) {
-			$meta = array_merge( $meta, $search_meta );
-		}
-
-		$response = rest_ensure_response(
-			array(
-				'documents' => $documents,
-				'meta'      => $meta,
-			)
-		);
+		$response = rest_ensure_response( $documents );
 
 		/*
 		 * The pagination WooCommerce would have sent.
