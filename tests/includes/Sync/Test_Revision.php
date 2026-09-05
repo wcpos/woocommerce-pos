@@ -108,8 +108,10 @@ class Test_Revision extends WP_UnitTestCase {
 	 * Generated creation and modification timestamps are not variation content.
 	 */
 	public function test_variation_revision_ignores_generated_dates(): void {
+		// `sku` is a variation schema field; `name` is not (WooCommerce serves it but does
+		// not declare it), so a non-schema field could never move the hash here.
 		$before = array(
-			'name'              => 'Pants',
+			'sku'               => 'PANTS-1',
 			'date_created'      => '2026-09-05T19:14:30',
 			'date_created_gmt'  => '2026-09-05T19:14:30',
 			'date_modified'     => '2026-09-05T19:14:30',
@@ -126,7 +128,7 @@ class Test_Revision extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( Revision::compute_variation( $before ), Revision::compute_variation( $after ) );
-		$after['name'] = 'Shirts';
+		$after['sku'] = 'SHIRTS-1';
 		$this->assertNotSame( Revision::compute_variation( $before ), Revision::compute_variation( $after ) );
 	}
 

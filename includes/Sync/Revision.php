@@ -101,6 +101,24 @@ class Revision {
 	 * @param array $record Bare serialized variation (transport stamps are ignored).
 	 */
 	public static function compute_variation( array $record ): string {
+		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::canonical_variation( $record ) ) );
+	}
+
+	/**
+	 * The exact form {@see self::compute_variation()} hashes, for tests and diagnostics
+	 * that need to name a differing field rather than compare two digests.
+	 *
+	 * Generated timestamps (`date_created*`, `date_modified*`) are outside the hash:
+	 * they are storage facts, not content. WooCommerce moves `date_modified` on every
+	 * save, including a semantic no-op (a push that re-sends the current stock), so a
+	 * revision that hashed it would make an unchanged record 409 the next writer for
+	 * nothing — the date-based revision this recipe replaced had exactly that flaw. A
+	 * content edit always moves a content field, so nothing is lost.
+	 *
+	 * @param array $record Bare serialized variation (transport stamps are ignored).
+	 * @return array Schema-scoped, identity-stripped, canonicalized record.
+	 */
+	public static function canonical_variation( array $record ): array {
 		// WooCommerce merges register_rest_field additions inside get_item_schema().
 		$controller = new class() extends \WC_REST_Product_Variations_Controller {
 			/** Keep the core schema; extensions opt in through the revision-fields filter. */
@@ -122,7 +140,8 @@ class Revision {
 				)
 			);
 		}
-		return self::compute_scoped( $record, (array) apply_filters( 'woocommerce_pos_sync_variation_revision_fields', $fields ) );
+		$fields = (array) apply_filters( 'woocommerce_pos_sync_variation_revision_fields', $fields );
+		return self::canonicalize( array_intersect_key( $record, array_flip( $fields ) ) );
 	}
 
 	public static function canonicalize( array $data ): array {

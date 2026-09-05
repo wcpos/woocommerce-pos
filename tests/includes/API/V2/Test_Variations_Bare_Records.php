@@ -179,18 +179,15 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			return $response;
 		};
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10, 3 );
-		$exclude_generated_dates = static function ( $fields ) {
-			return array_merge( $fields, array( 'date_created', 'date_created_gmt', 'date_modified', 'date_modified_gmt' ) );
-		};
-		add_filter( 'woocommerce_pos_sync_revision_excluded_fields', $exclude_generated_dates );
 		// Every serialization the lanes perform passes this hook last. Record each one's
-		// hashed form and request params, so a divergence between the lane's own canonical
-		// reads is diffed field by field instead of surfacing as two sha256 strings.
+		// HASHED form (the variation recipe's own canonical array) and request params, so a
+		// divergence between the lane's own canonical reads is diffed field by field instead
+		// of surfacing as two sha256 strings. CI named `date_modified_gmt` this way (#1878).
 		$seen     = array();
 		$recorder = static function ( $response, $object, $request ) use ( &$seen ) {
 			$seen[] = array(
 				'params'    => $request->get_params(),
-				'canonical' => json_decode( wp_json_encode( Revision::canonicalize( Meta_Normalizer::normalize( $response->get_data() ) ) ), true ),
+				'canonical' => json_decode( wp_json_encode( Revision::canonical_variation( Meta_Normalizer::normalize( $response->get_data() ) ) ), true ),
 			);
 			return $response;
 		};
@@ -204,8 +201,8 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			// instead of leaving two opaque hashes (CI saw exactly that once).
 			$serializer = new Product_Serializer();
 			$canonical  = static function () use ( $serializer, $variation ): array {
-				// The hashed form: canonicalized (meta as an id-less set) and in wire shape.
-				return json_decode( wp_json_encode( Revision::canonicalize( $serializer->bare_for_revision( wc_get_product( $variation->get_id() ) ) ) ), true );
+				// The hashed form: schema-scoped, dates and identity out, meta as an id-less set.
+				return json_decode( wp_json_encode( Revision::canonical_variation( $serializer->bare_for_revision( wc_get_product( $variation->get_id() ) ) ) ), true );
 			};
 			$before = $canonical();
 			$marked = $this->read( 'variations', $params )[0];
@@ -241,7 +238,6 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10 );
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $recorder, PHP_INT_MAX );
-			remove_filter( 'woocommerce_pos_sync_revision_excluded_fields', $exclude_generated_dates );
 		}
 	}
 
