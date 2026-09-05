@@ -197,6 +197,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			$plain = $this->flat( $variation );
 			$after = $canonical();
 			$ack = $this->push( $variation, $marked['_rxdb_revision'], array( 'stock_quantity' => 10 ) );
+			$settled = $canonical();
 			// Assert.
 			$this->assertSame( $before, $between, 'the marked read changed the canonical record' );
 			$this->assertSame( $between, $after, 'the plain read changed the canonical record' );
@@ -204,6 +205,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 			$this->assertNotSame( $plain['description'], $marked['description'] );
 			$this->assertSame( $plain['_rxdb_revision'], $marked['_rxdb_revision'] );
 			$this->assertSame( 200, $ack->get_status(), wp_json_encode( $ack->get_data() ) );
+			$this->assertSame( $after, $settled, 'the no-op write changed the canonical record' );
 			$this->assertSame( $marked['_rxdb_revision'], $ack->get_data()['currentRevision'] );
 		} finally {
 			remove_filter( 'woocommerce_rest_prepare_product_variation_object', $filter, 10 );
