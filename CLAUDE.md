@@ -116,6 +116,12 @@ git fetch -q origin
 git rev-list --left-right --count origin/main...origin/next   # <only-on-main>  <only-on-next>
 ```
 
-If `next` has commits `main` lacks, `next` is live: feature and breaking work targets `next`. If `next` is fully contained in `main` (right-hand count 0), we are in the freeze or just after a release: target `main`. If the remote contradicts this note, the remote wins — ask Paul only when the counts themselves are ambiguous.
+Read the counts:
+
+- **Right-hand count above 0** — `next` has commits `main` lacks, so `next` is live: feature and breaking work targets `next`.
+- **Left-hand count above 0, right-hand 0** — `main` has moved on and `next` has not, so we are in the freeze: target `main`.
+- **`0 0`** — the tips are equal. A freshly re-cut `next` looks exactly like the first hours of a freeze, and the count cannot tell them apart. Ask Paul which phase it is; do not default to `main`, or the first `next`-only commit never gets made.
+
+If the remote contradicts this note, the remote wins.
 
 Never commit directly to either trunk — branch off the right one in a worktree and target the PR's base at the same lane.
