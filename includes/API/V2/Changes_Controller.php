@@ -759,10 +759,11 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * @return string|WP_Error The collection, or the 400.
 	 */
 	private function collection_for_request( WP_REST_Request $request, array $supported ) {
-		$collection = (string) ( $request->get_param( 'collection' ) ?? '' );
-		if ( '' === $collection ) {
-			$collection = 'products';
-		}
+		// Only an ABSENT parameter takes the documented `products` default (the
+		// route args supply it); an explicit empty value (`?collection=`) is a
+		// malformed request and fails closed like any other unsupported value.
+		$raw        = $request->get_param( 'collection' );
+		$collection = null === $raw ? 'products' : (string) $raw;
 		if ( \in_array( $collection, $supported, true ) ) {
 			return $collection;
 		}
