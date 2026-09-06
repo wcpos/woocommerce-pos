@@ -86,11 +86,28 @@ class Bootstrap {
 	}
 
 	/**
+	 * The request lane the suite runs on (see manually_load_plugin()).
+	 *
+	 * A named callback so tests about lane detection can remove exactly this
+	 * filter and put it back.
+	 */
+	public static function default_request_lane(): string {
+		return \WCPOS\WooCommercePOS\Services\Request_Lane::REST;
+	}
+
+	/**
 	 * Manually load the plugin being tested.
 	 */
 	public function manually_load_plugin(): void {
 		require $this->plugin_dir . '/woocommerce-pos.php';
 		require_once $this->plugin_dir . '/includes/wcpos-functions.php';
+
+		// PHPUnit has no REQUEST_URI and no admin screen, which Request_Lane
+		// reads as a storefront page — where Init constructs only the always-on
+		// services. The suite exercises the full object graph the POS and its
+		// REST clients see, so pin the REST lane; tests about lane detection
+		// remove this filter and restore it.
+		add_filter( 'woocommerce_pos_request_lane', array( __CLASS__, 'default_request_lane' ) );
 
 		// StaticMockerHack rewrites short class names and falls back through the
 		// global name. Alias the namespaced identity brain so unmocked methods keep

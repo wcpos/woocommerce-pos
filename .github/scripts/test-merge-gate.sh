@@ -686,8 +686,8 @@ run_case "delegation naming a workflow that does not run the suite is rejected" 
 # deadlock for lock-only dependency PRs.
 gate_php_paths() {
   sed -n '/^requires_php_tests()/,/^}/p' "$MERGE_GATE_SCRIPT" \
-    | grep -oE '\*\.php|composer\.(json|lock)|\.github/[a-zA-Z0-9._/-]+\.(json|sh|yml)' \
-    | sed 's|^\*\.php$|**.php|' | sort -u
+    | grep -oE '\*\.php|composer\.(json|lock)|package\.json|pnpm-workspace\.yaml|patches/\*|\.github/[a-zA-Z0-9._/-]+\.(json|sh|yml)' \
+    | sed -e 's|^\*\.php$|**.php|' -e 's|^patches/\*$|patches/**|' | sort -u
 }
 workflow_php_paths() {
   awk '/^            php:$/{f=1;next} /^[[:space:]]*$/{f=0} f' "$REPO_ROOT/.github/workflows/tests-php.yml" \

@@ -121,6 +121,44 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 	}
 
 	/**
+	 * The wp_options key the upgrade-time autoload flip must target.
+	 *
+	 * A public accessor rather than a public option_name(): Pro's License
+	 * section overrides option_name() at protected visibility (its key is
+	 * Pro-prefixed), and a child cannot narrow a public parent method — making
+	 * option_name() public fatalled every Pro site (#1846/#1849). Deriving the
+	 * key from id() instead flipped the wrong row for that section and seeded a
+	 * stray `woocommerce_pos_settings_license` (measured 2026-09-03 on dev-pro:
+	 * one query per page for the license row).
+	 *
+	 * @return string
+	 */
+	public function autoload_option_name(): string {
+		return $this->option_name();
+	}
+
+	/**
+	 * Whether this section's option rides in alloptions.
+	 *
+	 * Off by default: byte-compatible with the legacy save path, and most
+	 * sections are only read on POS/admin requests. A section that is read on
+	 * EVERY request (General, via the Settings service during init) overrides
+	 * this, because without an object cache a non-autoloaded option costs one
+	 * query per page load (measured 2026-09-03 on dev-next). Declaring it here
+	 * is the whole contract: write() honours it for new writes, and
+	 * Activator::autoload_request_latches() flips existing rows on upgrade and
+	 * reactivation for every registered section that returns true — core's
+	 * update_option() never flips autoload on an unchanged value, so the
+	 * writer alone cannot repair an existing row. Keep it off for sections that
+	 * can hold unbounded lists (Visibility's product ids).
+	 *
+	 * @return bool
+	 */
+	public function autoload(): bool {
+		return false;
+	}
+
+	/**
 	 * Read the raw option value, coerced to array.
 	 *
 	 * @return array
@@ -169,7 +207,7 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 	 *
 	 * Behaviour is byte-compatible with the legacy
 	 * Services\Settings::save_settings(): sanitize, stamp date_modified_gmt,
-	 * apply the pre-save filter, update_option (autoload off), detect
+	 * apply the pre-save filter, update_option (autoload per {@see autoload()}), detect
 	 * unchanged-value no-ops, fire the saved action, return the post-save
 	 * read.
 	 *
@@ -199,7 +237,7 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 
 		$option_name    = $this->option_name();
 		$previous_value = get_option( $option_name, null );
-		$success        = update_option( $option_name, $settings, false );
+		$success        = update_option( $option_name, $settings, $this->autoload() );
 
 		if ( ! $success ) {
 			// update_option() returns false both when the value is unchanged (no DB

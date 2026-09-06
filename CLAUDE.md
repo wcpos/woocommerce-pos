@@ -102,11 +102,26 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 
 ## Branch lanes
 
-Two trunks, since 2026-08-28 (revived for 1.11):
+Two trunks, one standard release cycle. Which phase we are in is a fact you read off the remote, not off this file — this note was once left saying "`next` is dead" for a week after `next` had been revived, and it sent agents to the wrong lane.
 
-- **`main`** — the stable, released line. 1.10.x patches branch from and target `main`.
-- **`next`** — the **1.11.0** line: the checkout/payments rebuild and everything decided on the payments wayfinder map (wcpos/roadmap#97), plus the customer display. Anything for 1.11 — including bug fixes that only matter because of that work — branches from `origin/next` and targets `next`. Do not argue main vs next per PR; if it is 1.11 work, it is `next`.
+- **`main`** — the released line. Patch releases (`1.x.y`) are cut from its tip, so anything merged here ships in the next patch. Only fixes for the released version target `main`.
+- **`next`** — the feature lane for the next minor/major. New features, breaking changes, and bug fixes that only matter because of that work branch from `origin/next` and target `next`. `main` moves daily and is merged into `next` regularly, never the other way around until release.
 
-`main` moves daily, so `next` is fast-forwarded from `main` before every landing (`git push origin origin/main:refs/heads/next` while `next` is strictly behind; verify with `gh api repos/wcpos/woocommerce-pos/compare/next...main`).
+**The cycle:** `next` is live while the next version is being built. Just before release it is moved to `main` for final testing against dev-free and dev-pro — a freeze of a week or more during which `next` genuinely is dead and everything goes to `main`. Once the version ships, `next` is re-cut from `main` and becomes the working lane again.
+
+**How to tell which phase you are in** (do this before choosing a lane, every session):
+
+```bash
+git fetch -q origin
+git rev-list --left-right --count origin/main...origin/next   # <only-on-main>  <only-on-next>
+```
+
+Read the counts:
+
+- **Right-hand count above 0** — `next` has commits `main` lacks, so `next` is live: feature and breaking work targets `next`.
+- **Left-hand count above 0, right-hand 0** — `main` has moved on and `next` has not, so we are in the freeze: target `main`.
+- **`0 0`** — the tips are equal. A freshly re-cut `next` looks exactly like the first hours of a freeze, and the count cannot tell them apart. Ask Paul which phase it is; do not default to `main`, or the first `next`-only commit never gets made.
+
+If the remote contradicts this note, the remote wins.
 
 Never commit directly to either trunk — branch off the right one in a worktree and target the PR's base at the same lane.
