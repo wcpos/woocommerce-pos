@@ -32,8 +32,8 @@ use WC_Unit_Test_Case;
 class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	/**
 	 * Every hook name the constructor registers ONLY when the sync schema latch
-	 * is set. Derived from `Sync_Journal::register_hooks()` (32 names),
-	 * `Integrity_Digest::register_hooks()` (21, all a subset of the journal's),
+	 * is set. Derived from `Sync_Journal::register_hooks()` (33 names, `shutdown`
+	 * included), `Integrity_Digest::register_hooks()` (22, all a subset of the journal's),
 	 * `Visibility_Observer::register_hooks()` (9: four per watched option plus the
 	 * shared generic `delete_option`),
 	 * `Sync_Journal_Purge::register_hooks()` and the four sync lane filters.
@@ -66,6 +66,11 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'profile_update',
 		'remove_user_role',
 		'set_user_role',
+		// The request boundary for the coalesced order journal rows and
+		// order/customer digest upserts. Observed: in this test process the
+		// hook carries no callback before Init runs, so under the latch it
+		// appears as a new hook name (this golden went red without the entry).
+		'shutdown',
 		'update_option_woocommerce_pos_settings_general',
 		'update_option_woocommerce_pos_settings_visibility',
 		'updated_term_meta',

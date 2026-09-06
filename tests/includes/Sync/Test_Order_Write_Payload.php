@@ -440,6 +440,54 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A removed variation line keeps its wc/v3 deletion marker. The WCPOS client tombstones
+	 * a settled line by posting the FULL line with `product_id: null`, so the acked
+	 * `variation_id` (and sku) still ride along and the line reads as an unchanged
+	 * binding to the identity dedupe — which then dropped `product_id`, the very key
+	 * wc/v3 removes on, and the variation came back on every save.
+	 */
+	public function test_for_update_with_a_removed_variation_line_keeps_the_null_product_id_marker(): void {
+		// Arrange.
+		$variable   = ProductHelper::create_variation_product();
+		$variations = $variable->get_children();
+		$variation  = wc_get_product( $variations[0] );
+
+		$order = new WC_Order();
+		$item  = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'           => $item->get_id(),
+					'quantity'     => 1,
+					'product_id'   => null,
+					'variation_id' => $variation->get_id(),
+					'sku'          => 'ACKED-VARIATION-SKU',
+					'meta_data'    => array(
+						array(
+							'key'   => '_woocommerce_pos_uuid',
+							'value' => self::KEPT_LINE_UUID,
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_update( $order->get_id(), $payload );
+
+		// Assert: the marker survives the forward; the dedupe leaves the tombstone alone.
+		$this->assertCount( 1, $forwarded['line_items'] );
+		$line = $forwarded['line_items'][0];
+		$this->assertSame( $item->get_id(), $line['id'] );
+		$this->assertArrayHasKey( 'product_id', $line );
+		$this->assertNull( $line['product_id'] );
+		$this->assertArrayNotHasKey( 'sku', $line );
+	}
+
+	/**
 	 * When the id no longer resolves to an order, every order-reading step no-ops
 	 * and the forward carries only the create-side schema sanitization.
 	 */

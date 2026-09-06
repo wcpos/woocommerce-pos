@@ -14,7 +14,7 @@
  * Tested up to:      7.1
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
- * WC tested up to:   11.0.1
+ * WC tested up to:   11.1.0
  * WC requires at least: 5.3
  *
  * @see      http://wcpos.com
@@ -43,7 +43,7 @@ if ( ! class_exists( API\V2\Ping::class, false ) ) {
 API\V2\Ping::maybe_serve();
 
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.9.4' );
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.9.7' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
