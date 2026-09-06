@@ -62,3 +62,17 @@ and UUID metadata. `/resolve/barcode` returns a bare product or variation as
 `match`, not a wrapper. Variation revisions are schema-scoped content hashes,
 computed before transport stamps; `woocommerce_pos_sync_variation_revision_fields`
 allows site-local fields to participate in the same recipe on reads and CAS.
+
+## One checkpoint shape, schema-scoped order revisions (1.11.0, free#1870)
+
+Behind the protocol gate, `/orders/pull` speaks the `/changes/*` envelope
+vocabulary: `complete` replaces the inverted `hasMore`, and `epoch`, `head` and
+`horizon` move inside `checkpoint` beside the lane's cursor interior
+(`updatedAtGmt`, `orderId`, `revision`, `sequence`). The top-level copies are
+gone and `checkpoint` is present on every response, empty page included; the
+lane itself keeps serving for the whole 1.11.x line. Order revisions are now
+schema-scoped on the variation recipe: only WooCommerce's own order schema keys
+are hashed, generated dates are out (`date_paid*` / `date_completed*` stay), and
+`meta_data` hashes as an id-less set at every depth. Third-party
+`register_rest_field` keys ride outside the hash by construction (free#1744);
+`woocommerce_pos_sync_order_revision_fields` opts site-local fields back in.

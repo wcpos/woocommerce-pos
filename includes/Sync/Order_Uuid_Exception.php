@@ -17,7 +17,7 @@ use RuntimeException;
  * means the write surface is broken — never emit the document. This is THE
  * one reaction (#424): direct builders let it fail their page/chunk (retried);
  * the pull planner catches it to stop the page WITHOUT advancing the checkpoint
- * (hasMore forces a retry from the last emitted position).
+ * (a cleared `complete` forces a retry from the last emitted position).
  */
 final class Order_Uuid_Exception extends RuntimeException {
 	public static function for_order( int $order_id ): self {

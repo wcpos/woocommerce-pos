@@ -182,7 +182,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $data['documents'] );
-		$this->assertSame( 0, $data['horizon'] );
+		$this->assertSame( 0, $data['checkpoint']['horizon'] );
 
 		$document = $data['documents'][0];
 		$this->assertSame( $uuid, $document['id'] );

@@ -1,5 +1,5 @@
 ---
-status: accepted — compute-at-pull landed (free#1745 landed the retirement; free#1746 landed compute-at-pull; the schema-scoped recipe rides the 1.11.0 gate)
+status: implemented — compute-at-pull landed (free#1745 landed the retirement; free#1746 landed compute-at-pull), and the schema-scoped recipe with its generated-date exclusion landed on `next` for 1.11.0 behind the protocol gate (free#1870)
 ---
 
 # Order revision: content hash, computed at pull time, never stored
@@ -28,9 +28,12 @@ WooCommerce 11.1.0-beta.2 source; free#1746 pins it with a test). HPOS adds
 second-granularity collisions (one checkout's four saves share a second) and a
 caller-supplied-date hole (`wc_create_refund`).
 
-**Fingerprint scope (lands with free#1746):** the hashed form becomes the bare, pre-filter
-payload restricted to the top-level fields of WooCommerce's own REST order schema, plus the
-existing volatile-field strips. Third-party additions (`register_rest_field`, prepare-filter
+**Fingerprint scope (landed with free#1870):** the hashed form is the served payload — the
+lane's normalized document, not a pre-filter form, because every hash site must see the same
+meta normalization — restricted to the top-level fields of WooCommerce's own REST order schema
+minus the generated timestamps (`date_created*`, `date_modified*`, which move on a no-op save),
+plus the existing volatile-field strips, with meta rows hashed as an id-less, order-independent
+set. Third-party additions (`register_rest_field`, prepare-filter
 injections, the pull-only `woocommerce_pos_sync_serialized_order` filter) ride outside the
 hash by construction, so third-party payload noise cannot cause spurious 409s — at the
 accepted cost that conflicts on non-schema fields go undetected (concurrent order editing

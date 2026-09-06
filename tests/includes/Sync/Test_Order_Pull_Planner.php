@@ -108,7 +108,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertSame( '2026-07-10T01:00:00', $result['emits'][0]['checkpoint']['updatedAtGmt'] );
 
 		$this->assertSame( 'complete', $result['complete']['type'] );
-		$this->assertFalse( $result['complete']['hasMore'] );
+		$this->assertTrue( $result['complete']['complete'] );
 		$this->assertSame(
 			array(
 				'updatedAtGmt' => '2026-07-10T02:00:00',
@@ -136,7 +136,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		// Order 12 must NOT be planned — emitting it would advance the checkpoint past 11.
 		$this->assertCount( 1, $result['emits'] );
 		$this->assertSame( 10, $result['emits'][0]['orderId'] );
-		$this->assertTrue( $result['complete']['hasMore'] );
+		$this->assertFalse( $result['complete']['complete'] );
 		$this->assertSame( 10, $result['complete']['checkpoint']['orderId'] ); // held at the last EMITTED order
 	}
 
@@ -154,7 +154,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $result['emits'] );
 		$this->assertSame( 11, $result['emits'][0]['orderId'] );
-		$this->assertFalse( $result['complete']['hasMore'] );
+		$this->assertTrue( $result['complete']['complete'] );
 		$this->assertSame( 11, $result['complete']['checkpoint']['orderId'] );
 	}
 
@@ -283,7 +283,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertCount( 1, $result['emits'] );
 		$this->assertSame( 10, $result['emits'][0]['orderId'] );
 		$this->assertSame( 4, $result['complete']['checkpoint']['sequence'] );
-		$this->assertTrue( $result['complete']['hasMore'] );
+		$this->assertFalse( $result['complete']['complete'] );
 	}
 
 	public function test_empty_page_returns_the_request_checkpoint_unchanged(): void {
@@ -291,7 +291,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$result  = self::plan_result( $planner, array(), false, array() );
 		$this->assertCount( 0, $result['emits'] );
 		$this->assertSame( self::request_checkpoint(), $result['complete']['checkpoint'] );
-		$this->assertFalse( $result['complete']['hasMore'] );
+		$this->assertTrue( $result['complete']['complete'] );
 	}
 
 	public function test_sequence_zero_fallback_rows_are_never_coalesced_away(): void {
