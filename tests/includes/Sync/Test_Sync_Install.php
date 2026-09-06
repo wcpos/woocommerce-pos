@@ -209,12 +209,18 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		$wpdb->suppress_errors( $suppress );
 		remove_filter( 'query', $break_blanking );
 
+		// get_row, not get_var: get_var() maps an empty-string value to null by design.
+		$revision_of_51 = static function () use ( $wpdb, $journal ): ?string {
+			$row = $wpdb->get_row( 'SELECT revision FROM ' . $journal->table_name() . ' WHERE object_id = 51', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+			return \is_array( $row ) ? (string) $row['revision'] : null;
+		};
+
 		$this->assertSame( '5', get_option( Api::SCHEMA_OPTION, null ) );
-		$this->assertSame( 'sha256:legacy', $wpdb->get_var( 'SELECT revision FROM ' . $journal->table_name() . ' WHERE object_id = 51' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$this->assertSame( 'sha256:legacy', $revision_of_51() );
 
 		( new Activator() )->install_sync_schema();
 
-		$this->assertSame( '', $wpdb->get_var( 'SELECT revision FROM ' . $journal->table_name() . ' WHERE object_id = 51' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$this->assertSame( '', $revision_of_51() );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
 	}
 
