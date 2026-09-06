@@ -1721,7 +1721,10 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$timeout = (int) get_option( '_transient_timeout_wcpos_blacklist_' . $oldest );
 
 		$this->assertGreaterThan( time(), $timeout );
-		$this->assertLessThanOrEqual( $planted[ $oldest ]['access_expires'], $timeout );
+		// The service derives the lifetime from its own time() read and set_transient() reads
+		// time() again to stamp the timeout, so the stored bound can trail access_expires by
+		// one second when the clock ticks between the two (seen under xdebug coverage).
+		$this->assertLessThanOrEqual( $planted[ $oldest ]['access_expires'] + 1, $timeout );
 	}
 
 	/**
