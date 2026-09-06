@@ -76,3 +76,12 @@ are hashed, generated dates are out (`date_paid*` / `date_completed*` stay), and
 `meta_data` hashes as an id-less set at every depth. Third-party
 `register_rest_field` keys ride outside the hash by construction (free#1744);
 `woocommerce_pos_sync_order_revision_fields` opts site-local fields back in.
+
+## Order journal rows carry no revision value (1.11.0, free#1757)
+
+An order row in the sync journal is a change pointer — `(object_type, object_id, deleted,
+modified_gmt, sequence)` — and its `revision` column is always empty; the served revision is
+computed at pull from the payload (ADR 0033). `/orders/pull` no longer has a stored-wins
+branch, tombstone and other non-document checkpoints carry `revision: ""` (the literal
+`'deleted'` marker is gone), and the schema-6 upgrade blanks the pre-#1746 `sha256:` hashes
+and `'deleted'` markers older rows still held.

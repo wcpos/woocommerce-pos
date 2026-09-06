@@ -643,11 +643,8 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assertSame( 'order', $row['object_type'] );
 		$this->assertSame( $deleted ? 1 : 0, $row['deleted'] );
 		$this->assertSame( $origin, $row['origin'] );
-		if ( $deleted ) {
-			$this->assertSame( 'deleted', $row['revision'] );
-		} else {
-			$this->assertSame( '', $row['revision'] );
-		}
+		// Order rows are change pointers: no revision value on live rows OR tombstones (#1757).
+		$this->assertSame( '', $row['revision'] );
 	}
 
 	private function row_semantics( array $row ): array {
