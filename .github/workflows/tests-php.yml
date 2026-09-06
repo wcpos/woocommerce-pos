@@ -375,11 +375,19 @@ jobs:
           echo "Smoke test using WP ${{ steps.versions.outputs.wp }}, WC ${{ steps.versions.outputs.wc }}"
 
       - name: Start WordPress Environment
+        # The wp-env image build runs `apt-get update && apt-get install` inside
+        # the `wordpress:php7.4` base (Debian 11). security.debian.org's CDN
+        # periodically serves an index that lists a glibc build the pool has
+        # already dropped (404 on libc-dev-bin …deb11uNN), and the skew lasts
+        # tens of minutes per edge. Ten-second retries hit the same edge and
+        # fail identically; spacing the attempts out lets the skew clear or a
+        # different edge answer, which is what a manual rerun an hour later
+        # was doing by hand (three hits on 2026-09-05/06, PRs #1878/#1887/#1888).
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 10
+          max_attempts: 5
+          retry_wait_seconds: 300
           on_retry_command: docker buildx prune --all --force
           command: pnpm run wp-env start
 
@@ -547,11 +555,19 @@ jobs:
           cat .wp-env.json
 
       - name: Start WordPress Environment
+        # The wp-env image build runs `apt-get update && apt-get install` inside
+        # the `wordpress:php7.4` base (Debian 11). security.debian.org's CDN
+        # periodically serves an index that lists a glibc build the pool has
+        # already dropped (404 on libc-dev-bin …deb11uNN), and the skew lasts
+        # tens of minutes per edge. Ten-second retries hit the same edge and
+        # fail identically; spacing the attempts out lets the skew clear or a
+        # different edge answer, which is what a manual rerun an hour later
+        # was doing by hand (three hits on 2026-09-05/06, PRs #1878/#1887/#1888).
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 10
+          max_attempts: 5
+          retry_wait_seconds: 300
           on_retry_command: docker buildx prune --all --force
           command: pnpm run wp-env start
 
