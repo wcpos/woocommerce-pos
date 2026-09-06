@@ -120,7 +120,9 @@ class Templates {
 
 	/** Whether every default type and category term exists. */
 	private function default_terms_present(): bool {
-		foreach ( array( 'receipt', 'report' ) as $slug ) {
+		// Every supported type is seeded, so every one is verified — a list kept
+		// here by hand let `display` seed without being checked (next, 2026-09).
+		foreach ( self::SUPPORTED_TYPES as $slug ) {
 			if ( ! term_exists( $slug, 'wcpos_template_type' ) ) {
 				return false;
 			}
