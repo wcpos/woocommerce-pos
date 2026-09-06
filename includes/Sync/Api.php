@@ -26,7 +26,8 @@ final class Api {
 	public const ADMIN_OP_PATHS  = array( 'uuid/backfill', 'orders/index/backfill', 'integrity/rebuild' );
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
 	// 5: (status, created_at) index on the mutations table for retention pruning.
-	public const SCHEMA_VERSION  = '5';
+	// 6: order journal rows carry no revision value (#1757); the upgrade blanks pre-#1746 stored hashes and 'deleted' markers.
+	public const SCHEMA_VERSION  = '6';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

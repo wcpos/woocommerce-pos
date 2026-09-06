@@ -9,8 +9,8 @@ sha256 content hash, the same paradigm as every other CAS'd collection, but is t
 at pull time from the exact payload being served and never persisted. Under this decision the
 journal row's `revision` column is written empty for orders and `/orders/pull`'s computing
 fallback (already shipping for pre-backfill rows) becomes the only revision source; that
-change landed in free#1746 (legacy rows keep serving their stored hashes through the
-planner's stored-wins branch until they age out). Write-side CAS is unaffected either way: it has
+change landed in free#1746; the planner's stored-wins branch that served legacy rows' hashes
+in the meantime was retired for 1.11.0 by free#1757, whose schema-6 upgrade blanks them. Write-side CAS is unaffected either way: it has
 always recomputed from a fresh re-read and never consulted the stored value.
 
 **Why not stored-at-save (the 1.10.0 design):** the write-time hash serializes the full

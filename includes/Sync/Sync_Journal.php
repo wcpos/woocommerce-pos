@@ -78,11 +78,11 @@ final class Sync_Journal {
 	}
 
 	/**
-	 * The `revision` column is a per-lane union: a `date_modified` stamp for
-	 * catalogue/customer rows, `''` for live order rows (order revisions are
-	 * computed at pull time — ADR 0033), `'deleted'` for order tombstones, and
-	 * legacy pre-#1746 order rows may still carry stored `sha256:` hashes,
-	 * which the pull planner's stored-wins branch serves until they age out.
+	 * The `revision` column is a `date_modified` stamp for catalogue/customer
+	 * rows and always `''` for order rows: an order journal row is a change
+	 * pointer, and the order revision is computed at pull time from the served
+	 * payload (ADR 0033). Schema 6 blanked the pre-#1746 stored hashes and the
+	 * `'deleted'` tombstone markers older rows carried (#1757).
 	 */
 	public function schema_sql( string $table_name, string $charset_collate = '' ): string {
 		return "CREATE TABLE {$table_name} (\n"
@@ -197,6 +197,20 @@ final class Sync_Journal {
 				$now
 			)
 		);
+	}
+
+	/**
+	 * Schema 6 (#1757): clear every stored order revision. Order rows are change
+	 * pointers; the revision is computed at pull, so a stored value — a pre-#1746
+	 * `sha256:` hash or a `'deleted'` marker — must never be readable. Idempotent.
+	 *
+	 * @return bool False when the UPDATE failed; the installer keeps the old latch and retries.
+	 */
+	public function blank_order_revisions(): bool {
+		global $wpdb;
+		$table_name = $this->table_name();
+
+		return false !== $wpdb->query( "UPDATE {$table_name} SET revision = '' WHERE object_type = 'order' AND revision <> ''" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Internal table name.
 	}
 
 	/**
@@ -706,11 +720,9 @@ final class Sync_Journal {
 		$modified_date = $order ? $order->get_date_modified() : null;
 		$modified      = $modified_date ? gmdate( 'Y-m-d H:i:s', $modified_date->getTimestamp() ) : gmdate( 'Y-m-d H:i:s' );
 		// Order revisions are computed at pull time from the served payload (ADR 0033,
-		// #1746) — an order journal row is a change pointer, not a content stamp.
-		// 'deleted' is kept for wire compatibility (it flows into served checkpoints)
-		// and diagnostics; the planner branches on the `deleted` flag, not this value.
-		$revision = $deleted ? 'deleted' : '';
-
+		// #1746) — an order journal row is a change pointer, not a content stamp, so
+		// the column is empty for live rows AND tombstones (#1757); readers branch on
+		// the `deleted` flag.
 		$now = gmdate( 'Y-m-d H:i:s' );
 		return false !== $wpdb->insert(
 			$this->table_name(),
@@ -718,7 +730,7 @@ final class Sync_Journal {
 				'object_type' => 'order',
 				'object_id' => $order_id,
 				'deleted' => $deleted ? 1 : 0,
-				'revision' => $revision,
+				'revision' => '',
 				'modified_gmt' => $modified,
 				'origin' => $origin,
 				'created_gmt' => $now,

@@ -31,7 +31,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 			array(
 				'order_id' => $order_id,
 				'sequence' => $sequence,
-				'revision' => 'rev-' . $order_id . '-' . $sequence,
+				'revision' => '',
 				'modified_gmt' => '2026-07-10T00:00:0' . min( 9, $sequence ),
 				'deleted' => 0,
 			),
@@ -103,8 +103,8 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertCount( 2, $result['emits'] );
 		$this->assertSame( 'document', $result['emits'][0]['type'] );
 		$this->assertSame( 10, $result['emits'][0]['orderId'] );
-		// The row revision is used verbatim; modified comes from the PAYLOAD, not the index row.
-		$this->assertSame( 'rev-10-4', $result['emits'][0]['revision'] );
+		// The revision is computed from the served payload; modified comes from the PAYLOAD too, not the index row.
+		$this->assertSame( 'fallback-10-4', $result['emits'][0]['revision'] );
 		$this->assertSame( '2026-07-10T01:00:00', $result['emits'][0]['checkpoint']['updatedAtGmt'] );
 
 		$this->assertSame( 'complete', $result['complete']['type'] );
@@ -113,7 +113,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 			array(
 				'updatedAtGmt' => '2026-07-10T02:00:00',
 				'orderId' => 11,
-				'revision' => 'rev-11-5',
+				'revision' => 'fallback-11-5',
 				'sequence' => 5,
 			),
 			$result['complete']['checkpoint']
@@ -206,11 +206,16 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertSame( 4, $result['complete']['checkpoint']['sequence'] );
 	}
 
-	public function test_falls_back_to_the_canonical_revision_when_the_index_row_has_none(): void {
+	/**
+	 * Order journal rows carry no revision value (ADR 0033). The stored-wins
+	 * branch that once served a legacy pre-#1746 `sha256:` value verbatim is gone
+	 * (#1757): whatever the row carries, the served revision is the recipe's.
+	 */
+	public function test_document_revision_is_always_computed_never_the_stored_row_value(): void {
 		$planner = new Order_Pull_Planner( self::request_checkpoint(), false );
 		$result  = self::plan_result(
 			$planner,
-			array( self::row( 10, 4, array( 'revision' => '' ) ) ),
+			array( self::row( 10, 4, array( 'revision' => 'sha256:legacy' ) ) ),
 			false,
 			array(
 				10 => self::payload( 10, self::UUID_A ),
@@ -222,13 +227,12 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Post-#1746 fresh journal rows carry the shapes pinned here: `''` on live
-	 * order rows, `'deleted'` on tombstones. Non-document checkpoints serve the
-	 * stored row value verbatim — including the client-visible `''` when a page
-	 * ends on a live row whose order no longer serializes — both already-shipped
-	 * wire shapes 1.10.x clients tolerate.
+	 * A non-document checkpoint — tombstone, or a live row whose order no longer
+	 * serializes — carries an empty revision: nothing was served, and the row is
+	 * a pointer. A legacy `'deleted'` marker still on an old row is never echoed
+	 * (#1757; schema 6 blanks it anyway).
 	 */
-	public function test_non_document_rows_pass_their_stored_revision_into_checkpoints(): void {
+	public function test_non_document_checkpoints_carry_an_empty_revision(): void {
 		$planner   = new Order_Pull_Planner( self::request_checkpoint(), true );
 		$decisions = iterator_to_array(
 			$planner->plan(
@@ -263,7 +267,7 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$this->assertSame( 'computed-rev', $document['revision'] );
 		$this->assertSame( 'computed-rev', $document['checkpoint']['revision'] );
 		$this->assertSame( 'tombstone', $tombstone['type'] );
-		$this->assertSame( 'deleted', $tombstone['checkpoint']['revision'] );
+		$this->assertSame( '', $tombstone['checkpoint']['revision'] );
 		$this->assertSame( 'complete', $complete['type'] );
 		$this->assertSame( '', $complete['checkpoint']['revision'] );
 		$this->assertSame( 3, $complete['checkpoint']['sequence'] );

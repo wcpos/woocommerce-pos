@@ -206,6 +206,20 @@ class Activator {
 			return;
 		}
 
+		// Schema 6 (#1757): order journal rows carry no revision value — the order
+		// revision is computed at pull from the served payload (ADR 0033) and the
+		// planner's stored-wins branch is gone. Upgrading installs still hold
+		// pre-#1746 stored hashes and 'deleted' tombstone markers; blank them so a
+		// legacy value can never be served. The UPDATE is idempotent and the old
+		// latch stays until it succeeds, so a failed run retries.
+		if (
+			null !== $previous_schema
+			&& version_compare( (string) $previous_schema, '6', '<' )
+			&& ! $journal->blank_order_revisions()
+		) {
+			return;
+		}
+
 		// Autoloaded: the Init constructor reads this latch on every request.
 		// This flips an existing row only on WP 6.4+; older rows are flipped by
 		// autoload_request_latches() on upgrade.
