@@ -77,6 +77,19 @@ are hashed, generated dates are out (`date_paid*` / `date_completed*` stay), and
 `register_rest_field` keys ride outside the hash by construction (free#1744);
 `woocommerce_pos_sync_order_revision_fields` opts site-local fields back in.
 
+## Unsupported collections on the `/changes/*` read lanes (1.11.0, free#1740)
+
+`/changes/revision-hash` and `/changes/range-checksum` serve `products` (variations
+folded in) and `tax_rates`; `/changes/sequence-log` serves `all`, `products` and
+`tax_rates`. Any other `collection` value is refused with HTTP 400 and the code
+`woocommerce_pos_sync_unsupported_collection` before any query runs — it used to
+collapse silently to the products rows under the requested name. The `all` stream
+labels its rows by collection (`variations`, `coupons`, `customers`, …, from
+`Sync_Journal::catalogue_object_types()`); those labels are NOT narrowing values.
+`/changes/tick` and `/changes/config-fingerprint` take no collection narrowing and
+ignore the parameter, and `/digests` keeps its documented 200-with-`note` answer for
+an unknown collection because the client's boot prime reads it.
+
 ## Order journal rows carry no revision value (1.11.0, free#1757)
 
 An order row in the sync journal is a change pointer — `(object_type, object_id, deleted,
