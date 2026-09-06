@@ -80,8 +80,9 @@ are hashed, generated dates are out (`date_paid*` / `date_completed*` stay), and
 ## Order journal rows carry no revision value (1.11.0, free#1757)
 
 An order row in the sync journal is a change pointer — `(object_type, object_id, deleted,
-modified_gmt, sequence)` — and its `revision` column is always empty; the served revision is
-computed at pull from the payload (ADR 0033). `/orders/pull` no longer has a stored-wins
+modified_gmt, sequence)` — and the order observers always write its `revision` column empty
+(the generic `Sync_Journal::record()` still accepts a value, but no order writer passes one);
+the served revision is computed at pull from the payload (ADR 0033). `/orders/pull` no longer has a stored-wins
 branch, tombstone and other non-document checkpoints carry `revision: ""` (the literal
 `'deleted'` marker is gone), and the schema-6 upgrade blanks the pre-#1746 `sha256:` hashes
 and `'deleted'` markers older rows still held.

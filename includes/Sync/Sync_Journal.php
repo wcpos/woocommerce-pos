@@ -168,6 +168,20 @@ final class Sync_Journal {
 	}
 
 	/**
+	 * Schema 6 (#1757): clear every stored order revision. Order rows are change
+	 * pointers; the revision is computed at pull, so a stored value — a pre-#1746
+	 * `sha256:` hash or a `'deleted'` marker — must never be readable. Idempotent.
+	 *
+	 * @return bool False when the UPDATE failed; the installer keeps the old latch and retries.
+	 */
+	public function blank_order_revisions(): bool {
+		global $wpdb;
+		$table_name = $this->table_name();
+
+		return false !== $wpdb->query( "UPDATE {$table_name} SET revision = '' WHERE object_type = 'order' AND revision <> ''" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Internal table name.
+	}
+
+	/**
 	 * Append one tombstone per catalogue post id, in a single statement.
 	 *
 	 * The per-record `record_post_deleted()` path loads a `WC_Product` for the revision stamp, which
@@ -497,20 +511,6 @@ final class Sync_Journal {
 
 	public function record_order_updated( int $order_id ): void {
 		$this->record_order_change( $order_id, 'hook:update', false );
-	}
-
-	/**
-	 * Schema 6 (#1757): clear every stored order revision. Order rows are change
-	 * pointers; the revision is computed at pull, so a stored value — a pre-#1746
-	 * `sha256:` hash or a `'deleted'` marker — must never be readable. Idempotent.
-	 *
-	 * @return bool False when the UPDATE failed; the installer keeps the old latch and retries.
-	 */
-	public function blank_order_revisions(): bool {
-		global $wpdb;
-		$table_name = $this->table_name();
-
-		return false !== $wpdb->query( "UPDATE {$table_name} SET revision = '' WHERE object_type = 'order' AND revision <> ''" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Internal table name.
 	}
 
 	public function record_order_deleted( int $order_id ): void {

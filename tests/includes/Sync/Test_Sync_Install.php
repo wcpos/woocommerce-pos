@@ -188,6 +188,37 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A failed schema-6 blanking keeps the OLD latch (like the schema-3 step), so
+	 * the next install retries instead of latching over rows that still carry a
+	 * stored order revision the planner could never see again.
+	 */
+	public function test_schema_6_upgrade_keeps_old_latch_when_blanking_fails(): void {
+		global $wpdb;
+		( new Activator() )->install_sync_schema();
+		update_option( Api::SCHEMA_OPTION, '5', false );
+		$journal = new Sync_Journal();
+		$journal->record( 'order', 51, false, 'sha256:legacy', 'hook:update', false );
+
+		// Break only the blanking UPDATE: point it at a table that does not exist.
+		$break_blanking = static function ( string $query ): string {
+			return false !== strpos( $query, "SET revision = ''" ) ? "UPDATE wcpos_no_such_table SET revision = '' WHERE 1 = 0" : $query;
+		};
+		add_filter( 'query', $break_blanking );
+		$suppress = $wpdb->suppress_errors();
+		( new Activator() )->install_sync_schema();
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $break_blanking );
+
+		$this->assertSame( '5', get_option( Api::SCHEMA_OPTION, null ) );
+		$this->assertSame( 'sha256:legacy', $wpdb->get_var( 'SELECT revision FROM ' . $journal->table_name() . ' WHERE object_id = 51' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+
+		( new Activator() )->install_sync_schema();
+
+		$this->assertSame( '', $wpdb->get_var( 'SELECT revision FROM ' . $journal->table_name() . ' WHERE object_id = 51' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+	}
+
+	/**
 	 * A failed repair clears the current latch so a later install retries.
 	 */
 	public function test_failed_repair_clears_current_latch_and_next_install_repairs_schema(): void {
