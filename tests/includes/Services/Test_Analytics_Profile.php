@@ -22,6 +22,7 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		remove_filter( 'woocommerce_pos_analytics_multi_currency', '__return_true' );
+		remove_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
 		delete_transient( 'wcpos_landing_profile' );
 
 		parent::tearDown();
@@ -43,23 +44,67 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Every fit signal maps to its segment, with stronger signals taking priority.
+	 */
+	public function test_pro_fit_segment_for_each_signal_returns_highest_priority_segment(): void {
+		// Arrange.
+		$cases = array(
+			'pro beats multi-register'           => array( 'pro', true, 4, 3, '1000+' ),
+			'multi-register beats multi-gateway' => array( 'multi_register', false, 4, 3, '1000+' ),
+			'multi-gateway beats high-volume'    => array( 'multi_gateway', false, 3, 3, '1000+' ),
+			'101-1000 is high-volume'            => array( 'high_volume', false, 3, 2, '101-1000' ),
+			'1000+ is high-volume'               => array( 'high_volume', false, 3, 2, '1000+' ),
+			'non-matching band is starter'       => array( 'starter', false, 3, 2, '11-100' ),
+		);
+
+		foreach ( $cases as $case => $inputs ) {
+			// Act.
+			$actual = Analytics_Profile::pro_fit_segment( $inputs[1], $inputs[2], $inputs[3], $inputs[4] );
+
+			// Assert.
+			$this->assertSame( $inputs[0], $actual, $case );
+		}
+	}
+
+	/**
 	 * The profile reports the platform and market fields the spec calls for.
 	 */
 	public function test_group_properties_include_platform_and_market_fields(): void {
 		$properties = ( new Analytics_Profile() )->get_group_properties();
 
-		foreach ( array( 'php_version', 'wp_version', 'wc_version', 'mysql_version', 'wcpos_version', 'wcpos_edition', 'wc_country', 'wc_currency', 'locale', 'timezone', 'multisite', 'hpos_enabled', 'tax_enabled', 'multi_currency', 'days_since_install', 'product_count_band', 'order_count_band', 'pos_user_count', 'gateway_count' ) as $key ) {
+		foreach ( array( 'php_version', 'wp_version', 'wc_version', 'mysql_version', 'wcpos_version', 'wcpos_edition', 'pro_license_active', 'pro_fit_segment', 'wc_country', 'wc_currency', 'locale', 'timezone', 'multisite', 'hpos_enabled', 'tax_enabled', 'multi_currency', 'days_since_install', 'product_count_band', 'order_count_band', 'pos_user_count', 'gateway_count' ) as $key ) {
 			$this->assertArrayHasKey( $key, $properties, "Missing group property: {$key}" );
 		}
 
 		$this->assertSame( PHP_VERSION, $properties['php_version'] );
 		$this->assertSame( get_bloginfo( 'version' ), $properties['wp_version'] );
-		if ( class_exists( '\\WCPOS\\WooCommercePOSPro\\WooCommercePOSPro' ) ) {
-			$this->assertSame( 'pro', $properties['wcpos_edition'] );
+	}
 
-			return;
-		}
+	/**
+	 * The Free edition is reported when Pro detection is unfiltered.
+	 */
+	public function test_group_properties_by_default_report_free_edition(): void {
+		// Arrange: Pro detection is unfiltered.
+
+		// Act.
+		$properties = ( new Analytics_Profile() )->get_group_properties();
+
+		// Assert.
 		$this->assertSame( 'free', $properties['wcpos_edition'] );
+	}
+
+	/**
+	 * The Pro edition is reported when Pro detection is filtered on.
+	 */
+	public function test_group_properties_when_pro_detection_is_filtered_report_pro_edition(): void {
+		// Arrange.
+		add_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
+
+		// Act.
+		$properties = ( new Analytics_Profile() )->get_group_properties();
+
+		// Assert.
+		$this->assertSame( 'pro', $properties['wcpos_edition'] );
 	}
 
 	/**

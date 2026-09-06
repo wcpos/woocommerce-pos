@@ -18,14 +18,18 @@ use RuntimeException;
 /**
  * Hash-backed range-checksum support: stored per-record content digests.
  *
- * STORES a digest of each product/variation's raw DB row at hook time (the
- * same save/delete hooks class-change-log.php uses), so the integrity scan
+ * STORES a digest of each product/variation's raw DB row, marked dirty by the
+ * same save/delete hooks class-change-log.php uses and written at the request
+ * boundary (see $pending_digests), so the integrity scan
  * can compare — entirely in SQL — the aggregate of CURRENT raw-row digests
  * against the aggregate of STORED digests per id-range bucket. If hooks
  * fired for every write, stored == current (and sequence-log already
  * reported the change); a bucket mismatch therefore means exactly "content
  * changed without hooks firing" — the sql-bypass signature — at GROUP BY
- * prices instead of revision-hash's full-hydration prices.
+ * prices instead of revision-hash's full-hydration prices. Because the write
+ * lands at the boundary, a hook-less write later in the SAME request is
+ * absorbed into that request's digest; the scan catches bypasses between
+ * requests, which is where they happen (a direct SQL job, an importer).
  *
  * The digest basis is deliberately the RAW DB ROW, NOT the filtered REST
  * payload: this signal is detection-only (discovery of WHERE drift
@@ -76,6 +80,49 @@ final class Integrity_Digest {
 	 * computed by ONE expression — the invariant the whole scan rests on.
 	 */
 	private Digest_Index $index;
+
+	/**
+	 * Order and customer digests owed but not yet written, keyed "type:id".
+	 *
+	 * A stored digest is a pure function of the settled record, so only the
+	 * LAST upsert in a request carries information — yet one Store API checkout
+	 * ran the order INSERT…SELECT eleven times (35 ms) and, with account
+	 * creation, the customer one six more times (measured 2026-09-03 on
+	 * dev-next). Upserts land on {@see flush_pending_digests()}: at `shutdown`
+	 * (last, after WooCommerce's own customer save at 10 and session save at 20,
+	 * whose `woocommerce_update_customer` would otherwise queue after the only
+	 * flush), before any {@see Digest_Index::read_digests()} so the pull lane
+	 * never stamps a stale `_rxdb_digest`, and whenever the queue reaches
+	 * {@see PENDING_DIGEST_FLUSH_THRESHOLD} distinct records (a bulk import
+	 * coalesces nothing, so it must not accumulate). Once the shutdown flush
+	 * has run, later saves write immediately. Static so the read path can
+	 * flush without holding the observer instance; each entry keeps its blog id
+	 * so a multisite `switch_to_blog()` between save and flush still writes the
+	 * originating site's table. Product and variation digests ride the same
+	 * queue: WooCommerce saves a product more than once per request too
+	 * (`wc_reduce_stock_levels()` saves the quantity, then the stock status —
+	 * two INSERT…SELECT statements per purchased product at checkout, measured
+	 * 2026-09-03), and the v2 write lane reads digests back through
+	 * {@see Digest_Index::read_digests()}, which flushes first, so the
+	 * serializer still stamps the fresh `_rxdb_digest` in the same request.
+	 *
+	 * @var array<string, array{0: int, 1: string, 2: int}> "blog:type:id" => [blog, type, id]
+	 */
+	private static array $pending_digests = array();
+
+	/**
+	 * Flush the queue when it holds this many distinct records. Sized for the
+	 * realistic per-request maximum (a checkout touches an order and a customer;
+	 * a REST batch a few dozen records) while keeping a WP-CLI import's deferred
+	 * SQL and memory bounded.
+	 */
+	public const PENDING_DIGEST_FLUSH_THRESHOLD = 50;
+
+	/** The instance that first queued a digest; the flush writes through its Digest_Index. */
+	private static ?Integrity_Digest $flusher = null;
+
+	/** Set by the shutdown flush; afterwards saves are written immediately. */
+	private static bool $shutdown_flushed = false;
 
 	public function __construct( ?Digest_Index $index = null ) {
 		$this->index = $index ?? new Digest_Index();
@@ -161,6 +208,11 @@ final class Integrity_Digest {
 		// order's digest is never recreated and integrity scans treat it as
 		// deleted forever.
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_order_untrashed' ), 10, 1 );
+		// Request boundary for the coalesced digest upserts (see
+		// $pending_digests). LAST on shutdown: WooCommerce saves the customer at
+		// 10 and the session at 20. Zero accepted args: do_action( 'shutdown' )
+		// passes an empty string otherwise.
+		add_action( 'shutdown', array( __CLASS__, 'flush_pending_digests_at_shutdown' ), PHP_INT_MAX, 0 );
 	}
 
 	/**
@@ -299,15 +351,111 @@ final class Integrity_Digest {
 	 * Customer digest maintenance (ADR 0015, Leg-3 phase 7) — every WordPress
 	 * user is a POS customer, so saves and role changes always upsert.
 	 */
+	/** Owe the customer's digest; it is written once, on flush (see $pending_digests). */
 	public function record_customer_saved( int $user_id ): void {
+		$this->defer( 'customer', $user_id );
+	}
+
+	/**
+	 * Queue one digest upsert, or write it now if the boundary has passed.
+	 *
+	 * @param string $type 'order' or 'customer'.
+	 * @param int    $id   Record id.
+	 */
+	private function defer( string $type, int $id ): void {
+		if ( self::$shutdown_flushed ) {
+			// A save triggered by another shutdown handler (WooCommerce saves the
+			// customer at priority 10): nothing will flush again, so write now.
+			$this->upsert_pending( $type, $id );
+			return;
+		}
+		if ( null === self::$flusher ) {
+			self::$flusher = $this;
+		}
+		$blog = get_current_blog_id();
+		self::$pending_digests[ self::pending_key( $type, $id ) ] = array( $blog, $type, $id );
+		if ( \count( self::$pending_digests ) >= self::PENDING_DIGEST_FLUSH_THRESHOLD ) {
+			self::flush_pending_digests();
+		}
+	}
+
+	private static function pending_key( string $type, int $id ): string {
+		return get_current_blog_id() . ':' . $type . ':' . $id;
+	}
+
+	/** One queued upsert, under the observer's fail-open posture. */
+	private function upsert_pending( string $type, int $id ): void {
 		$this->observe(
-			function () use ( $user_id ): void {
-				$this->upsert_customer_digest( $user_id );
+			function () use ( $type, $id ): void {
+				if ( 'customer' === $type ) {
+					$this->upsert_customer_digest( $id );
+				} elseif ( 'order' === $type ) {
+					$this->upsert_order_digest( $id );
+				} else {
+					// 'post' (product or variation): the SQL derives the stored type from the row.
+					$this->upsert_digest( $id );
+				}
 			}
 		);
 	}
 
+	/**
+	 * Write every owed digest.
+	 *
+	 * Called from the shutdown flush, from {@see Digest_Index::read_digests()}
+	 * before it reads, and when the queue reaches its threshold. Writes go
+	 * through the instance that first queued (so an injected Digest_Index is
+	 * honoured) and under the blog each entry was recorded on. Each upsert keeps
+	 * the observer's fail-open posture: a failure is logged and the scan
+	 * self-heals. Safe to call repeatedly — a flushed digest is no longer pending.
+	 */
+	public static function flush_pending_digests(): void {
+		if ( array() === self::$pending_digests ) {
+			return;
+		}
+		$pending               = self::$pending_digests;
+		self::$pending_digests = array();
+		$digest                = self::$flusher ?? new self();
+		foreach ( $pending as $entry ) {
+			list( $blog, $type, $id ) = $entry;
+			$switch                   = is_multisite() && get_current_blog_id() !== (int) $blog;
+			if ( $switch ) {
+				switch_to_blog( (int) $blog );
+			}
+			try {
+				$digest->upsert_pending( (string) $type, (int) $id );
+			} finally {
+				if ( $switch ) {
+					restore_current_blog();
+				}
+			}
+		}
+	}
+
+	/**
+	 * The `shutdown` callback: flush, then write every later save immediately.
+	 */
+	public static function flush_pending_digests_at_shutdown(): void {
+		self::$shutdown_flushed = true;
+		self::flush_pending_digests();
+	}
+
+	/**
+	 * Discard per-request coalescing state. Tests only: the PHPUnit process
+	 * never reaches `shutdown`, so the static queue, flusher and flag would
+	 * leak between test cases otherwise.
+	 *
+	 * @internal
+	 */
+	public static function reset_request_state(): void {
+		self::$pending_digests  = array();
+		self::$flusher          = null;
+		self::$shutdown_flushed = false;
+	}
+
 	public function record_customer_deleted( int $user_id ): void {
+		// A pending upsert for a record that is leaving must not be written after the fact.
+		unset( self::$pending_digests[ self::pending_key( 'customer', $user_id ) ] );
 		$this->observe(
 			function () use ( $user_id ): void {
 				$this->delete_customer_digest( $user_id );
@@ -352,15 +500,14 @@ final class Integrity_Digest {
 	 * under HPOS AND CPT); the digest SQL's `type='shop_order'` filter makes the upsert a no-op for any
 	 * non-order, so no type re-check is needed here.
 	 */
+	/** Owe the order's digest; it is written once, on flush (see $pending_digests). */
 	public function record_order_saved( int $order_id ): void {
-		$this->observe(
-			function () use ( $order_id ): void {
-				$this->upsert_order_digest( $order_id );
-			}
-		);
+		$this->defer( 'order', $order_id );
 	}
 
 	public function record_order_deleted( int $order_id ): void {
+		// A pending upsert for a record that is leaving must not be written after the fact.
+		unset( self::$pending_digests[ self::pending_key( 'order', $order_id ) ] );
 		$this->observe(
 			function () use ( $order_id ): void {
 				$this->delete_order_digest( $order_id );
@@ -403,20 +550,24 @@ final class Integrity_Digest {
 		}
 	}
 
+	/**
+	 * Owe the product's or variation's digest; it is written once, on flush (see
+	 * $pending_digests). The queue type is 'post' for both: the upsert's SQL
+	 * derives the stored object_type from the row, so nothing here needs to.
+	 */
 	public function record_post_saved( int $post_id ): void {
-		$this->observe(
-			function () use ( $post_id ): void {
-				$this->upsert_digest( $post_id );
-			}
-		);
+		$this->defer( 'post', $post_id );
 	}
 
 	public function record_post_untrashed( int $post_id ): void {
-		if ( 'shop_order' === get_post_type( $post_id ) ) {
+		$post_type = get_post_type( $post_id );
+		if ( 'shop_order' === $post_type ) {
 			$this->record_order_saved( $post_id );
 			return;
 		}
-		$this->record_post_saved( $post_id );
+		if ( in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
+			$this->record_post_saved( $post_id );
+		}
 	}
 
 	public function record_post_deleted( int $post_id ): void {
@@ -424,6 +575,8 @@ final class Integrity_Digest {
 		if ( ! in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
 			return;
 		}
+		// A pending upsert for a record that is leaving must not be written after the fact.
+		unset( self::$pending_digests[ self::pending_key( 'post', $post_id ) ] );
 		$this->observe(
 			function () use ( $post_id, $post_type ): void {
 				$this->delete_post_digest( $post_id, $post_type );
@@ -460,7 +613,7 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * One round trip: the digest is computed in SQL from the raw row and
+	 * One statement: the digest is computed in SQL from the raw row and
 	 * upserted in the same statement — PHP never materializes the value.
 	 * No-op for rows outside the live predicate (the delete hook owns those).
 	 */
@@ -470,19 +623,17 @@ final class Integrity_Digest {
 		// (the raise runs inside the save hook — codex P3).
 		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
-		$result = $wpdb->query(
+		$this->query_with_retry(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 				. ' FROM (' . $this->index->row_digest_select_sql( 'p.ID = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$post_id
-			)
+			),
+			'upsert stored digest failed: ',
+			$started
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
-		if ( false === $result ) {
-			throw new RuntimeException( 'upsert stored digest failed: ' . $wpdb->last_error );
-		}
 	}
 
 	/**
@@ -494,19 +645,69 @@ final class Integrity_Digest {
 		global $wpdb;
 		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
-		$result = $wpdb->query(
+		$this->query_with_retry(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 				. ' FROM (' . $this->index->customer_digest_select_sql( 'u.ID = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$user_id
-			)
+			),
+			'upsert stored customer digest failed: ',
+			$started
 		);
+	}
+
+	/**
+	 * MySQL/MariaDB error numbers a second attempt can clear: 1020 ER_CHECKREAD
+	 * ("Record has changed since last read"), 1205 ER_LOCK_WAIT_TIMEOUT, 1213
+	 * ER_LOCK_DEADLOCK. Two requests upserting the same digest row race on
+	 * the `INSERT … ON DUPLICATE KEY UPDATE`; the retry reads the updated row.
+	 */
+	private const TRANSIENT_CONTENTION_ERRNOS = array( 1020, 1205, 1213 );
+
+	/**
+	 * Message fallback for the same three errors, used only when the driver's
+	 * error number is unavailable (a wpdb without a live mysqli handle).
+	 */
+	private const TRANSIENT_CONTENTION_MESSAGES = array(
+		'Record has changed since last read',
+		'Lock wait timeout',
+		'Deadlock found',
+	);
+
+	/** Retry a contended upsert once, including both attempts in the hook timing. */
+	private function query_with_retry( string $sql, string $error_message, float $started ): void {
+		global $wpdb;
+		$result = $wpdb->query( $sql );
+		if ( false === $result && $this->is_transient_contention( $wpdb ) ) {
+			$result = $wpdb->query( $sql );
+		}
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
-			throw new RuntimeException( 'upsert stored customer digest failed: ' . $wpdb->last_error );
+			throw new RuntimeException( $error_message . $wpdb->last_error );
 		}
+	}
+
+	/**
+	 * The error number is authoritative: server messages are localised
+	 * (`lc_messages`), so the English text is only a fallback for a handle-less
+	 * wpdb. `$wpdb->dbh` is reachable through wpdb's magic getter.
+	 */
+	private function is_transient_contention( \wpdb $wpdb ): bool {
+		$dbh = $wpdb->__get( 'dbh' );
+		if ( $dbh instanceof \mysqli ) {
+			$errno = mysqli_errno( $dbh ); // phpcs:ignore WordPress.DB.RestrictedFunctions -- reads the driver's last error number; no query is issued.
+			if ( 0 !== $errno ) {
+				return in_array( $errno, self::TRANSIENT_CONTENTION_ERRNOS, true );
+			}
+		}
+		foreach ( self::TRANSIENT_CONTENTION_MESSAGES as $message ) {
+			if ( false !== strpos( $wpdb->last_error, $message ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -22,6 +22,15 @@ class General_Section extends Abstract_Section {
 	}
 
 	/**
+	 * Read by the Settings service on every request, so it rides in alloptions.
+	 *
+	 * @return bool
+	 */
+	public function autoload(): bool {
+		return true;
+	}
+
+	/**
 	 * Section defaults.
 	 */
 	public function defaults(): array {

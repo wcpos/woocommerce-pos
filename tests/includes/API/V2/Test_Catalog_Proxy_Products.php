@@ -192,6 +192,43 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Every search term narrows the product result set.
+	 */
+	public function test_product_search_matches_every_term(): void {
+		$token  = wp_generate_password( 8, false );
+		$token2 = wp_generate_password( 8, false );
+		$match  = ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.4ohm' ) );
+		ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.6ohm' ) );
+		ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' 0.4' ) ), 'id' ) );
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => '0.4 ' . $token ) ), 'id' ) );
+		$this->assertSame( array(), $this->read( array( 'search' => $token . ' zzzz' . $token2 ) ) );
+	}
+
+	/**
+	 * Different search terms may match different product fields.
+	 */
+	public function test_product_search_ands_terms_across_fields(): void {
+		$token = wp_generate_password( 8, false );
+		$sku   = wp_generate_password( 8, false );
+		$match = ProductHelper::create_simple_product(
+			array(
+				'name' => $token,
+				'sku'  => $sku,
+			)
+		);
+		ProductHelper::create_simple_product(
+			array(
+				'name' => $token,
+				'sku'  => wp_generate_password( 8, false ),
+			)
+		);
+
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' ' . $sku ) ), 'id' ) );
+	}
+
+	/**
 	 * An exact SKU match must not fall behind a full first page of title matches.
 	 */
 	public function test_product_search_ranks_exact_sku_first(): void {

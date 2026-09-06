@@ -1043,6 +1043,38 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
+	/**
+	 * Every variation search term must match a searchable carrier.
+	 */
+	public function test_variation_search_matches_every_term(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['barcode_field'] = '_barcode';
+				return $settings;
+			}
+		);
+		$sku     = wp_generate_password( 8, false );
+		$barcode = wp_generate_password( 8, false );
+		$product = ProductHelper::create_variation_product();
+		$ids     = $product->get_children();
+		update_post_meta( $ids[0], '_sku', $sku );
+		update_post_meta( $ids[0], '_barcode', $barcode );
+		update_post_meta( $ids[1], '_sku', $sku );
+		update_post_meta( $ids[1], '_barcode', wp_generate_password( 8, false ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+
+		$request->set_query_params( array( 'search' => $sku . ' ' . $barcode ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $ids[0] ), wp_list_pluck( $response->get_data(), 'id' ) );
+
+		$request->set_query_params( array( 'search' => $sku . ' zzzz' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data() );
+	}
+
 	public function test_all_variation_with_includes(): void {
 		$product1       = ProductHelper::create_variation_product(); // has two variations
 		$variation_ids1 = $product1->get_children();

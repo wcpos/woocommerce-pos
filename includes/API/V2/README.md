@@ -83,7 +83,9 @@ are hashed, generated dates are out (`date_paid*` / `date_completed*` stay), and
 folded in) and `tax_rates`; `/changes/sequence-log` serves `all`, `products` and
 `tax_rates`. Any other `collection` value is refused with HTTP 400 and the code
 `woocommerce_pos_sync_unsupported_collection` before any query runs — it used to
-collapse silently to the products rows under the requested name. The `all` stream
+collapse silently to the products rows under the requested name. Only an absent
+parameter takes the `products` default; an explicit empty value (`?collection=`) is
+refused too. The `all` stream
 labels its rows by collection (`variations`, `coupons`, `customers`, …, from
 `Sync_Journal::catalogue_object_types()`); those labels are NOT narrowing values.
 `/changes/tick` and `/changes/config-fingerprint` take no collection narrowing and

@@ -41,6 +41,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		remove_filter( 'pre_http_request', array( $this, 'intercept_http' ), 10 );
+		remove_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
 		Analytics::reset_instance();
 		wp_set_current_user( 0 );
 
@@ -204,6 +205,23 @@ class Test_Analytics extends WP_UnitTestCase {
 		$this->assertSame( 'settings_header', $payload['properties']['placement'] );
 		$this->assertSame( array( 'site' => 'site-uuid-xyz' ), $payload['properties']['$groups'] );
 		$this->assertArrayHasKey( 'plugin_version', $payload['properties'] );
+	}
+
+	/**
+	 * Default properties report Pro as active when detection is filtered on.
+	 */
+	public function test_default_properties_when_pro_detection_is_filtered_report_pro_active(): void {
+		// Arrange.
+		add_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
+		$this->login_user_with_uuid();
+		$analytics = $this->enable_consent();
+
+		// Act.
+		$analytics->capture( 'test_event' );
+
+		// Assert.
+		$payload = json_decode( $this->captured_requests[0]['args']['body'], true );
+		$this->assertTrue( $payload['properties']['pro_active'] );
 	}
 
 	/**

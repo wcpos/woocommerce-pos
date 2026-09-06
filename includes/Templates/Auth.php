@@ -54,9 +54,17 @@ class Auth {
 	/**
 	 * Allowed redirect URI schemes.
 	 *
+	 * The native app registers one URL scheme per build profile so that a
+	 * device with two variants installed (e.g. the store build and the dev
+	 * client) returns the login to the app that started it: `wcpos` for the
+	 * store build, `wcpos-dev` for the development client, `wcpos-adhoc` for
+	 * ad-hoc test builds (monorepo `apps/main/app.config.ts`). `exp` is the
+	 * Expo Go client. Matching is an exact `<scheme>://` prefix, so listing
+	 * `wcpos-dev` does not admit `wcpos-devious`.
+	 *
 	 * @var array
 	 */
-	private const ALLOWED_SCHEMES = array( 'wcpos', 'exp', 'https', 'http' );
+	private const ALLOWED_SCHEMES = array( 'wcpos', 'wcpos-dev', 'wcpos-adhoc', 'exp', 'https', 'http' );
 
 	/**
 	 * The redirect URI.
