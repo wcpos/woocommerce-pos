@@ -91,6 +91,28 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
 	}
 
+	public function test_a_failed_display_type_insert_leaves_the_latch_unset(): void {
+		// Every supported type is verified before latching, not a hand-kept
+		// list: `display` seeded unverified until the check read SUPPORTED_TYPES.
+		delete_option( Templates::DEFAULT_TERMS_OPTION );
+		$this->delete_default_term( 'display', 'wcpos_template_type' );
+		$refuse = static function ( $term, $taxonomy ) {
+			return ( 'wcpos_template_type' === $taxonomy && 'Display' === $term ) ? new \WP_Error( 'test_refused', 'refused' ) : $term;
+		};
+		add_filter( 'pre_insert_term', $refuse, 10, 2 );
+
+		new Templates();
+		remove_filter( 'pre_insert_term', $refuse, 10 );
+
+		$this->assertNull( term_exists( 'display', 'wcpos_template_type' ) );
+		$this->assertFalse( get_option( Templates::DEFAULT_TERMS_OPTION ), 'A seed missing the display type must not be marked complete.' );
+
+		new Templates();
+
+		$this->assertNotFalse( term_exists( 'display', 'wcpos_template_type' ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
 	public function test_plugin_activation_rearms_the_seed(): void {
 		( new Activator() )->single_activate( false );
 
