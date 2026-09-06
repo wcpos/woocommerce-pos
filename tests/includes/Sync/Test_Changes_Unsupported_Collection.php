@@ -70,6 +70,10 @@ class Test_Changes_Unsupported_Collection extends Sync_REST_Store_Test_Case {
 		foreach ( self::HASH_LANES as $route ) {
 			$cases[ $route . ' / all' ] = array( $route, 'all' );
 		}
+		// An explicit empty value is malformed, not "use the default".
+		foreach ( self::ALL_LANES as $route ) {
+			$cases[ $route . ' / (empty)' ] = array( $route, '' );
+		}
 		return $cases;
 	}
 
@@ -88,7 +92,7 @@ class Test_Changes_Unsupported_Collection extends Sync_REST_Store_Test_Case {
 		// Assert.
 		$this->assertSame( 400, $response->get_status(), $route . ' / ' . $collection );
 		$this->assertSame( self::UNSUPPORTED, $this->code( $response ), $route . ' / ' . $collection );
-		$this->assertStringContainsString( $collection, (string) ( $data['message'] ?? '' ) );
+		$this->assertStringContainsString( '"' . $collection . '"', (string) ( $data['message'] ?? '' ) );
 		$this->assertSame( $collection, $data['data']['collection'] ?? null );
 		$this->assertArrayNotHasKey( 'changes', $data );
 		$this->assertArrayNotHasKey( 'buckets', $data );
@@ -131,7 +135,9 @@ class Test_Changes_Unsupported_Collection extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A missing collection keeps the documented `products` default on every lane.
+	 * A MISSING collection keeps the documented `products` default on every lane
+	 * (the route args supply it); an explicit empty value does not — see the
+	 * `(empty)` cases in the refusal provider.
 	 */
 	public function test_changes_lane_defaults_a_missing_collection_to_products(): void {
 		foreach ( self::ALL_LANES as $route ) {
