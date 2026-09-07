@@ -1,5 +1,7 @@
 const previewKeys = new Set([
 	'detailed-receipt',
+	'display-pocket',
+	'display-marquee',
 	'gift-receipt',
 	'invoice',
 	'minimal-receipt',

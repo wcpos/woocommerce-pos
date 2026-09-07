@@ -22,6 +22,12 @@ const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gall
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 794;
 const screenshotScale = 2;
+// Customer displays use phone or large-screen viewports rather than paper widths.
+const displayViewports = {
+	'display-pocket': { width: 390, height: 844 },
+	'display-marquee': { width: 1280, height: 800 },
+	default: { width: 1280, height: 800 },
+};
 
 const viteUrl = pathToFileURL(path.join(repoRoot, 'packages/template-gallery/node_modules/vite/dist/node/index.js')).href;
 const { createServer } = await import(viteUrl);
@@ -86,23 +92,35 @@ function replaceAssetUrls(value) {
 }
 
 const receiptData = replaceAssetUrls(payload.receipt_data);
-const bodyHtml = payload.engine === 'thermal'
+const isDisplay = payload.type === 'display';
+const bodyHtml = !isDisplay && payload.engine === 'thermal'
 	? renderThermalPreview(payload.template_content, receiptData)
 	: renderLogiclessPreview(payload.template_content, { t: true, ...receiptData });
 
 const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
-const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
-const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
-// Capture high-resolution source images and let the gallery cards downscale them.
-// A4 templates use their real CSS paper width; Playwright's device scale factor
-// doubles the stored pixels; the screenshots are converted to lossless WebP below.
-const initialCaptureWidth = payload.engine === 'thermal' ? nativeWidth : ${a4PreviewWidth};
-const scale = payload.engine === 'thermal' ? 1 : initialCaptureWidth / nativeWidth;
-capture.style.width = initialCaptureWidth + 'px';
-paper.style.width = nativeWidth + 'px';
-paper.style.transform = 'scale(' + scale + ')';
-paper.innerHTML = bodyHtml;
+if (isDisplay) {
+	paper.innerHTML = bodyHtml;
+	paper.querySelectorAll('section[data-wcpos-state]').forEach((section) => {
+		if (section.dataset.wcposState !== 'cart') section.remove();
+	});
+	capture.style.width = window.innerWidth + 'px';
+	capture.style.height = window.innerHeight + 'px';
+	paper.style.width = window.innerWidth + 'px';
+	paper.style.transform = 'none';
+} else {
+	const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
+	const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
+	// Capture high-resolution source images and let the gallery cards downscale them.
+	// A4 templates use their real CSS paper width; Playwright's device scale factor
+	// doubles the stored pixels; the screenshots are converted to lossless WebP below.
+	const initialCaptureWidth = payload.engine === 'thermal' ? nativeWidth : ${a4PreviewWidth};
+	const scale = payload.engine === 'thermal' ? 1 : initialCaptureWidth / nativeWidth;
+	capture.style.width = initialCaptureWidth + 'px';
+	paper.style.width = nativeWidth + 'px';
+	paper.style.transform = 'scale(' + scale + ')';
+	paper.innerHTML = bodyHtml;
+}
 
 await Promise.all(Array.from(document.images).map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
 	img.addEventListener('load', resolve, { once: true });
@@ -111,14 +129,14 @@ await Promise.all(Array.from(document.images).map((img) => img.complete ? Promis
 await document.fonts.ready;
 await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-if (payload.engine === 'thermal') {
+if (!isDisplay && payload.engine === 'thermal') {
 	const measuredWidth = Math.ceil(Math.max(paper.scrollWidth, paper.getBoundingClientRect().width));
 	capture.style.width = measuredWidth + 'px';
 	paper.style.width = measuredWidth + 'px';
 	await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
-capture.style.height = Math.ceil(paper.getBoundingClientRect().height) + 'px';
+if (!isDisplay) capture.style.height = Math.ceil(paper.getBoundingClientRect().height) + 'px';
 window.__WCPOS_PREVIEW_READY__ = true;
 `
 );
@@ -141,12 +159,17 @@ const page = await browser.newPage({ viewport: { width: 1800, height: 2400 }, de
 
 try {
 	for (const payload of payloads) {
+		const viewport = page.viewportSize();
+		if (payload.type === 'display') {
+			await page.setViewportSize(displayViewports[payload.key] ?? displayViewports.default);
+		}
 		await page.goto(`${baseUrl}?key=${encodeURIComponent(payload.key)}`, { waitUntil: 'networkidle' });
 		await page.waitForFunction(() => window.__WCPOS_PREVIEW_READY__ === true);
 		const capture = page.locator('#capture');
 		const pngPath = path.join(tempDir, `${payload.key}.png`);
 		const webpPath = path.join(outputDir, `${payload.key}.webp`);
 		await capture.screenshot({ path: pngPath });
+		if (payload.type === 'display') await page.setViewportSize(viewport);
 		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
 		console.log(`generated ${payload.key}.webp`);
 	}
