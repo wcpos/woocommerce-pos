@@ -179,7 +179,7 @@ export function GalleryGrid() {
 					</p>
 					<div className="wcpos:flex wcpos:gap-6">
 						<FilterSidebar
-							filters={currentFilters}
+							filters={filters}
 							showOutputFilters={type !== 'display'}
 							onChange={setFilters}
 							availableCategories={Array.from(
