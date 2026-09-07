@@ -635,5 +635,12 @@ class Init {
 		if ( is_admin() ) {
 			new Integrations\WePOS();
 		}
+
+		// WooCommerce Tax - https://wordpress.org/plugins/woocommerce-services/
+		// Its class exists whenever the plugin is active, but its callbacks are
+		// only hooked when automated taxes are on and the store country is
+		// supported, so the integration looks them up on the hooks at
+		// recalculation time instead of gating on the class here.
+		new Integrations\WooCommerce_Tax();
 	}
 }
