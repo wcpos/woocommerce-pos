@@ -586,7 +586,7 @@ JS;
 		$json_encode_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
 		return \sprintf(
-			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s, previewBaseUrl: %s }; wcpos.translationVersion = %s;',
+			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s, previewBaseUrl: %s, displayPreviewUrl: %s }; wcpos.translationVersion = %s;',
 			wp_json_encode( wcpos_is_pro_active(), $json_encode_flags ),
 			wp_json_encode( untrailingslashit( admin_url() ), $json_encode_flags ),
 			wp_json_encode(
@@ -601,6 +601,7 @@ JS;
 				$json_encode_flags
 			),
 			wp_json_encode( PLUGIN_URL . 'assets/img/template-gallery/previews', $json_encode_flags ),
+			wp_json_encode( home_url( '/wcpos-display/' ), $json_encode_flags ),
 			wp_json_encode( TRANSLATION_VERSION, $json_encode_flags )
 		);
 	}

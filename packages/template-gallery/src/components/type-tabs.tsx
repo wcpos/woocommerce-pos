@@ -1,9 +1,11 @@
+import { useNavigate } from '@tanstack/react-router';
 import classnames from 'classnames';
 
 import { t } from '../translations';
 
 const tabs = [
 	{ id: 'receipt', labelKey: 'tabs.receipts', enabled: true },
+	{ id: 'display', labelKey: 'tabs.display', enabled: true },
 	{ id: 'report', labelKey: 'tabs.reports', enabled: false },
 	{ id: 'email', labelKey: 'tabs.email', enabled: false },
 ] as const;
@@ -13,6 +15,8 @@ interface TypeTabsProps {
 }
 
 export function TypeTabs({ activeType }: TypeTabsProps) {
+	const navigate = useNavigate();
+
 	return (
 		<div className="wcpos:flex wcpos:gap-1 wcpos:border-b wcpos:border-gray-200 wcpos:mb-4">
 			{tabs.map((tab) => (
@@ -20,6 +24,9 @@ export function TypeTabs({ activeType }: TypeTabsProps) {
 					key={tab.id}
 					type="button"
 					disabled={!tab.enabled}
+					onClick={() => {
+						if (tab.enabled) navigate({ to: '/', search: { type: tab.id } });
+					}}
 					className={classnames(
 						'wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:border-b-2 wcpos:-mb-px wcpos:bg-transparent wcpos:cursor-pointer',
 						tab.id === activeType

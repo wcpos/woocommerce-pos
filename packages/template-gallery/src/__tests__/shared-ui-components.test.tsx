@@ -1,10 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-
+/// <reference types="vite/client" />
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TemplatesTable } from '../components/active-templates-table';
+import css from '../index.css?raw';
 
 import type { Template } from '../types';
 
@@ -22,7 +21,17 @@ const activeTemplate: Template = {
 	engine: 'thermal',
 	output_type: 'escpos',
 	paper_width: '80mm',
-	version: 1,
+	language: '',
+	tax_display: '',
+	is_premade: false,
+	is_active: true,
+	offline_capable: true,
+	gallery_key: null,
+	gallery_version: 1,
+	source: 'custom',
+	menu_order: 0,
+	date_created: '',
+	date_modified: '',
 	status: 'publish',
 	is_virtual: false,
 };
@@ -32,6 +41,7 @@ describe('template gallery shared UI integration', () => {
 		const markup = renderToStaticMarkup(
 			<TemplatesTable
 				templates={[activeTemplate]}
+				onSetActive={() => {}}
 				onPreview={() => {}}
 				onToggle={() => {}}
 				onDelete={() => {}}
@@ -53,6 +63,7 @@ describe('template gallery shared UI integration', () => {
 		const markup = renderToStaticMarkup(
 			<TemplatesTable
 				templates={[activeTemplate]}
+				onSetActive={() => {}}
 				onPreview={() => {}}
 				onToggle={() => {}}
 				onDelete={() => {}}
@@ -78,9 +89,6 @@ describe('template gallery shared UI integration', () => {
 	});
 
 	it('includes shared UI source files in Tailwind generation', () => {
-		const cssPath = path.resolve(__dirname, '../index.css');
-		const css = fs.readFileSync(cssPath, 'utf8');
-
 		expect(css).toContain('@source "../../ui/src"');
 	});
 });

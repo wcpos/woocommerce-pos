@@ -1,5 +1,6 @@
 import { act } from 'react';
 
+import { useSearch } from '@tanstack/react-router';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,6 +40,8 @@ const { direction: _direction, ...legacyTemplate } = {
 	description: 'Payload without direction',
 };
 
+vi.mock('@tanstack/react-router', () => ({ useSearch: vi.fn(() => ({ type: 'receipt' })) }));
+
 vi.mock('../hooks/use-gallery-templates', () => ({
 	useGalleryTemplates: () => ({
 		data: [ltrTemplate, rtlTemplate, legacyTemplate],
@@ -52,6 +55,7 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 
 vi.mock('../hooks/use-templates', () => ({
 	useTemplates: () => ({ data: [] }),
+	useSetActiveTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useToggleTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useToggleVirtualTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useReorderTemplates: () => ({ mutate: vi.fn() }),
@@ -73,6 +77,7 @@ vi.mock('../translations', () => ({
 const mountedRoots: Root[] = [];
 
 beforeEach(() => {
+	vi.mocked(useSearch).mockReturnValue({ type: 'receipt' });
 	(
 		window as Window & {
 			wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } };
@@ -141,5 +146,33 @@ describe('GalleryGrid direction filter', () => {
 		expect(text).toContain('Standard Receipt');
 		expect(text).toContain('Legacy Receipt');
 		expect(text).not.toContain('Standard Receipt (RTL)');
+	});
+});
+
+describe('GalleryGrid display templates', () => {
+	it('shows the Pro requirement, display creation link and no output filters or previews', () => {
+		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
+		Object.assign((window as any).wcpos.templateGallery, { isProActive: false });
+		const container = mountGrid();
+
+		expect(container.textContent).toContain('gallery.display_needs_pro');
+		expect(container.querySelector('a.page-title-action')?.getAttribute('href')).toBe(
+			'https://example.test/wp-admin/post-new.php?post_type=wcpos_template&wcpos_type=display'
+		);
+		expect(
+			container.querySelector('a[href="https://docs.wcpos.com/customer-display"]')
+		).not.toBeNull();
+		expect(container.querySelector('input[name="filter-format"]')).toBeNull();
+		expect(container.querySelector('input[name="filter-direction"]')).toBeNull();
+		expect(container.querySelector('button[aria-label="common.preview"]')).toBeNull();
+		expect(container.textContent).toContain('common.use_template');
+	});
+
+	it('does not apply a receipt direction filter after switching to display', () => {
+		const container = mountGrid();
+		clickDirection(container, 'rtl');
+		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
+		act(() => mountedRoots[0].render(<GalleryGrid />));
+		expect(container.textContent).toContain('Legacy Receipt');
 	});
 });
