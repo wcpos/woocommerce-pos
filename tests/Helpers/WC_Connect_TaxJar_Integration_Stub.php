@@ -59,6 +59,67 @@ if ( ! class_exists( 'WC_Connect_TaxJar_Integration', false ) ) {
 		private $response_rate_ids = array();
 
 		/**
+		 * Recorded priming options.
+		 *
+		 * @var array
+		 */
+		public $calculate_tax_calls = array();
+		/**
+		 * Rates available from TaxJar, keyed by postcode.
+		 *
+		 * @var array
+		 */
+		public $rates_by_postcode = array();
+		/**
+		 * Whether priming throws.
+		 *
+		 * @var bool
+		 */
+		public $calculate_tax_throws = false;
+		/**
+		 * Inserted rate ids, keyed by postcode.
+		 *
+		 * @var array
+		 */
+		private $inserted_rate_ids = array();
+
+		/**
+		 * Prime WooCommerce's rate table as the real calculate_tax() does.
+		 *
+		 * @param array $options TaxJar request options.
+		 * @return array|false
+		 * @throws \RuntimeException When configured to simulate TaxJar failure.
+		 */
+		public function calculate_tax( $options = array() ) {
+			$this->calculate_tax_calls[] = $options;
+			if ( $this->calculate_tax_throws ) {
+				throw new \RuntimeException( 'TaxJar unavailable' );
+			}
+			$postcode = $options['to_zip'];
+			if ( ! isset( $this->rates_by_postcode[ $postcode ] ) ) {
+				return false;
+			}
+			if ( ! isset( $this->inserted_rate_ids[ $postcode ] ) ) {
+				$rate = $this->rates_by_postcode[ $postcode ];
+				$id   = WC_Tax::_insert_tax_rate(
+					array(
+						'tax_rate_country'  => $options['to_country'],
+						'tax_rate_state'    => $rate['state'],
+						'tax_rate'          => $rate['rate'],
+						'tax_rate_name'     => $rate['name'],
+						'tax_rate_priority' => 1,
+						'tax_rate_compound' => 0,
+						'tax_rate_shipping' => 1,
+						'tax_rate_class'    => '',
+					)
+				);
+				WC_Tax::_update_tax_rate_postcodes( $id, $postcode );
+				$this->inserted_rate_ids[ $postcode ] = $id;
+			}
+			return array( 'has_nexus' => 1 );
+		}
+
+		/**
 		 * Register the preservation hook the way the plugin's init() does.
 		 */
 		public function init(): void {
