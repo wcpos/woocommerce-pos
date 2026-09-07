@@ -146,15 +146,18 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	/**
 	 * Paying an open order and changing its lines in one request charges tax
 	 * for the final lines: WooCommerce recalculates before it applies the status.
+	 *
+	 * Dispatched on wc/v3, which the client calls directly and the v2 writer
+	 * forwards to; the WCPOS header is what puts the request in the POS lane.
 	 */
-	public function test_v1_open_order_paid_in_the_same_request_gets_tax_for_the_final_lines(): void {
+	public function test_wc3_open_order_paid_in_the_same_request_gets_tax_for_the_final_lines(): void {
 		// Arrange.
 		$a        = $this->product( 10 );
 		$created  = $this->v1_create( 'pos-open', array( $this->line( $a ) ) );
 		$order_id = (int) $created->get_data()['id'];
 
 		// Act.
-		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
+		$request = $this->wp_rest_patch_request( '/wc/v3/orders/' . $order_id );
 		$request->set_body_params(
 			array(
 				'status'     => 'completed',
@@ -174,7 +177,7 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	 * Reopening a paid order and changing its lines in one request recalculates
 	 * for the new lines even though the persisted status is still paid.
 	 */
-	public function test_v1_reopened_order_with_changed_lines_recalculates_tax(): void {
+	public function test_wc3_reopened_order_with_changed_lines_recalculates_tax(): void {
 		// Arrange.
 		$a        = $this->product( 10 );
 		$created  = $this->v1_create( 'completed', array( $this->line( $a ) ) );
@@ -182,7 +185,7 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$this->assert_order_amounts( $order_id, 1.0, 11.0 );
 
 		// Act.
-		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
+		$request = $this->wp_rest_patch_request( '/wc/v3/orders/' . $order_id );
 		$request->set_body_params(
 			array(
 				'status'     => 'pos-open',
@@ -194,6 +197,37 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
 		$this->assertSame( 'pos-open', $updated->get_data()['status'] );
+		$this->assertSame( 0, $this->taxjar->snapshots_taken );
+		$this->assert_order_amounts( $order_id, 3.0, 33.0 );
+	}
+
+	/**
+	 * Checkout on the wcpos/v2 push: the final document carries the paid status
+	 * and the final lines together.
+	 */
+	public function test_v2_open_order_paid_in_the_same_push_gets_tax_for_the_final_lines(): void {
+		// Arrange.
+		$record_id = wp_generate_uuid4();
+		$created   = $this->push_order(
+			'create',
+			$record_id,
+			array(
+				'status'     => 'pos-open',
+				'line_items' => array( $this->line( $this->product( 10 ) ) ),
+			)
+		);
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$document = $created->get_data()['document'];
+		$order_id = (int) $document['id'];
+
+		// Act.
+		$document['status']       = 'completed';
+		$document['line_items'][] = $this->line( $this->product( 20 ) );
+		$updated                  = $this->push_order( 'update', $record_id, $document, $created->get_data()['currentRevision'] );
+
+		// Assert.
+		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
+		$this->assertSame( 'completed', $updated->get_data()['document']['status'] );
 		$this->assertSame( 0, $this->taxjar->snapshots_taken );
 		$this->assert_order_amounts( $order_id, 3.0, 33.0 );
 	}
@@ -227,6 +261,34 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
 		$this->assertSame( 'pos-open', $updated->get_data()['document']['status'] );
 		$this->assertSame( 0, $this->taxjar->snapshots_taken );
+		$this->assert_order_amounts( $order_id, 3.0, 33.0 );
+	}
+
+	/**
+	 * A snapshot the plugin took on an earlier bare calculate_taxes() must not be
+	 * written back when the POS recalculates: the restore callback is re-hooked
+	 * only after its priority has passed.
+	 */
+	public function test_stale_snapshot_from_a_bare_recalculation_is_not_restored_onto_an_open_order(): void {
+		// Arrange: the plugin snapshots the order during a non-POS recalculation
+		// that never reaches after_calculate_totals.
+		$a        = $this->product( 10 );
+		$created  = $this->v1_create( 'pos-open', array( $this->line( $a ) ) );
+		$order_id = (int) $created->get_data()['id'];
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		wc_get_order( $order_id )->calculate_taxes();
+		$this->assertSame( 1, $this->taxjar->snapshots_taken );
+		$this->assertSame( 0, $this->taxjar->restores_applied );
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		$request = $this->wp_rest_patch_request( '/wc/v3/orders/' . $order_id );
+		$request->set_body_params( array( 'line_items' => array( $this->line( $this->product( 20 ) ) ) ) );
+		$updated = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
+		$this->assertSame( 0, $this->taxjar->restores_applied, 'The stale snapshot must not be written back during the POS recalculation.' );
 		$this->assert_order_amounts( $order_id, 3.0, 33.0 );
 	}
 

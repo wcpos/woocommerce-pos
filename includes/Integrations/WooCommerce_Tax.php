@@ -44,10 +44,20 @@ class WooCommerce_Tax {
 	const BEFORE_HOOK = 'woocommerce_order_before_calculate_taxes';
 
 	/**
-	 * Hook the plugin restores on, and the earliest point its callbacks can
-	 * safely be hooked again.
+	 * Hook the plugin restores on, and where its callbacks are hooked again.
 	 */
 	const AFTER_HOOK = 'woocommerce_order_after_calculate_totals';
+
+	/**
+	 * Priority the callbacks are hooked again at on AFTER_HOOK.
+	 *
+	 * WP_Hook runs a callback added during dispatch if its priority has not been
+	 * passed yet. Re-adding the plugin's restore at 10 from priority 9 would run
+	 * it in the same pass, and a snapshot left over from an earlier bare
+	 * calculate_taxes() on the same order would be written over the fresh tax.
+	 * Re-adding from the last priority keeps it for the next recalculation.
+	 */
+	const RESUME_PRIORITY = PHP_INT_MAX;
 
 	/**
 	 * The plugin's callbacks, by hook. Both are suspended together so a snapshot
@@ -88,12 +98,13 @@ class WooCommerce_Tax {
 	/**
 	 * Constructor.
 	 *
-	 * Priority 9 on both order hooks: before the plugin's callbacks at 10.
+	 * Suspend at priority 9, before the plugin's snapshot callback at 10; resume
+	 * from the last priority so nothing re-added runs in the same pass.
 	 */
 	public function __construct() {
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'note_requested_status' ), 10, 2 );
 		add_action( self::BEFORE_HOOK, array( $this, 'suspend_tax_preservation' ), 9, 2 );
-		add_action( self::AFTER_HOOK, array( $this, 'resume_tax_preservation' ), 9 );
+		add_action( self::AFTER_HOOK, array( $this, 'resume_tax_preservation' ), self::RESUME_PRIORITY );
 	}
 
 	/**
