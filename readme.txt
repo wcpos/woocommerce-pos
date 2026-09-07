@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.8
+Stable tag: 1.10.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,14 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.9 - 2026/09/07 =
+
+- **A sale with a coupon no longer stays "POS - Open" after it is paid.**
+- **Stores using WooCommerce Tax (TaxJar) get the right tax rates on POS orders**, and open POS orders no longer have stale tax lines put back on save.
+- **Sync skips records that haven't changed**, and a bloated product search index repairs itself.
+- **Bluetooth printers on iOS and Android reconnect after a failed print** instead of staying stuck on a dead link.
+- **Fewer freezes during the first sync on iOS and Android.**
 
 = 1.10.8 - 2026/09/06 =
 
