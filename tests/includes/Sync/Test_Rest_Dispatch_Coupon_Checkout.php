@@ -34,23 +34,36 @@ class Test_Rest_Dispatch_Coupon_Checkout extends Sync_REST_Store_Test_Case {
 	private $sequence = 0;
 
 	/**
-	 * Enable the push route.
+	 * The store's tax setting before this test switched it off.
+	 *
+	 * @var mixed
+	 */
+	private $calc_taxes_before;
+
+	/**
+	 * Enable the push route; taxes off so the coupon arithmetic stays whole-number.
 	 *
 	 * @return void
 	 */
 	public function setUp(): void {
 		parent::setUp();
 		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$this->calc_taxes_before = get_option( 'woocommerce_calc_taxes' );
 		update_option( 'woocommerce_calc_taxes', 'no' );
 	}
 
 	/**
-	 * Restore request state.
+	 * Restore request and store state.
 	 *
 	 * @return void
 	 */
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'], $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+		if ( false === $this->calc_taxes_before ) {
+			delete_option( 'woocommerce_calc_taxes' );
+		} else {
+			update_option( 'woocommerce_calc_taxes', $this->calc_taxes_before );
+		}
 		parent::tearDown();
 	}
 
