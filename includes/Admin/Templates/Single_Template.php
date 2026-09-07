@@ -592,16 +592,18 @@ class Single_Template {
 		$paper_width = get_post_meta( $post->ID, '_template_paper_width', true );
 
 		$config = array(
-			'type'           => $type,
-			'displayStarter' => $display_starter,
-			'fieldSchema'    => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),
-			'sampleData'     => $sample_data,
-			'engine'         => $engine,
-			'paperWidth'     => $paper_width ? $paper_width : null,
-			'templateId'     => $post->ID,
-			'previewUrl'     => $preview_url,
-			'postContent'    => $post->post_content,
-			'hasPosOrders'   => (bool) wc_get_orders(
+			'isProActive'       => wcpos_is_pro_active(),
+			'displayPreviewUrl' => home_url( '/wcpos-display/' ),
+			'type'              => $type,
+			'displayStarter'    => $display_starter,
+			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),
+			'sampleData'        => $sample_data,
+			'engine'            => $engine,
+			'paperWidth'        => $paper_width ? $paper_width : null,
+			'templateId'        => $post->ID,
+			'previewUrl'        => $preview_url,
+			'postContent'       => $post->post_content,
+			'hasPosOrders'      => (bool) wc_get_orders(
 				array(
 					'limit'       => 1,
 					'return'      => 'ids',

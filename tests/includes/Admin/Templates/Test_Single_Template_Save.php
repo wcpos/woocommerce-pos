@@ -280,6 +280,10 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 			$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
 
 			$this->assertSame( $type, $config['type'] );
+			$this->assertArrayHasKey( 'isProActive', $config );
+			$this->assertSame( wcpos_is_pro_active(), $config['isProActive'] );
+			$this->assertArrayHasKey( 'displayPreviewUrl', $config );
+			$this->assertSame( home_url( '/wcpos-display/' ), $config['displayPreviewUrl'] );
 			$this->assertSame( 0 === $index ? $this->sample_html : null, $config['displayStarter'] );
 			$this->assertSame( 'display' === $type, isset( $config['fieldSchema']['ledger'] ) );
 		}

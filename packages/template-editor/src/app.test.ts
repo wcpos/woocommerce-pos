@@ -1,6 +1,113 @@
+import { act, createElement } from 'react';
+
+import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 
-import { getEditorLayoutStyle, STARTER_SHELLS, getThermalStarterShell } from './app';
+import {
+	App,
+	DISPLAY_STARTER_SHELL,
+	getDefaultDoc,
+	getEditorLayoutStyle,
+	STARTER_SHELLS,
+	getThermalStarterShell,
+} from './app';
+
+import type { EditorConfig } from './types';
+
+const config: EditorConfig = {
+	type: 'display',
+	displayStarter: null,
+	isProActive: true,
+	displayPreviewUrl: 'https://example.test/wcpos-display/',
+	fieldSchema: {},
+	sampleData: {},
+	engine: 'logicless',
+	paperWidth: null,
+	templateId: 123,
+	previewUrl: 'https://example.test/wp-json/wcpos/v2/templates/123/preview',
+	postContent: '',
+	hasPosOrders: false,
+};
+
+describe('display editor', () => {
+	it('uses saved content before the active display starter', () => {
+		expect(getDefaultDoc({ ...config, postContent: 'Saved', displayStarter: 'Active' })).toBe(
+			'Saved'
+		);
+	});
+
+	it('uses the active display starter before the shell', () => {
+		expect(getDefaultDoc({ ...config, displayStarter: 'Active' })).toBe('Active');
+	});
+
+	it('falls back to a shell containing all seven display states in order', () => {
+		expect(getDefaultDoc(config)).toBe(DISPLAY_STARTER_SHELL);
+		const container = document.createElement('div');
+		container.innerHTML = getDefaultDoc(config);
+		expect(
+			Array.from(
+				container.querySelectorAll('section'),
+				(section) => section.dataset.wcposState
+			)
+		).toEqual([
+			'idle',
+			'cart.empty',
+			'cart',
+			'payment.started',
+			'payment.approved',
+			'payment.declined',
+			'payment.complete',
+		]);
+		expect(DISPLAY_STARTER_SHELL.split('\n').length).toBeLessThan(60);
+	});
+
+	it.each(['logicless', 'thermal', 'legacy-php'] as const)(
+		'keeps the %s receipt defaults and saved content',
+		(engine) => {
+			const receipt = {
+				...config,
+				type: 'receipt' as const,
+				engine,
+				displayStarter: 'Display',
+			};
+			expect(getDefaultDoc(receipt)).toBe(STARTER_SHELLS[engine]);
+			expect(getDefaultDoc({ ...receipt, postContent: 'Saved' })).toBe('Saved');
+		}
+	);
+
+	it('renders the display preview without receipt controls and ignores receipt metabox events', async () => {
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		try {
+			await act(async () => root.render(createElement(App, { config })));
+			expect(container.querySelector('iframe')?.getAttribute('src')).toBe(
+				'https://example.test/wcpos-display/?preview=cart&template=123'
+			);
+			expect(container.textContent).toContain('Customer display template.');
+			expect(container.textContent).not.toContain('Sample Data');
+			expect(container.textContent).not.toContain('Receipt Printer template');
+			const editorContent = container.querySelector('.cm-content')?.textContent;
+			expect(editorContent).toContain('data-wcpos-state');
+			await act(async () => {
+				window.dispatchEvent(
+					new CustomEvent('wcposEngineChange', { detail: { engine: 'thermal' } })
+				);
+				window.dispatchEvent(
+					new CustomEvent('wcposPaperWidthChange', { detail: { paperWidth: '58mm' } })
+				);
+			});
+			expect(container.querySelector('.cm-content')?.textContent).toBe(editorContent);
+			expect(container.textContent).not.toContain('Receipt Printer template');
+			expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
+				'/wcpos-display/'
+			);
+		} finally {
+			await act(async () => root.unmount());
+			container.remove();
+		}
+	});
+});
 
 describe('template editor layout', () => {
 	it('gives the editor row a definite bounded height so side panels scroll internally', () => {
