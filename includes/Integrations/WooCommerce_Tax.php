@@ -277,6 +277,11 @@ class WooCommerce_Tax {
 	/**
 	 * The street line that belongs to the address WooCommerce is taxing.
 	 *
+	 * The declared basis (the POS meta, else WooCommerce's setting) is tried first
+	 * so two addresses that share a country, state, postcode and city are told
+	 * apart; the tuple check keeps the street consistent with the location that
+	 * was actually resolved, which a filter may have changed.
+	 *
 	 * @param WC_Abstract_Order $order    The order.
 	 * @param array             $location Country, state, postcode and city from get_taxable_location().
 	 *
@@ -284,10 +289,17 @@ class WooCommerce_Tax {
 	 */
 	private function street_for_location( WC_Abstract_Order $order, array $location ): string {
 		if ( $order instanceof WC_Order ) {
+			$basis = (string) $order->get_meta( '_woocommerce_pos_tax_based_on' );
+			if ( '' === $basis ) {
+				$basis = (string) get_option( 'woocommerce_tax_based_on', 'shipping' );
+			}
 			$candidates = array(
-				array( $order->get_billing_address_1(), array( $order->get_billing_country(), $order->get_billing_state(), $order->get_billing_postcode(), $order->get_billing_city() ) ),
-				array( $order->get_shipping_address_1(), array( $order->get_shipping_country(), $order->get_shipping_state(), $order->get_shipping_postcode(), $order->get_shipping_city() ) ),
+				'billing'  => array( $order->get_billing_address_1(), array( $order->get_billing_country(), $order->get_billing_state(), $order->get_billing_postcode(), $order->get_billing_city() ) ),
+				'shipping' => array( $order->get_shipping_address_1(), array( $order->get_shipping_country(), $order->get_shipping_state(), $order->get_shipping_postcode(), $order->get_shipping_city() ) ),
 			);
+			if ( isset( $candidates[ $basis ] ) ) {
+				$candidates = array( $basis => $candidates[ $basis ] ) + $candidates;
+			}
 			$taxed = array( $location['country'] ?? '', $location['state'] ?? '', $location['postcode'] ?? '', $location['city'] ?? '' );
 			foreach ( $candidates as $candidate ) {
 				if ( $candidate[1] === $taxed ) {

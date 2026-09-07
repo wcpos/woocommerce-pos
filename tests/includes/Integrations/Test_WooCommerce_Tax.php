@@ -430,6 +430,41 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'CA', $options['to_state'] );
 	}
 
+	/**
+	 * Billing and shipping can share a country, state, postcode and city; the
+	 * street sent to TaxJar must be the one for the declared tax basis.
+	 */
+	public function test_street_follows_the_declared_tax_basis_when_addresses_share_a_location(): void {
+		// Arrange.
+		$address = array(
+			'country'  => 'US',
+			'state'    => 'CA',
+			'postcode' => '90210',
+			'city'     => 'Beverly Hills',
+		);
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $this->product( 10 ) ) ),
+			'billing'    => $address + array( 'address_1' => '1 Rodeo Dr' ),
+			'shipping'   => $address + array( 'address_1' => '2 Rodeo Dr' ),
+			'meta_data'  => array(
+				array(
+					'key'   => '_woocommerce_pos_tax_based_on',
+					'value' => 'shipping',
+				),
+			),
+		);
+
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assertSame( '90210', $this->taxjar->calculate_tax_calls[0]['to_zip'] );
+		$this->assertSame( '2 Rodeo Dr', $this->taxjar->calculate_tax_calls[0]['to_street'] );
+	}
+
 	/** Non-POS writes leave rate priming to the plugin. */
 	public function test_non_pos_request_does_not_prime(): void {
 		// Arrange.
