@@ -159,6 +159,12 @@ class WooCommerce_Tax {
 		}
 		$taxjar = $callbacks[0]['callback'][0];
 
+		// get_taxable_location() is public since WooCommerce 7.6. Older stores keep
+		// today's behaviour rather than a warning on every save.
+		if ( version_compare( WC_VERSION, '7.6.0', '<' ) ) {
+			return;
+		}
+
 		try {
 			$location = $order->get_taxable_location();
 			$options  = array(
