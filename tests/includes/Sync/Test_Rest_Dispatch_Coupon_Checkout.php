@@ -184,7 +184,9 @@ class Test_Rest_Dispatch_Coupon_Checkout extends Sync_REST_Store_Test_Case {
 
 		// Assert.
 		$this->assertSame( 'success', $result['result'] );
-		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $paid->get_status() );
+		$this->assertTrue( $paid->is_paid() );
 	}
 
 	/**
