@@ -125,6 +125,10 @@ class Templates_Controller extends WP_REST_Controller {
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
+					'active'          => array(
+						'description' => __( 'Enabled template ID to activate.', 'woocommerce-pos' ),
+						'type'        => 'string',
+					),
 					'update'          => array(
 						'description' => __( 'Array of templates to update.', 'woocommerce-pos' ),
 						'type'        => 'array',
@@ -652,6 +656,20 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		$has_active = $request->has_param( 'active' );
+		if ( $has_active ) {
+			$active      = $request->get_param( 'active' );
+			$enabled_ids = array_map( 'strval', array_column( TemplatesManager::get_enabled_templates( $type ), 'id' ) );
+			if ( ! \in_array( (string) $active, $enabled_ids, true ) ) {
+				return new WP_Error(
+					'wcpos_template_invalid_active',
+					__( 'The active template must be enabled for this template type.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+			TemplatesManager::set_active_template_id( is_numeric( $active ) ? (int) $active : $active, $type );
+		}
+
 		// Build response.
 		$response_data = array();
 		if ( ! empty( $results ) ) {
@@ -664,10 +682,14 @@ class Templates_Controller extends WP_REST_Controller {
 			$response_data['disabled_virtual'] = TemplatesManager::get_disabled_virtual_templates( $type );
 		}
 
+		$has_non_update_ops = $has_active || $request->has_param( 'order' ) || $request->has_param( 'disable_virtual' ) || $request->has_param( 'enable_virtual' );
+		if ( $has_non_update_ops ) {
+			$response_data['active'] = TemplatesManager::get_active_template_id( $type );
+		}
+
 		$response = rest_ensure_response( $response_data );
 
 		// Return 400 only when the request contained nothing but update items and every one failed.
-		$has_non_update_ops = \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
 		if ( ! empty( $results ) && ! $has_non_update_ops ) {
 			$has_success = false;
 			foreach ( $results as $result_item ) {

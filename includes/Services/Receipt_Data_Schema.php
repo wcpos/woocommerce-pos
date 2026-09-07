@@ -308,10 +308,12 @@ class Receipt_Data_Schema {
 	 * from the receipt_data contract. Used by the JS field picker sidebar.
 	 * Internal sections (e.g. presentation_hints) are intentionally excluded.
 	 *
+	 * @param string $type Template type. Display adds ledger and payment fields.
+	 *
 	 * @return array<string, array{label: string, is_array?: bool, fields: array<string, array{type: string, label: string}>}>
 	 */
-	public static function get_field_tree(): array {
-		return array(
+	public static function get_field_tree( string $type = 'receipt' ): array {
+		$tree = array(
 			'order'       => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order', 'woocommerce-pos' ),
 				'fields' => array(
@@ -1272,6 +1274,110 @@ class Receipt_Data_Schema {
 				'fields' => self::get_i18n_field_tree_fields(),
 			),
 		);
+		if ( 'display' === $type ) {
+			$tree['ledger'] = array(
+				'label'  => __( 'Ledger', 'woocommerce-pos' ),
+				'fields' => array(
+					'status'     => array(
+						'type'  => 'string',
+						'label' => __( 'Status', 'woocommerce-pos' ),
+					),
+					'total'      => array(
+						'type'  => 'string',
+						'label' => __( 'Total', 'woocommerce-pos' ),
+					),
+					'total_raw'  => array(
+						'type'  => 'number',
+						'label' => __( 'Total (raw)', 'woocommerce-pos' ),
+					),
+					'paid'       => array(
+						'type'  => 'string',
+						'label' => __( 'Paid', 'woocommerce-pos' ),
+					),
+					'paid_raw'   => array(
+						'type'  => 'number',
+						'label' => __( 'Paid (raw)', 'woocommerce-pos' ),
+					),
+					'due'        => array(
+						'type'  => 'string',
+						'label' => __( 'Due', 'woocommerce-pos' ),
+					),
+					'due_raw'    => array(
+						'type'  => 'number',
+						'label' => __( 'Due (raw)', 'woocommerce-pos' ),
+					),
+					'change'     => array(
+						'type'  => 'string',
+						'label' => __( 'Change', 'woocommerce-pos' ),
+					),
+					'change_raw' => array(
+						'type'  => 'number',
+						'label' => __( 'Change (raw)', 'woocommerce-pos' ),
+					),
+					'payments'   => array(
+						'type'     => 'array',
+						'label'    => __( 'Payments', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'id'           => array(
+								'type'  => 'string',
+								'label' => __( 'ID', 'woocommerce-pos' ),
+							),
+							'method'       => array(
+								'type'  => 'string',
+								'label' => __( 'Method', 'woocommerce-pos' ),
+							),
+							'kind'         => array(
+								'type'  => 'string',
+								'label' => __( 'Kind', 'woocommerce-pos' ),
+							),
+							'status'       => array(
+								'type'  => 'string',
+								'label' => __( 'Status', 'woocommerce-pos' ),
+							),
+							'amount'       => array(
+								'type'  => 'string',
+								'label' => __( 'Amount', 'woocommerce-pos' ),
+							),
+							'amount_raw'   => array(
+								'type'  => 'number',
+								'label' => __( 'Amount (raw)', 'woocommerce-pos' ),
+							),
+							'tendered'     => array(
+								'type'  => 'string',
+								'label' => __( 'Tendered', 'woocommerce-pos' ),
+							),
+							'tendered_raw' => array(
+								'type'  => 'number',
+								'label' => __( 'Tendered (raw)', 'woocommerce-pos' ),
+							),
+							'change'       => array(
+								'type'  => 'string',
+								'label' => __( 'Change', 'woocommerce-pos' ),
+							),
+							'change_raw'   => array(
+								'type'  => 'number',
+								'label' => __( 'Change (raw)', 'woocommerce-pos' ),
+							),
+						),
+					),
+				),
+			);
+			$tree['payment'] = array(
+				'label'  => __( 'Payment', 'woocommerce-pos' ),
+				'fields' => array(
+					'state'      => array(
+						'type'  => 'string',
+						'label' => __( 'State', 'woocommerce-pos' ),
+					),
+					'message'    => array(
+						'type'  => 'string',
+						'label' => __( 'Message', 'woocommerce-pos' ),
+					),
+				),
+			);
+		}
+		return $tree;
 	}
 
 

@@ -58,6 +58,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		delete_option( 'wcpos_template_order_display' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
+		delete_option( 'wcpos_active_template_display' );
+		delete_option( 'wcpos_active_template_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_display' );
 		remove_role( 'pos_cashier_test' );
 	}
 
@@ -553,6 +556,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function create_cashier_user(): int {
 		// Ensure a disposable 'pos_cashier_test' role exists with only access cap.
+		delete_option( 'wcpos_active_template_display' );
+		delete_option( 'wcpos_active_template_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_display' );
 		remove_role( 'pos_cashier_test' );
 		add_role(
 			'pos_cashier_test',
@@ -831,6 +837,98 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	// ---- Task 7: Batch tests ----
+
+	/**
+	 * Batch activation accepts enabled display IDs and is a non-update operation.
+	 */
+	public function test_batch_active_display_sets_option_and_survives_failed_updates(): void {
+		$post_id = $this->create_template( 'Active Display', 'display' );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array( 'type' => 'display', 'active' => (string) $post_id, 'update' => array( array( 'id' => 999999 ) ) )
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $post_id, get_option( 'wcpos_active_template_display' ) );
+		$this->assertSame( $post_id, $response->get_data()['active'] );
+		$this->assertArrayHasKey( 'error', $response->get_data()['update'][0] );
+	}
+
+	/**
+	 * Disabled, unknown and wrong-type active IDs leave the saved choice alone.
+	 */
+	public function test_batch_active_invalid_display_returns_400_without_changing_option(): void {
+		$active_id = $this->create_template( 'Active Display', 'display' );
+		$draft_id  = $this->create_template( 'Disabled Display', 'display', 'draft' );
+		$receipt_id = $this->create_template( 'Receipt' );
+		Templates::set_active_template_id( $active_id, 'display' );
+
+		foreach ( array( (string) $draft_id, 'unknown-template', (string) $receipt_id ) as $invalid_id ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+			$request->set_body_params( array( 'type' => 'display', 'active' => $invalid_id ) );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertSame( 'wcpos_template_invalid_active', $response->get_data()['code'] );
+			$this->assertSame( $active_id, get_option( 'wcpos_active_template_display' ) );
+		}
+	}
+
+	/**
+	 * Virtual activation validates the enabled state after batch toggles.
+	 */
+	public function test_batch_active_virtual_template_requires_enabled_state(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params( array( 'active' => 'plugin-core', 'enable_virtual' => array( 'plugin-core' ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'plugin-core', $response->get_data()['active'] );
+		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
+
+		Templates::set_virtual_template_disabled( 'plugin-core', true );
+		$request->set_body_params( array( 'active' => 'plugin-core' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
+	}
+
+	/**
+	 * Ordering and virtual toggles echo the resolved display selection.
+	 */
+	public function test_batch_non_update_operations_echo_active_display(): void {
+		$post_id = $this->create_template( 'Display', 'display' );
+		foreach ( array( 'order', 'disable_virtual', 'enable_virtual' ) as $operation ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+			$request->set_body_params( array( 'type' => 'display', $operation => array() ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( $post_id, $response->get_data()['active'] );
+		}
+	}
+
+	/**
+	 * Unfiltered and filtered display lists mark exactly the selected item active.
+	 */
+	public function test_get_items_display_marks_exactly_one_active_template(): void {
+		$this->create_template( 'Display One', 'display' );
+		$active_id = $this->create_template( 'Display Two', 'display' );
+		Templates::set_active_template_id( $active_id, 'display' );
+
+		foreach ( array( '', 'Display' ) as $search ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+			$request->set_query_params( array( 'type' => 'display', 'search' => $search ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$active_count = 0;
+			foreach ( $response->get_data() as $item ) {
+				$this->assertSame( (string) $active_id === (string) $item['id'], $item['is_active'] );
+				$active_count += $item['is_active'] ? 1 : 0;
+			}
+			$this->assertSame( 1, $active_count );
+		}
+	}
 
 	/**
 	 * Test batch update multiple templates.
