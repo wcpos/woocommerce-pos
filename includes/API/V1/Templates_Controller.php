@@ -126,8 +126,8 @@ class Templates_Controller extends WP_REST_Controller {
 						'validate_callback' => 'rest_validate_request_arg',
 					),
 					'active'          => array(
-						'description' => __( 'Enabled template ID to activate.', 'woocommerce-pos' ),
-						'type'        => 'string',
+						'description' => __( 'Enabled template ID to activate: a post ID or a virtual template key.', 'woocommerce-pos' ),
+						'type'        => array( 'integer', 'string' ),
 					),
 					'update'          => array(
 						'description' => __( 'Array of templates to update.', 'woocommerce-pos' ),
@@ -590,6 +590,20 @@ class Templates_Controller extends WP_REST_Controller {
 	public function batch_items( $request ) {
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
+		// Validate `active` before anything is written so a bad id leaves the batch untouched.
+		$has_active = $request->has_param( 'active' );
+		if ( $has_active ) {
+			$active      = $request->get_param( 'active' );
+			$enabled_ids = array_map( 'strval', array_column( TemplatesManager::get_enabled_templates( $type ), 'id' ) );
+			if ( ! \in_array( (string) $active, $enabled_ids, true ) ) {
+				return new WP_Error(
+					'wcpos_template_invalid_active',
+					__( 'The active template must be enabled for this template type.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
 		// Handle order.
 		$order = $request->get_param( 'order' );
 		if ( \is_array( $order ) ) {
@@ -656,17 +670,7 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$has_active = $request->has_param( 'active' );
 		if ( $has_active ) {
-			$active      = $request->get_param( 'active' );
-			$enabled_ids = array_map( 'strval', array_column( TemplatesManager::get_enabled_templates( $type ), 'id' ) );
-			if ( ! \in_array( (string) $active, $enabled_ids, true ) ) {
-				return new WP_Error(
-					'wcpos_template_invalid_active',
-					__( 'The active template must be enabled for this template type.', 'woocommerce-pos' ),
-					array( 'status' => 400 )
-				);
-			}
 			TemplatesManager::set_active_template_id( is_numeric( $active ) ? (int) $active : $active, $type );
 		}
 

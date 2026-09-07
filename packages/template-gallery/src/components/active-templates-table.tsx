@@ -10,6 +10,7 @@ import {
 	extractClosestEdge,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/reorder-with-edge';
+import { addQueryArgs } from '@wordpress/url';
 import classnames from 'classnames';
 
 import { Toggle } from '@wcpos/ui';
@@ -201,7 +202,7 @@ function DraggableRow({
 					{type === 'display' ? (
 						isProActive && (
 							<a
-								href={`${displayPreviewUrl}?preview=cart&template=${template.id}`}
+								href={addQueryArgs(displayPreviewUrl, { preview: 'cart', template: template.id })}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"

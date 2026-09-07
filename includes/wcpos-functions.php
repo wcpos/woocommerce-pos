@@ -125,6 +125,20 @@ if ( ! \function_exists( 'wcpos_checkout_url' ) ) {
 	}
 }
 
+if ( ! \function_exists( 'wcpos_display_url' ) ) {
+	/**
+	 * Get the customer display host page URL (WCPOS Pro serves the page).
+	 *
+	 * Same scheme and trailing-slash rules as wcpos_checkout_url(); append
+	 * query args (preview, template) to the returned URL.
+	 *
+	 * @return string Customer display URL.
+	 */
+	function wcpos_display_url(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		return home_url( user_trailingslashit( Template_Router::DISPLAY_PATH ), wcpos_url_scheme() );
+	}
+}
+
 /*
  * Test for POS requests to the server.
  *

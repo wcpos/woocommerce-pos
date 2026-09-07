@@ -601,7 +601,7 @@ JS;
 				$json_encode_flags
 			),
 			wp_json_encode( PLUGIN_URL . 'assets/img/template-gallery/previews', $json_encode_flags ),
-			wp_json_encode( home_url( '/wcpos-display/' ), $json_encode_flags ),
+			wp_json_encode( wcpos_display_url(), $json_encode_flags ),
 			wp_json_encode( TRANSLATION_VERSION, $json_encode_flags )
 		);
 	}

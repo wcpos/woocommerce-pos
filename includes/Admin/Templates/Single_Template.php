@@ -102,7 +102,7 @@ class Single_Template {
 		// This gallery-link hint is not a form submission and needs no nonce.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$type = isset( $_GET['wcpos_type'] ) ? sanitize_key( wp_unslash( $_GET['wcpos_type'] ) ) : '';
-		if ( \in_array( $type, array( 'receipt', 'display' ), true ) ) {
+		if ( \in_array( $type, TemplatesManager::SUPPORTED_TYPES, true ) ) {
 			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
 		}
 	}
@@ -593,7 +593,7 @@ class Single_Template {
 
 		$config = array(
 			'isProActive'       => wcpos_is_pro_active(),
-			'displayPreviewUrl' => home_url( '/wcpos-display/' ),
+			'displayPreviewUrl' => wcpos_display_url(),
 			'type'              => $type,
 			'displayStarter'    => $display_starter,
 			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),

@@ -1314,52 +1314,51 @@ class Receipt_Data_Schema {
 						'type'  => 'number',
 						'label' => __( 'Change (raw)', 'woocommerce-pos' ),
 					),
-					'payments'   => array(
-						'type'     => 'array',
-						'label'    => __( 'Payments', 'woocommerce-pos' ),
-						'is_array' => true,
-						'fields'   => array(
-							'id'           => array(
-								'type'  => 'string',
-								'label' => __( 'ID', 'woocommerce-pos' ),
-							),
-							'method'       => array(
-								'type'  => 'string',
-								'label' => __( 'Method', 'woocommerce-pos' ),
-							),
-							'kind'         => array(
-								'type'  => 'string',
-								'label' => __( 'Kind', 'woocommerce-pos' ),
-							),
-							'status'       => array(
-								'type'  => 'string',
-								'label' => __( 'Status', 'woocommerce-pos' ),
-							),
-							'amount'       => array(
-								'type'  => 'string',
-								'label' => __( 'Amount', 'woocommerce-pos' ),
-							),
-							'amount_raw'   => array(
-								'type'  => 'number',
-								'label' => __( 'Amount (raw)', 'woocommerce-pos' ),
-							),
-							'tendered'     => array(
-								'type'  => 'string',
-								'label' => __( 'Tendered', 'woocommerce-pos' ),
-							),
-							'tendered_raw' => array(
-								'type'  => 'number',
-								'label' => __( 'Tendered (raw)', 'woocommerce-pos' ),
-							),
-							'change'       => array(
-								'type'  => 'string',
-								'label' => __( 'Change', 'woocommerce-pos' ),
-							),
-							'change_raw'   => array(
-								'type'  => 'number',
-								'label' => __( 'Change (raw)', 'woocommerce-pos' ),
-							),
-						),
+				),
+			);
+			$tree['ledger.payments'] = array(
+				'label'    => __( 'Ledger payments', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'id'           => array(
+						'type'  => 'string',
+						'label' => __( 'ID', 'woocommerce-pos' ),
+					),
+					'method'       => array(
+						'type'  => 'string',
+						'label' => __( 'Method', 'woocommerce-pos' ),
+					),
+					'kind'         => array(
+						'type'  => 'string',
+						'label' => __( 'Kind', 'woocommerce-pos' ),
+					),
+					'status'       => array(
+						'type'  => 'string',
+						'label' => __( 'Status', 'woocommerce-pos' ),
+					),
+					'amount'       => array(
+						'type'  => 'string',
+						'label' => __( 'Amount', 'woocommerce-pos' ),
+					),
+					'amount_raw'   => array(
+						'type'  => 'number',
+						'label' => __( 'Amount (raw)', 'woocommerce-pos' ),
+					),
+					'tendered'     => array(
+						'type'  => 'string',
+						'label' => __( 'Tendered', 'woocommerce-pos' ),
+					),
+					'tendered_raw' => array(
+						'type'  => 'number',
+						'label' => __( 'Tendered (raw)', 'woocommerce-pos' ),
+					),
+					'change'       => array(
+						'type'  => 'string',
+						'label' => __( 'Change', 'woocommerce-pos' ),
+					),
+					'change_raw'   => array(
+						'type'  => 'number',
+						'label' => __( 'Change (raw)', 'woocommerce-pos' ),
 					),
 				),
 			);

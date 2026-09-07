@@ -209,11 +209,17 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		try {
 			$pagenow = 'post-new.php';
 			foreach ( array( 'display', 'receipt', 'unknown', 'report' ) as $type ) {
-				$_GET = array( 'post_type' => 'wcpos_template', 'wcpos_type' => $type );
-				$post_id = $this->factory->post->create(
-					array( 'post_type' => 'wcpos_template', 'post_status' => 'auto-draft' )
+				$_GET = array(
+					'post_type' => 'wcpos_template',
+					'wcpos_type' => $type,
 				);
-				$expected = in_array( $type, array( 'receipt', 'display' ), true ) ? array( $type ) : array();
+				$post_id = $this->factory->post->create(
+					array(
+						'post_type' => 'wcpos_template',
+						'post_status' => 'auto-draft',
+					)
+				);
+				$expected = in_array( $type, TemplatesManager::SUPPORTED_TYPES, true ) ? array( $type ) : array();
 				$this->assertSame( $expected, wp_get_post_terms( $post_id, 'wcpos_template_type', array( 'fields' => 'slugs' ) ) );
 			}
 		} finally {
@@ -228,7 +234,12 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_first_save_display_forces_logicless_and_receipt_keeps_thermal(): void {
 		foreach ( array( 'display', 'receipt' ) as $type ) {
-			$post_id = $this->factory->post->create( array( 'post_type' => 'wcpos_template', 'post_status' => 'draft' ) );
+			$post_id = $this->factory->post->create(
+				array(
+					'post_type' => 'wcpos_template',
+					'post_status' => 'draft',
+				)
+			);
 			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
 
 			$this->simulate_admin_save( $post_id, $this->sample_html, 'thermal' );
@@ -244,7 +255,12 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	 * Display settings lock the engine and hide paper size even on an auto-draft.
 	 */
 	public function test_display_metabox_locks_logicless_engine(): void {
-		$post_id = $this->factory->post->create( array( 'post_type' => 'wcpos_template', 'post_status' => 'auto-draft' ) );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_status' => 'auto-draft',
+			)
+		);
 		wp_set_object_terms( $post_id, 'display', 'wcpos_template_type' );
 		$handler = new Single_Template();
 
@@ -265,7 +281,13 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		$active_id = $this->create_template( 'logicless', $this->sample_html );
 		wp_set_object_terms( $active_id, 'display', 'wcpos_template_type' );
 		TemplatesManager::set_active_template_id( $active_id, 'display' );
-		$post_id = $this->factory->post->create( array( 'post_type' => 'wcpos_template', 'post_status' => 'auto-draft', 'post_content' => '' ) );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_status' => 'auto-draft',
+				'post_content' => '',
+			)
+		);
 		wp_set_object_terms( $post_id, 'display', 'wcpos_template_type' );
 		$handler = new Single_Template();
 		$method  = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
@@ -274,7 +296,12 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		foreach ( array( 'display', 'receipt', 'display' ) as $index => $type ) {
 			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
 			if ( 2 === $index ) {
-				wp_update_post( array( 'ID' => $post_id, 'post_content' => 'Existing content' ) );
+				wp_update_post(
+					array(
+						'ID' => $post_id,
+						'post_content' => 'Existing content',
+					)
+				);
 			}
 			$script = $method->invoke( $handler, get_post( $post_id ) );
 			$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
@@ -283,12 +310,22 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'isProActive', $config );
 			$this->assertSame( wcpos_is_pro_active(), $config['isProActive'] );
 			$this->assertArrayHasKey( 'displayPreviewUrl', $config );
-			$this->assertSame( home_url( '/wcpos-display/' ), $config['displayPreviewUrl'] );
+			$this->assertSame( wcpos_display_url(), $config['displayPreviewUrl'] );
 			$this->assertSame( 0 === $index ? $this->sample_html : null, $config['displayStarter'] );
 			$this->assertSame( 'display' === $type, isset( $config['fieldSchema']['ledger'] ) );
 		}
-		wp_update_post( array( 'ID' => $active_id, 'post_status' => 'draft' ) );
-		wp_update_post( array( 'ID' => $post_id, 'post_content' => '' ) );
+		wp_update_post(
+			array(
+				'ID' => $active_id,
+				'post_status' => 'draft',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID' => $post_id,
+				'post_content' => '',
+			)
+		);
 		$script = $method->invoke( $handler, get_post( $post_id ) );
 		$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
 		$this->assertNull( $config['displayStarter'] );

@@ -42,14 +42,16 @@ class Test_Templates extends WP_UnitTestCase {
 			$this->assertSame( 'string', $ledger[ $field ]['type'] );
 			$this->assertSame( 'number', $ledger[ $field . '_raw' ]['type'] );
 		}
-		$this->assertTrue( $ledger['payments']['is_array'] );
-		$payments = $ledger['payments']['fields'];
+		$this->assertArrayNotHasKey( 'payments', $ledger );
+		$this->assertTrue( $display['ledger.payments']['is_array'] );
+		$this->assertSame( 'string', $display['ledger.payments']['fields']['method']['type'] );
+		$payments = $display['ledger.payments']['fields'];
 		$this->assertSame( array( 'id', 'method', 'kind', 'status', 'amount', 'amount_raw', 'tendered', 'tendered_raw', 'change', 'change_raw' ), array_keys( $payments ) );
 		foreach ( $payments as $key => $field ) {
 			$this->assertSame( substr( $key, -4 ) === '_raw' ? 'number' : 'string', $field['type'] );
 			$this->assertNotEmpty( $field['label'] );
 		}
-		unset( $display['ledger'], $display['payment'] );
+		unset( $display['ledger'], $display['ledger.payments'], $display['payment'] );
 		$this->assertSame( $receipt, $display );
 	}
 

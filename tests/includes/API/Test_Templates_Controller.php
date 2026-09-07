@@ -845,7 +845,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$post_id = $this->create_template( 'Active Display', 'display' );
 		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
 		$request->set_body_params(
-			array( 'type' => 'display', 'active' => (string) $post_id, 'update' => array( array( 'id' => 999999 ) ) )
+			array( 'type' => 'display', 'active' => $post_id, 'update' => array( array( 'id' => 999999 ) ) )
 		);
 
 		$response = $this->server->dispatch( $request );
