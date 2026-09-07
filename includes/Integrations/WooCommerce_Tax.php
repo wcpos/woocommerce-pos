@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Integrations;
 
 use WC_Abstract_Order;
+use WC_Order;
 use WP_REST_Request;
 
 /**
@@ -24,6 +25,10 @@ use WP_REST_Request;
  * save's tax while the POS has computed tax for the current lines, and the
  * client shows the totals-disagree banner. See
  * https://github.com/wcpos/woocommerce-pos/issues/1896.
+ *
+ * The plugin primes TaxJar rates only from the cart and wp-admin, while POS
+ * writes arrive through REST. Prime rates for the current order before WooCommerce
+ * matches them, so POS tax does not depend on an earlier checkout at that address.
  *
  * The plugin has no filter and no status gate, and its integration object is
  * held privately by its loader, so its callbacks are located on the hooks
@@ -103,6 +108,7 @@ class WooCommerce_Tax {
 	 */
 	public function __construct() {
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'note_requested_status' ), 10, 2 );
+		add_action( self::BEFORE_HOOK, array( $this, 'prime_tax_rates' ), 8, 2 );
 		add_action( self::BEFORE_HOOK, array( $this, 'suspend_tax_preservation' ), 9, 2 );
 		add_action( self::AFTER_HOOK, array( $this, 'resume_tax_preservation' ), self::RESUME_PRIORITY );
 	}
@@ -125,6 +131,89 @@ class WooCommerce_Tax {
 		}
 
 		return $order;
+	}
+
+	/**
+	 * Prime the plugin's rates for the order before WooCommerce matches them.
+	 *
+	 * Mirrors the request the plugin's protected get_backend_line_items() builds
+	 * (woocommerce-services 3.6.14), with one deliberate difference: items
+	 * WooCommerce will not tax are left out. The plugin sends them as exempt and
+	 * skips their 0% breakdown line through a private list only its own builders
+	 * fill; without that list the 0% would be written over the shared rate row
+	 * for the item's tax class. Their rates are never needed here.
+	 *
+	 * @param array                  $args  Calculation arguments. Unused.
+	 * @param WC_Abstract_Order|null $order The order being recalculated.
+	 */
+	public function prime_tax_rates( $args = array(), $order = null ): void {
+		// A leftover suspension would hide the plugin's callbacks from the lookup below.
+		$this->restore_suspended();
+
+		if ( ! $order instanceof WC_Abstract_Order || ! \wcpos_request() || ! $this->is_open_pos_order( $order ) ) {
+			return;
+		}
+		$callbacks = $this->find_plugin_callbacks( self::BEFORE_HOOK, self::PLUGIN_CALLBACKS[ self::BEFORE_HOOK ] );
+		if ( empty( $callbacks ) ) {
+			return;
+		}
+		$taxjar = $callbacks[0]['callback'][0];
+
+		// get_taxable_location() is public since WooCommerce 7.6. Older stores keep
+		// today's behaviour rather than a warning on every save.
+		if ( version_compare( WC_VERSION, '7.6.0', '<' ) ) {
+			return;
+		}
+
+		try {
+			$location = $order->get_taxable_location();
+			$options  = array(
+				'to_country'      => $location['country'] ?? '',
+				'to_state'        => $location['state'] ?? '',
+				'to_zip'          => $location['postcode'] ?? '',
+				'to_city'         => $location['city'] ?? '',
+				'to_street'       => $this->street_for_location( $order, $location ),
+				'shipping_amount' => $order->get_shipping_total(),
+				'line_items'      => array(),
+			);
+			foreach ( $order->get_items( 'line_item' ) as $item ) {
+				if ( 'taxable' !== $item->get_tax_status() ) {
+					continue;
+				}
+				$quantity   = $item->get_quantity();
+				$unit_price = empty( $quantity ) ? $item->get_subtotal() : wc_format_decimal( $item->get_subtotal() / $quantity );
+				if ( empty( $unit_price ) ) {
+					continue;
+				}
+				$tax_class               = explode( '-', $item->get_tax_class() );
+				$options['line_items'][] = array(
+					'id'               => (string) ( $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id() ),
+					'quantity'         => $quantity,
+					'unit_price'       => $unit_price,
+					'discount'         => wc_format_decimal( $item->get_subtotal() - $item->get_total() ),
+					'product_tax_code' => isset( $tax_class[1] ) && is_numeric( $tax_class[1] ) ? $tax_class[1] : '',
+				);
+			}
+			if ( empty( $options['line_items'] ) && empty( (float) $options['shipping_amount'] ) ) {
+				return;
+			}
+			// WooCommerce does not initialise the customer on REST requests, and the
+			// plugin reads it for its VAT-exemption check.
+			if ( ! WC()->customer instanceof \WC_Customer ) {
+				wc_load_cart();
+			}
+			if ( false === $taxjar->calculate_tax( $options ) ) {
+				\WCPOS\WooCommercePOS\Logger::log( 'WooCommerce Tax returned no rates for the POS order', array( 'order_id' => $order->get_id() ) );
+			}
+		} catch ( \Throwable $e ) {
+			\WCPOS\WooCommercePOS\Logger::warning(
+				'WooCommerce Tax rate priming failed',
+				array(
+					'order_id' => $order->get_id(),
+					'error'    => $e->getMessage(),
+				)
+			);
+		}
 	}
 
 	/**
@@ -183,6 +272,43 @@ class WooCommerce_Tax {
 		return null !== $this->requested
 			&& $this->requested['order'] === $order
 			&& \in_array( $this->requested['status'], self::OPEN_STATUSES, true );
+	}
+
+	/**
+	 * The street line that belongs to the address WooCommerce is taxing.
+	 *
+	 * The declared basis (the POS meta, else WooCommerce's setting) is tried first
+	 * so two addresses that share a country, state, postcode and city are told
+	 * apart; the tuple check keeps the street consistent with the location that
+	 * was actually resolved, which a filter may have changed.
+	 *
+	 * @param WC_Abstract_Order $order    The order.
+	 * @param array             $location Country, state, postcode and city from get_taxable_location().
+	 *
+	 * @return string
+	 */
+	private function street_for_location( WC_Abstract_Order $order, array $location ): string {
+		if ( $order instanceof WC_Order ) {
+			$basis = (string) $order->get_meta( '_woocommerce_pos_tax_based_on' );
+			if ( '' === $basis ) {
+				$basis = (string) get_option( 'woocommerce_tax_based_on', 'shipping' );
+			}
+			$candidates = array(
+				'billing'  => array( $order->get_billing_address_1(), array( $order->get_billing_country(), $order->get_billing_state(), $order->get_billing_postcode(), $order->get_billing_city() ) ),
+				'shipping' => array( $order->get_shipping_address_1(), array( $order->get_shipping_country(), $order->get_shipping_state(), $order->get_shipping_postcode(), $order->get_shipping_city() ) ),
+			);
+			if ( isset( $candidates[ $basis ] ) ) {
+				$candidates = array( $basis => $candidates[ $basis ] ) + $candidates;
+			}
+			$taxed = array( $location['country'] ?? '', $location['state'] ?? '', $location['postcode'] ?? '', $location['city'] ?? '' );
+			foreach ( $candidates as $candidate ) {
+				if ( $candidate[1] === $taxed ) {
+					return (string) $candidate[0];
+				}
+			}
+		}
+
+		return (string) WC()->countries->get_base_address();
 	}
 
 	/**

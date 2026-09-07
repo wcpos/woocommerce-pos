@@ -361,6 +361,266 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$this->assert_order_amounts( $order_id, 1.0, 31.0 );
 	}
 
+	/** Priming supplies the rate matched by the subsequent WooCommerce calculation. */
+	public function test_pos_create_primes_the_rates_table_for_the_order_tax_location(): void {
+		// Arrange.
+		$a       = $this->product( 10 );
+		$payload = $this->priming_payload( $a );
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload, null );
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$options = $this->taxjar->calculate_tax_calls[0];
+		$this->assertSame( 'US', $options['to_country'] );
+		$this->assertSame( 'CA', $options['to_state'] );
+		$this->assertSame( '90210', $options['to_zip'] );
+		$this->assertSame( 'Beverly Hills', $options['to_city'] );
+		$this->assertSame( '1 Rodeo Dr', $options['to_street'] );
+		$this->assertSame( 0.0, (float) $options['shipping_amount'] );
+		$this->assertCount( 1, $options['line_items'] );
+		$line = $options['line_items'][0];
+		$this->assertSame( (string) $a->get_id(), $line['id'] );
+		$this->assertSame( 1, $line['quantity'] );
+		$this->assertSame( 10.0, (float) $line['unit_price'] );
+		$this->assertSame( 0.0, (float) $line['discount'] );
+		$this->assertSame( '', $line['product_tax_code'] );
+		$this->assertSame( array( 'id', 'quantity', 'unit_price', 'discount', 'product_tax_code' ), array_keys( $line ), 'The request carries exactly the keys the plugin sends to TaxJar.' );
+		$order_id = (int) $created->get_data()['document']['id'];
+		$this->assert_order_amounts( $order_id, 0.85, 10.85 );
+		$taxes = array_values( wc_get_order( $order_id )->get_taxes() );
+		$this->assertCount( 1, $taxes );
+		$this->assertSame( 'CA STATE TAX', $taxes[0]->get_label() );
+	}
+
+	/** Each write primes with its current lines, without deduplicating calls. */
+	public function test_pos_update_primes_again_for_the_current_lines(): void {
+		// Arrange.
+		$record_id = wp_generate_uuid4();
+		$created   = $this->push_order( 'create', $record_id, $this->priming_payload( $this->product( 10 ) ) );
+		$this->assertSame( 201, $created->get_status() );
+		$document                 = $created->get_data()['document'];
+		$document['line_items'][] = $this->line( $this->product( 20 ) );
+		// Act.
+		$updated = $this->push_order( 'update', $record_id, $document, $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
+		$this->assertCount( 2, $this->taxjar->calculate_tax_calls );
+		$this->assertCount( 2, $this->taxjar->calculate_tax_calls[1]['line_items'] );
+		$this->assert_order_amounts( (int) $document['id'], 2.55, 32.55 );
+	}
+
+	/** Store-based tax uses the store street rather than an empty order address. */
+	public function test_base_address_is_sent_when_pos_tax_is_based_on_the_store(): void {
+		// Arrange.
+		update_option( 'woocommerce_store_address', '100 Main St' );
+		update_option( 'woocommerce_store_postcode', '94103' );
+		$payload = array(
+			'status' => 'pos-open',
+			'line_items' => array( $this->line( $this->product( 10 ) ) ),
+		);
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload, null );
+		// Assert.
+		$this->assertSame( 201, $created->get_status() );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$options = $this->taxjar->calculate_tax_calls[0];
+		$this->assertSame( '94103', $options['to_zip'] );
+		$this->assertSame( '100 Main St', $options['to_street'] );
+		$this->assertSame( 'CA', $options['to_state'] );
+	}
+
+	/**
+	 * Billing and shipping can share a country, state, postcode and city; the
+	 * street sent to TaxJar must be the one for the declared tax basis.
+	 */
+	public function test_street_follows_the_declared_tax_basis_when_addresses_share_a_location(): void {
+		// Arrange.
+		$address = array(
+			'country'  => 'US',
+			'state'    => 'CA',
+			'postcode' => '90210',
+			'city'     => 'Beverly Hills',
+		);
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $this->product( 10 ) ) ),
+			'billing'    => $address + array( 'address_1' => '1 Rodeo Dr' ),
+			'shipping'   => $address + array( 'address_1' => '2 Rodeo Dr' ),
+			'meta_data'  => array(
+				array(
+					'key'   => '_woocommerce_pos_tax_based_on',
+					'value' => 'shipping',
+				),
+			),
+		);
+
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assertSame( '90210', $this->taxjar->calculate_tax_calls[0]['to_zip'] );
+		$this->assertSame( '2 Rodeo Dr', $this->taxjar->calculate_tax_calls[0]['to_street'] );
+	}
+
+	/** Non-POS writes leave rate priming to the plugin. */
+	public function test_non_pos_request_does_not_prime(): void {
+		// Arrange.
+		$created = $this->v1_create( 'pos-open', array( $this->line( $this->product( 10 ) ) ) );
+		$this->assertSame( 201, $created->get_status() );
+		$this->taxjar->calculate_tax_calls = array();
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		// Act.
+		$request = $this->wp_rest_patch_request( '/wc/v3/orders/' . $created->get_data()['id'] );
+		$request->set_body_params( array( 'line_items' => array( $this->line( $this->product( 20 ) ) ) ) );
+		$updated = $this->server->dispatch( $request );
+		// Assert.
+		$this->assertSame( 200, $updated->get_status() );
+		$this->assertCount( 0, $this->taxjar->calculate_tax_calls );
+	}
+
+	/** Paid-order updates must not prime new rates. */
+	public function test_paid_order_update_does_not_prime(): void {
+		// Arrange.
+		$created = $this->v1_create( 'completed', array( $this->line( $this->product( 10 ) ) ) );
+		$this->assertSame( 201, $created->get_status() );
+		$this->taxjar->calculate_tax_calls = array();
+		// Act.
+		$request = $this->wp_rest_patch_request( '/wc/v3/orders/' . $created->get_data()['id'] );
+		$request->set_body_params( array( 'line_items' => array( $this->line( $this->product( 20 ) ) ) ) );
+		$updated = $this->server->dispatch( $request );
+		// Assert.
+		$this->assertSame( 200, $updated->get_status() );
+		$this->assertCount( 0, $this->taxjar->calculate_tax_calls );
+	}
+
+	/** TaxJar failure keeps the existing rate-matching behavior and saves the order. */
+	public function test_priming_failure_does_not_block_the_write(): void {
+		// Arrange.
+		$payload                            = $this->priming_payload( $this->product( 10 ) );
+		$this->taxjar->calculate_tax_throws = true;
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload, null );
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assert_order_amounts( (int) $created->get_data()['document']['id'], 1.0, 11.0 );
+	}
+
+	/**
+	 * A numeric tax-class suffix becomes the TaxJar product code, and an item
+	 * WooCommerce will not tax is left out of the request: sent as exempt it comes
+	 * back at 0%, and the plugin would write that over the shared rate row for the
+	 * item's class.
+	 */
+	public function test_tax_classes_map_to_product_codes_and_exempt_items_are_omitted(): void {
+		// Arrange.
+		\WC_Tax::create_tax_class( 'Clothing 20010', 'clothing-20010' );
+		$a = $this->product( 10 );
+		$a->set_tax_class( 'clothing-20010' );
+		$a->save();
+		$b = $this->product( 20 );
+		$b->set_tax_status( 'none' );
+		$b->save();
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $a ), $this->line( $b ) ),
+		);
+
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$lines = $this->taxjar->calculate_tax_calls[0]['line_items'];
+		$this->assertCount( 1, $lines );
+		$this->assertSame( (string) $a->get_id(), $lines[0]['id'] );
+		$this->assertSame( '20010', $lines[0]['product_tax_code'] );
+		$this->assertSame( 10.0, (float) $lines[0]['unit_price'] );
+	}
+
+	/**
+	 * Nothing taxable and no shipping means nothing to prime; the plugin would
+	 * only abort.
+	 */
+	public function test_order_with_only_exempt_items_does_not_prime(): void {
+		// Arrange.
+		$b = $this->product( 20 );
+		$b->set_tax_status( 'none' );
+		$b->save();
+
+		// Act.
+		$created = $this->push_order(
+			'create',
+			wp_generate_uuid4(),
+			array(
+				'status'     => 'pos-open',
+				'line_items' => array( $this->line( $b ) ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 0, $this->taxjar->calculate_tax_calls );
+	}
+
+	/**
+	 * A bare calculate_taxes() leaves the plugin's callbacks suspended until the
+	 * next recalculation. Priming must still find the plugin instance then.
+	 */
+	public function test_priming_still_finds_the_plugin_after_a_leftover_suspension(): void {
+		// Arrange: a POS recalculation that never reaches after_calculate_totals.
+		$created  = $this->v1_create( 'pos-open', array( $this->line( $this->product( 10 ) ) ) );
+		$order_id = (int) $created->get_data()['id'];
+		wc_get_order( $order_id )->calculate_taxes();
+		$this->assertFalse( has_action( 'woocommerce_order_before_calculate_taxes', array( $this->taxjar, 'preserve_order_taxes_on_recalculation' ) ) );
+		$this->taxjar->calculate_tax_calls = array();
+
+		// Act.
+		$request = $this->wp_rest_patch_request( '/wc/v3/orders/' . $order_id );
+		$request->set_body_params( array( 'line_items' => array( $this->line( $this->product( 20 ) ) ) ) );
+		$updated = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assertCount( 2, $this->taxjar->calculate_tax_calls[0]['line_items'] );
+	}
+
+	/**
+	 * An open billing-based order and the rate TaxJar will supply for it.
+	 *
+	 * @param WC_Product $product The order's product.
+	 * @return array
+	 */
+	private function priming_payload( WC_Product $product ): array {
+		$this->taxjar->rates_by_postcode['90210'] = array(
+			'rate' => '8.5000',
+			'name' => 'CA STATE TAX',
+			'state' => 'CA',
+		);
+		return array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $product ) ),
+			'billing'    => array(
+				'country' => 'US',
+				'state' => 'CA',
+				'postcode' => '90210',
+				'city' => 'Beverly Hills',
+				'address_1' => '1 Rodeo Dr',
+			),
+			'meta_data'  => array(
+				array(
+					'key' => '_woocommerce_pos_tax_based_on',
+					'value' => 'billing',
+				),
+			),
+		);
+	}
+
 	/**
 	 * A taxable simple product at the standard rate.
 	 *
