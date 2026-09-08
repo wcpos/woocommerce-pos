@@ -974,6 +974,56 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * "First enabled" means oldest created, whatever the post dates say: two
+	 * templates saved in the same second tie on post_date, and the fallback
+	 * that becomes Live must not depend on which one MySQL returns first.
+	 */
+	public function test_get_items_display_fallback_is_the_oldest_template_regardless_of_post_date(): void {
+		// Arrange: the older template (lower id) carries the EARLIER date, so
+		// post_date DESC — get_posts()'s default — would put the newer one first.
+		delete_option( 'wcpos_active_template_display' );
+		$first  = $this->create_template( 'First', 'display' );
+		$second = $this->create_template( 'Second', 'display' );
+		wp_update_post(
+			array(
+				'ID'            => $first,
+				'post_date'     => '2026-01-01 10:00:00',
+				'post_date_gmt' => '2026-01-01 10:00:00',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'            => $second,
+				'post_date'     => '2026-01-01 11:00:00',
+				'post_date_gmt' => '2026-01-01 11:00:00',
+			)
+		);
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $first, (int) get_option( 'wcpos_active_template_display' ) );
+		$ids = array_map(
+			static function ( $item ) {
+				return $item['id'];
+			},
+			array_values(
+				array_filter(
+					$response->get_data(),
+					static function ( $item ) use ( $first, $second ) {
+						return \in_array( (int) $item['id'], array( $first, $second ), true );
+					}
+				)
+			)
+		);
+		$this->assertSame( array( $first, $second ), array_map( 'intval', $ids ) );
+	}
+
+	/**
 	 * The admin display list pins the first-enabled fallback so the Live radio stays put.
 	 */
 	public function test_get_items_display_pins_the_fallback_as_live(): void {
@@ -1494,6 +1544,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'حبوب إسبرسو منزلية', $data['receipt_data']['lines'][0]['name'] );
 	}
 
+	/**
+	 * Previewing a gallery template returns the receipt data envelope.
+	 */
 	public function test_preview_returns_data_for_gallery_template(): void {
 		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
 		if ( empty( $gallery ) ) {

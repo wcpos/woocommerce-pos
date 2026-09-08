@@ -985,12 +985,17 @@ class Templates {
 			}
 		}
 
-		// Collect enabled database (custom) templates.
+		// Collect enabled database (custom) templates, oldest first. Without an
+		// explicit order get_posts() sorts by post_date DESC, and two templates
+		// saved in the same second tie — so "the first enabled template", which
+		// the admin display list pins as Live, could differ between requests.
 		$posts = get_posts(
 			array(
 				'post_type'      => 'wcpos_template',
 				'post_status'    => 'publish',
 				'posts_per_page' => -1,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
 				'tax_query'      => array(
 					array(
 						'taxonomy' => 'wcpos_template_type',
