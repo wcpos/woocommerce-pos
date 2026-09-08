@@ -989,6 +989,52 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A display batch cannot make a receipt id live by publishing it in the same request,
+	 * and the last status for an id in the update list is the one the projection uses.
+	 */
+	public function test_batch_active_projection_respects_type_and_update_order(): void {
+		$receipt_id = $this->create_template( 'Receipt', 'receipt' );
+		$display_id = $this->create_template( 'Display', 'display', 'draft' );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+		$request->set_body_params(
+			array(
+				'type'   => 'display',
+				'active' => $receipt_id,
+				'update' => array(
+					array(
+						'id' => $receipt_id,
+						'status' => 'publish',
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertFalse( get_option( 'wcpos_active_template_display' ) );
+
+		$request->set_body_params(
+			array(
+				'type'   => 'display',
+				'active' => $display_id,
+				'update' => array(
+					array(
+						'id' => $display_id,
+						'status' => 'draft',
+					),
+					array(
+						'id' => $display_id,
+						'status' => 'publish',
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $display_id, (int) get_option( 'wcpos_active_template_display' ) );
+	}
+
+	/**
 	 * Test batch update multiple templates.
 	 */
 	public function test_batch_update_multiple_templates(): void {

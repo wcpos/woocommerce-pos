@@ -733,21 +733,32 @@ class Templates_Controller extends WP_REST_Controller {
 	private function projected_enabled_ids( $request, string $type ): array {
 		$ids = array_map( 'strval', array_column( TemplatesManager::get_enabled_templates( $type ), 'id' ) );
 
+		$removed = array_map( 'strval', (array) $request->get_param( 'disable_virtual' ) );
 		foreach ( (array) $request->get_param( 'enable_virtual' ) as $vid ) {
 			if ( \is_string( $vid ) && TemplatesManager::get_virtual_template( $vid, $type ) ) {
 				$ids[] = $vid;
 			}
 		}
+
+		// Database updates: the last status for an id wins, and only templates of this type
+		// count — a display batch must not be able to make a receipt id "enabled" for display.
+		$statuses = array();
 		foreach ( (array) $request->get_param( 'update' ) as $item ) {
-			if ( \is_array( $item ) && ! empty( $item['id'] ) && is_numeric( $item['id'] ) && 'publish' === ( $item['status'] ?? null ) ) {
-				$ids[] = (string) (int) $item['id'];
+			if ( \is_array( $item ) && ! empty( $item['id'] ) && is_numeric( $item['id'] ) && isset( $item['status'] ) ) {
+				$statuses[ (string) (int) $item['id'] ] = $item['status'];
 			}
 		}
-
-		$removed = array_map( 'strval', (array) $request->get_param( 'disable_virtual' ) );
-		foreach ( (array) $request->get_param( 'update' ) as $item ) {
-			if ( \is_array( $item ) && ! empty( $item['id'] ) && 'draft' === ( $item['status'] ?? null ) ) {
-				$removed[] = (string) (int) $item['id'];
+		foreach ( $statuses as $id => $status ) {
+			$id       = (string) $id; // PHP stores numeric-string keys as ints; the ids list is strings.
+			$template = TemplatesManager::get_template( (int) $id );
+			if ( ! $template || ( $template['type'] ?? 'receipt' ) !== $type ) {
+				$removed[] = $id;
+				continue;
+			}
+			if ( 'publish' === $status ) {
+				$ids[] = $id;
+			} elseif ( 'draft' === $status ) {
+				$removed[] = $id;
 			}
 		}
 
