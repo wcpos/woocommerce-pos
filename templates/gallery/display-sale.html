@@ -68,6 +68,8 @@ html,body{margin:0;min-height:100%}
 .wcpos-ledger__headline{margin:0;font-size:clamp(40px,6vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
 .wcpos-ledger__subline{margin:0;font-size:clamp(18px,2.2vw,26px);font-weight:500;opacity:.85;max-width:36ch;text-wrap:balance}
 .wcpos-ledger__rule{width:120px;height:2px;background:currentColor;opacity:.5}
+/* The merchant's logo keeps the white ground it has on receipts, so a dark-ink logo stays legible on the themed background. */
+.wcpos-ledger--idle .wcpos-ledger__logo{background:#fff;padding:18px 26px;border-radius:20px;max-height:200px}
 .wcpos-ledger--idle .wcpos-ledger__brand{font-size:clamp(22px,3vw,32px);font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
 .wcpos-ledger--idle{background:#111827;color:#fff;gap:20px}
 .wcpos-ledger__badge{padding:10px 22px;border-radius:999px;background:#facc15;color:#111827;font-size:18px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}
