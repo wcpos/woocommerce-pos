@@ -150,6 +150,15 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		);
 		update_post_meta( $customized, '_template_gallery_key', 'display-pocket' );
 		wp_set_object_terms( $customized, 'promotion', 'wcpos_template_category' );
+		// A legacy install that also carries a merchant-assigned category keeps it.
+		$mixed = self::factory()->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $mixed, '_template_gallery_key', 'display-marquee' );
+		wp_set_object_terms( $mixed, array( 'display', 'promotion' ), 'wcpos_template_category' );
 		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
 
 		new Templates();
@@ -158,6 +167,7 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		$this->assertSame( array( 'standard' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 		$this->assertSame( array( 'display' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 		$this->assertSame( array( 'promotion' ), wp_get_post_terms( $customized, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertEqualsCanonicalizing( array( 'promotion', 'standard' ), wp_get_post_terms( $mixed, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 	}
 
 	private function delete_default_term( string $slug, string $taxonomy ): void {

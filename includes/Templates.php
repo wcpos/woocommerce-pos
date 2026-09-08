@@ -113,14 +113,20 @@ class Templates {
 		}
 		$this->register_default_template_types();
 		$this->register_default_template_categories();
-		$this->migrate_legacy_display_gallery_categories();
-		if ( $this->default_terms_present() ) {
+		// The latch only advances once every legacy assignment moved, so a failed write retries next request.
+		if ( $this->migrate_legacy_display_gallery_categories() && $this->default_terms_present() ) {
 			update_option( self::DEFAULT_TERMS_OPTION, self::DEFAULT_TERMS_VERSION, true );
 		}
 	}
 
-	/** Move uncustomized Pocket and Marquee installs to their current category. */
-	private function migrate_legacy_display_gallery_categories(): void {
+	/**
+	 * Move Pocket and Marquee installs that still carry the legacy `display` category to `standard`.
+	 *
+	 * Only the `display` term is swapped; any other category the merchant assigned stays.
+	 *
+	 * @return bool True when every assignment succeeded (or there was nothing to migrate).
+	 */
+	private function migrate_legacy_display_gallery_categories(): bool {
 		$post_ids = get_posts(
 			array(
 				'post_type'      => 'wcpos_template',
@@ -144,9 +150,16 @@ class Templates {
 			)
 		);
 
+		$ok = true;
 		foreach ( $post_ids as $post_id ) {
-			wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category' );
+			$removed = wp_remove_object_terms( $post_id, 'display', 'wcpos_template_category' );
+			$added   = wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category', true );
+			if ( true !== $removed || is_wp_error( $added ) ) {
+				$ok = false;
+			}
 		}
+
+		return $ok;
 	}
 
 	/** Whether every default type and category term exists. */
