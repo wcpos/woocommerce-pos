@@ -775,7 +775,8 @@ class Write_Controller extends WP_REST_Controller {
 	 */
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
 		// Customer edits/deletes: never let a non-admin POS user touch a staff account.
-		if ( $permission && 'user' === $post_type && \in_array( $context, array( 'edit', 'delete' ), true )
+		if ( $permission && 'user' === $post_type && (int) $object_id > 0
+			&& \in_array( $context, array( 'edit', 'delete' ), true )
 			&& ! Customer_Account_Guard::can_modify( get_current_user_id(), (int) $object_id ) ) {
 			return false;
 		}

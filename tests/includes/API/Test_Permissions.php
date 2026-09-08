@@ -435,6 +435,7 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_edit_staff_account', $response->get_data()['code'] );
 		clean_user_cache( $this->shop_manager );
 		$this->assertSame( $original, get_user_by( 'id', $this->shop_manager )->first_name );
 	}
@@ -451,6 +452,7 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_edit_staff_account', $response->get_data()['code'] );
 		wp_delete_user( $target_id );
 	}
 
@@ -483,7 +485,7 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
-		$this->assertSame( 'woocommerce_rest_cannot_delete', $response->get_data()['code'] );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_edit_staff_account', $response->get_data()['code'] );
 		$this->assertInstanceOf( \WP_User::class, get_user_by( 'id', $target_id ) );
 		wp_delete_user( $target_id );
 		wp_delete_user( $cashier_id );
@@ -508,6 +510,67 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
 		}
+	}
+
+	/**
+	 * WooCommerce reads only the first role, so a capability test must gate deletes.
+	 */
+	public function test_cashier_with_delete_users_cannot_delete_a_customer_role_account_holding_staff_capabilities_on_v1(): void {
+		$target_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		get_user_by( 'id', $target_id )->add_cap( 'manage_woocommerce' );
+		$cashier_id = $this->create_cashier_without( array() );
+		get_user_by( 'id', $cashier_id )->add_cap( 'delete_users' );
+		wp_set_current_user( $cashier_id );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/customers/' . $target_id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_param( 'force', true );
+		$request->set_param( 'reassign', 0 );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_edit_staff_account', $response->get_data()['code'] );
+		$this->assertInstanceOf( \WP_User::class, get_user_by( 'id', $target_id ) );
+		wp_delete_user( $target_id );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * An administrator who also holds the customer role must not be deletable.
+	 */
+	public function test_cashier_with_delete_users_cannot_delete_a_multi_role_administrator_on_v1(): void {
+		$target_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		get_user_by( 'id', $target_id )->add_role( 'administrator' );
+		$cashier_id = $this->create_cashier_without( array() );
+		get_user_by( 'id', $cashier_id )->add_cap( 'delete_users' );
+		wp_set_current_user( $cashier_id );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/customers/' . $target_id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_param( 'force', true );
+		$request->set_param( 'reassign', 0 );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_edit_staff_account', $response->get_data()['code'] );
+		$this->assertInstanceOf( \WP_User::class, get_user_by( 'id', $target_id ) );
+		wp_delete_user( $target_id );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * A cleared target is judged by capability, not by WooCommerce's role name list.
+	 */
+	public function test_shop_manager_can_update_a_subscriber_on_v1(): void {
+		wp_set_current_user( $this->shop_manager );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $this->subscriber );
+		$request->set_body_params( array( 'first_name' => 'Updated' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		clean_user_cache( $this->subscriber );
+		$this->assertSame( 'Updated', get_user_by( 'id', $this->subscriber )->first_name );
 	}
 
 	// ──────────────────────────────────────────────

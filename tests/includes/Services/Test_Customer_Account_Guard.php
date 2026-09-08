@@ -73,6 +73,43 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An unresolvable target is denied rather than waved through.
+	 */
+	public function test_unknown_target_is_denied(): void {
+		$actor_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$target_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		wp_delete_user( $target_id );
+
+		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+
+		$this->assertFalse( $allowed );
+		wp_delete_user( $actor_id );
+	}
+
+	/**
+	 * A logged-out actor is denied, including against user ID zero.
+	 */
+	public function test_missing_actor_is_denied(): void {
+		$this->assertFalse( Customer_Account_Guard::can_modify( 0, 0 ) );
+	}
+
+	/**
+	 * The target's own roles are allowed through, then restored.
+	 */
+	public function test_allow_target_roles_adds_target_roles_and_restores(): void {
+		$target_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+
+		$restore = Customer_Account_Guard::allow_target_roles( $target_id );
+		$during  = apply_filters( 'woocommerce_shop_manager_editable_roles', array( 'customer' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook, applied here only to observe the filter.
+		$restore();
+		$after = apply_filters( 'woocommerce_shop_manager_editable_roles', array( 'customer' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook, applied here only to observe the filter.
+
+		$this->assertContains( 'subscriber', $during );
+		$this->assertSame( array( 'customer' ), $after );
+		wp_delete_user( $target_id );
+	}
+
+	/**
 	 * Filtered capabilities are normalized and de-duplicated.
 	 */
 	public function test_protected_capabilities_filter_is_honoured_and_deduplicated(): void {
