@@ -1,10 +1,21 @@
 <?php
+/**
+ * Base REST test case for WCPOS: registers the plugin's routes, signs the
+ * request in as an administrator, and wires the sync read lane on demand.
+ *
+ * @package WCPOS\WooCommercePOS\Tests
+ */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
+use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_REST_Request;
 use WP_User;
 
@@ -13,18 +24,25 @@ use WP_User;
  */
 abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	/**
+	 * The controller under test, when a subclass sets one.
+	 *
 	 * @var Controller
 	 */
 	protected $endpoint;
 
 	/**
+	 * The administrator every request runs as.
+	 *
 	 * @var WP_User
 	 */
 	protected $user;
 
+	/**
+	 * Register the routes before the REST server boots, then sign in.
+	 */
 	public function setUp(): void {
 		$this->drop_stale_rest_api_init_callbacks();
-		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) ); // add hook before parent::setUp()
+		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) ); // Add the hook before parent::setUp().
 
 		parent::setUp();
 		$this->user = $this->factory->user->create(
@@ -35,10 +53,16 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		wp_set_current_user( $this->user );
 	}
 
+	/**
+	 * Tear down.
+	 */
 	public function tearDown(): void {
 		parent::tearDown();
 	}
 
+	/**
+	 * Register the plugin's REST controllers.
+	 */
 	public function rest_api_init(): void {
 		new API();
 	}
@@ -86,9 +110,13 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Build a request the way a current POS client sends it: the WCPOS marker
+	 * Build a GET request the way a current POS client sends it: the WCPOS marker
 	 * plus the protocol signal the 1.11.0 gate requires (free#1868). Gate tests
 	 * strip the protocol header to model a pre-boundary client.
+	 *
+	 * @param string $path Route path.
+	 *
+	 * @return WP_REST_Request
 	 */
 	public function wp_rest_get_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
@@ -100,6 +128,13 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		return $request;
 	}
 
+	/**
+	 * A POST request carrying the header every WCPOS route requires.
+	 *
+	 * @param string $path Route path.
+	 *
+	 * @return WP_REST_Request
+	 */
 	public function wp_rest_post_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
@@ -114,7 +149,9 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 * NOTE: all PATCH requests are sent as POST requests with a _method=PATCH query param.
 	 * This is because PATCH requests are not supported by some servers.
 	 *
-	 * @param mixed $path
+	 * @param string $path Route path.
+	 *
+	 * @return WP_REST_Request
 	 */
 	public function wp_rest_patch_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
@@ -127,9 +164,16 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		return $request;
 	}
 
-	public function get_reflected_property_value( $propertyName ) {
+	/**
+	 * Read a non-public property off the controller under test.
+	 *
+	 * @param string $property_name Property name.
+	 *
+	 * @return mixed
+	 */
+	public function get_reflected_property_value( $property_name ) {
 		$reflection = new ReflectionClass( $this->endpoint );
-		$property   = $reflection->getProperty( $propertyName );
+		$property   = $reflection->getProperty( $property_name );
 		$property->setAccessible( true );
 
 		return $property->getValue( $this->endpoint );
@@ -170,6 +214,51 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		);
 	}
 
+	/**
+	 * Wire the sync read lane a deployed client actually reads through.
+	 *
+	 * Production installs this on EVERY request: `Init::__construct()` registers
+	 * `Meta_Normalizer` at priority 5 and calls `Sync\Augmentation_Pipeline::install()`
+	 * behind the schema latch. The phpunit run never gets there. `Init` is
+	 * constructed on `plugins_loaded`, and on the suite's only boot the latch is
+	 * still unset at that moment — `Activator::version_check()` defers the schema
+	 * install to `woocommerce_init`, which fires later. So `Init` reads an unset
+	 * latch, skips the whole read lane, and every proxy read in the suite is served
+	 * WITHOUT the revision and digest stamps. On a real site the NEXT request finds
+	 * the latch written and wires everything; a one-boot process never gets that
+	 * second request, which is what makes the gap invisible — the latch reads
+	 * healthy by the time a test body runs, so nothing looks disabled.
+	 *
+	 * A payload pin that runs without this asserts a row shape nobody receives,
+	 * and — the inverted signal this whole family exists to stop (#1712, #1717) —
+	 * would go RED the day the production wiring were restored.
+	 *
+	 * Call from `setUp()`, and {@see uninstall_sync_read_lane()} from `tearDown()`.
+	 */
+	protected function install_sync_read_lane(): void {
+		Meta_Normalizer::register_hooks();
+		Augmentation_Pipeline::install();
+	}
+
+	/**
+	 * Unwind every filter {@see install_sync_read_lane()} put up.
+	 *
+	 * `Augmentation_Pipeline::reset()` removes only the PROJECTIONS the pipeline
+	 * installed; the three batch-lane stampers it wires keep their own
+	 * `unregister_*` seams and have to be unwound by name, or they leak into every
+	 * test that runs after this one.
+	 */
+	protected function uninstall_sync_read_lane(): void {
+		Augmentation_Pipeline::reset();
+		Revision::unregister_proxy_stamps();
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		Integrity_Digest::unregister_proxy_digest_stampers();
+		Meta_Normalizer::unregister_hooks();
+	}
+
+	/**
+	 * Turn on decimal quantities for the test.
+	 */
 	protected function setup_decimal_quantity_tests(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
