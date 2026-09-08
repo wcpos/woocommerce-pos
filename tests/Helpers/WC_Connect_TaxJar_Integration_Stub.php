@@ -76,6 +76,9 @@ if ( ! class_exists( 'WC_Connect_TaxJar_Integration', false ) ) {
 		 * @var bool
 		 */
 		public $calculate_tax_throws = false;
+
+		/** @var object|null Synthetic TaxJar response, passed through the real response hook. */
+		public $taxjar_response = null;
 		/**
 		 * Inserted rate ids, keyed by postcode.
 		 *
@@ -92,6 +95,9 @@ if ( ! class_exists( 'WC_Connect_TaxJar_Integration', false ) ) {
 		 */
 		public function calculate_tax( $options = array() ) {
 			$this->calculate_tax_calls[] = $options;
+			if ( null !== $this->taxjar_response ) {
+				apply_filters( 'woocommerce_services_override_tax_rate', $this->taxjar_response->rate, $this->taxjar_response, $options );
+			}
 			if ( $this->calculate_tax_throws ) {
 				throw new \RuntimeException( 'TaxJar unavailable' );
 			}
