@@ -28,6 +28,7 @@ function matchesFilters(
 		engine?: string;
 		output_type?: string;
 		direction?: 'ltr' | 'rtl';
+		screen?: GalleryTemplate['screen'];
 	},
 	filters: FilterState
 ): boolean {
@@ -49,6 +50,10 @@ function matchesFilters(
 	}
 
 	if (filters.direction !== 'all' && (template.direction ?? 'ltr') !== filters.direction) {
+		return false;
+	}
+
+	if (filters.screen !== 'all' && template.screen && template.screen !== filters.screen) {
 		return false;
 	}
 

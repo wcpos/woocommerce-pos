@@ -55,7 +55,7 @@ foreach ( $templates as $template ) {
 		);
 	}
 
-	$payloads[] = array(
+	$payload = array(
 		'key'              => $key,
 		'type'             => $template_type,
 		'title'            => $template['title'] ?? $key,
@@ -64,6 +64,10 @@ foreach ( $templates as $template ) {
 		'template_content' => isset( $template['content'] ) && is_string( $template['content'] ) ? $template['content'] : '',
 		'receipt_data'     => $receipt_data,
 	);
+	if ( 'display' === $template_type ) {
+		$payload['preview_state'] = in_array( $template['category'], array( 'seasonal', 'promotion' ), true ) ? 'idle' : 'cart';
+	}
+	$payloads[] = $payload;
 }
 
 echo wp_json_encode( $payloads, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT );

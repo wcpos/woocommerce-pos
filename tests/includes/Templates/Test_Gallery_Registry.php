@@ -22,6 +22,12 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 	 */
 	private const EXPECTED_KEYS = array(
 		'detailed-receipt',
+		'display-ledger',
+		'display-seasons-greetings',
+		'display-lunar-new-year',
+		'display-eid',
+		'display-diwali',
+		'display-sale',
 		'display-marquee',
 		'display-pocket',
 		'gift-receipt',
@@ -51,6 +57,39 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 		sort( $expected );
 
 		$this->assertEquals( $expected, $keys );
+	}
+
+	/**
+	 * Display entries declare screen and category facets without changing receipts.
+	 */
+	public function test_registry_display_entries_have_expected_facets(): void {
+		$expected = array(
+			'display-diwali'            => array( 'responsive', 'seasonal' ),
+			'display-eid'               => array( 'responsive', 'seasonal' ),
+			'display-ledger'            => array( 'responsive', 'standard' ),
+			'display-lunar-new-year'    => array( 'responsive', 'seasonal' ),
+			'display-marquee'           => array( 'large-screen', 'standard' ),
+			'display-pocket'            => array( 'phone', 'standard' ),
+			'display-sale'              => array( 'responsive', 'promotion' ),
+			'display-seasons-greetings' => array( 'responsive', 'seasonal' ),
+		);
+		$entries = Gallery_Registry::all();
+
+		foreach ( $expected as $key => $facets ) {
+			$this->assertArrayHasKey( $key, $entries );
+			$this->assertSame( 'display', $entries[ $key ]['type'] );
+			$this->assertSame( $facets, array( $entries[ $key ]['screen'], $entries[ $key ]['category'] ) );
+			$this->assertSame( 'logicless', $entries[ $key ]['engine'] );
+			$this->assertSame( 'html', $entries[ $key ]['output_type'] );
+			$this->assertSame( 1, $entries[ $key ]['version'] );
+			$this->assertNull( $entries[ $key ]['paper_width'] );
+			$this->assertNull( $entries[ $key ]['preview_data'] );
+		}
+		foreach ( $entries as $entry ) {
+			if ( 'receipt' === $entry['type'] ) {
+				$this->assertArrayNotHasKey( 'screen', $entry );
+			}
+		}
 	}
 
 	/**

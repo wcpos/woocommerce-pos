@@ -102,7 +102,7 @@ const capture = document.getElementById('capture');
 if (isDisplay) {
 	paper.innerHTML = bodyHtml;
 	paper.querySelectorAll('section[data-wcpos-state]').forEach((section) => {
-		if (section.dataset.wcposState !== 'cart') section.remove();
+		if (section.dataset.wcposState !== (payload.preview_state ?? 'cart')) section.remove();
 	});
 	capture.style.width = window.innerWidth + 'px';
 	capture.style.height = window.innerHeight + 'px';

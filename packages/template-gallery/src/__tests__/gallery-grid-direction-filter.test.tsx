@@ -44,7 +44,33 @@ vi.mock('@tanstack/react-router', () => ({ useSearch: vi.fn(() => ({ type: 'rece
 
 vi.mock('../hooks/use-gallery-templates', () => ({
 	useGalleryTemplates: () => ({
-		data: [ltrTemplate, rtlTemplate, legacyTemplate],
+		data:
+			useSearch({ from: '/' }).type === 'display'
+				? [
+						{
+							...ltrTemplate,
+							key: 'phone',
+							title: 'Phone Display',
+							type: 'display',
+							screen: 'phone',
+						},
+						{
+							...ltrTemplate,
+							key: 'responsive',
+							title: 'Responsive Display',
+							type: 'display',
+							screen: 'responsive',
+						},
+						{
+							...ltrTemplate,
+							key: 'large',
+							title: 'Large Display',
+							type: 'display',
+							screen: 'large-screen',
+						},
+						legacyTemplate,
+					]
+				: [ltrTemplate, rtlTemplate, legacyTemplate],
 	}),
 	useInstallGalleryTemplate: () => ({
 		isPending: false,
@@ -126,6 +152,7 @@ describe('GalleryGrid direction filter', () => {
 		const container = mountGrid();
 		const text = () => container.textContent ?? '';
 
+		expect(container.querySelector('input[name="filter-screen"]')).toBeNull();
 		expect(text()).toContain('Standard Receipt');
 		expect(text()).toContain('Standard Receipt (RTL)');
 		expect(text()).toContain('Legacy Receipt');
@@ -150,6 +177,29 @@ describe('GalleryGrid direction filter', () => {
 });
 
 describe('GalleryGrid display templates', () => {
+	it('filters by phone while keeping templates without screen and supports clearing', () => {
+		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
+		const container = mountGrid();
+		expect(container.textContent).toContain('Responsive Display');
+		expect(container.textContent).toContain('Large Display');
+		const phone = container.querySelector<HTMLInputElement>(
+			'input[name="filter-screen"][value="phone"]'
+		);
+		expect(phone).not.toBeNull();
+		act(() => phone!.click());
+		expect(container.textContent).toContain('Phone Display');
+		expect(container.textContent).toContain('Legacy Receipt');
+		expect(container.textContent).not.toContain('Responsive Display');
+		expect(container.textContent).not.toContain('Large Display');
+		const clear = Array.from(container.querySelectorAll('button')).find(
+			(button) => button.textContent === 'filter.clear_all'
+		);
+		expect(clear).toBeDefined();
+		act(() => clear!.click());
+		expect(container.textContent).toContain('Responsive Display');
+		expect(container.textContent).toContain('Large Display');
+	});
+
 	it('shows the Pro requirement, display creation link and no output filters or previews', () => {
 		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		Object.assign((window as any).wcpos.templateGallery, { isProActive: false });
@@ -162,6 +212,8 @@ describe('GalleryGrid display templates', () => {
 		expect(
 			container.querySelector('a[href="https://docs.wcpos.com/customer-display"]')
 		).not.toBeNull();
+		expect(container.textContent).toContain('filter.screen');
+		expect(container.querySelectorAll('input[name="filter-screen"]')).toHaveLength(4);
 		expect(container.querySelector('input[name="filter-format"]')).toBeNull();
 		expect(container.querySelector('input[name="filter-direction"]')).toBeNull();
 		expect(container.querySelector('button[aria-label="common.preview"]')).toBeNull();
