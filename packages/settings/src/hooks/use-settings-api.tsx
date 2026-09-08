@@ -12,7 +12,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
 	const { setNotice } = useNotices();
-	const endpoint = `wcpos/v1/settings/${id}?wcpos=1`;
+	const endpoint = `wcpos/v2/settings/${id}?wcpos=1`;
 
 	const { data } = useSuspenseQuery({
 		queryKey: [id],

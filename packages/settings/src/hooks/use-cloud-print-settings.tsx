@@ -72,7 +72,7 @@ export interface CloudPrintSettingsResponse extends CloudPrintSettings {
 	generated?: Record<string, string>;
 }
 
-const ENDPOINT = 'wcpos/v1/settings/cloud-print?wcpos=1';
+const ENDPOINT = 'wcpos/v2/settings/cloud-print?wcpos=1';
 
 /**
  * Read/write the cloud-print settings. The REST endpoint replaces the whole
@@ -111,7 +111,7 @@ export function useCloudPrintSettings() {
 	return { settings: data, save: mutation.mutateAsync };
 }
 
-const RELAY_REGISTER_ENDPOINT = 'wcpos/v1/print-jobs/relay/register?wcpos=1';
+const RELAY_REGISTER_ENDPOINT = 'wcpos/v2/print-jobs/relay/register?wcpos=1';
 
 /**
  * Self-register with the WCPOS Cloud Print relay. The endpoint returns the

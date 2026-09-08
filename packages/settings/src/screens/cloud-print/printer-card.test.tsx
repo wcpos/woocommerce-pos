@@ -263,7 +263,7 @@ describe('PrinterCard', () => {
 		fireEvent.click(screen.getByTestId(`printer-card-test-${printer.id}`));
 		await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(1));
 		expect(apiFetchMock).toHaveBeenCalledWith({
-			path: 'wcpos/v1/print-jobs/test?wcpos=1',
+			path: 'wcpos/v2/print-jobs/test?wcpos=1',
 			method: 'POST',
 			data: { printer_id: printer.id },
 		});

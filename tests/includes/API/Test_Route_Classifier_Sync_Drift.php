@@ -182,6 +182,46 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Every wcpos/v2 route the wp-admin settings screen calls is exempt from
+	 * the protocol gate.
+	 *
+	 * The screen authenticates with a cookie and makes no client protocol
+	 * claim, so a gated route it calls answers 426 "update required" — which
+	 * is how the PrintNode and Star discovery lookups broke while the
+	 * declared-entries guard above stayed green (they sit at the namespace
+	 * root, outside the `/print-jobs` prefix). This walks the source the
+	 * other way: every `wcpos/v2/...` literal in `packages/settings/src`
+	 * (template segments cut at the first `${`) must be exempt.
+	 * DRIFT CAUGHT: a settings-facing route added without its exemption.
+	 * WHEN IT FIRES: add the route to its controller's `protocol_exempt`.
+	 */
+	public function test_every_v2_route_the_settings_screen_calls_is_protocol_exempt(): void {
+		// Arrange.
+		$source = \dirname( __DIR__, 3 ) . '/packages/settings/src';
+		$this->assertDirectoryExists( $source );
+		$paths = array();
+		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source ) );
+		foreach ( $files as $file ) {
+			if ( ! preg_match( '/\.(ts|tsx)$/', $file->getFilename() ) || false !== strpos( $file->getFilename(), '.test.' ) ) {
+				continue;
+			}
+			$contents = file_get_contents( $file->getPathname() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Test reads repo source.
+			if ( preg_match_all( '#wcpos/v2/([A-Za-z0-9_/-]+)#', (string) $contents, $matches ) ) {
+				foreach ( $matches[1] as $path ) {
+					$paths[ '/wcpos/v2/' . rtrim( $path, '/' ) ] = true;
+				}
+			}
+		}
+		$this->assertNotEmpty( $paths, 'the settings screen calls no wcpos/v2 route at all — the scan is broken' );
+
+		// Act / Assert.
+		$classifier = $this->api->get_route_classifier();
+		foreach ( array_keys( $paths ) as $route ) {
+			$this->assertTrue( $classifier->is_protocol_exempt( $route ), $route . ' is called by the settings screen with cookie auth but is protocol-gated' );
+		}
+	}
+
+	/**
 	 * Every public and printer-token v2 route is exempt from the protocol gate.
 	 *
 	 * Pins the derivation in `Route_Classifier::is_protocol_exempt()`: pre-login

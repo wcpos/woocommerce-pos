@@ -20,7 +20,7 @@ export interface TemplateOption {
 	engine: TemplateEngine;
 }
 
-const ENDPOINT = 'wcpos/v1/templates?wcpos=1&type=receipt';
+const ENDPOINT = 'wcpos/v2/templates?wcpos=1&type=receipt';
 
 /**
  * Receipt-template options for settings pickers.

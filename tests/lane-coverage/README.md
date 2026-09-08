@@ -33,9 +33,11 @@ The client (`wcpos/monorepo`, `next`) calls three namespaces:
 `wcpos/v1/products/variations` is allowlisted in the scanner (`CURRENT_V1_ROUTES`). A test
 that touches only that route is current-lane, not legacy. The scanner also accepts subtree
 entries (a path ending in `/*`) for surfaces where v1 **is** the current lane:
-`wcpos/v1/print-jobs/*` is one — the settings frontend calls it directly (queue polling,
-reprint, the add-printer wizard), CloudPRNT/Epson printers poll its endpoints, and no v2
-print namespace exists. Subtree entries are for whole live surfaces only; the
+`wcpos/v1/print-jobs/*` is one — CloudPRNT/Epson printers already in the field poll the
+`wcpos/v1` URL their firmware was configured with, and those URLs cannot be recalled. (Every
+service, print jobs included, also answers under `wcpos/v2` since #1252; the wp-admin
+settings screen speaks `wcpos/v2` for everything, so v1 print-jobs is live for printer
+firmware only.) Subtree entries are for whole live surfaces only; the
 `products/variations` entry stays exact on purpose, because only the collection route is
 live there. Everything else under `wcpos/v1` is a legacy pin.
 

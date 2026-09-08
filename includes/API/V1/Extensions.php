@@ -37,6 +37,22 @@ class Extensions extends WP_REST_Controller {
 	protected $rest_base = 'extensions';
 
 	/**
+	 * Declare the protocol-gate classification.
+	 *
+	 * The wp-admin settings screen calls this surface with cookie auth and no
+	 * client protocol claim, and its wire shape did not change at the 1.11.0
+	 * boundary, so the whole prefix is exempt from the gate on both namespaces.
+	 * The sync surface stays gated (#1868).
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'protocol_exempt' => array( "/{$this->namespace}/{$this->rest_base}" ),
+		);
+	}
+
+	/**
 	 * Register routes.
 	 *
 	 * @return void

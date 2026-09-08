@@ -105,7 +105,7 @@ describe('AddPrinterWizard', () => {
 
 		// Step 2: poll URL (token embedded, no separate token row) + one-time copy.
 		const expectedUrl =
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/epson-sdp/kitchen/9f3a8c21d7b64e0fa1c2e5d8b09a7f6c?wcpos=1';
+			'https://mystore.com/wp-json/wcpos/v2/print-jobs/epson-sdp/kitchen/9f3a8c21d7b64e0fa1c2e5d8b09a7f6c?wcpos=1';
 		await waitFor(() => expect(screen.getByTestId('wizard-poll-url')).toBeInTheDocument());
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(expectedUrl);
 		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('AddPrinterWizard', () => {
 		);
 
 		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(
-			'https://mystore.com/?rest_route=/wcpos/v1/print-jobs/cloudprnt/kitchen'
+			'https://mystore.com/?rest_route=/wcpos/v2/print-jobs/cloudprnt/kitchen'
 		);
 	});
 
@@ -351,7 +351,7 @@ describe('AddPrinterWizard', () => {
 		// Step 2 directly.
 		const url = screen.getByTestId('wizard-poll-url');
 		expect(url).toHaveTextContent(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen'
+			'https://mystore.com/wp-json/wcpos/v2/print-jobs/cloudprnt/kitchen'
 		);
 		// Token masked (no real token, dots in the token path segment).
 		expect(url.textContent).toContain('/••••');
@@ -390,7 +390,7 @@ describe('AddPrinterWizard', () => {
 describe('buildPollUrl relay routing', () => {
 	it('builds a direct URL on the site REST root by default', () => {
 		expect(buildPollUrl('star-cloudprnt', 'kitchen', 'tok')).toBe(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen/tok?wcpos=1'
+			'https://mystore.com/wp-json/wcpos/v2/print-jobs/cloudprnt/kitchen/tok?wcpos=1'
 		);
 	});
 
@@ -430,7 +430,7 @@ describe('AddPrinterWizard relay display', () => {
 		// Direct is framed as an opt-out from the relay, not a troubleshooting step.
 		expect(screen.getByText(/rather not route print jobs through a relay/i)).toBeInTheDocument();
 		expect(screen.getByTestId('wizard-direct-url').textContent).toContain(
-			'https://mystore.com/wp-json/wcpos/v1/print-jobs/cloudprnt/kitchen/••••'
+			'https://mystore.com/wp-json/wcpos/v2/print-jobs/cloudprnt/kitchen/••••'
 		);
 	});
 

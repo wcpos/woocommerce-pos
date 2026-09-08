@@ -54,7 +54,7 @@ describe('Extensions screen refresh', () => {
 		await screen.findByText('New Extension');
 		expect(screen.queryByText('Old Extension')).toBeNull();
 		expect(apiFetchMock).toHaveBeenLastCalledWith({
-			path: 'wcpos/v1/extensions?wcpos=1&force=1',
+			path: 'wcpos/v2/extensions?wcpos=1&force=1',
 			method: 'GET',
 		});
 	});

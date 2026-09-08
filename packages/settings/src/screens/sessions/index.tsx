@@ -49,7 +49,7 @@ function Sessions() {
 		queryKey: ['sessions', 'all'],
 		queryFn: async () => {
 			const response = await apiFetch({
-				path: '/wcpos/v1/auth/users/sessions?wcpos=1',
+				path: '/wcpos/v2/auth/users/sessions?wcpos=1',
 				method: 'GET',
 			});
 			return response as AllUsersSessionsResponse;
@@ -89,7 +89,7 @@ function Sessions() {
 	const deleteSessionMutation = useMutation({
 		mutationFn: async ({ userId, jti }: { userId: number; jti: string }) =>
 			apiFetch({
-				path: `/wcpos/v1/auth/sessions/${jti}?user_id=${userId}&wcpos=1`,
+				path: `/wcpos/v2/auth/sessions/${jti}?user_id=${userId}&wcpos=1`,
 				method: 'DELETE',
 			}),
 		onSuccess: () => {
@@ -112,7 +112,7 @@ function Sessions() {
 			});
 			if (exceptCurrent) params.append('except_current', 'true');
 			return apiFetch({
-				path: `/wcpos/v1/auth/sessions?${params.toString()}`,
+				path: `/wcpos/v2/auth/sessions?${params.toString()}`,
 				method: 'DELETE',
 			});
 		},

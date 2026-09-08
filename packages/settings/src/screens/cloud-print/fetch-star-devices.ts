@@ -13,7 +13,7 @@ export async function fetchStarDevices(
 	fetch: typeof apiFetch = apiFetch
 ): Promise<StarDeviceOption[]> {
 	const res = (await fetch({
-		path: 'wcpos/v1/star-online/devices?wcpos=1',
+		path: 'wcpos/v2/star-online/devices?wcpos=1',
 		method: 'POST',
 		data: { cloudprnt_url: cloudprntUrl, api_key: apiKey },
 	})) as { devices?: StarDeviceOption[] };

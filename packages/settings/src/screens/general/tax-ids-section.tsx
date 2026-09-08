@@ -238,7 +238,7 @@ export function TaxIdsSection() {
 		queryKey: ['tax_ids_detection'],
 		queryFn: async () => {
 			return apiFetch<TaxIdsDetection>({
-				path: 'wcpos/v1/settings/tax_ids/detection?wcpos=1',
+				path: 'wcpos/v2/settings/tax_ids/detection?wcpos=1',
 				method: 'GET',
 			});
 		},
