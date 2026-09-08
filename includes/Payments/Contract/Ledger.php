@@ -19,6 +19,12 @@ class Ledger {
 	public const META_KEY = '_wcpos_payments';
 	public const INDEX_META_KEY = '_wcpos_payment_method';
 	public const PAYMENT_ID_META_KEY = '_wcpos_payment_id';
+	/**
+	 * One meta row per pending or authorized leg. What the sweep selects orders by: an
+	 * authorization that covers the balance completes the order through payment_complete(),
+	 * so a status filter would lose exactly the leg that most needs reconciling.
+	 */
+	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
 	public const SEEN_EVENTS_MAX = 20;
 	public const SCHEMA = 1;
@@ -443,13 +449,27 @@ class Ledger {
 				return $this->refusal_error( $applied, $order );
 			}
 			if ( $tip ) {
-				$taxable = (bool) apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
 				$fee = new \WC_Order_Item_Fee();
 				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
+				$fee->set_tax_status( 'none' );
 				$fee->set_total( Money::format( $difference ) );
-				$fee->set_tax_status( $taxable ? 'taxable' : 'none' );
+				// The customer has already paid the confirmed amount, so a tax on the tip is
+				// carved OUT of the difference — never added on top of money nobody collected
+				// (that would leave a phantom balance on a fully paid order). Per-rate
+				// rounding here matches how the order sums item taxes, so fee + tax equals
+				// the difference to the cent. update_taxes() folds the item taxes into the
+				// order's tax lines and cart_tax — calculate_totals( false ) reads cart_tax
+				// but only refreshes it through calculate_taxes(), which we skip so the rest
+				// of the order is not recalculated.
+				if ( apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+					$fee->set_tax_status( 'taxable' );
+					$taxes = array_map( 'wc_round_tax_total', \WC_Tax::calc_inclusive_tax( (float) Money::format( $difference ), \WC_Tax::get_rates( $fee->get_tax_class() ) ) );
+					$fee->set_taxes( array( 'total' => $taxes ) );
+					$fee->set_total( Money::format( $difference - Money::minor( array_sum( $taxes ) ) ) );
+				}
 				$order->add_item( $fee );
-				$order->calculate_totals( $taxable );
+				$order->update_taxes();
+				$order->calculate_totals( false );
 				$applied['amount'] = Money::normalize( $confirmed );
 				$applied['tip'] = Money::format( $difference );
 			}
@@ -765,9 +785,13 @@ class Ledger {
 		);
 		$order->delete_meta_data( self::INDEX_META_KEY );
 		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
+		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
 		$indexed = array();
 		foreach ( $normalized as $row ) {
 			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
+			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+			}
 			if ( in_array( $row['status'], self::LIVE_STATUSES, true ) && ! in_array( $row['method_id'], $indexed, true ) ) {
 				$indexed[] = $row['method_id'];
 				$order->add_meta_data( self::INDEX_META_KEY, $row['method_id'], false );

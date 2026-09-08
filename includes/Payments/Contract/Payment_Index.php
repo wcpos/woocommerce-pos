@@ -60,51 +60,45 @@ final class Payment_Index {
 	}
 
 	/**
-	 * Orders in the given statuses that carry at least one ledger row, oldest-modified first.
+	 * Orders holding at least one pending or authorized leg, oldest-modified first.
 	 *
-	 * @param string[] $statuses Bare order statuses (`pending`, not `wc-pending`).
-	 * @param int      $limit    Batch cap.
+	 * No status filter on purpose: an authorization that covers the balance completes
+	 * the order through payment_complete(), and that is exactly the leg a sweep must
+	 * still reach when it expires uncaptured. The live-leg index drops off the order
+	 * the moment every leg settles, so the candidate set is only ever orders with
+	 * something to reconcile — never the abandoned-cart mass.
+	 *
+	 * @param int $limit Batch cap.
 	 *
 	 * @return int[] Order ids.
 	 */
-	public static function order_ids_with_rows( array $statuses, int $limit ): array {
+	public static function order_ids_with_live_legs( int $limit ): array {
 		global $wpdb;
-		$statuses = array_values(
-			array_map(
-				static function ( string $status ): string {
-					return 0 === strpos( $status, 'wc-' ) ? $status : 'wc-' . $status;
-				},
-				$statuses
-			)
-		);
-		if ( empty( $statuses ) || $limit < 1 ) {
+		if ( $limit < 1 ) {
 			return array();
 		}
-		$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 		if ( self::hpos() ) {
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- Placeholders built from a counted list; datastore-aware index lookup.
-			$ids = $wpdb->get_col(
+			$ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Datastore-aware index lookup; see the class comment.
 				$wpdb->prepare(
 					"SELECT o.id FROM {$wpdb->prefix}wc_orders o"
-					. " WHERE o.type = 'shop_order' AND o.status IN ( {$placeholders} )"
+					. " WHERE o.type = 'shop_order' AND o.status NOT IN ( 'trash', 'auto-draft' )"
 					. " AND EXISTS ( SELECT 1 FROM {$wpdb->prefix}wc_orders_meta m WHERE m.order_id = o.id AND m.meta_key = %s )"
 					. ' ORDER BY o.date_updated_gmt ASC LIMIT %d',
-					array_merge( $statuses, array( Ledger::PAYMENT_ID_META_KEY, $limit ) )
+					Ledger::LIVE_LEG_META_KEY,
+					$limit
 				)
 			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
 		} else {
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- Placeholders built from a counted list; datastore-aware index lookup.
-			$ids = $wpdb->get_col(
+			$ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Datastore-aware index lookup; see the class comment.
 				$wpdb->prepare(
 					"SELECT p.ID FROM {$wpdb->posts} p"
-					. " WHERE p.post_type = 'shop_order' AND p.post_status IN ( {$placeholders} )"
+					. " WHERE p.post_type = 'shop_order' AND p.post_status NOT IN ( 'trash', 'auto-draft' )"
 					. " AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m WHERE m.post_id = p.ID AND m.meta_key = %s )"
 					. ' ORDER BY p.post_modified_gmt ASC LIMIT %d',
-					array_merge( $statuses, array( Ledger::PAYMENT_ID_META_KEY, $limit ) )
+					Ledger::LIVE_LEG_META_KEY,
+					$limit
 				)
 			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
 		}
 
 		return is_array( $ids ) ? array_map( 'intval', $ids ) : array();

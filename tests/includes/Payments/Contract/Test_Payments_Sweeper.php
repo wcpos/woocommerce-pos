@@ -108,12 +108,25 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
 	}
 
-	public function test_sweeper_completed_orders_are_not_polled(): void {
-		list( $order ) = $this->leg( 600 );
+	public function test_sweeper_reaches_a_paid_order_that_still_holds_an_authorization(): void {
+		// A captured leg on a completed order has nothing to reconcile: no live index, not polled.
+		list( $settled ) = $this->leg( 600, array( 'status' => 'captured' ) );
+		$settled->set_status( 'completed' );
+		$settled->save();
+		// An authorization that completed the order and then lapsed is exactly what the
+		// sweep exists for — a status filter would never see it (Codex review, #1904).
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() - 60 ) ) );
 		$order->set_status( 'completed' );
 		$order->save();
 		( new Payments_Sweeper() )->run();
-		$this->assertSame( array(), Sweep_Test_Handler::$calls );
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( 'voided', $this->row( $order, $id )['status'] );
+		// Never unwound (§3.3); flagged where staff look instead.
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertNotEmpty( array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'expired after the order was marked paid' ) ) );
+		$this->assertEmpty( wc_get_order( $order->get_id() )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
 	}
 
 	public function test_sweeper_registers_single_ten_minute_schedule(): void {

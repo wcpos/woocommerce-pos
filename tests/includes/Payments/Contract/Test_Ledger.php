@@ -160,7 +160,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
-	public function test_capture_calculates_tax_for_a_taxable_tip_fee(): void {
+	public function test_capture_carves_tax_out_of_a_taxable_tip_and_the_order_stays_paid(): void {
 		$old_calc_taxes = get_option( 'woocommerce_calc_taxes' );
 		update_option( 'woocommerce_calc_taxes', 'yes' );
 		$tax_rate_id = WC_Tax::_insert_tax_rate(
@@ -187,13 +187,20 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			$ledger = Ledger::instance();
 			$ledger->intent( $order, $input['id'], $input, array() );
 
-			$ledger->capture( $order, $input['id'], array( 'amount' => '100.00' ) );
+			$row = $ledger->capture( $order, $input['id'], array( 'amount' => '100.00' ) );
 
+			// The customer paid 100.00 and no more. A 7.05 tip at 10% is 6.41 + 0.64 tax,
+			// carved out of the tip — never 7.05 + 0.71 on top, which would leave a
+			// phantom 0.71 balance on an order the customer has fully paid.
 			$fee = array_values( $order->get_fees() )[0];
 			$this->assertSame( 'taxable', $fee->get_tax_status() );
-			$this->assertSame( '0.71', wc_format_decimal( $fee->get_total_tax(), 2 ) );
-			$this->assertSame( '100.71', $order->get_total() );
-			$this->assertSame( '0.71', $ledger->summary( $order )['balance'] );
+			$this->assertSame( '6.41', wc_format_decimal( $fee->get_total(), 2 ) );
+			$this->assertSame( '0.64', wc_format_decimal( $fee->get_total_tax(), 2 ) );
+			$this->assertSame( '100.00', $order->get_total() );
+			$this->assertSame( '100.00', $row['amount'] );
+			$this->assertSame( '7.05', $row['tip'] );
+			$this->assertSame( '0.00', $ledger->summary( $order )['balance'] );
+			$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
 		} finally {
 			WC_Tax::_delete_tax_rate( $tax_rate_id );
 			update_option( 'woocommerce_calc_taxes', $old_calc_taxes );

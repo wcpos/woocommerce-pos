@@ -41,12 +41,10 @@ final class Payments_Sweeper {
 	/** Poll oldest-modified in-progress orders within this run's batch budget. */
 	public function run(): void {
 		$threshold = max( 0, (int) apply_filters( 'wcpos_payments_sweep_threshold', 5 * MINUTE_IN_SECONDS ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
-		// Not `pos-open`: the projection (ledger.md §3.3) moves an order off it the moment a
-		// leg is pending or counting, so a pos-open order only ever holds failed or voided
-		// rows — and there are thousands of abandoned carts. Sweeping them would pin the
-		// oldest fifty at the head of the batch forever and starve every real live leg.
-		$order_ids = Payment_Index::order_ids_with_rows(
-			array_values( array_diff( Ledger::IN_PROGRESS_STATUSES, array( 'pos-open' ) ) ),
+		// Selected by the live-leg index, not by order status: an authorization that covers
+		// the balance has already completed the order (ledger.md §3.3, authorized counts),
+		// and that leg still has to be voided if it expires uncaptured.
+		$order_ids = Payment_Index::order_ids_with_live_legs(
 			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) ) // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
 		);
 		foreach ( $order_ids as $order_id ) {
@@ -55,7 +53,7 @@ final class Payments_Sweeper {
 				$order_id,
 				function () use ( $order_id, $threshold ) {
 					$order = wc_get_order( $order_id );
-					if ( ! $order instanceof WC_Order || ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) || ! wcpos_is_pos_order( $order ) ) {
+					if ( ! $order instanceof WC_Order ) {
 						return;
 					}
 					$ledger = Ledger::instance();
@@ -80,6 +78,13 @@ final class Payments_Sweeper {
 							$result = $handler->void( $result, 'expired' );
 							if ( ! is_wp_error( $result ) ) {
 								$result = $ledger->apply_result( $order, $row['id'], $result, false );
+							}
+							// The projection never unwinds a paid order (§3.3), so an authorization
+							// that completed it and then lapsed leaves the order paid with no money
+							// captured. That is a needs-attention fact, recorded where staff look.
+							if ( ! is_wp_error( $result ) && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
+								/* translators: 1: payment row uuid, 2: leg amount with currency. */
+								$order->add_order_note( sprintf( __( 'WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'] ) );
 							}
 						}
 						if ( is_wp_error( $result ) ) {
