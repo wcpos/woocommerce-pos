@@ -36,6 +36,7 @@ class Gallery_Registry {
 					'woocommerce-pos'
 				),
 				'type'          => 'display',
+				'order'         => 20,
 				'category'      => 'standard',
 				'screen'        => 'phone',
 				'engine'        => 'logicless',
@@ -56,6 +57,7 @@ class Gallery_Registry {
 					'woocommerce-pos'
 				),
 				'type'          => 'display',
+				'order'         => 30,
 				'category'      => 'standard',
 				'screen'        => 'large-screen',
 				'engine'        => 'logicless',
@@ -70,6 +72,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The responsive default: itemised list with a totals panel on wide screens, a docked total on narrow ones. Install it to customise.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'order'         => 10,
 				'category'      => 'standard',
 				'screen'        => 'responsive',
 				'engine'        => 'logicless',
@@ -84,6 +87,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a festive idle screen for the December–January window. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'order'         => 40,
 				'category'      => 'seasonal',
 				'screen'        => 'responsive',
 				'engine'        => 'logicless',
@@ -91,6 +95,7 @@ class Gallery_Registry {
 				'paper_width'   => null,
 				'version'       => 1,
 				'preview_data'  => null,
+				'preview_state' => 'idle',
 			),
 			'display-lunar-new-year' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
@@ -98,6 +103,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a red-and-gold idle screen wishing customers good fortune. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'order'         => 41,
 				'category'      => 'seasonal',
 				'screen'        => 'responsive',
 				'engine'        => 'logicless',
@@ -105,6 +111,7 @@ class Gallery_Registry {
 				'paper_width'   => null,
 				'version'       => 1,
 				'preview_data'  => null,
+				'preview_state' => 'idle',
 			),
 			'display-eid' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
@@ -112,6 +119,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a night-blue-and-gold idle screen for Ramadan and Eid al-Fitr. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'order'         => 42,
 				'category'      => 'seasonal',
 				'screen'        => 'responsive',
 				'engine'        => 'logicless',
@@ -119,6 +127,7 @@ class Gallery_Registry {
 				'paper_width'   => null,
 				'version'       => 1,
 				'preview_data'  => null,
+				'preview_state' => 'idle',
 			),
 			'display-diwali' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
@@ -126,6 +135,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a warm idle screen of lights. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'order'         => 43,
 				'category'      => 'seasonal',
 				'screen'        => 'responsive',
 				'engine'        => 'logicless',
@@ -133,6 +143,7 @@ class Gallery_Registry {
 				'paper_width'   => null,
 				'version'       => 1,
 				'preview_data'  => null,
+				'preview_state' => 'idle',
 			),
 			'display-sale' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
@@ -140,6 +151,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a promotional idle screen: a headline and an offer line you edit for each promotion.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'order'         => 50,
 				'category'      => 'promotion',
 				'screen'        => 'responsive',
 				'engine'        => 'logicless',
@@ -147,6 +159,7 @@ class Gallery_Registry {
 				'paper_width'   => null,
 				'version'       => 1,
 				'preview_data'  => null,
+				'preview_state' => 'idle',
 			),
 			'detailed-receipt' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */

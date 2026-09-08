@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
+use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
 use WP_UnitTestCase;
 
@@ -84,12 +85,36 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 			$this->assertSame( 1, $entries[ $key ]['version'] );
 			$this->assertNull( $entries[ $key ]['paper_width'] );
 			$this->assertNull( $entries[ $key ]['preview_data'] );
+			if ( 'standard' === $facets[1] ) {
+				$this->assertArrayNotHasKey( 'preview_state', $entries[ $key ] );
+			} else {
+				$this->assertSame( 'idle', $entries[ $key ]['preview_state'] );
+			}
 		}
 		foreach ( $entries as $entry ) {
 			if ( 'receipt' === $entry['type'] ) {
 				$this->assertArrayNotHasKey( 'screen', $entry );
 			}
 		}
+	}
+
+	/**
+	 * Display gallery payloads put standard designs before themed designs.
+	 */
+	public function test_display_gallery_templates_have_expected_order(): void {
+		$this->assertSame(
+			array(
+				'display-ledger',
+				'display-pocket',
+				'display-marquee',
+				'display-seasons-greetings',
+				'display-lunar-new-year',
+				'display-eid',
+				'display-diwali',
+				'display-sale',
+			),
+			array_column( Templates::get_gallery_templates( 'display' ), 'key' )
+		);
 	}
 
 	/**

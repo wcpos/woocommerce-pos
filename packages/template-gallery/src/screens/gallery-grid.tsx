@@ -53,7 +53,7 @@ function matchesFilters(
 		return false;
 	}
 
-	if (filters.screen !== 'all' && template.screen && template.screen !== filters.screen) {
+	if (filters.screen !== 'all' && template.screen !== filters.screen) {
 		return false;
 	}
 
@@ -187,6 +187,7 @@ export function GalleryGrid() {
 						<FilterSidebar
 							filters={filters}
 							showOutputFilters={type !== 'display'}
+							showScreenFilter={type === 'display'}
 							onChange={setFilters}
 							availableCategories={Array.from(
 								new Set(galleryTemplates.map((tmpl) => tmpl.category).filter((c) => c.length > 0))

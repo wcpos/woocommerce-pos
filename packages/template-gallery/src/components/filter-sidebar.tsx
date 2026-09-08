@@ -18,6 +18,7 @@ export const DEFAULT_FILTERS: FilterState = {
 
 interface FilterSidebarProps {
 	showOutputFilters?: boolean;
+	showScreenFilter?: boolean;
 	filters: FilterState;
 	onChange: (filters: FilterState) => void;
 	availableCategories: string[];
@@ -79,6 +80,7 @@ function isFiltered(filters: FilterState): boolean {
 
 export function FilterSidebar({
 	showOutputFilters = true,
+	showScreenFilter = false,
 	filters,
 	onChange,
 	availableCategories,
@@ -176,7 +178,7 @@ export function FilterSidebar({
 
 			{/* Screen */}
 			<RadioGroup
-				hidden={showOutputFilters}
+				hidden={!showScreenFilter}
 				label={t('filter.screen')}
 				name="filter-screen"
 				value={filters.screen}

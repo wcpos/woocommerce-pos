@@ -68,7 +68,7 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 							type: 'display',
 							screen: 'large-screen',
 						},
-						legacyTemplate,
+						{ ...legacyTemplate, type: 'display', screen: 'responsive' },
 					]
 				: [ltrTemplate, rtlTemplate, legacyTemplate],
 	}),
@@ -177,7 +177,7 @@ describe('GalleryGrid direction filter', () => {
 });
 
 describe('GalleryGrid display templates', () => {
-	it('filters by phone while keeping templates without screen and supports clearing', () => {
+	it('filters defaulted responsive templates out of phone results and supports clearing', () => {
 		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		const container = mountGrid();
 		expect(container.textContent).toContain('Responsive Display');
@@ -188,9 +188,16 @@ describe('GalleryGrid display templates', () => {
 		expect(phone).not.toBeNull();
 		act(() => phone!.click());
 		expect(container.textContent).toContain('Phone Display');
-		expect(container.textContent).toContain('Legacy Receipt');
+		expect(container.textContent).not.toContain('Legacy Receipt');
 		expect(container.textContent).not.toContain('Responsive Display');
 		expect(container.textContent).not.toContain('Large Display');
+		const responsive = container.querySelector<HTMLInputElement>(
+			'input[name="filter-screen"][value="responsive"]'
+		);
+		act(() => responsive!.click());
+		expect(container.textContent).toContain('Legacy Receipt');
+		expect(container.textContent).toContain('Responsive Display');
+		expect(container.textContent).not.toContain('Phone Display');
 		const clear = Array.from(container.querySelectorAll('button')).find(
 			(button) => button.textContent === 'filter.clear_all'
 		);

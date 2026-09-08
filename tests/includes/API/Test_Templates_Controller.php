@@ -1418,15 +1418,16 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$templates = $response->get_data();
+		// Gallery order: standard first (Ledger, then the screen-specific pair), then seasonal, then promotion.
 		$expected = array(
-			'display-diwali'            => array( 'responsive', 'seasonal' ),
-			'display-eid'               => array( 'responsive', 'seasonal' ),
 			'display-ledger'            => array( 'responsive', 'standard' ),
-			'display-lunar-new-year'    => array( 'responsive', 'seasonal' ),
-			'display-marquee'           => array( 'large-screen', 'standard' ),
 			'display-pocket'            => array( 'phone', 'standard' ),
-			'display-sale'              => array( 'responsive', 'promotion' ),
+			'display-marquee'           => array( 'large-screen', 'standard' ),
 			'display-seasons-greetings' => array( 'responsive', 'seasonal' ),
+			'display-lunar-new-year'    => array( 'responsive', 'seasonal' ),
+			'display-eid'               => array( 'responsive', 'seasonal' ),
+			'display-diwali'            => array( 'responsive', 'seasonal' ),
+			'display-sale'              => array( 'responsive', 'promotion' ),
 		);
 		$this->assertSame( array_keys( $expected ), array_column( $templates, 'key' ) );
 		foreach ( $templates as $template ) {

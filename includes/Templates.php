@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 1;
+	public const DEFAULT_TERMS_VERSION = 2;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -1118,7 +1118,9 @@ class Templates {
 		usort(
 			$templates,
 			function ( $a, $b ) {
-				return strcmp( $a['key'], $b['key'] );
+				$order = ( $a['order'] ?? 0 ) <=> ( $b['order'] ?? 0 );
+
+				return 0 !== $order ? $order : strcmp( $a['key'], $b['key'] );
 			}
 		);
 
@@ -1161,6 +1163,9 @@ class Templates {
 		$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
 			? 'rtl'
 			: 'ltr';
+		if ( 'display' === $metadata['type'] ) {
+			$metadata['screen'] = $metadata['screen'] ?? 'responsive';
+		}
 
 		return $metadata;
 	}
@@ -1424,6 +1429,9 @@ class Templates {
 			'purchase-order' => /* translators: Receipt template post type or template option label. */ __( 'Purchase Order', 'woocommerce-pos' ),
 			'kitchen-ticket' => /* translators: Receipt template post type or template option label. */ __( 'Kitchen Ticket', 'woocommerce-pos' ),
 			'bar-ticket'     => /* translators: Receipt template post type or template option label. */ __( 'Bar Ticket', 'woocommerce-pos' ),
+			'standard'       => /* translators: Display template category label. */ __( 'Standard', 'woocommerce-pos' ),
+			'seasonal'       => /* translators: Display template category label. */ __( 'Seasonal', 'woocommerce-pos' ),
+			'promotion'      => /* translators: Display template category label. */ __( 'Promotion', 'woocommerce-pos' ),
 		);
 	}
 

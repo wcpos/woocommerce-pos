@@ -65,7 +65,7 @@ foreach ( $templates as $template ) {
 		'receipt_data'     => $receipt_data,
 	);
 	if ( 'display' === $template_type ) {
-		$payload['preview_state'] = in_array( $template['category'], array( 'seasonal', 'promotion' ), true ) ? 'idle' : 'cart';
+		$payload['preview_state'] = $template['preview_state'] ?? 'cart';
 	}
 	$payloads[] = $payload;
 }
