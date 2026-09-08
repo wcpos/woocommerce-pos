@@ -217,6 +217,19 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
 	}
 }
 
+if ( ! \function_exists( 'wcpos_settle_payment' ) ) {
+	/**
+	 * Apply a provider webhook confirmation; the provider owns endpoint authentication.
+	 *
+	 * @param string $payment_id Payment UUID.
+	 * @param array  $patch      Provider confirmation.
+	 * @return true|WP_Error
+	 */
+	function wcpos_settle_payment( string $payment_id, array $patch ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Public payments contract function.
+		return \WCPOS\WooCommercePOS\Payments\Contract\Settlement::instance()->settle( $payment_id, $patch );
+	}
+}
+
 if ( ! \function_exists( 'wcpos_register_capture_mode' ) ) {
 	/**
 	 * Register a payment capture-mode handler.

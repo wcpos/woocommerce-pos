@@ -71,6 +71,7 @@ class Init {
 	 * | 10b | `delete_option` plus `pre_update_option_*`, `update_option_*`, `add_option_*`, `delete_option_*` for the two `Pos_Visibility::source_options()` | `Sync\Visibility_Observer` (9 callbacks) | 10 | irrelevant | Default. Appends the journal row for a record entering or leaving the POS servable set — the transition the sequence-log stream relies on, since it drops a hidden record's update rows. `delete_option` is the generic PRE-delete action (the per-option form fires after) and is gated on the option name inside the callback. Registered after `Sync_Journal` only because it writes through it; the constructor also runs the observer's one-time tombstone seed. |
 	 * | 11 | `wcpos_sync_journal_purge` | `Sync\Sync_Journal_Purge::run_purge` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the daily event. |
 	 * | 12 | 21 catalogue/customer/order hooks (a subset of row 10's), plus `shutdown` | `Sync\Integrity_Digest` | 10 (`shutdown` at `PHP_INT_MAX`) | unknown | Default. Shares every one of its hooks with `Sync_Journal` at the same priority, so the journal always runs first — no code found that depends on that, but nothing pins it either. Every save — product, variation, customer, order — only MARKS the digest dirty; the upsert lands on `flush_pending_digests()` at `shutdown`, before any `Digest_Index::read_digests()`, or when the queue holds 50 records. |
+	 * | 12b | `wcpos_payments_sweep`, `cron_schedules` | `Payments\Contract\Payments_Sweeper::run` / `::schedules` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the ten-minute event. Outside the schema latch: a live payment leg has to be reconciled even while the sync schema is down. |
 	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
 	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
 	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
@@ -158,6 +159,8 @@ class Init {
 			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
 			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
 		}
+
+		( new \WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper() )->register_hooks();
 
 		( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
 

@@ -18,6 +18,9 @@ use WP_Error;
 class Ledger {
 	public const META_KEY = '_wcpos_payments';
 	public const INDEX_META_KEY = '_wcpos_payment_method';
+	public const PAYMENT_ID_META_KEY = '_wcpos_payment_id';
+	/** Bound provider-event dedupe history without growing each row indefinitely. */
+	public const SEEN_EVENTS_MAX = 20;
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
@@ -180,7 +183,19 @@ class Ledger {
 		$rows   = $this->read( $order );
 		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
 		if ( $stored ) {
-			return $this->replay( $order, $stored, $input, $amount, $currency );
+			$replayed = $this->replay( $order, $stored, $input, $amount, $currency );
+			if ( is_wp_error( $replayed ) ) {
+				return $replayed;
+			}
+			$settled = Settlement::instance()->apply_parked( $order, $stored['id'] );
+			if ( is_wp_error( $settled ) ) {
+				return $settled;
+			}
+			$this->derive( $order, $this->read( $order ) );
+			if ( $order->get_changes() ) {
+				$order->save();
+			}
+			return $this->find( $order, $stored['id'] );
 		}
 
 		$descriptor = $this->validate_method( (string) ( $input['method_id'] ?? '' ) );
@@ -242,13 +257,22 @@ class Ledger {
 			$row                    = $this->normalize_row( $order, $row );
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
+			Settlement::instance()->apply_parked( $order, $row['id'] );
 			return $this->refusal_error( $row, $order );
 		}
 
 		$row    = $this->normalize_row( $order, $row );
 		$rows[] = $row;
-		$this->save( $order, $rows );
-		return $row;
+		// Index the arrival before consuming its webhook, but do not mark money paid
+		// until a parked provider confirmation has passed capture verification.
+		$this->save( $order, $rows, false );
+		$settled = Settlement::instance()->apply_parked( $order, $row['id'] );
+		if ( is_wp_error( $settled ) ) {
+			return $settled;
+		}
+		$this->derive( $order, $this->read( $order ) );
+		$order->save();
+		return $this->find( $order, $row['id'] );
 	}
 
 	/**
@@ -372,6 +396,32 @@ class Ledger {
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
+		return $this->apply_result( $order, $id, $new );
+	}
+
+	/**
+	 * Apply provider state under the caller's order lock, sharing capture verification.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param string   $id    Payment ID.
+	 * @param array    $new   Provider result.
+	 * @param bool     $derive Project payment state after applying.
+	 * @return array|WP_Error
+	 */
+	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true ) {
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( ! $row ) {
+			return $this->not_found();
+		}
+		$event = $new['event_id'] ?? null;
+		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
+			return $row;
+		}
+		$refusal = $this->refusal_error( $row, $order );
+		if ( $refusal ) {
+			return $refusal;
+		}
 		$applied = $this->apply_transition( $row, $new );
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
@@ -387,7 +437,7 @@ class Ledger {
 				$applied['status'] = 'failed';
 				$applied['failure_reason'] = 'amount_mismatch';
 				$applied = $this->normalize_row( $order, $applied );
-				$this->replace_and_save( $order, $rows, $applied );
+				$this->replace_and_save( $order, $rows, $applied, $derive );
 				/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
 				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
 				return $this->refusal_error( $applied, $order );
@@ -403,8 +453,14 @@ class Ledger {
 				$applied['tip'] = Money::format( $difference );
 			}
 		}
-		$applied = $this->normalize_row( $order, $applied );
-		$this->replace_and_save( $order, $rows, $applied );
+		if ( is_string( $event ) ) {
+			$applied['seen_events'][] = $event;
+			$applied['seen_events'] = array_slice( $applied['seen_events'], -self::SEEN_EVENTS_MAX );
+		}
+		if ( $applied !== $row ) {
+			$applied = $this->normalize_row( $order, $applied );
+			$this->replace_and_save( $order, $rows, $applied, $derive );
+		}
 		return $applied;
 	}
 
@@ -589,11 +645,7 @@ class Ledger {
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
-		$applied = $this->apply_transition( $row, $new );
-		if ( ! is_wp_error( $applied ) && $applied !== $row ) {
-			$this->replace_and_save( $order, $rows, $applied );
-		}
-		return $applied;
+		return $this->apply_result( $order, $id, $new );
 	}
 
 	/**
@@ -693,8 +745,9 @@ class Ledger {
 	 *
 	 * @param WC_Order $order Order object.
 	 * @param array    $rows  Payment rows.
+	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
 	 */
-	public function save( WC_Order $order, array $rows ): void {
+	public function save( WC_Order $order, array $rows, bool $derive = true ): void {
 		$normalized = array();
 		foreach ( $rows as $row ) {
 			$normalized[] = $this->normalize_row( $order, $row );
@@ -710,14 +763,18 @@ class Ledger {
 			)
 		);
 		$order->delete_meta_data( self::INDEX_META_KEY );
+		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
 		$indexed = array();
 		foreach ( $normalized as $row ) {
+			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
 			if ( in_array( $row['status'], self::LIVE_STATUSES, true ) && ! in_array( $row['method_id'], $indexed, true ) ) {
 				$indexed[] = $row['method_id'];
 				$order->add_meta_data( self::INDEX_META_KEY, $row['method_id'], false );
 			}
 		}
-		$this->derive( $order, $normalized );
+		if ( $derive ) {
+			$this->derive( $order, $normalized );
+		}
 		$order->save();
 	}
 
@@ -920,8 +977,9 @@ class Ledger {
 	 * @param WC_Order $order       Order object.
 	 * @param array    $rows        Payment rows.
 	 * @param array    $replacement Replacement payment row.
+	 * @param bool     $derive      Project payment state after saving.
 	 */
-	private function replace_and_save( WC_Order $order, array $rows, array $replacement ): void {
+	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): void {
 		foreach ( $rows as &$row ) {
 			if ( $row['id'] === $replacement['id'] ) {
 				$row = $replacement;
@@ -929,7 +987,7 @@ class Ledger {
 			}
 		}
 		unset( $row );
-		$this->save( $order, $rows );
+		$this->save( $order, $rows, $derive );
 	}
 
 	/**
