@@ -152,9 +152,10 @@ class Templates {
 
 		$ok = true;
 		foreach ( $post_ids as $post_id ) {
-			$removed = wp_remove_object_terms( $post_id, 'display', 'wcpos_template_category' );
-			$added   = wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category', true );
-			if ( true !== $removed || is_wp_error( $added ) ) {
+			// Add first, remove second: a post that fails half-way keeps `display` and is
+			// selected again on the retry instead of being stranded without a category.
+			$added = wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category', true );
+			if ( is_wp_error( $added ) || true !== wp_remove_object_terms( $post_id, 'display', 'wcpos_template_category' ) ) {
 				$ok = false;
 			}
 		}
