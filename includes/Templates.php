@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 1;
+	public const DEFAULT_TERMS_VERSION = 3;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -113,9 +113,54 @@ class Templates {
 		}
 		$this->register_default_template_types();
 		$this->register_default_template_categories();
-		if ( $this->default_terms_present() ) {
+		// The latch only advances once every legacy assignment moved, so a failed write retries next request.
+		if ( $this->migrate_legacy_display_gallery_categories() && $this->default_terms_present() ) {
 			update_option( self::DEFAULT_TERMS_OPTION, self::DEFAULT_TERMS_VERSION, true );
 		}
+	}
+
+	/**
+	 * Move Pocket and Marquee installs that still carry the legacy `display` category to `standard`.
+	 *
+	 * Only the `display` term is swapped; any other category the merchant assigned stays.
+	 *
+	 * @return bool True when every assignment succeeded (or there was nothing to migrate).
+	 */
+	private function migrate_legacy_display_gallery_categories(): bool {
+		$post_ids = get_posts(
+			array(
+				'post_type'      => 'wcpos_template',
+				'post_status'    => 'any',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'meta_query'     => array(
+					array(
+						'key'     => '_template_gallery_key',
+						'value'   => array( 'display-pocket', 'display-marquee' ),
+						'compare' => 'IN',
+					),
+				),
+				'tax_query'      => array(
+					array(
+						'taxonomy' => 'wcpos_template_category',
+						'field'    => 'slug',
+						'terms'    => 'display',
+					),
+				),
+			)
+		);
+
+		$ok = true;
+		foreach ( $post_ids as $post_id ) {
+			// Add first, remove second: a post that fails half-way keeps `display` and is
+			// selected again on the retry instead of being stranded without a category.
+			$added = wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category', true );
+			if ( is_wp_error( $added ) || true !== wp_remove_object_terms( $post_id, 'display', 'wcpos_template_category' ) ) {
+				$ok = false;
+			}
+		}
+
+		return $ok;
 	}
 
 	/** Whether every default type and category term exists. */
@@ -1123,7 +1168,9 @@ class Templates {
 		usort(
 			$templates,
 			function ( $a, $b ) {
-				return strcmp( $a['key'], $b['key'] );
+				$order = ( $a['order'] ?? 0 ) <=> ( $b['order'] ?? 0 );
+
+				return 0 !== $order ? $order : strcmp( $a['key'], $b['key'] );
 			}
 		);
 
@@ -1166,6 +1213,9 @@ class Templates {
 		$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
 			? 'rtl'
 			: 'ltr';
+		if ( 'display' === $metadata['type'] ) {
+			$metadata['screen'] = $metadata['screen'] ?? 'responsive';
+		}
 
 		return $metadata;
 	}
@@ -1429,6 +1479,9 @@ class Templates {
 			'purchase-order' => /* translators: Receipt template post type or template option label. */ __( 'Purchase Order', 'woocommerce-pos' ),
 			'kitchen-ticket' => /* translators: Receipt template post type or template option label. */ __( 'Kitchen Ticket', 'woocommerce-pos' ),
 			'bar-ticket'     => /* translators: Receipt template post type or template option label. */ __( 'Bar Ticket', 'woocommerce-pos' ),
+			'standard'       => /* translators: Display template category label. */ __( 'Standard', 'woocommerce-pos' ),
+			'seasonal'       => /* translators: Display template category label. */ __( 'Seasonal', 'woocommerce-pos' ),
+			'promotion'      => /* translators: Display template category label. */ __( 'Promotion', 'woocommerce-pos' ),
 		);
 	}
 

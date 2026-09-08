@@ -28,6 +28,7 @@ function matchesFilters(
 		engine?: string;
 		output_type?: string;
 		direction?: 'ltr' | 'rtl';
+		screen?: GalleryTemplate['screen'];
 	},
 	filters: FilterState
 ): boolean {
@@ -49,6 +50,10 @@ function matchesFilters(
 	}
 
 	if (filters.direction !== 'all' && (template.direction ?? 'ltr') !== filters.direction) {
+		return false;
+	}
+
+	if (filters.screen !== 'all' && template.screen !== filters.screen) {
 		return false;
 	}
 
@@ -182,6 +187,7 @@ export function GalleryGrid() {
 						<FilterSidebar
 							filters={filters}
 							showOutputFilters={type !== 'display'}
+							showScreenFilter={type === 'display'}
 							onChange={setFilters}
 							availableCategories={Array.from(
 								new Set(galleryTemplates.map((tmpl) => tmpl.category).filter((c) => c.length > 0))

@@ -50,10 +50,11 @@ function getAvailability(template: AnyTemplate): string {
 
 function formatCategory(slug: string | undefined): string {
 	if (!slug) return '\u2014';
-	return slug
+	const fallback = slug
 		.split('-')
 		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 		.join(' ');
+	return t(`category.${slug}`, { defaultValue: fallback });
 }
 
 function isTemplateEnabled(template: AnyTemplate): boolean {

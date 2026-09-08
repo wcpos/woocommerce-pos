@@ -31,6 +31,12 @@ const THERMAL_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsW
 const DISPLAY_VIEWPORTS: Record<string, { width: number; height: number }> = {
 	'display-pocket': { width: 390, height: 844 },
 	'display-marquee': { width: 1280, height: 800 },
+	'display-ledger': { width: 1280, height: 800 },
+	'display-seasons-greetings': { width: 1280, height: 800 },
+	'display-lunar-new-year': { width: 1280, height: 800 },
+	'display-eid': { width: 1280, height: 800 },
+	'display-diwali': { width: 1280, height: 800 },
+	'display-sale': { width: 1280, height: 800 },
 };
 
 // Templates that must ship a committed preview image today.

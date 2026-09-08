@@ -1468,12 +1468,50 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$templates = $response->get_data();
-		$this->assertSame( array( 'display-marquee', 'display-pocket' ), array_column( $templates, 'key' ) );
+		// Gallery order: standard first (Ledger, then the screen-specific pair), then seasonal, then promotion.
+		$expected = array(
+			'display-ledger'            => array( 'responsive', 'standard' ),
+			'display-pocket'            => array( 'phone', 'standard' ),
+			'display-marquee'           => array( 'large-screen', 'standard' ),
+			'display-seasons-greetings' => array( 'responsive', 'seasonal' ),
+			'display-lunar-new-year'    => array( 'responsive', 'seasonal' ),
+			'display-eid'               => array( 'responsive', 'seasonal' ),
+			'display-diwali'            => array( 'responsive', 'seasonal' ),
+			'display-sale'              => array( 'responsive', 'promotion' ),
+		);
+		$this->assertSame( array_keys( $expected ), array_column( $templates, 'key' ) );
 		foreach ( $templates as $template ) {
 			$this->assertSame( 'display', $template['type'] );
-			$this->assertSame( 'display', $template['category'] );
+			$this->assertSame( $expected[ $template['key'] ], array( $template['screen'], $template['category'] ) );
 			$this->assertArrayHasKey( 'preview_data', $template );
 			$this->assertNull( $template['preview_data'] );
+		}
+	}
+
+	/**
+	 * Receipt gallery payloads do not expose the display screen facet.
+	 */
+	public function test_gallery_receipt_templates_omit_screen(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request->set_param( 'type', 'receipt' );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotEmpty( $response->get_data() );
+		foreach ( $response->get_data() as $template ) {
+			$this->assertArrayNotHasKey( 'screen', $template );
+		}
+
+		$current_request = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
+		$current_request->set_param( 'type', 'receipt' );
+
+		$current_response = $this->server->dispatch( $current_request );
+
+		$this->assertSame( 200, $current_response->get_status() );
+		$this->assertNotEmpty( $current_response->get_data() );
+		foreach ( $current_response->get_data() as $template ) {
+			$this->assertArrayNotHasKey( 'screen', $template );
 		}
 	}
 

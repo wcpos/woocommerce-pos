@@ -57,6 +57,7 @@ export interface GalleryTemplate {
 	output_type: string;
 	paper_width: string | null;
 	direction: 'ltr' | 'rtl';
+	screen?: 'responsive' | 'phone' | 'large-screen';
 	version: number;
 	content?: string;
 	preview_data?: string;
