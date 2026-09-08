@@ -33,8 +33,10 @@ use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
  *
  * `<scope>` is `'default'` or a store id (multi-store, per-store visibility). The POS servable set is
  * every product/variation EXCEPT the `online_only` ids for the scope; `pos_only` is a web-store
- * concern, not ours. An empty/absent option means nothing is hidden — the safe default (feature
- * simply off).
+ * concern that {@see pos_only_ids()} resolves for `Products` (front-end queries) and
+ * `Catalog_Visibility` (the WooCommerce catalog-visibility invariant) with the same pipeline, so
+ * the two never disagree about which products are POS Only. An empty/absent option means nothing
+ * is hidden — the safe default (feature simply off).
  *
  * # Reads go through the Settings service
  *
@@ -322,6 +324,25 @@ final class Pos_Visibility {
 	}
 
 	/**
+	 * The products marked POS Only for one scope — hidden from the web store, not from the POS.
+	 *
+	 * Products only: catalog visibility is a parent-level WooCommerce property, so a POS Only
+	 * variation never changes its parent. Same gate and pipeline as {@see hidden_ids()}: empty when
+	 * the `pos_only_products` feature is off or the scope was never configured.
+	 *
+	 * @param null|string $scope Visibility scope: `default` or a store id. Null means default.
+	 *
+	 * @return int[]
+	 */
+	public function pos_only_ids( ?string $scope = null ): array {
+		if ( ! Settings::instance()->pos_only_products_enabled() ) {
+			return array();
+		}
+
+		return $this->configured_ids( self::PRODUCTS, self::normalize_scope( $scope ), 'pos_only' );
+	}
+
+	/**
 	 * The `online_only` id list for one post-type + scope, read through the Settings service so the
 	 * section's defaults-merge, migration and the public visibility filters all apply.
 	 *
@@ -335,16 +356,35 @@ final class Pos_Visibility {
 	 * @return int[]
 	 */
 	private function online_only_ids( string $post_type, string $scope ): array {
+		return $this->configured_ids( $post_type, $scope, 'online_only' );
+	}
+
+	/**
+	 * One configured id list (`pos_only` or `online_only`), read through the filtered accessors.
+	 *
+	 * @param string $post_type `products` or `variations`.
+	 * @param string $scope     Visibility scope.
+	 * @param string $list      `pos_only` or `online_only`.
+	 *
+	 * @return int[]
+	 */
+	private function configured_ids( string $post_type, string $scope, string $list ): array {
 		$settings = Settings::instance();
 		$stored   = $settings->get_visibility_settings();
 
-		if ( ! isset( $stored[ $post_type ][ $scope ]['online_only'] ) ) {
+		if ( ! isset( $stored[ $post_type ][ $scope ][ $list ] ) ) {
 			return array();
 		}
 
-		$view = self::PRODUCTS === $post_type
-			? $settings->get_online_only_product_visibility_settings( $scope )
-			: $settings->get_online_only_variations_visibility_settings( $scope );
+		if ( 'pos_only' === $list ) {
+			$view = self::PRODUCTS === $post_type
+				? $settings->get_pos_only_product_visibility_settings( $scope )
+				: $settings->get_pos_only_variations_visibility_settings( $scope );
+		} else {
+			$view = self::PRODUCTS === $post_type
+				? $settings->get_online_only_product_visibility_settings( $scope )
+				: $settings->get_online_only_variations_visibility_settings( $scope );
+		}
 
 		$ids = \is_array( $view ) && isset( $view['ids'] ) ? $view['ids'] : array();
 		if ( ! \is_array( $ids ) ) {

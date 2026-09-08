@@ -12,6 +12,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
+use WCPOS\WooCommercePOS\Catalog_Visibility;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Post;
@@ -271,6 +272,12 @@ class Single_Product {
 				$selected = apply_filters( 'woocommerce_pos_default_product_visibility', '', $post );
 			}
 		}
+
+		// What the catalog visibility goes back to when the product leaves POS
+		// Only (#1862); the template shows it once POS Only is deselected.
+		$visibility_options   = wc_get_product_visibility_options();
+		$prior_catalog        = get_post_meta( $post->ID, Catalog_Visibility::PRIOR_META, true );
+		$prior_catalog_label  = $visibility_options[ \is_string( $prior_catalog ) && isset( $visibility_options[ $prior_catalog ] ) ? $prior_catalog : 'visible' ];
 
 		include 'templates/post-metabox-visibility-select.php';
 	}

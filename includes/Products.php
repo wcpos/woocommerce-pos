@@ -74,6 +74,11 @@ class Products {
 	/**
 	 * Hide POS only products and variations from front-end queries.
 	 *
+	 * This is the hard backstop (`post__not_in`). Since #1862 a POS Only product
+	 * also carries WooCommerce catalog visibility `hidden`, kept in step by
+	 * {@see Catalog_Visibility}, so surfaces that never run this query filter
+	 * (blocks, Store API, related products, wc/v3) hide it too.
+	 *
 	 * @param \WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return void

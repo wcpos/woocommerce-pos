@@ -115,6 +115,10 @@ class Activator {
 		self::autoload_request_latches();
 		Admin\Permalink::ensure_default();
 
+		// POS Only ⇒ catalog visibility hidden (#1862): re-apply after a
+		// deactivation restored it. Idempotent, one pass over the set.
+		( new Catalog_Visibility() )->force_all();
+
 		// create POS specific roles.
 		$this->create_pos_roles();
 
@@ -593,6 +597,7 @@ class Activator {
 			'1.8.13'       => 'updates/update-1.8.13.php',
 			'1.9.0'        => 'updates/update-1.9.0.php',
 			'1.10.0'       => 'updates/update-1.10.0.php',
+			'1.11.0'       => 'updates/update-1.11.0.php',
 		);
 		foreach ( $db_updates as $version => $updater ) {
 			if ( version_compare( $version, $old, '>' ) &&

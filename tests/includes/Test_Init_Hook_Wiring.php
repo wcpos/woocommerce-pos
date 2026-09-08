@@ -44,25 +44,22 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * `woocommerce_untrash_order` are absent for the same reason since #1805:
 	 * `Pos_Uuid::register_hooks()` (unconditional — identity is core) re-proves
 	 * uuid ownership on restore, so the latch only adds the observers' callbacks.
+	 * The nine visibility option hooks `Visibility_Observer` watches are absent
+	 * since #1862 for the same reason again: `Catalog_Visibility` registers them
+	 * unconditionally at the same priority, so they live in the unconditional
+	 * golden above and the latch only adds the observer's callbacks to them.
 	 *
 	 * @var string[]
 	 */
 	private const LATCHED_ONLY_HOOKS = array(
-		'add_option_woocommerce_pos_settings_general',
-		'add_option_woocommerce_pos_settings_visibility',
 		'add_user_role',
 		'added_term_meta',
 		'before_delete_post',
 		'created_term',
-		'delete_option',
-		'delete_option_woocommerce_pos_settings_general',
-		'delete_option_woocommerce_pos_settings_visibility',
 		'delete_term',
 		'delete_user',
 		'deleted_term_meta',
 		'edited_term',
-		'pre_update_option_woocommerce_pos_settings_general',
-		'pre_update_option_woocommerce_pos_settings_visibility',
 		'profile_update',
 		'remove_user_role',
 		'set_user_role',
@@ -71,8 +68,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		// hook carries no callback before Init runs, so under the latch it
 		// appears as a new hook name (this golden went red without the entry).
 		'shutdown',
-		'update_option_woocommerce_pos_settings_general',
-		'update_option_woocommerce_pos_settings_visibility',
 		'updated_term_meta',
 		'user_register',
 		'wcpos_sync_journal_purge',
@@ -222,8 +217,19 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'admin_enqueue_scripts'                                 => array( 10 ),
 			'admin_init'                                            => array( 10 ),
 			'admin_notices'                                         => array( 10 ),
+			// Catalog_Visibility (#1862): POS Only ⇒ catalog visibility hidden.
+			// Unconditional like Pos_Uuid — a storefront invariant, not a sync
+			// observer. Visibility_Observer adds its own callbacks on the same
+			// option hooks once the latch is set.
+			'add_option_woocommerce_pos_settings_general'           => array( 10 ),
+			'add_option_woocommerce_pos_settings_visibility'        => array( 10 ),
+			'delete_option'                                         => array( 10 ),
+			'delete_option_woocommerce_pos_settings_general'        => array( 10 ),
+			'delete_option_woocommerce_pos_settings_visibility'     => array( 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
+			'pre_update_option_woocommerce_pos_settings_general'    => array( 10 ),
+			'pre_update_option_woocommerce_pos_settings_visibility' => array( 10 ),
 			'pre_update_option_woocommerce_pos_pro_settings_license' => array( 10 ),
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
@@ -241,12 +247,16 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// like stamp_on_save — identity is core. The sync observers add their
 			// own callbacks on the same two hooks once the latch is set.
 			'untrashed_post'                                        => array( 10 ),
+			'update_option_woocommerce_pos_settings_general'        => array( 10 ),
+			'update_option_woocommerce_pos_settings_visibility'     => array( 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
+			'woocommerce_duplicate_product_exclude_meta'            => array( 10 ),
 			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
+			'woocommerce_product_duplicate_before_save'             => array( 10 ),
 			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),
 		);

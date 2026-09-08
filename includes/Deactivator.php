@@ -58,6 +58,11 @@ class Deactivator {
 		$lifecycle->report_deactivation();
 		$lifecycle->clear_schedule();
 
+		// POS Only products carry a forced WooCommerce catalog visibility
+		// (#1862); give them their own value back so nothing plugin-managed
+		// outlives the plugin. Activation re-applies it.
+		( new \WCPOS\WooCommercePOS\Catalog_Visibility() )->restore_all();
+
 		// remove pos capabilities.
 		$this->remove_pos_capability();
 
