@@ -202,6 +202,7 @@ class WooCommerce_Tax {
 			if ( ! WC()->customer instanceof \WC_Customer ) {
 				wc_load_cart();
 			}
+			add_filter( 'woocommerce_services_override_tax_rate', array( $this, 'preserve_tax_rate_order' ), PHP_INT_MAX, 3 );
 			if ( false === $taxjar->calculate_tax( $options ) ) {
 				\WCPOS\WooCommercePOS\Logger::log( 'WooCommerce Tax returned no rates for the POS order', array( 'order_id' => $order->get_id() ) );
 			}
@@ -213,7 +214,75 @@ class WooCommerce_Tax {
 					'error'    => $e->getMessage(),
 				)
 			);
+		} finally {
+			remove_filter( 'woocommerce_services_override_tax_rate', array( $this, 'preserve_tax_rate_order' ), PHP_INT_MAX );
 		}
+	}
+
+	/**
+	 * Preserve WooCommerce rate IDs when TaxJar jurisdiction fields change order.
+	 *
+	 * WooCommerce Tax assigns rows by response position, not jurisdiction. Only
+	 * reorder an exact label bijection; new/renamed jurisdictions keep upstream
+	 * behaviour. Values are untouched, including genuine rate changes. This hook
+	 * exposes the mutable response object before the plugin writes its rate rows.
+	 *
+	 * @param mixed  $rate Overall rate, returned unchanged.
+	 * @param object $tax  TaxJar tax response.
+	 * @param array  $body Normalized TaxJar request address.
+	 * @return mixed
+	 */
+	public function preserve_tax_rate_order( $rate, $tax, $body ) {
+		$lines = \is_array( $tax->breakdown->line_items ?? null ) ? $tax->breakdown->line_items : array();
+		if ( isset( $tax->breakdown->shipping ) ) {
+			$lines[] = $tax->breakdown->shipping;
+		}
+		foreach ( $lines as $line ) {
+			if ( ! \is_object( $line ) ) {
+				continue;
+			}
+			$keys = array();
+			foreach ( $line as $key => $value ) {
+				if ( 'combined_tax_rate' === $key || false === strpos( $key, '_tax_rate' ) ) {
+					continue;
+				}
+				// Mirrors the plugin's private generate_itemized_tax_rate_name().
+				$label = ucwords( str_replace( '_', ' ', str_replace( '_tax_rate', '', $key ) ) ) . ' ' . __( 'Tax', 'woocommerce-services' ); // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- Match the third-party rate labels.
+				$place = trim( trim( $tax->jurisdictions->county ?? '' ) . ' ' . trim( $tax->jurisdictions->city ?? '' ) );
+				$label = 'US' === $body['to_country'] ? ( '' === $place ? $label : $place . ' : ' . $label ) : strtoupper( $label );
+				if ( isset( $keys[ $label ] ) ) {
+					continue 2;
+				}
+				$keys[ $label ] = $key;
+			}
+			$product = wc_get_product( (int) ( $line->id ?? 0 ) );
+			$rates   = \WC_Tax::find_rates(
+				array(
+					'country'   => $body['to_country'],
+					'state'     => $body['to_state'],
+					'postcode'  => $body['to_zip'],
+					'city'      => $body['to_city'],
+					'tax_class' => $product ? $product->get_tax_class() : '',
+				)
+			);
+			if ( \count( $rates ) !== \count( $keys ) ) {
+				continue;
+			}
+			$ordered = array();
+			foreach ( $rates as $existing ) {
+				if ( ! isset( $keys[ $existing['label'] ] ) ) {
+					continue 2;
+				}
+				$key             = $keys[ $existing['label'] ];
+				$ordered[ $key ] = $line->$key;
+				unset( $keys[ $existing['label'] ] );
+			}
+			foreach ( $ordered as $key => $value ) {
+				unset( $line->$key );
+				$line->$key = $value;
+			}
+		}
+		return $rate;
 	}
 
 	/**
