@@ -18,7 +18,7 @@ export interface LogsEnvelope<TBody> {
 
 /** REST path for one page of the log, with the envelope opt-in and the active filters. */
 export function logsRequestPath(page: number, level: string, source: string): string {
-	return addQueryArgs('wcpos/v1/logs', {
+	return addQueryArgs('wcpos/v2/logs', {
 		wcpos: 1,
 		_wcpos_envelope: 1,
 		per_page: LOGS_PER_PAGE,

@@ -97,7 +97,7 @@ function routeQueue(getQueue: () => QueueResponse) {
 		if (opts.path.includes('/reprint')) {
 			return Promise.resolve({ id: 99 });
 		}
-		if (opts.path.includes('wcpos/v1/templates')) {
+		if (opts.path.includes('wcpos/v2/templates')) {
 			// The template-name map is built from the unfiltered list, so a
 			// draft still resolves; ids absent here fall back to the raw id.
 			return Promise.resolve([

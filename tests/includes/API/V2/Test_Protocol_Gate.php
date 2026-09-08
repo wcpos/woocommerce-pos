@@ -124,7 +124,8 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Every route the gate must never touch: the pre-login connect probes, the
 	 * whole auth prefix, the health probe, the cloud-print relay callback
-	 * (public) and the printer polls (printer token) — none of these callers
+	 * (public), the printer polls (printer token), and the service surfaces the
+	 * wp-admin settings screen drives with cookie auth — none of these callers
 	 * carries a client protocol signal by construction.
 	 *
 	 * @return array<string, array{0: string, 1: string}>
@@ -139,6 +140,15 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 			'relay verification' => array( 'GET', '/wcpos/v2/print-jobs/relay-verification' ),
 			'cloudprnt poll'     => array( 'POST', '/wcpos/v2/print-jobs/cloudprnt' ),
 			'epson sdp poll'     => array( 'POST', '/wcpos/v2/print-jobs/epson-sdp' ),
+			// The wp-admin settings screen: cookie auth, no protocol claim.
+			'settings'           => array( 'GET', '/wcpos/v2/settings' ),
+			'settings section'   => array( 'GET', '/wcpos/v2/settings/general' ),
+			'templates'          => array( 'GET', '/wcpos/v2/templates' ),
+			'extensions'         => array( 'GET', '/wcpos/v2/extensions' ),
+			'logs'               => array( 'GET', '/wcpos/v2/logs' ),
+			'print queue'        => array( 'GET', '/wcpos/v2/print-jobs' ),
+			'printnode printers' => array( 'POST', '/wcpos/v2/printnode/printers' ),
+			'star devices'       => array( 'POST', '/wcpos/v2/star-online/devices' ),
 		);
 	}
 

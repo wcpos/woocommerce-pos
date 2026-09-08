@@ -15,7 +15,11 @@ the body `code`, never the status. Carve-outs are one rule in
 connect probes: echo, ping, site, the relay callback) and every `printer_token`
 route (printer polls carry no client signal) is exempt by derivation; anything
 else must be declared in the `protocol_exempt` group, where an entry covers
-itself and every route below it — today `/status` and the `/auth/` family.
+itself and every route below it — today `/status`, the `/auth/` family, and the
+service surfaces the wp-admin settings screen drives with cookie auth and no client
+protocol claim: `/settings/`, `/templates/`, `/extensions/`, `/logs/` and
+`/print-jobs/` (their wire shapes did not change at the boundary; each controller
+declares its own entry in `wcpos_route_classifications()`).
 `server_protocol` stays 2: every 1.11.0 wire change is one the protocol-2
 client already tolerates (free#1752).
 

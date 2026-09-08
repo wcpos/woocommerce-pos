@@ -148,7 +148,7 @@ function buildPollUrlWithTokenSegment(
 		// the relay rebuilds the query server-side, so none is needed here.
 		return `${relayBaseUrl.replace(/\/$/, '')}/${creds}/${endpoint}`;
 	}
-	const baseUrl = `${getRestRoot()}wcpos/v1/print-jobs/${endpoint}/${creds}`;
+	const baseUrl = `${getRestRoot()}wcpos/v2/print-jobs/${endpoint}/${creds}`;
 	const separator = baseUrl.includes('?') ? '&' : '?';
 	return `${baseUrl}${separator}wcpos=1`;
 }

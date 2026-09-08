@@ -171,8 +171,29 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			array( '/wcpos/v2/' ),
 			$built_classifications['rewrite_exempt']
 		);
+		// The auth family, the health probe, and the five service surfaces the
+		// wp-admin settings screen drives with cookie auth (no protocol claim),
+		// each declared by its V1 controller and inherited by the V2 twin.
 		$this->assertSame(
-			array( '/wcpos/v1/auth/', '/wcpos/v2/status', '/wcpos/v2/auth/' ),
+			array(
+				'/wcpos/v1/auth/',
+				'/wcpos/v1/settings',
+				'/wcpos/v1/templates',
+				'/wcpos/v1/print-jobs',
+				'/wcpos/v1/printnode/printers',
+				'/wcpos/v1/star-online/devices',
+				'/wcpos/v1/extensions',
+				'/wcpos/v1/logs',
+				'/wcpos/v2/status',
+				'/wcpos/v2/auth/',
+				'/wcpos/v2/settings',
+				'/wcpos/v2/templates',
+				'/wcpos/v2/print-jobs',
+				'/wcpos/v2/printnode/printers',
+				'/wcpos/v2/star-online/devices',
+				'/wcpos/v2/extensions',
+				'/wcpos/v2/logs',
+			),
 			$built_classifications['protocol_exempt']
 		);
 		$this->assertSame(

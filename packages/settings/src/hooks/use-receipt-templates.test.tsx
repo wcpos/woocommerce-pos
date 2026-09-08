@@ -49,7 +49,7 @@ describe('useReceiptTemplateOptions', () => {
 		// Assert
 		await waitFor(() => expect(result.current).toBeTruthy());
 		expect(apiFetchMock).toHaveBeenCalledWith({
-			path: 'wcpos/v1/templates?wcpos=1&type=receipt',
+			path: 'wcpos/v2/templates?wcpos=1&type=receipt',
 			method: 'GET',
 		});
 		expect(result.current).toEqual([

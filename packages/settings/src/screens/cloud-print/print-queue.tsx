@@ -23,7 +23,7 @@ import {
 import { useReceiptTemplateNames } from '../../hooks/use-receipt-templates';
 import { t } from '../../translations';
 
-const QUEUE_ENDPOINT = 'wcpos/v1/print-jobs/queue';
+const QUEUE_ENDPOINT = 'wcpos/v2/print-jobs/queue';
 const QUEUE_QUERY_KEY = 'print-queue';
 const PER_PAGE = 20;
 const REFETCH_MS = 30_000;
@@ -196,7 +196,7 @@ export function PrintQueue() {
 
 	const retryJob = useMutation({
 		mutationFn: (id: number) =>
-			apiFetch({ path: `wcpos/v1/print-jobs/${id}/reprint?wcpos=1`, method: 'POST' }),
+			apiFetch({ path: `wcpos/v2/print-jobs/${id}/reprint?wcpos=1`, method: 'POST' }),
 		onSuccess: invalidate,
 		onError: (error, id) => {
 			const retryError = error as { code?: string; data?: { retried_to?: number } };

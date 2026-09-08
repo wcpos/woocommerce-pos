@@ -21,7 +21,7 @@ describe('fetchPrintNodePrinters', () => {
 		// Act — call through the default apiFetch (production path), no injected fetch.
 		await fetchPrintNodePrinters('test-api-key');
 
-		// Assert — WCPOS only registers its /wcpos/v1/ routes when the request
+		// Assert — WCPOS only registers its /wcpos/v2/ routes when the request
 		// carries the wcpos flag; without it the route 404s with rest_no_route.
 		// Regression guard for the "Fetch my printers" 404 (PR #1098).
 		expect(apiFetchMock).toHaveBeenCalledTimes(1);
@@ -31,7 +31,7 @@ describe('fetchPrintNodePrinters', () => {
 			data: unknown;
 		};
 		expect(args.path).toContain('wcpos=1');
-		expect(args.path).toContain('wcpos/v1/printnode/printers');
+		expect(args.path).toContain('wcpos/v2/printnode/printers');
 		expect(args.method).toBe('POST');
 		expect(args.data).toEqual({ api_key: 'test-api-key' });
 	});
