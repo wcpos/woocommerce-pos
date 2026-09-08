@@ -10,8 +10,8 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
@@ -19,10 +19,13 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  */
 class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Enable v2 routes and the read-time identity stamper.
+	 * Enable v2 routes and the production sync read lane.
+	 *
+	 * The identity stamper alone is not the lane a client reads through — see
+	 * {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()}.
 	 */
 	public function setUp(): void {
-		Proxy_Uuid_Stamper::register_proxy_stampers();
+		$this->install_sync_read_lane();
 		parent::setUp();
 	}
 
@@ -31,7 +34,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		Proxy_Uuid_Stamper::unregister_proxy_stampers();
+		$this->uninstall_sync_read_lane();
 	}
 
 	/**
@@ -110,22 +113,41 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_product_row_is_the_woocommerce_product_shape(): void {
 		$product = ProductHelper::create_simple_product();
+		// The digest observers are detached by the phpunit bootstrap, so a fixture
+		// carries no stored digest and `_rxdb_digest` would be absent for a reason
+		// that has nothing to do with the wire contract. Seed one, so the field
+		// below is pinned PRESENT rather than pinned absent — pinning its absence
+		// is the same "ratify whatever we happen to emit" move these pins exist to
+		// stop (#1717).
+		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
 
 		$rows = $this->read( array( 'include' => array( $product->get_id() ) ) );
 		$row  = $rows[0];
 
 		/*
-		 * The delta is `_links` alone, and that is the load-bearing claim here: on
-		 * the product lane WCPOS adds NO top-level key of its own. The POS identity
-		 * rides `meta_data` — a key WooCommerce itself declares — so
-		 * `Sync\Proxy_Uuid_Stamper` injects `_woocommerce_pos_uuid` into an existing
-		 * field rather than widening the row (pinned by the uuid tests above).
+		 * WCPOS adds no BUSINESS field to a product row — that is the load-bearing
+		 * claim here. The POS identity rides `meta_data`, a key WooCommerce itself
+		 * declares, so `Sync\Proxy_Uuid_Stamper` injects `_woocommerce_pos_uuid`
+		 * into an existing field rather than widening the row (pinned by the uuid
+		 * tests above). The two additions are transport metadata, both stamped by
+		 * `Sync\Augmentation_Pipeline::install()` as `Init::__construct()` wires it
+		 * in production:
+		 *
+		 *  - `_rxdb_revision` — the canonical content revision the client pairs
+		 *    against a push-side recompute (`Sync\Revision`, priority 9). Without
+		 *    this pin it could stop reaching the wire with the suite still green.
+		 *  - `_rxdb_digest`   — the stored 64-bit digest that seeds the client's
+		 *    existence-reconcile manifest (`Sync\Integrity_Digest`, priority 10).
+		 *    Stamped only for records the digest index already knows, hence the
+		 *    seeded fixture above.
+		 *
 		 * `_links` is appended by `rest_get_server()->response_to_data()` from the
 		 * controller's own `prepare_links()`, not by the schema.
 		 */
 		$this->assertEqualsCanonicalizing(
 			array_merge(
 				$this->view_context_fields( ( new WC_REST_Products_Controller() )->get_public_item_schema()['properties'] ),
+				array( '_rxdb_revision', '_rxdb_digest' ),
 				array( '_links' )
 			),
 			array_keys( $row )

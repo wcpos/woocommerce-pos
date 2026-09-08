@@ -431,6 +431,39 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A local customer can share the store's country, state, postcode and city;
+	 * store-based tax must still send the store street, not the customer's.
+	 */
+	public function test_store_street_is_sent_when_a_customer_shares_the_store_location(): void {
+		// Arrange.
+		update_option( 'woocommerce_store_address', '100 Main St' );
+		update_option( 'woocommerce_store_postcode', '94103' );
+		update_option( 'woocommerce_store_city', 'San Francisco' );
+		$address = array(
+			'country'  => 'US',
+			'state'    => 'CA',
+			'postcode' => '94103',
+			'city'     => 'San Francisco',
+		);
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $this->product( 10 ) ) ),
+			'billing'    => $address + array( 'address_1' => '1 Rodeo Dr' ),
+			'shipping'   => $address + array( 'address_1' => '2 Rodeo Dr' ),
+		);
+
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assertSame( '94103', $this->taxjar->calculate_tax_calls[0]['to_zip'] );
+		$this->assertSame( 'San Francisco', $this->taxjar->calculate_tax_calls[0]['to_city'] );
+		$this->assertSame( '100 Main St', $this->taxjar->calculate_tax_calls[0]['to_street'] );
+	}
+
+	/**
 	 * Billing and shipping can share a country, state, postcode and city; the
 	 * street sent to TaxJar must be the one for the declared tax basis.
 	 */

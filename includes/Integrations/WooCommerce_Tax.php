@@ -279,8 +279,10 @@ class WooCommerce_Tax {
 	 *
 	 * The declared basis (the POS meta, else WooCommerce's setting) is tried first
 	 * so two addresses that share a country, state, postcode and city are told
-	 * apart; the tuple check keeps the street consistent with the location that
-	 * was actually resolved, which a filter may have changed.
+	 * apart — including the store's own address, which a local customer's billing
+	 * or shipping address can match exactly; the tuple check keeps the street
+	 * consistent with the location that was actually resolved, which a filter may
+	 * have changed.
 	 *
 	 * @param WC_Abstract_Order $order    The order.
 	 * @param array             $location Country, state, postcode and city from get_taxable_location().
@@ -293,7 +295,9 @@ class WooCommerce_Tax {
 			if ( '' === $basis ) {
 				$basis = (string) get_option( 'woocommerce_tax_based_on', 'shipping' );
 			}
+			$countries  = WC()->countries;
 			$candidates = array(
+				'base'     => array( $countries->get_base_address(), array( $countries->get_base_country(), $countries->get_base_state(), $countries->get_base_postcode(), $countries->get_base_city() ) ),
 				'billing'  => array( $order->get_billing_address_1(), array( $order->get_billing_country(), $order->get_billing_state(), $order->get_billing_postcode(), $order->get_billing_city() ) ),
 				'shipping' => array( $order->get_shipping_address_1(), array( $order->get_shipping_country(), $order->get_shipping_state(), $order->get_shipping_postcode(), $order->get_shipping_city() ) ),
 			);

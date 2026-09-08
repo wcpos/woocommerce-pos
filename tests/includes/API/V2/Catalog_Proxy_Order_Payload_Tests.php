@@ -13,6 +13,7 @@ use WC_Order;
 use WC_Order_Item_Fee;
 use WC_REST_Orders_Controller;
 use WC_Tax;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
  * Pins the wire SHAPE of a v2 order row, on both order storage backends.
@@ -46,6 +47,24 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		 *                 because the v2 client reads them from the document body;
 		 *                 the frozen v1 lane serves the same hrefs as HAL links.
 		 *
+		 * On top of those sit two pieces of transport metadata, stamped by
+		 * `Sync\Augmentation_Pipeline::install()` exactly as `Init::__construct()`
+		 * wires it in production:
+		 *
+		 *  - `_rxdb_revision` — the canonical content revision the client pairs
+		 *                       against a push-side recompute (`Sync\Revision` at
+		 *                       priority 9; orders take the identity-stripping
+		 *                       `Order_Serializer::canonical_revision` branch). This
+		 *                       is the field an order push sends back as
+		 *                       `baseRevision`, so it leaving the wire is a
+		 *                       lost-update bug, and until this pin nothing in the
+		 *                       suite would have gone red.
+		 *  - `_rxdb_digest`   — the stored digest that seeds the client's
+		 *                       existence-reconcile manifest (`Sync\Integrity_Digest`
+		 *                       at priority 10), stamped only for records the digest
+		 *                       index already knows, which is why the fixture seeds
+		 *                       one.
+		 *
 		 * Neither of the remaining two is ours. `currency_symbol` is emitted by
 		 * WooCommerce itself and declared nowhere in the wc/v3 order schema
 		 * (`Automattic\WooCommerce\Admin\API\Init::add_currency_symbol_to_order_response`,
@@ -63,6 +82,7 @@ trait Catalog_Proxy_Order_Payload_Tests {
 			array_merge(
 				$this->view_context_fields( $this->order_schema_properties() ),
 				array( 'tax_ids', 'links' ),
+				array( '_rxdb_revision', '_rxdb_digest' ),
 				array( 'currency_symbol', '_links' )
 			),
 			array_keys( $row )
@@ -230,6 +250,12 @@ trait Catalog_Proxy_Order_Payload_Tests {
 			)
 		);
 		$this->assertNotWPError( $refund );
+
+		// The digest observers are detached by the phpunit bootstrap, so a fixture
+		// carries no stored digest and `_rxdb_digest` would be absent for a reason
+		// that has nothing to do with the wire contract. Seed one, so the field is
+		// pinned PRESENT rather than pinned absent (#1717).
+		( new Integrity_Digest() )->upsert_order_digest( $order->get_id() );
 
 		return wc_get_order( $order->get_id() );
 	}
