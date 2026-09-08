@@ -56,13 +56,14 @@ function matchesFilters(
 }
 
 export function GalleryGrid() {
-	const [filters, setFilters] = React.useState<FilterState>({ ...DEFAULT_FILTERS });
+	// Filters are kept per tab: a receipt-only category or search must not hide every display card.
+	const [filtersByType, setFiltersByType] = React.useState<Record<string, FilterState>>({});
 	const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 	const [previewId, setPreviewId] = React.useState<number | string | null>(null);
 
 	const { type } = useSearch({ from: '/' });
-	const displayFilters: FilterState = { ...filters, output: 'all', direction: 'all' };
-	const currentFilters = type === 'display' ? displayFilters : filters;
+	const filters = filtersByType[type] ?? DEFAULT_FILTERS;
+	const setFilters = (next: FilterState) => setFiltersByType((prev) => ({ ...prev, [type]: next }));
 
 	const { data: templates = [] } = useTemplates(type);
 	const { data: galleryTemplates = [] } = useGalleryTemplates(type);
@@ -74,7 +75,7 @@ export function GalleryGrid() {
 	const setActiveTemplate = useSetActiveTemplate(type);
 
 	const filteredGallery = galleryTemplates.filter((tmpl: GalleryTemplate) =>
-		matchesFilters(tmpl, currentFilters)
+		matchesFilters(tmpl, filters)
 	);
 
 	const adminUrl =
