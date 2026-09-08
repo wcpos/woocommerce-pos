@@ -64,11 +64,12 @@ final class Order_Lock {
 		}
 		// MySQL before 5.7.5 and MariaDB before 10.0.2 RELEASE the lock a connection holds
 		// when it takes a second one, so a nested lock (the settlement parking lock inside
-		// record()) would silently drop the order lock. There, a nested lock takes the
-		// option lease instead.
-		$nested = ! empty( self::$owners ) && ! self::supports_multiple_locks();
+		// record()) would silently drop the order lock. On such a server EVERY lock takes
+		// the option lease — one driver per server, never per call, or a top-level GET_LOCK
+		// and a nested lease on the same name would not contend with each other at all.
+		$lease_only = ! self::supports_multiple_locks();
 		try {
-			$result = $nested ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 5 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Advisory locks cannot use the object cache.
+			$result = $lease_only ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 5 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Advisory locks cannot use the object cache.
 		} catch ( \Throwable $exception ) {
 			$result = null;
 		}

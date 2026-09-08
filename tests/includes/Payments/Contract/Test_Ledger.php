@@ -318,6 +318,21 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
 	}
 
+	public function test_intent_derives_only_after_a_parked_void_is_applied(): void {
+		// The webhook that voided the leg arrived before the row existed; the intent then
+		// returns an authorization for the full balance. Deriving before the drain would
+		// complete the order on money that was already reversed — and never unwind it.
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '92.95' );
+		$this->assertTrue( wcpos_settle_payment( $input['id'], array( 'status' => 'voided', 'event_id' => 'reversed' ) ) );
+		$result = Ledger::instance()->intent( $order, $input['id'], $input, array( 'resume' => array( 'status' => 'authorized' ) ) );
+		$this->assertSame( 'voided', $result['payment']['status'] );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertFalse( $order->is_paid() );
+		$this->assertNull( $order->get_date_paid() );
+		$this->assertSame( 'pos-open', $order->get_status() );
+	}
+
 	public function test_row_schema_carries_events_and_void_requested_at_for_handlers(): void {
 		$order = $this->create_pos_order();
 		$row = $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending', 'events' => 'nope', 'void_requested_at' => 'invalid' ) );

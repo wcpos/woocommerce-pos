@@ -375,13 +375,18 @@ class Ledger {
 		}
 		$row = $this->normalize_row( $order, $row );
 		$rows[] = $row;
-		$this->save( $order, $rows );
 		// A provider can webhook before Free has written the row; that confirmation is
-		// parked and drained here, as record() does — the sweep never drains.
+		// parked and drained here, as record() does — the sweep never drains. Index the
+		// row first WITHOUT deriving: an authorization that covers the balance would
+		// otherwise complete the order before a parked void could be applied, and the
+		// projection never unwinds a completed order.
+		$this->save( $order, $rows, false );
 		$settled = Settlement::instance()->apply_parked( $order, $row['id'] );
 		if ( is_wp_error( $settled ) ) {
 			return $settled;
 		}
+		$this->derive( $order, $this->read( $order ) );
+		$order->save();
 		return array(
 			'payment' => $this->find( $order, $row['id'] ),
 			'handoff' => $handoff,
