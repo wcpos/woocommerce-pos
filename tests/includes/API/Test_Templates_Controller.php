@@ -838,14 +838,20 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	// ---- Task 7: Batch tests ----
 
+	// The display-activation cases below dispatch on wcpos/v2, the lane the app calls; V2 inherits
+	// this controller unchanged (tests/lane-coverage/README.md).
 	/**
 	 * Batch activation accepts enabled display IDs and is a non-update operation.
 	 */
 	public function test_batch_active_display_sets_option_and_survives_failed_updates(): void {
 		$post_id = $this->create_template( 'Active Display', 'display' );
-		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
 		$request->set_body_params(
-			array( 'type' => 'display', 'active' => $post_id, 'update' => array( array( 'id' => 999999 ) ) )
+			array(
+				'type' => 'display',
+				'active' => $post_id,
+				'update' => array( array( 'id' => 999999 ) ),
+			)
 		);
 
 		$response = $this->server->dispatch( $request );
@@ -866,8 +872,13 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		Templates::set_active_template_id( $active_id, 'display' );
 
 		foreach ( array( (string) $draft_id, 'unknown-template', (string) $receipt_id ) as $invalid_id ) {
-			$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
-			$request->set_body_params( array( 'type' => 'display', 'active' => $invalid_id ) );
+			$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+			$request->set_body_params(
+				array(
+					'type' => 'display',
+					'active' => $invalid_id,
+				)
+			);
 			$response = $this->server->dispatch( $request );
 
 			$this->assertSame( 400, $response->get_status() );
@@ -880,11 +891,33 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Virtual activation validates the enabled state after batch toggles.
 	 */
 	public function test_batch_active_virtual_template_requires_enabled_state(): void {
-		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
-		$request->set_body_params( array( 'active' => 'plugin-core', 'enable_virtual' => array( 'plugin-core' ) ) );
+		// Projected state: enabling and activating in one request works even when the
+		// template is disabled going in.
+		Templates::set_virtual_template_disabled( 'plugin-core', true );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+		$request->set_body_params(
+			array(
+				'active' => 'plugin-core',
+				'enable_virtual' => array( 'plugin-core' ),
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'plugin-core', $response->get_data()['active'] );
+		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
+
+		// Disabling and activating the same template is rejected before anything is written:
+		// the template stays enabled and the option is untouched.
+		$request->set_body_params(
+			array(
+				'active' => 'plugin-core',
+				'disable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'wcpos_template_invalid_active', $response->get_data()['code'] );
+		$this->assertNotContains( 'plugin-core', Templates::get_disabled_virtual_templates( 'receipt' ) );
 		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
 
 		Templates::set_virtual_template_disabled( 'plugin-core', true );
@@ -900,8 +933,13 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_batch_non_update_operations_echo_active_display(): void {
 		$post_id = $this->create_template( 'Display', 'display' );
 		foreach ( array( 'order', 'disable_virtual', 'enable_virtual' ) as $operation ) {
-			$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
-			$request->set_body_params( array( 'type' => 'display', $operation => array() ) );
+			$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+			$request->set_body_params(
+				array(
+					'type' => 'display',
+					$operation => array(),
+				)
+			);
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( $post_id, $response->get_data()['active'] );
@@ -917,8 +955,13 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		Templates::set_active_template_id( $active_id, 'display' );
 
 		foreach ( array( '', 'Display' ) as $search ) {
-			$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
-			$request->set_query_params( array( 'type' => 'display', 'search' => $search ) );
+			$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+			$request->set_query_params(
+				array(
+					'type' => 'display',
+					'search' => $search,
+				)
+			);
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 200, $response->get_status() );
 			$active_count = 0;
@@ -928,6 +971,21 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 			$this->assertSame( 1, $active_count );
 		}
+	}
+
+	/**
+	 * The admin display list pins the first-enabled fallback so the Live radio stays put.
+	 */
+	public function test_get_items_display_pins_the_fallback_as_live(): void {
+		delete_option( 'wcpos_active_template_display' );
+		$post_id = $this->create_template( 'First', 'display' );
+		$this->create_template( 'Second', 'display' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$this->server->dispatch( $request );
+
+		$this->assertSame( $post_id, (int) get_option( 'wcpos_active_template_display' ) );
 	}
 
 	/**
