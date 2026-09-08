@@ -27,6 +27,12 @@ class Ledger {
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
 	public const SEEN_EVENTS_MAX = 20;
+	/**
+	 * Cap on the cashier event log a server-mode handler writes to the row (the audit's
+	 * ask: server truth on the row instead of five browser-side panels). Free owns
+	 * persistence, so Free enforces the cap; newest entries win.
+	 */
+	public const EVENTS_MAX = 100;
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
@@ -755,7 +761,7 @@ class Ledger {
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
-		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds' ) as $field ) {
+		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
 			}
@@ -931,6 +937,10 @@ class Ledger {
 			'refunds' => array(),
 			'expires_at' => null,
 			'seen_events' => array(),
+			// Server-mode handlers: cancel is a request, not a result — the stamp says one is
+			// in flight so nobody asks the provider twice; events[] is the cashier log.
+			'void_requested_at' => null,
+			'events' => array(),
 			'provider_refs' => array(),
 			'receipt' => array(),
 			'cashier_id' => 0,
@@ -959,6 +969,8 @@ class Ledger {
 		$row['refunds']          = is_array( $row['refunds'] ) ? $row['refunds'] : array();
 		$row['expires_at']       = $this->valid_time( $row['expires_at'] );
 		$row['seen_events']      = is_array( $row['seen_events'] ) ? array_values( array_filter( $row['seen_events'], 'is_string' ) ) : array();
+		$row['void_requested_at'] = $this->valid_time( $row['void_requested_at'] );
+		$row['events']           = is_array( $row['events'] ) ? array_slice( array_values( array_filter( $row['events'], 'is_array' ) ), -self::EVENTS_MAX ) : array();
 		$row['updated_at_gmt']   = $now;
 		return $row;
 	}

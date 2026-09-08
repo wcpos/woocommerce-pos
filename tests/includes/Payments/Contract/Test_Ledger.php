@@ -283,6 +283,26 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'event' ), $new['seen_events'] );
 	}
 
+	public function test_row_schema_carries_events_and_void_requested_at_for_handlers(): void {
+		$order = $this->create_pos_order();
+		$row = $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending', 'events' => 'nope', 'void_requested_at' => 'invalid' ) );
+		Ledger::instance()->save( $order, array( $row ) );
+		$stored = Ledger::instance()->find( $order, $row['id'] );
+		$this->assertSame( array(), $stored['events'] );
+		$this->assertNull( $stored['void_requested_at'] );
+		// A handler owns both: they survive apply_transition, and the log is capped newest-last.
+		$events = array();
+		for ( $i = 0; $i < Ledger::EVENTS_MAX + 5; ++$i ) {
+			$events[] = array( 't' => gmdate( 'c' ), 'level' => 'info', 'message' => 'event ' . $i );
+		}
+		$new = Ledger::instance()->apply_transition( $stored, array( 'events' => $events, 'void_requested_at' => '2026-09-09T00:00:00Z' ) );
+		Ledger::instance()->save( $order, array( $new ) );
+		$stored = Ledger::instance()->find( $order, $row['id'] );
+		$this->assertCount( Ledger::EVENTS_MAX, $stored['events'] );
+		$this->assertSame( 'event ' . ( Ledger::EVENTS_MAX + 4 ), $stored['events'][ Ledger::EVENTS_MAX - 1 ]['message'] );
+		$this->assertSame( '2026-09-09T00:00:00Z', $stored['void_requested_at'] );
+	}
+
 	/** A full cash tender completes and indexes the order. */
 	public function test_record_single_cash_payment_completes_order_and_sets_payment_method(): void {
 		// Arrange.
