@@ -443,12 +443,13 @@ class Ledger {
 				return $this->refusal_error( $applied, $order );
 			}
 			if ( $tip ) {
+				$taxable = (bool) apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
 				$fee = new \WC_Order_Item_Fee();
 				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
 				$fee->set_total( Money::format( $difference ) );
-				$fee->set_tax_status( apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ) ? 'taxable' : 'none' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+				$fee->set_tax_status( $taxable ? 'taxable' : 'none' );
 				$order->add_item( $fee );
-				$order->calculate_totals( false );
+				$order->calculate_totals( $taxable );
 				$applied['amount'] = Money::normalize( $confirmed );
 				$applied['tip'] = Money::format( $difference );
 			}

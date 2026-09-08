@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WC_Tax;
 
 /** Payment ledger tests. */
 class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
@@ -157,6 +158,46 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			'under' => array( array( 'amount' => '90.00' ), 'none', true ),
 			'currency' => array( array( 'currency' => 'EUR' ), 'on_reader', true ),
 		);
+	}
+
+	public function test_capture_calculates_tax_for_a_taxable_tip_fee(): void {
+		$old_calc_taxes = get_option( 'woocommerce_calc_taxes' );
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		$tax_rate_id = WC_Tax::_insert_tax_rate(
+			array(
+				'tax_rate'          => '10.0000',
+				'tax_rate_name'     => 'Tip tax',
+				'tax_rate_priority' => 1,
+				'tax_rate_order'    => 0,
+				'tax_rate_class'    => '',
+			)
+		);
+
+		try {
+			$order = $this->create_pos_order();
+			$product = ProductHelper::create_simple_product();
+			$product->set_price( '92.95' );
+			$product->set_tax_status( 'none' );
+			$product->save();
+			$order->add_product( $product );
+			$order->calculate_totals( false );
+			Integrity_Handler::$tips = 'on_reader';
+			add_filter( 'wcpos_payment_tip_fee_taxable', '__return_true' );
+			$input = $this->payment( 'pos_card', '92.95' );
+			$ledger = Ledger::instance();
+			$ledger->intent( $order, $input['id'], $input, array() );
+
+			$ledger->capture( $order, $input['id'], array( 'amount' => '100.00' ) );
+
+			$fee = array_values( $order->get_fees() )[0];
+			$this->assertSame( 'taxable', $fee->get_tax_status() );
+			$this->assertSame( '0.71', wc_format_decimal( $fee->get_total_tax(), 2 ) );
+			$this->assertSame( '100.71', $order->get_total() );
+			$this->assertSame( '0.71', $ledger->summary( $order )['balance'] );
+		} finally {
+			WC_Tax::_delete_tax_rate( $tax_rate_id );
+			update_option( 'woocommerce_calc_taxes', $old_calc_taxes );
+		}
 	}
 
 	public function test_refund_replay_and_rollup_preserve_one_allocation(): void {
