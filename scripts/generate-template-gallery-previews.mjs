@@ -163,7 +163,9 @@ try {
 		if (payload.type === 'display') {
 			await page.setViewportSize(displayViewports[payload.key] ?? displayViewports.default);
 		}
-		await page.goto(`${baseUrl}?key=${encodeURIComponent(payload.key)}`, { waitUntil: 'networkidle' });
+		await page.goto(`${baseUrl}?key=${encodeURIComponent(payload.key)}`, {
+			waitUntil: 'networkidle',
+		});
 		await page.waitForFunction(() => window.__WCPOS_PREVIEW_READY__ === true);
 		const capture = page.locator('#capture');
 		const pngPath = path.join(tempDir, `${payload.key}.png`);

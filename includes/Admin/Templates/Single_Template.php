@@ -593,7 +593,8 @@ class Single_Template {
 
 		$config = array(
 			'isProActive'       => wcpos_is_pro_active(),
-			'displayPreviewUrl' => wcpos_display_url(),
+			// The iframe must share wp-admin's origin for postMessage, so it follows this request's scheme.
+			'displayPreviewUrl' => set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ),
 			'type'              => $type,
 			'displayStarter'    => $display_starter,
 			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),

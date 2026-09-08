@@ -310,7 +310,7 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'isProActive', $config );
 			$this->assertSame( wcpos_is_pro_active(), $config['isProActive'] );
 			$this->assertArrayHasKey( 'displayPreviewUrl', $config );
-			$this->assertSame( wcpos_display_url(), $config['displayPreviewUrl'] );
+			$this->assertSame( set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ), $config['displayPreviewUrl'] );
 			$this->assertSame( 0 === $index ? $this->sample_html : null, $config['displayStarter'] );
 			$this->assertSame( 'display' === $type, isset( $config['fieldSchema']['ledger'] ) );
 		}

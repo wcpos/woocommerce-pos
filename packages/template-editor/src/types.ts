@@ -15,7 +15,7 @@ export interface SectionInfo {
 export type FieldSchema = Record<string, SectionInfo>;
 
 export interface EditorConfig {
-	type: 'receipt' | 'display';
+	type: 'receipt' | 'display' | 'report';
 	displayStarter: string | null;
 	isProActive: boolean;
 	displayPreviewUrl: string;
