@@ -66,6 +66,17 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		}
 	}
 
+	public function test_sweeper_does_not_request_a_cancel_twice(): void {
+		// A handler that treats cancel as a request stamps void_requested_at and keeps the
+		// row pending until the provider confirms; the sweep must not ask again.
+		Sweep_Test_Handler::$patch = array( 'status' => 'pending' );
+		list( $order, $id ) = $this->leg( 600, array( 'expires_at' => gmdate( 'c', time() - 60 ), 'void_requested_at' => gmdate( 'c', time() - 30 ) ) );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+		$this->assertSame( 'pending', $this->row( $order, $id )['status'] );
+	}
+
 	public function test_sweeper_status_error_leaves_expired_row_untouched(): void {
 		Sweep_Test_Handler::$patch = new \WP_Error( 'test_provider_unavailable', 'Unavailable' );
 		list( $order, $id ) = $this->leg( 600, array( 'expires_at' => gmdate( 'c', time() - 60 ) ) );

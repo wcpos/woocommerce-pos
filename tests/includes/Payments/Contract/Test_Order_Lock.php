@@ -39,6 +39,35 @@ class Test_Order_Lock extends \WP_UnitTestCase {
 		$this->assertTrue( ( new Order_Lock() )->with_lock( 123, static function () { return true; } ) );
 	}
 
+	public function test_every_lock_uses_the_option_lease_where_the_server_cannot_hold_two(): void {
+		global $wpdb;
+		$filter = '__return_false';
+		add_filter( 'wcpos_order_lock_supports_multiple_locks', $filter );
+		$reflection = new \ReflectionProperty( Order_Lock::class, 'multi_lock' );
+		$reflection->setAccessible( true );
+		$reflection->setValue( null, null );
+		$outer = new Order_Lock();
+		$inner = new Order_Lock();
+		try {
+			$this->assertTrue( $outer->acquire( 501 ) );
+			$this->assertTrue( $inner->acquire( 502 ) );
+			// One driver per server: BOTH locks are option leases, so a top-level caller and
+			// a nested one on the same name contend through the same row, and neither
+			// touches GET_LOCK (which would release the other's lock on this server).
+			$this->assertNotEmpty( get_option( 'wcpos_payment_lock_501' ) );
+			$this->assertNotEmpty( get_option( 'wcpos_payment_lock_502' ) );
+			$this->assertSame( '1', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK(%s)', sprintf( 'wcpos_order_%d_%d', 501, get_current_blog_id() ) ) ) );
+			$this->assertSame( 'wcpos_payment_locked', ( new Order_Lock() )->with_lock( 501, static function () { return 'ran'; } )->get_error_code() );
+		} finally {
+			$inner->release( 502 );
+			$outer->release( 501 );
+			remove_filter( 'wcpos_order_lock_supports_multiple_locks', $filter );
+			$reflection->setValue( null, null );
+		}
+		$this->assertFalse( get_option( 'wcpos_payment_lock_502' ) );
+		$this->assertFalse( get_option( 'wcpos_payment_lock_501' ) );
+	}
+
 	public function test_option_fallback_takes_stale_lease_and_preserves_new_owner_on_release(): void {
 		$filter = static function ( $sql ) {
 			return 0 === strpos( $sql, 'SELECT GET_LOCK(' ) ? 'SELECT NULL' : $sql;

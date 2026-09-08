@@ -27,6 +27,12 @@ class Ledger {
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
 	public const SEEN_EVENTS_MAX = 20;
+	/**
+	 * Cap on the cashier event log a server-mode handler writes to the row (the audit's
+	 * ask: server truth on the row instead of five browser-side panels). Free owns
+	 * persistence, so Free enforces the cap; newest entries win.
+	 */
+	public const EVENTS_MAX = 100;
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
@@ -327,12 +333,12 @@ class Ledger {
 				return $resumed;
 			}
 			$handoff = $resumed['handoff'] ?? array();
-			$applied = $this->apply_transition( $replayed, $resumed );
+			// A resumed leg can come back captured (the reader finished while the till was
+			// away), so it takes the same verification as capture(), never a bare transition.
+			$applied = $this->apply_result( $order, $replayed['id'], $resumed );
 			if ( is_wp_error( $applied ) ) {
 				return $applied;
 			}
-			$applied = $this->normalize_row( $order, $applied );
-			$this->replace_and_save( $order, $rows, $applied );
 			return array(
 				'payment' => $applied,
 				'handoff' => $handoff,
@@ -369,9 +375,20 @@ class Ledger {
 		}
 		$row = $this->normalize_row( $order, $row );
 		$rows[] = $row;
-		$this->save( $order, $rows );
+		// A provider can webhook before Free has written the row; that confirmation is
+		// parked and drained here, as record() does — the sweep never drains. Index the
+		// row first WITHOUT deriving: an authorization that covers the balance would
+		// otherwise complete the order before a parked void could be applied, and the
+		// projection never unwinds a completed order.
+		$this->save( $order, $rows, false );
+		$settled = Settlement::instance()->apply_parked( $order, $row['id'] );
+		if ( is_wp_error( $settled ) ) {
+			return $settled;
+		}
+		$this->derive( $order, $this->read( $order ) );
+		$order->save();
 		return array(
-			'payment' => $row,
+			'payment' => $this->find( $order, $row['id'] ),
 			'handoff' => $handoff,
 		);
 	}
@@ -702,18 +719,23 @@ class Ledger {
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
-		$applied = $this->apply_transition( $row, $new );
+		// A server-mode cancel is a request: the handler may answer with the row still
+		// pending (void_requested_at set), or captured if the reader finished first — so
+		// the result takes the same verification and persistence as every other write.
+		$applied = $this->apply_result( $order, $row['id'], $new );
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
-		$order->add_order_note(
-			'' === $reason
-				/* translators: %s: payment row uuid. */
-				? sprintf( __( 'WCPOS payment %s voided.', 'woocommerce-pos' ), $row['id'] )
-				/* translators: 1: payment row uuid, 2: void reason given by the cashier. */
-				: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
-		);
-		$this->replace_and_save( $order, $rows, $applied );
+		if ( 'voided' === $applied['status'] ) {
+			$order->add_order_note(
+				'' === $reason
+					/* translators: %s: payment row uuid. */
+					? sprintf( __( 'WCPOS payment %s voided.', 'woocommerce-pos' ), $row['id'] )
+					/* translators: 1: payment row uuid, 2: void reason given by the cashier. */
+					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
+			);
+			$order->save();
+		}
 		return $applied;
 	}
 
@@ -755,7 +777,7 @@ class Ledger {
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
-		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds' ) as $field ) {
+		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
 			}
@@ -931,6 +953,10 @@ class Ledger {
 			'refunds' => array(),
 			'expires_at' => null,
 			'seen_events' => array(),
+			// Server-mode handlers: cancel is a request, not a result — the stamp says one is
+			// in flight so nobody asks the provider twice; events[] is the cashier log.
+			'void_requested_at' => null,
+			'events' => array(),
 			'provider_refs' => array(),
 			'receipt' => array(),
 			'cashier_id' => 0,
@@ -959,6 +985,8 @@ class Ledger {
 		$row['refunds']          = is_array( $row['refunds'] ) ? $row['refunds'] : array();
 		$row['expires_at']       = $this->valid_time( $row['expires_at'] );
 		$row['seen_events']      = is_array( $row['seen_events'] ) ? array_values( array_filter( $row['seen_events'], 'is_string' ) ) : array();
+		$row['void_requested_at'] = $this->valid_time( $row['void_requested_at'] );
+		$row['events']           = is_array( $row['events'] ) ? array_slice( array_values( array_filter( $row['events'], 'is_array' ) ), -self::EVENTS_MAX ) : array();
 		$row['updated_at_gmt']   = $now;
 		return $row;
 	}

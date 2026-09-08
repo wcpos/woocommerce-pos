@@ -32,6 +32,12 @@ final class Order_Lock {
 	 * @var array<string, array{driver:string,value:string,count:int}>
 	 */
 	private $held = array();
+	/**
+	 * Whether the server keeps more than one named lock per connection.
+	 *
+	 * @var bool|null
+	 */
+	private static $multi_lock = null;
 
 	/** Get the shared, request-reentrant lock. */
 	public static function instance(): self {
@@ -56,8 +62,14 @@ final class Order_Lock {
 		if ( isset( self::$owners[ $name ] ) ) {
 			return false;
 		}
+		// MySQL before 5.7.5 and MariaDB before 10.0.2 RELEASE the lock a connection holds
+		// when it takes a second one, so a nested lock (the settlement parking lock inside
+		// record()) would silently drop the order lock. On such a server EVERY lock takes
+		// the option lease — one driver per server, never per call, or a top-level GET_LOCK
+		// and a nested lease on the same name would not contend with each other at all.
+		$lease_only = ! self::supports_multiple_locks();
 		try {
-			$result = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 5 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Advisory locks cannot use the object cache.
+			$result = $lease_only ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 5 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Advisory locks cannot use the object cache.
 		} catch ( \Throwable $exception ) {
 			$result = null;
 		}
@@ -178,6 +190,35 @@ final class Order_Lock {
 			wp_cache_delete( $name, 'options' );
 		}
 		return (bool) $deleted;
+	}
+
+	/**
+	 * Whether this server can hold two named locks on one connection (MySQL 5.7.5+,
+	 * MariaDB 10.0.2+). Read once per request; `db_server_info()` reports MariaDB as
+	 * "5.5.5-10.6.12-MariaDB" and MySQL as "8.0.36".
+	 */
+	private static function supports_multiple_locks(): bool {
+		if ( null === self::$multi_lock ) {
+			global $wpdb;
+			$info = is_object( $wpdb ) && method_exists( $wpdb, 'db_server_info' ) ? (string) $wpdb->db_server_info() : '';
+			if ( preg_match( '/(\d+\.\d+\.\d+)-MariaDB/i', $info, $m ) ) {
+				$supported = version_compare( $m[1], '10.0.2', '>=' );
+			} elseif ( preg_match( '/^(\d+\.\d+\.\d+)/', $info, $m ) ) {
+				$supported = version_compare( $m[1], '5.7.5', '>=' );
+			} else {
+				$supported = false;
+			}
+			/**
+			 * Filters whether nested named locks are trusted on this database server.
+			 *
+			 * @since 1.11.0
+			 *
+			 * @param bool   $supported Detected from the server version.
+			 * @param string $info      The server version string.
+			 */
+			self::$multi_lock = (bool) apply_filters( 'wcpos_order_lock_supports_multiple_locks', $supported, $info ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+		}
+		return self::$multi_lock;
 	}
 
 	/**

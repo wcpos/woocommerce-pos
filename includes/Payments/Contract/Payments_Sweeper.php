@@ -74,7 +74,9 @@ final class Payments_Sweeper {
 						// Decide expiry before an authorization can complete the order.
 						$result = $ledger->apply_result( $order, $row['id'], $result, false );
 						$expires = ! is_wp_error( $result ) && ! empty( $result['expires_at'] ) ? strtotime( $result['expires_at'] ) : false;
-						if ( ! is_wp_error( $result ) && in_array( $result['status'], array( 'pending', 'authorized' ), true ) && false !== $expires && $expires < time() ) {
+						// A cancel already in flight (void_requested_at) is not requested again; the
+						// status() call above is what confirms it.
+						if ( ! is_wp_error( $result ) && in_array( $result['status'], array( 'pending', 'authorized' ), true ) && empty( $result['void_requested_at'] ) && false !== $expires && $expires < time() ) {
 							$result = $handler->void( $result, 'expired' );
 							if ( ! is_wp_error( $result ) ) {
 								$result = $ledger->apply_result( $order, $row['id'], $result, false );
