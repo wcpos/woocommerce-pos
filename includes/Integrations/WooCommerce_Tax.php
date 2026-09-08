@@ -295,11 +295,15 @@ class WooCommerce_Tax {
 			if ( '' === $basis ) {
 				$basis = (string) get_option( 'woocommerce_tax_based_on', 'shipping' );
 			}
+			// The store address is a candidate too, but LAST unless it is the
+			// declared basis: when a filter moves the taxed location to the other
+			// customer address, that address must win over a store that happens
+			// to share its country, state, postcode and city.
 			$countries  = WC()->countries;
 			$candidates = array(
-				'base'     => array( $countries->get_base_address(), array( $countries->get_base_country(), $countries->get_base_state(), $countries->get_base_postcode(), $countries->get_base_city() ) ),
 				'billing'  => array( $order->get_billing_address_1(), array( $order->get_billing_country(), $order->get_billing_state(), $order->get_billing_postcode(), $order->get_billing_city() ) ),
 				'shipping' => array( $order->get_shipping_address_1(), array( $order->get_shipping_country(), $order->get_shipping_state(), $order->get_shipping_postcode(), $order->get_shipping_city() ) ),
+				'base'     => array( $countries->get_base_address(), array( $countries->get_base_country(), $countries->get_base_state(), $countries->get_base_postcode(), $countries->get_base_city() ) ),
 			);
 			if ( isset( $candidates[ $basis ] ) ) {
 				$candidates = array( $basis => $candidates[ $basis ] ) + $candidates;
