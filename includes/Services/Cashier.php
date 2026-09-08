@@ -83,12 +83,8 @@ class Cashier {
 			'display_name' => $user->display_name,
 			'nice_name'    => $user->user_nicename,
 			'roles'        => array_values( $user->roles ),
-			// Raw grants (role + user), the same vocabulary the POS Access settings
-			// screen reads and writes. user_can() is wrong here: the singular meta
-			// caps (edit_product, delete_product) cannot be checked without a post.
-			'capabilities' => array_values(
-				array_filter( Access_Section::capability_names(), fn( $cap ) => ! empty( $user->allcaps[ $cap ] ) )
-			),
+			// The helper reports effective grants, including role-editor denies.
+			'capabilities' => Access_Section::effective_capabilities( $user ),
 			'last_access'  => $last_access ? $last_access : '',
 			'avatar_url'   => get_avatar_url( $user->ID ),
 		);
@@ -200,6 +196,70 @@ class Cashier {
 	 */
 	public function has_cashier_permissions( WP_User $user ): bool {
 		return user_can( $user, 'publish_shop_orders' );
+	}
+
+	/**
+	 * POS baseline capabilities the user lacks.
+	 *
+	 * The baseline is what the POS needs to open and take a sale: the access gate,
+	 * the cashier gate (publish_shop_orders — see has_cashier_permissions()), and the
+	 * three reads every screen makes. Missing entries are reported, in this order,
+	 * so a merchant can see which role or role-editor deny is responsible.
+	 *
+	 * @param WP_User $user User to check.
+	 * @return string[] Missing capability names.
+	 */
+	public function missing_pos_capabilities( WP_User $user ): array {
+		$baseline = array( 'access_woocommerce_pos', 'publish_shop_orders', 'read_private_products', 'read_private_shop_orders', 'list_users' );
+
+		return array_values( array_filter( $baseline, fn( $cap ) => ! user_can( $user, $cap ) ) );
+	}
+
+	/**
+	 * Whether the user clears the two gates the server already enforces.
+	 *
+	 * Only access_woocommerce_pos (the REST gate) and publish_shop_orders (the
+	 * cashier gate) block entry; a user missing only a read capability can still
+	 * work partially, and the corrected capability payload tells the client what
+	 * is missing.
+	 *
+	 * @param WP_User $user User to check.
+	 * @return bool True when both entry capabilities are granted.
+	 */
+	public function can_open_pos( WP_User $user ): bool {
+		$blocking = array_intersect( array( 'access_woocommerce_pos', 'publish_shop_orders' ), $this->missing_pos_capabilities( $user ) );
+
+		return empty( $blocking );
+	}
+
+	/**
+	 * Describe missing baseline capabilities and how to grant them.
+	 *
+	 * @param WP_User $user User to check.
+	 * @return string Diagnostic message, or empty unless the user is blocked by can_open_pos().
+	 */
+	public function missing_pos_capabilities_message( WP_User $user ): string {
+		if ( $this->can_open_pos( $user ) ) {
+			return '';
+		}
+		$missing = $this->missing_pos_capabilities( $user );
+		/* translators: %s: Comma-separated missing capability names. */
+		$message = sprintf( __( 'This account cannot use the POS. Missing capabilities: %s.', 'woocommerce-pos' ), implode( ', ', $missing ) );
+		if ( count( $user->roles ) >= 2 ) {
+			$role_names = array_map(
+				function ( $slug ) {
+					$roles = wp_roles()->roles;
+
+					return isset( $roles[ $slug ]['name'] ) ? translate_user_role( $roles[ $slug ]['name'] ) : $slug;
+				},
+				$user->roles
+			);
+			/* translators: %s: Comma-separated role names. */
+			return $message . ' ' . sprintf( __( 'It has the roles %s. A capability denied on one role can override a grant from another, and role-editor plugins such as Members apply that deny first. Remove the extra role or clear the deny in the role editor.', 'woocommerce-pos' ), implode( ', ', $role_names ) );
+		}
+
+		/* translators: Guidance for granting missing POS capabilities. */
+		return $message . ' ' . __( 'Grant them under WCPOS Settings, Access, or assign a role that has them.', 'woocommerce-pos' );
 	}
 
 	/**
