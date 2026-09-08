@@ -8,10 +8,210 @@
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
+use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Payment ledger tests. */
 class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
+
+	public function setUp(): void {
+		parent::setUp();
+		Capture_Mode_Registry::instance()->register( 'integrity', Integrity_Handler::class );
+		Integrity_Handler::$calls = 0;
+		Integrity_Handler::$tips = 'none';
+		add_filter( 'wcpos_payment_method_capture_mode', static function ( $mode, $gateway ) {
+			return 'pos_card' === $gateway->id ? 'integrity' : $mode;
+		}, 10, 2 );
+		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {
+			$settings['gateways']['pos_card']['enabled'] = true;
+			return $settings;
+		} );
+	}
+
+	public function test_intent_disabled_method_returns_403(): void {
+		$order = $this->create_pos_order();
+		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {
+			$settings['gateways']['pos_card']['enabled'] = false;
+			return $settings;
+		}, 20 );
+		$input = $this->payment( 'pos_card', '20.00' );
+		$error = Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$this->assertSame( 'wcpos_payment_method_disabled', $error->get_error_code() );
+		$this->assertSame( 403, $error->get_error_data()['status'] );
+		$this->assertSame( array(), Ledger::instance()->read( $order ) );
+	}
+
+	public function test_intent_paid_order_returns_409_without_row(): void {
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$input = $this->payment( 'pos_card', '20.00' );
+		$error = Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$this->assertSame( 'wcpos_order_already_paid', $error->get_error_code() );
+		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertCount( 1, Ledger::instance()->read( $order ) );
+	}
+
+	public function test_intent_excess_balance_does_not_persist_or_call_handler(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '93.00' );
+		$error = Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$this->assertSame( 'wcpos_amount_exceeds_balance', $error->get_error_code() );
+		$this->assertSame( 400, $error->get_error_data()['status'] );
+		$this->assertSame( array(), Ledger::instance()->read( $order ) );
+		$this->assertSame( 0, Integrity_Handler::$calls );
+	}
+
+	public function test_intent_handler_error_does_not_persist(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$error = new \WP_Error( 'test_declined', 'Declined' );
+		$this->assertSame( $error, Ledger::instance()->intent( $order, $input['id'], $input, array( 'error' => $error ) ) );
+		$this->assertSame( array(), Ledger::instance()->read( $order ) );
+	}
+
+	public function test_capture_handler_error_preserves_pending_row(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$error = new \WP_Error( 'test_declined', 'Declined' );
+		$this->assertSame( $error, Ledger::instance()->capture( $order, $input['id'], array( 'error' => $error ) ) );
+		$this->assertSame( 'pending', Ledger::instance()->find( $order, $input['id'] )['status'] );
+	}
+
+	public function test_intent_replay_resumes_the_handler_and_returns_the_handoff(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$ledger = Ledger::instance();
+		$first = $ledger->intent( $order, $input['id'], $input, array() );
+		$again = $ledger->intent( $order, $input['id'], $input, array() );
+		// routes.md §4.3: a leg still in flight RESUMES at the provider rather than
+		// repeating — the handler keys its provider call on the row id — so a replay
+		// hands back the same handoff the app lost when the first response never
+		// arrived. Returning an empty handoff would strand the till mid-payment.
+		$this->assertSame( 2, Integrity_Handler::$calls );
+		$this->assertSame( array( 'token' => 'secret' ), $first['handoff'] );
+		$this->assertSame( $first['handoff'], $again['handoff'] );
+		$this->assertSame( $first['payment']['id'], $again['payment']['id'] );
+		$this->assertSame( 'pending', $again['payment']['status'] );
+		$this->assertCount( 1, $ledger->read( $order ) );
+		$this->assertArrayNotHasKey( 'handoff', $ledger->find( $order, $input['id'] ) );
+		$this->assertSame( 'pending', $order->get_status() );
+		$error = $ledger->intent( $order, $input['id'], array_merge( $input, array( 'amount' => '21.00' ) ), array() );
+		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
+	}
+
+	/** @dataProvider capture_confirmations */
+	public function test_capture_verifies_provider_money( array $confirmed, string $tips, bool $mismatch ): void {
+		$order = $this->create_pos_order();
+		$product = ProductHelper::create_simple_product();
+		$product->set_price( '92.95' );
+		$product->set_tax_status( 'none' );
+		$product->save();
+		$order->add_product( $product );
+		$order->calculate_totals( false );
+		Integrity_Handler::$tips = $tips;
+		$input = $this->payment( 'pos_card', '92.95' );
+		$ledger = Ledger::instance();
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$result = $ledger->capture( $order, $input['id'], $confirmed );
+		$stored = $ledger->find( wc_get_order( $order->get_id() ), $input['id'] );
+		if ( $mismatch ) {
+			$this->assertSame( 'wcpos_amount_mismatch', $result->get_error_code() );
+			$this->assertSame( 409, $result->get_error_data()['status'] );
+			$this->assertSame( 'failed', $stored['status'] );
+			$this->assertSame( 'amount_mismatch', $stored['failure_reason'] );
+			$this->assertSame( '92.95', $stored['amount'] );
+			$replay = $ledger->capture( $order, $input['id'], $confirmed );
+			// assertEquals, not assertSame: to_wire() mints a fresh stdClass for the two
+			// empty maps on every call, so identity comparison could never hold.
+			$this->assertEquals( $result->get_error_data(), $replay->get_error_data() );
+			$this->assertNotEmpty( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+			$this->assertFalse( $order->is_paid() );
+		} else {
+			$this->assertSame( $confirmed['status'] ?? 'captured', $stored['status'] );
+			$this->assertSame( $confirmed['amount'] ?? '92.95', $stored['amount'] );
+			$this->assertSame( '0.00', $ledger->summary( $order )['balance'] );
+			if ( 'on_reader' === $tips ) {
+				$fees = array_values( $order->get_fees() );
+				$this->assertCount( 1, $fees );
+				$this->assertSame( 'Tip', $fees[0]->get_name() );
+				$this->assertSame( 'none', $fees[0]->get_tax_status() );
+				$this->assertSame( '7.05', $stored['tip'] );
+				$this->assertSame( '100.00', $order->get_total() );
+				$this->assertSame( 'wcpos_invalid_transition', $ledger->capture( $order, $input['id'], $confirmed )->get_error_code() );
+				$this->assertCount( 1, $order->get_fees() );
+			}
+		}
+	}
+
+	public function capture_confirmations(): array {
+		return array(
+			'exact' => array( array( 'amount' => '92.95' ), 'none', false ),
+			'authorized exact' => array( array( 'status' => 'authorized', 'amount' => '92.95' ), 'none', false ),
+			'authorized mismatch' => array( array( 'status' => 'authorized', 'amount' => '90.00' ), 'none', true ),
+			'implicit' => array( array(), 'none', false ),
+			'tip' => array( array( 'amount' => '100.00' ), 'on_reader', false ),
+			'over' => array( array( 'amount' => '100.00' ), 'none', true ),
+			'under' => array( array( 'amount' => '90.00' ), 'none', true ),
+			'currency' => array( array( 'currency' => 'EUR' ), 'on_reader', true ),
+		);
+	}
+
+	public function test_refund_replay_and_rollup_preserve_one_allocation(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->save();
+		$first = $ledger->refund( $order, $row['id'], $refund->get_id(), '5.00' );
+		$again = $ledger->refund( $order, $row['id'], $refund->get_id(), '5.00' );
+		$this->assertSame( $first, $again );
+		$this->assertCount( 1, $again['refunds'] );
+		$this->assertSame( '5.00', $again['refunded_amount'] );
+		$this->assertSame( '5.00', $ledger->find( wc_get_order( $order->get_id() ), $row['id'] )['refunded_amount'] );
+	}
+
+	public function test_refund_pending_allocations_reserve_balance(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$row['refunds'] = array( array( 'id' => 123, 'amount' => '15.00', 'status' => 'pending', 'provider_ref' => null ) );
+		$ledger->save( $order, array( $row ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->save();
+		$error = $ledger->refund( $order, $row['id'], $refund->get_id(), '6.00' );
+		$this->assertSame( 'wcpos_refund_not_allocatable', $error->get_error_code() );
+		$this->assertSame( 400, $error->get_error_data()['status'] );
+		$exact = $ledger->refund( $order, $row['id'], $refund->get_id(), '5.00' );
+		$this->assertSame( '5.00', $exact['refunded_amount'] );
+	}
+
+	public function test_refund_rejects_foreign_parent(): void {
+		$order = $this->create_pos_order();
+		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $this->create_pos_order()->get_id() );
+		$refund->save();
+		$error = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '5.00' );
+		$this->assertSame( 'rest_invalid_param', $error->get_error_code() );
+	}
+
+	public function test_row_schema_normalizes_expiry_and_seen_events(): void {
+		$order = $this->create_pos_order();
+		$row = $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending', 'expires_at' => 'invalid', 'seen_events' => array( 'event', 123 ) ) );
+		Ledger::instance()->save( $order, array( $row ) );
+		$stored = Ledger::instance()->find( $order, $row['id'] );
+		$this->assertNull( $stored['expires_at'] );
+		$this->assertSame( array( 'event' ), $stored['seen_events'] );
+		$new = Ledger::instance()->apply_transition( $stored, array( 'expires_at' => '2026-09-09T00:00:00Z', 'seen_events' => array( 'forged' ) ) );
+		$this->assertSame( '2026-09-09T00:00:00Z', $new['expires_at'] );
+		$this->assertSame( array( 'event' ), $new['seen_events'] );
+	}
+
 	/** A full cash tender completes and indexes the order. */
 	public function test_record_single_cash_payment_completes_order_and_sets_payment_method(): void {
 		// Arrange.
@@ -480,5 +680,26 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			),
 			$extra
 		);
+	}
+}
+
+/** Deterministic provider confirmations; no external payment operations. */
+class Integrity_Handler extends Manual_Handler {
+	public static $calls = 0;
+	public static $tips = 'none';
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		$descriptor = parent::describe( $gateway );
+		$descriptor['capture']['mode'] = 'integrity';
+		$descriptor['capabilities']['tips'] = self::$tips;
+		return $descriptor;
+	}
+	public function intent( array $row, array $context ) {
+		++self::$calls;
+		if ( isset( $context['error'] ) ) { return $context['error']; }
+		$row['handoff'] = array( 'token' => 'secret' );
+		return $row;
+	}
+	public function capture( array $row, array $context ) {
+		return $context['error'] ?? array_merge( array( 'status' => 'captured' ), $context );
 	}
 }

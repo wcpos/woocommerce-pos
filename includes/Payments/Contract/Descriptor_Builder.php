@@ -57,7 +57,7 @@ class Descriptor_Builder {
 
 		return array(
 			'schema' => 1,
-			'contract' => '1.0',
+			'contract' => '1.1',
 			'methods' => $methods,
 		);
 	}

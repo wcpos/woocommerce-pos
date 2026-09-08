@@ -38,4 +38,21 @@ class Manual_Handler extends Abstract_Capture_Mode_Handler {
 			'provider_data' => array(),
 		);
 	}
+	/**
+	 * Cash handed back is immediately refunded.
+	 *
+	 * @param array  $row       Payment row.
+	 * @param int    $refund_id Refund ID.
+	 * @param string $amount    Refund amount.
+	 * @return array
+	 */
+	public function refund( array $row, int $refund_id, string $amount ) {
+		$row['refunds'][] = array(
+			'id' => $refund_id,
+			'amount' => $amount,
+			'status' => 'succeeded',
+			'provider_ref' => null,
+		);
+		return $row;
+	}
 }

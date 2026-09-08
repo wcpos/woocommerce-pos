@@ -80,7 +80,7 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array( 'schema', 'contract', 'methods' ), array_keys( $envelope ) );
 		$this->assertSame( 1, $envelope['schema'] );
-		$this->assertSame( '1.0', $envelope['contract'] );
+		$this->assertSame( '1.1', $envelope['contract'] );
 		$this->assertCount( count( $gateways ), $envelope['methods'] );
 	}
 

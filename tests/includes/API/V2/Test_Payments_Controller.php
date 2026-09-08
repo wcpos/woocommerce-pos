@@ -194,6 +194,66 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
 	}
 
+	/** @dataProvider order_actions */
+	public function test_every_order_route_obeys_lock( string $action ): void {
+		$order = $this->create_pos_order();
+		$other = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $other->acquire( $order->get_id() ) );
+		try {
+			$path = '/wcpos/v2/orders/' . $order->get_id() . '/payments';
+			if ( 'record' !== $action ) {
+				$path .= '/' . wp_generate_uuid4() . '/' . $action;
+			}
+			$request = 'status' === $action ? $this->wp_rest_get_request( $path ) : $this->wp_rest_post_request( $path );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'wcpos_payment_locked', $response->get_data()['code'] );
+		} finally {
+			$other->release( $order->get_id() );
+		}
+	}
+
+	public function order_actions(): array {
+		return array_map( static function ( $action ) { return array( $action ); }, array( 'record', 'intent', 'capture', 'status', 'void', 'refund' ) );
+	}
+
+	public function test_intent_and_capture_return_handoff_and_locked_fresh_order_summary(): void {
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		add_filter( 'wcpos_payment_method_capture_mode', static function () { return 'route_test'; } );
+		$order = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/intent' );
+		$request->set_body_params( array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1', 'cashier_id' => 0 ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pending', $response->get_data()['payment']['status'] );
+		$this->assertSame( get_current_user_id(), $response->get_data()['payment']['cashier_id'] );
+		$this->assertSame( array( 'reader' => 'reader-1' ), $response->get_data()['handoff'] );
+		$this->assertSame( 'pending', $response->get_data()['order']['status'] );
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/capture' );
+		$request->set_body_params( array( 'context' => array( 'amount' => '92.95' ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'captured', $response->get_data()['payment']['status'] );
+		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
+		$this->assertArrayNotHasKey( 'handoff', $response->get_data() );
+	}
+
+	public function test_refund_response_contains_only_payment(): void {
+		$order = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '20.00' );
+		$this->record( $order, $payment );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->save();
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/refund' );
+		$request->set_body_params( array( 'refund_id' => $refund->get_id(), 'amount' => '5.00' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'payment' ), array_keys( $response->get_data() ) );
+		$this->assertSame( '5.00', $response->get_data()['payment']['refunded_amount'] );
+	}
+
 	/** Create an open POS order at the contract total. */
 	private function create_pos_order(): \WC_Order {
 		$order = OrderHelper::create_order();
@@ -258,5 +318,20 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function payment_path( \WC_Order $order, string $id ): string {
 		return '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $id;
+	}
+}
+
+class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler {
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		$descriptor = parent::describe( $gateway );
+		$descriptor['capture']['mode'] = 'route_test';
+		return $descriptor;
+	}
+	public function intent( array $row, array $context ) {
+		$row['handoff'] = array( 'reader' => $context['reader'] );
+		return $row;
+	}
+	public function capture( array $row, array $context ) {
+		return array_merge( array( 'status' => 'captured' ), $context );
 	}
 }
