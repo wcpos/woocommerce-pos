@@ -1452,6 +1452,17 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		foreach ( $response->get_data() as $template ) {
 			$this->assertArrayNotHasKey( 'screen', $template );
 		}
+
+		$current_request = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
+		$current_request->set_param( 'type', 'receipt' );
+
+		$current_response = $this->server->dispatch( $current_request );
+
+		$this->assertSame( 200, $current_response->get_status() );
+		$this->assertNotEmpty( $current_response->get_data() );
+		foreach ( $current_response->get_data() as $template ) {
+			$this->assertArrayNotHasKey( 'screen', $template );
+		}
 	}
 
 	/**

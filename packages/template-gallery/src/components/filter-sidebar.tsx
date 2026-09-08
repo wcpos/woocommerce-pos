@@ -37,7 +37,8 @@ interface RadioGroupProps {
 
 function formatLabel(slug: string): string {
 	if (slug === 'all') return t('filter.all');
-	return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	const fallback = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	return t(`category.${slug}`, { defaultValue: fallback });
 }
 
 function RadioGroup({ hidden, label, name, value, options, onChange }: RadioGroupProps) {

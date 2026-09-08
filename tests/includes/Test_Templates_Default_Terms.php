@@ -129,6 +129,37 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
 	}
 
+	public function test_version_upgrade_migrates_only_legacy_pocket_and_marquee_categories(): void {
+		$posts = array();
+		foreach ( array( 'display-pocket', 'display-marquee', 'display-ledger' ) as $gallery_key ) {
+			$posts[ $gallery_key ] = self::factory()->post->create(
+				array(
+					'post_type'   => 'wcpos_template',
+					'post_status' => 'publish',
+				)
+			);
+			update_post_meta( $posts[ $gallery_key ], '_template_gallery_key', $gallery_key );
+			wp_set_object_terms( $posts[ $gallery_key ], 'display', 'wcpos_template_category' );
+		}
+
+		$customized = self::factory()->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $customized, '_template_gallery_key', 'display-pocket' );
+		wp_set_object_terms( $customized, 'promotion', 'wcpos_template_category' );
+		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
+
+		new Templates();
+
+		$this->assertSame( array( 'standard' ), wp_get_post_terms( $posts['display-pocket'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'standard' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'display' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'promotion' ), wp_get_post_terms( $customized, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+	}
+
 	private function delete_default_term( string $slug, string $taxonomy ): void {
 		$term = term_exists( $slug, $taxonomy );
 		$this->assertIsArray( $term, "Arrangement expects the default term '{$slug}' to exist." );

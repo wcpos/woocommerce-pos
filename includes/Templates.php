@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 2;
+	public const DEFAULT_TERMS_VERSION = 3;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -113,8 +113,39 @@ class Templates {
 		}
 		$this->register_default_template_types();
 		$this->register_default_template_categories();
+		$this->migrate_legacy_display_gallery_categories();
 		if ( $this->default_terms_present() ) {
 			update_option( self::DEFAULT_TERMS_OPTION, self::DEFAULT_TERMS_VERSION, true );
+		}
+	}
+
+	/** Move uncustomized Pocket and Marquee installs to their current category. */
+	private function migrate_legacy_display_gallery_categories(): void {
+		$post_ids = get_posts(
+			array(
+				'post_type'      => 'wcpos_template',
+				'post_status'    => 'any',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'meta_query'     => array(
+					array(
+						'key'     => '_template_gallery_key',
+						'value'   => array( 'display-pocket', 'display-marquee' ),
+						'compare' => 'IN',
+					),
+				),
+				'tax_query'      => array(
+					array(
+						'taxonomy' => 'wcpos_template_category',
+						'field'    => 'slug',
+						'terms'    => 'display',
+					),
+				),
+			)
+		);
+
+		foreach ( $post_ids as $post_id ) {
+			wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category' );
 		}
 	}
 

@@ -63,6 +63,22 @@ describe('FilterSidebar direction filter', () => {
 		expect(markup).toContain('value="rtl"');
 	});
 
+	it('looks up category labels through translations', () => {
+		const markup = renderToStaticMarkup(
+			<FilterSidebar
+				filters={{ ...DEFAULT_FILTERS }}
+				onChange={() => {}}
+				availableCategories={['standard', 'seasonal', 'promotion']}
+				collapsed={false}
+				onToggleCollapse={() => {}}
+			/>
+		);
+
+		expect(markup).toContain('category.standard');
+		expect(markup).toContain('category.seasonal');
+		expect(markup).toContain('category.promotion');
+	});
+
 	it('emits direction=rtl when the RTL radio is clicked', () => {
 		const onChange = vi.fn();
 		const container = mount({ ...DEFAULT_FILTERS }, onChange);

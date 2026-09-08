@@ -112,6 +112,14 @@ describe('display tabs and table', () => {
 		).toBe(true);
 	});
 
+	it('looks up installed template categories through translations', () => {
+		const markup = renderToStaticMarkup(
+			<TemplatesTable {...props} templates={[{ ...template, category: 'seasonal' }]} />
+		);
+
+		expect(markup).toContain('category.seasonal');
+	});
+
 	it.each([true, false])(
 		'only links to display previews when Pro is active (%s)',
 		(isProActive) => {
