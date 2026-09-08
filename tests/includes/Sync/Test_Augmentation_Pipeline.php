@@ -288,8 +288,12 @@ class Test_Augmentation_Pipeline extends WP_UnitTestCase {
 		);
 
 		Revision::unregister_proxy_stamps();
-		Proxy_Uuid_Stamper::unregister_proxy_stampers();
 		Integrity_Digest::unregister_proxy_digest_stampers();
+		$this->assertNotFalse(
+			has_filter( Augmentation_Pipeline::PROXY_FILTER ),
+			'reset() must not silently unwire the uuid stamper either'
+		);
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
 
 		$this->assertFalse(
 			has_filter( Augmentation_Pipeline::PROXY_FILTER ),
