@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
@@ -22,6 +23,38 @@ use WP_UnitTestCase;
  * Class Test_Templates
  */
 class Test_Templates extends WP_UnitTestCase {
+	/**
+	 * Display fields extend the unchanged default receipt tree.
+	 */
+	public function test_field_tree_display_adds_ledger_and_payment_groups(): void {
+		$receipt = Receipt_Data_Schema::get_field_tree();
+		$display = Receipt_Data_Schema::get_field_tree( 'display' );
+
+		$this->assertSame( $receipt, Receipt_Data_Schema::get_field_tree( 'receipt' ) );
+		$this->assertArrayNotHasKey( 'ledger', $receipt );
+		$this->assertArrayNotHasKey( 'payment', $receipt );
+		$this->assertSame( 'Ledger', $display['ledger']['label'] );
+		$this->assertSame( 'Payment', $display['payment']['label'] );
+		$this->assertSame( array( 'state', 'message' ), array_keys( $display['payment']['fields'] ) );
+		$ledger = $display['ledger']['fields'];
+		$this->assertSame( 'string', $ledger['status']['type'] );
+		foreach ( array( 'total', 'paid', 'due', 'change' ) as $field ) {
+			$this->assertSame( 'string', $ledger[ $field ]['type'] );
+			$this->assertSame( 'number', $ledger[ $field . '_raw' ]['type'] );
+		}
+		$this->assertArrayNotHasKey( 'payments', $ledger );
+		$this->assertTrue( $display['ledger.payments']['is_array'] );
+		$this->assertSame( 'string', $display['ledger.payments']['fields']['method']['type'] );
+		$payments = $display['ledger.payments']['fields'];
+		$this->assertSame( array( 'id', 'method', 'kind', 'status', 'amount', 'amount_raw', 'tendered', 'tendered_raw', 'change', 'change_raw' ), array_keys( $payments ) );
+		foreach ( $payments as $key => $field ) {
+			$this->assertSame( substr( $key, -4 ) === '_raw' ? 'number' : 'string', $field['type'] );
+			$this->assertNotEmpty( $field['label'] );
+		}
+		unset( $display['ledger'], $display['ledger.payments'], $display['payment'] );
+		$this->assertSame( $receipt, $display );
+	}
+
 	/**
 	 * Test data directory for mock templates.
 	 *

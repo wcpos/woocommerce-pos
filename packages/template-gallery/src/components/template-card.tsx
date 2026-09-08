@@ -10,6 +10,7 @@ import type { AnyTemplate, GalleryTemplate } from '../types';
 
 interface BaseProps {
 	onPreview: () => void;
+	hidePreview?: boolean;
 }
 
 interface GalleryCardProps extends BaseProps {
@@ -33,7 +34,7 @@ interface CustomCardProps extends BaseProps {
 type TemplateCardProps = GalleryCardProps | CustomCardProps;
 
 export function TemplateCard(props: TemplateCardProps) {
-	const { template, isGallery, onPreview } = props;
+	const { template, isGallery, onPreview, hidePreview = false } = props;
 
 	const name = template.title;
 	const description = template.description;
@@ -43,23 +44,37 @@ export function TemplateCard(props: TemplateCardProps) {
 	return (
 		<Card active={isActive}>
 			{/* Thumbnail area — flush to card edges */}
-			<button
-				type="button"
-				onClick={onPreview}
-				aria-label={t('common.preview')}
-				className="wcpos:group wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0 wcpos:overflow-hidden"
-			>
-				{previewSrc ? (
-					<img
-						src={previewSrc}
-						alt=""
-						loading="lazy"
-						className="wcpos:w-full wcpos:h-full wcpos:object-cover wcpos:object-top wcpos:group-hover:object-bottom wcpos:transition-[object-position] wcpos:duration-[3000ms] wcpos:ease-linear wcpos:motion-reduce:transition-none wcpos:motion-reduce:duration-0"
-					/>
-				) : (
-					<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
-				)}
-			</button>
+			{hidePreview ? (
+				// Display cards: the thumbnail is the preview, nothing to click.
+				<div className="wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:overflow-hidden">
+					{previewSrc && (
+						<img
+							src={previewSrc}
+							alt=""
+							loading="lazy"
+							className="wcpos:w-full wcpos:h-full wcpos:object-cover wcpos:object-top"
+						/>
+					)}
+				</div>
+			) : (
+				<button
+					type="button"
+					onClick={onPreview}
+					aria-label={t('common.preview')}
+					className="wcpos:group wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0 wcpos:overflow-hidden"
+				>
+					{previewSrc ? (
+						<img
+							src={previewSrc}
+							alt=""
+							loading="lazy"
+							className="wcpos:w-full wcpos:h-full wcpos:object-cover wcpos:object-top wcpos:group-hover:object-bottom wcpos:transition-[object-position] wcpos:duration-[3000ms] wcpos:ease-linear wcpos:motion-reduce:transition-none wcpos:motion-reduce:duration-0"
+						/>
+					) : (
+						<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
+					)}
+				</button>
+			)}
 
 			<Card.Body className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:p-3">
 				<div className="wcpos:flex wcpos:items-start wcpos:justify-between wcpos:gap-2">
@@ -99,13 +114,15 @@ export function TemplateCard(props: TemplateCardProps) {
 					isGallery && 'wcpos:justify-between'
 				)}
 			>
-				<button
-					type="button"
-					onClick={onPreview}
-					className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-				>
-					{t('common.preview')}
-				</button>
+				{!hidePreview && (
+					<button
+						type="button"
+						onClick={onPreview}
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+					>
+						{t('common.preview')}
+					</button>
+				)}
 				{isGallery ? (
 					<Button
 						variant="primary"

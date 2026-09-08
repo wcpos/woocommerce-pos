@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useSearch } from '@tanstack/react-router';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { GalleryGridSkeleton } from '../components/skeleton';
@@ -33,18 +33,23 @@ function ErrorFallback({
 }
 
 export function GalleryLayout() {
+	const { type } = useSearch({ from: '/' });
 	return (
 		<div className="wcpos:max-w-7xl">
-			<TypeTabs activeType="receipt" />
+			<TypeTabs activeType={type} />
 
 			<div className="wcpos:mb-6">
 				<h1 className="wcpos:text-2xl wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
-					{t('layout.title')}
+					{t(type === 'display' ? 'layout.display_title' : 'layout.title')}
 				</h1>
 				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2">
-					{t('layout.description')}{' '}
+					{t(type === 'display' ? 'layout.display_description' : 'layout.description')}{' '}
 					<a
-						href="https://docs.wcpos.com/templates/receipt-templates"
+						href={
+							type === 'display'
+								? 'https://docs.wcpos.com/customer-display'
+								: 'https://docs.wcpos.com/templates/receipt-templates'
+						}
 						target="_blank"
 						rel="noopener noreferrer"
 						className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"

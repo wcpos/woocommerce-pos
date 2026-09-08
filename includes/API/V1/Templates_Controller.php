@@ -125,6 +125,12 @@ class Templates_Controller extends WP_REST_Controller {
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
+					'active'          => array(
+						'description' => __( 'Enabled template ID to activate: a post ID or a virtual template key.', 'woocommerce-pos' ),
+						'type'              => array( 'integer', 'string' ),
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
 					'update'          => array(
 						'description' => __( 'Array of templates to update.', 'woocommerce-pos' ),
 						'type'        => 'array',
@@ -355,6 +361,15 @@ class Templates_Controller extends WP_REST_Controller {
 			? ( ! empty( $enabled ) ? $enabled[0]['id'] : null )
 			: TemplatesManager::get_active_template_id( $type );
 
+		// A display shows exactly one template and the gallery presents it as a "Live" radio, so the
+		// first-enabled fallback is pinned the first time the admin list resolves it; otherwise a
+		// reorder or Pro activation would move Live without anyone choosing it. Receipts keep the
+		// fallback (the cashier picks among enabled receipts, there is no single live one).
+		if ( ! $store_id && 'display' === $type && $is_manager && null !== $active_template_id
+			&& null === get_option( 'wcpos_active_template_' . $type, null ) ) {
+			TemplatesManager::set_active_template_id( $active_template_id, $type );
+		}
+
 		// Step 2: Build full template list.
 		// When store_id is set, use the resolved enabled list directly.
 		// Managers without filters get the full admin list (including inactive).
@@ -478,8 +493,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$enabled = TemplatesManager::get_enabled_templates( $template['type'] ?? 'receipt' );
-		$active_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$active_id             = TemplatesManager::get_active_template_id( $template['type'] ?? 'receipt' );
 		$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
@@ -569,8 +583,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$enabled = TemplatesManager::get_enabled_templates( $template['type'] ?? 'receipt' );
-		$active_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$active_id             = TemplatesManager::get_active_template_id( $template['type'] ?? 'receipt' );
 		$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
@@ -585,6 +598,22 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	public function batch_items( $request ) {
 		$type = $request->get_param( 'type' ) ?? 'receipt';
+
+		// `active` is validated against the enabled set this batch will leave behind — current
+		// enabled ids, plus virtual templates it enables and database templates it publishes,
+		// minus the ones it disables or drafts — before anything is written, so an invalid id
+		// rejects the whole request without a partial write.
+		$has_active = $request->has_param( 'active' );
+		if ( $has_active ) {
+			$active = $request->get_param( 'active' );
+			if ( ! \in_array( (string) $active, $this->projected_enabled_ids( $request, $type ), true ) ) {
+				return new WP_Error(
+					'wcpos_template_invalid_active',
+					__( 'The active template must be enabled for this template type.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
 
 		// Handle order.
 		$order = $request->get_param( 'order' );
@@ -652,6 +681,10 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		if ( $has_active ) {
+			TemplatesManager::set_active_template_id( is_numeric( $active ) ? (int) $active : $active, $type );
+		}
+
 		// Build response.
 		$response_data = array();
 		if ( ! empty( $results ) ) {
@@ -664,10 +697,14 @@ class Templates_Controller extends WP_REST_Controller {
 			$response_data['disabled_virtual'] = TemplatesManager::get_disabled_virtual_templates( $type );
 		}
 
+		$has_non_update_ops = $has_active || \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
+		if ( $has_non_update_ops ) {
+			$response_data['active'] = TemplatesManager::get_active_template_id( $type );
+		}
+
 		$response = rest_ensure_response( $response_data );
 
 		// Return 400 only when the request contained nothing but update items and every one failed.
-		$has_non_update_ops = \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
 		if ( ! empty( $results ) && ! $has_non_update_ops ) {
 			$has_success = false;
 			foreach ( $results as $result_item ) {
@@ -683,6 +720,49 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		return $response;
+	}
+
+	/**
+	 * Enabled template ids of a type as they will stand once a batch request is applied.
+	 *
+	 * @param WP_REST_Request $request Batch request.
+	 * @param string          $type    Template type.
+	 *
+	 * @return string[] Template ids as strings.
+	 */
+	private function projected_enabled_ids( $request, string $type ): array {
+		$ids = array_map( 'strval', array_column( TemplatesManager::get_enabled_templates( $type ), 'id' ) );
+
+		$removed = array_map( 'strval', (array) $request->get_param( 'disable_virtual' ) );
+		foreach ( (array) $request->get_param( 'enable_virtual' ) as $vid ) {
+			if ( \is_string( $vid ) && TemplatesManager::get_virtual_template( $vid, $type ) ) {
+				$ids[] = $vid;
+			}
+		}
+
+		// Database updates: the last status for an id wins, and only templates of this type
+		// count — a display batch must not be able to make a receipt id "enabled" for display.
+		$statuses = array();
+		foreach ( (array) $request->get_param( 'update' ) as $item ) {
+			if ( \is_array( $item ) && ! empty( $item['id'] ) && is_numeric( $item['id'] ) && isset( $item['status'] ) ) {
+				$statuses[ (string) (int) $item['id'] ] = $item['status'];
+			}
+		}
+		foreach ( $statuses as $id => $status ) {
+			$id       = (string) $id; // PHP stores numeric-string keys as ints; the ids list is strings.
+			$template = TemplatesManager::get_template( (int) $id );
+			if ( ! $template || ( $template['type'] ?? 'receipt' ) !== $type ) {
+				$removed[] = $id;
+				continue;
+			}
+			if ( 'publish' === $status ) {
+				$ids[] = $id;
+			} elseif ( 'draft' === $status ) {
+				$removed[] = $id;
+			}
+		}
+
+		return array_values( array_unique( array_diff( $ids, $removed ) ) );
 	}
 
 	/**

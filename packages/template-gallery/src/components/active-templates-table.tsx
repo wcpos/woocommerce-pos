@@ -10,6 +10,7 @@ import {
 	extractClosestEdge,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/reorder-with-edge';
+import { addQueryArgs } from '@wordpress/url';
 import classnames from 'classnames';
 
 import { Toggle } from '@wcpos/ui';
@@ -63,6 +64,9 @@ function isTemplateEnabled(template: AnyTemplate): boolean {
 }
 
 interface DraggableRowProps {
+	type: 'receipt' | 'display';
+	onSetActive: (id: number | string) => void;
+	settingActiveId?: number | string | null;
 	template: AnyTemplate;
 	index: number;
 	onPreview: (id: number | string) => void;
@@ -73,6 +77,9 @@ interface DraggableRowProps {
 }
 
 function DraggableRow({
+	type,
+	onSetActive,
+	settingActiveId,
 	template,
 	index,
 	onPreview,
@@ -88,6 +95,7 @@ function DraggableRow({
 
 	const adminUrl =
 		(window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
+	const { isProActive, displayPreviewUrl } = (window as any).wcpos?.templateGallery ?? {};
 	const isVirtual = template.is_virtual;
 	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
 	const canDelete = !isVirtual;
@@ -156,15 +164,30 @@ function DraggableRow({
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatCategory(template.category)}
 			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
-				{getPrintMethod(template)}
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
-				{getPaperSize(template)}
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
-				{getAvailability(template)}
-			</td>
+			{type === 'display' ? (
+				<td className="wcpos:px-3 wcpos:py-2 wcpos:text-center">
+					<input
+						type="radio"
+						name="wcpos-live-display"
+						checked={template.is_active}
+						disabled={!enabled || settingActiveId != null}
+						aria-label={t('table.set_live')}
+						onChange={() => onSetActive(template.id)}
+					/>
+				</td>
+			) : (
+				<>
+					<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
+						{getPrintMethod(template)}
+					</td>
+					<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
+						{getPaperSize(template)}
+					</td>
+					<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
+						{getAvailability(template)}
+					</td>
+				</>
+			)}
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-center">
 				<Toggle
 					checked={enabled}
@@ -176,13 +199,26 @@ function DraggableRow({
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
 				<div className="wcpos:flex wcpos:gap-3 wcpos:items-center">
-					<button
-						type="button"
-						onClick={() => onPreview(template.id)}
-						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-					>
-						{t('common.preview')}
-					</button>
+					{type === 'display' ? (
+						isProActive && (
+							<a
+								href={addQueryArgs(displayPreviewUrl, { preview: 'cart', template: template.id })}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"
+							>
+								{t('common.preview')}
+							</a>
+						)
+					) : (
+						<button
+							type="button"
+							onClick={() => onPreview(template.id)}
+							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+						>
+							{t('common.preview')}
+						</button>
+					)}
 					{editUrl && (
 						<a
 							href={editUrl}
@@ -212,6 +248,9 @@ function DraggableRow({
 }
 
 interface TemplatesTableProps {
+	type?: 'receipt' | 'display';
+	onSetActive: (id: number | string) => void;
+	settingActiveId?: number | string | null;
 	templates: AnyTemplate[];
 	onPreview: (id: number | string) => void;
 	onToggle: (id: number | string) => void;
@@ -222,6 +261,9 @@ interface TemplatesTableProps {
 }
 
 export function TemplatesTable({
+	type = 'receipt',
+	onSetActive,
+	settingActiveId,
 	templates,
 	onPreview,
 	onToggle,
@@ -300,17 +342,19 @@ export function TemplatesTable({
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							{t('common.category')}
 						</th>
-						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							{t('table.header_print')}
-						</th>
-						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							{t('table.header_paper')}
-						</th>
-						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							{t('table.header_mode')}
-						</th>
+						{(type === 'display'
+							? ['table.header_live']
+							: ['table.header_print', 'table.header_paper', 'table.header_mode']
+						).map((key) => (
+							<th
+								key={key}
+								className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider"
+							>
+								{t(key)}
+							</th>
+						))}
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-center wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							{t('table.header_active')}
+							{t(type === 'display' ? 'table.header_enabled' : 'table.header_active')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							{t('table.header_actions')}
@@ -320,6 +364,9 @@ export function TemplatesTable({
 				<tbody>
 					{templates.map((template, index) => (
 						<DraggableRow
+							type={type}
+							onSetActive={onSetActive}
+							settingActiveId={settingActiveId}
 							key={template.id}
 							template={template}
 							index={index}

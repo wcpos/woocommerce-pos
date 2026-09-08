@@ -33,6 +33,12 @@ class Template_Router {
 	public const CHECKOUT_PATH = 'wcpos-checkout';
 
 	/**
+	 * Customer display host page path. Served by WCPOS Pro; Free links to it
+	 * from the templates gallery and editor.
+	 */
+	public const DISPLAY_PATH = 'wcpos-display';
+
+	/**
 	 * POS frontend slug.
 	 *
 	 * @var string

@@ -18,7 +18,7 @@ export function useGalleryTemplates(type = 'receipt') {
 	});
 }
 
-export function useInstallGalleryTemplate() {
+export function useInstallGalleryTemplate(type = 'receipt') {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
 
@@ -32,7 +32,12 @@ export function useInstallGalleryTemplate() {
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
 			queryClient.invalidateQueries({ queryKey: ['gallery-templates'] });
-			addSnackbar({ message: t('snackbar.gallery_installed'), status: 'success' });
+			addSnackbar({
+				message: t(
+					type === 'display' ? 'snackbar.display_installed' : 'snackbar.gallery_installed'
+				),
+				status: 'success',
+			});
 		},
 		onError: () => {
 			addSnackbar({ message: t('snackbar.install_failed'), status: 'error' });

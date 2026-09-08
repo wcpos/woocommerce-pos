@@ -199,6 +199,140 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Gallery type hints apply only to supported auto-drafts on post-new.php.
+	 */
+	public function test_new_template_type_hint_assigns_only_supported_terms(): void {
+		global $pagenow;
+		$previous_page = $pagenow;
+		$previous_get  = $_GET;
+		$handler       = new Single_Template();
+		try {
+			$pagenow = 'post-new.php';
+			foreach ( array( 'display', 'receipt', 'unknown', 'report' ) as $type ) {
+				$_GET = array(
+					'post_type' => 'wcpos_template',
+					'wcpos_type' => $type,
+				);
+				$post_id = $this->factory->post->create(
+					array(
+						'post_type' => 'wcpos_template',
+						'post_status' => 'auto-draft',
+					)
+				);
+				$expected = in_array( $type, TemplatesManager::SUPPORTED_TYPES, true ) ? array( $type ) : array();
+				$this->assertSame( $expected, wp_get_post_terms( $post_id, 'wcpos_template_type', array( 'fields' => 'slugs' ) ) );
+			}
+		} finally {
+			$pagenow = $previous_page;
+			$_GET    = $previous_get;
+			remove_action( 'wp_insert_post', array( $handler, 'assign_new_template_type' ), 10 );
+		}
+	}
+
+	/**
+	 * Display first saves force HTML; receipt first saves keep the posted engine.
+	 */
+	public function test_first_save_display_forces_logicless_and_receipt_keeps_thermal(): void {
+		foreach ( array( 'display', 'receipt' ) as $type ) {
+			$post_id = $this->factory->post->create(
+				array(
+					'post_type' => 'wcpos_template',
+					'post_status' => 'draft',
+				)
+			);
+			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
+
+			$this->simulate_admin_save( $post_id, $this->sample_html, 'thermal' );
+			$this->cleanup_post_globals();
+
+			$this->assertSame( 'display' === $type ? 'logicless' : 'thermal', get_post_meta( $post_id, '_template_engine', true ) );
+			$this->assertSame( 'display' === $type ? 'html' : 'escpos', get_post_meta( $post_id, '_template_output_type', true ) );
+			$this->assertSame( 'display' === $type ? 'html' : 'xml', get_post_meta( $post_id, '_template_language', true ) );
+		}
+	}
+
+	/**
+	 * Display settings lock the engine and hide paper size even on an auto-draft.
+	 */
+	public function test_display_metabox_locks_logicless_engine(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_status' => 'auto-draft',
+			)
+		);
+		wp_set_object_terms( $post_id, 'display', 'wcpos_template_type' );
+		$handler = new Single_Template();
+
+		ob_start();
+		$handler->render_settings_metabox( get_post( $post_id ) );
+		$html = ob_get_clean();
+
+		$this->assertMatchesRegularExpression( '/<select[^>]+id="wcpos-template-engine"[^>]+disabled="disabled"/', $html );
+		$this->assertMatchesRegularExpression( '/<option value="logicless"\s+selected=/', $html );
+		$this->assertStringContainsString( '<input type="hidden" name="wcpos_template_engine" value="logicless"', $html );
+		$this->assertStringContainsString( 'id="wcpos-paper-size-field" style="display:none;"', $html );
+	}
+
+	/**
+	 * Only empty display editors receive the active display's starter content.
+	 */
+	public function test_editor_config_display_starter_is_scoped_to_empty_displays(): void {
+		$active_id = $this->create_template( 'logicless', $this->sample_html );
+		wp_set_object_terms( $active_id, 'display', 'wcpos_template_type' );
+		TemplatesManager::set_active_template_id( $active_id, 'display' );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_status' => 'auto-draft',
+				'post_content' => '',
+			)
+		);
+		wp_set_object_terms( $post_id, 'display', 'wcpos_template_type' );
+		$handler = new Single_Template();
+		$method  = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+		$method->setAccessible( true );
+
+		foreach ( array( 'display', 'receipt', 'display' ) as $index => $type ) {
+			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
+			if ( 2 === $index ) {
+				wp_update_post(
+					array(
+						'ID' => $post_id,
+						'post_content' => 'Existing content',
+					)
+				);
+			}
+			$script = $method->invoke( $handler, get_post( $post_id ) );
+			$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+
+			$this->assertSame( $type, $config['type'] );
+			$this->assertArrayHasKey( 'isProActive', $config );
+			$this->assertSame( wcpos_is_pro_active(), $config['isProActive'] );
+			$this->assertArrayHasKey( 'displayPreviewUrl', $config );
+			$this->assertSame( set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ), $config['displayPreviewUrl'] );
+			$this->assertSame( 0 === $index ? $this->sample_html : null, $config['displayStarter'] );
+			$this->assertSame( 'display' === $type, isset( $config['fieldSchema']['ledger'] ) );
+		}
+		wp_update_post(
+			array(
+				'ID' => $active_id,
+				'post_status' => 'draft',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID' => $post_id,
+				'post_content' => '',
+			)
+		);
+		$script = $method->invoke( $handler, get_post( $post_id ) );
+		$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+		$this->assertNull( $config['displayStarter'] );
+		delete_option( 'wcpos_active_template_display' );
+	}
+
+	/**
 	 * Test admin save assigns a readable default title when a new template is saved blank.
 	 */
 	public function test_admin_save_generates_title_for_blank_thermal_template(): void {

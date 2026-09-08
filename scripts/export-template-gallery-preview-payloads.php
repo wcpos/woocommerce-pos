@@ -19,7 +19,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 $loader   = new Receipt_Preview_Fixture_Loader();
 $payloads = array();
 
-foreach ( Templates::get_gallery_templates( 'receipt' ) as $template ) {
+$templates = array_merge( Templates::get_gallery_templates( 'receipt' ), Templates::get_gallery_templates( 'display' ) );
+foreach ( $templates as $template ) {
 	$key = isset( $template['key'] ) && is_string( $template['key'] ) ? $template['key'] : '';
 	if ( '' === $key ) {
 		continue;
@@ -29,9 +30,34 @@ foreach ( Templates::get_gallery_templates( 'receipt' ) as $template ) {
 	$receipt_data = $loader->build( $profile, wcpos_get_store() );
 	$currency     = isset( $receipt_data['order']['currency'] ) ? (string) $receipt_data['order']['currency'] : 'USD';
 	$receipt_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
+	$template_type = $template['type'];
+	if ( 'display' === $template_type ) {
+		// Same plain-text money the receipt data carries: wc_price() markup stripped and entities decoded.
+		$display_money = static function ( $amount ) use ( $currency ): string {
+			return html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $currency ) ) ), ENT_QUOTES, 'UTF-8' );
+		};
+		$total                  = $receipt_data['totals']['total'];
+		$receipt_data['ledger']  = array(
+			'status'     => 'unpaid',
+			'total'      => $display_money( $total ),
+			'total_raw'  => $total,
+			'paid'       => $display_money( 0 ),
+			'paid_raw'   => 0,
+			'due'        => $display_money( $total ),
+			'due_raw'    => $total,
+			'change'     => $display_money( 0 ),
+			'change_raw' => 0,
+			'payments'   => array(),
+		);
+		$receipt_data['payment'] = array(
+			'state'   => 'started',
+			'message' => '',
+		);
+	}
 
 	$payloads[] = array(
 		'key'              => $key,
+		'type'             => $template_type,
 		'title'            => $template['title'] ?? $key,
 		'engine'           => $template['engine'] ?? 'logicless',
 		'paper_width'      => $template['paper_width'] ?? null,

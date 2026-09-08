@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 
 import { CodeEditor } from './components/code-editor';
+import { DisplayPreview } from './components/display-preview';
 import { FieldPicker } from './components/field-picker';
 import { LivePreview } from './components/live-preview';
 import { PhpPreview } from './components/php-preview';
@@ -181,14 +182,50 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? get_
 </html>`,
 };
 
-function getDefaultDoc(postContent: string, engine: EditorConfig['engine']): string {
-	return postContent || STARTER_SHELLS[engine];
+export const DISPLAY_STARTER_SHELL = `<div style="font-family: sans-serif; padding: 24px; color: #1f2937;">
+  <section data-wcpos-state="idle">
+    <h1>{{store.name}}</h1>
+    <p>{{i18n.welcome}}</p>
+  </section>
+  <section data-wcpos-state="cart.empty">
+    <h1>{{store.name}}</h1>
+    <p>{{i18n.items_appear_here}}</p>
+  </section>
+  <section data-wcpos-state="cart">
+    <h1>{{i18n.your_items}}</h1>
+    {{#lines}}<p>{{name}} × {{qty}} {{line_total_display}}</p>{{/lines}}
+    <p style="font-size: 24px; font-weight: bold;">{{totals.total_incl_display}}</p>
+  </section>
+  <section data-wcpos-state="payment.started">
+    <h1>{{i18n.present_card}}</h1>
+    <p>{{ledger.due}}</p>
+  </section>
+  <section data-wcpos-state="payment.approved">
+    <h1>{{i18n.approved}}</h1>
+  </section>
+  <section data-wcpos-state="payment.declined">
+    <h1>{{i18n.declined}}</h1>
+    <p>{{i18n.try_another_card}}</p>
+  </section>
+  <section data-wcpos-state="payment.complete">
+    <h1>{{i18n.paid_in_full}}</h1>
+    <p>{{ledger.total}}</p>
+  </section>
+</div>`;
+
+export function getDefaultDoc(config: EditorConfig): string {
+	if (config.type === 'display') {
+		return config.postContent || config.displayStarter || DISPLAY_STARTER_SHELL;
+	}
+	return config.postContent || STARTER_SHELLS[config.engine];
 }
 
 function TemplateInfoBar({
+	type,
 	engine,
 	paperWidth,
 }: {
+	type: EditorConfig['type'];
 	engine: EditorConfig['engine'];
 	paperWidth: string | null;
 }) {
@@ -196,7 +233,11 @@ function TemplateInfoBar({
 	let text: string;
 	let bgClass: string;
 
-	if (engine === 'thermal') {
+	if (type === 'display') {
+		icon = '\uD83D\uDDA5\uFE0F';
+		text = t('editor.info_display');
+		bgClass = 'wcpos:bg-gray-50 wcpos:border-gray-200 wcpos:text-gray-700';
+	} else if (engine === 'thermal') {
 		icon = '\uD83D\uDDA8\uFE0F';
 		const size = paperWidth === '58mm' ? '58mm' : '80mm';
 		text = t('editor.info_thermal', { size });
@@ -234,7 +275,7 @@ export function getEditorLayoutStyle(): CSSProperties {
 }
 
 export function App({ config }: AppProps) {
-	const defaultDoc = getDefaultDoc(config.postContent, config.engine);
+	const defaultDoc = getDefaultDoc(config);
 
 	const [engine, setEngine] = useState(config.engine);
 	const [paperWidth, setPaperWidth] = useState(config.paperWidth ?? '80mm');
@@ -251,7 +292,11 @@ export function App({ config }: AppProps) {
 
 	const insertRef = useRef<((text: string) => void) | null>(null);
 	const syncContent = useContentSync();
-	const preview = usePreviewData(config.sampleData, config.templateId, config.hasPosOrders);
+	const preview = usePreviewData(
+		config.sampleData,
+		config.templateId,
+		config.type !== 'display' && config.hasPosOrders
+	);
 
 	// Sync initial content to the hidden WP textarea on mount.
 	// Use a stable ref so this effect has no deps other than the stable syncContent.
@@ -263,6 +308,7 @@ export function App({ config }: AppProps) {
 	// Listen for engine changes dispatched by the PHP metabox select
 	// (see Single_Template.php — dispatches wcposEngineChange on <select> change).
 	useEffect(() => {
+		if (config.type === 'display') return;
 		const handler = (e: Event) => {
 			const detail = (e as CustomEvent<{ engine: string }>).detail;
 			// Guard: ignore unknown engine values that are not in STARTER_SHELLS.
@@ -295,11 +341,12 @@ export function App({ config }: AppProps) {
 
 		window.addEventListener('wcposEngineChange', handler);
 		return () => window.removeEventListener('wcposEngineChange', handler);
-	}, [syncContent]);
+	}, [syncContent, config.type]);
 
 	// Listen for paper width changes dispatched by the PHP metabox select
 	// (see Single_Template.php — dispatches wcposPaperWidthChange on <select> change).
 	useEffect(() => {
+		if (config.type === 'display') return;
 		const handler = (e: Event) => {
 			// Guard: paper width only applies to the thermal engine.
 			if (engineRef.current !== 'thermal') return;
@@ -335,7 +382,7 @@ export function App({ config }: AppProps) {
 
 		window.addEventListener('wcposPaperWidthChange', handler);
 		return () => window.removeEventListener('wcposPaperWidthChange', handler);
-	}, [syncContent]);
+	}, [syncContent, config.type]);
 
 	const handleChange = useCallback(
 		(newContent: string) => {
@@ -364,7 +411,7 @@ export function App({ config }: AppProps) {
 
 	return (
 		<>
-			<TemplateInfoBar engine={engine} paperWidth={paperWidth} />
+			<TemplateInfoBar type={config.type} engine={engine} paperWidth={paperWidth} />
 			<div
 				className="wcpos:flex wcpos:gap-3 wcpos:mt-4 wcpos:items-stretch"
 				style={getEditorLayoutStyle()}
@@ -386,7 +433,14 @@ export function App({ config }: AppProps) {
 			</div>
 
 			<div className="wcpos:mt-4">
-				{engine === 'thermal' ? (
+				{config.type === 'display' ? (
+					<DisplayPreview
+						content={content}
+						templateId={config.templateId}
+						previewUrl={config.displayPreviewUrl}
+						isProActive={config.isProActive}
+					/>
+				) : engine === 'thermal' ? (
 					<ThermalPreview
 						content={content}
 						sampleData={preview.data}
