@@ -32,14 +32,25 @@ jobs:
           fi
           svn --version --quiet
 
-      - name: Refuse to delete the stable tag or an empty name
+      - name: Refuse to delete the stable tag or anything but one plain tag name
         run: |
           set -euo pipefail
-          case "$TAG" in ''|*/*|*..*|trunk|assets) echo "::error::refusing tag name '$TAG'"; exit 1;; esac
+          # A positive allowlist: one directory name, no dots-only segments, no
+          # separators. `.` or `..` would canonicalise to /tags itself and delete
+          # every tag; `*..*` alone let a bare `.` through.
+          # bash's =~ matches the whole value, so an embedded newline fails too
+          # (grep would have checked line by line).
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$ ]]; then echo "::error::refusing tag name '$TAG'"; exit 1; fi
+          case "$TAG" in trunk|assets) echo "::error::refusing tag name '$TAG'"; exit 1;; esac
           STABLE=$(curl -fsS "https://plugins.svn.wordpress.org/$SLUG/trunk/readme.txt" | sed -n 's/^Stable tag:[[:space:]]*//p' | tr -d '\r' | head -1)
           echo "Stable tag on trunk: $STABLE"
           if [ "$TAG" = "$STABLE" ]; then echo "::error::'$TAG' is the current Stable tag; not deleting"; exit 1; fi
-          if ! curl -fsS -o /dev/null "https://plugins.svn.wordpress.org/$SLUG/tags/$TAG/"; then echo "::error::tags/$TAG does not exist"; exit 1; fi
+          # Ask SVN itself, not the HTTP mirror: no path squashing, no caching.
+          # A missing path is W160013/E200009; anything else is not an answer.
+          if ! out=$(svn ls "https://plugins.svn.wordpress.org/$SLUG/tags/$TAG" --non-interactive 2>&1); then
+            case "$out" in *W160013*|*E200009*) echo "::error::tags/$TAG does not exist";; *) echo "::error::could not check tags/$TAG: $out";; esac
+            exit 1
+          fi
 
       - name: Delete the tag
         env:
@@ -51,6 +62,9 @@ jobs:
             -m "Remove stray tag $TAG" \
             --username "$SVN_USERNAME" --password "$SVN_PASSWORD" \
             --non-interactive --no-auth-cache
-          sleep 5
-          if curl -fsS -o /dev/null "https://plugins.svn.wordpress.org/$SLUG/tags/$TAG/"; then echo "::error::tags/$TAG still exists"; exit 1; fi
-          echo "tags/$TAG deleted"
+          # svn delete on a URL is a commit: it either succeeded above or exited
+          # non-zero. Confirm through SVN, where a missing path is a specific
+          # answer (W160013/E200009) rather than whatever the HTTP mirror serves
+          # right now; any other failure is "could not confirm", not "deleted".
+          if out=$(svn ls "https://plugins.svn.wordpress.org/$SLUG/tags/$TAG" --non-interactive 2>&1); then echo "::error::tags/$TAG still exists"; exit 1; fi
+          case "$out" in *W160013*|*E200009*) echo "tags/$TAG deleted";; *) echo "::error::could not confirm deletion of tags/$TAG: $out"; exit 1;; esac
