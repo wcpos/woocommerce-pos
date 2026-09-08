@@ -283,6 +283,41 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'event' ), $new['seen_events'] );
 	}
 
+	public function test_resumed_intent_and_void_results_take_capture_verification(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		// A resumed intent that comes back captured for the wrong money is refused.
+		$input = $this->payment( 'pos_card', '20.00' );
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$error = $ledger->intent( $order, $input['id'], $input, array( 'resume' => array( 'status' => 'captured', 'amount' => '999.00' ) ) );
+		$this->assertSame( 'wcpos_amount_mismatch', $error->get_error_code() );
+		$this->assertSame( 'failed', $ledger->find( $order, $input['id'] )['status'] );
+		// A void whose cancel raced a capture is verified the same way.
+		$input = $this->payment( 'pos_card', '20.00' );
+		$ledger->intent( $order, $input['id'], $input, array() );
+		Integrity_Handler::$void_result = array( 'status' => 'captured', 'amount' => '999.00' );
+		$error = $ledger->void( $order, $input['id'], 'changed mind' );
+		$this->assertSame( 'wcpos_amount_mismatch', $error->get_error_code() );
+		// A cancel that is only requested leaves the row pending with the stamp.
+		$input = $this->payment( 'pos_card', '20.00' );
+		$ledger->intent( $order, $input['id'], $input, array() );
+		Integrity_Handler::$void_result = array( 'void_requested_at' => '2026-09-08T10:00:00Z' );
+		$row = $ledger->void( $order, $input['id'], 'changed mind' );
+		$this->assertSame( 'pending', $row['status'] );
+		$this->assertSame( '2026-09-08T10:00:00Z', $row['void_requested_at'] );
+	}
+
+	public function test_intent_drains_a_settlement_parked_before_the_row_existed(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$this->assertTrue( wcpos_settle_payment( $input['id'], array( 'status' => 'captured', 'amount' => '20.00', 'event_id' => 'early' ) ) );
+		$result = Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$this->assertSame( 'captured', $result['payment']['status'] );
+		$this->assertSame( array( 'early' ), $result['payment']['seen_events'] );
+		$this->assertArrayNotHasKey( $input['id'], get_option( 'wcpos_pending_settlements', array() ) );
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+	}
+
 	public function test_row_schema_carries_events_and_void_requested_at_for_handlers(): void {
 		$order = $this->create_pos_order();
 		$row = $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending', 'events' => 'nope', 'void_requested_at' => 'invalid' ) );
@@ -778,6 +813,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 class Integrity_Handler extends Manual_Handler {
 	public static $calls = 0;
 	public static $tips = 'none';
+	public static $void_result = null;
 	public function describe( \WC_Payment_Gateway $gateway ): array {
 		$descriptor = parent::describe( $gateway );
 		$descriptor['capture']['mode'] = 'integrity';
@@ -787,8 +823,13 @@ class Integrity_Handler extends Manual_Handler {
 	public function intent( array $row, array $context ) {
 		++self::$calls;
 		if ( isset( $context['error'] ) ) { return $context['error']; }
+		if ( isset( $context['resume'] ) ) { $row = array_merge( $row, $context['resume'] ); }
 		$row['handoff'] = array( 'token' => 'secret' );
 		return $row;
+	}
+	public function void( array $row, string $reason ) {
+		if ( null !== self::$void_result ) { $result = array_merge( $row, self::$void_result ); self::$void_result = null; return $result; }
+		return parent::void( $row, $reason );
 	}
 	public function capture( array $row, array $context ) {
 		return $context['error'] ?? array_merge( array( 'status' => 'captured' ), $context );

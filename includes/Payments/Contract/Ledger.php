@@ -333,12 +333,12 @@ class Ledger {
 				return $resumed;
 			}
 			$handoff = $resumed['handoff'] ?? array();
-			$applied = $this->apply_transition( $replayed, $resumed );
+			// A resumed leg can come back captured (the reader finished while the till was
+			// away), so it takes the same verification as capture(), never a bare transition.
+			$applied = $this->apply_result( $order, $replayed['id'], $resumed );
 			if ( is_wp_error( $applied ) ) {
 				return $applied;
 			}
-			$applied = $this->normalize_row( $order, $applied );
-			$this->replace_and_save( $order, $rows, $applied );
 			return array(
 				'payment' => $applied,
 				'handoff' => $handoff,
@@ -376,8 +376,14 @@ class Ledger {
 		$row = $this->normalize_row( $order, $row );
 		$rows[] = $row;
 		$this->save( $order, $rows );
+		// A provider can webhook before Free has written the row; that confirmation is
+		// parked and drained here, as record() does — the sweep never drains.
+		$settled = Settlement::instance()->apply_parked( $order, $row['id'] );
+		if ( is_wp_error( $settled ) ) {
+			return $settled;
+		}
 		return array(
-			'payment' => $row,
+			'payment' => $this->find( $order, $row['id'] ),
 			'handoff' => $handoff,
 		);
 	}
@@ -708,18 +714,23 @@ class Ledger {
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
-		$applied = $this->apply_transition( $row, $new );
+		// A server-mode cancel is a request: the handler may answer with the row still
+		// pending (void_requested_at set), or captured if the reader finished first — so
+		// the result takes the same verification and persistence as every other write.
+		$applied = $this->apply_result( $order, $row['id'], $new );
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
-		$order->add_order_note(
-			'' === $reason
-				/* translators: %s: payment row uuid. */
-				? sprintf( __( 'WCPOS payment %s voided.', 'woocommerce-pos' ), $row['id'] )
-				/* translators: 1: payment row uuid, 2: void reason given by the cashier. */
-				: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
-		);
-		$this->replace_and_save( $order, $rows, $applied );
+		if ( 'voided' === $applied['status'] ) {
+			$order->add_order_note(
+				'' === $reason
+					/* translators: %s: payment row uuid. */
+					? sprintf( __( 'WCPOS payment %s voided.', 'woocommerce-pos' ), $row['id'] )
+					/* translators: 1: payment row uuid, 2: void reason given by the cashier. */
+					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
+			);
+			$order->save();
+		}
 		return $applied;
 	}
 
