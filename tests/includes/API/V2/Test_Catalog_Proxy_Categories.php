@@ -21,10 +21,10 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 	 * Enable v2 routes before REST initialization and authenticate a cashier.
 	 */
 	public function setUp(): void {
+		parent::setUp();
 		// The identity stamper alone is not the lane a client reads through — see
 		// {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()}.
 		$this->install_sync_read_lane();
-		parent::setUp();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 	}
 
