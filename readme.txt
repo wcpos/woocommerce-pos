@@ -128,6 +128,32 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.10.9 - 2026/09/07 =
+
+- **A sale with a coupon no longer stays "POS - Open" after it is paid.**
+- **Stores using WooCommerce Tax (TaxJar) get the right tax rates on POS orders**, and open POS orders no longer have stale tax lines put back on save.
+- **Sync skips records that haven't changed**, and a bloated product search index repairs itself.
+- **Bluetooth printers on iOS and Android reconnect after a failed print** instead of staying stuck on a dead link.
+- **Fewer freezes during the first sync on iOS and Android.**
+
+= 1.10.8 - 2026/09/06 =
+
+- **Printer setup has been redesigned.** The till scans for printers, you pick one and print a test page. Network, USB and Bluetooth printers are covered on desktop.
+- **Printers that need a different character set can be given a receipt language** in the printer's options.
+- **Copy setup report gathers printer diagnostics** for a support request.
+- **Bluetooth printers on desktop reconnect reliably between receipts.**
+- **A removed variation no longer comes back into the order on the next save.**
+- **Orders no longer fail to sync with an "invalid item id" error** after a line was removed on the server.
+- **Orders no longer show a false "store calculated different totals" warning** on stores that keep tax at more decimal places than they display.
+- **The receipt preview shows after a payment through the order-pay page**, and says why when it can't.
+- **Product and order search matches every word you type**, and exact SKU or barcode matches come first.
+- **The till works alongside the JWT Authentication for WP REST API plugin.**
+- **Saving an order no longer fails with a "Record has changed since last read" database error** on MariaDB stores.
+- **Less overhead on online-store page loads**, and fewer database writes per sale on the till.
+- **Receipt templates can tell percentage and fixed discounts apart**, and a new `woocommerce_pos_receipt_data` filter lets developers adjust receipt data.
+- **The POS footer and the Store health table fit narrow windows.**
+- Updated translations.
+
 = 1.10.7 - 2026/09/02 =
 
 - **Paid orders no longer stay open on the till after a gateway payment.** Mostly affected stores that don't use HPOS.
