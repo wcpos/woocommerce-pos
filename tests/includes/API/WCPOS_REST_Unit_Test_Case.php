@@ -1,4 +1,10 @@
 <?php
+/**
+ * Base REST test case for WCPOS: registers the plugin's routes, signs the
+ * request in as an administrator, and wires the sync read lane on demand.
+ *
+ * @package WCPOS\WooCommercePOS\Tests
+ */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
@@ -18,18 +24,25 @@ use WP_User;
  */
 abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	/**
+	 * The controller under test, when a subclass sets one.
+	 *
 	 * @var Controller
 	 */
 	protected $endpoint;
 
 	/**
+	 * The administrator every request runs as.
+	 *
 	 * @var WP_User
 	 */
 	protected $user;
 
+	/**
+	 * Register the routes before the REST server boots, then sign in.
+	 */
 	public function setUp(): void {
 		$this->drop_stale_rest_api_init_callbacks();
-		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) ); // add hook before parent::setUp()
+		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) ); // Add the hook before parent::setUp().
 
 		parent::setUp();
 		$this->user = $this->factory->user->create(
@@ -40,10 +53,16 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		wp_set_current_user( $this->user );
 	}
 
+	/**
+	 * Tear down.
+	 */
 	public function tearDown(): void {
 		parent::tearDown();
 	}
 
+	/**
+	 * Register the plugin's REST controllers.
+	 */
 	public function rest_api_init(): void {
 		new API();
 	}
@@ -90,6 +109,13 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * A GET request carrying the header every WCPOS route requires.
+	 *
+	 * @param string $path Route path.
+	 *
+	 * @return WP_REST_Request
+	 */
 	public function wp_rest_get_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
@@ -99,6 +125,13 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		return $request;
 	}
 
+	/**
+	 * A POST request carrying the header every WCPOS route requires.
+	 *
+	 * @param string $path Route path.
+	 *
+	 * @return WP_REST_Request
+	 */
 	public function wp_rest_post_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
@@ -112,7 +145,9 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 * NOTE: all PATCH requests are sent as POST requests with a _method=PATCH query param.
 	 * This is because PATCH requests are not supported by some servers.
 	 *
-	 * @param mixed $path
+	 * @param string $path Route path.
+	 *
+	 * @return WP_REST_Request
 	 */
 	public function wp_rest_patch_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
@@ -124,9 +159,16 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		return $request;
 	}
 
-	public function get_reflected_property_value( $propertyName ) {
+	/**
+	 * Read a non-public property off the controller under test.
+	 *
+	 * @param string $property_name Property name.
+	 *
+	 * @return mixed
+	 */
+	public function get_reflected_property_value( $property_name ) {
 		$reflection = new ReflectionClass( $this->endpoint );
-		$property   = $reflection->getProperty( $propertyName );
+		$property   = $reflection->getProperty( $property_name );
 		$property->setAccessible( true );
 
 		return $property->getValue( $this->endpoint );
@@ -209,6 +251,9 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		Meta_Normalizer::unregister_hooks();
 	}
 
+	/**
+	 * Turn on decimal quantities for the test.
+	 */
 	protected function setup_decimal_quantity_tests(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
