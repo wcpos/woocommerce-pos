@@ -161,10 +161,27 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_capture_carves_tax_out_of_a_taxable_tip_and_the_order_stays_paid(): void {
-		$old_calc_taxes = get_option( 'woocommerce_calc_taxes' );
+		$old_calc_taxes    = get_option( 'woocommerce_calc_taxes' );
+		$old_tax_based_on  = get_option( 'woocommerce_tax_based_on' );
+		$old_base_location = get_option( 'woocommerce_default_country' );
 		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_tax_based_on', 'base' );
+		update_option( 'woocommerce_default_country', 'US:CA' );
+		$base_tax_rate_id = WC_Tax::_insert_tax_rate(
+			array(
+				'tax_rate_country'  => 'US',
+				'tax_rate_state'    => 'CA',
+				'tax_rate'          => '20.0000',
+				'tax_rate_name'     => 'Base tax',
+				'tax_rate_priority' => 1,
+				'tax_rate_order'    => 0,
+				'tax_rate_class'    => '',
+			)
+		);
 		$tax_rate_id = WC_Tax::_insert_tax_rate(
 			array(
+				'tax_rate_country'  => 'AU',
+				'tax_rate_state'    => 'VIC',
 				'tax_rate'          => '10.0000',
 				'tax_rate_name'     => 'Tip tax',
 				'tax_rate_priority' => 1,
@@ -175,6 +192,9 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 		try {
 			$order = $this->create_pos_order();
+			$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'billing' );
+			$order->set_billing_country( 'AU' );
+			$order->set_billing_state( 'VIC' );
 			$product = ProductHelper::create_simple_product();
 			$product->set_price( '92.95' );
 			$product->set_tax_status( 'none' );
@@ -203,7 +223,10 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
 		} finally {
 			WC_Tax::_delete_tax_rate( $tax_rate_id );
+			WC_Tax::_delete_tax_rate( $base_tax_rate_id );
 			update_option( 'woocommerce_calc_taxes', $old_calc_taxes );
+			update_option( 'woocommerce_tax_based_on', $old_tax_based_on );
+			update_option( 'woocommerce_default_country', $old_base_location );
 		}
 	}
 

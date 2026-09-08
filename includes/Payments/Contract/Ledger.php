@@ -463,7 +463,9 @@ class Ledger {
 				// of the order is not recalculated.
 				if ( apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
 					$fee->set_tax_status( 'taxable' );
-					$taxes = array_map( 'wc_round_tax_total', \WC_Tax::calc_inclusive_tax( (float) Money::format( $difference ), \WC_Tax::get_rates( $fee->get_tax_class() ) ) );
+					$tax_location = $order->get_taxable_location();
+					$tax_location = array( $tax_location['country'], $tax_location['state'], $tax_location['postcode'], $tax_location['city'] );
+					$taxes        = array_map( 'wc_round_tax_total', \WC_Tax::calc_inclusive_tax( (float) Money::format( $difference ), \WC_Tax::get_rates_from_location( $fee->get_tax_class(), $tax_location ) ) );
 					$fee->set_taxes( array( 'total' => $taxes ) );
 					$fee->set_total( Money::format( $difference - Money::minor( array_sum( $taxes ) ) ) );
 				}
