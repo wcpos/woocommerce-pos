@@ -498,6 +498,57 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '2 Rodeo Dr', $this->taxjar->calculate_tax_calls[0]['to_street'] );
 	}
 
+	/**
+	 * A filter can move the taxed location to the customer address that is NOT
+	 * the declared basis; if that address shares the store's location, the
+	 * customer's street must still win over the store's.
+	 */
+	public function test_street_prefers_the_customer_address_over_a_matching_store_when_a_filter_moves_the_location(): void {
+		// Arrange.
+		update_option( 'woocommerce_store_address', '100 Main St' );
+		update_option( 'woocommerce_store_postcode', '94103' );
+		update_option( 'woocommerce_store_city', 'San Francisco' );
+		$billing = array(
+			'country'   => 'US',
+			'state'     => 'CA',
+			'postcode'  => '94103',
+			'city'      => 'San Francisco',
+			'address_1' => '1 Rodeo Dr',
+		);
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $this->product( 10 ) ) ),
+			'billing'    => $billing,
+			'shipping'   => array(
+				'country'   => 'US',
+				'state'     => 'CA',
+				'postcode'  => '90210',
+				'city'      => 'Beverly Hills',
+				'address_1' => '2 Rodeo Dr',
+			),
+			'meta_data'  => array(
+				array(
+					'key'   => '_woocommerce_pos_tax_based_on',
+					'value' => 'shipping',
+				),
+			),
+		);
+		$to_billing = static function ( $args ) use ( $billing ) {
+			return array_intersect_key( $billing, array_flip( array( 'country', 'state', 'postcode', 'city' ) ) ) + (array) $args;
+		};
+		add_filter( 'woocommerce_order_get_tax_location', $to_billing );
+
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload );
+		remove_filter( 'woocommerce_order_get_tax_location', $to_billing );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assertSame( '94103', $this->taxjar->calculate_tax_calls[0]['to_zip'] );
+		$this->assertSame( '1 Rodeo Dr', $this->taxjar->calculate_tax_calls[0]['to_street'] );
+	}
+
 	/** Non-POS writes leave rate priming to the plugin. */
 	public function test_non_pos_request_does_not_prime(): void {
 		// Arrange.
