@@ -17,6 +17,7 @@ use Exception;
 use WC_Customer;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Customer_Account_Guard;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -158,21 +159,20 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Check if a given request has access to update a customer.
 	 *
-	 * WC checks edit_users. The POS fallback also checks edit_users so the
-	 * Access settings page toggle controls this behaviour.
+	 * WCPOS never widens WooCommerce's customer update check, which refuses
+	 * email/password changes on non-customer roles. The guard additionally
+	 * keeps non-admins off staff accounts.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return WP_Error|bool
 	 */
 	public function update_item_permissions_check( $request ) {
-		$permission = parent::update_item_permissions_check( $request );
-
-		if ( is_wp_error( $permission ) && current_user_can( 'edit_users' ) ) {
-			return true;
+		if ( ! Customer_Account_Guard::can_modify( get_current_user_id(), (int) $request['id'] ) ) {
+			return Customer_Account_Guard::denial();
 		}
 
-		return $permission;
+		return parent::update_item_permissions_check( $request );
 	}
 
 	/**

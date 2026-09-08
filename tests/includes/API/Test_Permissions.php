@@ -397,6 +397,119 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 403, $response->get_status() );
 	}
 
+	/**
+	 * A cashier must not take over an administrator's credentials.
+	 */
+	public function test_cashier_with_edit_users_cannot_change_administrator_email_or_password_on_v1(): void {
+		$target_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$original  = get_user_by( 'id', $target_id );
+		wp_set_current_user( $this->cashier );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $target_id );
+		$request->set_body_params(
+			array(
+				'email'    => 'blocked-' . wp_generate_uuid4() . '@example.com',
+				'password' => 'Blocked-password-123!',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_cannot_edit_staff_account', $response->get_data()['code'] );
+		clean_user_cache( $target_id );
+		$actual = get_user_by( 'id', $target_id );
+		$this->assertSame( $original->user_email, $actual->user_email );
+		$this->assertSame( $original->user_pass, $actual->user_pass );
+		wp_delete_user( $target_id );
+	}
+
+	/**
+	 * Staff profile fields are protected, not only credentials.
+	 */
+	public function test_cashier_with_edit_users_cannot_edit_shop_manager_profile_on_v1(): void {
+		$original = get_user_by( 'id', $this->shop_manager )->first_name;
+		wp_set_current_user( $this->cashier );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $this->shop_manager );
+		$request->set_body_params( array( 'first_name' => 'Blocked' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		clean_user_cache( $this->shop_manager );
+		$this->assertSame( $original, get_user_by( 'id', $this->shop_manager )->first_name );
+	}
+
+	/**
+	 * Another cashier is staff because the role holds edit_users.
+	 */
+	public function test_cashier_cannot_edit_another_cashier_on_v1(): void {
+		$target_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $this->cashier );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $target_id );
+		$request->set_body_params( array( 'first_name' => 'Blocked' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		wp_delete_user( $target_id );
+	}
+
+	/**
+	 * Administrators retain WooCommerce's staff profile editing permission.
+	 */
+	public function test_administrator_can_update_shop_manager_on_v1(): void {
+		wp_set_current_user( $this->user );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $this->shop_manager );
+		$request->set_body_params( array( 'first_name' => 'Updated' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * Granting delete_users must not permit deleting an administrator.
+	 */
+	public function test_cashier_with_delete_users_cannot_delete_administrator_on_v1(): void {
+		$target_id  = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$cashier_id = $this->create_cashier_without( array() );
+		get_user_by( 'id', $cashier_id )->add_cap( 'delete_users' );
+		wp_set_current_user( $cashier_id );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/customers/' . $target_id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_param( 'force', true );
+		$request->set_param( 'reassign', 0 );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_rest_cannot_delete', $response->get_data()['code'] );
+		$this->assertInstanceOf( \WP_User::class, get_user_by( 'id', $target_id ) );
+		wp_delete_user( $target_id );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * Sites can narrow protection without bypassing WooCommerce's checks.
+	 */
+	public function test_protected_capabilities_filter_narrows_the_guard_on_v1(): void {
+		$filter = static function () {
+			return array( 'manage_options' );
+		};
+		add_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
+		wp_set_current_user( $this->cashier );
+
+		try {
+			$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $this->shop_manager );
+			$request->set_body_params( array( 'first_name' => 'Updated' ) );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+		} finally {
+			remove_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
+		}
+	}
+
 	// ──────────────────────────────────────────────
 	// Taxes - role-based tests
 	// ──────────────────────────────────────────────

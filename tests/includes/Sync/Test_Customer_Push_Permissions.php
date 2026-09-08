@@ -110,6 +110,50 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A cashier cannot push a staff first_name change.
+	 */
+	public function test_cashier_cannot_push_update_to_administrator(): void {
+		$target_id  = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$original   = get_user_by( 'id', $target_id )->first_name;
+		$record_id  = Pos_Uuid::ensure_uuid( new \WC_Customer( $target_id ) );
+		$cashier_id = $this->create_cashier_without( array() );
+		wp_set_current_user( $cashier_id );
+		$revision = $this->customer_revision( $target_id );
+
+		$response = $this->server->dispatch(
+			$this->customer_push_request( 'update', $record_id, $revision, array( 'first_name' => 'Blocked' ) )
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+		clean_user_cache( $target_id );
+		$this->assertSame( $original, get_user_by( 'id', $target_id )->first_name );
+		wp_delete_user( $target_id );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * A cashier cannot push a staff email change.
+	 */
+	public function test_cashier_cannot_push_email_change_to_administrator(): void {
+		$target_id  = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$original   = get_user_by( 'id', $target_id )->user_email;
+		$record_id  = Pos_Uuid::ensure_uuid( new \WC_Customer( $target_id ) );
+		$cashier_id = $this->create_cashier_without( array() );
+		wp_set_current_user( $cashier_id );
+		$revision = $this->customer_revision( $target_id );
+
+		$response = $this->server->dispatch(
+			$this->customer_push_request( 'update', $record_id, $revision, array( 'email' => 'blocked-' . wp_generate_uuid4() . '@example.com' ) )
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+		clean_user_cache( $target_id );
+		$this->assertSame( $original, get_user_by( 'id', $target_id )->user_email );
+		wp_delete_user( $target_id );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
 	 * Create a cashier-like user without selected granular capabilities.
 	 */
 	private function create_cashier_without( array $excluded ): int {

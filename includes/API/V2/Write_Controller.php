@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\API\V2\Writers\Collection_Writer_Resolver;
+use WCPOS\WooCommercePOS\Services\Customer_Account_Guard;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -760,7 +761,7 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Authorize proxied catalog mutations for POS users.
+	 * Authorize proxied mutations for POS users while protecting staff accounts.
 	 *
 	 * This filter is attached only while a sync push is forwarded to wc/v3, so
 	 * direct WooCommerce requests keep their normal permission checks.
@@ -773,6 +774,12 @@ class Write_Controller extends WP_REST_Controller {
 	 * @return bool
 	 */
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
+		// Customer edits/deletes: never let a non-admin POS user touch a staff account.
+		if ( $permission && 'user' === $post_type && \in_array( $context, array( 'edit', 'delete' ), true )
+			&& ! Customer_Account_Guard::can_modify( get_current_user_id(), (int) $object_id ) ) {
+			return false;
+		}
+
 		// Catalog and coupon WRITES require the user's real WooCommerce
 		// capabilities — no POS-tier widening. The cashier role is deliberately
 		// read-only on catalog (Activator), and a blanket grant here handed
