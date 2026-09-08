@@ -25,8 +25,8 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 * {@see WCPOS_REST_Unit_Test_Case::install_sync_read_lane()}.
 	 */
 	public function setUp(): void {
-		$this->install_sync_read_lane();
 		parent::setUp();
+		$this->install_sync_read_lane();
 	}
 
 	/**
