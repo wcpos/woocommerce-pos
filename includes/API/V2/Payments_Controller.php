@@ -12,11 +12,12 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
 
-/** Records, reads, and voids manual payment rows. */
+/** Exposes the locked order payment route family. */
 class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * REST namespace.
@@ -32,12 +33,15 @@ class Payments_Controller extends WC_REST_Controller {
 	 */
 	protected $rest_base = 'orders';
 
-	/** Register the manual payment route family. */
+	/** Register the order payment route family. */
 	public function register_routes(): void {
 		$payment_path = '/' . $this->rest_base . '/(?P<id>[\d]+)/payments';
 		$routes       = array(
 			$payment_path => array( WP_REST_Server::CREATABLE, 'create_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/status' => array( WP_REST_Server::READABLE, 'get_status' ),
+			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/intent' => array( WP_REST_Server::CREATABLE, 'intent_item' ),
+			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/capture' => array( WP_REST_Server::CREATABLE, 'capture_item' ),
+			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/refund' => array( WP_REST_Server::CREATABLE, 'refund_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/void' => array( WP_REST_Server::CREATABLE, 'void_item' ),
 		);
 		foreach ( $routes as $route => $definition ) {
@@ -47,7 +51,10 @@ class Payments_Controller extends WC_REST_Controller {
 				array(
 					array(
 						'methods'             => $definition[0],
-						'callback'            => array( $this, $definition[1] ),
+						'callback'            => function ( $request ) use ( $definition ) {
+							// Each body fetches its order only after acquiring the lock, including GET status.
+							return Order_Lock::instance()->with_lock( (int) $request['id'], fn() => $this->{$definition[1]}( $request ) );
+						},
 						'permission_callback' => array( $this, 'payments_permissions_check' ),
 					),
 				)
@@ -141,6 +148,79 @@ class Payments_Controller extends WC_REST_Controller {
 			return $row;
 		}
 		return $this->payment_response( $row, $order );
+	}
+
+	/**
+	 * Create a payment intent and return its transient handoff.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function intent_item( $request ) {
+		return $this->provider_item( $request, 'intent' );
+	}
+
+	/**
+	 * Capture a payment through its handler.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function capture_item( $request ) {
+		return $this->provider_item( $request, 'capture' );
+	}
+
+	/**
+	 * Allocate a refund through its handler.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function refund_item( $request ) {
+		return $this->provider_item( $request, 'refund' );
+	}
+
+	/**
+	 * Dispatch the new provider operations, inside the route's order lock.
+	 *
+	 * @param WP_REST_Request $request   Request object.
+	 * @param string          $operation Ledger operation.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	private function provider_item( WP_REST_Request $request, string $operation ) {
+		$order = $this->get_order( (int) $request['id'] );
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+		$params = $request->get_json_params();
+		$params = is_array( $params ) ? $params : $request->get_body_params();
+		$context = $params['context'] ?? array();
+		// Money is a decimal string on the wire, but a client that sends the JSON number
+		// is not wrong enough to refuse — the ledger validates the value either way.
+		if ( ! is_array( $context ) || ( 'intent' === $operation && ! is_array( $params['payment'] ?? null ) ) || ( 'refund' === $operation && ( ! is_scalar( $params['amount'] ?? null ) || ! is_numeric( $params['amount'] ) || ! isset( $params['refund_id'] ) || ! is_numeric( $params['refund_id'] ) || (int) $params['refund_id'] != $params['refund_id'] ) ) ) {
+			return new WP_Error( 'rest_invalid_param', __( 'Invalid payment operation parameters.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		$context['cashier_id'] = get_current_user_id();
+		$id = strtolower( (string) $request['uuid'] );
+		$ledger = Ledger::instance();
+		if ( 'intent' === $operation ) {
+			$result = $ledger->intent( $order, $id, $params['payment'], $context );
+		} elseif ( 'capture' === $operation ) {
+			$result = $ledger->capture( $order, $id, $context );
+		} else {
+			$result = $ledger->refund( $order, $id, (int) $params['refund_id'], (string) $params['amount'] );
+		}
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( 'refund' === $operation ) {
+			return rest_ensure_response( array( 'payment' => Ledger::to_wire( $result ) ) );
+		}
+		$response = $this->payment_response( 'intent' === $operation ? $result['payment'] : $result, $order );
+		if ( 'intent' === $operation ) {
+			$response->set_data( array_merge( $response->get_data(), array( 'handoff' => empty( $result['handoff'] ) ? new \stdClass() : $result['handoff'] ) ) );
+		}
+		return $response;
 	}
 
 	/**

@@ -18,6 +18,15 @@ use WP_Error;
 class Ledger {
 	public const META_KEY = '_wcpos_payments';
 	public const INDEX_META_KEY = '_wcpos_payment_method';
+	public const PAYMENT_ID_META_KEY = '_wcpos_payment_id';
+	/**
+	 * One meta row per pending or authorized leg. What the sweep selects orders by: an
+	 * authorization that covers the balance completes the order through payment_complete(),
+	 * so a status filter would lose exactly the leg that most needs reconciling.
+	 */
+	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
+	/** Bound provider-event dedupe history without growing each row indefinitely. */
+	public const SEEN_EVENTS_MAX = 20;
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
@@ -172,48 +181,32 @@ class Ledger {
 	 * @return array|\WP_Error
 	 */
 	public function record( WC_Order $order, array $input, array $context = array() ) {
-		if ( ! Pos_Uuid::is_uuid( $input['id'] ?? null ) ) {
-			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
+		$validated = $this->validate_input( $order, $input );
+		if ( is_wp_error( $validated ) ) {
+			return $validated;
 		}
-		if ( ! isset( $input['amount'] ) || ! is_scalar( $input['amount'] ) ) {
-			return $this->invalid( __( 'Payment amount must be positive.', 'woocommerce-pos' ) );
-		}
-		$amount = wc_format_decimal( $input['amount'], wc_get_price_decimals() );
-		if ( '' === $amount || ! is_numeric( $amount ) || Money::minor( $amount ) <= 0 ) {
-			return $this->invalid( __( 'Payment amount must be positive.', 'woocommerce-pos' ) );
-		}
-		$amount   = Money::normalize( $amount );
-		$currency = isset( $input['currency'] ) ? (string) $input['currency'] : $order->get_currency();
-		if ( $currency !== $order->get_currency() ) {
-			return $this->invalid( __( 'Payment currency must match the order.', 'woocommerce-pos' ) );
-		}
+		list( $amount, $currency ) = $validated;
 		$rows   = $this->read( $order );
 		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
 		if ( $stored ) {
-			$requested = array(
-				'method_id' => (string) ( $input['method_id'] ?? '' ),
-				'amount'    => $amount,
-				'currency'  => $currency,
-			);
-			foreach ( $requested as $field => $value ) {
-				if ( ( $stored[ $field ] ?? null ) !== $value ) {
-					return new WP_Error(
-						'wcpos_payment_conflict',
-						__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
-						array(
-							'status' => 409,
-							'payment' => self::to_wire( $stored ),
-						)
-					);
-				}
+			$replayed = $this->replay( $order, $stored, $input, $amount, $currency );
+			if ( is_wp_error( $replayed ) ) {
+				return $replayed;
 			}
-			$refusal = $this->refusal_error( $stored, $order );
-			return $refusal ? $refusal : $stored;
+			$settled = Settlement::instance()->apply_parked( $order, $stored['id'] );
+			if ( is_wp_error( $settled ) ) {
+				return $settled;
+			}
+			$this->derive( $order, $this->read( $order ) );
+			if ( $order->get_changes() ) {
+				$order->save();
+			}
+			return $this->find( $order, $stored['id'] );
 		}
 
-		$descriptor = Descriptor_Builder::instance()->get( (string) ( $input['method_id'] ?? '' ) );
-		if ( ! $descriptor ) {
-			return new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		$descriptor = $this->validate_method( (string) ( $input['method_id'] ?? '' ) );
+		if ( is_wp_error( $descriptor ) ) {
+			return $descriptor;
 		}
 		if ( ! $this->is_recordable( $descriptor ) ) {
 			return new WP_Error(
@@ -255,6 +248,8 @@ class Ledger {
 				'failure_reason'  => null,
 				'refunded_amount' => Money::format( 0 ),
 				'refunds'         => array(),
+				'seen_events'     => array(),
+				'expires_at'      => null,
 				'cashier_id'      => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
 				'store_id'        => isset( $context['store_id'] ) ? (int) $context['store_id'] : null,
 			)
@@ -268,32 +263,383 @@ class Ledger {
 			$row                    = $this->normalize_row( $order, $row );
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
+			Settlement::instance()->apply_parked( $order, $row['id'] );
 			return $this->refusal_error( $row, $order );
 		}
 
 		$row    = $this->normalize_row( $order, $row );
 		$rows[] = $row;
+		// Index the arrival before consuming its webhook, but do not mark money paid
+		// until a parked provider confirmation has passed capture verification.
+		$this->save( $order, $rows, false );
+		$settled = Settlement::instance()->apply_parked( $order, $row['id'] );
+		if ( is_wp_error( $settled ) ) {
+			return $settled;
+		}
+		$this->derive( $order, $this->read( $order ) );
+		$order->save();
+		return $this->find( $order, $row['id'] );
+	}
+
+	/**
+	 * Start a provider payment without recording money before the handler succeeds.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param string   $id      Payment ID.
+	 * @param array    $input   Payment input.
+	 * @param array    $context Provider context.
+	 * @return array|WP_Error
+	 */
+	public function intent( WC_Order $order, string $id, array $input, array $context ) {
+		$input['id'] = $id;
+		$validated = $this->validate_input( $order, $input );
+		if ( is_wp_error( $validated ) ) {
+			return $validated;
+		}
+		list( $amount, $currency ) = $validated;
+		$descriptor = $this->validate_method( (string) ( $input['method_id'] ?? '' ) );
+		if ( is_wp_error( $descriptor ) ) {
+			return $descriptor;
+		}
+		if ( ! $descriptor['pos_enabled'] ) {
+			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is disabled.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+		}
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( $row ) {
+			$replayed = $this->replay( $order, $row, $input, $amount, $currency );
+			if ( is_wp_error( $replayed ) ) {
+				return $replayed;
+			}
+			// A leg still in flight RESUMES at the provider (§4.3): handlers key their
+			// provider call on the row id, so calling intent() again returns the same
+			// provider intent — and with it the handoff the app lost when the first
+			// response never arrived. A settled leg has nothing left to hand off.
+			if ( 'pending' !== ( $replayed['status'] ?? '' ) ) {
+				return array(
+					'payment' => $replayed,
+					'handoff' => array(),
+				);
+			}
+			$handler = Capture_Mode_Registry::instance()->resolve( (string) $replayed['capture_mode'], $replayed['provider'] ?? null );
+			$resumed = $handler ? $handler->intent( $replayed, $context ) : $this->unsupported();
+			if ( is_wp_error( $resumed ) ) {
+				return $resumed;
+			}
+			$handoff = $resumed['handoff'] ?? array();
+			$applied = $this->apply_transition( $replayed, $resumed );
+			if ( is_wp_error( $applied ) ) {
+				return $applied;
+			}
+			$applied = $this->normalize_row( $order, $applied );
+			$this->replace_and_save( $order, $rows, $applied );
+			return array(
+				'payment' => $applied,
+				'handoff' => $handoff,
+			);
+		}
+		$balance = Money::minor( $this->balance( $order, $rows ) );
+		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
+			return new WP_Error( 0 === $balance ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance', 0 === $balance ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ), array( 'status' => 0 === $balance ? 409 : 400 ) );
+		}
+		$row = $this->normalize_row(
+			$order,
+			array(
+				'id' => $id,
+				'method_id' => $descriptor['id'],
+				'provider' => $descriptor['capture']['provider'],
+				'kind' => $descriptor['kind'],
+				'capture_mode' => $descriptor['capture']['mode'],
+				'amount' => $amount,
+				'currency' => $currency,
+				'status' => 'pending',
+				'cashier_id' => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
+				'store_id' => isset( $context['store_id'] ) ? (int) $context['store_id'] : null,
+			)
+		);
+		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] );
+		$new = $handler ? $handler->intent( $row, $context ) : $this->unsupported();
+		if ( is_wp_error( $new ) ) {
+			return $new;
+		}
+		$handoff = $new['handoff'] ?? array();
+		$row = $this->apply_transition( $row, $new );
+		if ( is_wp_error( $row ) ) {
+			return $row;
+		}
+		$row = $this->normalize_row( $order, $row );
+		$rows[] = $row;
 		$this->save( $order, $rows );
+		return array(
+			'payment' => $row,
+			'handoff' => $handoff,
+		);
+	}
+
+	/**
+	 * Capture and verify provider-confirmed money before it counts toward payment.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param string   $id      Payment ID.
+	 * @param array    $context Provider context.
+	 * @return array|WP_Error
+	 */
+	public function capture( WC_Order $order, string $id, array $context ) {
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( ! $row ) {
+			return $this->not_found();
+		}
+		$refusal = $this->refusal_error( $row, $order );
+		if ( $refusal ) {
+			return $refusal;
+		}
+		if ( ! in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+			return $this->invalid_transition();
+		}
+		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
+		$new = $handler ? $handler->capture( $row, $context ) : $this->unsupported();
+		if ( is_wp_error( $new ) ) {
+			return $new;
+		}
+		return $this->apply_result( $order, $id, $new );
+	}
+
+	/**
+	 * Apply provider state under the caller's order lock, sharing capture verification.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param string   $id    Payment ID.
+	 * @param array    $new   Provider result.
+	 * @param bool     $derive Project payment state after applying.
+	 * @return array|WP_Error
+	 */
+	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true ) {
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( ! $row ) {
+			return $this->not_found();
+		}
+		$event = $new['event_id'] ?? null;
+		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
+			return $row;
+		}
+		$refusal = $this->refusal_error( $row, $order );
+		if ( $refusal ) {
+			return $refusal;
+		}
+		$applied = $this->apply_transition( $row, $new );
+		if ( is_wp_error( $applied ) ) {
+			return $applied;
+		}
+		if ( in_array( $applied['status'], self::COUNTING_STATUSES, true ) ) {
+			$confirmed = array_key_exists( 'amount', $new ) ? $new['amount'] : $row['amount'];
+			$valid = is_numeric( $confirmed );
+			$difference = $valid ? Money::minor( $confirmed ) - Money::minor( $row['amount'] ) : 0;
+			$currency = ! array_key_exists( 'currency', $new ) || $new['currency'] === $row['currency'];
+			$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
+			$tip = $difference > 0 && 'on_reader' === ( $descriptor['capabilities']['tips'] ?? 'none' );
+			if ( ! $valid || ! $currency || ( 0 !== $difference && ! $tip ) ) {
+				$applied['status'] = 'failed';
+				$applied['failure_reason'] = 'amount_mismatch';
+				$applied = $this->normalize_row( $order, $applied );
+				$this->replace_and_save( $order, $rows, $applied, $derive );
+				/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
+				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
+				return $this->refusal_error( $applied, $order );
+			}
+			if ( $tip ) {
+				$fee = new \WC_Order_Item_Fee();
+				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
+				$fee->set_tax_status( 'none' );
+				$fee->set_total( Money::format( $difference ) );
+				// The customer has already paid the confirmed amount, so a tax on the tip is
+				// carved OUT of the difference — never added on top of money nobody collected
+				// (that would leave a phantom balance on a fully paid order). Per-rate
+				// rounding here matches how the order sums item taxes, so fee + tax equals
+				// the difference to the cent. update_taxes() folds the item taxes into the
+				// order's tax lines and cart_tax — calculate_totals( false ) reads cart_tax
+				// but only refreshes it through calculate_taxes(), which we skip so the rest
+				// of the order is not recalculated.
+				if ( apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+					$fee->set_tax_status( 'taxable' );
+					$tax_location = $order->get_taxable_location();
+					$tax_location = array( $tax_location['country'], $tax_location['state'], $tax_location['postcode'], $tax_location['city'] );
+					$taxes        = array_map( 'wc_round_tax_total', \WC_Tax::calc_inclusive_tax( (float) Money::format( $difference ), \WC_Tax::get_rates_from_location( $fee->get_tax_class(), $tax_location ) ) );
+					$fee->set_taxes( array( 'total' => $taxes ) );
+					$fee->set_total( Money::format( $difference - Money::minor( array_sum( $taxes ) ) ) );
+				}
+				$order->add_item( $fee );
+				$order->update_taxes();
+				$order->calculate_totals( false );
+				$applied['amount'] = Money::normalize( $confirmed );
+				$applied['tip'] = Money::format( $difference );
+			}
+		}
+		if ( is_string( $event ) ) {
+			$applied['seen_events'][] = $event;
+			$applied['seen_events'] = array_slice( $applied['seen_events'], -self::SEEN_EVENTS_MAX );
+		}
+		if ( $applied !== $row ) {
+			$applied = $this->normalize_row( $order, $applied );
+			$this->replace_and_save( $order, $rows, $applied, $derive );
+		}
+		return $applied;
+	}
+
+	/**
+	 * Allocate an existing WooCommerce refund to a payment row.
+	 *
+	 * @param WC_Order $order     Order object.
+	 * @param string   $id        Payment ID.
+	 * @param int      $refund_id WooCommerce refund ID.
+	 * @param string   $amount    Allocation amount.
+	 * @return array|WP_Error
+	 */
+	public function refund( WC_Order $order, string $id, int $refund_id, string $amount ) {
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( ! $row ) {
+			return $this->not_found();
+		}
+		if ( ! in_array( $row['status'], self::COUNTING_STATUSES, true ) ) {
+			return $this->invalid_transition();
+		}
+		$allocated = 0;
+		foreach ( $row['refunds'] ?? array() as $refund ) {
+			if ( (int) $refund['id'] === $refund_id ) {
+				return $row;
+			}
+			if ( in_array( $refund['status'], array( 'succeeded', 'pending' ), true ) ) {
+				$allocated += Money::minor( $refund['amount'] );
+			}
+		}
+		$refund = wc_get_order( $refund_id );
+		if ( ! $refund || 'shop_order_refund' !== $refund->get_type() || $refund->get_parent_id() !== $order->get_id() ) {
+			return $this->invalid( __( 'Refund must belong to this order.', 'woocommerce-pos' ) );
+		}
+		if ( ! is_numeric( $amount ) || Money::minor( $amount ) <= 0 || $allocated + Money::minor( $amount ) > Money::minor( $row['amount'] ) ) {
+			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
+		$new = $handler ? $handler->refund( $row, $refund_id, Money::normalize( $amount ) ) : $this->unsupported();
+		if ( is_wp_error( $new ) ) {
+			return $new;
+		}
+		$row = $this->apply_transition( $row, $new );
+		if ( is_wp_error( $row ) ) {
+			return $row;
+		}
+		$refunded = 0;
+		foreach ( $row['refunds'] as $refund ) {
+			if ( 'succeeded' === $refund['status'] ) {
+				$refunded += Money::minor( $refund['amount'] );
+			}
+		}
+		$row['refunded_amount'] = Money::format( $refunded );
+		$row = $this->normalize_row( $order, $row );
+		$this->replace_and_save( $order, $rows, $row );
 		return $row;
 	}
 
 	/**
-	 * Rebuild a stored overpay refusal.
+	 * Shared record/intent identity and money validation.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $input Payment input.
+	 * @return array|WP_Error
+	 */
+	private function validate_input( WC_Order $order, array $input ) {
+		if ( ! Pos_Uuid::is_uuid( $input['id'] ?? null ) ) {
+			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
+		}
+		if ( ! isset( $input['amount'] ) || ! is_scalar( $input['amount'] ) ) {
+			return $this->invalid( __( 'Payment amount must be positive.', 'woocommerce-pos' ) );
+		}
+		$amount = wc_format_decimal( $input['amount'], wc_get_price_decimals() );
+		if ( '' === $amount || ! is_numeric( $amount ) || Money::minor( $amount ) <= 0 ) {
+			return $this->invalid( __( 'Payment amount must be positive.', 'woocommerce-pos' ) );
+		}
+		$amount   = Money::normalize( $amount );
+		$currency = isset( $input['currency'] ) ? (string) $input['currency'] : $order->get_currency();
+		if ( $currency !== $order->get_currency() ) {
+			return $this->invalid( __( 'Payment currency must match the order.', 'woocommerce-pos' ) );
+		}
+		return array( $amount, $currency );
+	}
+
+	/**
+	 * Shared record/intent method lookup and missing-method error.
+	 *
+	 * @param string $id Gateway ID.
+	 * @return array|WP_Error
+	 */
+	private function validate_method( string $id ) {
+		$descriptor = Descriptor_Builder::instance()->get( $id );
+		return $descriptor ? $descriptor : new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+	}
+
+	/**
+	 * Replay the stored row, rejecting conflicting immutable fields.
+	 *
+	 * @param WC_Order $order    Order object.
+	 * @param array    $stored   Stored row.
+	 * @param array    $input    Requested row.
+	 * @param string   $amount   Normalized amount.
+	 * @param string   $currency Order currency.
+	 * @return array|WP_Error
+	 */
+	private function replay( WC_Order $order, array $stored, array $input, string $amount, string $currency ) {
+		// routes.md §4.3 makes `amount` immutable "outside a tip adjustment": an on-reader
+		// tip rewrites the row's amount at capture, so a replay of the original call is
+		// compared against the leg the cashier actually sent, not the tipped total.
+		$stored_amount = isset( $stored['amount'] ) ? (string) $stored['amount'] : null;
+		if ( null !== $stored_amount && null !== ( $stored['tip'] ?? null ) ) {
+			$stored_amount = Money::format( Money::minor( $stored_amount ) - Money::minor( $stored['tip'] ) );
+		}
+		$comparable = array(
+			'method_id' => $stored['method_id'] ?? null,
+			'amount'    => $stored_amount,
+			'currency'  => $stored['currency'] ?? null,
+		);
+		$requested = array(
+			'method_id' => (string) ( $input['method_id'] ?? '' ),
+			'amount'    => $amount,
+			'currency'  => $currency,
+		);
+		foreach ( $requested as $field => $value ) {
+			if ( $comparable[ $field ] !== $value ) {
+				return new WP_Error(
+					'wcpos_payment_conflict',
+					__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
+					array(
+						'status' => 409,
+						'payment' => self::to_wire( $stored ),
+					)
+				);
+			}
+		}
+		$refusal = $this->refusal_error( $stored, $order );
+		return $refusal ? $refusal : $stored;
+	}
+
+	/**
+	 * Rebuild a stored payment refusal, including provider amount mismatches.
 	 *
 	 * @param array    $row   Payment row.
 	 * @param WC_Order $order Order object.
 	 */
 	public function refusal_error( array $row, WC_Order $order ): ?WP_Error {
 		$reason = 'failed' === ( $row['status'] ?? '' ) ? ( $row['failure_reason'] ?? '' ) : '';
-		if ( ! in_array( $reason, array( 'order_already_paid', 'amount_exceeds_balance' ), true ) ) {
+		if ( ! in_array( $reason, array( 'order_already_paid', 'amount_exceeds_balance', 'amount_mismatch' ), true ) ) {
 			return null;
 		}
 		$already = 'order_already_paid' === $reason;
 		return new WP_Error(
-			$already ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance',
-			$already ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ),
+			'wcpos_' . $reason,
+			'amount_mismatch' === $reason ? __( 'Provider-confirmed amount or currency does not match the payment.', 'woocommerce-pos' ) : ( $already ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ) ),
 			array(
-				'status' => $already ? 409 : 400,
+				'status' => 'amount_exceeds_balance' === $reason ? 400 : 409,
 				'payment' => self::to_wire( $row ),
 				'order' => $this->summary( $order ),
 			)
@@ -322,11 +668,7 @@ class Ledger {
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
-		$applied = $this->apply_transition( $row, $new );
-		if ( ! is_wp_error( $applied ) && $applied !== $row ) {
-			$this->replace_and_save( $order, $rows, $applied );
-		}
-		return $applied;
+		return $this->apply_result( $order, $id, $new );
 	}
 
 	/**
@@ -413,7 +755,7 @@ class Ledger {
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
-		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport' ) as $field ) {
+		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds' ) as $field ) {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
 			}
@@ -426,8 +768,9 @@ class Ledger {
 	 *
 	 * @param WC_Order $order Order object.
 	 * @param array    $rows  Payment rows.
+	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
 	 */
-	public function save( WC_Order $order, array $rows ): void {
+	public function save( WC_Order $order, array $rows, bool $derive = true ): void {
 		$normalized = array();
 		foreach ( $rows as $row ) {
 			$normalized[] = $this->normalize_row( $order, $row );
@@ -443,14 +786,22 @@ class Ledger {
 			)
 		);
 		$order->delete_meta_data( self::INDEX_META_KEY );
+		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
+		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
 		$indexed = array();
 		foreach ( $normalized as $row ) {
+			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
+			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+			}
 			if ( in_array( $row['status'], self::LIVE_STATUSES, true ) && ! in_array( $row['method_id'], $indexed, true ) ) {
 				$indexed[] = $row['method_id'];
 				$order->add_meta_data( self::INDEX_META_KEY, $row['method_id'], false );
 			}
 		}
-		$this->derive( $order, $normalized );
+		if ( $derive ) {
+			$this->derive( $order, $normalized );
+		}
 		$order->save();
 	}
 
@@ -578,6 +929,8 @@ class Ledger {
 			'failure_reason' => null,
 			'refunded_amount' => Money::normalize( $row['refunded_amount'] ?? 0 ),
 			'refunds' => array(),
+			'expires_at' => null,
+			'seen_events' => array(),
 			'provider_refs' => array(),
 			'receipt' => array(),
 			'cashier_id' => 0,
@@ -604,6 +957,8 @@ class Ledger {
 		$row['provider_refs']    = is_array( $row['provider_refs'] ) ? $row['provider_refs'] : array();
 		$row['receipt']          = is_array( $row['receipt'] ) ? $row['receipt'] : array();
 		$row['refunds']          = is_array( $row['refunds'] ) ? $row['refunds'] : array();
+		$row['expires_at']       = $this->valid_time( $row['expires_at'] );
+		$row['seen_events']      = is_array( $row['seen_events'] ) ? array_values( array_filter( $row['seen_events'], 'is_string' ) ) : array();
 		$row['updated_at_gmt']   = $now;
 		return $row;
 	}
@@ -649,8 +1004,9 @@ class Ledger {
 	 * @param WC_Order $order       Order object.
 	 * @param array    $rows        Payment rows.
 	 * @param array    $replacement Replacement payment row.
+	 * @param bool     $derive      Project payment state after saving.
 	 */
-	private function replace_and_save( WC_Order $order, array $rows, array $replacement ): void {
+	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): void {
 		foreach ( $rows as &$row ) {
 			if ( $row['id'] === $replacement['id'] ) {
 				$row = $replacement;
@@ -658,7 +1014,7 @@ class Ledger {
 			}
 		}
 		unset( $row );
-		$this->save( $order, $rows );
+		$this->save( $order, $rows, $derive );
 	}
 
 	/**

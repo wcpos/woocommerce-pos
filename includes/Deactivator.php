@@ -66,6 +66,7 @@ class Deactivator {
 
 		// stop the journal retention purge.
 		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge::PURGE_HOOK );
+		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper::HOOK );
 
 		// remove pos rewrite rule.
 		flush_rewrite_rules( false ); // false will not overwrite .htaccess.
