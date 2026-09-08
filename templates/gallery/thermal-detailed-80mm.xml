@@ -343,6 +343,6 @@ break the cross-printer layout contract. Indented continuation lines
   <align mode="center"><text>{{store.opening_hours_notes}}</text></align>
   {{/store.opening_hours_notes}}
 
-  <feed lines="2" />
+  <feed lines="3" />
   <cut />
 </receipt>

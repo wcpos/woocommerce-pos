@@ -32,7 +32,6 @@ class Customer_Writer extends Null_Writer {
 			return;
 		}
 		( new Tax_Id_Writer() )->write_for_user( $id, $payload['tax_ids'] );
-		do_action( 'woocommerce_update_customer', $id, new \WC_Customer( $id ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 
 	/** Remove customer-only fields from the wc/v3 forward. */

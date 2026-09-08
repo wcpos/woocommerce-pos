@@ -249,58 +249,10 @@ final class Order_Serializer {
 		return self::add_receipt_link( $payload, $order );
 	}
 
-	public function sync_metadata( array $payload, int $order_id, string $source, bool $partial, int $sequence ): array {
-		return array(
-			'order_id' => $order_id,
-			'source' => $source,
-			'partial' => $partial,
-			'sequence' => $sequence,
-			// UNIFIED (#423 step 1): orders hash through THE canonical
-			// Revision::compute like every other collection — identity-strip,
-			// recursive key-sort, excluded volatile fields. Every order site
-			// (pull, stream, skeleton, snapshot, sync-index, push check)
-			// funnels through here or revision_for, so all move atomically.
-			'revision' => self::canonical_revision( $payload ),
-			'generated_at_gmt' => gmdate( 'c' ),
-		);
-	}
-
 	/*
-	 * ---------------------------------------------------------------------------
-	 * ORDER REVISION RECIPES — a VERSIONED list, newest first.
-	 *
-	 * Every entry below is a complete hashing recipe for an order payload, and each
-	 * one corresponds to a wire shape this plugin has shipped. A deployed client
-	 * stores whatever `currentRevision` it was handed at the time, so the write
-	 * path's grace comparer (Write_Controller::revision_matches_with_grace) must be
-	 * able to recognise ALL of them. NONE of these may be deleted or altered while
-	 * the `woocommerce_pos_sync_legacy_revision_grace` option still exists.
-	 *
-	 *   canonical_revision()
-	 *     CURRENT. Identity-stripped (order meta + item meta), image.id normalized
-	 *     to int, `tax_ids` and `links` excluded. Defined so that the augmented v2
-	 *     document and a BARE wc/v3 re-read of the same order hash identically —
-	 *     which is what lets the pull, proxy and write-ack lanes all serve the
-	 *     augmented shape while the write path keeps hashing the bare one.
-	 *
-	 *   pre_item_uuid_canonical_revision()
-	 *     The shape shipped between the read lanes gaining `tax_ids`/links and the
-	 *     read-time item-uuid stamping + image.id cast: item uuids stripped, but
-	 *     image.id left as wc/v3's string and `tax_ids` left in the hash.
-	 *
-	 *   pre_augmentation_canonical_revision()
-	 *     The shape shipped before ANY v2 read augmentation: order identity meta
-	 *     stripped, nothing else. Item uuids, image.id and `tax_ids` all hashed
-	 *     as they arrive.
-	 *
-	 *   legacy_revision()
-	 *     PRE-CUTOVER (#423 step 2): raw wp_json_encode with no ksort and no
-	 *     excluded-field list. Its comparer branch reserializes the order through
-	 *     serialize_order() rather than hashing a bare re-read.
-	 *
-	 * Retirement (#423 step 4) drops the option and the three non-canonical
-	 * recipes together, not one at a time.
-	 * ---------------------------------------------------------------------------
+	 * canonical_revision() is THE single order revision recipe.
+	 * The pre-1.10.0 versioned recipe list and grace comparer were retired per
+	 * docs/adr/0033 (free#1745).
 	 */
 
 	/** THE canonical order revision: identity-stripped, then Revision::compute. */
@@ -311,7 +263,10 @@ final class Order_Serializer {
 		unset( $payload['tax_ids'], $payload['_rxdb_digest'] );
 
 		// HPOS removes these internal fields only after the restored order's save
-		// hooks run. Exclude them so that save and the completed restore hash alike.
+		// hooks run. The exclusion predates compute-at-pull (ADR 0033) and is frozen
+		// with the 1.10.x recipe: legacy journal rows stored hashes computed with it,
+		// and every read-time hash site (pull fallback, CAS re-read, proxy stamp)
+		// must keep matching them and each other across restore states.
 		if ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) {
 			$payload['meta_data'] = array_values(
 				array_filter(
@@ -327,16 +282,6 @@ final class Order_Serializer {
 		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ) ) );
 	}
 
-	/** The canonical recipe used before v2 read augmentations were added. */
-	public static function pre_augmentation_canonical_revision( array $payload ): string {
-		return Revision::compute( self::strip_identity_meta( $payload ) );
-	}
-
-	/** The pre-augmentation canonical recipe before read-time item UUID stamping. */
-	public static function pre_item_uuid_canonical_revision( array $payload ): string {
-		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ), false ) );
-	}
-
 	/**
 	 * Canonicalize items in a COPY of the payload before hashing, so revision
 	 * sources hashing the BARE wc/v3 form and lanes serving the augmented form
@@ -349,7 +294,7 @@ final class Order_Serializer {
 	 * - Normalize line_items[].image.id to an int — the augmented read lanes
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
 	 */
-	private static function strip_item_identity_meta( array $payload, bool $normalize_image_ids = true ): array {
+	private static function strip_item_identity_meta( array $payload ): array {
 		// coupon_lines joined the uuid-stamped set with the rest (the client pairs
 		// coupons by uuid too); their identity meta must be hash-invisible for the
 		// same reason as every other line type — the augmented document and a bare
@@ -363,7 +308,7 @@ final class Order_Serializer {
 				if ( ! is_array( $item ) ) {
 					continue;
 				}
-				if ( $normalize_image_ids && 'line_items' === $items_key && isset( $item['image']['id'] ) ) {
+				if ( 'line_items' === $items_key && isset( $item['image']['id'] ) ) {
 					$payload[ $items_key ][ $index ]['image']['id'] = (int) $item['image']['id'];
 				}
 				if ( ! isset( $item['meta_data'] ) || ! is_array( $item['meta_data'] ) ) {
@@ -382,29 +327,6 @@ final class Order_Serializer {
 		}
 
 		return $payload;
-	}
-
-	/**
-	 * The PRE-CUTOVER byte recipe (no ksort, volatiles included) — kept ONLY
-	 * for the write path's grace comparer (#423 step 2), so a client whose
-	 * stored baseRevision predates the cutover still drains. Deleted at
-	 * retirement (step 4) along with the grace option.
-	 */
-	public static function legacy_revision( array $payload ): string {
-		// Pre-cutover payloads never contained the read-time `links` augmentation.
-		// The write path's grace comparer reserializes the CURRENT order (links now
-		// injected) and compares against a hash the client computed BEFORE this
-		// deployment — hashing links here would reject every unchanged pre-upgrade
-		// order with a false 409.
-		unset( $payload['links'], $payload['tax_ids'], $payload['_rxdb_digest'] );
-		$payload = self::strip_item_identity_meta( $payload );
-		foreach ( $payload['line_items'] ?? array() as $index => $line_item ) {
-			if ( isset( $line_item['image']['id'] ) ) {
-				$payload['line_items'][ $index ]['image']['id'] = (string) $line_item['image']['id'];
-			}
-		}
-		$source = wp_json_encode( self::strip_identity_meta( $payload ) );
-		return 'sha256:' . hash( 'sha256', false === $source ? '' : $source );
 	}
 
 	/**

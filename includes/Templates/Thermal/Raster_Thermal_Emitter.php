@@ -48,23 +48,6 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 class Raster_Thermal_Emitter {
 
 	/**
-	 * Printable dots across 80 mm paper at 203 dpi.
-	 */
-	private const DOTS_80MM = 576;
-
-	/**
-	 * Printable dots across 58 mm paper at 203 dpi.
-	 */
-	private const DOTS_58MM = 384;
-
-	/**
-	 * Column count at or above which paper is treated as 80 mm.
-	 *
-	 * 58 mm rolls carry 32 columns; 80 mm rolls carry 42 or 48.
-	 */
-	private const WIDE_PAPER_COLUMNS = 40;
-
-	/**
 	 * Line box height as a multiple of the cell width.
 	 *
 	 * Monospace cells are about twice as tall as they are wide; 1.7 leaves the
@@ -124,7 +107,7 @@ class Raster_Thermal_Emitter {
 	 *
 	 * @var int
 	 */
-	private $dots = self::DOTS_80MM;
+	private $dots = Thermal_Bounds::DOTS_80MM;
 
 	/**
 	 * The width of one character cell in dots.
@@ -284,7 +267,7 @@ class Raster_Thermal_Emitter {
 	 */
 	private function configure_geometry( array $ast ): void {
 		$this->columns = isset( $ast['paper_width'] ) ? max( 1, (int) $ast['paper_width'] ) : 48;
-		$this->dots    = $this->columns >= self::WIDE_PAPER_COLUMNS ? self::DOTS_80MM : self::DOTS_58MM;
+		$this->dots    = Thermal_Bounds::paper_dots( $this->columns );
 
 		// Floor the cell so the grid can never run past the paper edge, then centre
 		// whatever slack that leaves. 48 and 32 columns divide exactly; 42 does not.

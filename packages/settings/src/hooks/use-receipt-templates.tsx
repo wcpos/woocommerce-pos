@@ -1,4 +1,6 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
 export type TemplateEngine = 'legacy-php' | 'logicless' | 'thermal';
@@ -48,4 +50,25 @@ export function useReceiptTemplateOptions(includeInactiveVirtual = false): Templ
 			label: template.title,
 			engine: template.engine,
 		}));
+}
+
+/**
+ * Id → title map for every receipt template the site knows about.
+ *
+ * Deliberately unfiltered — drafts and inactive virtual templates included —
+ * because historical queue rows can reference a template that is no longer
+ * selectable. Shares the ['templates', 'receipt'] cache with
+ * `useReceiptTemplateOptions`, so it costs no extra request. Ids missing from
+ * the map (deleted templates) are the caller's fallback case.
+ */
+export function useReceiptTemplateNames(): Map<string, string> {
+	const { data } = useQuery<ReceiptTemplate[]>({
+		queryKey: ['templates', 'receipt'],
+		queryFn: () => apiFetch({ path: ENDPOINT, method: 'GET' }) as Promise<ReceiptTemplate[]>,
+	});
+
+	return useMemo(
+		() => new Map((Array.isArray(data) ? data : []).map((t) => [String(t.id), t.title])),
+		[data]
+	);
 }

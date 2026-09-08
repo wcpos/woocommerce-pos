@@ -69,6 +69,8 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		remove_all_filters( 'woocommerce_pos_sync_serialized_order' );
 		remove_action( 'woocommerce_before_product_object_save', array( Pos_Uuid::class, 'stamp_on_save' ), 10 );
 		remove_action( 'woocommerce_before_product_variation_object_save', array( Pos_Uuid::class, 'stamp_on_save' ), 10 );
+		remove_action( 'untrashed_post', array( Pos_Uuid::class, 'recheck_ownership_after_untrash' ), 10 );
+		remove_action( 'woocommerce_untrash_order', array( Pos_Uuid::class, 'recheck_order_ownership_after_untrash' ), 10 );
 	}
 
 	/**

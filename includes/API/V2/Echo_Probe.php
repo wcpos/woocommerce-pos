@@ -62,13 +62,25 @@ final class Echo_Probe {
 
 		return new WP_REST_Response(
 			array(
+				// Stays 1: shipped clients hard-gate on `v === 1` and read a
+				// mismatch as "not the echo route" (hydration-steps.ts), so an
+				// additive field must not bump it.
 				'v'       => 1,
 				'headers' => $headers,
 				'params'  => array(
 					'authorization' => isset( $params['authorization'] ) && '' !== $params['authorization'],
 					'wcpos'         => isset( $params['wcpos'] ) && '' !== $params['wcpos'],
 					'store_id'      => isset( $params['store_id'] ) && '' !== $params['store_id'],
+					'wcpos_protocol' => isset( $params['wcpos_protocol'] ) && '' !== $params['wcpos_protocol'],
+					'wcpos_client'   => isset( $params['wcpos_client'] ) && '' !== $params['wcpos_client'],
 				),
+				// Means: this SERVER reflects announced x-wcpos-* names at
+				// preflight ({@see \WCPOS\WooCommercePOS\Rest_Cors}). It does
+				// NOT prove this store's preflights reach PHP — an edge that
+				// answers OPTIONS itself still blocks new headers, so a client
+				// must confirm the path with one cross-origin request carrying
+				// a throwaway x-wcpos-* header before trusting header transport.
+				'cors'    => array( 'reflects_request_headers' => true ),
 			),
 			200
 		);

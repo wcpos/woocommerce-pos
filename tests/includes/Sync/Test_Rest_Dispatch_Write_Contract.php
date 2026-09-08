@@ -183,6 +183,21 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		return array_column( $this->fixtures( 'valid-envelopes' ), null, 'name' )[ $name ];
 	}
 
+	private function delete_record_id( string $collection ): int {
+		switch ( $collection ) {
+			case 'products':
+				return ProductHelper::create_simple_product()->get_id();
+			case 'coupons':
+				return \Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper::create_coupon( 'force-default' )->get_id();
+			case 'categories':
+				return $this->factory->term->create( array( 'taxonomy' => 'product_cat' ) );
+			case 'customers':
+				return $this->factory->user->create( array( 'role' => 'customer' ) );
+			default:
+				throw new \InvalidArgumentException( "No delete record factory for collection '{$collection}'." );
+		}
+	}
+
 	private function request( string $collection, array $envelope, array $headers = array() ): WP_REST_Request {
 		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/' . $collection );
 		$request->set_header( 'Content-Type', 'application/json' );
@@ -859,7 +874,59 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 				$GLOBALS['wcpos_sync_contract_calls']
 			)
 		);
-		$this->assertTrue( $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+		$this->assertFalse( $GLOBALS['wcpos_sync_contract_calls'][1]->get_param( 'force' ) );
+	}
+
+	/**
+	 * #1741: the forwarded delete's `force` is the envelope's when present; otherwise the writer
+	 * asks WooCommerce to trash and deletes permanently only when WooCommerce answers that the
+	 * type cannot be trashed (terms, users).
+	 *
+	 * @dataProvider deleteForceCases
+	 */
+	public function test_delete_forwards_the_envelope_force_or_asks_woocommerce_to_trash( string $fixture_name, ?bool $envelope_force, bool $trash_refused, array $expected_forces, int $expected_status ): void {
+		// Arrange.
+		$fixture   = $this->fixture( $fixture_name );
+		$record_id = $this->delete_record_id( $fixture['collection'] );
+		$current   = array( 'id' => $record_id );
+		$revision  = Revision::compute( $current );
+		$this->store->resolve                = $record_id;
+		$fixture['envelope']['baseRevision'] = $revision;
+		$fixture['headers']['If-Match']      = '"' . $revision . '"';
+		if ( null !== $envelope_force ) {
+			$fixture['envelope']['force'] = $envelope_force;
+		}
+		$responses = array( new WP_REST_Response( $current, 200 ) );
+		if ( $trash_refused ) {
+			$responses[] = new WP_REST_Response( array( 'code' => 'woocommerce_rest_trash_not_supported' ), 501 );
+		}
+		$responses[] = new WP_REST_Response( array( 'id' => $record_id ), 200 );
+		$GLOBALS['wcpos_sync_contract_responses'] = $responses;
+
+		// Act.
+		$response = $this->server->dispatch( $this->request( $fixture['collection'], $fixture['envelope'], $fixture['headers'] ) );
+
+		// Assert.
+		$this->assertSame( $expected_status, $response->get_status() );
+		$deletes = array_values(
+			array_filter(
+				$GLOBALS['wcpos_sync_contract_calls'],
+				static fn( $request ) => 'DELETE' === $request->get_method()
+			)
+		);
+		$this->assertSame( $expected_forces, array_map( static fn( $request ) => $request->get_param( 'force' ), $deletes ) );
+	}
+
+	public static function deleteForceCases(): array {
+		// fixture, envelope force, WooCommerce refuses the trash, forwarded forces, response status.
+		return array(
+			'products: no force trashes'                       => array( 'product-delete', null, false, array( false ), 200 ),
+			'coupons: no force trashes'                        => array( 'coupon-delete', null, false, array( false ), 200 ),
+			'categories: trash refused, deleted permanently'   => array( 'category-delete', null, true, array( false, true ), 200 ),
+			'customers: trash refused, deleted permanently'    => array( 'customer-delete', null, true, array( false, true ), 200 ),
+			'products: explicit true is forwarded'             => array( 'product-delete', true, false, array( true ), 200 ),
+			'categories: explicit false is returned, no retry' => array( 'category-delete', false, true, array( false ), 501 ),
+		);
 	}
 
 	public function test_dispatched_delete_428_and_conflict_match_golden_shapes(): void {

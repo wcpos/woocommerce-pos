@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WP_REST_Request;
 
 /**
@@ -196,6 +197,11 @@ final class Collection_Rules {
 	 *                WP_Query `orderby` vocabulary cannot express (rewritten through
 	 *                `posts_orderby`), OR
 	 *                `array( 'meta_key' => ..., 'orderby' => meta_value|meta_value_num )`.
+	 *   - `posts` => `array( 'meta_sort' => array( 'key' => ..., 'numeric' => bool ) )`
+	 *                a postmeta sort that must NOT filter: applied as a LEFT JOIN through
+	 *                `posts_clauses`, with rows that have no value for the key ordered
+	 *                LAST in both directions. Use this for any user-facing column sort —
+	 *                `meta_key`/`orderby` INNER JOINs and silently drops rows.
 	 *
 	 * Filter row shape:
 	 *   - `meta`      => `array( 'key' => <meta key>, 'storage' => <optional storage lock> )`
@@ -287,6 +293,32 @@ final class Collection_Rules {
 			),
 
 			/*
+			 * The POS grid's SKU / barcode / stock columns, for the product grid and the
+			 * variation grid alike — the SAME four rows, from one builder, because the two
+			 * surfaces drifted apart once already and a cashier sorting a column expects
+			 * the same thing of both.
+			 *
+			 * A `meta_sort` row sorts on a postmeta value WITHOUT letting the sort decide
+			 * which records exist. The obvious encoding — WP_Query's `meta_key` +
+			 * `orderby => meta_value` — INNER JOINs `postmeta`, so a record with no row for
+			 * that key VANISHES from the result. On a default store the barcode field is
+			 * `_global_unique_id`, which most catalogues never populate, so sorting by
+			 * barcode returned an EMPTY page; `orderby=sku` silently dropped everything
+			 * without a SKU. A sort must never hide a record from a cashier, so these rows
+			 * are applied as a LEFT JOIN with the meta-less rows ordered LAST in both
+			 * directions (`Collection_Rules_Plan::apply_meta_sort_clauses()`).
+			 *
+			 * Neither collection is ever HPOS — both are posts on every store — so there is
+			 * no `hpos` half to these rows.
+			 */
+			'products' => array(
+				'sorts' => self::catalog_meta_sorts(),
+			),
+			'variations' => array(
+				'sorts' => self::catalog_meta_sorts(),
+			),
+
+			/*
 			 * SORT NAMES ONLY — deliberately no clause bodies.
 			 *
 			 * Customers are a `WP_User_Query` over `wp_users`/`wp_usermeta`, a storage
@@ -314,6 +346,54 @@ final class Collection_Rules {
 		);
 
 		return $rules[ $collection ] ?? array();
+	}
+
+	/**
+	 * The four POS column sorts, shared by `products` and `variations`.
+	 *
+	 * One builder rather than two copied blocks: these two collections carry the same
+	 * cashier-facing columns, and the previous copy-per-controller encoding is exactly how
+	 * the variation lane kept a defect the product lane had already fixed.
+	 *
+	 * @return array<string, array>
+	 */
+	private static function catalog_meta_sorts(): array {
+		return array(
+			'sku' => array(
+				'posts' => array(
+					'meta_sort' => array( 'key' => '_sku' ),
+				),
+			),
+
+			/*
+			 * The barcode meta key is a store setting, so the row reads the same accessor
+			 * the controllers do rather than hard-coding a key that would drift.
+			 */
+			'barcode' => array(
+				'posts' => array(
+					'meta_sort' => array( 'key' => Barcode_Field::orderby_key() ),
+				),
+			),
+
+			/*
+			 * `_stock` is written as NULL for everything that does not manage stock, so this
+			 * row needs the same meta-less-last ordering as the rest — it is not a special
+			 * case, it was merely the first one noticed.
+			 */
+			'stock_quantity' => array(
+				'posts' => array(
+					'meta_sort' => array(
+						'key'     => '_stock',
+						'numeric' => true,
+					),
+				),
+			),
+			'stock_status' => array(
+				'posts' => array(
+					'meta_sort' => array( 'key' => '_stock_status' ),
+				),
+			),
+		);
 	}
 
 	/**

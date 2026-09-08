@@ -37,6 +37,12 @@ final class Cors {
 	/**
 	 * POS-client request headers beyond WP core's CORS defaults.
 	 *
+	 * FROZEN as the compatibility floor (free#1763): Rest_Cors pre-authorizes
+	 * new client headers through preflight reflection, so adding a name only
+	 * masks a reflection bug, while removing one narrows the degradation floor
+	 * used when announcements are stripped and by old preflight caches.
+	 * `X-WCPOS-Protocol` and `X-WCPOS-Client` (free#1760) are the last additions.
+	 *
 	 * - `Idempotency-Key` / `If-Match` — the v2 write path's standard-header
 	 *   mirror ({@see Header_Mirror::HEADERS}).
 	 * - `If-None-Match` — conditional sequence-log polling (304s).
@@ -44,6 +50,8 @@ final class Cors {
 	 *   key (v1-shaped, predates the ADR 0011 mirror).
 	 * - `X-WCPOS-Store` — the till's store scope ({@see Store_Scope::HEADER},
 	 *   pro#425).
+	 * - `X-WCPOS-Protocol` — protocol signal (wcpos/woocommerce-pos#1752).
+	 * - `X-WCPOS-Client` — client platform signal (wcpos/woocommerce-pos#1752).
 	 *
 	 * @return string[] Header names in their canonical (sent) casing.
 	 */
@@ -54,6 +62,8 @@ final class Cors {
 				'If-None-Match',
 				'X-WCPOS-Idempotency-Key',
 				Store_Scope::HEADER,
+				'X-WCPOS-Protocol',
+				'X-WCPOS-Client',
 			)
 		);
 	}

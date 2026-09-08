@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
 
 /**
@@ -56,6 +57,10 @@ class Received {
 			$request  = new WP_REST_Request( 'GET', '/wcpos/v1/orders/' . $order_id );
 			$server   = rest_get_server();
 			$response = $server->dispatch( $request );
+			if ( $response->is_error() || $response->get_status() >= 400 ) {
+				Logger::log( sprintf( 'Received order %d REST dispatch failed with status %d.', $order_id, $response->get_status() ) );
+				return false;
+			}
 			$data     = $server->response_to_data( $response, true );
 		} finally {
 			remove_filter( 'user_has_cap', $grant_caps );
@@ -88,12 +93,15 @@ class Received {
 				);
 			}
 
-			$order_json       = $this->get_order_json( $order->get_id() );
-			$payment_method   = $order->get_payment_method();
-			$gateway_settings = woocommerce_pos_get_settings( 'payment_gateways' );
-			$status_setting   = $gateway_settings['gateways'][ $payment_method ]['order_status'] ?? 'wc-completed';
-			$completed_status = 'wc-' === substr( $status_setting, 0, 3 ) ? substr( $status_setting, 3 ) : $status_setting;
-			$order_complete   = 'pos-open' !== $completed_status;
+			$order_json = $this->get_order_json( $order->get_id() );
+			// Emit only after WooCommerce recognizes the order as paid. A negative
+			// needs_payment() check is insufficient because zero-total failed orders do not
+			// need payment. Keep the POS exclusions so parked carts never report success.
+			$order_complete = $order->is_paid() && ! \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true );
+
+			if ( false === $order_json ) {
+				$order_complete = false;
+			}
 
 			include woocommerce_pos_locate_template( 'received.php' );
 			exit;

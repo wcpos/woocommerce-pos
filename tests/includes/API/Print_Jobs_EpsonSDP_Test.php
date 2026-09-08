@@ -110,6 +110,105 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It never dispatches an empty print payload as a successful job.
+	 *
+	 * A job that renders to nothing — most often a template whose engine Server
+	 * Direct Print cannot render — used to be sent as <PrintData></PrintData>.
+	 * The printer parses that, prints nothing, and posts back success="true",
+	 * so the queue recorded a receipt that never existed. Fail the job instead.
+	 */
+	public function test_poll_fails_the_job_when_the_payload_renders_empty(): void {
+		// Arrange: an empty payload stands in for a render that produced nothing.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '' ),
+			)
+		);
+
+		// Act.
+		$response = $this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+		$body     = $response->get_raw_body();
+
+		// Assert: nothing printable was handed to the printer.
+		$this->assertStringNotContainsString( '<PrintData>', $body );
+		$this->assertStringNotContainsString( 'PrintRequestInfo', $body );
+
+		// Assert: the queue tells the truth rather than reporting a print.
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+
+		// Assert: the log names the printer and the job.
+		$this->assertNotEmpty(
+			array_filter(
+				$this->logged_messages,
+				function ( $message ) {
+					return false !== strpos( (string) $message, 'rendered an empty payload' );
+				}
+			),
+			'an empty render must be logged'
+		);
+	}
+
+	/**
+	 * It stores a stable reason when an empty render fails a job.
+	 */
+	public function test_empty_render_persists_failure_reason(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '' ),
+			)
+		);
+
+		$this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+
+		$this->assertSame( 'empty_rendered_payload', $this->jobs->get( $id )['error'] );
+	}
+
+	/**
+	 * It records the printer's failure code against the job, not just the log.
+	 *
+	 * Without this the queue can only ever say "Failed" while the reason the
+	 * printer gave — EX_TIMEOUT and friends — is buried in the WCPOS log, so
+	 * diagnosing a recurring printer fault means log-diving.
+	 */
+	public function test_failure_code_is_persisted_on_the_job(): void {
+		// Arrange: a claimed job the printer is about to report on.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->sdp( '<PrintRequestInfo><ConnectionType>GET</ConnectionType></PrintRequestInfo>' );
+
+		// Act: the printer posts a failure result.
+		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/print-jobs/epson-sdp' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_query_params(
+			array(
+				'printer_id' => 'p1',
+				'pt'         => 'tok',
+			)
+		);
+		$request->set_body_params(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="false" code="EX_TIMEOUT"/>',
+			)
+		);
+		rest_do_request( $request );
+
+		// Assert: the job is failed and carries the reason.
+		$job = $this->jobs->get( $id );
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $job['status'] );
+		$this->assertSame( 'EX_TIMEOUT', $job['error'] );
+	}
+
+	/**
 	 * It wraps the print data in the Server Direct Print response envelope.
 	 *
 	 * The printer discards a response it cannot recognise without printing or
@@ -247,6 +346,90 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It ignores a SetResponse post that does not contain a print result.
+	 */
+	public function test_set_response_without_response_element_keeps_claim(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ID'             => '',
+				'ResponseFile'   => '<?xml version="1.0" encoding="UTF-8"?><PrintResponseInfo Version="1.00"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'claimed', $this->jobs->get( $id )['status'] );
+		$this->assertSame( array(), $this->logged_messages );
+	}
+
+	/**
+	 * It never hands a pending job to an empty SetResponse post.
+	 */
+	public function test_set_response_without_response_element_does_not_dispatch_a_job(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ID'             => '',
+				'ResponseFile'   => '<?xml version="1.0" encoding="UTF-8"?><PrintResponseInfo Version="1.00"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+		$this->assertSame( '<response success="true" code="" status=""/>', $response->get_raw_body() );
+	}
+
+	/**
+	 * It never hands a pending job to an untyped post that carries a ResponseFile.
+	 */
+	public function test_untyped_post_with_empty_response_file_does_not_dispatch_a_job(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ID'           => '',
+				'ResponseFile' => '<?xml version="1.0" encoding="UTF-8"?><PrintResponseInfo Version="1.00"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pending', $this->jobs->get( $id )['status'] );
+		$this->assertSame( '<response success="true" code="" status=""/>', $response->get_raw_body() );
+	}
+
+	/**
 	 * It marks a failed result and logs the printer's code from the form field.
 	 */
 	public function test_set_response_form_post_records_failure(): void {
@@ -264,14 +447,14 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 				'ConnectionType' => 'SetResponse',
 				'ID'             => '',
 				'ResponseFile'   => '<?xml version="1.0" encoding="utf-8"?><PrintResponseInfo Version="1.00">'
-					. '<response success="false" code="EPTR_REC_EMPTY" status="251854870"/>'
+					. '<response success="false" code="EPTR_REC_EMPTY" status="252182550"/>'
 					. '</PrintResponseInfo>',
 			)
 		);
 
 		$this->assertEquals( 'failed', $this->jobs->get( $id )['status'] );
 		$this->assertEquals(
-			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPTR_REC_EMPTY" for print job %d.', $id ) ),
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPTR_REC_EMPTY" (0x0F080016: paper end) for print job %d.', $id ) ),
 			$this->logged_messages
 		);
 	}
@@ -313,8 +496,215 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'failed', $this->jobs->get( $id )['status'] );
 		$this->assertEquals(
-			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPOS2_ERR_PRINT" for print job %d.', $id ) ),
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPOS2_ERR_PRINT" (0x0F000016) for print job %d.', $id ) ),
 			$this->logged_messages
+		);
+	}
+
+	/**
+	 * It records decoded Epson status details for a failed result.
+	 */
+	public function test_failed_result_with_known_status_records_diagnostics(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		// Act.
+		$this->sdp( '<response success="false" code="EX_TIMEOUT" status="251658280"/>' );
+		$job = $this->jobs->get( $id );
+
+		// Assert.
+		$this->assertSame( 'failed', $job['status'] );
+		$this->assertSame( 'EX_TIMEOUT (0x0F000028: offline, cover open)', $job['error'] );
+		$this->assertSame(
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EX_TIMEOUT" (0x0F000028: offline, cover open) for print job %d.', $id ) ),
+			$this->logged_messages
+		);
+	}
+
+	/**
+	 * It decodes a status whose top bit is set, which is above PHP_INT_MAX on 32-bit PHP.
+	 */
+	public function test_failed_result_with_top_bit_status_records_full_hex_and_label(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		// Act. 0x80000008 — spooler stopped (bit 31) plus offline (bit 3).
+		$this->sdp( '<response success="false" code="EX_TIMEOUT" status="2147483656"/>' );
+		$job = $this->jobs->get( $id );
+
+		// Assert.
+		$this->assertSame( 'failed', $job['status'] );
+		$this->assertSame( 'EX_TIMEOUT (0x80000008: offline, spooler stopped)', $job['error'] );
+	}
+
+	/**
+	 * It does not automatically offer a stale claim again.
+	 */
+	public function test_get_request_poll_after_claim_ttl_returns_ack_and_fails_job(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$response = $this->sdp_form(
+			array(
+				'ConnectionType' => 'GetRequest',
+				'ID'             => '',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( '<response success="true" code="" status=""/>', $response->get_raw_body() );
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It accepts a successful result that arrives after the claim TTL.
+	 */
+	public function test_set_response_after_claim_ttl_marks_unconfirmed_job_printed(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="true" code="" status="251658262"/>',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $this->jobs->get( $id )['status'] );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
+	}
+
+	/**
+	 * It records a failed result that arrives after the claim TTL.
+	 */
+	public function test_set_response_failure_after_claim_ttl_records_code_and_logs_failure(): void {
+		// Arrange.
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+		update_post_meta( $id, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+
+		// Act.
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="false" code="EPTR_REC_EMPTY" status="251658262"/>',
+			)
+		);
+
+		// Assert: the cleared error is replaced by the printer's decoded reason.
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+		$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_UNCONFIRMED, true ) );
+		$this->assertSame( 'EPTR_REC_EMPTY (0x0F000016)', get_post_meta( $id, Print_Job_Service::META_ERROR, true ) );
+		$this->assertSame(
+			sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPTR_REC_EMPTY" (0x0F000016) for print job %d.', $id ),
+			$this->logged_messages[ count( $this->logged_messages ) - 1 ]
+		);
+	}
+
+	/**
+	 * It records a result against the active claim and logs the unconfirmed job.
+	 *
+	 * A Server Direct Print result carries no job token, so it can only be
+	 * attributed to the printer's active claim. That is correct for the ordering
+	 * printers actually use — a printer holding an unsent result retries that POST
+	 * before polling for more work — and it is what keeps a reboot case right: the
+	 * result belongs to the job the printer is holding now, not to the earlier one
+	 * whose result was lost. The pairing is still worth a log line, because if it
+	 * ever does happen the attribution is the wrong job.
+	 */
+	public function test_set_response_while_an_unconfirmed_job_exists_records_the_claim_and_logs_it(): void {
+		// Arrange: job A times out unconfirmed, then job B is claimed by the next poll.
+		$a = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $a );
+		update_post_meta( $a, Print_Job_Service::META_CLAIMED_AT, time() - Print_Job_Service::CLAIM_TTL - 1 );
+		$b = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'GetRequest',
+				'ID'             => '',
+			)
+		);
+		$this->assertSame( Print_Job_Service::STATUS_CLAIMED, $this->jobs->get( $b )['status'] );
+
+		// Act: the printer reports success for the job it is holding.
+		$this->sdp_form(
+			array(
+				'ConnectionType' => 'SetResponse',
+				'ResponseFile'   => '<response success="true" code="" status="251658262"/>',
+			)
+		);
+
+		// Assert: the result lands on the claim, not on the unconfirmed job.
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $this->jobs->get( $b )['status'] );
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $a )['status'] );
+		$this->assertTrue( $this->jobs->get( $a )['unconfirmed'] );
+		$this->assertSame( 'claim_timeout', get_post_meta( $a, Print_Job_Service::META_ERROR, true ) );
+
+		// Assert: the ordering is visible in the log if it ever happens in the field.
+		$this->assertNotEmpty(
+			array_filter(
+				$this->logged_messages,
+				function ( $message ) use ( $a, $b ) {
+					return (string) $message === sprintf(
+						'Printer "p1": result recorded against claimed job %d while unconfirmed job %d is still awaiting one.',
+						$b,
+						$a
+					);
+				}
+			),
+			'a result arriving while a job is still unconfirmed must be logged'
 		);
 	}
 

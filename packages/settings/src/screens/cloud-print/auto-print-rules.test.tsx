@@ -184,6 +184,79 @@ describe('AutoPrintRules', () => {
 		expect(next[0].store_id).toBe(0);
 	});
 
+	it('reconciles a template the newly chosen printer cannot render', () => {
+		// A PrintNode printer accepts any engine, so a legacy-php template is a
+		// legitimate choice for it. Switching that rule to an Epson SDP printer
+		// (thermal only) must not leave the unrenderable template behind: the
+		// picker would silently show a thermal option while the saved pairing
+		// still named the legacy one, and the receipt would never print.
+		const { onChange } = renderRules({
+			printers: [
+				{ id: 'office', name: 'Office', provider: 'printnode', store_id: 0 },
+				{ id: 'front', name: 'Front counter', provider: 'epson-sdp', store_id: 0 },
+			],
+			templateOptions: [
+				{ value: '11', label: 'Standard receipt', engine: 'thermal' as const },
+				{ value: 'plugin-core', label: 'Legacy PHP Template', engine: 'legacy-php' as const },
+			],
+			assignments: [
+				{ printer_id: 'office', store_id: 0, scope: 'every', template_id: 'plugin-core' },
+			],
+		});
+
+		fireEvent.change(screen.getByTestId('rule-printer-0'), { target: { value: 'front' } });
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		const next = onChange.mock.calls[0][0] as CloudAssignment[];
+		expect(next[0].printer_id).toBe('front');
+		expect(next[0].template_id).toBe('11');
+	});
+
+	it('keeps a template the newly chosen printer can still render', () => {
+		const { onChange } = renderRules({
+			assignments: [
+				{ printer_id: 'kitchen', store_id: 0, scope: 'every', template_id: '22' },
+			],
+		});
+
+		fireEvent.change(screen.getByTestId('rule-printer-0'), { target: { value: 'front' } });
+
+		const next = onChange.mock.calls[0][0] as CloudAssignment[];
+		expect(next[0].printer_id).toBe('front');
+		expect(next[0].template_id).toBe('22');
+	});
+
+	it('shows a cleared template as unselected, not as some other template', () => {
+		// The server clears a template the printer cannot render. The Select can
+		// only display a value present in its options, so without an entry for
+		// the empty value it would fall back to showing a real template — the
+		// row would look configured while the trigger skips it for having none.
+		renderRules({
+			assignments: [{ printer_id: 'front', store_id: 0, scope: 'every', template_id: '' }],
+		});
+
+		const select = screen.getByTestId('rule-template-0') as HTMLSelectElement;
+		expect(select.value).toBe('');
+		expect(screen.getByText('Choose a template…')).toBeInTheDocument();
+	});
+
+	it('shows a stored template the printer cannot render rather than substituting one', () => {
+		renderRules({
+			printers: [{ id: 'front', name: 'Front counter', provider: 'epson-sdp', store_id: 0 }],
+			templateOptions: [
+				{ value: '11', label: 'Standard receipt', engine: 'thermal' as const },
+				{ value: 'plugin-core', label: 'Legacy PHP Template', engine: 'legacy-php' as const },
+			],
+			assignments: [
+				{ printer_id: 'front', store_id: 0, scope: 'every', template_id: 'plugin-core' },
+			],
+		});
+
+		const select = screen.getByTestId('rule-template-0') as HTMLSelectElement;
+		expect(select.value).toBe('plugin-core');
+		expect(screen.getByText(/Unsupported template/)).toBeInTheDocument();
+	});
+
 	it('+ Add rule appends a default rule', () => {
 		const { onChange, printers } = renderRules();
 		fireEvent.click(screen.getByTestId('rules-add'));

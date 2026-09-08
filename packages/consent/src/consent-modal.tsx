@@ -42,7 +42,7 @@ export function ConsentModal({
 				title={consentText(copy, 'title', 'consent.modal_title')}
 			>
 				<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-4">
-					{consentText(copy, 'body', 'consent.modal_intro')}
+					{consentText(copy, 'body', 'consent.modal_intro_v2')}
 				</p>
 				{error && (
 					<p role="alert" className="wcpos:text-sm wcpos:text-red-700 wcpos:mb-3">

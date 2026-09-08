@@ -53,18 +53,26 @@ class Pos_Uuid {
 	 * blank duplicate in favour of a later valid one.
 	 */
 	public static function read_valid_uuid_from_meta( array $meta_data ): string {
+		$entry = self::first_valid_uuid_entry( $meta_data );
+
+		return null === $entry ? '' : (string) Meta_Entry::value( $entry );
+	}
+
+	/**
+	 * The record's CANONICAL uuid entry — the first meta entry carrying a valid
+	 * uuid — or null. One selection rule for every reader: the served value, the
+	 * entry the prune keeps and the provenance check all name the same entry.
+	 *
+	 * @return mixed|null
+	 */
+	private static function first_valid_uuid_entry( array $meta_data ) {
 		foreach ( $meta_data as $meta ) {
-			$key = Meta_Entry::key( $meta );
-			if ( self::META_KEY !== $key ) {
-				continue;
-			}
-			$value = Meta_Entry::value( $meta );
-			if ( self::is_uuid( $value ) ) {
-				return $value;
+			if ( self::META_KEY === Meta_Entry::key( $meta ) && self::is_uuid( Meta_Entry::value( $meta ) ) ) {
+				return $meta;
 			}
 		}
 
-		return '';
+		return null;
 	}
 
 	/**
@@ -78,6 +86,15 @@ class Pos_Uuid {
 	 * that copied the meta), we treat it as needing a fresh one rather than serving
 	 * a duplicate RxDB key. Injected so the branching stays unit-testable; the live
 	 * wiring uses the $wpdb-backed self::uuid_owned_by_other.
+	 *
+	 * $opts['trust_persisted'] (default false) settles ownership WITHOUT the
+	 * detector when the uuid was loaded from this record's own meta row and is
+	 * unchanged ({@see is_own_persisted_uuid}) — the ordinary save and read paths,
+	 * where the detector re-proved a fact the row already stated at a cost linear
+	 * in catalog size (#1805, ADR 0038). Leave it off where a loaded duplicate MUST
+	 * be re-keyed: the collision backfill, the proxy stamper's in-response
+	 * duplicates, and the V1 list lanes, whose no-shared-uuid-per-response contract
+	 * has no other check.
 	 *
 	 * @param mixed $object
 	 */
@@ -105,14 +122,21 @@ class Pos_Uuid {
 	private static function ensure_uuid_without_user_lock( $object, array $opts ): string {
 		$collides = $opts['collides'] ?? null;
 		$persist  = $opts['persist'] ?? true;
-		$existing = self::read_valid_uuid_from_meta( (array) $object->get_meta_data() );
-		if ( '' !== $existing && ! ( \is_callable( $collides ) && $collides( $existing, $object ) ) ) {
-			// Converge any duplicate uuid metas (e.g. a concurrent first-stamp) to
-			// the single canonical value — deterministic regardless of object-cache
-			// backend, so no cross-request lock is required for correctness.
-			self::prune_duplicate_uuid_meta( $object, $persist );
+		$trust    = ! empty( $opts['trust_persisted'] );
+		$entry    = self::first_valid_uuid_entry( (array) $object->get_meta_data() );
+		$existing = null === $entry ? '' : (string) Meta_Entry::value( $entry );
+		if ( '' !== $existing ) {
+			$owned = ! \is_callable( $collides )
+				|| ( $trust && self::is_own_persisted_uuid( $object, $entry ) )
+				|| ! $collides( $existing, $object );
+			if ( $owned ) {
+				// Converge any duplicate uuid metas (e.g. a concurrent first-stamp) to
+				// the single canonical value — deterministic regardless of object-cache
+				// backend, so no cross-request lock is required for correctness.
+				self::prune_duplicate_uuid_meta( $object, $persist );
 
-			return $existing;
+				return $existing;
+			}
 		}
 		if ( ! method_exists( $object, 'update_meta_data' ) ) {
 			return '';
@@ -125,6 +149,24 @@ class Pos_Uuid {
 			return '';
 		}
 		$uuid = self::generate_uuid();
+		if ( '' !== $existing ) {
+			// A re-key changes the record's client-side primary key (ADR 0038). Rare
+			// and consequential, so it is always on the record: which record, the
+			// identity it lost, the one it received.
+			// The commonest re-key is an unsaved clone (id 0), so the name is what
+			// identifies it after the fact.
+			$name = method_exists( $object, 'get_name' ) ? (string) $object->get_name() : '';
+			Logger::log(
+				sprintf(
+					'Re-keyed %s #%d%s: uuid %s is already owned by another record; it now carries %s.',
+					\get_class( $object ),
+					method_exists( $object, 'get_id' ) ? (int) $object->get_id() : 0,
+					'' === $name ? '' : ' (' . $name . ')',
+					$existing,
+					$uuid
+				)
+			);
+		}
 		$object->update_meta_data( self::META_KEY, $uuid );
 		if ( $persist ) {
 			call_user_func( array( $object, 'save_meta_data' ) );
@@ -166,6 +208,9 @@ class Pos_Uuid {
 			return '';
 		}
 
+		// No `trust_persisted` here: V1's customer list has no in-response
+		// duplicate check, so its "no two records share a uuid" contract rests on
+		// this detector (Test_Customers_Controller::test_customer_uuid_is_unique).
 		return self::ensure_uuid(
 			$customer,
 			array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_user' ) )
@@ -376,7 +421,16 @@ class Pos_Uuid {
 		$collides = is_a( $object, 'WC_Abstract_Order' )
 			? array( __CLASS__, 'uuid_owned_by_other_order' )
 			: array( __CLASS__, 'uuid_owned_by_other' );
-		$uuid = self::ensure_uuid( $object, array( 'collides' => $collides ) );
+		// Read path over a record loaded from its own row: a loaded, unchanged uuid
+		// is trusted (ADR 0038). On the legacy CPT order store the detector is a
+		// full `wp_postmeta` uuid walk per served order (#1805).
+		$uuid = self::ensure_uuid(
+			$object,
+			array(
+				'collides'        => $collides,
+				'trust_persisted' => true,
+			)
+		);
 
 		return '' === $uuid ? $payload : self::ensure_in_payload( $payload, $uuid );
 	}
@@ -481,11 +535,23 @@ class Pos_Uuid {
 		}
 		add_action( 'woocommerce_before_product_object_save', array( __CLASS__, 'stamp_on_save' ), 10, 1 );
 		add_action( 'woocommerce_before_product_variation_object_save', array( __CLASS__, 'stamp_on_save' ), 10, 1 );
+		// A record leaving the trash must re-prove ownership: it was invisible to
+		// the detector while inactive, so another record may hold its uuid now.
+		// Both storage lanes — `untrashed_post` never fires for HPOS orders and
+		// `woocommerce_untrash_order` never fires for posts (ADR 0038).
+		add_action( 'untrashed_post', array( __CLASS__, 'recheck_ownership_after_untrash' ), 10, 1 );
+		add_action( 'woocommerce_untrash_order', array( __CLASS__, 'recheck_order_ownership_after_untrash' ), 10, 1 );
 	}
 
 	/**
 	 * Before-save hook: ensure the WC object carries a unique uuid as part of the
 	 * in-progress save (persist:false — the save itself writes it).
+	 *
+	 * The ownership scan runs only for a uuid that did NOT come from this record's
+	 * own persisted meta row (`trust_persisted`, {@see is_own_persisted_uuid}). It
+	 * walks every uuid row in `wp_postmeta` (no `meta_value` index), so on every
+	 * save it cost 0.46 s and 30k rows examined on a 30k-product store, 114 times
+	 * an hour, for a fact the loaded row already stated (#1805, ADR 0038).
 	 *
 	 * @param mixed $object
 	 */
@@ -493,10 +559,120 @@ class Pos_Uuid {
 		self::ensure_uuid(
 			$object,
 			array(
-				'collides' => array( __CLASS__, 'uuid_owned_by_other' ),
-				'persist'  => false,
+				'collides'        => array( __CLASS__, 'uuid_owned_by_other' ),
+				'persist'         => false,
+				'trust_persisted' => true,
 			)
 		);
+	}
+
+	/**
+	 * Re-prove uuid ownership for a post that just left the trash (products,
+	 * variations, and orders on the legacy CPT store).
+	 *
+	 * A trashed record is not a live owner, so a clone or import made while it
+	 * was in the trash legitimately kept the copied uuid — and the tills now key
+	 * on that record. A native restore (wp-admin's Restore, `wp_untrash_post()`)
+	 * persists the status change before any WC object save, so neither the write
+	 * hook nor the trusted read path ever sees a trash→live transition: this hook
+	 * is the one seam. It runs the detector once per restore — a rare event — and
+	 * re-keys the RESTORED record when another live record owns its uuid, never
+	 * the record the tills already hold (ADR 0038).
+	 *
+	 * @param mixed $post_id Restored post id (`untrashed_post`).
+	 */
+	public static function recheck_ownership_after_untrash( $post_id ): void {
+		$post_id   = (int) $post_id;
+		$post_type = \function_exists( 'get_post_type' ) ? get_post_type( $post_id ) : '';
+		if ( \in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
+			$object   = \function_exists( 'wc_get_product' ) ? wc_get_product( $post_id ) : null;
+			$collides = array( __CLASS__, 'uuid_owned_by_other' );
+		} elseif ( 'shop_order' === $post_type ) {
+			$object   = \function_exists( 'wc_get_order' ) ? wc_get_order( $post_id ) : null;
+			$collides = array( __CLASS__, 'uuid_owned_by_other_order' );
+		} else {
+			return;
+		}
+		if ( \is_object( $object ) && method_exists( $object, 'get_id' ) && (int) $object->get_id() === $post_id ) {
+			self::ensure_uuid( $object, array( 'collides' => $collides ) );
+		}
+	}
+
+	/**
+	 * HPOS twin of {@see recheck_ownership_after_untrash}: `untrashed_post` never
+	 * fires for orders in the orders table, and `woocommerce_untrash_order` fires
+	 * BEFORE the data store restores the status (a detector run there would see a
+	 * still-trashed row and, worse, the restore's own save would write the old meta
+	 * back). Arm a one-shot on the order's first live object save and re-prove
+	 * ownership then — the same seam {@see Integrity_Digest::record_order_untrashed}
+	 * uses.
+	 *
+	 * @param mixed $order_id Order being restored (`woocommerce_untrash_order`).
+	 */
+	public static function recheck_order_ownership_after_untrash( $order_id ): void {
+		$order_id = (int) $order_id;
+		$handler  = static function ( $order ) use ( $order_id, &$handler ): void {
+			if ( ! \is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! method_exists( $order, 'get_status' )
+				|| (int) $order->get_id() !== $order_id || 'trash' === $order->get_status() ) {
+				return;
+			}
+			remove_action( 'woocommerce_after_order_object_save', $handler );
+			self::ensure_uuid( $order, array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_order' ) ) );
+		};
+		add_action( 'woocommerce_after_order_object_save', $handler );
+	}
+
+	/**
+	 * True when $entry — the record's canonical uuid entry — was READ from this
+	 * record's own meta row and has not been changed in memory since: the uuid is
+	 * already this record's persisted identity, not a value that arrived by copy.
+	 *
+	 * The ownership detector exists to catch a uuid that reached a record some
+	 * other way, and every such provenance fails this test: a duplicated object
+	 * (WooCommerce's "Duplicate" clones the meta with its ids cleared), an importer
+	 * rewriting the value in memory (a tracked change on the entry), a record with
+	 * no id yet, a record returning from the trash. What passes is the ordinary
+	 * save or read — a stock change, a price edit, a REST update, a served record —
+	 * where the detector re-proved a fact at a cost linear in catalog size.
+	 *
+	 * A copy made WITHOUT hooks (direct SQL, a migration tool) passes too, on both
+	 * records: neither save re-keys it. Deliberate (ADR 0038): the detector caught
+	 * that shape only when one of the two next saved, and re-keyed whichever that
+	 * was — the original as readily as the copy. The collision backfill
+	 * (`/uuid/backfill?mode=collisions`) walks the store once in bounded pages and
+	 * re-keys the later copy, never the owner; it is the repair for that shape.
+	 *
+	 * Duck-typed on WC_Data / WC_Meta_Data (`get_id`, `get_changes`, `get_data`,
+	 * `->id`): a bare array or a fake without change tracking is never trusted.
+	 *
+	 * @param mixed $object
+	 * @param mixed $entry
+	 */
+	private static function is_own_persisted_uuid( $object, $entry ): bool {
+		if ( ! \is_object( $object ) || ! method_exists( $object, 'get_id' ) || (int) $object->get_id() <= 0 ) {
+			return false;
+		}
+		// A record coming back from trash/auto-draft was invisible to the ownership
+		// scan while inactive (inactive rows are not live owners), so another record
+		// may have adopted its uuid in the meantime — and that record is what the
+		// tills now key on. The transition back to live is the one ordinary save
+		// that must re-prove ownership; the loaded status is still in get_data()
+		// because the before-save hook fires ahead of apply_changes().
+		if ( method_exists( $object, 'get_changes' ) && method_exists( $object, 'get_data' ) ) {
+			$changes = (array) $object->get_changes();
+			if ( isset( $changes['status'] ) ) {
+				$loaded = (array) $object->get_data();
+				if ( \in_array( (string) ( $loaded['status'] ?? '' ), array( 'trash', 'auto-draft' ), true ) ) {
+					return false;
+				}
+			}
+		}
+		// Only the canonical entry's provenance decides; a trailing duplicate is
+		// pruned by the save either way.
+		return \is_object( $entry )
+			&& method_exists( $entry, 'get_changes' )
+			&& ! empty( $entry->id )
+			&& array() === $entry->get_changes();
 	}
 
 	/**

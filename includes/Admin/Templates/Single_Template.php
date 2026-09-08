@@ -507,7 +507,7 @@ class Single_Template {
 		wp_enqueue_script(
 			'wcpos-template-editor',
 			PLUGIN_URL . $dir . '/js/template-editor.js',
-			array( 'react', 'react-dom', 'wp-api-fetch' ),
+			array( 'react', 'react-dom', 'wp-api-fetch', \WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE ),
 			PLUGIN_VERSION,
 			true
 		);

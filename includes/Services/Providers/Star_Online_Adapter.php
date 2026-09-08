@@ -56,7 +56,8 @@ class Star_Online_Adapter implements Push_Provider_Adapter_Interface {
 		$name   = str_replace( array( '[', ']' ), array( '[[', ']]' ), $printer_name );
 		$markup = '[align: middle][bold: on]WCPOS[bold: off]' . "\nCloud Print Test\n[align: left]";
 		$markup .= 'Printer: ' . $name . "\nDate: " . gmdate( 'Y-m-d H:i' ) . "\n";
-		$markup .= "If you can read this, printing works!\n[feed][cut]";
+		// Three feeds before the cut, matching the receipt templates' bottom margin.
+		$markup .= "If you can read this, printing works!\n[feed][feed][feed][cut]";
 
 		return array(
 			'content_type' => $this->content_type(),

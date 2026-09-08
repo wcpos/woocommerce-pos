@@ -92,7 +92,10 @@ class Provider_Adapter_Test extends WP_UnitTestCase {
 
 		$diagnostic = $adapter->diagnostic( 'Counter' );
 		$this->assertSame( 'application/xml', $diagnostic['content_type'] );
-		$this->assertStringContainsString( '<epos-print', base64_decode( $diagnostic['payload'], true ) );
+		$xml = base64_decode( $diagnostic['payload'], true );
+		$this->assertStringContainsString( '<epos-print', $xml );
+		// Three blank lines before the feed cut so the last line clears the blade.
+		$this->assertStringContainsString( '</text><feed line="3"/><cut type="feed"/>', $xml );
 		$this->assertSame(
 			'blocked',
 			$adapter->status(
@@ -163,7 +166,9 @@ class Provider_Adapter_Test extends WP_UnitTestCase {
 
 		$diagnostic = $adapter->diagnostic( 'Till [cut]' );
 		$this->assertSame( 'text/vnd.star.markup', $diagnostic['content_type'] );
-		$this->assertStringContainsString( 'Till [[cut]]', base64_decode( $diagnostic['payload'], true ) );
+		$markup = base64_decode( $diagnostic['payload'], true );
+		$this->assertStringContainsString( 'Till [[cut]]', $markup );
+		$this->assertStringEndsWith( "printing works!\n[feed][feed][feed][cut]", $markup );
 		$this->assertSame( 'unknown', $adapter->status( $printer, array( 'cache_ttl' => 60 ) ) );
 
 		$result = $adapter->submit( array(), array(), '', 'WCPOS Test' );

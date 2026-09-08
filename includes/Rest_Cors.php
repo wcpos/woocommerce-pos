@@ -142,7 +142,11 @@ final class Rest_Cors {
 	 *
 	 * Deliberately narrower than ROUTE_PATTERN — a namespace added through
 	 * `woocommerce_pos_rest_namespaces` publishes its own response semantics,
-	 * and this guard has never covered it.
+	 * and this guard has never covered it. Preflights are the exception:
+	 * every preflight this class ANSWERS gets the cache contract regardless
+	 * of lane ({@see self::rest_pre_serve_request()}), because the answer
+	 * depends on the announced headers; the narrowing here binds real
+	 * responses only.
 	 */
 	private const CACHE_ROUTE_PATTERN = '#^/wcpos/v[12](?:/|$)#i';
 
@@ -156,6 +160,27 @@ final class Rest_Cors {
 	 * having to guess from the route alone.
 	 */
 	private const MARKER_HEADER_PREFIX = 'x-wcpos';
+
+	/** Makes CR/LF/NUL and malformed names unreachable in the response header. */
+	private const HEADER_NAME_PATTERN = '/\A[A-Za-z0-9!#$%&\'*+.^_`|~-]+\z/';
+
+	/**
+	 * Reflection budget, names axis ({@see self::preflight_allow_headers()}).
+	 *
+	 * Bounds a hostile many-short-names announcement, which the byte budget
+	 * alone would not. A legitimate client announces well under ten names
+	 * beyond the floor.
+	 */
+	private const REFLECT_MAX_NAMES = 16;
+
+	/**
+	 * Reflection budget, bytes axis ({@see self::preflight_allow_headers()}).
+	 *
+	 * Bounds a hostile few-long-names announcement. With the ~250-byte floor
+	 * the emitted header stays well under the smallest real proxy
+	 * response-header ceilings (nginx buffers 4 KB per header line).
+	 */
+	private const REFLECT_MAX_BYTES = 256;
 
 	/**
 	 * Register the wire contract. Unconditional — see the class docblock.
@@ -193,11 +218,14 @@ final class Rest_Cors {
 	 * @return bool $served
 	 */
 	public static function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
-		if ( preg_match( self::CACHE_ROUTE_PATTERN, (string) $request->get_route() ) ) {
+		$owns_request = self::owns_request( $request );
+		if ( $owns_request && 'OPTIONS' === $request->get_method() ) {
+			self::send_cache_defeating_headers( $result, $server, array( 'Access-Control-Request-Headers' ) );
+		} elseif ( preg_match( self::CACHE_ROUTE_PATTERN, (string) $request->get_route() ) ) {
 			self::send_cache_defeating_headers( $result, $server );
 		}
 
-		if ( ! self::owns_request( $request ) ) {
+		if ( ! $owns_request ) {
 			return $served;
 		}
 
@@ -209,16 +237,72 @@ final class Rest_Cors {
 		$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
 
 		if ( 'OPTIONS' === $request->get_method() ) {
-			// Same list core built in serve_request(), through the same
-			// filter, so a third party that hooks it reaches both writes.
-			$allow_headers = apply_filters( 'rest_allowed_cors_headers', self::ALLOW_HEADERS_BASE, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
-
 			$server->send_header( 'Access-Control-Allow-Methods', 'OPTIONS, GET, POST, PUT, PATCH, DELETE' );
-			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', array_unique( $allow_headers ) ) );
+			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', array_unique( self::preflight_allow_headers( $request ) ) ) );
 			$server->send_header( 'Access-Control-Max-Age', self::MAX_AGE );
 		}
 
 		return $served;
+	}
+
+	/**
+	 * The preflight allow-list: the frozen floor plus reflected announcements.
+	 *
+	 * The floor (ALLOW_HEADERS_BASE ∪ Sync\Cors::headers(), through core's
+	 * filter) is frozen — {@see Sync\Cors::headers()}. Any `x-wcpos-*` name
+	 * the browser announces in `Access-Control-Request-Headers` is reflected
+	 * after it, so a header a future client invents is pre-authorized the
+	 * moment it ships instead of waiting out the plugin-update lag that took
+	 * tills offline in 23bcdb47, 118a091f, and forced #1760's query twins.
+	 * Reflection grants nothing: it tells the browser it MAY send the name;
+	 * every route keeps its permission callback, and the server ignores
+	 * names it does not read. {@see API\V2\Echo_Probe} advertises this
+	 * capability to clients (`cors.reflects_request_headers`) — narrowing
+	 * reflection later must update that field.
+	 *
+	 * A non-browser can put arbitrary bytes in the announcement, so
+	 * reflected names are token-checked (HEADER_NAME_PATTERN) and budgeted
+	 * on two independent axes (REFLECT_MAX_NAMES, REFLECT_MAX_BYTES). An
+	 * oversized name is SKIPPED, never truncated — and never aborts the
+	 * names after it, or one hostile entry could starve a legitimate header
+	 * and take the till offline: the exact outage class reflection removes.
+	 *
+	 * Degradation contract: an absent or proxy-stripped announcement yields
+	 * the floor, byte-identical to the pre-reflection wire.
+	 *
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return string[] Floor names in canonical casing, reflected extras in lowercase.
+	 */
+	private static function preflight_allow_headers( WP_REST_Request $request ): array {
+		// Same list core built in serve_request(), through the same
+		// filter, so a third party that hooks it reaches both writes.
+		$allow_headers   = apply_filters( 'rest_allowed_cors_headers', self::ALLOW_HEADERS_BASE, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
+		$allowed_names   = array_fill_keys( array_map( 'strtolower', $allow_headers ), true );
+		$reflected       = 0;
+		$reflected_bytes = 0;
+
+		foreach ( self::announced_header_names( $request ) as $header ) {
+			// The bare marker (`x-wcpos`) is already in the floor; reflected
+			// extras must carry the hyphenated namespace, so `x-wcposter`
+			// stays a stranger's header.
+			if ( ! preg_match( self::HEADER_NAME_PATTERN, $header ) || 0 !== strpos( $header, self::MARKER_HEADER_PREFIX . '-' ) || isset( $allowed_names[ $header ] ) ) {
+				continue;
+			}
+			if ( self::REFLECT_MAX_NAMES <= $reflected ) {
+				break;
+			}
+			if ( self::REFLECT_MAX_BYTES < $reflected_bytes + strlen( $header ) ) {
+				continue;
+			}
+
+			$allow_headers[]          = $header;
+			$allowed_names[ $header ] = true;
+			++$reflected;
+			$reflected_bytes += strlen( $header );
+		}
+
+		return $allow_headers;
 	}
 
 	/**
@@ -277,18 +361,31 @@ final class Rest_Cors {
 	 * @return bool
 	 */
 	private static function preflight_announces_wcpos( WP_REST_Request $request ): bool {
-		$announced = (string) $request->get_header( 'Access-Control-Request-Headers' );
-		if ( '' === $announced ) {
-			return false;
-		}
-
-		foreach ( explode( ',', strtolower( $announced ) ) as $header ) {
-			if ( 0 === strpos( trim( $header ), self::MARKER_HEADER_PREFIX ) ) {
+		foreach ( self::announced_header_names( $request ) as $header ) {
+			if ( 0 === strpos( $header, self::MARKER_HEADER_PREFIX ) ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Parse the header names announced by a CORS preflight.
+	 *
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return string[] Trimmed, lowercase, non-empty header names.
+	 */
+	private static function announced_header_names( WP_REST_Request $request ): array {
+		return array_values(
+			array_filter(
+				array_map( 'trim', explode( ',', strtolower( (string) $request->get_header( 'Access-Control-Request-Headers' ) ) ) ),
+				static function ( string $header ): bool {
+					return '' !== $header;
+				}
+			)
+		);
 	}
 
 	/**
@@ -302,12 +399,15 @@ final class Rest_Cors {
 	 * Vary is defense-in-depth for intermediaries that ignore no-store but
 	 * honor Vary ({@see self::VARY_TOKENS}). Existing Vary tokens are
 	 * preserved (deduped case-insensitively); a wildcard Vary stays alone,
-	 * since '*' is grammatically an alternative to a field list.
+	 * since '*' is grammatically an alternative to a field list. Preflights
+	 * also vary on their announced headers because the answer depends on them
+	 * (RFC 9111 section 4.1).
 	 *
-	 * @param WP_HTTP_Response $result Result to send to the client.
-	 * @param WP_REST_Server   $server Server instance.
+	 * @param WP_HTTP_Response $result            Result to send to the client.
+	 * @param WP_REST_Server   $server            Server instance.
+	 * @param string[]         $extra_vary_tokens Additional Vary tokens.
 	 */
-	private static function send_cache_defeating_headers( WP_HTTP_Response $result, WP_REST_Server $server ): void {
+	private static function send_cache_defeating_headers( WP_HTTP_Response $result, WP_REST_Server $server, array $extra_vary_tokens = array() ): void {
 		$response_headers = array_change_key_case( $result->get_headers(), CASE_LOWER );
 		$existing_vary    = isset( $response_headers['vary'] )
 			? array_values(
@@ -323,7 +423,7 @@ final class Rest_Cors {
 		if ( in_array( '*', $existing_vary, true ) ) {
 			$vary = '*';
 		} else {
-			$vary_tokens = array_merge( $existing_vary, self::VARY_TOKENS );
+			$vary_tokens = array_merge( $existing_vary, self::VARY_TOKENS, $extra_vary_tokens );
 			$vary_tokens = array_change_key_case( array_combine( $vary_tokens, $vary_tokens ), CASE_LOWER );
 			$vary        = implode( ', ', $vary_tokens );
 		}

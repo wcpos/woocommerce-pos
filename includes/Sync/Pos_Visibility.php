@@ -224,7 +224,7 @@ final class Pos_Visibility {
 	 *
 	 * WooCommerce's own visible-children resolution applies the store's WEB visibility rules, NOT the
 	 * POS exclusion, so a child hidden from the POS would otherwise leak — its price into a served
-	 * price range, or the row itself into a targeted pull. Also used for `include=` variation lists.
+	 * price range.
 	 *
 	 * @param array       $ids   Variation ids.
 	 * @param null|string $scope Visibility scope: `default` or a store id. Null means default.

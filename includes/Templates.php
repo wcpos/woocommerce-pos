@@ -42,11 +42,30 @@ class Templates {
 	const OFFLINE_CAPABLE_ENGINES = array( 'logicless', 'thermal' );
 
 	/**
+	 * File extensions a bundled gallery template's content file can use.
+	 */
+	const GALLERY_CONTENT_EXTENSIONS = array( 'html', 'php', 'xml' );
+
+	/**
 	 * Per-request cache of installed gallery template preview data profiles.
 	 *
 	 * @var array<string,string|null>
 	 */
 	private static $gallery_preview_data_cache = array();
+
+	/**
+	 * Bump when the default term set below changes; a lower stored value reseeds.
+	 *
+	 * This class is constructed on EVERY request (Init::init_common), and the
+	 * seeding used to run nine `term_exists()` checks each time — 18 of the 31
+	 * queries the plugin added to every storefront page (measured 2026-09-03
+	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
+	 * Behind the latch the whole registration costs no queries.
+	 */
+	public const DEFAULT_TERMS_VERSION = 1;
+
+	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
+	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
 
 	/**
 	 * Constructor.
@@ -55,6 +74,63 @@ class Templates {
 		// Register immediately since this is already being called during 'init'.
 		$this->register_post_type();
 		$this->register_taxonomy();
+		$this->maybe_seed_default_terms();
+	}
+
+	/**
+	 * Make sure the template post type and taxonomies exist on this request.
+	 *
+	 * A storefront request constructs Templates only on its first order write
+	 * (see Init::ensure_order_services()), but the static readers below are
+	 * also reached from a plain page — the My Account order actions read the
+	 * active receipt template. A tax_query against an unregistered taxonomy
+	 * matches nothing, and get_active_template_id() would then treat the
+	 * merchant's custom template as gone and delete the active-template
+	 * option. Registration itself costs no queries (the default terms are
+	 * behind an autoloaded latch), so every static reader calls this first.
+	 */
+	public static function ensure_registered(): void {
+		if ( taxonomy_exists( 'wcpos_template_type' ) && post_type_exists( 'wcpos_template' ) ) {
+			return;
+		}
+		new self();
+	}
+
+	/**
+	 * Seed the default template types and categories once per DEFAULT_TERMS_VERSION.
+	 *
+	 * The latch is set only once every default term verifiably exists, so a
+	 * failed `wp_insert_term()` (a filter returning WP_Error, a transient DB
+	 * fault) leaves seeding armed for the next request instead of marking it
+	 * done. A term deleted by hand is restored on the next version bump or
+	 * plugin (re)activation, not the next request; the taxonomies are hidden
+	 * from menus and the defaults exist for the receipt UI, so that is the
+	 * right trade for a free page load.
+	 */
+	private function maybe_seed_default_terms(): void {
+		if ( (int) get_option( self::DEFAULT_TERMS_OPTION, 0 ) >= self::DEFAULT_TERMS_VERSION ) {
+			return;
+		}
+		$this->register_default_template_types();
+		$this->register_default_template_categories();
+		if ( $this->default_terms_present() ) {
+			update_option( self::DEFAULT_TERMS_OPTION, self::DEFAULT_TERMS_VERSION, true );
+		}
+	}
+
+	/** Whether every default type and category term exists. */
+	private function default_terms_present(): bool {
+		foreach ( array( 'receipt', 'report' ) as $slug ) {
+			if ( ! term_exists( $slug, 'wcpos_template_type' ) ) {
+				return false;
+			}
+		}
+		foreach ( array_keys( self::default_template_categories() ) as $slug ) {
+			if ( ! term_exists( $slug, 'wcpos_template_category' ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -178,8 +254,7 @@ class Templates {
 
 		register_taxonomy( 'wcpos_template_type', array( 'wcpos_template' ), $args );
 
-		// Register default template types.
-		$this->register_default_template_types();
+		// Default terms are seeded by maybe_seed_default_terms(), behind a latch.
 
 		// Register category taxonomy for gallery filtering.
 		register_taxonomy(
@@ -205,8 +280,6 @@ class Templates {
 				),
 			)
 		);
-
-		$this->register_default_template_categories();
 	}
 
 	/**
@@ -317,6 +390,7 @@ class Templates {
 	 * @return null|array Template data or null if not found.
 	 */
 	public static function get_template( int $template_id ): ?array {
+		self::ensure_registered();
 		$post = get_post( $template_id );
 
 		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
@@ -335,8 +409,8 @@ class Templates {
 		$preview_data    = null;
 		if ( \is_string( $gallery_key ) && '' !== $gallery_key ) {
 			if ( ! array_key_exists( $gallery_key, self::$gallery_preview_data_cache ) ) {
-				$gallery_template = self::get_gallery_template_by_key( $gallery_key );
-				self::$gallery_preview_data_cache[ $gallery_key ] = $gallery_template['preview_data'] ?? null;
+				$gallery_metadata = self::get_gallery_template_metadata( $gallery_key );
+				self::$gallery_preview_data_cache[ $gallery_key ] = $gallery_metadata['preview_data'] ?? null;
 			}
 
 			$preview_data = self::$gallery_preview_data_cache[ $gallery_key ];
@@ -889,6 +963,7 @@ class Templates {
 	 * @return array Array of template data arrays.
 	 */
 	public static function get_enabled_templates( string $type = 'receipt' ): array {
+		self::ensure_registered();
 		$disabled_virtual = self::get_disabled_virtual_templates( $type );
 		$order            = self::get_template_order( $type );
 		$templates        = array();
@@ -1009,8 +1084,7 @@ class Templates {
 			return array();
 		}
 
-		$templates  = array();
-		$extensions = array( 'html', 'php', 'xml' );
+		$templates = array();
 
 		foreach ( Gallery_Registry::all() as $key => $metadata ) {
 			if ( $type && ( $metadata['type'] ?? '' ) !== $type ) {
@@ -1020,34 +1094,15 @@ class Templates {
 				continue;
 			}
 
-			$content_file = null;
-			foreach ( $extensions as $ext ) {
-				$candidate = $gallery_dir . $key . '.' . $ext;
-				if ( file_exists( $candidate ) ) {
-					$content_file = $candidate;
-					break;
-				}
-			}
+			$content_file = self::find_gallery_content_file( $key );
 
-			if ( ! $content_file ) {
+			if ( '' === $content_file ) {
 				continue;
 			}
 
-			$metadata['key']       = $key;
-			$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
-				? 'rtl'
-				: 'ltr';
-
-			$templates[] = array_merge(
-				$metadata,
-				array(
-					'content'         => file_get_contents( $content_file ),
-					'content_file'    => $content_file,
-					'is_premade'      => true,
-					'is_virtual'      => true,
-					'source'          => 'gallery',
-					'offline_capable' => in_array( $metadata['engine'] ?? 'logicless', self::OFFLINE_CAPABLE_ENGINES, true ),
-				)
+			$templates[] = self::build_gallery_template(
+				self::prepare_gallery_metadata( $key, $metadata ),
+				$content_file
 			);
 		}
 
@@ -1062,22 +1117,111 @@ class Templates {
 	}
 
 	/**
+	 * Locate the content file for a bundled gallery template key.
+	 *
+	 * Only stats the candidate paths for the given key — it never reads file
+	 * contents, and never touches the other bundled gallery templates.
+	 *
+	 * @param string $key Gallery template key (e.g. "standard-receipt").
+	 *
+	 * @return string Absolute path to the content file, or '' when none exists.
+	 */
+	private static function find_gallery_content_file( string $key ): string {
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+
+		foreach ( self::GALLERY_CONTENT_EXTENSIONS as $ext ) {
+			$candidate = $gallery_dir . $key . '.' . $ext;
+			if ( file_exists( $candidate ) ) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Normalize a raw registry entry into gallery template metadata.
+	 *
+	 * @param string              $key      Gallery template key.
+	 * @param array<string,mixed> $metadata Raw registry entry.
+	 *
+	 * @return array<string,mixed> Normalized metadata.
+	 */
+	private static function prepare_gallery_metadata( string $key, array $metadata ): array {
+		$metadata['key']       = $key;
+		$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
+			? 'rtl'
+			: 'ltr';
+
+		return $metadata;
+	}
+
+	/**
+	 * Build a full gallery template record by reading its content file.
+	 *
+	 * @param array<string,mixed> $metadata     Normalized metadata for the key.
+	 * @param string              $content_file Absolute path to the content file.
+	 *
+	 * @return array<string,mixed> Gallery template record.
+	 */
+	private static function build_gallery_template( array $metadata, string $content_file ): array {
+		return array_merge(
+			$metadata,
+			array(
+				'content'         => file_get_contents( $content_file ),
+				'content_file'    => $content_file,
+				'is_premade'      => true,
+				'is_virtual'      => true,
+				'source'          => 'gallery',
+				'offline_capable' => in_array( $metadata['engine'] ?? 'logicless', self::OFFLINE_CAPABLE_ENGINES, true ),
+			)
+		);
+	}
+
+	/**
+	 * Get a single gallery template's metadata without reading any template file.
+	 *
+	 * Metadata (title, description, engine, preview_data, ...) lives in
+	 * Gallery_Registry, so callers that only need metadata never pay for reading
+	 * the bundled template content — which is why get_template() uses this rather
+	 * than get_gallery_template_by_key().
+	 *
+	 * @param string $key Gallery template key (e.g. "standard-receipt").
+	 *
+	 * @return null|array Gallery template metadata, or null when the key is unknown
+	 *                    or has no bundled content file.
+	 */
+	public static function get_gallery_template_metadata( string $key ): ?array {
+		$registry = Gallery_Registry::all();
+
+		if ( ! isset( $registry[ $key ] ) ) {
+			return null;
+		}
+
+		if ( '' === self::find_gallery_content_file( $key ) ) {
+			return null;
+		}
+
+		return self::prepare_gallery_metadata( $key, $registry[ $key ] );
+	}
+
+	/**
 	 * Get a single gallery template by its key.
+	 *
+	 * Reads only the requested template's content file.
 	 *
 	 * @param string $key Gallery template key (e.g. "standard-receipt").
 	 *
 	 * @return null|array Gallery template data or null if not found.
 	 */
 	public static function get_gallery_template_by_key( string $key ): ?array {
-		$templates = self::get_gallery_templates();
+		$metadata = self::get_gallery_template_metadata( $key );
 
-		foreach ( $templates as $template ) {
-			if ( ( $template['key'] ?? '' ) === $key ) {
-				return $template;
-			}
+		if ( null === $metadata ) {
+			return null;
 		}
 
-		return null;
+		return self::build_gallery_template( $metadata, self::find_gallery_content_file( $key ) );
 	}
 
 	/**
@@ -1247,12 +1391,12 @@ class Templates {
 	}
 
 	/**
-	 * Register default template categories.
+	 * The default template categories: slug => label.
 	 *
-	 * @return void
+	 * @return array<string, string>
 	 */
-	private function register_default_template_categories(): void {
-		$categories = array(
+	private static function default_template_categories(): array {
+		return array(
 			'receipt'        => /* translators: Receipt template post type or template option label. */ __( 'Receipt', 'woocommerce-pos' ),
 			'invoice'        => /* translators: Receipt template post type or template option label. */ __( 'Invoice', 'woocommerce-pos' ),
 			'gift-receipt'   => /* translators: Receipt template post type or template option label. */ __( 'Gift Receipt', 'woocommerce-pos' ),
@@ -1261,8 +1405,15 @@ class Templates {
 			'kitchen-ticket' => /* translators: Receipt template post type or template option label. */ __( 'Kitchen Ticket', 'woocommerce-pos' ),
 			'bar-ticket'     => /* translators: Receipt template post type or template option label. */ __( 'Bar Ticket', 'woocommerce-pos' ),
 		);
+	}
 
-		foreach ( $categories as $slug => $name ) {
+	/**
+	 * Register default template categories.
+	 *
+	 * @return void
+	 */
+	private function register_default_template_categories(): void {
+		foreach ( self::default_template_categories() as $slug => $name ) {
 			if ( ! term_exists( $slug, 'wcpos_template_category' ) ) {
 				wp_insert_term( $name, 'wcpos_template_category', array( 'slug' => $slug ) );
 			}

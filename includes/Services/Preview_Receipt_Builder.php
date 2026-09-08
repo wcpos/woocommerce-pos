@@ -755,11 +755,12 @@ class Preview_Receipt_Builder {
 
 		$discounts = array(
 			array(
-				'label'      => $discount_label,
-				'code'       => 'SUMMER10',
-				'total'      => $display_incl ? $discount_incl : $discount_excl,
-				'total_incl' => $discount_incl,
-				'total_excl' => $discount_excl,
+				'label'         => $discount_label,
+				'code'          => 'SUMMER10',
+				'discount_type' => 'fixed_cart',
+				'total'         => $display_incl ? $discount_incl : $discount_excl,
+				'total_incl'    => $discount_incl,
+				'total_excl'    => $discount_excl,
 			),
 		);
 

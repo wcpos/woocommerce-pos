@@ -82,7 +82,7 @@ function next_significant_index( $tokens, $index ) {
 	}
 	return null;
 }
-function literal_text_from_call_argument( $tokens, $open_index, $argument_index, &$literal_indexes ) {
+function literal_text_from_call_argument( $tokens, $open_index, $argument_index, &$literal_indexes, &$argument_exists = null ) {
 	$text     = '';
 	$argument = 0;
 	$depth    = 0;
@@ -99,6 +99,7 @@ function literal_text_from_call_argument( $tokens, $open_index, $argument_index,
 			$literal_indexes[ $index ] = true;
 		}
 	}
+	$argument_exists = $argument >= $argument_index;
 	return $text;
 }
 function name_token_ids() {
@@ -281,15 +282,14 @@ function scan_file( $absolute_file, $relative_file ) {
 			if ( $current_method['test'] && 'WP_REST_Response' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
 				$classes[ $class_index ]['methods'][ $current_method['index'] ]['stub_sites'][ $token[2] ] = true;
 			} elseif ( 'WP_REST_Request' === ltrim( $name, '\\' ) && null !== $constructor && '(' === $tokens[ $constructor ] ) {
-				$after_open = next_significant_index( $tokens, $constructor );
-				if ( null !== $after_open && ')' === $tokens[ $after_open ] ) {
-					// A bare `new WP_REST_Request()` carries no route at all: it is a
+				$literal = literal_text_from_call_argument( $tokens, $constructor, 1, $literal_indexes, $route_argument_exists );
+				if ( ! $route_argument_exists ) {
+					// A bare or method-only `new WP_REST_Request(...)` carries no route at all: it is a
 					// payload/stub object handed to serializers, not a dispatch. It
 					// contributes NO lane signal — `unresolved` is reserved for routes
-					// that exist but cannot be read from literals, and counting bare
+					// that exist but cannot be read from literals, and counting routeless
 					// constructors there misclassifies pure-unit observers.
 				} else {
-					$literal = literal_text_from_call_argument( $tokens, $constructor, 1, $literal_indexes );
 					$route_literal_tokens += $literal_indexes;
 					$lanes   = lanes_from_text( $literal );
 					add_finding( $classes, $class_index, $current_method, empty( $lanes ) ? array( 'unresolved' => true ) : $lanes, empty( $lanes ) ? null : $literal );

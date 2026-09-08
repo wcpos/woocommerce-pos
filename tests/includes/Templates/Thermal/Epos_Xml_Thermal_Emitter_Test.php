@@ -90,6 +90,56 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Text after a styled heading explicitly restores the default printer state.
+	 *
+	 * @return void
+	 */
+	public function test_plain_text_after_styled_heading_restores_default_style(): void {
+		// Arrange.
+		$markup = '<receipt><align mode="center"><bold><size width="2" height="2"><text>Store</text></size></bold></align><text>Plain</text></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '<text align="center" em="true" dw="true" dh="true">Store', $xml );
+		$this->assertStringContainsString( '<text align="left" em="false" dw="false" dh="false">Plain', $xml );
+	}
+
+	/**
+	 * Consecutive plain text elements do not repeat unchanged printer state.
+	 *
+	 * @return void
+	 */
+	public function test_consecutive_plain_texts_do_not_repeat_style_attributes(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><text>First</text><text>Second</text></receipt>' );
+
+		// Assert.
+		$this->assertStringStartsWith(
+			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>',
+			$xml
+		);
+		$this->assertStringContainsString( "<text>First\n</text><text>Second\n</text>", $xml );
+	}
+
+	/**
+	 * The document starts by resetting every persistent text attribute.
+	 *
+	 * @return void
+	 */
+	public function test_document_starts_with_printer_state_reset(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><text>Hello</text></receipt>' );
+
+		// Assert.
+		$this->assertStringStartsWith(
+			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text align="left" em="false" ul="false" reverse="false" dw="false" dh="false"/>',
+			$xml
+		);
+	}
+
+	/**
 	 * Plain left text has no alignment or styling attributes.
 	 *
 	 * @return void
@@ -99,12 +149,12 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$xml = $this->render( '<receipt><text>Hello</text></receipt>' );
 
 		// Assert.
-		$this->assertNotFalse( simplexml_load_string( $xml ) );
-		$this->assertStringContainsString( 'Hello', $xml );
-		$this->assertStringNotContainsString( 'align=', $xml );
-		$this->assertStringNotContainsString( 'em="true"', $xml );
-		$this->assertStringNotContainsString( 'dw="true"', $xml );
-		$this->assertStringNotContainsString( 'dh="true"', $xml );
+		$doc = simplexml_load_string( $xml );
+		$this->assertNotFalse( $doc );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$this->assertSame( 'Hello', rtrim( (string) $texts[0], "\n" ) );
+		$this->assertCount( 0, $texts[0]->attributes() );
 	}
 
 	/**
@@ -121,10 +171,11 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertNotFalse( simplexml_load_string( $xml ) );
-		$this->assertEquals( 1, substr_count( $xml, '<text' ) );
 		$doc = simplexml_load_string( $xml );
 		$this->assertNotFalse( $doc );
-		$line = rtrim( (string) $doc->text, "\n" );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$line = rtrim( (string) $texts[0], "\n" );
 		$this->assertEquals( 48, strlen( $line ) );
 		$this->assertStringStartsWith( 'Item', $line );
 		$this->assertStringEndsWith( '$9.99', $line );
@@ -287,6 +338,83 @@ PHP;
 	}
 
 	/**
+	 * Barcode alignment is explicit and text after it reasserts its alignment.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_alignment_is_explicit_and_invalidates_text_alignment_state(): void {
+		// Arrange.
+		$markup = '<receipt><align mode="center"><barcode type="code128">72316</barcode></align><text>Plain</text></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '<barcode type="code128" hri="below" height="40" align="center">', $xml );
+		$this->assertStringContainsString( '<text align="left">Plain', $xml );
+	}
+
+	/**
+	 * Code 128 payloads select code set B and escape literal braces.
+	 *
+	 * @return void
+	 */
+	public function test_code128_payload_selects_code_set_and_escapes_braces(): void {
+		// Arrange / Act.
+		$plain  = $this->render( '<receipt><barcode type="code128">72316</barcode></receipt>' );
+		$braces = $this->render( '<receipt><barcode type="code128">A{B</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '>{B72316</barcode>', $plain );
+		$this->assertStringContainsString( '>{BA{{B</barcode>', $braces );
+	}
+
+	/**
+	 * ePOS-only symbologies pass through without the Code 128 selector.
+	 *
+	 * @return void
+	 */
+	public function test_epos_only_symbology_data_is_not_prefixed(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><barcode type="jan13">4006381333931</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '<barcode type="jan13" hri="below" height="40" align="left">4006381333931</barcode>', $xml );
+		$this->assertStringNotContainsString( '{B', $xml );
+	}
+
+	/**
+	 * QR (<symbol>) data shares the barcode escape layer: backslashes are doubled.
+	 *
+	 * @return void
+	 */
+	public function test_qrcode_data_doubles_backslashes(): void {
+		// Arrange / Act.
+		$xml = $this->render( '<receipt><qrcode>C:\dir\x41</qrcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( '>C:\\\\dir\\\\x41</symbol>', $xml );
+	}
+
+	/**
+	 * Empty barcode and QR values emit nothing; an unencodable value falls
+	 * back to a centered text line, as on the ESC/POS lane.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_empty_or_invalid_values_are_rescued(): void {
+		// Arrange / Act.
+		$empty   = $this->render( '<receipt><barcode type="code128">  </barcode><qrcode>  </qrcode></receipt>' );
+		$invalid = $this->render( '<receipt><barcode type="ean13">4006381333932</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringNotContainsString( '<barcode', $empty );
+		$this->assertStringNotContainsString( '<symbol', $empty );
+		$this->assertStringNotContainsString( '<barcode', $invalid );
+		$this->assertStringContainsString( '<text align="center">4006381333932' . "\n" . '</text>', $invalid );
+	}
+
+	/**
 	 * Text content with XML-significant characters is escaped and round-trips.
 	 *
 	 * @return void
@@ -302,15 +430,67 @@ PHP;
 		$this->assertStringContainsString( 'Tom &amp; Jerry &lt;x&gt;', $xml );
 		$doc = simplexml_load_string( $xml );
 		$this->assertNotFalse( $doc );
-		$this->assertEquals( 'Tom & Jerry <x>', rtrim( (string) $doc->text, "\n" ) );
+		$texts = $doc->xpath( '//*[local-name()="text" and string-length(.) > 0]' );
+		$this->assertCount( 1, $texts );
+		$this->assertEquals( 'Tom & Jerry <x>', rtrim( (string) $texts[0], "\n" ) );
 	}
 
 	/**
-	 * Image nodes are skipped but surrounding text is preserved.
+	 * Typographic spaces and dashes are folded before they reach the printer.
+	 *
+	 * CLDR time patterns separate the hour from the day period with U+202F, and a
+	 * printer with no mapping for it substitutes `?` — an Epson Server Direct
+	 * Print receipt came back reading "1:09?PM". Every other command-set lane
+	 * already normalized; this one emitted UTF-8 straight through.
 	 *
 	 * @return void
 	 */
-	public function test_image_node_is_skipped(): void {
+	public function test_typographic_characters_are_normalized_before_emission(): void {
+		// Arrange.
+		$markup = '<receipt><text>1:09' . "\u{202F}" . 'PM ' . "\u{2014}" . ' ' . "\u{201C}" . 'ok' . "\u{201D}" . '</text></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		// The double quotes normalize_text() folds the smart pair into are then
+		// XML-escaped on their way into the <text> element.
+		$this->assertStringContainsString( '1:09 PM - &quot;ok&quot;', $xml );
+		$this->assertStringNotContainsString( "\u{202F}", $xml );
+		$this->assertStringNotContainsString( "\u{2014}", $xml );
+	}
+
+	/**
+	 * Row padding still lines up after normalization.
+	 *
+	 * normalize_text() is a 1:1 substitution, so a row padded against the raw
+	 * width stays padded correctly — this pins that, because a normalization that
+	 * changed a character count would silently break every price column.
+	 *
+	 * @return void
+	 */
+	public function test_row_columns_stay_aligned_through_normalization(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="20"><row>'
+			. '<col width="*">a' . "\u{2014}" . 'b</col>'
+			. '<col width="6" align="right">1.00</col>'
+			. '</row></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( 'a-b' . str_repeat( ' ', 11 ) . '  1.00', $xml );
+	}
+
+	/**
+	 * An unresolvable image src emits nothing, and the receipt still prints.
+	 *
+	 * A logo that cannot be read is worth losing; the receipt around it is not.
+	 *
+	 * @return void
+	 */
+	public function test_unresolvable_image_src_emits_no_image_element(): void {
 		// Arrange.
 		$markup = '<receipt><text>before</text><image src="x" width="64"/><text>after</text></receipt>';
 
@@ -322,6 +502,89 @@ PHP;
 		$this->assertStringNotContainsString( '<image', $xml );
 		$this->assertStringContainsString( 'before', $xml );
 		$this->assertStringContainsString( 'after', $xml );
+	}
+
+	/**
+	 * A resolvable image is emitted as base64 raster in an <image> element.
+	 *
+	 * The store logo reaching the paper is the whole point of the element: an
+	 * Epson Server Direct Print receipt used to arrive with the logo silently
+	 * dropped while the merchant's preview showed it.
+	 *
+	 * @return void
+	 */
+	public function test_image_node_is_emitted_as_base64_raster(): void {
+		// Arrange. A 16x8 solid black logo is 2 bytes per row over 8 rows.
+		$markup = '<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertNotFalse( simplexml_load_string( $xml ) );
+		$this->assertStringContainsString( '<image width="16" height="8"', $xml );
+		$this->assertStringContainsString( 'mode="mono"', $xml );
+		$this->assertStringContainsString( '>' . base64_encode( str_repeat( "\xff", 16 ) ) . '</image>', $xml );
+	}
+
+	/**
+	 * An image is centred with no align wrapper, matching the other renderers.
+	 *
+	 * The preview, the PDF and the raster lane all hard-centre an `<image>`
+	 * regardless of the enclosing `<align>`, so this lane does too.
+	 *
+	 * @return void
+	 */
+	public function test_image_is_centered_without_an_align_wrapper(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/></receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( 'align="center"', $xml );
+	}
+
+	/**
+	 * The image moves printer alignment, so the cached text alignment is dropped.
+	 *
+	 * The manual's note on <text align> — "the align setting specified in this
+	 * element is also applied to <image>, <logo>, <barcode> and <symbol>" — runs
+	 * both ways. A cached "the printer is already left-aligned" would leave the
+	 * line after the logo centred under it.
+	 *
+	 * @return void
+	 */
+	public function test_image_alignment_invalidates_the_cached_text_alignment(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48">'
+			. '<image src="' . $this->black_png_data_uri( 8, 8 ) . '" width="8"/>'
+			. '<text>after</text>'
+			. '</receipt>';
+
+		// Act.
+		$xml = $this->render( $markup );
+
+		// Assert.
+		$this->assertStringContainsString( '<text align="left">after', $xml );
+	}
+
+	/**
+	 * A solid black PNG as a data URI.
+	 *
+	 * @param int $width  Width in pixels.
+	 * @param int $height Height in pixels.
+	 *
+	 * @return string The data URI.
+	 */
+	private function black_png_data_uri( int $width, int $height ): string {
+		$image = imagecreatetruecolor( $width, $height );
+		imagefilledrectangle( $image, 0, 0, $width - 1, $height - 1, imagecolorallocate( $image, 0, 0, 0 ) );
+		ob_start();
+		imagepng( $image );
+
+		return 'data:image/png;base64,' . base64_encode( (string) ob_get_clean() );
 	}
 
 	/**

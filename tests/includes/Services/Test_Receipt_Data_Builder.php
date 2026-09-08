@@ -1784,6 +1784,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertCount( 3, $payload['discounts'] );
 		foreach ( $payload['discounts'] as $discount ) {
 			$this->assertArrayHasKey( 'code', $discount );
+			$this->assertArrayHasKey( 'discount_type', $discount );
 			$this->assertArrayNotHasKey( 'codes', $discount );
 		}
 
@@ -1794,6 +1795,104 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'Band discount 25–75', $discounts_by_code[ wc_format_coupon_code( 'CODE_A' ) ]['label'] );
 		$this->assertSame( wc_format_coupon_code( 'CODE_B' ), $discounts_by_code[ wc_format_coupon_code( 'CODE_B' ) ]['label'] );
 		$this->assertSame( wc_format_coupon_code( 'CODE_C' ), $discounts_by_code[ wc_format_coupon_code( 'CODE_C' ) ]['label'] );
+	}
+
+	/**
+	 * Test discount rows expose the WooCommerce coupon type, or an empty string once the coupon is gone.
+	 */
+	public function test_build_exposes_discount_type_per_coupon_row(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Item' );
+		$product->set_regular_price( '50.00' );
+		$product->save();
+
+		$fixed = new \WC_Coupon();
+		$fixed->set_code( 'FIXED5' );
+		$fixed->set_amount( 5 );
+		$fixed->set_discount_type( 'fixed_cart' );
+		$fixed->save();
+
+		$percent = new \WC_Coupon();
+		$percent->set_code( 'TEN_PERCENT' );
+		$percent->set_amount( 10 );
+		$percent->set_discount_type( 'percent' );
+		$percent->save();
+
+		$deleted = new \WC_Coupon();
+		$deleted->set_code( 'GONE' );
+		$deleted->set_amount( 1 );
+		$deleted->set_discount_type( 'fixed_cart' );
+		$deleted->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->apply_coupon( 'FIXED5' );
+		$order->apply_coupon( 'TEN_PERCENT' );
+		$order->apply_coupon( 'GONE' );
+		$order->calculate_totals();
+		$order->save();
+
+		$deleted->delete( true );
+
+		$payload           = $this->builder->build( $order, 'live' );
+		$discounts_by_code = array_column( $payload['discounts'], null, 'code' );
+
+		$this->assertSame( 'fixed_cart', $discounts_by_code[ wc_format_coupon_code( 'FIXED5' ) ]['discount_type'] );
+		$this->assertSame( 'percent', $discounts_by_code[ wc_format_coupon_code( 'TEN_PERCENT' ) ]['discount_type'] );
+		$this->assertSame( '', $discounts_by_code[ wc_format_coupon_code( 'GONE' ) ]['discount_type'] );
+		$this->assertSame( wc_format_coupon_code( 'GONE' ), $discounts_by_code[ wc_format_coupon_code( 'GONE' ) ]['label'] );
+	}
+
+	/**
+	 * Test extensions can reshape the receipt payload through woocommerce_pos_receipt_data.
+	 */
+	public function test_build_applies_receipt_data_filter_with_order_and_mode(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Item' );
+		$product->set_regular_price( '50.00' );
+		$product->save();
+
+		$coupon = new \WC_Coupon();
+		$coupon->set_code( 'FIXED5' );
+		$coupon->set_amount( 5 );
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->apply_coupon( 'FIXED5' );
+		$order->calculate_totals();
+		$order->save();
+
+		$seen   = array();
+		$filter = static function ( array $data, $filtered_order, string $mode ) use ( &$seen ): array {
+			$seen = array(
+				'order_id' => $filtered_order->get_id(),
+				'mode'     => $mode,
+			);
+			$data['discounts'][0]['gift_card'] = true;
+			$data['discounts'][0]['label']     = 'Gift Card';
+
+			return $data;
+		};
+
+		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		try {
+			$payload = $this->builder->build( $order, 'fiscal' );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+		}
+
+		$this->assertSame(
+			array(
+				'order_id' => $order->get_id(),
+				'mode'     => 'fiscal',
+			),
+			$seen
+		);
+		$this->assertTrue( $payload['discounts'][0]['gift_card'] );
+		$this->assertSame( 'Gift Card', $payload['discounts'][0]['label'] );
+		$this->assertSame( 'fixed_cart', $payload['discounts'][0]['discount_type'] );
 	}
 
 	/**

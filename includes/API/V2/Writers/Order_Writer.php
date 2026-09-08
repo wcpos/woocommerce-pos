@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\API\V2\Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -23,6 +24,14 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
+	/**
+	 * Audit meta recording HOW an order came to be paid (ADR 0035 path 3):
+	 * `offline` means the till ASSERTED payment via `set_paid` — no gateway ran.
+	 * Server-owned (spoof-stripped via Pos_Order_Audit::SERVER_META_KEYS).
+	 */
+	public const PAYMENT_ASSERTED_META    = '_pos_payment_asserted';
+	public const PAYMENT_ASSERTED_OFFLINE = 'offline';
+
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
 
@@ -55,6 +64,11 @@ class Order_Writer extends Null_Writer {
 		$till_meta = Pos_Order_Audit::till_meta_from_payload( $meta_data );
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
+		if ( self::asserts_payment( $payload ) ) {
+			// A CREATE carrying set_paid IS the payment event — the push itself
+			// marks the fresh order paid with no gateway involved.
+			$till_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
+		}
 		return array(
 			'method' => 'POST',
 			'route' => $meta['route'],
@@ -84,15 +98,83 @@ class Order_Writer extends Null_Writer {
 		);
 	}
 
+	/** Whether the push payload asserts payment via wc/v3's write-only set_paid flag. */
+	private static function asserts_payment( array $payload ): bool {
+		return isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
+	}
+
 	/** Repair an existing born-twice order without inventing a version stamp. */
 	public function validate_existing_create( int $id, array $payload, array $prepared ) {
+		// The repair runs against an EXISTING order: if a gateway paid it between
+		// the two create arrivals, the replayed set_paid no longer describes this
+		// order's payment — same needs_payment() guard as the update path. The
+		// recovery phases keep stamping unconditionally: there the order was paid
+		// by this very push.
+		$order = wc_get_order( $id );
+		if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
+			unset( $payload['set_paid'] );
+		}
 		$this->stamp_order_audit( $id, $payload, false );
 		return null;
 	}
 
 	/** Forward within the named order hook lifecycle. */
 	public function forward( array $prepared, callable $forward ) {
-		return $this->forward_with_order_lifecycle( $prepared, $forward );
+		return $this->forward_with_reserved_stock( $prepared, $forward );
+	}
+
+	/**
+	 * Wrap the create forward in the shared create-pending -> reserve -> complete
+	 * sequence, so this lane gets the SAME anti-overselling guarantee as wcpos/v1.
+	 *
+	 * Without this the only stock check on this lane is the `pre_insert` filter,
+	 * which runs against an unsaved order (id 0) and so can only compare
+	 * availability — it cannot take a reservation, and two terminals selling the
+	 * last unit concurrently both pass it. See Stock_Validator::around_paid_create().
+	 *
+	 * @param array    $prepared Prepared forward.
+	 * @param callable $forward  Underlying wc/v3 dispatch.
+	 */
+	private function forward_with_reserved_stock( array $prepared, callable $forward ) {
+		$context = $prepared['context'];
+		$payload = $prepared['payload'];
+		$paid    = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
+		$status  = isset( $payload['status'] ) ? (string) $payload['status'] : '';
+		$validator = Stock_Validator::instance();
+
+		if ( 'create' !== $context['operation']
+			|| ! SettingsService::instance()->prevent_overselling_enabled()
+			|| ! $validator->should_validate_create_payload( $status, $paid ) ) {
+			return $this->forward_with_order_lifecycle( $prepared, $forward );
+		}
+
+		$response = null;
+		$order    = $validator->around_paid_create(
+			array(
+				'status'         => $status,
+				'set_paid'       => $paid,
+				'transaction_id' => isset( $payload['transaction_id'] ) ? (string) $payload['transaction_id'] : '',
+			),
+			function ( array $neutralised ) use ( $prepared, $forward, &$response ) {
+				$prepared['payload']['status']   = $neutralised['status'];
+				$prepared['payload']['set_paid'] = $neutralised['set_paid'];
+				$response                        = $this->forward_with_order_lifecycle( $prepared, $forward );
+				$data                            = $response instanceof \WP_REST_Response ? $response->get_data() : null;
+				$id                              = is_array( $data ) && isset( $data['id'] ) ? (int) $data['id'] : 0;
+
+				return $id > 0 ? wc_get_order( $id ) : $response;
+			}
+		);
+
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+
+		// The controller rebuilds its response document from wc_get_order( $id )
+		// (see document()/build_response_document()), so the forwarded body does
+		// not need re-shaping after payment completes — only the id has to be
+		// right, and it is the same order throughout.
+		return $response;
 	}
 
 	/** Persist the order behavior assigned to a controller-owned protocol phase. */
@@ -243,6 +325,18 @@ class Order_Writer extends Null_Writer {
 		$pre_store = null;
 		$order     = wc_get_order( $id );
 		if ( $order ) {
+			/*
+			 * `set_paid` is write-only in wc/v3, so a client re-sends it on every
+			 * later edit of an order it created offline. WooCommerce only takes
+			 * payment on update when the order still needs it (`$creating ||
+			 * needs_payment()` in its orders controller) — mirror that, pre-forward,
+			 * or an update to an order ALREADY paid by a real gateway (hosted pay
+			 * page) would stamp 'offline' over a gateway-taken payment: the exact
+			 * distinction this marker exists to draw. Fill-only, never overwrite.
+			 */
+			if ( self::asserts_payment( $payload ) && $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
+				$fill_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
+			}
 			$pre_store = (string) $order->get_meta( '_pos_store' );
 			foreach ( array( '_pos_user', '_pos_user_created' ) as $key ) {
 				if ( '' === (string) $order->get_meta( $key ) ) {
@@ -326,6 +420,13 @@ class Order_Writer extends Null_Writer {
 	/** Persist server-owned order audit metadata. */
 	private function stamp_order_audit( int $id, array $payload, bool $stamp_version ): void {
 		$meta = array( '_pos_user' => (string) get_current_user_id() );
+		// Create-shaped phases only (create_after_identity, create_recovery, the
+		// born-twice repair): the create push itself asserted the payment, so no
+		// needs_payment() gate — by the time this runs post-forward the order is
+		// already paid BY THIS PUSH. The update path carries its own guard.
+		if ( self::asserts_payment( $payload ) ) {
+			$meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
+		}
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
 			$meta['_pos_user_created']         = $meta['_pos_user'];

@@ -343,7 +343,9 @@ class Lifecycle_Events {
 			// A queued event outlives an undecided answer. Once the answer is
 			// no, drop it rather than leaving it to sit in the options table
 			// waiting for a consent that is not coming.
-			if ( 'denied' === Settings::instance()->tracking_consent() ) {
+			// The persisted answer: a settings filter must not be able to keep a
+			// declined merchant's queued events sitting in the options table.
+			if ( 'denied' === Settings::instance()->raw_tracking_consent() ) {
 				delete_option( self::PENDING_OPTION );
 			}
 
@@ -492,8 +494,10 @@ class Lifecycle_Events {
 	 * @param array  $properties Event properties.
 	 */
 	private function record( string $event, array $properties = array() ): void {
-		// An explicit "no" is an answer, not a delay.
-		if ( 'denied' === Settings::instance()->tracking_consent() ) {
+		// An explicit "no" is an answer, not a delay. Read the persisted value:
+		// nothing should be queued about a merchant who declined, even if a
+		// settings filter presents a different answer.
+		if ( 'denied' === Settings::instance()->raw_tracking_consent() ) {
 			return;
 		}
 

@@ -217,6 +217,20 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
 }
 
 /*
+ * Determine whether WCPOS Pro is active.
+ *
+ * @return bool Whether WCPOS Pro is active.
+ */
+if ( ! \function_exists( 'wcpos_is_pro_active' ) ) {
+	/**
+	 * Determine whether WCPOS Pro is active.
+	 */
+	function wcpos_is_pro_active(): bool { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		return (bool) apply_filters( 'woocommerce_pos_is_pro_active', \defined( 'WCPOS\WooCommercePOSPro\VERSION' ) );
+	}
+}
+
+/*
  * Get the site UUID (Plugin State), generating and persisting it on first use.
  *
  * @return string Site UUID.

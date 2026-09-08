@@ -12,7 +12,7 @@ namespace WCPOS\WooCommercePOS\Sync;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
-use WP_REST_Request;
+use WCPOS\WooCommercePOS\Logger;
 
 final class Sync_Journal {
 	/** Persisted order backfill cursor. */
@@ -26,6 +26,38 @@ final class Sync_Journal {
 
 	/** Per-request dedup of identical customer lifecycle events. */
 	private array $recorded_this_request = array();
+
+	/**
+	 * The ONE order whose `hook:update` row is owed but not yet written.
+	 *
+	 * WooCommerce saves an order many times while building it: one Store API
+	 * checkout fires `woocommerce_update_order` eleven times, and even a plain
+	 * `$order->save()` on a CPT store fires it three times. Every firing used to
+	 * append a row (an fsync, ~3 ms) after a three-query `wc_get_order()` — 12
+	 * rows and ~66 ms for ONE online order, measured 2026-09-03 on dev-next.
+	 * A journal row is a change POINTER (ADR 0033), so one row per order per
+	 * request carries the same information.
+	 *
+	 * Single slot, not a map: a save for a DIFFERENT order flushes the pending
+	 * one first (so a bulk loop never holds rows until process end), which
+	 * means at most one order is ever pending. Static, not per instance: the
+	 * "update row lands before any other-origin row" guarantee must hold for
+	 * whichever `Sync_Journal` instance writes the other row. The slot keeps the
+	 * blog id so a multisite `switch_to_blog()` between save and flush still
+	 * writes to the originating site's table, and the order object the hook
+	 * handed us so the flush never refetches.
+	 *
+	 * Rows land on {@see flush_pending_order_updates()}: at `shutdown` (last,
+	 * after WooCommerce's own shutdown saves), before any other-origin row, or
+	 * when a different order is saved. Once the shutdown flush has run, later
+	 * updates write immediately.
+	 *
+	 * @var array{blog: int, id: int, order: \WC_Abstract_Order|null}|null
+	 */
+	private static ?array $pending_order_update = null;
+
+	/** Set by the shutdown flush; afterwards updates are written immediately. */
+	private static bool $shutdown_flushed = false;
 
 	/**
 	 * Option-name prefix for the per-object-type lossy-prune watermarks.
@@ -45,6 +77,13 @@ final class Sync_Journal {
 		return $wpdb->prefix . Health::SYNC_JOURNAL_TABLE;
 	}
 
+	/**
+	 * The `revision` column is a per-lane union: a `date_modified` stamp for
+	 * catalogue/customer rows, `''` for live order rows (order revisions are
+	 * computed at pull time — ADR 0033), `'deleted'` for order tombstones, and
+	 * legacy pre-#1746 order rows may still carry stored `sha256:` hashes,
+	 * which the pull planner's stored-wins branch serves until they age out.
+	 */
 	public function schema_sql( string $table_name, string $charset_collate = '' ): string {
 		return "CREATE TABLE {$table_name} (\n"
 			. "  sequence BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n"
@@ -237,10 +276,86 @@ final class Sync_Journal {
 		add_action( 'woocommerce_update_customer', array( $this, 'record_customer_updated' ), 10, 1 );
 		add_action( 'delete_user', array( $this, 'record_customer_deleted' ), 10, 1 );
 		add_action( 'woocommerce_new_order', array( $this, 'record_order_created' ), 10, 1 );
-		add_action( 'woocommerce_update_order', array( $this, 'record_order_updated' ), 10, 1 );
+		// Two args: the data store passes ($order_id, $order). Keeping the object
+		// lets the coalesced flush read modified_gmt without a refetch.
+		add_action( 'woocommerce_update_order', array( $this, 'record_order_updated' ), 10, 2 );
+		// Request boundary for the coalesced order update row. LAST on shutdown:
+		// WooCommerce saves the customer at 10 and the session at 20, and any
+		// save those trigger must still find the slot open. Zero accepted args:
+		// do_action( 'shutdown' ) passes an empty string otherwise.
+		add_action( 'shutdown', array( $this, 'flush_pending_order_updates_at_shutdown' ), PHP_INT_MAX, 0 );
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
+		add_action( 'woocommerce_pos_invalidate', array( $this, 'record_invalidation' ), 10, 2 );
+	}
+
+	/**
+	 * Record an out-of-band change announced by an extension.
+	 *
+	 * Plugins fire `woocommerce_pos_invalidate` when they change a record's
+	 * SERVED representation in a way no save hook announces — a filter-only
+	 * output change (a pricing filter, an added payload field). The journal
+	 * appends a pointer row; clients hydrate pointer rows by sequence, so the
+	 * re-served payload carries the plugin's change. Formula fingerprints
+	 * (#1742) will eventually make representation changes directly detectable;
+	 * until then this action is the documented relief valve.
+	 *
+	 * `$object_type` is the registry's SINGULAR journal name: `product`,
+	 * `variation`, `customer`, `order`, `tax_rate`, and the other journalled
+	 * catalogue types. A plural (`products`) or unknown type is logged and
+	 * ignored. Rows land with origin `invalidate` on every type.
+	 *
+	 * @since 1.10.3
+	 *
+	 * @param string $object_type Canonical (singular) journal object type.
+	 * @param int    $object_id   Changed object ID.
+	 */
+	public function record_invalidation( $object_type = '', $object_id = 0 ): void {
+		// Loose signature on purpose: a public action handler whose posture is
+		// log-and-ignore — a one-arg or wrong-typed do_action() must not fatal
+		// the calling plugin's request.
+		$object_type = is_scalar( $object_type ) ? (string) $object_type : '';
+		$object_id   = is_scalar( $object_id ) ? (int) $object_id : 0;
+		$collection  = Collections::by_object_type( $object_type );
+		if ( $object_id <= 0 || null === $collection || ! isset( $collection['journal'] ) ) {
+			Logger::log( sprintf( 'WCPOS sync: ignored invalidation for object_type "%s" (id %d)', $object_type, $object_id ) );
+			return;
+		}
+
+		if ( 'order' === $object_type ) {
+			$this->record_order_change( $object_id, 'invalidate', false );
+			return;
+		}
+		$loader = (string) ( $collection['identity']['loader'] ?? '' );
+		if ( 'product' === $loader ) {
+			$object = function_exists( 'wc_get_product' ) ? wc_get_product( $object_id ) : null;
+			$this->record( $object_type, $object_id, false, self::object_revision( $object ), 'invalidate' );
+			if ( 'variation' === $object_type ) {
+				// Native variation paths always pair the parent row — the parent
+				// document carries the variable price range — so an invalidation
+				// must too, or the relief valve half-works. Recorded inline (not via
+				// record_variation_parent) so the paired row keeps the 'invalidate'
+				// origin the contract above promises for every row this action lands.
+				$parent_id = function_exists( 'wp_get_post_parent_id' ) ? (int) wp_get_post_parent_id( $object_id ) : 0;
+				if ( $parent_id > 0 ) {
+					$parent = function_exists( 'wc_get_product' ) ? wc_get_product( $parent_id ) : null;
+					$this->record( 'product', $parent_id, false, self::object_revision( $parent ), 'invalidate' );
+				}
+			}
+			return;
+		}
+		if ( 'customer' === $loader ) {
+			try {
+				$customer = class_exists( '\\WC_Customer' ) ? new \WC_Customer( $object_id ) : null;
+			} catch ( \Exception $e ) {
+				Logger::log( sprintf( 'WCPOS sync: ignored invalidation for missing customer %d', $object_id ) );
+				return;
+			}
+			$this->record( 'customer', $object_id, false, self::object_revision( $customer ), 'invalidate', true, 'invalidate' );
+			return;
+		}
+		$this->record( $object_type, $object_id, false, '', 'invalidate' );
 	}
 
 	public function record_product_created( int $product_id ): void {
@@ -419,8 +534,103 @@ final class Sync_Journal {
 		$this->record_order_change( $order_id, 'hook:create', false );
 	}
 
-	public function record_order_updated( int $order_id ): void {
-		$this->record_order_change( $order_id, 'hook:update', false );
+	/**
+	 * Mark an order's `hook:update` row as owed; the row lands on flush.
+	 *
+	 * See {@see $pending_order_updates} for why this is deferred. Direct callers
+	 * that need an immediate row use {@see record_order_change()}.
+	 *
+	 * @param int                       $order_id Order id from the hook.
+	 * @param \WC_Abstract_Order|mixed  $order    Order object from the hook (second
+	 *                                            argument of `woocommerce_update_order`),
+	 *                                            or anything else to fall back to a
+	 *                                            refetch at flush time.
+	 */
+	public function record_order_updated( int $order_id, $order = null ): void {
+		$order = $order instanceof \WC_Abstract_Order ? $order : null;
+		if ( self::$shutdown_flushed ) {
+			// The request boundary has passed (a save triggered by another
+			// shutdown handler): nothing will flush again, so write now.
+			$this->record_order_change( $order_id, 'hook:update', false, $order );
+			return;
+		}
+		$blog = get_current_blog_id();
+		$slot = self::$pending_order_update;
+		if ( null !== $slot && ( $slot['id'] !== $order_id || $slot['blog'] !== $blog ) ) {
+			// A different order began: land what is owed so a bulk loop (WP-CLI
+			// import, Action Scheduler runner) never holds rows until process end.
+			$this->flush_pending_order_updates();
+			$slot = null;
+		}
+		self::$pending_order_update = array(
+			'blog'  => $blog,
+			'id'    => $order_id,
+			'order' => $order ?? ( $slot['order'] ?? null ),
+		);
+	}
+
+	/**
+	 * Write the owed `hook:update` row, if any.
+	 *
+	 * Called from {@see record_order_change()} before any other-origin row and
+	 * from the shutdown flush. Safe to call repeatedly: a flushed order is no
+	 * longer pending.
+	 */
+	public function flush_pending_order_updates(): void {
+		$slot = self::$pending_order_update;
+		if ( null === $slot ) {
+			return;
+		}
+		self::$pending_order_update = null;
+		self::in_blog(
+			$slot['blog'],
+			function () use ( $slot ): void {
+				$this->record_order_change( $slot['id'], 'hook:update', false, $slot['order'] );
+			}
+		);
+	}
+
+	/**
+	 * The `shutdown` callback: flush, then write every later update immediately.
+	 */
+	public function flush_pending_order_updates_at_shutdown(): void {
+		self::$shutdown_flushed = true;
+		$this->flush_pending_order_updates();
+	}
+
+	/**
+	 * Discard per-request coalescing state. Tests only: the PHPUnit process
+	 * never reaches `shutdown`, so the static slot and flag would leak between
+	 * test cases otherwise.
+	 *
+	 * @internal
+	 */
+	public static function reset_request_state(): void {
+		self::$pending_order_update = null;
+		self::$shutdown_flushed     = false;
+	}
+
+	/**
+	 * Run a write under the blog it was recorded on.
+	 *
+	 * The journal table is blog-scoped, so a deferred write must not follow a
+	 * `switch_to_blog()` that happened between the save and the flush.
+	 *
+	 * @param int      $blog_id Blog the write belongs to.
+	 * @param callable $write   The write.
+	 */
+	private static function in_blog( int $blog_id, callable $write ): void {
+		$switch = is_multisite() && get_current_blog_id() !== $blog_id;
+		if ( $switch ) {
+			switch_to_blog( $blog_id );
+		}
+		try {
+			$write();
+		} finally {
+			if ( $switch ) {
+				restore_current_blog();
+			}
+		}
 	}
 
 	public function record_order_deleted( int $order_id ): void {
@@ -436,11 +646,9 @@ final class Sync_Journal {
 	 *
 	 * `woocommerce_untrash_order` fires BEFORE the data store restores the
 	 * status, so the row cannot be written there. The restore then performs
-	 * MORE THAN ONE object save, so arming on the first
-	 * `woocommerce_after_order_object_save` whose status is not `trash`
-	 * captures a revision from part-way through the restore — anything a later
-	 * save changes is missing from it, and the journal advertises a revision
-	 * the order does not have.
+	 * MORE THAN ONE object save, so the journal row's modified_gmt must be read
+	 * from the SETTLED order for checkpoint ordering. The revision is computed
+	 * at pull time rather than stored here.
 	 *
 	 * Measured sequence for an HPOS untrash (status read from wc_orders):
 	 *
@@ -466,19 +674,42 @@ final class Sync_Journal {
 		add_action( 'woocommerce_order_status_changed', $handler, 10, 2 );
 	}
 
-	public function record_order_change( int $order_id, string $origin, bool $deleted ): bool {
+	/**
+	 * Append one order row immediately.
+	 *
+	 * @param int                      $order_id Order id.
+	 * @param string                   $origin   Row origin (`hook:create`, `hook:update`, …).
+	 * @param bool                     $deleted  Whether the row is a tombstone.
+	 * @param \WC_Abstract_Order|mixed $order    The order object when the caller already holds it;
+	 *                                           anything else triggers a refetch.
+	 *
+	 * @return bool Whether the insert succeeded.
+	 */
+	public function record_order_change( int $order_id, string $origin, bool $deleted, $order = null ): bool {
 		global $wpdb;
-		$order         = wc_get_order( $order_id );
+		if ( 'hook:update' !== $origin ) {
+			$slot = self::$pending_order_update;
+			if ( 'hook:create' === $origin && null !== $slot && $order_id === $slot['id'] && get_current_blog_id() === $slot['blog'] ) {
+				// The Store API saves a checkout-draft several times BEFORE
+				// `woocommerce_new_order` fires. Both rows would point at the same
+				// live record, so the create row makes the owed update row redundant.
+				self::$pending_order_update = null;
+			} else {
+				// Land the owed update row FIRST so the stream never reads as
+				// delete-then-update (a replay would resurrect a trashed order).
+				$this->flush_pending_order_updates();
+			}
+		}
+		if ( ! $order instanceof \WC_Abstract_Order ) {
+			$order = wc_get_order( $order_id );
+		}
 		$modified_date = $order ? $order->get_date_modified() : null;
 		$modified      = $modified_date ? gmdate( 'Y-m-d H:i:s', $modified_date->getTimestamp() ) : gmdate( 'Y-m-d H:i:s' );
-		$revision      = 'deleted';
-
-		if ( $order && ! $deleted ) {
-			$serializer = new Order_Serializer();
-			$payload    = $serializer->serialize_order( $order_id, new WP_REST_Request() );
-			$sync_meta  = $serializer->sync_metadata( $payload, $order_id, 'custom-pull', false, 0 );
-			$revision   = (string) $sync_meta['revision'];
-		}
+		// Order revisions are computed at pull time from the served payload (ADR 0033,
+		// #1746) — an order journal row is a change pointer, not a content stamp.
+		// 'deleted' is kept for wire compatibility (it flows into served checkpoints)
+		// and diagnostics; the planner branches on the `deleted` flag, not this value.
+		$revision = $deleted ? 'deleted' : '';
 
 		$now = gmdate( 'Y-m-d H:i:s' );
 		return false !== $wpdb->insert(

@@ -418,39 +418,35 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Orderby.
+	 *
+	 * The sequence used to stop at `zeta`, because every product in the fixture had a
+	 * SKU — which is why the sort-as-filter bug survived: with no meta-less row present,
+	 * an INNER JOIN and a LEFT JOIN return the same list (#1779 follow-up).
 	 */
 	public function test_product_orderby_sku(): void {
-		$product1  = ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
-		$product2  = ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
-		$product3  = ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
-		$product4  = ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
-		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'sku',
-				'order'   => 'asc',
-			)
+		ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
+		ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
+		ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
+		ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
+		$this->wcpos_create_product_without_meta( '_sku' );
+
+		$this->assertSame(
+			array( '123456789', '987654321', 'alpha', 'zeta', '' ),
+			$this->wcpos_orderby_values( 'sku', 'asc', 'sku' )
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'sku' );
-
-		$this->assertEquals( $skus, array( '123456789', '987654321', 'alpha', 'zeta' ) );
-
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'sku',
-				'order'   => 'desc',
-			)
+		$this->assertSame(
+			array( 'zeta', 'alpha', '987654321', '123456789', '' ),
+			$this->wcpos_orderby_values( 'sku', 'desc', 'sku' )
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'sku' );
-
-		$this->assertEquals( $skus, array( 'zeta', 'alpha', '987654321', '123456789' ) );
 	}
 
+	/**
+	 * The barcode sort must serve products that carry NO barcode meta row at all.
+	 *
+	 * That is the shape a default store is in — the barcode field defaults to
+	 * `_global_unique_id`, which most catalogues never populate — and it made this sort
+	 * answer with an EMPTY page.
+	 */
 	public function test_product_orderby_barcode(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
@@ -461,69 +457,110 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		);
 
-		$product1  = ProductHelper::create_simple_product();
+		$product1 = ProductHelper::create_simple_product();
 		$product1->update_meta_data( '_barcode', 'alpha' );
 		$product1->save_meta_data();
 
-		$product2  = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
 		$product2->update_meta_data( '_barcode', 'zeta' );
 		$product2->save_meta_data();
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'barcode',
-				'order'   => 'asc',
-			)
-		);
-		$response         = $this->server->dispatch( $request );
-		$data             = $response->get_data();
-		$barcodes         = wp_list_pluck( $data, 'barcode' );
+		// No `_barcode` meta row whatsoever — the row an INNER JOIN drops.
+		ProductHelper::create_simple_product();
 
-		$this->assertEquals( $barcodes, array( 'alpha', 'zeta' ) );
-
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'barcode',
-				'order'   => 'desc',
-			)
-		);
-		$response         = $this->server->dispatch( $request );
-		$data             = $response->get_data();
-		$barcodes         = wp_list_pluck( $data, 'barcode' );
-
-		$this->assertEquals( $barcodes, array( 'zeta', 'alpha' ) );
+		$this->assertSame( array( 'alpha', 'zeta', '' ), $this->wcpos_orderby_values( 'barcode', 'asc', 'barcode' ) );
+		$this->assertSame( array( 'zeta', 'alpha', '' ), $this->wcpos_orderby_values( 'barcode', 'desc', 'barcode' ) );
 	}
 
+	/**
+	 * A sort must never change WHICH products come back — only their order.
+	 *
+	 * Asserted on BOTH lanes in one case, with literal routes. The claim is a parity claim
+	 * — the two lanes must answer a category-filtered barcode sort with the same set — and
+	 * a v1-only version of it would be a legacy pin that proves nothing about the lane the
+	 * app actually calls (tests/lane-coverage/README.md).
+	 */
+	public function test_product_orderby_barcode_preserves_category_membership(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$category = wp_insert_term( 'Gear', 'product_cat' );
+		$this->assertIsArray( $category );
+		$members = array();
+		foreach ( array( 'b-alpha', null, 'b-mike' ) as $barcode ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_category_ids( array( (int) $category['term_id'] ) );
+			$product->save();
+			if ( null !== $barcode ) {
+				$product->update_meta_data( '_barcode', $barcode );
+				$product->save_meta_data();
+			}
+			$members[] = $product->get_id();
+		}
+		// A product OUTSIDE the category, so a filter that stopped filtering also fails.
+		ProductHelper::create_simple_product();
+		sort( $members );
+
+		$unsorted = $this->wcpos_orderby_ids( array( 'category' => (string) $category['term_id'] ) );
+		$sorted   = $this->wcpos_orderby_ids(
+			array(
+				'category' => (string) $category['term_id'],
+				'orderby'  => 'barcode',
+				'order'    => 'asc',
+			)
+		);
+		// A SET comparison: which products come back is the claim, not their order.
+		sort( $unsorted );
+		sort( $sorted );
+
+		$this->assertSame( $members, $unsorted );
+		$this->assertSame( $members, $sorted );
+
+		// The same claim on the lane the app actually calls.
+		$v2_request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$v2_request->set_query_params(
+			array(
+				'category' => (string) $category['term_id'],
+				'orderby'  => 'barcode',
+				'order'    => 'asc',
+				'per_page' => 100,
+			)
+		);
+		$v2_response = $this->server->dispatch( $v2_request );
+
+		$this->assertEquals( 200, $v2_response->get_status() );
+
+		$v2_ids = wp_list_pluck( $v2_response->get_data(), 'id' );
+		sort( $v2_ids );
+
+		$this->assertSame( $members, $v2_ids );
+	}
+
+	/**
+	 * Asserted on IDS, not the reported status: WooCommerce defaults a product with no
+	 * `_stock_status` row to "instock" in the payload, so a value sequence could not tell
+	 * the meta-less row from a real in-stock one. What this pins is that it is still
+	 * SERVED, and served last.
+	 */
 	public function test_product_orderby_stock_status(): void {
-		$product1  = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
-		$product2  = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
-		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'stock_status',
-				'order'   => 'asc',
-			)
+		$instock    = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
+		$outofstock = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
+		$metaless   = $this->wcpos_create_product_without_meta( '_stock_status' );
+
+		$this->assertSame(
+			array( $instock->get_id(), $outofstock->get_id(), $metaless ),
+			$this->wcpos_orderby_ids( array( 'orderby' => 'stock_status', 'order' => 'asc' ) )
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_status' );
-
-		$this->assertEquals( $skus, array( 'instock', 'outofstock' ) );
-
-		// reverse order
-		$request->set_query_params(
-			array(
-				'orderby' => 'stock_status',
-				'order'   => 'desc',
-			)
+		$this->assertSame(
+			array( $outofstock->get_id(), $instock->get_id(), $metaless ),
+			$this->wcpos_orderby_ids( array( 'orderby' => 'stock_status', 'order' => 'desc' ) )
 		);
-		$response     = $this->server->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_status' );
-
-		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
 	}
 
 	public function test_product_orderby_stock_quantity(): void {
@@ -1057,6 +1094,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 				'manage_stock'   => true,
 			)
 		);
+		// Not stock-managed: `_stock` is NULL, and it must still be served, last.
+		ProductHelper::create_simple_product();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params(
 			array(
@@ -1068,7 +1107,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data       = $response->get_data();
 		$quantities = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $quantities, array( 3.5, 11.2, 20.7 ) );
+		$this->assertEquals( array( 3.5, 11.2, 20.7, null ), $quantities );
 
 		// reverse order
 		$request->set_query_params(
@@ -1081,7 +1120,74 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data       = $response->get_data();
 		$quantities = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $quantities, array( 20.7, 11.2, 3.5 ) );
+		$this->assertEquals( array( 20.7, 11.2, 3.5, null ), $quantities );
+	}
+
+	/**
+	 * A product whose postmeta row for `$meta_key` is absent entirely.
+	 *
+	 * WooCommerce always writes these keys, so the row has to be removed after the fact
+	 * to reproduce the catalogue shape an importer leaves behind.
+	 *
+	 * @param string $meta_key The meta key to strip.
+	 *
+	 * @return int The product id.
+	 */
+	private function wcpos_create_product_without_meta( string $meta_key ): int {
+		$product = ProductHelper::create_simple_product();
+		delete_post_meta( $product->get_id(), $meta_key );
+		wp_cache_flush();
+
+		return $product->get_id();
+	}
+
+	/**
+	 * Dispatch a wcpos/v1 product collection read and return the rows.
+	 *
+	 * @param array $params Query parameters.
+	 *
+	 * @return array
+	 */
+	private function wcpos_read_products( array $params ): array {
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( $params );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		return $response->get_data();
+	}
+
+	/**
+	 * One field of every row of a sorted read, in served order.
+	 *
+	 * @param string $orderby Sort key.
+	 * @param string $order   Sort direction.
+	 * @param string $field   Payload field to pluck.
+	 *
+	 * @return array
+	 */
+	private function wcpos_orderby_values( string $orderby, string $order, string $field ): array {
+		return wp_list_pluck(
+			$this->wcpos_read_products(
+				array(
+					'orderby' => $orderby,
+					'order'   => $order,
+				)
+			),
+			$field
+		);
+	}
+
+	/**
+	 * The ids a read serves, in served order.
+	 *
+	 * @param array $params Query parameters.
+	 *
+	 * @return array<int, int>
+	 */
+	private function wcpos_orderby_ids( array $params ): array {
+		return wp_list_pluck( $this->wcpos_read_products( $params ), 'id' );
 	}
 
 	public function test_product_search(): void {

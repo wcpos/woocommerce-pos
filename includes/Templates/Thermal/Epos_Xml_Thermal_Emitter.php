@@ -11,14 +11,18 @@
  * fixed, non-template layout from canonical receipt data.
  *
  * Deliberate deviations / limitations:
+ *  - ePOS `<text>` attributes are persistent printer state, so the emitter
+ *    tracks that state and emits only changes after a reset preamble.
  *  - Double rules (`<line style="double"/>`) are emitted as ASCII `=` repeated
  *    across the paper width (consistent with the ESC/POS emitter) rather than a
  *    box-drawing glyph, so output is codepage-independent.
  *  - Paper cuts (`<cut>`), both full and partial, map to `<cut type="feed"/>`.
- *  - Images (`<image>`) are skipped entirely; server-side rasterization is out
- *    of scope, so the emitter writes nothing for image nodes.
- *  - Text is emitted as plain UTF-8 (Epson handles UTF-8); no ASCII
- *    normalization is applied.
+ *  - Images (`<image>`) are thresholded to 1-bit dots by Thermal_Bitmap and sent
+ *    as base64 in an `<image>` element.
+ *  - Text is emitted as plain UTF-8 (Epson handles UTF-8), but still passes
+ *    through Thermal_Text_Layout::normalize_text(): the typographic spaces and
+ *    dashes it folds are not in any printer character table, and a printer that
+ *    cannot map a codepoint substitutes `?` on the paper.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -99,6 +103,22 @@ class Epos_Xml_Thermal_Emitter {
 	private $dh = false;
 
 	/**
+	 * The text style state currently held by the printer.
+	 *
+	 * A null value means the state is unknown and must be re-emitted.
+	 *
+	 * @var array
+	 */
+	private $printer = array(
+		'align'   => null,
+		'em'      => null,
+		'ul'      => null,
+		'reverse' => null,
+		'dw'      => null,
+		'dh'      => null,
+	);
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $options Render options.
@@ -126,6 +146,11 @@ class Epos_Xml_Thermal_Emitter {
 		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
 
 		$this->buffer .= '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+
+		// The printer still holds whatever the previous job left, so treat every
+		// attribute as unknown and let the transition write the full reset preamble.
+		$this->printer = array_fill_keys( array( 'align', 'em', 'ul', 'reverse', 'dw', 'dh' ), null );
+		$this->buffer .= '<text' . $this->style_transition() . '/>';
 
 		$children = isset( $ast['children'] ) && \is_array( $ast['children'] ) ? $ast['children'] : array();
 		$this->walk_nodes( $this->nodes_with_auto_drawer( $children ) );
@@ -262,7 +287,7 @@ class Epos_Xml_Thermal_Emitter {
 				$this->emit_qrcode( $node );
 				break;
 			case 'image':
-				// Skipped: server-side rasterization is out of scope.
+				$this->emit_image( $node );
 				break;
 			case 'cut':
 				$this->buffer .= '<cut type="feed"/>';
@@ -344,41 +369,95 @@ class Epos_Xml_Thermal_Emitter {
 	}
 
 	/**
-	 * Emit a single <text> element using the current style state.
+	 * Emit a single <text> line in the current style state.
 	 *
-	 * @param string $content The plain text content (will be XML-escaped).
+	 * @param string      $content The plain text content (will be XML-escaped).
+	 * @param string|null $align   Alignment override for this line (rows are
+	 *                             pre-padded and always print left-aligned).
 	 *
 	 * @return void
 	 */
-	private function emit_text_element( string $content ): void {
-		$this->buffer .= '<text' . $this->style_attributes() . '>' . $this->escape( $content ) . "\n" . '</text>';
+	private function emit_text_element( string $content, ?string $align = null ): void {
+		// normalize_text() is a 1:1 character substitution, so it cannot change a
+		// display width the row/rule callers have already padded against.
+		$content       = Thermal_Text_Layout::normalize_text( $content );
+		$this->buffer .= '<text' . $this->style_transition( $align ) . '>' . $this->escape( $content ) . "\n" . '</text>';
 	}
 
 	/**
-	 * Build the style attribute string for the current state.
+	 * Emit a template `<image>` (in practice, the store logo).
+	 *
+	 * The dots go out as base64 raw raster — 1 bit per dot, MSB first, rows whole
+	 * bytes — not as an encoded PNG (ePOS-Print XML User's Manual, "Encoding
+	 * Graphic Data"). Thermal_Bitmap produces exactly that layout, and
+	 * resolves the src without an outbound request, which matters because this
+	 * runs inside the printer's job fetch.
+	 *
+	 * The image is centred unconditionally, ignoring any enclosing `<align>`.
+	 * That is the contract the other three renderers already keep — the preview
+	 * (thermal-renderer.ts), the PDF (Html_Thermal_Emitter::render_image()) and
+	 * the raster lane (Raster_Thermal_Emitter::draw_image()) all hard-centre an
+	 * `<image>` — and following the wrapper here instead would left-align the
+	 * bare `<image>` that the template editor inserts, which every one of those
+	 * three shows centred.
+	 *
+	 * A src that resolves to nothing (a remote URL, a missing file) emits
+	 * nothing: a receipt without its logo still prints, where a broken `<image>`
+	 * element risks the printer rejecting the whole job.
+	 *
+	 * @param array $node The image AST node.
+	 *
+	 * @return void
+	 */
+	private function emit_image( array $node ): void {
+		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->columns ) );
+		if ( null === $bitmap ) {
+			return;
+		}
+
+		// align is a documented <image> attribute, not borrowed from <text>:
+		// ePOS-Print XML User's Manual, chapter 4, lists left/center/right on this
+		// element and defaults it to "left".
+		$this->buffer .= '<image width="' . $bitmap->width() . '" height="' . $bitmap->height() . '"'
+			. ' align="center" color="color_1" mode="mono">'
+			. base64_encode( $bitmap->raster() )
+			. '</image>';
+
+		// The manual's note on <text align> — "the align setting specified in this
+		// element is also applied to <image>, <logo>, <barcode> and <symbol>" —
+		// runs both ways: this <image> has moved the printer's persistent
+		// alignment, so the tracked state can no longer be trusted.
+		$this->printer['align'] = null;
+	}
+
+	/**
+	 * Build the <text> attributes that move the printer to the current style,
+	 * and record the printer as now holding that style.
+	 *
+	 * The attributes persist on the printer until changed, so only the values
+	 * that differ from what it holds are written; a null entry in $printer
+	 * (unknown) is always written.
+	 *
+	 * @param string|null $align Alignment override; null uses the wrapper state.
 	 *
 	 * @return string The attribute string (with a leading space when non-empty).
 	 */
-	private function style_attributes(): string {
+	private function style_transition( ?string $align = null ): string {
+		$desired = array(
+			'align'   => null === $align ? $this->align : $align,
+			'em'      => $this->em,
+			'ul'      => $this->ul,
+			'reverse' => $this->reverse,
+			'dw'      => $this->dw,
+			'dh'      => $this->dh,
+		);
 		$attrs = '';
-		if ( 'center' === $this->align || 'right' === $this->align ) {
-			$attrs .= ' align="' . $this->align . '"';
+		foreach ( $desired as $name => $value ) {
+			if ( $this->printer[ $name ] !== $value ) {
+				$attrs .= ' ' . $name . '="' . ( \is_bool( $value ) ? ( $value ? 'true' : 'false' ) : $value ) . '"';
+			}
 		}
-		if ( $this->em ) {
-			$attrs .= ' em="true"';
-		}
-		if ( $this->ul ) {
-			$attrs .= ' ul="true"';
-		}
-		if ( $this->reverse ) {
-			$attrs .= ' reverse="true"';
-		}
-		if ( $this->dw ) {
-			$attrs .= ' dw="true"';
-		}
-		if ( $this->dh ) {
-			$attrs .= ' dh="true"';
-		}
+		$this->printer = $desired;
 
 		return $attrs;
 	}
@@ -490,7 +569,7 @@ class Epos_Xml_Thermal_Emitter {
 			}
 		}
 
-		$this->buffer .= '<text align="left">' . $this->escape( $line ) . "\n" . '</text>';
+		$this->emit_text_element( $line, 'left' );
 	}
 
 	/**
@@ -514,7 +593,7 @@ class Epos_Xml_Thermal_Emitter {
 			$text = str_repeat( '-', $this->columns );
 		}
 
-		$this->buffer .= '<text>' . $this->escape( $text ) . "\n" . '</text>';
+		$this->emit_text_element( $text );
 	}
 
 	/**
@@ -529,12 +608,32 @@ class Epos_Xml_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_barcode( array $node ): void {
-		$value  = isset( $node['value'] ) ? (string) $node['value'] : '';
+		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
+		if ( '' === trim( $value ) ) {
+			return;
+		}
+
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		$height = max( 1, min( 255, $height ) );
 
-		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="none" height="' . $height . '">' . $this->escape( $value ) . '</barcode>';
+		// Same rescue as the ESC/POS lane: a value the symbology cannot encode
+		// would be dropped by the printer "with no error returned" (ePOS-Print
+		// manual), so print it as a centered line instead of nothing.
+		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_ESCPOS ) ) {
+			$this->emit_text_element( (string) preg_replace( '/[\x00-\x1f\x7f]/', ' ', $value ), 'center' );
+
+			return;
+		}
+
+		$payload = Barcode_Symbology::epos_xml_payload( $type, $value );
+
+		// hri="below" prints the value under the bars, as the preview, the PDF and
+		// the raster lane all do. Without it the merchant designs against a
+		// receipt that carries the order number and the printer hands the customer
+		// one that does not.
+		$this->buffer .= '<barcode type="' . $this->escape( Barcode_Symbology::epos_xml_name( $type ) ) . '" hri="below" height="' . $height . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $payload ) . '</barcode>';
+		$this->printer['align'] = null;
 	}
 
 	/**
@@ -546,9 +645,16 @@ class Epos_Xml_Thermal_Emitter {
 	 */
 	private function emit_qrcode( array $node ): void {
 		$value = isset( $node['value'] ) ? (string) $node['value'] : '';
-		$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
+		if ( '' === trim( $value ) ) {
+			return;
+		}
+		$size = isset( $node['size'] ) ? (int) $node['size'] : 4;
 
-		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '">' . $this->escape( $value ) . '</symbol>';
+		// <symbol> data shares the barcode escape layer (`\xnn`, `\\`).
+		$payload = Barcode_Symbology::epos_xml_escape_data( $value );
+
+		$this->buffer .= '<symbol type="qrcode_model_2" level="default" width="' . $size . '" align="' . $this->escape( $this->align ) . '">' . $this->escape( $payload ) . '</symbol>';
+		$this->printer['align'] = null;
 	}
 
 	/**

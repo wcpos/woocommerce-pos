@@ -216,6 +216,49 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Deleting the job history must not re-arm the assignment.
+	 *
+	 * handle_order() runs again on every later order-status change. While
+	 * dedup counted only job rows, deleting a printed receipt — or one the
+	 * admin had deliberately cancelled — read as never printed and queued a
+	 * second copy. The retention purge deletes those same rows on a timer, so
+	 * this was reachable without an admin touching anything.
+	 */
+	public function test_deleting_job_history_does_not_reprint_the_receipt(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'copies'      => 1,
+				),
+			)
+		);
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$service->handle_order( $order->get_id() );
+		$jobs = $this->jobs->query( array( 'order_id' => $order->get_id() ) );
+		$this->assertCount( 1, $jobs );
+
+		// Act: the admin clears the queue, then the order changes status again.
+		$this->assertTrue( $this->jobs->delete( (int) $jobs[0]['id'] ) );
+		$service->handle_order( $order->get_id() );
+
+		// Assert: no replacement receipt.
+		$this->assertEquals( 0, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
 	 * Overlapping triggers do not exceed the requested copy count.
 	 */
 	public function test_overlapping_triggers_do_not_exceed_requested_copy_count(): void {

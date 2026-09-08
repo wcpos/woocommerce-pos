@@ -43,7 +43,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Receipt data schema contract version.
 	 */
-	const SCHEMA_VERSION = '1.1.0';
+	const SCHEMA_VERSION = '1.2.0';
 
 	/**
 	 * Money keys that must be present in totals.
@@ -804,23 +804,27 @@ class Receipt_Data_Schema {
 				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Discounts', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
-					'label'      => array(
+					'label'         => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Label', 'woocommerce-pos' ),
 					),
-					'code'       => array(
+					'code'          => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Coupon Code', 'woocommerce-pos' ),
 					),
-					'total'      => array(
+					'discount_type' => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Coupon Type', 'woocommerce-pos' ),
+					),
+					'total'         => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
-					'total_incl' => array(
+					'total_incl'    => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (incl tax)', 'woocommerce-pos' ),
 					),
-					'total_excl' => array(
+					'total_excl'    => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (excl tax)', 'woocommerce-pos' ),
 					),

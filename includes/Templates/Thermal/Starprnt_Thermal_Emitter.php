@@ -23,7 +23,9 @@
  *    plugin, so the last lines clear the cutter before cutting.
  *  - Star printers adjust the line feed pitch for magnified text themselves,
  *    so there is no scaled line-spacing handling.
- *  - Images (`<image>`) are skipped entirely, as in Escpos_Thermal_Emitter.
+ *  - Images (`<image>`) are thresholded to 1-bit dots by Thermal_Bitmap and sent
+ *    as `ESC X` column graphics, Star having no row-major raster command to
+ *    match ESC/POS `GS v 0`.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -104,6 +106,19 @@ class Starprnt_Thermal_Emitter {
 	private $height = 1;
 
 	/**
+	 * Whether unterminated text is sitting in the printer's line buffer.
+	 *
+	 * Star's graphics and barcode commands, like their ESC/POS counterparts, are
+	 * line-oriented: `ESC X` starts a raster band and `ESC b` a barcode, and both
+	 * expect to begin at the start of a line. Bare text in a template
+	 * (`<receipt>Total<image/></receipt>`) parses to a `raw-text` node, which
+	 * prints without a terminator, so the emitter tracks whether a line is open.
+	 *
+	 * @var bool
+	 */
+	private $line_open = false;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $options Render options.
@@ -127,6 +142,7 @@ class Starprnt_Thermal_Emitter {
 		$this->invert    = false;
 		$this->width     = 1;
 		$this->height    = 1;
+		$this->line_open = false;
 
 		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
 
@@ -274,7 +290,7 @@ class Starprnt_Thermal_Emitter {
 				$this->emit_qrcode( $node );
 				break;
 			case 'image':
-				// Skipped: server-side rasterization is out of scope.
+				$this->emit_image( $node );
 				break;
 			case 'cut':
 				$this->emit_cut( $node );
@@ -299,7 +315,29 @@ class Starprnt_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_inline_text( string $value ): void {
-		$this->raw_string( Thermal_Text_Layout::normalize_text( $value ) );
+		$text = Thermal_Text_Layout::normalize_text( $value );
+		if ( '' === $text ) {
+			return;
+		}
+
+		$this->raw_string( $text );
+
+		// The parser preserves a text node verbatim, newlines included, so this
+		// may have ended the line itself — `<receipt>Total\n<image/></receipt>`
+		// leaves the printer at column zero. Reading the state off the bytes just
+		// written keeps close_open_line() from spending a second line feed there.
+		$this->line_open = "\n" !== substr( $text, -1 );
+	}
+
+	/**
+	 * Close an open line so a line-oriented command can start cleanly.
+	 *
+	 * @return void
+	 */
+	private function close_open_line(): void {
+		if ( $this->line_open ) {
+			$this->newline();
+		}
 	}
 
 	/**
@@ -500,8 +538,10 @@ class Starprnt_Thermal_Emitter {
 	 *
 	 * `ESC b n1 n2 n3 n4 <data> RS` — StarPRNT Command Specifications Ver 1.3E,
 	 * barcode section. n1 is the symbology (owned by Barcode_Symbology; note
-	 * Star numbers the UPC pair the opposite way round to ESC/POS), n2 = 1 for
-	 * "no HRI, line feed after printing", n3 = 2 for the medium module width
+	 * Star numbers the UPC pair the opposite way round to ESC/POS), n2 = 2 for
+	 * "HRI under the bars, line feed after printing" — matching the preview, the
+	 * PDF and the raster lane, and matching Star's own reference plugin, which
+	 * sets n2 = 2 whenever HRI is asked for — n3 = 2 for the medium module width
 	 * (valid for every symbology we emit), and n4 is the height in dots, clamped
 	 * to the printable 8-255 range.
 	 *
@@ -519,6 +559,11 @@ class Starprnt_Thermal_Emitter {
 			return;
 		}
 
+		// Before the validation branch, not after: ESC b starts a barcode block,
+		// and the rescue below centres its text against the full paper width, so
+		// both outcomes need the line closed first.
+		$this->close_open_line();
+
 		$type   = isset( $node['barcode_type'] ) ? (string) $node['barcode_type'] : 'code128';
 		$height = isset( $node['height'] ) ? (int) $node['height'] : 40;
 		// The 8-dot floor is Star's, not the markup's: Thermal_Bounds allows a
@@ -532,9 +577,75 @@ class Starprnt_Thermal_Emitter {
 			return;
 		}
 
-		$this->raw( array( 0x1b, 0x62, Barcode_Symbology::starprnt_id( $type ), 0x01, 0x02, $height ) );
+		$this->raw( array( 0x1b, 0x62, Barcode_Symbology::starprnt_id( $type ), 0x02, 0x02, $height ) );
 		$this->raw_string( Barcode_Symbology::starprnt_payload( $type, $value ) );
 		$this->raw( array( 0x1e ) );
+	}
+
+	/**
+	 * Print a template `<image>` (in practice, the store logo).
+	 *
+	 * `ESC X nL nH d1..dk` — Star's column graphics, taken from the StarPRNT
+	 * language module of NielsLeenheer/ReceiptPrinterEncoder, the same source the
+	 * rest of this emitter was cross-checked against. Star has no row-major
+	 * raster command to match ESC/POS `GS v 0`: the image goes out in 24-dot
+	 * bands, three bytes per column, top bit first, so the dots are transposed
+	 * out of the bitmap here. Line spacing is set to 24 dots (`ESC 0`) for the
+	 * duration so consecutive bands butt together instead of leaving white
+	 * stripes, and restored to the default (`ESC z 1`) afterwards.
+	 *
+	 * The image is centred unconditionally, ignoring any enclosing `<align>`.
+	 * That is the contract the other three renderers already keep — the preview
+	 * (thermal-renderer.ts), the PDF (Html_Thermal_Emitter::render_image()) and
+	 * the raster lane (Raster_Thermal_Emitter::draw_image()) all hard-centre an
+	 * `<image>` — and inheriting the wrapper's alignment instead would left-align
+	 * the bare `<image>` the template editor inserts, which all three show
+	 * centred.
+	 *
+	 * A src that resolves to nothing (a remote URL, a missing file) prints
+	 * nothing, and in particular does not disturb the line spacing.
+	 *
+	 * @param array $node The image AST node.
+	 *
+	 * @return void
+	 */
+	private function emit_image( array $node ): void {
+		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->columns ) );
+		if ( null === $bitmap ) {
+			return;
+		}
+
+		// ESC X starts a raster band; close any open text line first.
+		$this->close_open_line();
+
+		$width  = $bitmap->width();
+		$height = $bitmap->height();
+
+		$this->raw( array( 0x1b, 0x1d, 0x61, $this->align_byte( 'center' ) ) );
+		$this->raw( array( 0x1b, 0x30 ) ); // ESC 0 — 24-dot line spacing.
+
+		for ( $top = 0; $top < $height; $top += 24 ) {
+			$this->raw( array( 0x1b, 0x58, $width & 0xff, ( $width >> 8 ) & 0xff ) );
+
+			$band = '';
+			for ( $x = 0; $x < $width; $x++ ) {
+				for ( $byte_index = 0; $byte_index < 3; $byte_index++ ) {
+					$byte = 0;
+					for ( $bit = 0; $bit < 8; $bit++ ) {
+						// pixel() reads out of range as blank, which is what makes
+						// the last band safe when the height is not a multiple of 24.
+						$byte |= $bitmap->pixel( $x, $top + ( $byte_index * 8 ) + $bit ) << ( 7 - $bit );
+					}
+					$band .= \chr( $byte );
+				}
+			}
+
+			$this->raw_string( $band );
+			$this->raw( array( 0x0a, 0x0d ) );
+		}
+
+		$this->raw( array( 0x1b, 0x7a, 0x01 ) ); // ESC z 1 — default line spacing.
+		$this->raw( array( 0x1b, 0x1d, 0x61, $this->align_byte( $this->align ) ) );
 	}
 
 	/**
@@ -590,6 +701,9 @@ class Starprnt_Thermal_Emitter {
 		// Thermal_Bounds::QRCODE_SIZE_MAX. Device-specific, so it stays here.
 		$size  = max( Thermal_Bounds::QRCODE_SIZE_MIN, min( 8, $size ) );
 
+		// ESC GS y prints a QR block; close any open text line first.
+		$this->close_open_line();
+
 		// Select model 2.
 		$this->raw( array( 0x1b, 0x1d, 0x79, 0x53, 0x30, 0x02 ) );
 		// Set error correction level (M).
@@ -637,6 +751,7 @@ class Starprnt_Thermal_Emitter {
 		for ( $index = 0; $index < $lines; $index++ ) {
 			$this->raw( array( 0x0a ) );
 		}
+		$this->line_open = false;
 	}
 
 	/**
@@ -646,6 +761,7 @@ class Starprnt_Thermal_Emitter {
 	 */
 	private function newline(): void {
 		$this->raw( array( 0x0a ) );
+		$this->line_open = false;
 	}
 
 	/**

@@ -66,10 +66,11 @@ class Init {
 	 * | 7 | `woocommerce_pos_sync_proxy_response` | `Sync\Revision::stamp_proxy_revisions` (via `Augmentation_Pipeline::install()`) | **9** | **ORDER-CRITICAL** | Between `Meta_Normalizer` (5) and the uuid/digest stampers (10). Revision must hash the normalized-but-not-yet-augmented payload. |
 	 * | 8 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product` | `Proxy_Uuid_Stamper`, `Integrity_Digest` digest stampers, pipeline projections | 10 | order-critical (by number) | Preserved verbatim from the hand-wiring the pipeline replaced, so third-party code hooking either public filter still runs where it always did. |
 	 * | 9 | `woocommerce_before_product_object_save`, `woocommerce_before_product_variation_object_save` | `Sync\Pos_Uuid::stamp_on_save` | 10 | irrelevant | Default. The HOOK is the design (before the data store writes, so the uuid lands in the same save); the number is not. Registered unconditionally — identity is core, not an observer. |
-	 * | 10 | 32 catalogue/customer/order hooks | `Sync\Sync_Journal` (33 callbacks) | 10 | irrelevant | Default throughout. |
+	 * | 9a | `untrashed_post`, `woocommerce_untrash_order` | `Sync\Pos_Uuid::recheck_ownership_after_untrash`, `::recheck_order_ownership_after_untrash` | 10 | irrelevant | Default. Re-proves uuid ownership when a record leaves the trash — the one seam a native restore passes through (#1805, ADR 0038). Unconditional for the same reason as row 9; the journal and digest observers (rows 10, 12) share both hooks at the same priority once the latch is set, and nothing depends on the order. |
+	 * | 10 | 32 catalogue/customer/order hooks, plus `shutdown` | `Sync\Sync_Journal` (34 callbacks) | 10 (`shutdown` at `PHP_INT_MAX`) | `shutdown`: order-critical (by number) | Default throughout. `woocommerce_update_order` only MARKS the order dirty; the `hook:update` row lands on `flush_pending_order_updates()` — at `shutdown`, before any other-origin row for that order, or when a different order is saved — so one online checkout writes one update row, not eleven. The shutdown flush runs LAST because WooCommerce saves the customer at 10 and the session at 20; a save those trigger after the flush is written immediately. |
 	 * | 10b | `delete_option` plus `pre_update_option_*`, `update_option_*`, `add_option_*`, `delete_option_*` for the two `Pos_Visibility::source_options()` | `Sync\Visibility_Observer` (9 callbacks) | 10 | irrelevant | Default. Appends the journal row for a record entering or leaving the POS servable set — the transition the sequence-log stream relies on, since it drops a hidden record's update rows. `delete_option` is the generic PRE-delete action (the per-option form fires after) and is gated on the option name inside the callback. Registered after `Sync_Journal` only because it writes through it; the constructor also runs the observer's one-time tombstone seed. |
 	 * | 11 | `wcpos_sync_journal_purge` | `Sync\Sync_Journal_Purge::run_purge` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the daily event. |
-	 * | 12 | 21 catalogue/customer/order hooks (a subset of row 10's) | `Sync\Integrity_Digest` | 10 | unknown | Default. Shares every one of its hooks with `Sync_Journal` at the same priority, so the journal always runs first — no code found that depends on that, but nothing pins it either. |
+	 * | 12 | 21 catalogue/customer/order hooks (a subset of row 10's), plus `shutdown` | `Sync\Integrity_Digest` | 10 (`shutdown` at `PHP_INT_MAX`) | unknown | Default. Shares every one of its hooks with `Sync_Journal` at the same priority, so the journal always runs first — no code found that depends on that, but nothing pins it either. Every save — product, variation, customer, order — only MARKS the digest dirty; the upsert lands on `flush_pending_digests()` at `shutdown`, before any `Digest_Index::read_digests()`, or when the queue holds 50 records. |
 	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
 	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
 	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
@@ -83,6 +84,7 @@ class Init {
 	 * | 23 | `determine_current_user` | `Init::determine_current_user_early` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
 	 * | 24 | `admin_init` | `Services\Lifecycle_Events::flush_pending`, `::maybe_schedule_refresh` | 10 | irrelevant | Default. `admin_init` because both need a fully booted admin request: one sends install/upgrade events recorded before the plugin was loaded enough to send them, the other schedules row 25. Both check consent first and cost nothing on a site that opted out. |
 	 * | 25 | `wcpos_analytics_group_refresh` | `Services\Lifecycle_Events::refresh_group_properties` | 10 | irrelevant | Default; sole listener. Unlike row 11, this call does NOT schedule the event — scheduling lives in row 24 so that withdrawing consent unschedules it. |
+	 * | 26 | `rest_request_after_callbacks` | `Services\Error_Reporter::filter_rest_request_after_callbacks` | **999** | order-critical (by number) | Runs late so the response status it reports is the one the client receives. |
 	 *
 	 * ## The one pair where statement order is the whole mechanism
 	 *
@@ -211,6 +213,11 @@ class Init {
 		// above in statement order. Deliberately NOT before the pair above —
 		// rows 20 and 23 are decided by insertion order alone.
 		( new Services\Lifecycle_Events() )->register_hooks();
+
+		// Consent-gated Sentry error reporting (issue #1811). Registered last for
+		// the same reason as Lifecycle_Events: nothing orders against it. Its REST
+		// filter runs at 999 so the status it reports is the one the client receives.
+		Services\Error_Reporter::instance()->register_hooks();
 	}
 
 	/**
@@ -437,39 +444,157 @@ class Init {
 	}
 
 	/**
-	 * Common initializations.
+	 * Groups constructed so far in this request (test seam; see constructed_groups()).
+	 *
+	 * @var array<string, bool>
+	 */
+	private static array $constructed = array();
+
+	/**
+	 * Common initializations, by request lane.
+	 *
+	 * Every request gets the services whose hooks WooCommerce consults on a
+	 * plain shopper page BEFORE any order exists: translations, the product
+	 * visibility filters, the order statuses and the read-side order filters
+	 * (My Account renders POS orders), the gateway registration (WooCommerce
+	 * builds its gateway list on cart pages) and the reserved-stock filter
+	 * (POS drafts must reduce online availability at add-to-cart time).
+	 *
+	 * Everything else is constructed only on the lanes that use it, and the
+	 * order-event services additionally on the first order write of ANY request
+	 * ({@see ensure_order_services()}), so the lane classifier is an
+	 * optimisation rather than a correctness gate. Measured 2026-09-03: a
+	 * storefront page loaded ~80 plugin files and 22 objects for hooks that
+	 * never fire there (see .claude/research/2026-09-03-lazy-service-construction-spec.md).
 	 */
 	private function init_common(): void {
+		self::$constructed['always'] = true;
+
 		// init the Services.
 		SettingsService::instance();
 		AuthService::instance();
-		Extensions::instance();
-		Receipt_Snapshot_Store::instance();
 
-		// init other functionality needed by both frontend and admin.
+		// Needed on every lane, including a plain storefront page.
 		new i18n();
 		new Gateways();
 		new Products();
 		new Orders();
-		new Emails();
-		new Templates();
-		new Services\Stock_Validator();
+		Services\Stock_Validator::instance();
+
+		if ( Services\Request_Lane::is_storefront() ) {
+			// Order-event services arrive on the first order write, if any.
+			self::arm_order_services();
+			return;
+		}
+
+		self::ensure_order_services();
+		self::construct_pos_services();
+	}
+
+	/**
+	 * Services only POS, admin, REST, cron and CLI requests use.
+	 */
+	private static function construct_pos_services(): void {
+		if ( isset( self::$constructed['pos'] ) ) {
+			return;
+		}
+		self::$constructed['pos'] = true;
+		Extensions::instance();
 		new Services\Decimal_Quantities();
 		new Services\Customer_Meta_Parity();
+	}
+
+	/**
+	 * Hook the order-event services to the first order write of the request.
+	 *
+	 * Every WooCommerce order write — create, update, status transition,
+	 * `payment_complete()`, refund — goes through `WC_Abstract_Order::save()`,
+	 * which fires `woocommerce_before_order_object_save` before the data store
+	 * writes and before `woocommerce_new_order` / `woocommerce_order_status_changed`
+	 * / `woocommerce_payment_complete` fire. Priority 0 there means every
+	 * observer exists before any order is written — on a webhook, a cron
+	 * spawned from a page view, a third-party plugin creating an order on
+	 * `template_redirect`, or a lane the classifier got wrong. Nothing in the
+	 * order group listens to trash or delete, so those need no arming.
+	 */
+	private static function arm_order_services(): void {
+		add_action( 'woocommerce_before_order_object_save', array( self::class, 'ensure_order_services' ), 0, 0 );
+	}
+
+	/**
+	 * Construct the order-event services exactly once per request.
+	 *
+	 * Idempotent and safe to call after `init`; each service handles its own
+	 * late registration. Fires `woocommerce_pos_order_services_ready` once so
+	 * Pro and extensions can construct their own order-event services at the
+	 * same moment on every lane.
+	 */
+	public static function ensure_order_services(): void {
+		if ( isset( self::$constructed['order'] ) ) {
+			return;
+		}
+		self::$constructed['order'] = true;
+
+		Receipt_Snapshot_Store::instance();
+		new Emails();
+		new Templates();
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();
 		new Services\Cloud_Print_Relay_Service();
+
+		/**
+		 * Fires once per request when the POS order-event services exist:
+		 * eagerly on POS, admin, REST, cron and CLI requests (from this
+		 * plugin's `init` callback at priority 10), and on a storefront
+		 * request the moment the first order is about to be written.
+		 *
+		 * Because the eager firing happens at `init` priority 10, a listener
+		 * added later than that (for example from another plugin's `init`
+		 * callback at priority 20) must check `did_action()` first and
+		 * construct immediately when the action has already fired.
+		 *
+		 * @since 1.10.8
+		 */
+		do_action( 'woocommerce_pos_order_services_ready' );
+	}
+
+	/**
+	 * Which service groups this request has constructed: 'always', 'order', 'pos'.
+	 *
+	 * @internal Test seam.
+	 *
+	 * @return string[]
+	 */
+	public static function constructed_groups(): array {
+		return array_keys( self::$constructed );
+	}
+
+	/**
+	 * Forget which groups were constructed. Tests only.
+	 *
+	 * @internal
+	 */
+	public static function reset_request_state(): void {
+		self::$constructed = array();
+		Services\Request_Lane::reset();
 	}
 
 	/**
 	 * Frontend specific initializations.
 	 */
 	private function init_frontend(): void {
-		if ( ! is_admin() ) {
+		if ( is_admin() ) {
+			return;
+		}
+		// The public receipt shortcode and the My Account receipt action are
+		// storefront features; they construct the template services when used.
+		new Storefront_Receipts();
+		if ( ! Services\Request_Lane::is_storefront() ) {
+			// The POS routes (rewrite rules, checkout context, order-pay and
+			// coupon forms) only matter on requests the classifier saw as POS.
 			new Template_Router();
 			new Form_Handler();
-			new Storefront_Receipts();
 		}
 	}
 
@@ -506,6 +631,16 @@ class Init {
 
 		// wePOS alters the WooCommerce REST API, breaking the expected schema
 		// It's very bad form on their part, but we need to work around it.
-		new Integrations\WePOS();
+		// Its only hook is admin_init (a conflict notice), so admin lane only.
+		if ( is_admin() ) {
+			new Integrations\WePOS();
+		}
+
+		// WooCommerce Tax - https://wordpress.org/plugins/woocommerce-services/
+		// Its class exists whenever the plugin is active, but its callbacks are
+		// only hooked when automated taxes are on and the store country is
+		// supported, so the integration looks them up on the hooks at
+		// recalculation time instead of gating on the class here.
+		new Integrations\WooCommerce_Tax();
 	}
 }

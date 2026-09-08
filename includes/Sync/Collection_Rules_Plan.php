@@ -85,6 +85,13 @@ final class Collection_Rules_Plan {
 	public const HOOK_POSTS_ORDERBY = 'posts_orderby';
 
 	/**
+	 * Legacy storage — a postmeta sort that must not filter the result set.
+	 *
+	 * @var string
+	 */
+	public const HOOK_POSTS_CLAUSES = 'posts_clauses';
+
+	/**
 	 * HPOS storage — filter rules, appended to the `WHERE` clause.
 	 *
 	 * The `woocommerce_orders_table_query_clauses` hook carries two unrelated roles and
@@ -269,6 +276,9 @@ final class Collection_Rules_Plan {
 			case self::HOOK_POSTS_ORDERBY:
 				return \is_string( $value ) ? $this->apply_legacy_sort_clause( $value, $context[0] ?? null ) : $value;
 
+			case self::HOOK_POSTS_CLAUSES:
+				return \is_array( $value ) ? $this->apply_meta_sort_clauses( $value, $context[0] ?? null ) : $value;
+
 			case self::HOOK_HPOS_FILTERS:
 				return \is_array( $value ) ? $this->apply_hpos_filters( $value, $context[0] ?? null ) : $value;
 
@@ -345,6 +355,20 @@ final class Collection_Rules_Plan {
 	 */
 	public function needs_legacy_posts_orderby(): bool {
 		return null !== $this->sort && isset( $this->rules['sorts'][ $this->sort ]['posts']['posts_orderby'] );
+	}
+
+	/**
+	 * Whether the claimed sort is a postmeta sort applied through `posts_clauses`.
+	 *
+	 * Reads the sort's declaration rather than naming a sort inline, so a `meta_sort`
+	 * row added to the table is picked up by every lane that asks.
+	 *
+	 * @return bool
+	 */
+	public function needs_meta_sort(): bool {
+		return Collection_Rules::STORAGE_POSTS === $this->storage
+			&& null !== $this->sort
+			&& '' !== (string) ( $this->rules['sorts'][ $this->sort ]['posts']['meta_sort']['key'] ?? '' );
 	}
 
 	/**
@@ -677,23 +701,85 @@ final class Collection_Rules_Plan {
 			return $orderby;
 		}
 
-		/*
-		 * The direction comes from the query WooCommerce built, exactly as the HPOS sort
-		 * takes it from that query's args — one derivation for both storages and both
-		 * Read Lanes. `WP_Query::get_posts()` normalises `order` (upper-cased, defaulting
-		 * to DESC) before `posts_orderby` fires, and it is populated from the same request
-		 * `order` param v1 used to read directly, so this is byte-identical on the direct
-		 * lane while giving the proxy lane the same answer instead of its own hard-coded
-		 * DESC. The terminal `ASC` is v1's own fallback, reached only if nothing at all
-		 * supplied a direction.
-		 */
-		$order = $query->query_vars['order'] ?? $this->request_order ?? 'ASC';
-		$order = \is_scalar( $order ) ? strtoupper( (string) $order ) : 'ASC';
-		// $request_order is the RAW request param — it feeds SQL text below, so it
-		// must never carry anything but the two legal directions.
-		$order = \in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
+		$order = $this->resolve_order( $query );
 
 		return "{$wpdb->posts}.{$column} {$order}";
+	}
+
+	/**
+	 * Sort on a postmeta value without letting the sort decide which rows exist.
+	 *
+	 * WP_Query's `meta_key` + `orderby => meta_value` pair INNER JOINs `postmeta`, so a
+	 * row with no value for the key is DROPPED — a sort silently acting as a filter. On a
+	 * default store that made `orderby=barcode` answer with an empty page (the barcode
+	 * field defaults to `_global_unique_id`, which most catalogues never populate) and
+	 * `orderby=sku` hide every product without a SKU. A cashier sorting a column expects
+	 * the same products in a different order, never fewer, so the join is LEFT and the
+	 * rows with no value are ordered LAST whichever way the column runs — MySQL would
+	 * otherwise float them to the top under ASC.
+	 *
+	 * The `ID` tiebreak makes the order total, so the rows that share a value (or share
+	 * having none) cannot swap places between two pages of the same walk.
+	 *
+	 * @param array $clauses The query clauses so far.
+	 * @param mixed $query   The WP_Query instance.
+	 *
+	 * @return array
+	 */
+	private function apply_meta_sort_clauses( array $clauses, $query ): array {
+		global $wpdb;
+
+		if ( ! $this->needs_meta_sort() ) {
+			return $clauses;
+		}
+
+		$rule  = $this->rules['sorts'][ $this->sort ]['posts']['meta_sort'];
+		$alias = 'wcpos_sort_meta';
+
+		// One join per query: `posts_clauses` can run more than once for a single
+		// WP_Query when another filter re-enters it.
+		if ( false === strpos( (string) ( $clauses['join'] ?? '' ), $alias ) ) {
+			$clauses['join'] = (string) ( $clauses['join'] ?? '' ) . $wpdb->prepare(
+				" LEFT JOIN {$wpdb->postmeta} AS {$alias} ON ( {$alias}.post_id = {$wpdb->posts}.ID AND {$alias}.meta_key = %s )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names and the generated alias only; the meta key is bound.
+				(string) $rule['key']
+			);
+		}
+
+		// A duplicate meta row for the same key would otherwise repeat the product.
+		if ( '' === (string) ( $clauses['groupby'] ?? '' ) ) {
+			$clauses['groupby'] = "{$wpdb->posts}.ID";
+		}
+
+		$order = $this->resolve_order( $query );
+		$value = empty( $rule['numeric'] ) ? "{$alias}.meta_value" : "{$alias}.meta_value + 0";
+
+		$clauses['orderby'] = "( {$alias}.meta_value IS NULL OR {$alias}.meta_value = '' ) ASC, {$value} {$order}, {$wpdb->posts}.ID ASC";
+
+		return $clauses;
+	}
+
+	/**
+	 * The sort direction a legacy clause body should write.
+	 *
+	 * Taken from the query WooCommerce built, exactly as the HPOS sort takes it from that
+	 * query's args — one derivation for both storages and both Read Lanes.
+	 * `WP_Query::get_posts()` normalises `order` (upper-cased, defaulting to DESC) before
+	 * the clause filters fire, and it is populated from the same request `order` param v1
+	 * used to read directly, so this is byte-identical on the direct lane while giving the
+	 * proxy lane the same answer instead of its own hard-coded default. The terminal `ASC`
+	 * is v1's own fallback, reached only if nothing at all supplied a direction.
+	 *
+	 * @param mixed $query The WP_Query instance.
+	 *
+	 * @return string Either `ASC` or `DESC`.
+	 */
+	private function resolve_order( $query ): string {
+		$order = $query->query_vars['order'] ?? $this->request_order ?? 'ASC';
+		$order = \is_scalar( $order ) ? strtoupper( (string) $order ) : 'ASC';
+
+		// $request_order is the RAW request param — it feeds SQL text, so it must never
+		// carry anything but the two legal directions.
+		return \in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'ASC';
 	}
 
 	/**

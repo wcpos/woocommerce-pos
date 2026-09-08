@@ -143,7 +143,6 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 	public function tearDown(): void {
 		Meta_Normalizer::unregister_hooks();
-		delete_option( 'woocommerce_pos_sync_legacy_revision_grace' );
 		parent::tearDown();
 	}
 
@@ -445,7 +444,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	 * identity it had from the last pull, and saw image.id flip type between a
 	 * read and a write of the same order. Commit 6fa92554 unified "both v2 read
 	 * lanes" and skipped this one; the fallout one commit later (489c51b4) was an
-	 * extra revision variant plus a third grace branch. Routing the ack through
+	 * extra revision variant plus a compatibility branch. Routing the ack through
 	 * Order_Serializer::document() closes the gap at the source.
 	 *
 	 * The ack's `currentRevision` is unaffected — it is still computed over the
@@ -512,8 +511,8 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 	 *
 	 * The old-shape ack returned canonical_revision() over the bare document, and
 	 * so does the new one, so the stored value matches on the FIRST (exact) branch
-	 * of revision_matches_with_grace — no grace required. This reconstructs that
-	 * stored value the way the old code produced it and pushes with it.
+	 * of the strict revision comparison — no compatibility path required. This
+	 * reconstructs that stored value the way the old code produced it and pushes with it.
 	 */
 	public function test_revision_stored_from_an_old_shape_ack_still_passes_the_precondition(): void {
 		$order = $this->representative_order();
@@ -565,53 +564,6 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 				: 'The characterization push must not return WP_Error.'
 		);
 		$this->assertSame( 200, $second->get_status(), (string) wp_json_encode( $second->get_data() ) );
-	}
-
-	/**
-	 * REVISION SAFETY — the grace branches still fire. Each historical recipe in
-	 * Order_Serializer's versioned-recipe list is exercised against an order whose
-	 * items have not yet been stamped, which is the state each branch exists for.
-	 *
-	 * @dataProvider grace_recipes
-	 *
-	 * @param string $recipe Static Order_Serializer method producing the historical revision.
-	 */
-	public function test_historical_revision_recipes_still_pass_the_grace_comparer( string $recipe ): void {
-		$order = $this->representative_order();
-		$uuid  = Pos_Uuid::ensure_uuid( $order );
-
-		// The grace comparer hashes the CURRENT bare wc/v3 re-read under the old
-		// recipe; an unchanged order must therefore still drain.
-		$historical = Order_Serializer::$recipe( $this->current_bare_document( $order ) );
-		$this->assertNotSame(
-			Order_Serializer::canonical_revision( $this->current_bare_document( $order ) ),
-			$historical,
-			'The fixture must actually differ under the historical recipe, or the test proves nothing.'
-		);
-
-		$response = $this->push_update( $order, $uuid, $historical );
-
-		$this->assertNotWPError(
-			$response,
-			is_wp_error( $response )
-				? sprintf( 'The characterization push returned WP_Error [%s] with data %s.', $response->get_error_code(), (string) wp_json_encode( $response->get_error_data() ) )
-				: 'The characterization push must not return WP_Error.'
-		);
-		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
-	}
-
-	/**
-	 * The historical revision recipes the write path's grace comparer accepts.
-	 *
-	 * `legacy_revision` is excluded: its comparer branch reserializes the order
-	 * through serialize_order() rather than hashing the bare re-read, and it is
-	 * already covered by Test_Write_Controller.
-	 */
-	public function grace_recipes(): array {
-		return array(
-			'pre-augmentation recipe' => array( 'pre_augmentation_canonical_revision' ),
-			'pre-item-uuid recipe'    => array( 'pre_item_uuid_canonical_revision' ),
-		);
 	}
 
 	/**

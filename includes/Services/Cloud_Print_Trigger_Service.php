@@ -109,6 +109,21 @@ class Cloud_Print_Trigger_Service {
 	}
 
 	/**
+	 * Order-meta key holding how many jobs an assignment has already fired.
+	 *
+	 * Keyed by the same triple the job count filters on, so two rules that
+	 * differ only by trigger keep separate marks. Hashed because a template id
+	 * can be an arbitrary virtual slug and meta keys have a length limit.
+	 *
+	 * @param string $printer_id  Printer id.
+	 * @param string $template_id Template id.
+	 * @param string $trigger     Normalized trigger.
+	 */
+	private static function fired_meta_key( string $printer_id, string $template_id, string $trigger ): string {
+		return '_wcpos_cp_fired_' . md5( $printer_id . "\0" . $template_id . "\0" . $trigger );
+	}
+
+	/**
 	 * Create jobs for an order according to the configured assignments.
 	 *
 	 * @param int $order_id Order ID.
@@ -178,7 +193,15 @@ class Cloud_Print_Trigger_Service {
 						'trigger'     => $trigger,
 					)
 				);
-				$shortfall = max( 0, $copies - $existing );
+				// Counting rows alone cannot dedupe: the rows are deletable (by
+				// the admin, and by the retention purge), and handle_order()
+				// runs again on every later status change. A deleted receipt
+				// would then read as never printed and be queued a second time
+				// — including one the admin had deliberately cancelled. The
+				// high-water mark survives the rows it counts.
+				$fired_key = self::fired_meta_key( $printer_id, $template_id, $trigger );
+				$fired     = (int) $order->get_meta( $fired_key );
+				$shortfall = max( 0, $copies - max( $existing, $fired ) );
 				if ( 0 === $shortfall ) {
 					continue;
 				}
@@ -207,6 +230,11 @@ class Cloud_Print_Trigger_Service {
 						array(),
 						$trigger
 					);
+					if ( $job_id > 0 ) {
+						++$fired;
+						$order->update_meta_data( $fired_key, (string) $fired );
+						$order->save_meta_data();
+					}
 					if ( 0 === $job_id ) {
 						Logger::log(
 							sprintf(

@@ -35,7 +35,7 @@ function makeQueue(overrides: Partial<QueueResponse> = {}): QueueResponse {
 				order_id: 4291,
 				order_number: '4291',
 				order_edit_url: 'https://mystore.com/wp-admin/admin.php?page=wc-orders&id=4291',
-				template_id: 'receipt',
+				template_id: '75431',
 				content_type: 'application/vnd.star.starprnt',
 				created_gmt: created,
 			},
@@ -97,6 +97,13 @@ function routeQueue(getQueue: () => QueueResponse) {
 		if (opts.path.includes('/reprint')) {
 			return Promise.resolve({ id: 99 });
 		}
+		if (opts.path.includes('wcpos/v1/templates')) {
+			// The template-name map is built from the unfiltered list, so a
+			// draft still resolves; ids absent here fall back to the raw id.
+			return Promise.resolve([
+				{ id: 75431, title: 'Kitchen 80mm', status: 'draft', is_active: false, engine: 'thermal' },
+			]);
+		}
 		return Promise.resolve({});
 	});
 }
@@ -125,6 +132,10 @@ describe('PrintQueue', () => {
 		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('#4291');
 		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('Kitchen');
 		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('Waiting');
+		// Template name shown when resolved; raw id is the fallback (row 12).
+		expect(screen.getByTestId('queue-row-11')).toHaveTextContent('Kitchen 80mm');
+		expect(screen.getByTestId('queue-row-11')).not.toHaveTextContent('75431');
+		expect(screen.getByTestId('queue-row-12')).toHaveTextContent('receipt');
 		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Failed');
 		expect(screen.getByTestId('queue-retry-13')).toBeInTheDocument();
 	});
@@ -317,7 +328,11 @@ describe('PrintQueue', () => {
 		});
 	});
 
-	it('requests the active view by default — printed history is opt-in', async () => {
+	it('requests every status by default, newest first', async () => {
+		// "Needs attention" as the default hid the job that just fired, so the
+		// queue could not answer the question it is usually opened to answer:
+		// did my receipt go through? Ordering is the server's job (DESC) — what
+		// matters here is that the client stops narrowing the view for you.
 		routeQueue(makeQueue);
 		renderQueue();
 
@@ -325,7 +340,119 @@ describe('PrintQueue', () => {
 		const firstQueueCall = apiFetchMock.mock.calls
 			.map((c) => (c[0] as ApiOpts).path)
 			.find((path) => path.includes('print-jobs/queue') && !path.includes('cancel'));
-		expect(firstQueueCall).toContain('status=active');
+		expect(firstQueueCall).not.toContain('status=active');
+		expect(
+			screen.getByText('Jobs across every status, including printed and cancelled.')
+		).toBeInTheDocument();
+	});
+
+	it('renders rows in the order the server returned them, newest first', async () => {
+		// The server orders DESC; the table must not re-sort or reverse it. The
+		// shared fixture gives every job the same created_gmt, so an ascending
+		// regression would pass unnoticed — use distinct timestamps and assert
+		// the rendered order.
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = [
+				{ ...base.jobs[0], id: 11, created_gmt: '2026-08-29 12:00:00' },
+				{ ...base.jobs[1], id: 12, created_gmt: '2026-08-29 11:00:00' },
+				{ ...base.jobs[2], id: 13, created_gmt: '2026-08-29 10:00:00' },
+			];
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		const rendered = screen
+			.getAllByTestId(/^queue-row-/)
+			.map((row) => row.getAttribute('data-testid'));
+		expect(rendered).toEqual(['queue-row-11', 'queue-row-12', 'queue-row-13']);
+	});
+
+	it('shows a recorded failure reason on the row', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13 ? { ...job, error: 'EX_TIMEOUT' } : job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('EX_TIMEOUT');
+	});
+
+	it('explains an unconfirmed failure instead of showing its code', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13 ? { ...job, error: 'claim_timeout', unconfirmed: true } : job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('never confirmed');
+		expect(screen.getByTestId('queue-error-13')).not.toHaveTextContent('claim_timeout');
+	});
+
+	it('drops the retry advice from an unconfirmed failure that was already retried', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13
+					? { ...job, error: 'claim_timeout', unconfirmed: true, retried_to: 21 }
+					: job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('never confirmed');
+		expect(screen.getByTestId('queue-error-13')).not.toHaveTextContent('retry it if it did not print');
+	});
+
+	it('shows completion timing instead of a stale error on a printed job', async () => {
+		routeQueue(() => {
+			const base = makeQueue();
+			base.jobs = base.jobs.map((job) =>
+				job.id === 13
+					? {
+							...job,
+							status: 'printed',
+							error: 'EX_TIMEOUT',
+							terminal_at: nowSeconds() - 60,
+						}
+					: job
+			);
+			return base;
+		});
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		expect(screen.queryByTestId('queue-error-13')).toBeNull();
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('Printed');
+		expect(screen.getByTestId('queue-row-13')).toHaveTextContent('1 minute ago');
+	});
+
+	it('deletes a single job through the bulk delete endpoint', async () => {
+		routeQueue(makeQueue);
+		renderQueue();
+
+		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
+		fireEvent.click(screen.getByTestId('queue-delete-11'));
+
+		await waitFor(() => {
+			const deleteCall = apiFetchMock.mock.calls.find((c) =>
+				((c[0] as ApiOpts).path ?? '').includes('queue/delete')
+			);
+			expect(deleteCall).toBeTruthy();
+			expect((deleteCall?.[0] as ApiOpts).method).toBe('POST');
+			expect((deleteCall?.[0] as { data?: { ids?: number[] } })?.data?.ids).toEqual([11]);
+		});
 	});
 
 	it('never shows a stale banner for a push provider with a backlog', async () => {

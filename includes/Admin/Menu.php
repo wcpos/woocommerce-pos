@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
@@ -467,7 +468,8 @@ JS;
 		$profile    = new Landing_Profile();
 		$data       = $profile->get_functional_data();
 
-		$consent = Settings::instance()->tracking_consent();
+		// Send gate: the persisted answer, not the filtered read view.
+		$consent = Settings::instance()->raw_tracking_consent();
 		if ( 'allowed' === $consent ) {
 			$data = array_merge( $data, $profile->get_consented_data() );
 		}
@@ -475,8 +477,7 @@ JS;
 		$encoded = wp_json_encode( $data, $json_flags );
 
 		if ( false === $encoded ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( 'WCPOS landing data JSON encoding failed: ' . json_last_error_msg() );
+			Logger::error( 'Landing data JSON encoding failed: ' . json_last_error_msg() );
 			$encoded = '{}';
 		}
 
@@ -570,7 +571,7 @@ JS;
 		wp_enqueue_script(
 			'wcpos-template-gallery',
 			PLUGIN_URL . $dir . '/js/template-gallery.js',
-			array( 'react', 'react-dom', 'wp-api-fetch', 'wp-url' ),
+			array( 'react', 'react-dom', 'wp-api-fetch', \WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE, 'wp-url' ),
 			PLUGIN_VERSION,
 			true
 		);
@@ -586,7 +587,7 @@ JS;
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s, previewBaseUrl: %s }; wcpos.translationVersion = %s;',
-			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ), $json_encode_flags ),
+			wp_json_encode( wcpos_is_pro_active(), $json_encode_flags ),
 			wp_json_encode( untrailingslashit( admin_url() ), $json_encode_flags ),
 			wp_json_encode(
 				(bool) wc_get_orders(

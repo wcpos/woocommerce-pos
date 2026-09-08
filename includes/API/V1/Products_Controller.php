@@ -18,9 +18,12 @@ use WC_Data;
 use WC_Product;
 use WC_Product_Variable;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\API\Product_Search;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
@@ -58,6 +61,16 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @var WP_REST_Request|null
 	 */
 	protected $wcpos_request;
+
+	/**
+	 * Request keys the product Collection Rules plan reads on this lane.
+	 *
+	 * @var array
+	 */
+	private const WCPOS_SORT_PARAM_MAP = array(
+		'orderby' => 'orderby',
+		'order'   => 'order',
+	);
 
 	/**
 	 * Memoized parent collection params.
@@ -219,13 +232,10 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Define new sorting options.
-			$new_sort_options = array(
-				'sku',
-				'barcode',
-				'stock_quantity',
-				'stock_status',
-			);
+			// The POS sorts are DECLARED once, in Sync\Collection_Rules, and projected here.
+			// The v2 proxy lane claims the same list, so a sort cannot be advertised on one
+			// Read Lane and rejected on the other (#1779).
+			$new_sort_options = Collection_Rules::orderby_enum( 'products' );
 			// Merge new options, avoiding duplicates.
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}
@@ -360,46 +370,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
-		global $wpdb;
-
-		if ( empty( $search ) ) {
-			return $search; // skip processing - no search term in query.
-		}
-
-		$q            = $wp_query->query_vars;
-		$n            = ! empty( $q['exact'] ) ? '' : '%';
-		$search_terms = (array) $q['search_terms'];
-
-		// Fields in the main 'posts' table.
-		$post_fields = array( 'post_title' );
-
-		// Meta fields to search.
-		$meta_fields = Barcode_Field::search_keys();
-
-		$search_conditions = array();
-
-		foreach ( $search_terms as $term ) {
-			$term = $n . $wpdb->esc_like( $term ) . $n;
-
-			// Search in post fields.
-			foreach ( $post_fields as $field ) {
-				$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
-			}
-
-			// Search in meta fields.
-			foreach ( $meta_fields as $field ) {
-				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
-			}
-		}
-
-		if ( ! empty( $search_conditions ) ) {
-			$search = ' AND (' . implode( ' OR ', $search_conditions ) . ') ';
-			if ( ! is_user_logged_in() ) {
-				$search .= " AND ($wpdb->posts.post_password = '') ";
-			}
-		}
-
-		return $search;
+		return Product_Search::posts_search( $search, $wp_query );
 	}
 
 	/**
@@ -412,24 +383,18 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 */
 	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
-		global $wpdb;
-
-		// Handle NULL values in stock_quantity sorting
-		// By default, MySQL sorts NULLs first in ASC and last in DESC
-		// We want NULLs to always be last regardless of sort direction.
-		if ( isset( $this->wcpos_request ) ) {
-			$orderby = $this->wcpos_request->get_param( 'orderby' );
-			$order   = strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' );
-
-			if ( 'stock_quantity' === $orderby ) {
-				// Modify ORDER BY to put NULLs last
-				// Use CASE to assign a sort priority: non-NULL = 0, NULL = 1
-				// Then sort by the actual value.
-				$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
-			}
+		if ( ! isset( $this->wcpos_request ) ) {
+			return $clauses;
 		}
 
-		return $clauses;
+		$post_type = $wp_query->query_vars['post_type'] ?? null;
+		if ( 'product' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product', $post_type, true ) ) ) {
+			return $clauses;
+		}
+
+		$plan = Collection_Rules::for_request( 'products', $this->wcpos_request, self::WCPOS_SORT_PARAM_MAP );
+
+		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
 	}
 
 	/**
@@ -620,13 +585,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_join_to_products_search( string $join, WP_Query $query ) {
-		global $wpdb;
-
-		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
-			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
-		}
-
-		return $join;
+		return Product_Search::posts_join( $join, $query );
 	}
 
 	/**
@@ -638,13 +597,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return string
 	 */
 	public function wcpos_posts_groupby_product_search( string $groupby, WP_Query $query ) {
-		global $wpdb;
-
-		if ( ! empty( $query->query_vars['s'] ) ) {
-			$groupby = "{$wpdb->posts}.ID";
-		}
-
-		return $groupby;
+		return Product_Search::posts_groupby( $groupby, $query );
 	}
 
 	/**
@@ -740,31 +693,14 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$args = parent::prepare_objects_query( $request );
 		$args = $this->wcpos_apply_store_api_tax_operator_fallbacks( $args, $request );
 
-		// Add custom 'orderby' options.
-		if ( isset( $request['orderby'] ) ) {
-			switch ( $request['orderby'] ) {
-				case 'sku':
-					$args['meta_key'] = '_sku';
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'barcode':
-					$args['meta_key'] = Barcode_Field::orderby_key();
-					$args['orderby']  = 'meta_value';
-
-					break;
-				case 'stock_quantity':
-					$args['meta_key'] = '_stock';
-					$args['orderby']  = 'meta_value_num';
-
-					break;
-				case 'stock_status':
-					$args['meta_key'] = '_stock_status';
-					$args['orderby']  = 'meta_value';
-
-					break;
-			}
-		}
+		/*
+		 * The POS sorts (`sku`, `barcode`, `stock_quantity`, `stock_status`) are NOT
+		 * mapped onto `meta_key` + `orderby => meta_value` here any more. That pair
+		 * INNER JOINs postmeta, so it dropped every product with no value for the key —
+		 * a sort acting as a filter (#1779 follow-up). `Sync\Collection_Rules` declares
+		 * them and `wcpos_posts_clauses()` applies them as a LEFT JOIN, on this lane and
+		 * on the v2 proxy alike.
+		 */
 
 		return $args;
 	}

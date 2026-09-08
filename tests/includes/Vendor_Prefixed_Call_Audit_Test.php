@@ -24,8 +24,9 @@ use WP_UnitTestCase;
  * unless a shim exists in includes/Vendor_Prefixed_Polyfills.php.
  *
  * This audit scans every built file for fully-qualified WCPOS\Vendor function
- * calls and asserts each one resolves, so a scoper regression fails CI at the
- * next test run instead of fataling on customer sites.
+ * calls, including namespaced function calls, and asserts each one resolves,
+ * so a scoper regression fails CI at the next test run instead of fataling on
+ * customer sites.
  */
 class Vendor_Prefixed_Call_Audit_Test extends WP_UnitTestCase {
 	/**
@@ -36,10 +37,9 @@ class Vendor_Prefixed_Call_Audit_Test extends WP_UnitTestCase {
 		$vendor_prefixed_dir = \dirname( __DIR__, 2 ) . '/vendor_prefixed';
 		$this->assertDirectoryExists( $vendor_prefixed_dir );
 
-		// Function calls are a single lowercase segment directly followed by an
-		// open paren; class references (PascalCase, sub-namespaces, ::) never
-		// match. The source literal is \WCPOS\Vendor\name(.
-		$call_pattern = '/\\\\WCPOS\\\\Vendor\\\\([a-z_][a-z0-9_]*)\s*\(/';
+		// Match optional namespace segments followed by a lowercase function
+		// name. Lowercase-named classes are excluded after matching.
+		$call_pattern = '/\\\\WCPOS\\\\Vendor\\\\((?:[A-Za-z_][A-Za-z0-9_]*\\\\)*[a-z_][a-z0-9_]*)\s*\(/';
 
 		$iterator = new RecursiveIteratorIterator(
 			new RecursiveDirectoryIterator( $vendor_prefixed_dir, FilesystemIterator::SKIP_DOTS )
@@ -58,7 +58,10 @@ class Vendor_Prefixed_Call_Audit_Test extends WP_UnitTestCase {
 			}
 
 			foreach ( array_unique( $matches[1] ) as $function ) {
-				if ( ! \function_exists( 'WCPOS\\Vendor\\' . $function ) ) {
+				if (
+					! \function_exists( 'WCPOS\\Vendor\\' . $function )
+					&& ! \class_exists( 'WCPOS\\Vendor\\' . $function )
+				) {
 					$relative_path             = substr( $file->getPathname(), \strlen( $vendor_prefixed_dir ) + 1 );
 					$unresolved[ $function ][] = $relative_path;
 				}

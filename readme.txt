@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.1
+Stable tag: 1.10.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -113,13 +113,107 @@ Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) 
 Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 = What data does WCPOS send outside my site? =
-WCPOS keeps your data in your own WooCommerce database, unless you turn on a feature that relies on an outside service. It contacts outside services to: load the POS web bundle, other interface assets, and translations from a CDN (jsDelivr); send anonymous usage analytics to wcpos.com **if you opt in** (withdraw any time in settings); validate your license key, site identifier (`site_uuid`), and anonymous identifier (`anon_id`) with wcpos.com when you activate Pro; and relay cloud print jobs through the WCPOS Cloud Print relay at cloudprint.wcpos.com **if you use cloud printing** — your site registers with the relay automatically when you open the Cloud Print settings, and each print job for a relay-addressed printer is then passed through the relay to your configured cloud printer, so the receipt contents (which include order details) leave your site (developers can opt out with the `woocommerce_pos_cloud_print_relay_enabled` filter). Full details are in our [privacy policy](https://wcpos.com/privacy).
+Your products, orders and customers stay in your own WooCommerce database. WCPOS only talks to outside services for a few specific reasons:
+
+* **To load the app.** The POS interface, its assets and translations are served from a CDN (jsDelivr), like any web app.
+* **To find and fix bugs — only if you opt in.** With your permission, WCPOS sends us anonymous usage data (which features are used, on what kind of setup) and anonymous error reports from the POS and from the WCPOS plugin on your server (what went wrong, on which version and platform). This is how we spot problems before you have to write in, fix them faster, and decide what to build next. It never includes customer details, order contents, prices or your site address, and you can change your mind any time in POS > Settings > General.
+* **To activate Pro.** Your license key, site identifier (`site_uuid`) and anonymous identifier (`anon_id`) are validated with wcpos.com.
+* **To print through the WCPOS Cloud Print relay — only if you use cloud printing.** Your site registers with the relay at cloudprint.wcpos.com when you open the Cloud Print settings, and print jobs for relay-addressed printers are passed through it to your printer, so those receipt contents (which include order details) leave your site. Developers can opt out with the `woocommerce_pos_cloud_print_relay_enabled` filter.
+
+Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Screenshots ==
 
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.9 - 2026/09/07 =
+
+- **A sale with a coupon no longer stays "POS - Open" after it is paid.**
+- **Stores using WooCommerce Tax (TaxJar) get the right tax rates on POS orders**, and open POS orders no longer have stale tax lines put back on save.
+- **Sync skips records that haven't changed**, and a bloated product search index repairs itself.
+- **Bluetooth printers on iOS and Android reconnect after a failed print** instead of staying stuck on a dead link.
+- **Fewer freezes during the first sync on iOS and Android.**
+
+= 1.10.8 - 2026/09/06 =
+
+- **Printer setup has been redesigned.** The till scans for printers, you pick one and print a test page. Network, USB and Bluetooth printers are covered on desktop.
+- **Printers that need a different character set can be given a receipt language** in the printer's options.
+- **Copy setup report gathers printer diagnostics** for a support request.
+- **Bluetooth printers on desktop reconnect reliably between receipts.**
+- **A removed variation no longer comes back into the order on the next save.**
+- **Orders no longer fail to sync with an "invalid item id" error** after a line was removed on the server.
+- **Orders no longer show a false "store calculated different totals" warning** on stores that keep tax at more decimal places than they display.
+- **The receipt preview shows after a payment through the order-pay page**, and says why when it can't.
+- **Product and order search matches every word you type**, and exact SKU or barcode matches come first.
+- **The till works alongside the JWT Authentication for WP REST API plugin.**
+- **Saving an order no longer fails with a "Record has changed since last read" database error** on MariaDB stores.
+- **Less overhead on online-store page loads**, and fewer database writes per sale on the till.
+- **Receipt templates can tell percentage and fixed discounts apart**, and a new `woocommerce_pos_receipt_data` filter lets developers adjust receipt data.
+- **The POS footer and the Store health table fit narrow windows.**
+- Updated translations.
+
+= 1.10.7 - 2026/09/02 =
+
+- **Paid orders no longer stay open on the till after a gateway payment.** Mostly affected stores that don't use HPOS.
+- **Orders paid by cheque, bank transfer or a gateway with its own order status now complete on the till** instead of staying open.
+- **The payment-received page only reports success once the order is actually paid.**
+- **A failed order lookup after payment no longer breaks the payment-received page.**
+- **The Logs screen explains "Storage call has not returned" and failed search rebuilds** instead of showing a raw message.
+- Updated translations.
+
+= 1.10.6 - 2026/09/01 =
+
+- **Installing WCPOS Pro on a site running the free plugin no longer takes the site down.** Affected 1.10.0 to 1.10.5.
+- **The Orders screen no longer goes blank until reload.**
+- **Search finds accented names** -- "cafe" matches "café".
+- **Search works the moment the till opens** instead of wrongly saying "no products found".
+- **Variations no longer get stuck loading** in the product popover.
+- **One stalled sync request can no longer stop products from loading.**
+- **The product grid fills its first page on large screens.**
+- **The till now repairs more kinds of local database damage at startup.**
+- **Cloud print: the store logo and the number under the barcode now print** on Epson Server Direct Print and Star CloudPRNT receipts.
+- **Epson Server Direct Print receipts no longer show "?" in the time.**
+- **The cloud print queue shows which receipt template each job used.**
+- **The receipt template gallery opens faster** on stores with many templates.
+- **Optional error reporting** -- off by default, sent only with your consent -- and updated translations.
+
+= 1.10.5 - 2026/08/30 =
+
+- **Saving products and variations is much faster on large stores.**
+- **Orders load faster** on stores that don't use HPOS.
+- **Store Health scans are much faster on large stores.**
+
+= 1.10.4 - 2026/08/30 =
+
+- **Sorting products or variations by SKU, barcode or stock now works** -- and no longer hides items that don't have one.
+- **The till repairs a damaged local database at startup** instead of getting stuck until site data is cleared.
+- **The product grid no longer crashes when a search narrows the results.**
+- **A brief network glitch no longer shows "Website is unreachable"** or drops the till into offline mode.
+- **Removing a line from the cart now responds to the first press.**
+- **Logging in no longer fails on stores with a large number of saved sessions.**
+
+= 1.10.3 - 2026/08/30 =
+
+- **Payments work again in the iOS and Android apps.**
+- **Product search no longer matches product descriptions**, so searches find the right products again.
+- **Prevent overselling now holds stock during checkout**, so two tills can't sell the same item.
+- **Orders save faster.**
+- **Epson receipts print properly again** -- text size, the order barcode, and where the paper is cut.
+- **Cloud print no longer prints a receipt twice** when a printer briefly loses its connection.
+- **A blank cloud print no longer reports as printed** -- the cloud print queue now shows what went wrong.
+- **The cloud print queue can be cleared**, shows every job by default, and lists the newest first.
+- **"Out of stock" stays set** on products that don't manage stock when decimal quantities are switched on.
+- **Deleting a product or coupon from the till now sends it to the trash** instead of deleting it for good.
+- **Variations now follow the rules set by your other plugins**, such as multilingual and multi-store plugins.
+- **Changes made at the till now trigger WooCommerce's own hooks**, so your other plugins notice them.
+- **Store Health now spots when any kind of record needs re-syncing**, not just products.
+
+**Note for developers:** the `woocommerce_pos_sync_legacy_revision_grace` option and the pre-1.10.0 revision recipes are gone. New extension points: `woocommerce_pos_order_pull_ids` and `woocommerce_pos_invalidate`. `wcpos/v2` product search matches title, SKU and barcode only. Admin bundles now depend on a new script handle, `wcpos-api-fetch-method-param`, which rewrites `PUT`/`PATCH`/`DELETE` on `wcpos/v*` routes to `POST` + `?_method=`. The app now sends `wcpos_protocol` and `wcpos_client` with every request.
+
+= 1.10.2 - 2026/08/26 =
+- **Fixed a regression in order save speed for CPT orders** -- HPOS orders are not affected.
 
 = 1.10.1 - 2026/08/26 =
 

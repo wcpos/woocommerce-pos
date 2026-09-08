@@ -206,7 +206,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree         = Receipt_Data_Schema::get_field_tree();
 		$line_fields  = $tree['lines']['fields'];
 
-		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertArrayHasKey( $field, $line_fields );
@@ -224,6 +224,22 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Discount rows carry the WooCommerce coupon type as of the v1.2 contract.
+	 */
+	public function test_discount_rows_expose_discount_type(): void {
+		$tree            = Receipt_Data_Schema::get_field_tree();
+		$discount_fields = $tree['discounts']['fields'];
+
+		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertArrayHasKey( 'discount_type', $discount_fields );
+		$this->assertSame( 'string', $discount_fields['discount_type']['type'] );
+
+		$json_fields = Receipt_Data_Schema::get_json_schema()['properties']['discounts']['items']['properties'];
+		$this->assertArrayHasKey( 'discount_type', $json_fields );
+		$this->assertSame( 'string', $json_fields['discount_type']['type'] );
+	}
+
+	/**
 	 * Aggregate savings fields extend the unreleased nullable v1.1 contract.
 	 */
 	public function test_total_saved_fields_are_published_as_nullable_money_contract(): void {
@@ -238,7 +254,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree          = Receipt_Data_Schema::get_field_tree();
 		$total_fields  = $tree['totals']['fields'];
 
-		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertContains( $field, Receipt_Data_Schema::TOTAL_MONEY_KEYS );

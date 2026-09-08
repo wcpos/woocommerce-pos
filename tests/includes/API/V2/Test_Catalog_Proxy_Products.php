@@ -164,18 +164,442 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Product search deliberately does not widen title search to SKU search.
+	 * Product search matches the v1 title, SKU, and barcode fields only.
 	 */
-	public function test_search_does_not_match_product_sku(): void {
+	public function test_product_search(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$title       = wp_generate_password( 12, false );
+		$sku         = wp_generate_password( 8, false );
+		$barcode     = wp_generate_password( 10, false );
+		$description = 'A string containing ' . $title . ' and ' . $sku . ' and ' . $barcode;
+
+		ProductHelper::create_simple_product( array( 'description' => $description ) );
+		$product2 = ProductHelper::create_simple_product(
+			array(
+				'description' => $description,
+				'name'        => 'Foo ' . $title . ' bar',
+			)
+		);
+		$product3 = ProductHelper::create_simple_product(
+			array(
+				'description' => $description,
+				'sku'         => 'foo-' . $sku . '-bar',
+			)
+		);
+		$product4 = ProductHelper::create_simple_product( array( 'description' => $description ) );
+		$product4->update_meta_data( '_barcode', 'foo-' . $barcode . '-bar' );
+		$product4->save_meta_data();
+
+		$this->assertCount( 4, $this->read( array( 'search' => '' ) ) );
+
+		$rows = $this->read( array( 'search' => $title ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $product2->get_id(), $rows[0]['id'] );
+
+		$rows = $this->read( array( 'search' => $sku ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $product3->get_id(), $rows[0]['id'] );
+
+		$rows = $this->read( array( 'search' => $barcode ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $product4->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * Every search term narrows the product result set.
+	 */
+	public function test_product_search_matches_every_term(): void {
+		$token  = wp_generate_password( 8, false );
+		$token2 = wp_generate_password( 8, false );
+		$match  = ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.4ohm' ) );
+		ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.6ohm' ) );
+		ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' 0.4' ) ), 'id' ) );
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => '0.4 ' . $token ) ), 'id' ) );
+		$this->assertSame( array(), $this->read( array( 'search' => $token . ' zzzz' . $token2 ) ) );
+	}
+
+	/**
+	 * Different search terms may match different product fields.
+	 */
+	public function test_product_search_ands_terms_across_fields(): void {
+		$token = wp_generate_password( 8, false );
+		$sku   = wp_generate_password( 8, false );
+		$match = ProductHelper::create_simple_product(
+			array(
+				'name' => $token,
+				'sku'  => $sku,
+			)
+		);
+		ProductHelper::create_simple_product(
+			array(
+				'name' => $token,
+				'sku'  => wp_generate_password( 8, false ),
+			)
+		);
+
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' ' . $sku ) ), 'id' ) );
+	}
+
+	/**
+	 * An exact SKU match must not fall behind a full first page of title matches.
+	 */
+	public function test_product_search_ranks_exact_sku_first(): void {
+		$exact = ProductHelper::create_simple_product( array( 'sku' => 'red' ) );
+		$this->create_red_title_matches();
+
+		$rows = $this->read(
+			array(
+				'search'   => 'red',
+				'per_page' => 20,
+				'orderby'  => 'id',
+				'order'    => 'desc',
+			)
+		);
+
+		$this->assertCount( 20, $rows );
+		$this->assertSame( $exact->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * An exact configured-barcode match must rank ahead of title matches.
+	 */
+	public function test_product_search_ranks_exact_barcode_first(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$exact = ProductHelper::create_simple_product();
+		$exact->update_meta_data( '_barcode', 'red' );
+		$exact->save_meta_data();
+		$this->create_red_title_matches();
+
+		$rows = $this->read(
+			array(
+				'search'   => 'red',
+				'per_page' => 20,
+				'orderby'  => 'id',
+				'order'    => 'desc',
+			)
+		);
+
+		$this->assertCount( 20, $rows );
+		$this->assertSame( $exact->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * A claimed POS sort must retain the exact-carrier rank ahead of its own order.
+	 */
+	public function test_product_search_exact_rank_precedes_claimed_sku_sort(): void {
+		$exact = ProductHelper::create_simple_product( array( 'sku' => 'red' ) );
+		$this->create_red_title_matches( true );
+
+		$rows = $this->read(
+			array(
+				'search'   => 'red',
+				'per_page' => 20,
+				'orderby'  => 'sku',
+				'order'    => 'asc',
+			)
+		);
+
+		$this->assertCount( 20, $rows );
+		$this->assertSame( $exact->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * Regression: wcpos/v2 search must not match product descriptions.
+	 */
+	public function test_product_search_does_not_match_description(): void {
+		$term        = wp_generate_password( 12, false );
+		$description = ProductHelper::create_simple_product( array( 'description' => 'Contains ' . $term ) );
+		$title       = ProductHelper::create_simple_product( array( 'name' => 'Contains ' . $term ) );
+
+		$rows = $this->read( array( 'search' => $term ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $title->get_id(), $rows[0]['id'] );
+		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * PHP's empty() calls the string "0" empty; a search for the literal term 0 is still a search.
+	 */
+	public function test_product_search_for_literal_zero_is_a_search(): void {
+		$description = ProductHelper::create_simple_product( array( 'name' => 'Alpha', 'sku' => 'ALPHA', 'description' => 'Rated 0 stars' ) );
+		$zero        = ProductHelper::create_simple_product( array( 'name' => 'Beta', 'sku' => 'ZERO-0', 'description' => 'no digits here' ) );
+
+		$rows = $this->read( array( 'search' => '0' ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $zero->get_id(), $rows[0]['id'] );
+		$this->assertNotSame( $description->get_id(), $rows[0]['id'] );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_sku, plus the product that has no SKU at all.
+	 *
+	 * The sequences here used to stop at `zeta`, because every product in the fixture had
+	 * a SKU — which is exactly why the sort-as-filter bug survived: with no meta-less row
+	 * present, an INNER JOIN and a LEFT JOIN return the same list (#1779 follow-up).
+	 */
+	public function test_product_orderby_sku(): void {
+		ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
+		ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
+		ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
+		ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
+		$this->create_product_without_meta( '_sku' );
+
+		$rows = $this->read( array( 'orderby' => 'sku', 'order' => 'asc' ) );
+
+		$this->assertSame( array( '123456789', '987654321', 'alpha', 'zeta', '' ), wp_list_pluck( $rows, 'sku' ) );
+
+		$rows = $this->read( array( 'orderby' => 'sku', 'order' => 'desc' ) );
+
+		$this->assertSame( array( 'zeta', 'alpha', '987654321', '123456789', '' ), wp_list_pluck( $rows, 'sku' ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_barcode, plus a product with no barcode.
+	 *
+	 * The barcode row is the one that has NO postmeta row at all, which is the shape the
+	 * default store is in — the barcode field defaults to `_global_unique_id`, which most
+	 * catalogues never populate — and the shape that made this sort answer with an empty
+	 * page. v2 serves no top-level `barcode` field by design, so the value is read back
+	 * out of `meta_data`.
+	 */
+	public function test_product_orderby_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$product1 = ProductHelper::create_simple_product();
+		$product1->update_meta_data( '_barcode', 'alpha' );
+		$product1->save_meta_data();
+
+		$product2 = ProductHelper::create_simple_product();
+		$product2->update_meta_data( '_barcode', 'zeta' );
+		$product2->save_meta_data();
+
+		// No `_barcode` meta row whatsoever — the row an INNER JOIN drops.
+		ProductHelper::create_simple_product();
+
+		$rows = $this->read( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
+
+		$this->assertSame( array( 'alpha', 'zeta', null ), $this->barcodes( $rows ) );
+
+		$rows = $this->read( array( 'orderby' => 'barcode', 'order' => 'desc' ) );
+
+		$this->assertSame( array( 'zeta', 'alpha', null ), $this->barcodes( $rows ) );
+	}
+
+	/**
+	 * A sort must never change WHICH products come back — only their order.
+	 *
+	 * The regression this pins is the whole point: `orderby=barcode` answered a
+	 * category-filtered browse window with an empty page on any store whose products
+	 * carry no barcode, so the POS grid's barcode column went blank.
+	 */
+	public function test_product_orderby_barcode_preserves_category_membership(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+				);
+			}
+		);
+
+		$category = wp_insert_term( 'Gear', 'product_cat' );
+		$this->assertIsArray( $category );
+		$members = array();
+		foreach ( array( 'b-alpha', null, 'b-mike' ) as $barcode ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_category_ids( array( (int) $category['term_id'] ) );
+			$product->save();
+			if ( null !== $barcode ) {
+				$product->update_meta_data( '_barcode', $barcode );
+				$product->save_meta_data();
+			}
+			$members[] = $product->get_id();
+		}
+		// A product OUTSIDE the category, so a filter that stopped filtering also fails.
+		ProductHelper::create_simple_product();
+
+		$unsorted = $this->read( array( 'category' => (string) $category['term_id'] ) );
+		$sorted   = $this->read(
+			array(
+				'category' => (string) $category['term_id'],
+				'orderby'  => 'barcode',
+				'order'    => 'asc',
+			)
+		);
+
+		sort( $members );
+		$this->assertSame( $members, $this->sorted_ids( $unsorted ) );
+		$this->assertSame( $members, $this->sorted_ids( $sorted ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_stock_status, plus a product with no status meta.
+	 *
+	 * Asserted on IDS, not on the reported status: WooCommerce defaults a product with no
+	 * `_stock_status` row to "instock" in the payload, so the value sequence could not
+	 * tell the meta-less row apart from a real in-stock one. What this pins is that the
+	 * row is still SERVED, and served last.
+	 */
+	public function test_product_orderby_stock_status(): void {
+		$instock    = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
+		$outofstock = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
+		$metaless   = $this->create_product_without_meta( '_stock_status' );
+
+		$rows = $this->read( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
+
+		$this->assertSame(
+			array( $instock->get_id(), $outofstock->get_id(), $metaless ),
+			wp_list_pluck( $rows, 'id' )
+		);
+
+		$rows = $this->read( array( 'orderby' => 'stock_status', 'order' => 'desc' ) );
+
+		$this->assertSame(
+			array( $outofstock->get_id(), $instock->get_id(), $metaless ),
+			wp_list_pluck( $rows, 'id' )
+		);
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_stock_quantity (#1779).
+	 *
+	 * Products that do not manage stock carry a NULL `_stock`, and they must land LAST
+	 * in both directions — MySQL would otherwise float them to the top under ASC.
+	 */
+	public function test_product_orderby_stock_quantity(): void {
+		foreach ( array( 1, 2, null, 0, -1 ) as $quantity ) {
+			ProductHelper::create_simple_product(
+				array(
+					'stock_quantity' => $quantity,
+					'manage_stock'   => true,
+				)
+			);
+		}
+		ProductHelper::create_simple_product();
+
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
+
+		$this->assertSame( array( -1, 0, 1, 2, null, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
+
+		$this->assertSame( array( 2, 1, 0, -1, null, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+	}
+
+	/**
+	 * Port of API\V1 test_product_orderby_decimal_stock_quantity, plus an unmanaged product.
+	 */
+	public function test_product_orderby_decimal_stock_quantity(): void {
+		$this->setup_decimal_quantity_tests();
+		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+
+		foreach ( array( '11.2', '3.5', '20.7' ) as $quantity ) {
+			ProductHelper::create_simple_product(
+				array(
+					'stock_quantity' => $quantity,
+					'manage_stock'   => true,
+				)
+			);
+		}
+		ProductHelper::create_simple_product();
+
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
+
+		$this->assertEquals( array( 3.5, 11.2, 20.7, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+
+		$rows = $this->read( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
+
+		$this->assertEquals( array( 20.7, 11.2, 3.5, null ), wp_list_pluck( $rows, 'stock_quantity' ) );
+	}
+
+	/**
+	 * A product whose postmeta row for `$meta_key` is absent entirely.
+	 *
+	 * WooCommerce always writes these keys, so the row has to be removed after the fact
+	 * to reproduce the catalogue shape an importer leaves behind.
+	 *
+	 * @param string $meta_key The meta key to strip.
+	 *
+	 * @return int The product id.
+	 */
+	private function create_product_without_meta( string $meta_key ): int {
 		$product = ProductHelper::create_simple_product();
-		$product->set_name( 'V2 Product Search Boundary' );
-		$product->set_sku( 'SKU-ONLY-NEEDLE-1456' );
-		$product->save();
+		delete_post_meta( $product->get_id(), $meta_key );
+		wp_cache_flush();
 
-		$rows = $this->read( array( 'search' => 'NEEDLE-1456' ) );
+		return $product->get_id();
+	}
 
-		// Barcode lookup belongs to /wcpos/v2/resolve/barcode; broader catalog
-		// filtering is client-side by design, not a server-side product search mode.
-		$this->assertSame( array(), $rows );
+	/**
+	 * Create enough title matches to fill the requested search page.
+	 *
+	 * @param bool $with_skus Whether to give the matches SKUs that sort before "red".
+	 */
+	private function create_red_title_matches( bool $with_skus = false ): void {
+		for ( $i = 0; $i < 25; ++$i ) {
+			$args = array( 'name' => 'Red Widget ' . $i );
+			if ( $with_skus ) {
+				$args['sku'] = 'aaa-' . $i;
+			}
+			ProductHelper::create_simple_product( $args );
+		}
+	}
+
+	/**
+	 * Row ids, ascending.
+	 *
+	 * @param array $rows Product rows.
+	 *
+	 * @return array<int, int>
+	 */
+	private function sorted_ids( array $rows ): array {
+		$ids = wp_list_pluck( $rows, 'id' );
+		sort( $ids );
+
+		return $ids;
+	}
+
+	/**
+	 * The configured barcode value of each row, in row order.
+	 *
+	 * @param array $rows Product rows.
+	 *
+	 * @return array<int, null|string>
+	 */
+	private function barcodes( array $rows ): array {
+		$barcodes = array();
+		foreach ( $rows as $row ) {
+			$meta       = array_column( $row['meta_data'], 'value', 'key' );
+			$barcodes[] = $meta['_barcode'] ?? null;
+		}
+
+		return $barcodes;
 	}
 }

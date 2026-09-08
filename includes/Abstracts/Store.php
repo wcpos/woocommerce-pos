@@ -73,6 +73,10 @@ class Store extends \WC_Data implements StoreInterface {
 		'tax_total_display'           => '',
 		'default_customer'            => 0,
 		'default_customer_is_cashier' => false,
+		// The merchant's consent to anonymous usage data + error reports. The POS
+		// client reads it from here so its own error reporting follows the same
+		// switch as the plugin's analytics (POS > Settings > General).
+		'tracking_consent'            => 'undecided',
 		// Pro properties (with WooCommerce defaults in free version).
 		'url'                         => '',
 		'phone'                       => '',
@@ -164,6 +168,9 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );
 		$this->set_prop( 'default_customer_is_cashier', Settings::instance()->default_customer_is_cashier() );
 		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );
+		// The POS client gates its OWN error reporting on this value, so it is a
+		// send gate one hop away: read the persisted answer, not the filtered view.
+		$this->set_prop( 'tracking_consent', Settings::instance()->raw_tracking_consent() );
 	}
 
 	/**
@@ -491,6 +498,16 @@ class Store extends \WC_Data implements StoreInterface {
 	 */
 	public function get_default_customer_is_cashier( $context = 'view' ) {
 		return $this->get_prop( 'default_customer_is_cashier', $context );
+	}
+
+	/**
+	 * Get the merchant's tracking consent: 'undecided', 'allowed' or 'denied'.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_tracking_consent( $context = 'view' ) {
+		return $this->get_prop( 'tracking_consent', $context );
 	}
 
 	/**

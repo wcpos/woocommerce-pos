@@ -53,7 +53,7 @@ export function ConsentCallout({
 					{consentText(copy, 'title', 'consent.callout_title')}
 				</p>
 				<p className="wcpos:text-[13px] wcpos:leading-relaxed wcpos:mt-0 wcpos:mb-3 wcpos:text-gray-700">
-					{consentText(copy, 'body', 'consent.callout_body')}{' '}
+					{consentText(copy, 'body', 'consent.callout_body_v2')}{' '}
 					<button
 						type="button"
 						onClick={() => setLearnMoreOpen(true)}

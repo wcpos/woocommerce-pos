@@ -16,6 +16,8 @@ use WCPOS\WooCommercePOS\API\V2\Digests_Controller;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
 use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
@@ -823,6 +825,21 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Fingerprinting is a universal registry capability (ADR 0036).
+	 */
+	public function test_every_collection_carries_the_fingerprint_capability(): void {
+		$all           = Collections::names();
+		$fingerprinted = array_keys( Collections::with( 'fingerprint' ) );
+		sort( $all );
+		sort( $fingerprinted );
+
+		$this->assertSame( $all, $fingerprinted );
+		foreach ( Collections::names() as $collection ) {
+			$this->assertNotNull( Collections::row( $collection )['fingerprint'] ?? null );
+		}
+	}
+
+	/**
 	 * Config fingerprint exposes all supported collection snapshots by default.
 	 */
 	public function test_config_fingerprint_returns_supported_collections(): void {
@@ -841,6 +858,39 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( 'global_unique_id' ), $after['barcode_fields']['products'] );
 		$this->assertArrayNotHasKey( 'candidate', $after );
 		$this->assertSame( array( 'supported' => true ), $after['meta'] );
+	}
+
+	/**
+	 * The served route includes every fingerprint without widening barcode recipes.
+	 */
+	public function test_config_fingerprint_route_reports_every_collection(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$response = $this->server->dispatch(
+			$this->wp_rest_get_request( '/wcpos/v2/changes/config-fingerprint' )
+		);
+		$data     = $response->get_data();
+
+		$expected = Collections::names();
+		$actual   = array_keys( $data['fingerprints'] );
+		sort( $expected );
+		sort( $actual );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $expected, $actual );
+
+		$barcode_collections = array_keys(
+			array_filter(
+				Collections::with( 'fingerprint' ),
+				static fn ( array $row ): bool => $row['fingerprint']['barcode']
+			)
+		);
+		$this->assertSame( $barcode_collections, array_keys( array_filter( $data['barcode_fields'] ) ) );
+		foreach ( $data['barcode_fields'] as $collection => $fields ) {
+			if ( in_array( $collection, $barcode_collections, true ) ) {
+				$this->assertCount( 1, $fields );
+			} else {
+				$this->assertSame( array(), $fields );
+			}
+		}
 	}
 
 	/**
@@ -891,36 +941,113 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A collection still at the baseline contract must NOT have its fingerprint moved.
+	 * Baseline omission preserves the exact pre-Phase-1 wire serialization.
 	 *
-	 * Every fingerprint move marks that collection stale, and a stale `products` collection means a
-	 * FULL CATALOGUE re-fetch on every active till. Adding the contract key unconditionally would
-	 * have changed the serialization of every unbumped collection — `{"barcode_field":"_sku"}` to
-	 * `{"barcode_field":"_sku","payload_contract":1}`, and tax_rates' `[]` to an object — so
-	 * upgrading to 1.10.1 would have re-pulled the entire product catalogue and refreshed tax rates
-	 * for a shape that did not change.
+	 * A moved fingerprint marks the collection stale, and a stale `products`
+	 * means a FULL CATALOGUE re-fetch on every active till — the stakes are
+	 * spelled out on {@see Config_Fingerprint::representation_settings()}.
+	 * LITERALS on both sides on purpose: deriving the expectation from
+	 * Barcode_Field::meta_key() would move with the code under test and let a
+	 * changed default ship a fleet-wide re-fetch with this test green.
 	 */
-	public function test_baseline_contract_collections_keep_their_fingerprint(): void {
+	public function test_preexisting_fingerprints_are_byte_stable(): void {
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$fingerprint = new Config_Fingerprint();
 
-		foreach ( array( 'products', 'tax_rates' ) as $collection ) {
+		foreach ( array( 'products' => 1, 'tax_rates' => 1, 'variations' => 2 ) as $collection => $contract ) {
 			$this->assertSame(
-				1,
+				$contract,
 				Config_Fingerprint::payload_contract_version( $collection ),
-				$collection . ' is expected to still be at the baseline for this assertion to mean anything.'
-			);
-			$this->assertArrayNotHasKey(
-				'payload_contract',
-				$fingerprint->representation_settings( $collection ),
-				$collection . ' is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+				$collection . ' is expected at this contract version for these literals to mean anything — a deliberate bump must update this test.'
 			);
 		}
+		$this->assertSame(
+			array( 'barcode_field' => '_sku' ),
+			$fingerprint->representation_settings( 'products' ),
+			'products is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+		);
+		$this->assertSame(
+			array(
+				'barcode_field'    => '_sku',
+				'payload_contract' => 2,
+			),
+			$fingerprint->representation_settings( 'variations' ),
+			'variations at contract 2 must keep the exact serialization 1.10.1 shipped.'
+		);
+		$this->assertSame(
+			array(),
+			$fingerprint->representation_settings( 'tax_rates' ),
+			'tax_rates is unbumped, so its serialization — and therefore its fingerprint — must not move.'
+		);
+	}
 
-		// The exact pre-existing serializations, spelled out: this is the byte-for-byte property,
-		// not merely "the key is absent".
-		$this->assertSame( array( 'barcode_field' => '_sku' ), $fingerprint->representation_settings( 'products' ) );
-		$this->assertSame( array(), $fingerprint->representation_settings( 'tax_rates' ) );
+	/**
+	 * Newly modeled recipes degenerate to the shared baseline-only fingerprint.
+	 */
+	public function test_new_collections_fingerprint_at_the_shared_baseline(): void {
+		$fingerprint          = new Config_Fingerprint();
+		$tax_rate_fingerprint = $fingerprint->fingerprint( 'tax_rates' );
+
+		foreach ( array( 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons' ) as $collection ) {
+			$this->assertArrayHasKey( $collection, Collections::with( 'fingerprint' ) );
+			$this->assertSame( 1, Config_Fingerprint::payload_contract_version( $collection ) );
+			$this->assertSame( array(), $fingerprint->representation_settings( $collection ) );
+			$this->assertSame( $tax_rate_fingerprint, $fingerprint->fingerprint( $collection ) );
+		}
+	}
+
+	/**
+	 * Digest formula key sets cannot change membership without an explicit
+	 * fingerprint review (ADR 0036). Compared as SORTED sets: reordering a
+	 * constant is a no-op everywhere production uses them (the SQL and the
+	 * formula fingerprint both sort), and a red pin on a no-op would instruct a
+	 * contract bump — a fleet-wide re-fetch — for a change that altered nothing.
+	 */
+	public function test_digest_formula_key_sets_are_change_gated(): void {
+		$product_keys = Digest_Index::DIGESTED_META_KEYS;
+		sort( $product_keys );
+		$this->assertSame(
+			array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' ),
+			$product_keys,
+			'This set feeds the product/variation digest formula AND the served digests clients hold. Membership changes: '
+			. 'bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for BOTH products and variations (the set is shared) in the '
+			. 'same commit — the stored half rebuilds itself via digest_formula_fingerprint — then update this literal (ADR 0036).'
+		);
+
+		$customer_keys = Digest_Index::CUSTOMER_DIGESTED_META_KEYS;
+		sort( $customer_keys );
+		$this->assertSame(
+			array( 'billing_email', 'billing_phone', 'first_name', 'last_name' ),
+			$customer_keys,
+			'This set feeds the customer digest formula, which has NO automatic stored-digest rebuild trigger today. '
+			. 'Membership changes: bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for customers in the same commit, plan '
+			. 'a stored-digest rebuild (see the constant docblock; #1756 phase 2/3), then update this literal (ADR 0036).'
+		);
+
+		$order_keys = Digest_Index::ORDER_DIGESTED_META_KEYS;
+		sort( $order_keys );
+		$this->assertSame(
+			array( '_customer_user', '_order_total' ),
+			$order_keys,
+			'This set feeds the CPT-path order digest formula, which has NO automatic stored-digest rebuild trigger today. '
+			. 'Membership changes: bump Config_Fingerprint::PAYLOAD_CONTRACT_VERSION for orders in the same commit, plan a '
+			. 'stored-digest rebuild (see the constant docblock; #1756 phase 2/3), then update this literal (ADR 0036).'
+		);
+	}
+
+	/**
+	 * `?collection=` narrowing now accepts every fingerprint collection — the one
+	 * non-additive behavior change of universal membership, pinned as intended:
+	 * a name that is a valid member scopes the response to that single key
+	 * (before #1756 phase 1, `orders` fell through to the full map).
+	 */
+	public function test_config_fingerprint_collection_param_scopes_to_new_members(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/changes/config-fingerprint' );
+		$request->set_query_params( array( 'collection' => 'orders' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'orders' ), array_keys( $response->get_data()['fingerprints'] ) );
 	}
 
 	/**

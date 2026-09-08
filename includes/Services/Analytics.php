@@ -129,7 +129,11 @@ class Analytics {
 			return $this->enabled_cache;
 		}
 
-		$consent             = Settings::instance()->tracking_consent();
+		// The PERSISTED consent, not the filtered read view — otherwise any
+		// plugin filtering woocommerce_pos_general_settings could switch
+		// telemetry on for a merchant who declined it. Same gate as
+		// Services\Error_Reporter.
+		$consent             = Settings::instance()->raw_tracking_consent();
 		$this->enabled_cache = ( 'allowed' === $consent );
 
 		return $this->enabled_cache;
@@ -415,9 +419,25 @@ class Analytics {
 	private function get_default_properties(): array {
 		return array(
 			'plugin_version' => PLUGIN_VERSION,
-			'pro_active'     => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			'pro_active'     => $this->is_pro_active(),
 			'locale'         => get_locale(),
 		);
+	}
+
+	/**
+	 * Whether the Pro plugin is active, safe to call before Init has run.
+	 *
+	 * Same situation as get_site_id(): the deactivation hook can fire in a
+	 * request where the WooCommerce check failed, Init never ran, and
+	 * wcpos-functions.php is not loaded. Fall back to the constant the helper
+	 * itself reads rather than fataling on the way out.
+	 */
+	private function is_pro_active(): bool {
+		if ( ! \function_exists( 'wcpos_is_pro_active' ) ) {
+			return \defined( 'WCPOS\WooCommercePOSPro\VERSION' );
+		}
+
+		return wcpos_is_pro_active();
 	}
 
 	/**

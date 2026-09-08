@@ -15,6 +15,7 @@ use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WCPOS\WooCommercePOS\Payments\Idempotency_Repository;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -116,6 +117,7 @@ class Checkout_Controller extends WC_REST_Controller {
 	 * Create a checkout state mutation.
 	 *
 	 * @param WP_REST_Request $request Request object.
+	 * @throws \Throwable When gateway processing fails.
 	 */
 	public function create_item( $request ) {
 		$order = $this->get_order( (int) $request['id'] );
@@ -184,13 +186,40 @@ class Checkout_Controller extends WC_REST_Controller {
 		try {
 			$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
 			$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
-			$state        = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
+			// Validate on EVERY action, not just `start`. The action string is
+			// free-form and dispatched to a gateway filter, and the shipped surface
+			// already carries `update` alongside `start`, so a gateway completing
+			// payment on a later action would otherwise take money for stock that
+			// was never checked. validate_checkout() short-circuits when the order
+			// already holds a sufficient reservation, so this costs a lookup rather
+			// than a second hold.
+			$validation = Stock_Validator::instance()->validate_checkout( $order );
+			if ( is_wp_error( $validation ) ) {
+				Stock_Validator::instance()->release_checkout_stock( $order );
+
+				return $validation;
+			}
+			try {
+				$state = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
+			} catch ( \Throwable $exception ) {
+				// Every action can now be holding stock, so every action gives it
+				// back when dispatch fails; the normalized cancelled/failed branch
+				// below is never reached on these paths.
+				Stock_Validator::instance()->release_checkout_stock( $order );
+
+				throw $exception;
+			}
 
 			if ( is_wp_error( $state ) ) {
+				Stock_Validator::instance()->release_checkout_stock( $order );
+
 				return $state;
 			}
 
 			$state = $this->normalize_state( $order->get_id(), $gateway_id, $state );
+			if ( \in_array( $state['status'], array( 'cancelled', 'failed' ), true ) ) {
+				Stock_Validator::instance()->release_checkout_stock( $order );
+			}
 			$this->state_repository->upsert( $order->get_id(), $state );
 
 			if ( 'completed' === $state['status'] ) {

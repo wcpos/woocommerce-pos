@@ -225,7 +225,7 @@ class Starprnt_Thermal_Emitter_Test extends WP_UnitTestCase {
 	public function test_emit_barcode_uses_esc_b_with_rs_terminator(): void {
 		$bytes = $this->render( '<receipt><barcode type="code128" height="40">HELLO</barcode></receipt>' );
 
-		$start = $this->sequence_index( $bytes, array( 0x1b, 0x62, 0x06, 0x01, 0x02, 0x28 ) );
+		$start = $this->sequence_index( $bytes, array( 0x1b, 0x62, 0x06, 0x02, 0x02, 0x28 ) );
 		$this->assertGreaterThan( -1, $start );
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x1e ) ) );
 	}
@@ -319,13 +319,142 @@ PHP;
 	}
 
 	/**
-	 * It skips image nodes entirely.
+	 * An unresolvable image src changes nothing about the job.
+	 *
+	 * In particular it must not leave the line spacing set to 24 dots, which
+	 * would stretch every line that follows.
 	 */
-	public function test_emit_image_is_skipped(): void {
+	public function test_emit_unresolvable_image_src_leaves_the_job_unchanged(): void {
 		$with    = $this->render( '<receipt><image src="logo.png"/><text>T</text></receipt>' );
 		$without = $this->render( '<receipt><text>T</text></receipt>' );
 
 		$this->assertSame( $without, $with );
+	}
+
+	/**
+	 * It emits a resolvable image as ESC X column graphics.
+	 *
+	 * Star has no row-major raster command, so the dots go out in 24-dot bands of
+	 * three bytes per column, wrapped in the 24-dot line spacing that makes
+	 * consecutive bands butt together.
+	 */
+	public function test_emit_image_uses_esc_x_column_graphics(): void {
+		// Arrange. 16 dots wide, 8 tall: one band, the top byte of each column
+		// set and the two below it blank.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Act.
+		$band = "\x1b\x58\x10\x00" . str_repeat( "\xff\x00\x00", 16 ) . "\x0a\x0d";
+
+		// Assert.
+		$this->assertStringContainsString( "\x1b\x30" . $band, $bytes );
+		$this->assertStringContainsString( $band . "\x1b\x7a\x01", $bytes );
+	}
+
+	/**
+	 * A bare image is centered, matching the preview, the PDF and the raster lane.
+	 *
+	 * All three of those hard-center an `<image>` regardless of the enclosing
+	 * `<align>`, so this lane sets center itself and restores afterwards.
+	 */
+	public function test_emit_image_is_centered_without_an_align_wrapper(): void {
+		// Arrange / Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert. ESC GS a 1 precedes the raster block, ESC GS a 0 restores after.
+		$this->assertStringContainsString( "\x1b\x1d\x61\x01\x1b\x30\x1b\x58", $bytes );
+		$this->assertStringContainsString( "\x1b\x7a\x01\x1b\x1d\x61\x00", $bytes );
+	}
+
+	/**
+	 * An image after unterminated text starts on a fresh line.
+	 */
+	public function test_emit_image_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48">Total<image src="' . $this->black_png_data_uri( 16, 8 ) . '" width="16"/></receipt>'
+		);
+
+		// Assert.
+		$this->assertStringContainsString( 'Total' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Total' . "\x1b\x1d\x61", $bytes );
+	}
+
+	/**
+	 * A barcode after unterminated text starts on a fresh line.
+	 */
+	public function test_emit_barcode_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Order<barcode type="code128">55766</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Order' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Order' . "\x1b\x62", $bytes );
+	}
+
+	/**
+	 * The unencodable-barcode rescue starts its own centered line.
+	 *
+	 * The rescue centres text against the full paper width, so running it while
+	 * a raw-text node still holds the line open would append its padding to that
+	 * text instead of centring the value.
+	 */
+	public function test_emit_invalid_barcode_rescue_after_inline_text_starts_a_new_line(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Total<barcode type="ean13">invalid</barcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Total' . "\x0a", $bytes );
+		$this->assertStringContainsString( "\x0a" . str_repeat( ' ', 20 ) . 'invalid', $bytes );
+	}
+
+	/**
+	 * A QR code after unterminated text starts on a fresh line.
+	 */
+	public function test_emit_qrcode_after_inline_text_closes_the_line_first(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48">Scan<qrcode>https://x.test</qrcode></receipt>' );
+
+		// Assert.
+		$this->assertStringContainsString( 'Scan' . "\x0a", $bytes );
+		$this->assertStringNotContainsString( 'Scan' . "\x1b\x1d\x79", $bytes );
+	}
+
+	/**
+	 * It splits an image taller than 24 dots into consecutive bands.
+	 */
+	public function test_emit_image_splits_into_twenty_four_dot_bands(): void {
+		// Arrange / Act. 8 dots wide, 30 tall: two bands, the second one
+		// six dots deep with the rest of its 24 reading as blank paper.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><image src="' . $this->black_png_data_uri( 8, 30 ) . '" width="8"/></receipt>'
+		);
+
+		// Assert.
+		$this->assertSame( 2, substr_count( $bytes, "\x1b\x58\x08\x00" ) );
+		$this->assertStringContainsString( "\x1b\x58\x08\x00" . str_repeat( "\xff\xff\xff", 8 ), $bytes );
+		$this->assertStringContainsString( "\x1b\x58\x08\x00" . str_repeat( "\xfc\x00\x00", 8 ), $bytes );
+	}
+
+	/**
+	 * A solid black PNG as a data URI.
+	 *
+	 * @param int $width  Width in pixels.
+	 * @param int $height Height in pixels.
+	 *
+	 * @return string The data URI.
+	 */
+	private function black_png_data_uri( int $width, int $height ): string {
+		$image = imagecreatetruecolor( $width, $height );
+		imagefilledrectangle( $image, 0, 0, $width - 1, $height - 1, imagecolorallocate( $image, 0, 0, 0 ) );
+		ob_start();
+		imagepng( $image );
+
+		return 'data:image/png;base64,' . base64_encode( (string) ob_get_clean() );
 	}
 
 	/**
@@ -384,7 +513,7 @@ PHP;
 		$bytes = $this->render( '<receipt><barcode type="ean13" height="40">4006381333931</barcode></receipt>' );
 
 		// Assert. ESC b n1=3 (EAN-13) n2=1 n3=2 n4=40.
-		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x62, 0x03, 0x01, 0x02, 0x28 ) ) );
+		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x62, 0x03, 0x02, 0x02, 0x28 ) ) );
 		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1b, 0x62, 0x06 ) ) );
 	}
 
@@ -402,8 +531,8 @@ PHP;
 		$upce = $this->render( '<receipt><barcode type="upce" height="40">01234500006</barcode></receipt>' );
 
 		// Assert.
-		$this->assertTrue( $this->includes_sequence( $upca, array( 0x1b, 0x62, 0x01, 0x01, 0x02, 0x28 ) ) );
-		$this->assertTrue( $this->includes_sequence( $upce, array( 0x1b, 0x62, 0x00, 0x01, 0x02, 0x28 ) ) );
+		$this->assertTrue( $this->includes_sequence( $upca, array( 0x1b, 0x62, 0x01, 0x02, 0x02, 0x28 ) ) );
+		$this->assertTrue( $this->includes_sequence( $upce, array( 0x1b, 0x62, 0x00, 0x02, 0x02, 0x28 ) ) );
 	}
 
 	/**
@@ -420,7 +549,7 @@ PHP;
 		$bytes = $this->render( '<receipt><barcode type="code128" height="40">A%B</barcode></receipt>' );
 
 		// Assert.
-		$this->assertStringContainsString( "\x1b\x62\x06\x01\x02\x28" . 'A%0B' . "\x1e", $bytes );
+		$this->assertStringContainsString( "\x1b\x62\x06\x02\x02\x28" . 'A%0B' . "\x1e", $bytes );
 		$this->assertStringNotContainsString( '{B', $bytes );
 	}
 
@@ -451,7 +580,7 @@ PHP;
 		$bytes = $this->render( '<receipt><barcode type="not-a-symbology" height="40">ABCDEF</barcode></receipt>' );
 
 		// Assert.
-		$this->assertStringContainsString( "\x1b\x62\x06\x01\x02\x28" . 'ABCDEF' . "\x1e", $bytes );
+		$this->assertStringContainsString( "\x1b\x62\x06\x02\x02\x28" . 'ABCDEF' . "\x1e", $bytes );
 	}
 
 	/**

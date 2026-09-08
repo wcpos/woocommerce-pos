@@ -60,7 +60,7 @@ class Landing_Profile {
 			'schema_version'  => 2, // bumped: anon_id added (landing-experiments spec §5.1).
 			'locale'          => get_locale(),
 			'plugin_version'  => PLUGIN_VERSION,
-			'pro_active'      => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			'pro_active'      => wcpos_is_pro_active(),
 			'anon_id'         => $anon_id,
 			'bootstrap_flags' => ( new Feature_Flags() )->get_landing_bootstrap_flags( $anon_id ),
 		);

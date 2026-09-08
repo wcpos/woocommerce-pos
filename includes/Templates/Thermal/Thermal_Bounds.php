@@ -148,6 +148,39 @@ final class Thermal_Bounds {
 	public const COL_WIDTH_MAX = self::PAPER_WIDTH_MAX;
 
 	/**
+	 * Printable dots across 80 mm paper at 203 dpi.
+	 */
+	public const DOTS_80MM = 576;
+
+	/**
+	 * Printable dots across 58 mm paper at 203 dpi.
+	 */
+	public const DOTS_58MM = 384;
+
+	/**
+	 * Column count at or above which paper is treated as 80 mm.
+	 *
+	 * 58 mm rolls carry 32 columns; 80 mm rolls carry 42 or 48.
+	 */
+	public const WIDE_PAPER_COLUMNS = 40;
+
+	/**
+	 * The printable width of the roll, in dots.
+	 *
+	 * Templates size images in dots, but declare paper in character columns, so
+	 * every lane that puts an image on paper has to bridge the two. Shared here
+	 * because an image scaled against 576 dots on one lane and 384 on another is
+	 * the same divergence this whole table exists to prevent.
+	 *
+	 * @param int $columns The paper width in character columns.
+	 *
+	 * @return int The printable width in dots.
+	 */
+	public static function paper_dots( int $columns ): int {
+		return $columns >= self::WIDE_PAPER_COLUMNS ? self::DOTS_80MM : self::DOTS_58MM;
+	}
+
+	/**
 	 * Clamp a value into one of the ranges above.
 	 *
 	 * Thermal_Markup_Parser already clamps every attribute on its way into the
