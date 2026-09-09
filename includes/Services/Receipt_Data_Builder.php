@@ -245,14 +245,26 @@ class Receipt_Data_Builder {
 			if ( ! $coupon_item instanceof \WC_Order_Item_Coupon ) {
 				continue;
 			}
-			$coupon      = $this->get_order_coupon( $coupon_item );
+			$intent = Quick_Discount::intent_from_item( $coupon_item );
+			if ( $intent ) {
+				$discount_type = $intent['discount_type'];
+				$label = 'fixed_cart' === $discount_type ? __( 'Discount', 'woocommerce-pos' ) : sprintf(
+					/* translators: %s: Discount percentage. */
+					__( 'Discount (%s%%)', 'woocommerce-pos' ),
+					wc_format_decimal( $intent['amount'], '', true )
+				);
+			} else {
+				$coupon = $this->get_order_coupon( $coupon_item );
+				$discount_type = $coupon ? (string) $coupon->get_discount_type() : '';
+				$label = $this->get_coupon_label( $coupon_item, $coupon );
+			}
 			$coupon_excl = (float) $coupon_item->get_discount();
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
 			$discounts[] = array(
-				'label'         => $this->get_coupon_label( $coupon_item, $coupon ),
+				'label'         => $label,
 				'code'          => $coupon_item->get_code(),
-				'discount_type' => $coupon ? (string) $coupon->get_discount_type() : '',
+				'discount_type' => $discount_type,
 				'total'         => $display_incl ? $coupon_incl : $coupon_excl,
 				'total_incl'    => $coupon_incl,
 				'total_excl'    => $coupon_excl,

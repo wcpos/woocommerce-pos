@@ -26,6 +26,7 @@ use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
@@ -118,6 +119,18 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws \Throwable If checkout stock validation cannot be completed.
 	 */
 	protected function save_object( $request, $creating = false ) {
+		// Refuse an invalid or code-taken quick discount BEFORE the parent saves the
+		// prepared order, so a 400 never leaves a partially applied update behind.
+		$qd = new Quick_Discount();
+		try {
+			$error = $qd->register_from_lines( \is_array( $request['coupon_lines'] ?? null ) ? $request['coupon_lines'] : array() );
+			if ( is_wp_error( $error ) ) {
+				return $error;
+			}
+		} finally {
+			$qd->clear();
+		}
+
 		$validator = Stock_Validator::instance();
 		if ( ! $creating || ! \wcpos_request() || ! SettingsService::instance()->prevent_overselling_enabled() || ! $validator->should_validate_create_request( $request ) ) {
 			return parent::save_object( $request, $creating );
@@ -1383,7 +1396,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 *
 	 * Since the POS always sends the complete order object on updates, coupon_lines
 	 * will contain IDs from the previous response. We compare the requested coupon
-	 * codes with the existing ones on the order: if they match, we skip the
+	 * codes and quick-discount intents with the existing ones: if they match, we skip the
 	 * recalculation entirely (preserving stable line item IDs). If they differ,
 	 * we strip the IDs and delegate to the parent for the remove-and-reapply.
 	 *
@@ -1399,39 +1412,50 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return false;
 		}
 
-		// Extract coupon codes from the request.
-		$requested_codes = array();
-		foreach ( $request['coupon_lines'] as $item ) {
-			$code = $item['code'] ?? '';
-			if ( '' !== $code ) {
-				$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
+		$qd = new Quick_Discount();
+		try {
+			$error = $qd->register_from_lines( $request['coupon_lines'] );
+			if ( is_wp_error( $error ) ) {
+				throw new \WC_REST_Exception( $error->get_error_code(), $error->get_error_message(), 400 );
 			}
+			// Extract coupon codes from the request.
+			$requested_codes = array();
+			foreach ( $request['coupon_lines'] as $item ) {
+				$code = $item['code'] ?? '';
+				if ( '' !== $code ) {
+					$requested_codes[] = Quick_Discount::set_key( $code, Quick_Discount::intent_from_line( $item ) );
+				}
+			}
+
+			// Get the existing coupon codes on the order.
+			$existing_codes = array_map(
+				function ( $coupon ) {
+					return Quick_Discount::set_key( $coupon->get_code(), Quick_Discount::intent_from_item( $coupon ) );
+				},
+				array_values( $order->get_coupons() )
+			);
+
+			sort( $requested_codes );
+			sort( $existing_codes );
+
+			// If the coupon codes haven't changed, skip recalculation entirely.
+			// This preserves stable coupon line item IDs across saves.
+			if ( $requested_codes === $existing_codes ) {
+				return false;
+			}
+
+			// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
+			$coupon_lines = $request['coupon_lines'];
+			foreach ( $coupon_lines as &$coupon_line ) {
+				unset( $coupon_line['id'] );
+			}
+			$request->set_param( 'coupon_lines', $coupon_lines );
+
+			$result = parent::calculate_coupons( $request, $order );
+			$qd->persist( $order );
+			return $result;
+		} finally {
+			$qd->clear();
 		}
-
-		// Get the existing coupon codes on the order.
-		$existing_codes = array_map(
-			function ( $coupon ) {
-				return wc_strtolower( $coupon->get_code() );
-			},
-			array_values( $order->get_coupons() )
-		);
-
-		sort( $requested_codes );
-		sort( $existing_codes );
-
-		// If the coupon codes haven't changed, skip recalculation entirely.
-		// This preserves stable coupon line item IDs across saves.
-		if ( $requested_codes === $existing_codes ) {
-			return false;
-		}
-
-		// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
-		$coupon_lines = $request['coupon_lines'];
-		foreach ( $coupon_lines as &$coupon_line ) {
-			unset( $coupon_line['id'] );
-		}
-		$request->set_param( 'coupon_lines', $coupon_lines );
-
-		return parent::calculate_coupons( $request, $order );
 	}
 }
