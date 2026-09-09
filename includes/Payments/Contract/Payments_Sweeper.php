@@ -12,7 +12,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 
-/** Free owns scheduling; registered handlers own provider status and expiry operations. */
+/** Free owns scheduling; registered handlers own provider status, expiry and capture operations. */
 final class Payments_Sweeper {
 	const HOOK = 'wcpos_payments_sweep';
 
@@ -87,6 +87,20 @@ final class Payments_Sweeper {
 							if ( ! is_wp_error( $result ) && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
 								/* translators: 1: payment row uuid, 2: leg amount with currency. */
 								$order->add_order_note( sprintf( __( 'WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'] ) );
+							}
+						} elseif ( ! is_wp_error( $result ) && 'authorized' === $result['status'] && empty( $result['void_requested_at'] ) && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
+							// An authorization that covered the balance completed the order (§3.3), and
+							// the app resumes live legs only on orders still open — so no till is coming
+							// back to capture this one. The hold is on the provider and the cashier
+							// already took the money: capture it here, through the same amount and
+							// currency verification the capture route uses. An order still in progress
+							// is left to its till, which may yet cancel the leg (wcpos/roadmap#169).
+							$captured = $handler->capture( $result, array( 'source' => 'sweep' ) );
+							if ( is_wp_error( $captured ) ) {
+								// The authorization stands; the next run tries again until it expires.
+								Logger::log( sprintf( 'WCPOS payment sweep %s: capture refused: %s', $row['id'], $captured->get_error_message() ) );
+							} else {
+								$result = $ledger->apply_result( $order, $row['id'], $captured, false );
 							}
 						}
 						if ( is_wp_error( $result ) ) {

@@ -20,6 +20,8 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		Sweep_Test_Handler::$voids = array();
 		Sweep_Test_Handler::$preserve_authorized = false;
 		Sweep_Test_Handler::$patch = array( 'status' => 'captured' );
+		Sweep_Test_Handler::$captures = array();
+		Sweep_Test_Handler::$capture_patch = array( 'status' => 'captured' );
 	}
 
 	public function test_sweeper_stale_pending_is_polled_but_fresh_row_is_not(): void {
@@ -183,6 +185,68 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
 	}
 
+	public function test_sweeper_captures_a_standing_authorization_on_a_completed_order(): void {
+		// A full-balance authorization completes the order (§3.3), the order leaves the
+		// open-orders set the app resumes from, and a manual-capture provider is never
+		// asked to capture. The sweep owes that capture (wcpos/roadmap#169).
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array( array( $id, 'authorized', 'sweep' ) ), Sweep_Test_Handler::$captures );
+		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+		$this->assertSame( 'captured', $this->row( $order, $id )['status'] );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertEmpty( wc_get_order( $order->get_id() )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+	}
+
+	public function test_sweeper_leaves_an_authorization_on_an_in_progress_order_to_its_till(): void {
+		// A partial authorization keeps the order open; the till that owns the leg resumes
+		// it on reload and may still cancel it, so the sweep does not pre-empt that.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	public function test_sweeper_does_not_capture_an_authorization_being_cancelled(): void {
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'void_requested_at' => gmdate( 'c', time() - 30 ) ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+	}
+
+	public function test_sweeper_refused_capture_leaves_the_authorization_standing(): void {
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_provider_error', 'Declined by the provider' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertCount( 1, Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+		// Still live: the next run asks again, and expiry still voids it.
+		$this->assertNotEmpty( wc_get_order( $order->get_id() )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+	}
+
+	public function test_sweeper_capture_uses_capture_verification(): void {
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		Sweep_Test_Handler::$capture_patch = array( 'status' => 'captured', 'amount' => '999.00' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized' ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( 'failed', $this->row( $order, $id )['status'] );
+		$this->assertSame( 'amount_mismatch', $this->row( $order, $id )['failure_reason'] );
+	}
+
 	/** Backdate an order's modified stamp in whichever order table is active. */
 	private function backdate_modified( \WC_Order $order, int $timestamp ): void {
 		global $wpdb;
@@ -220,6 +284,8 @@ class Sweep_Test_Handler extends Manual_Handler {
 	public static $voids = array();
 	public static $patch = array();
 	public static $preserve_authorized = false;
+	public static $captures = array();
+	public static $capture_patch = array();
 	public function status( array $row ) {
 		self::$calls[] = $row['id'];
 		return self::$preserve_authorized && 'authorized' === $row['status'] ? $row : self::$patch;
@@ -227,5 +293,9 @@ class Sweep_Test_Handler extends Manual_Handler {
 	public function void( array $row, string $reason ) {
 		self::$voids[] = array( $row['id'], $reason, $row['status'] );
 		return array( 'status' => 'voided' );
+	}
+	public function capture( array $row, array $context ) {
+		self::$captures[] = array( $row['id'], $row['status'], $context['source'] ?? null );
+		return self::$capture_patch;
 	}
 }
