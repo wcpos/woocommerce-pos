@@ -155,13 +155,22 @@ class Templates {
 			)
 		);
 
+		// Only terms that exist can be removed: `standard` is no longer seeded, and core reads
+		// the term-taxonomy id of a missing slug without checking for it (a warning on PHP 8).
+		$legacy = array();
+		foreach ( array( 'display', 'standard' ) as $slug ) {
+			if ( term_exists( $slug, 'wcpos_template_category' ) ) {
+				$legacy[] = $slug;
+			}
+		}
+
 		$ok = true;
 		foreach ( $post_ids as $post_id ) {
 			// Add first, remove second: a post that fails half-way keeps its legacy term and is
 			// selected again on the retry instead of being stranded without a category.
 			$category = $categories[ get_post_meta( $post_id, '_template_gallery_key', true ) ];
 			$added    = wp_set_object_terms( $post_id, $category, 'wcpos_template_category', true );
-			if ( is_wp_error( $added ) || true !== wp_remove_object_terms( $post_id, array( 'display', 'standard' ), 'wcpos_template_category' ) ) {
+			if ( is_wp_error( $added ) || ( $legacy && true !== wp_remove_object_terms( $post_id, $legacy, 'wcpos_template_category' ) ) ) {
 				$ok = false;
 			}
 		}

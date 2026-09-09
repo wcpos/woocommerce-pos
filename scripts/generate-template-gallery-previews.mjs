@@ -19,8 +19,6 @@ try {
 	);
 }
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
-// Lossless output above this is a photograph, not a UI capture (bytes).
-const LOSSLESS_SIZE_LIMIT = 1_000_000;
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 794;
 const screenshotScale = 2;
@@ -176,6 +174,9 @@ if (!baseUrl) throw new Error('Unable to start Vite preview server');
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1800, height: 2400 }, deviceScaleFactor: screenshotScale });
+// Templates animate state changes and idle ornaments behind prefers-reduced-motion; a capture
+// wants the settled design, not a frame of the entrance.
+await page.emulateMedia({ reducedMotion: 'reduce' });
 
 try {
 	for (const payload of payloads) {
@@ -192,12 +193,12 @@ try {
 		const webpPath = path.join(outputDir, `${payload.key}.webp`);
 		await capture.screenshot({ path: pngPath });
 		if (payload.type === 'display') await page.setViewportSize(viewport);
-		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
-		// Flat UI compresses well losslessly; a photographic idle screen does not, and a card
-		// image over a megabyte is too heavy for the gallery page. Re-encode those lossy.
-		if (fs.statSync(webpPath).size > LOSSLESS_SIZE_LIMIT) {
-			execFileSync('cwebp', ['-quiet', '-q', '88', '-m', '6', pngPath, '-o', webpPath]);
-		}
+		// Receipts are text on paper and stay lossless so the type is crisp. Display captures are
+		// full-bleed art shown at card size, where lossless costs half a megabyte each (a photograph
+		// nearly two) and lossy at this quality is indistinguishable.
+		execFileSync('cwebp', payload.type === 'display'
+			? ['-quiet', '-q', '90', '-m', '6', pngPath, '-o', webpPath]
+			: ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
 		console.log(`generated ${payload.key}.webp`);
 	}
 } finally {
