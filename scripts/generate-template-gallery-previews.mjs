@@ -196,9 +196,12 @@ try {
 		// Receipts are text on paper and stay lossless so the type is crisp. Display captures are
 		// full-bleed art shown at card size, where lossless costs half a megabyte each (a photograph
 		// nearly two) and lossy at this quality is indistinguishable.
-		execFileSync('cwebp', payload.type === 'display'
-			? ['-quiet', '-q', '90', '-m', '6', pngPath, '-o', webpPath]
-			: ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
+		execFileSync(
+			'cwebp',
+			payload.type === 'display'
+				? ['-quiet', '-q', '90', '-m', '6', pngPath, '-o', webpPath]
+				: ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]
+		);
 		console.log(`generated ${payload.key}.webp`);
 	}
 } finally {
