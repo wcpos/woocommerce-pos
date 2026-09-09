@@ -124,7 +124,8 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		add_filter(
 			'wcpos_payment_method_capture_mode',
 			static function () {
-				return 'server';
+				// A provider-scoped registry key: the view carries the bare mode.
+				return 'server:stripe_terminal';
 			}
 		);
 		$this->assertSame( 'server', $section->read()['gateways']['pos_cash']['capture_mode'] );

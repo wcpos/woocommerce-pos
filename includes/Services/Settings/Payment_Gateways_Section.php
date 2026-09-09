@@ -189,7 +189,8 @@ class Payment_Gateways_Section extends Abstract_Section {
 					'lock_to_default' => false,
 				),
 				$gateways_settings['gateways'][ $id ] ?? array(),
-				array( 'capture_mode' => Descriptor_Builder::resolve_mode( $gateway ) )
+				// The bare mode: a handler may scope the resolved value as `<mode>:<provider>`.
+				array( 'capture_mode' => explode( ':', Descriptor_Builder::resolve_mode( $gateway ), 2 )[0] )
 			);
 		}
 
