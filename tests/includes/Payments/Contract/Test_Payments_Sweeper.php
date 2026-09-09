@@ -222,6 +222,35 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
 	}
 
+	public function test_sweeper_never_captures_on_a_cancelled_or_refunded_order(): void {
+		// Cancelled and refunded are outside the in-progress set too, but they are not paid:
+		// charging a customer for an order staff cancelled is the one thing the sweep must
+		// never do (Greptile/Codex on #1926). The hold lapses at expires_at instead.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		foreach ( array( 'cancelled', 'refunded', 'on-hold' ) as $status ) {
+			list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
+			$order->set_status( $status );
+			$order->save();
+			( new Payments_Sweeper() )->run();
+			$this->assertSame( array(), Sweep_Test_Handler::$captures, $status );
+			$this->assertSame( 'authorized', $this->row( $order, $id )['status'], $status );
+		}
+	}
+
+	public function test_sweeper_leaves_an_authorize_only_provider_alone(): void {
+		// A handler without capture() answers unsupported: authorized is that provider's
+		// settled state, so the sweep asks once per run and records nothing.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_capture_mode_unsupported', 'Unsupported', array( 'status' => 501 ) );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized' ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertCount( 1, Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+	}
+
 	public function test_sweeper_refused_capture_leaves_the_authorization_standing(): void {
 		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
 		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_provider_error', 'Declined by the provider' );
