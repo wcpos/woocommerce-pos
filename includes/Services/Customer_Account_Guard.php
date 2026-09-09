@@ -15,8 +15,11 @@ namespace WCPOS\WooCommercePOS\Services;
  * reads only the target's FIRST role, so an administrator who also holds the
  * customer role passes it. This guard tests capabilities instead: a POS user
  * who is not an administrator may not edit or delete an account holding staff
- * capabilities, whatever its roles say. Reads are deliberately untouched — the
- * POS customer space is every user on the site (#1379).
+ * capabilities, whatever its roles say. "Staff" covers site and store
+ * administration, user management and an author seat in wp-admin, so editors
+ * and authors are fenced as well as administrators, shop managers and other
+ * cashiers. Reads are deliberately untouched — the POS customer space is every
+ * user on the site (#1379).
  */
 class Customer_Account_Guard {
 	/**
@@ -29,15 +32,19 @@ class Customer_Account_Guard {
 		 * Filters the capabilities that mark an account as staff.
 		 *
 		 * A POS user who cannot manage_options may not edit or delete an account
-		 * holding any of these. Narrowing the list only relaxes this check; it
-		 * never widens WooCommerce's own permission checks, which still run.
+		 * holding any of these. The default marks site and store administration
+		 * (manage_options, manage_woocommerce), user management (edit_users, which
+		 * the Cashier role holds) and an author seat in wp-admin (edit_posts:
+		 * editors, authors and contributors). Narrowing the list only relaxes this
+		 * check; it never widens WooCommerce's own permission checks, which still
+		 * run.
 		 *
 		 * @param {array} $capabilities
 		 * @returns {array} $capabilities
 		 * @since 1.10.10
 		 * @hook woocommerce_pos_protected_account_capabilities
 		 */
-		$caps = apply_filters( 'woocommerce_pos_protected_account_capabilities', array( 'manage_options', 'manage_woocommerce', 'edit_users' ) );
+		$caps = apply_filters( 'woocommerce_pos_protected_account_capabilities', array( 'manage_options', 'manage_woocommerce', 'edit_users', 'edit_posts' ) );
 
 		return array_values( array_unique( array_filter( array_map( 'strval', (array) $caps ) ) ) );
 	}
@@ -118,7 +125,7 @@ class Customer_Account_Guard {
 	public static function denial(): \WP_Error {
 		return new \WP_Error(
 			'woocommerce_pos_rest_cannot_edit_staff_account',
-			__( 'Sorry, POS users cannot edit staff accounts.', 'woocommerce-pos' ),
+			__( 'Only an administrator can edit or delete a staff account from the POS.', 'woocommerce-pos' ),
 			array( 'status' => rest_authorization_required_code() )
 		);
 	}

@@ -59,6 +59,22 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Verify cashier tier actor cannot modify a customer-first author target.
+	 */
+	public function test_cashier_tier_actor_cannot_modify_customer_first_author_target(): void {
+		$actor_id  = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$target_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		get_user_by( 'id', $actor_id )->add_cap( 'edit_users' );
+		get_user_by( 'id', $target_id )->add_role( 'author' );
+
+		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+
+		$this->assertFalse( $allowed );
+		wp_delete_user( $actor_id );
+		wp_delete_user( $target_id );
+	}
+
+	/**
 	 * Verify customer role target is allowed.
 	 */
 	public function test_customer_role_target_is_allowed(): void {

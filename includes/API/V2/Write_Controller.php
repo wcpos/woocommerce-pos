@@ -45,6 +45,13 @@ use WP_REST_Server;
  * fake store + a stubbed `rest_do_request`.
  */
 class Write_Controller extends WP_REST_Controller {
+	/**
+	 * True while wc_rest_check_user_permissions() is re-run for a cleared target.
+	 *
+	 * @var bool
+	 */
+	private $rejudging_user_target = false;
+
 	// Our gate (capability + F13 health); forwarded writes scope the client-tier grant below.
 	use Endpoint_Permissions;
 
@@ -761,6 +768,39 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Judge a customer edit or delete the way V1\Customers_Controller does.
+	 *
+	 * The staff guard runs first and is final. A target it has cleared is then
+	 * re-judged by WooCommerce with the target's own roles allowed through the
+	 * shop_manager role-name restriction, so a shop manager can edit a subscriber
+	 * from a current app exactly as from the legacy route. WooCommerce's
+	 * credential fence is untouched: it runs in the controller, not here.
+	 *
+	 * @param bool   $permission WooCommerce's verdict so far.
+	 * @param string $context    'edit' or 'delete'.
+	 * @param int    $target_id  Target user ID.
+	 */
+	private function check_user_permission( bool $permission, string $context, int $target_id ): bool {
+		if ( $this->rejudging_user_target ) {
+			return $permission;
+		}
+		if ( ! Customer_Account_Guard::can_modify( get_current_user_id(), $target_id ) ) {
+			return false;
+		}
+		if ( $permission ) {
+			return true;
+		}
+		$this->rejudging_user_target = true;
+		$restore                     = Customer_Account_Guard::allow_target_roles( $target_id );
+		try {
+			return (bool) wc_rest_check_user_permissions( $context, $target_id );
+		} finally {
+			$restore();
+			$this->rejudging_user_target = false;
+		}
+	}
+
+	/**
 	 * Authorize proxied mutations for POS users while protecting staff accounts.
 	 *
 	 * This filter is attached only while a sync push is forwarded to wc/v3, so
@@ -774,11 +814,10 @@ class Write_Controller extends WP_REST_Controller {
 	 * @return bool
 	 */
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		// Customer edits/deletes: never let a non-admin POS user touch a staff account.
-		if ( $permission && 'user' === $post_type && (int) $object_id > 0
-			&& \in_array( $context, array( 'edit', 'delete' ), true )
-			&& ! Customer_Account_Guard::can_modify( get_current_user_id(), (int) $object_id ) ) {
-			return false;
+		// Customer edits/deletes: the staff guard is final, then a cleared target
+		// is judged by WooCommerce the same way the v1 controller judges it.
+		if ( 'user' === $post_type && (int) $object_id > 0 && \in_array( $context, array( 'edit', 'delete' ), true ) ) {
+			return $this->check_user_permission( (bool) $permission, $context, (int) $object_id );
 		}
 
 		// Catalog and coupon WRITES require the user's real WooCommerce
