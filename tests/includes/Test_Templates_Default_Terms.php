@@ -129,6 +129,16 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
 	}
 
+	public function test_version_upgrade_seeds_general_category(): void {
+		update_option( Templates::DEFAULT_TERMS_OPTION, 4, true );
+		$this->delete_default_term( 'general', 'wcpos_template_category' );
+
+		new Templates();
+
+		$this->assertInstanceOf( \WP_Term::class, get_term_by( 'slug', 'general', 'wcpos_template_category' ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
 	/** @dataProvider legacy_display_categories */
 	public function test_version_upgrade_migrates_only_legacy_gallery_categories( string $legacy_category ): void {
 		$posts = array();

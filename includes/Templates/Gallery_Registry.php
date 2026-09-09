@@ -78,13 +78,58 @@ class Gallery_Registry {
 				'version'       => 1,
 				'preview_data'  => null,
 			),
+			'display-carousel' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Carousel', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Rotate your own pictures between sales. Swap the three image links for yours and edit the captions; a small version keeps cycling under the totals.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 40,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-specials' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Specials board', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A short list of featured items and prices for the idle screen, with an "ask about today\'s specials" line on the order screens. Edit the four lines.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 41,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-follow' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Follow & review', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Your social handle and a QR code between sales; paste in your own QR image. Adds your handle to the order screens.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 42,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
 			'display-seasons-greetings' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
 				'title'         => __( 'Season\'s Greetings', 'woocommerce-pos' ),
 				/* translators: Gallery template description shown in the admin Template Gallery. */
-				'description'   => __( 'The Ledger with a festive idle screen for the December–January window. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'description'   => __( 'The Ledger with a festive idle screen for the December–January window; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
-				'order'         => 40,
+				'order'         => 50,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
@@ -97,9 +142,9 @@ class Gallery_Registry {
 				/* translators: Gallery template name shown in the admin Template Gallery. */
 				'title'         => __( 'Lunar New Year', 'woocommerce-pos' ),
 				/* translators: Gallery template description shown in the admin Template Gallery. */
-				'description'   => __( 'The Ledger with a red-and-gold idle screen wishing customers good fortune. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'description'   => __( 'The Ledger with a red-and-gold idle screen wishing customers good fortune; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
-				'order'         => 41,
+				'order'         => 51,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
@@ -112,9 +157,9 @@ class Gallery_Registry {
 				/* translators: Gallery template name shown in the admin Template Gallery. */
 				'title'         => __( 'Eid Mubarak', 'woocommerce-pos' ),
 				/* translators: Gallery template description shown in the admin Template Gallery. */
-				'description'   => __( 'The Ledger with a night-blue-and-gold idle screen for Ramadan and Eid al-Fitr. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'description'   => __( 'The Ledger with a night-blue-and-gold idle screen for Ramadan and Eid al-Fitr; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
-				'order'         => 42,
+				'order'         => 52,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
@@ -127,9 +172,144 @@ class Gallery_Registry {
 				/* translators: Gallery template name shown in the admin Template Gallery. */
 				'title'         => __( 'Diwali', 'woocommerce-pos' ),
 				/* translators: Gallery template description shown in the admin Template Gallery. */
-				'description'   => __( 'The Ledger with a warm idle screen of lights. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'description'   => __( 'The Ledger with a warm idle screen of lights; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
-				'order'         => 43,
+				'order'         => 53,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-valentines' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Valentine\'s Day', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A love letter with a wax seal on a blush ground; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 54,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-mothers-day' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Mother\'s Day', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A ring of petals around the greeting, with a soft accent on the order screens. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 55,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-fathers-day' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Father\'s Day', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A workshop card between plaid bands. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 56,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-easter' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Easter', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A row of patterned eggs on a spring gradient. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 57,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-halloween' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Halloween', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'An orange moon, bats and jagged grass. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 58,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-thanksgiving' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Thanksgiving', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A harvest wreath of leaves. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 59,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-hanukkah' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Hanukkah', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A menorah of nine candles. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 60,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-new-year' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'New Year', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Confetti and a gold burst. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 61,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-nowruz' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Nowruz', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Tulips for the spring equinox. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 62,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
@@ -144,7 +324,22 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a promotional idle screen: a headline and an offer line you edit for each promotion.', 'woocommerce-pos' ),
 				'type'          => 'display',
-				'order'         => 50,
+				'order'         => 70,
+				'category'      => 'promotion',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-black-friday' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Black Friday', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Blackout with a deals ticker, and the offer line repeated on the order screens. Edit the offer.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'order'         => 71,
 				'category'      => 'promotion',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',

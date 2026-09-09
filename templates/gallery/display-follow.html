@@ -1,5 +1,5 @@
 <!--
-Sale — a perforated ticket between hazard stripes; edit the headline and offer line.
+Follow & review — your handle and a QR code. Replace the QR image src and the handle.
 Built on the Ledger (responsive): every other state is the Ledger; edit the idle section to make it yours.
 -->
 <style>
@@ -79,45 +79,34 @@ html,body{margin:0;min-height:100%}
 }
 
 /* Idle screen */
-@keyframes sale-wobble{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(-1deg)}}
-@keyframes sale-stripe{from{background-position:0 0}to{background-position:68px 0}}
-.wcpos-idle--sale{position:relative;height:100vh;overflow:hidden;background:#ffd400;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;color:#111}
-.wcpos-idle--sale .stripe{position:absolute;left:0;right:0;height:26px;background:repeating-linear-gradient(135deg,#111 0 24px,#ffd400 24px 48px)}
-.wcpos-idle--sale .stripe.t{top:0}
-.wcpos-idle--sale .stripe.b{bottom:0}
-.wcpos-idle--sale .ticket{position:relative;background:#111;color:#fff;border-radius:22px;padding:42px 60px 40px;width:min(760px,86vw);text-align:center;box-shadow:0 30px 70px rgba(0,0,0,.25)}
-.wcpos-idle--sale .ticket:before,.wcpos-idle--sale .ticket:after{content:"";position:absolute;top:50%;width:44px;height:44px;border-radius:50%;background:#ffd400;transform:translateY(-50%)}
-.wcpos-idle--sale .ticket:before{left:-22px}
-.wcpos-idle--sale .ticket:after{right:-22px}
-.wcpos-idle--sale .brand{height:78px;width:auto;object-fit:contain;background:#fff;border-radius:12px;padding:8px 14px;display:block;margin:0 auto 14px}
-.wcpos-idle--sale .tag{display:inline-block;transform:rotate(-4deg);background:#e11d2f;color:#fff;font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:15px;padding:8px 16px;border-radius:6px;margin-bottom:8px}
-.wcpos-idle--sale h1{margin:0;font-size:clamp(96px,17vw,220px);font-weight:900;letter-spacing:-.06em;line-height:.85;color:#ffd400}
-.wcpos-idle--sale .off{margin:12px 0 10px;font-size:clamp(22px,3vw,38px);font-weight:800;letter-spacing:.02em}
-.wcpos-idle--sale p{margin:0;font-size:clamp(16px,1.9vw,22px);opacity:.85;text-wrap:balance}
-@media (max-width:600px){.wcpos-idle--sale .ticket{padding:30px 22px}}
-@media (prefers-reduced-motion:no-preference){.wcpos-idle--sale .tag{animation:sale-wobble 2.4s ease-in-out infinite}
-.wcpos-idle--sale .stripe{animation:sale-stripe 3s linear infinite}}
-.wcpos-idle--sale .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
+@keyframes fl-float{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-10px) rotate(1.5deg)}}
+.wcpos-idle--follow{position:relative;height:100vh;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+.wcpos-idle--follow{background:radial-gradient(circle at 20% 20%,#fef3c7,#fde68a 40%,#f59e0b 100%);color:#1c1917;display:flex;align-items:center;justify-content:center;gap:6vw;padding:0 6vw;box-sizing:border-box}
+.wcpos-idle--follow .card{background:#fff;border-radius:24px;padding:28px;box-shadow:0 30px 60px rgba(120,53,15,.25);width:min(340px,38vw);aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+.wcpos-idle--follow .card img{width:100%;height:100%;object-fit:contain}
+.wcpos-idle--follow .text{max-width:520px}
+.wcpos-idle--follow .brand{height:80px;width:auto;object-fit:contain;display:block;margin-bottom:22px}
+.wcpos-idle--follow h1{margin:0 0 12px;font-size:clamp(36px,5.2vw,68px);font-weight:800;letter-spacing:-.02em;line-height:1}
+.wcpos-idle--follow .handle{display:inline-block;margin:0 0 14px;font-size:clamp(20px,2.4vw,30px);font-weight:700;color:#7c2d12}
+.wcpos-idle--follow p{margin:0;font-size:clamp(16px,1.9vw,22px);color:#44403c;max-width:34ch;text-wrap:balance}
+@media (prefers-reduced-motion:no-preference){.wcpos-idle--follow .card{animation:fl-float 6s ease-in-out infinite}}
+@media (max-width:700px){.wcpos-idle--follow{flex-direction:column;gap:28px;padding:6vh 8vw;justify-content:center}
+.wcpos-idle--follow .card{width:min(260px,60vw)}
+.wcpos-idle--follow .text{text-align:center}
+.wcpos-idle--follow .brand{margin-inline:auto}
+.wcpos-idle--follow p{margin-inline:auto}}
+.wcpos-idle--follow .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
 
 /* Theme carried into every state: accent colour, a bar on the panel, a one-line note. */
-:root{--ledger-accent:#111827;--ledger-new:#ffd400}
-.wcpos-ledger__panel{border-top:4px solid #111827}
-.wcpos-ledger__note{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:8px 12px;border-radius:8px;background:#ffd400;color:#111827;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+:root{--ledger-accent:#7c2d12;--ledger-new:#fef3c7}
+.wcpos-ledger__panel{border-top:4px solid #7c2d12}
+.wcpos-ledger__note{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:8px 12px;border-radius:8px;background:#fef3c7;color:#7c2d12;font-size:14px;font-weight:600;letter-spacing:.01em}
 .wcpos-ledger__note-mark{font-size:16px;opacity:.85}
 @media (max-width:820px){.wcpos-ledger__note{margin:0 0 6px;font-size:13px;padding:6px 10px}}
 </style>
 
-<section class="wcpos-idle wcpos-idle--sale" data-wcpos-state="idle">
-  <div class="stripe t"></div>
-  <div class="ticket">
-    {{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}
-    <div class="tag">This week only</div>
-    <h1>SALE</h1>
-    <div class="off">Up to 50% off selected items</div>
-    <p>Ask us in store for details.</p>
-  </div>
-  <div class="stripe b"></div>
-</section>
+<section class="wcpos-idle wcpos-idle--follow" data-wcpos-state="idle"><div class="text">{{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}<h1>Loved it? Tell someone.</h1><div class="handle">@coffeemonster</div><p>Scan to follow us, or leave a review. It helps a small shop more than you'd think.</p></div>
+<div class="card"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSI0MDAiIGZpbGw9IiNmZmYiLz48cmVjdCB4PSI0MCIgeT0iNDAiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMCIvPjxyZWN0IHg9IjY5IiB5PSI0MCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwLjk1Ii8+PHJlY3QgeD0iOTgiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxMjciIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIxNTYiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxODUiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyMTQiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIyNDMiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNzIiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMDEiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIzMzAiIHk9IjQwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI0MCIgeT0iNjkiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjY5IiB5PSI2OSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iOTgiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxMjciIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxNTYiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIxODUiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyMTQiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNDMiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIyNzIiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMDEiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMzAiIHk9IjY5IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSI0MCIgeT0iOTgiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjY5IiB5PSI5OCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwLjk1Ii8+PHJlY3QgeD0iOTgiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIxMjciIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxNTYiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxODUiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIyMTQiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNDMiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNzIiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSIzMDEiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMzAiIHk9Ijk4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI0MCIgeT0iMTI3IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSI2OSIgeT0iMTI3IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI5OCIgeT0iMTI3IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxMjciIHk9IjEyNyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTU2IiB5PSIxMjciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjE4NSIgeT0iMTI3IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyMTQiIHk9IjEyNyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjQzIiB5PSIxMjciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjI3MiIgeT0iMTI3IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMDEiIHk9IjEyNyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMzMwIiB5PSIxMjciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjQwIiB5PSIxNTYiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjY5IiB5PSIxNTYiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMCIvPjxyZWN0IHg9Ijk4IiB5PSIxNTYiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjEyNyIgeT0iMTU2IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxNTYiIHk9IjE1NiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTg1IiB5PSIxNTYiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjIxNCIgeT0iMTU2IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNDMiIHk9IjE1NiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjcyIiB5PSIxNTYiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjMwMSIgeT0iMTU2IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMzAiIHk9IjE1NiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iNDAiIHk9IjE4NSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwLjk1Ii8+PHJlY3QgeD0iNjkiIHk9IjE4NSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwLjk1Ii8+PHJlY3QgeD0iOTgiIHk9IjE4NSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTI3IiB5PSIxODUiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjE1NiIgeT0iMTg1IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxODUiIHk9IjE4NSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjE0IiB5PSIxODUiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjI0MyIgeT0iMTg1IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNzIiIHk9IjE4NSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMzAxIiB5PSIxODUiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjMzMCIgeT0iMTg1IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI0MCIgeT0iMjE0IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSI2OSIgeT0iMjE0IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI5OCIgeT0iMjE0IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxMjciIHk9IjIxNCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTU2IiB5PSIyMTQiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjE4NSIgeT0iMjE0IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyMTQiIHk9IjIxNCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjQzIiB5PSIyMTQiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjI3MiIgeT0iMjE0IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMDEiIHk9IjIxNCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMzMwIiB5PSIyMTQiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjQwIiB5PSIyNDMiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjY5IiB5PSIyNDMiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMCIvPjxyZWN0IHg9Ijk4IiB5PSIyNDMiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjEyNyIgeT0iMjQzIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxNTYiIHk9IjI0MyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTg1IiB5PSIyNDMiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjIxNCIgeT0iMjQzIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNDMiIHk9IjI0MyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjcyIiB5PSIyNDMiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjMwMSIgeT0iMjQzIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMzAiIHk9IjI0MyIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iNDAiIHk9IjI3MiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwLjk1Ii8+PHJlY3QgeD0iNjkiIHk9IjI3MiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwLjk1Ii8+PHJlY3QgeD0iOTgiIHk9IjI3MiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTI3IiB5PSIyNzIiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjE1NiIgeT0iMjcyIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxODUiIHk9IjI3MiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjE0IiB5PSIyNzIiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjI0MyIgeT0iMjcyIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNzIiIHk9IjI3MiIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMzAxIiB5PSIyNzIiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjMzMCIgeT0iMjcyIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI0MCIgeT0iMzAxIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAiLz48cmVjdCB4PSI2OSIgeT0iMzAxIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSI5OCIgeT0iMzAxIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxMjciIHk9IjMwMSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTU2IiB5PSIzMDEiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjE4NSIgeT0iMzAxIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyMTQiIHk9IjMwMSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjQzIiB5PSIzMDEiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjI3MiIgeT0iMzAxIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMDEiIHk9IjMwMSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMzMwIiB5PSIzMDEiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjQwIiB5PSIzMzAiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjY5IiB5PSIzMzAiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMCIvPjxyZWN0IHg9Ijk4IiB5PSIzMzAiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjEyNyIgeT0iMzMwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIxNTYiIHk9IjMzMCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMTg1IiB5PSIzMzAiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjIxNCIgeT0iMzMwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIyNDMiIHk9IjMzMCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iMjcyIiB5PSIzMzAiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0iIzExMSIgb3BhY2l0eT0iMC45NSIvPjxyZWN0IHg9IjMwMSIgeT0iMzMwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiMxMTEiIG9wYWNpdHk9IjAuOTUiLz48cmVjdCB4PSIzMzAiIHk9IjMzMCIgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMTExIiBvcGFjaXR5PSIwIi8+PHJlY3QgeD0iNDAiIHk9IjQwIiB3aWR0aD0iODgiIGhlaWdodD0iODgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzExMSIgc3Ryb2tlLXdpZHRoPSIxMiIvPjxyZWN0IHg9IjI3MiIgeT0iNDAiIHdpZHRoPSI4OCIgaGVpZ2h0PSI4OCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTExIiBzdHJva2Utd2lkdGg9IjEyIi8+PHJlY3QgeD0iNDAiIHk9IjI3MiIgd2lkdGg9Ijg4IiBoZWlnaHQ9Ijg4IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMTEiIHN0cm9rZS13aWR0aD0iMTIiLz48dGV4dCB4PSIyMDAiIHk9IjM5MiIgZm9udC1mYW1pbHk9IkhlbHZldGljYSxBcmlhbCIgZm9udC1zaXplPSIxOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzY2NiI+UmVwbGFjZSB3aXRoIHlvdXIgUVIgY29kZSBpbWFnZTwvdGV4dD48L3N2Zz4=" alt="QR code"></div></section>
 
 <section class="wcpos-ledger" data-wcpos-state="cart">
   <div class="wcpos-ledger__list">
@@ -130,7 +119,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span>Follow us @coffeemonster</span></div>
     {{#totals.total_qty}}
     <div class="wcpos-ledger__totals">
       <div class="wcpos-ledger__total-row"><span>{{i18n.subtotal}}</span><span class="wcpos-ledger__money">{{totals.subtotal_display}}</span></div>
@@ -153,7 +142,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span>Follow us @coffeemonster</span></div>
     <div class="wcpos-ledger__payment">
       <div><div class="wcpos-ledger__total-row"><span>{{i18n.total}}</span><span class="wcpos-ledger__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-ledger__total-row wcpos-ledger__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-ledger__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
       <div class="wcpos-ledger__card"><div class="wcpos-ledger__icon wcpos-ledger__spinner" aria-hidden="true"></div><div class="wcpos-ledger__card-title">{{i18n.present_card}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{ledger.due}}</div></div>
@@ -169,7 +158,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span>Follow us @coffeemonster</span></div>
     <div class="wcpos-ledger__payment">
       <div><div class="wcpos-ledger__total-row"><span>{{i18n.total}}</span><span class="wcpos-ledger__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-ledger__total-row wcpos-ledger__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-ledger__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
       <div class="wcpos-ledger__card wcpos-ledger__card--ok"><div class="wcpos-ledger__icon" aria-hidden="true">&#10003;</div><div class="wcpos-ledger__card-title">{{i18n.approved}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{ledger.due}}</div>{{#payment.message}}<div class="wcpos-ledger__message">{{payment.message}}</div>{{/payment.message}}</div>
@@ -185,7 +174,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span>Follow us @coffeemonster</span></div>
     <div class="wcpos-ledger__payment">
       <div><div class="wcpos-ledger__total-row"><span>{{i18n.total}}</span><span class="wcpos-ledger__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-ledger__total-row wcpos-ledger__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-ledger__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
       <div class="wcpos-ledger__card wcpos-ledger__card--bad"><div class="wcpos-ledger__icon" aria-hidden="true">&times;</div><div class="wcpos-ledger__card-title">{{i18n.declined}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{ledger.due}}</div>{{#payment.message}}<div class="wcpos-ledger__message">{{payment.message}}</div>{{/payment.message}}{{^payment.message}}<div class="wcpos-ledger__message">{{i18n.try_another_card}}</div>{{/payment.message}}</div>
@@ -201,7 +190,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span>Follow us @coffeemonster</span></div>
     <div class="wcpos-ledger__payment">
       <div class="wcpos-ledger__card wcpos-ledger__card--ok"><div class="wcpos-ledger__icon" aria-hidden="true">&#10003;</div><div class="wcpos-ledger__card-title">{{i18n.paid_in_full}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{totals.total_incl_display}}</div>{{#ledger.change_raw}}<div class="wcpos-ledger__message">{{i18n.change}} {{ledger.change}}</div>{{/ledger.change_raw}}<div class="wcpos-ledger__message">{{i18n.thank_you}}</div></div>
     </div>

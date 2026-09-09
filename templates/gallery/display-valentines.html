@@ -1,5 +1,5 @@
 <!--
-Sale — a perforated ticket between hazard stripes; edit the headline and offer line.
+Valentine's Day — a love letter with a wax seal on a blush ground.
 Built on the Ledger (responsive): every other state is the Ledger; edit the idle section to make it yours.
 -->
 <style>
@@ -79,45 +79,33 @@ html,body{margin:0;min-height:100%}
 }
 
 /* Idle screen */
-@keyframes sale-wobble{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(-1deg)}}
-@keyframes sale-stripe{from{background-position:0 0}to{background-position:68px 0}}
-.wcpos-idle--sale{position:relative;height:100vh;overflow:hidden;background:#ffd400;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;color:#111}
-.wcpos-idle--sale .stripe{position:absolute;left:0;right:0;height:26px;background:repeating-linear-gradient(135deg,#111 0 24px,#ffd400 24px 48px)}
-.wcpos-idle--sale .stripe.t{top:0}
-.wcpos-idle--sale .stripe.b{bottom:0}
-.wcpos-idle--sale .ticket{position:relative;background:#111;color:#fff;border-radius:22px;padding:42px 60px 40px;width:min(760px,86vw);text-align:center;box-shadow:0 30px 70px rgba(0,0,0,.25)}
-.wcpos-idle--sale .ticket:before,.wcpos-idle--sale .ticket:after{content:"";position:absolute;top:50%;width:44px;height:44px;border-radius:50%;background:#ffd400;transform:translateY(-50%)}
-.wcpos-idle--sale .ticket:before{left:-22px}
-.wcpos-idle--sale .ticket:after{right:-22px}
-.wcpos-idle--sale .brand{height:78px;width:auto;object-fit:contain;background:#fff;border-radius:12px;padding:8px 14px;display:block;margin:0 auto 14px}
-.wcpos-idle--sale .tag{display:inline-block;transform:rotate(-4deg);background:#e11d2f;color:#fff;font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:15px;padding:8px 16px;border-radius:6px;margin-bottom:8px}
-.wcpos-idle--sale h1{margin:0;font-size:clamp(96px,17vw,220px);font-weight:900;letter-spacing:-.06em;line-height:.85;color:#ffd400}
-.wcpos-idle--sale .off{margin:12px 0 10px;font-size:clamp(22px,3vw,38px);font-weight:800;letter-spacing:.02em}
-.wcpos-idle--sale p{margin:0;font-size:clamp(16px,1.9vw,22px);opacity:.85;text-wrap:balance}
-@media (max-width:600px){.wcpos-idle--sale .ticket{padding:30px 22px}}
-@media (prefers-reduced-motion:no-preference){.wcpos-idle--sale .tag{animation:sale-wobble 2.4s ease-in-out infinite}
-.wcpos-idle--sale .stripe{animation:sale-stripe 3s linear infinite}}
-.wcpos-idle--sale .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
+@keyframes val-beat{0%,100%{transform:translateX(-50%) scale(1)}12%{transform:translateX(-50%) scale(1.12)}24%{transform:translateX(-50%) scale(1)}}
+@keyframes val-drift{from{background-position:0 0,0 0}to{background-position:0 120px,0 120px}}
+.wcpos-idle--valentines{position:relative;height:100vh;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+.wcpos-idle--valentines{background:#f6d5dc;display:flex;align-items:center;justify-content:center;color:#5a1f2e}
+.wcpos-idle--valentines .hearts{position:absolute;inset:0;opacity:.35;background-image:radial-gradient(circle at 30% 30%,#e8879a 0 8px,transparent 9px),radial-gradient(circle at 70% 30%,#e8879a 0 8px,transparent 9px);background-size:120px 120px;background-position:0 0,0 0}
+.wcpos-idle--valentines .env{position:relative;width:min(720px,84vw);background:#fffaf7;border-radius:16px;box-shadow:0 30px 60px rgba(90,31,46,.18);padding:56px 56px 48px;text-align:center;overflow:hidden}
+.wcpos-idle--valentines .env:before{content:"";position:absolute;left:0;right:0;top:0;height:120px;background:linear-gradient(135deg,#fde6ea 50%,transparent 50%) left/50% 100% no-repeat,linear-gradient(-135deg,#fde6ea 50%,transparent 50%) right/50% 100% no-repeat}
+.wcpos-idle--valentines .seal{position:absolute;left:50%;top:88px;transform:translateX(-50%);width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#e0485f,#a3122f);box-shadow:0 6px 14px rgba(163,18,47,.4);color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px}
+.wcpos-idle--valentines .brand{height:84px;width:auto;object-fit:contain;display:block;margin:118px auto 14px;position:relative}
+.wcpos-idle--valentines h1{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Georgia,serif;font-style:italic;font-weight:500;font-size:clamp(42px,6vw,80px);margin:0 0 12px;color:#a3122f;line-height:1}
+.wcpos-idle--valentines p{margin:0;font-size:clamp(17px,2vw,24px);color:#7a3546;text-wrap:balance}
+@media (max-width:600px){.wcpos-idle--valentines .env{padding:48px 24px 36px}
+.wcpos-idle--valentines .brand{margin-top:56px}}
+@media (prefers-reduced-motion:no-preference){.wcpos-idle--valentines .seal{animation:val-beat 2.6s ease-in-out infinite}
+.wcpos-idle--valentines .hearts{animation:val-drift 18s linear infinite}}
+.wcpos-idle--valentines .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
 
 /* Theme carried into every state: accent colour, a bar on the panel, a one-line note. */
-:root{--ledger-accent:#111827;--ledger-new:#ffd400}
-.wcpos-ledger__panel{border-top:4px solid #111827}
-.wcpos-ledger__note{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:8px 12px;border-radius:8px;background:#ffd400;color:#111827;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+:root{--ledger-accent:#a3122f;--ledger-new:#fde8ec}
+.wcpos-ledger__panel{border-top:4px solid #a3122f}
+.wcpos-ledger__note{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:8px 12px;border-radius:8px;background:#fde8ec;color:#a3122f;font-size:14px;font-weight:600;letter-spacing:.01em}
 .wcpos-ledger__note-mark{font-size:16px;opacity:.85}
 @media (max-width:820px){.wcpos-ledger__note{margin:0 0 6px;font-size:13px;padding:6px 10px}}
 </style>
 
-<section class="wcpos-idle wcpos-idle--sale" data-wcpos-state="idle">
-  <div class="stripe t"></div>
-  <div class="ticket">
-    {{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}
-    <div class="tag">This week only</div>
-    <h1>SALE</h1>
-    <div class="off">Up to 50% off selected items</div>
-    <p>Ask us in store for details.</p>
-  </div>
-  <div class="stripe b"></div>
-</section>
+<section class="wcpos-idle wcpos-idle--valentines" data-wcpos-state="idle"><div class="hearts"></div>
+<div class="env"><div class="seal">&#9829;</div>{{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}<h1>Happy Valentine's Day</h1><p>Treat someone you love today.</p></div></section>
 
 <section class="wcpos-ledger" data-wcpos-state="cart">
   <div class="wcpos-ledger__list">
@@ -130,7 +118,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span class="wcpos-ledger__note-mark" aria-hidden="true">&#9829;</span><span>Happy Valentine's Day</span></div>
     {{#totals.total_qty}}
     <div class="wcpos-ledger__totals">
       <div class="wcpos-ledger__total-row"><span>{{i18n.subtotal}}</span><span class="wcpos-ledger__money">{{totals.subtotal_display}}</span></div>
@@ -153,7 +141,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span class="wcpos-ledger__note-mark" aria-hidden="true">&#9829;</span><span>Happy Valentine's Day</span></div>
     <div class="wcpos-ledger__payment">
       <div><div class="wcpos-ledger__total-row"><span>{{i18n.total}}</span><span class="wcpos-ledger__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-ledger__total-row wcpos-ledger__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-ledger__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
       <div class="wcpos-ledger__card"><div class="wcpos-ledger__icon wcpos-ledger__spinner" aria-hidden="true"></div><div class="wcpos-ledger__card-title">{{i18n.present_card}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{ledger.due}}</div></div>
@@ -169,7 +157,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span class="wcpos-ledger__note-mark" aria-hidden="true">&#9829;</span><span>Happy Valentine's Day</span></div>
     <div class="wcpos-ledger__payment">
       <div><div class="wcpos-ledger__total-row"><span>{{i18n.total}}</span><span class="wcpos-ledger__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-ledger__total-row wcpos-ledger__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-ledger__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
       <div class="wcpos-ledger__card wcpos-ledger__card--ok"><div class="wcpos-ledger__icon" aria-hidden="true">&#10003;</div><div class="wcpos-ledger__card-title">{{i18n.approved}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{ledger.due}}</div>{{#payment.message}}<div class="wcpos-ledger__message">{{payment.message}}</div>{{/payment.message}}</div>
@@ -185,7 +173,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span class="wcpos-ledger__note-mark" aria-hidden="true">&#9829;</span><span>Happy Valentine's Day</span></div>
     <div class="wcpos-ledger__payment">
       <div><div class="wcpos-ledger__total-row"><span>{{i18n.total}}</span><span class="wcpos-ledger__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-ledger__total-row wcpos-ledger__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-ledger__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
       <div class="wcpos-ledger__card wcpos-ledger__card--bad"><div class="wcpos-ledger__icon" aria-hidden="true">&times;</div><div class="wcpos-ledger__card-title">{{i18n.declined}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{ledger.due}}</div>{{#payment.message}}<div class="wcpos-ledger__message">{{payment.message}}</div>{{/payment.message}}{{^payment.message}}<div class="wcpos-ledger__message">{{i18n.try_another_card}}</div>{{/payment.message}}</div>
@@ -201,7 +189,7 @@ html,body{margin:0;min-height:100%}
   </div>
   <aside class="wcpos-ledger__panel">
     <div class="wcpos-ledger__store">{{store.name}}</div>
-    <div class="wcpos-ledger__note"><span>SALE &middot; Up to 50% off selected items. Ask us in store.</span></div>
+    <div class="wcpos-ledger__note"><span class="wcpos-ledger__note-mark" aria-hidden="true">&#9829;</span><span>Happy Valentine's Day</span></div>
     <div class="wcpos-ledger__payment">
       <div class="wcpos-ledger__card wcpos-ledger__card--ok"><div class="wcpos-ledger__icon" aria-hidden="true">&#10003;</div><div class="wcpos-ledger__card-title">{{i18n.paid_in_full}}</div><div class="wcpos-ledger__card-amount wcpos-ledger__money">{{totals.total_incl_display}}</div>{{#ledger.change_raw}}<div class="wcpos-ledger__message">{{i18n.change}} {{ledger.change}}</div>{{/ledger.change_raw}}<div class="wcpos-ledger__message">{{i18n.thank_you}}</div></div>
     </div>

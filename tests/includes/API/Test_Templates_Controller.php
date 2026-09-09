@@ -1468,16 +1468,29 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$templates = $response->get_data();
-		// Gallery order: screen-fit first (Ledger, then the screen-specific pair), then seasonal, then promotion.
+		// Gallery order: screen-fit first (Ledger, then the screen-specific pair), then general, seasonal, and promotion.
 		$expected = array(
 			'display-ledger'            => 'responsive',
 			'display-pocket'            => 'small-screen',
 			'display-marquee'           => 'large-screen',
+			'display-carousel'          => 'general',
+			'display-specials'          => 'general',
+			'display-follow'            => 'general',
 			'display-seasons-greetings' => 'seasonal',
 			'display-lunar-new-year'    => 'seasonal',
 			'display-eid'               => 'seasonal',
 			'display-diwali'            => 'seasonal',
+			'display-valentines'        => 'seasonal',
+			'display-mothers-day'       => 'seasonal',
+			'display-fathers-day'       => 'seasonal',
+			'display-easter'            => 'seasonal',
+			'display-halloween'         => 'seasonal',
+			'display-thanksgiving'      => 'seasonal',
+			'display-hanukkah'          => 'seasonal',
+			'display-new-year'          => 'seasonal',
+			'display-nowruz'            => 'seasonal',
 			'display-sale'              => 'promotion',
+			'display-black-friday'      => 'promotion',
 		);
 		$this->assertSame( array_keys( $expected ), array_column( $templates, 'key' ) );
 		foreach ( $templates as $template ) {

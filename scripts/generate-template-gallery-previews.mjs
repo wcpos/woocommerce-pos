@@ -19,6 +19,8 @@ try {
 	);
 }
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
+// Lossless output above this is a photograph, not a UI capture (bytes).
+const LOSSLESS_SIZE_LIMIT = 1_000_000;
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 794;
 const screenshotScale = 2;
@@ -84,18 +86,36 @@ function replaceAssetUrls(value) {
 	if (value && typeof value === 'object') {
 		return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, replaceAssetUrls(v)]));
 	}
-	if (typeof value === 'string' && value.includes('/assets/img/template-gallery/preview-assets/')) {
-		const assetPath = value.slice(value.indexOf('/assets/img/template-gallery/preview-assets/') + 1);
+	if (typeof value === 'string' && value.includes('/assets/img/template-gallery/')) {
+		const assetPath = value.slice(value.indexOf('/assets/img/template-gallery/') + 1);
 		return '/@fs/${repoRootForBrowser}/' + assetPath;
 	}
 	return value;
 }
 
+// Display templates may define reusable blocks as <template data-wcpos-partial="name">
+// and use them as {{> name}}; the Pro display engine lifts them out the same way.
+function extractPartials(template) {
+	const parsed = document.createElement('template');
+	parsed.innerHTML = template;
+	// Serialising text escapes ">" and "&", which would hide {{> name}} and {{& name}} from Mustache.
+	const restoreTags = (html) => html.replace(/\{\{&gt;/g, '{{>').replace(/\{\{&amp;/g, '{{&');
+	const partials = {};
+	Array.from(parsed.content.children).forEach((element) => {
+		if (element.tagName === 'TEMPLATE' && element.dataset.wcposPartial) {
+			partials[element.dataset.wcposPartial] = restoreTags(element.innerHTML);
+			element.remove();
+		}
+	});
+	return { source: restoreTags(parsed.innerHTML), partials };
+}
+
 const receiptData = replaceAssetUrls(payload.receipt_data);
 const isDisplay = payload.type === 'display';
+const display = isDisplay ? extractPartials(payload.template_content) : null;
 const bodyHtml = !isDisplay && payload.engine === 'thermal'
 	? renderThermalPreview(payload.template_content, receiptData)
-	: renderLogiclessPreview(payload.template_content, { t: true, ...receiptData });
+	: renderLogiclessPreview(display?.source ?? payload.template_content, { t: true, ...receiptData }, display?.partials);
 
 const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
@@ -173,6 +193,11 @@ try {
 		await capture.screenshot({ path: pngPath });
 		if (payload.type === 'display') await page.setViewportSize(viewport);
 		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
+		// Flat UI compresses well losslessly; a photographic idle screen does not, and a card
+		// image over a megabyte is too heavy for the gallery page. Re-encode those lossy.
+		if (fs.statSync(webpPath).size > LOSSLESS_SIZE_LIMIT) {
+			execFileSync('cwebp', ['-quiet', '-q', '88', '-m', '6', pngPath, '-o', webpPath]);
+		}
 		console.log(`generated ${payload.key}.webp`);
 	}
 } finally {

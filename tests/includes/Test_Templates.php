@@ -51,7 +51,10 @@ class Test_Templates extends WP_UnitTestCase {
 			$this->assertSame( substr( $key, -4 ) === '_raw' ? 'number' : 'string', $field['type'] );
 			$this->assertNotEmpty( $field['label'] );
 		}
-		unset( $display['ledger'], $display['ledger.payments'], $display['payment'] );
+		$this->assertSame( array( 'url' ), array_keys( $display['assets']['fields'] ) );
+		$this->assertSame( 'string', $display['assets']['fields']['url']['type'] );
+		$this->assertArrayNotHasKey( 'assets', $receipt );
+		unset( $display['ledger'], $display['ledger.payments'], $display['payment'], $display['assets'] );
 		$this->assertSame( $receipt, $display );
 	}
 
@@ -1136,7 +1139,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$bar_ticket = term_exists( 'bar-ticket', 'wcpos_template_category' );
 		$this->assertNotNull( $bar_ticket );
 
-		foreach ( array( 'responsive' => 'Responsive', 'small-screen' => 'Small screen', 'large-screen' => 'Large screen', 'seasonal' => 'Seasonal', 'promotion' => 'Promotion' ) as $slug => $label ) {
+		foreach ( array( 'responsive' => 'Responsive', 'small-screen' => 'Small screen', 'large-screen' => 'Large screen', 'general' => 'General', 'seasonal' => 'Seasonal', 'promotion' => 'Promotion' ) as $slug => $label ) {
 			$term = get_term_by( 'slug', $slug, 'wcpos_template_category' );
 			$this->assertInstanceOf( \WP_Term::class, $term );
 			$this->assertSame( $label, $term->name );

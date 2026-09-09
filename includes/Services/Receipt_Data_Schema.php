@@ -1362,6 +1362,15 @@ class Receipt_Data_Schema {
 					),
 				),
 			);
+			$tree['assets'] = array(
+				'label'  => __( 'Assets', 'woocommerce-pos' ),
+				'fields' => array(
+					'url' => array(
+						'type'  => 'string',
+						'label' => __( 'Plugin image folder URL (example pictures)', 'woocommerce-pos' ),
+					),
+				),
+			);
 			$tree['payment'] = array(
 				'label'  => __( 'Payment', 'woocommerce-pos' ),
 				'fields' => array(

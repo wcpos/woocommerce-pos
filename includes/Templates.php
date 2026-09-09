@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 4;
+	public const DEFAULT_TERMS_VERSION = 5;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -1485,6 +1485,7 @@ class Templates {
 			'responsive'     => /* translators: Display template category label. */ __( 'Responsive', 'woocommerce-pos' ),
 			'small-screen'   => /* translators: Display template category label. */ __( 'Small screen', 'woocommerce-pos' ),
 			'large-screen'   => /* translators: Display template category label. */ __( 'Large screen', 'woocommerce-pos' ),
+			'general'        => /* translators: Display template category label. */ __( 'General', 'woocommerce-pos' ),
 			'seasonal'       => /* translators: Display template category label. */ __( 'Seasonal', 'woocommerce-pos' ),
 			'promotion'      => /* translators: Display template category label. */ __( 'Promotion', 'woocommerce-pos' ),
 		);
