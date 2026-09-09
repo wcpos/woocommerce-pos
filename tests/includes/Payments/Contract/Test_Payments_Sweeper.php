@@ -240,27 +240,52 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 	public function test_sweeper_leaves_an_authorize_only_provider_alone(): void {
 		// A handler without capture() answers unsupported: authorized is that provider's
 		// settled state, so the sweep asks once per run and records nothing.
+		$logs = array();
+		$capture_log = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = $message;
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
 		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_capture_mode_unsupported', 'Unsupported', array( 'status' => 501 ) );
 		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized' ) );
 		$order->set_status( 'completed' );
 		$order->save();
-		( new Payments_Sweeper() )->run();
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
+		}
 		$this->assertCount( 1, Sweep_Test_Handler::$captures );
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
 		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+		// Only our line matters: the Logger's dedup flush can emit an earlier test's
+		// "repeated N times" through the same filter, so a bare count is order-fragile.
+		$this->assertSame( array(), $this->refusal_logs( $logs ) );
 	}
 
 	public function test_sweeper_refused_capture_leaves_the_authorization_standing(): void {
+		$logs = array();
+		$capture_log = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = $message;
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
 		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_provider_error', 'Declined by the provider' );
 		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
 		$order->set_status( 'completed' );
 		$order->save();
-		( new Payments_Sweeper() )->run();
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
+		}
 		$this->assertCount( 1, Sweep_Test_Handler::$captures );
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
 		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+		$this->assertCount( 1, $this->refusal_logs( $logs ) );
+		$this->assertStringContainsString( 'capture refused: Declined by the provider', $this->refusal_logs( $logs )[0] );
 		// Still live: the next run asks again, and expiry still voids it.
 		$this->assertNotEmpty( wc_get_order( $order->get_id() )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
 	}
@@ -274,6 +299,11 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		( new Payments_Sweeper() )->run();
 		$this->assertSame( 'failed', $this->row( $order, $id )['status'] );
 		$this->assertSame( 'amount_mismatch', $this->row( $order, $id )['failure_reason'] );
+	}
+
+	/** The sweep's capture-refusal lines out of everything the logging filter saw. */
+	private function refusal_logs( array $logs ): array {
+		return array_values( array_filter( $logs, static fn( $line ) => false !== strpos( (string) $line, 'capture refused' ) ) );
 	}
 
 	/** Backdate an order's modified stamp in whichever order table is active. */
