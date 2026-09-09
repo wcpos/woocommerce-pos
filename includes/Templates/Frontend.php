@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Cashier;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -54,9 +55,9 @@ class Frontend {
 		}
 
 		// check privileges.
-		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
-			// translators: Authorization error shown when a logged-in user lacks permission to open the POS page.
-			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'woocommerce-pos' ) );
+		$user = wp_get_current_user();
+		if ( ! Cashier::instance()->can_open_pos( $user ) ) {
+			wp_die( esc_html( Cashier::instance()->missing_pos_capabilities_message( $user ) ), '', array( 'response' => 403 ) );
 		}
 
 		// disable cache plugins.

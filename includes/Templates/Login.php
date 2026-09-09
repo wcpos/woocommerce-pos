@@ -9,6 +9,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Cashier;
 use WP_User;
 
 /**
@@ -44,6 +45,8 @@ class Login {
 				foreach ( $user->errors as $error ) {
 					$error_string .= '<p class="error">' . $error[0] . '</p>';
 				}
+			} elseif ( ! Cashier::instance()->can_open_pos( $user ) ) {
+				$error_string .= '<p class="error">' . esc_html( Cashier::instance()->missing_pos_capabilities_message( $user ) ) . '</p>';
 			} else {
 				wp_set_current_user( $user->ID );
 				$this->login_success( $user );

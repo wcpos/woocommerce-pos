@@ -62,6 +62,12 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		remove_filter( 'user_has_cap', array( $this, 'apply_role_denies' ), 10 );
+		foreach ( $this->denied_caps as $cap ) {
+			get_role( 'customer' )->remove_cap( $cap );
+		}
+		$this->denied_caps = array();
+
 		FunctionsMockerHack::get_hack_instance()->reset();
 		if ( $this->user ) {
 			wp_delete_user( $this->user->ID );
@@ -569,5 +575,117 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		$this->assertEmpty( $stores );
 
 		remove_all_filters( 'woocommerce_pos_cashier_accessible_stores' );
+	}
+
+	/**
+	 * Capabilities denied on the customer role by the current test, removed in tearDown.
+	 *
+	 * @var string[]
+	 */
+	private $denied_caps = array();
+
+	/**
+	 * Create a customer-first administrator with Members-style role denies.
+	 *
+	 * @param string[] $denied Capabilities denied on the customer role.
+	 * @return \WP_User
+	 */
+	private function create_denied_user( array $denied ): \WP_User {
+		$this->denied_caps = $denied;
+		foreach ( $denied as $cap ) {
+			get_role( 'customer' )->add_cap( $cap, false );
+		}
+		$user_id = wp_insert_user(
+			array(
+				'user_login' => 'members-denied-user',
+				'user_pass'  => 'test-password',
+				'role'       => 'customer',
+			)
+		);
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_role( 'administrator' );
+		add_filter( 'user_has_cap', array( $this, 'apply_role_denies' ), 10, 4 );
+
+		return $user;
+	}
+
+	/**
+	 * Emulate Members: a deny on any role overrides grants for multi-role users.
+	 *
+	 * @param array    $allcaps Merged grants.
+	 * @param string[] $caps    Required capabilities.
+	 * @param array    $args    Capability check arguments.
+	 * @param \WP_User $user    User being checked.
+	 * @return array
+	 */
+	public function apply_role_denies( array $allcaps, array $caps, array $args, \WP_User $user ): array {
+		if ( count( $user->roles ) >= 2 ) {
+			foreach ( $user->roles as $role ) {
+				foreach ( get_role( $role )->capabilities as $cap => $grant ) {
+					if ( false === $grant ) {
+						$allcaps[ $cap ] = false;
+					}
+				}
+			}
+		}
+
+		return $allcaps;
+	}
+
+	/**
+	 * Payload excludes a role-editor deny even when raw administrator grants win.
+	 */
+	public function test_get_cashier_data_capabilities_excludes_capability_denied_by_user_has_cap_filter(): void {
+		$user = $this->create_denied_user( array( 'read_private_products' ) );
+		$this->assertTrue( $user->allcaps['read_private_products'] );
+
+		$data = $this->service->get_cashier_data( $user );
+
+		$this->assertNotContains( 'read_private_products', $data['capabilities'] );
+		$this->assertContains( 'access_woocommerce_pos', $data['capabilities'] );
+		$this->assertContains( 'edit_product', $data['capabilities'] );
+		$this->assertFalse( user_can( $user, 'read_private_products' ) );
+	}
+
+	/**
+	 * Missing baseline capabilities retain diagnostic order across role denies.
+	 */
+	public function test_missing_pos_capabilities_two_role_user_with_members_style_deny_lists_denied_caps(): void {
+		$user = $this->create_denied_user( array( 'read_private_products', 'publish_shop_orders' ) );
+
+		$missing = $this->service->missing_pos_capabilities( $user );
+
+		$this->assertSame( array( 'publish_shop_orders', 'read_private_products' ), $missing );
+	}
+
+	/**
+	 * A denied cashier capability blocks entry even with POS access granted.
+	 */
+	public function test_can_open_pos_missing_publish_shop_orders_returns_false(): void {
+		$user = $this->create_denied_user( array( 'publish_shop_orders' ) );
+
+		$this->assertFalse( $this->service->can_open_pos( $user ) );
+	}
+
+	/**
+	 * A missing read capability does not prevent partial POS use.
+	 */
+	public function test_can_open_pos_missing_only_list_users_returns_true(): void {
+		$this->user->add_cap( 'list_users', false );
+
+		$this->assertSame( array( 'list_users' ), $this->service->missing_pos_capabilities( $this->user ) );
+		$this->assertTrue( $this->service->can_open_pos( $this->user ) );
+	}
+
+	/**
+	 * Multi-role diagnostics identify the roles and missing capability.
+	 */
+	public function test_missing_pos_capabilities_message_two_role_user_mentions_both_roles(): void {
+		$user = $this->create_denied_user( array( 'publish_shop_orders' ) );
+
+		$message = $this->service->missing_pos_capabilities_message( $user );
+
+		$this->assertStringContainsString( 'Customer, Administrator', $message );
+		$this->assertStringContainsString( 'publish_shop_orders', $message );
 	}
 }
