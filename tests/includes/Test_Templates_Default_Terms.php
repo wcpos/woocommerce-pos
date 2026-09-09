@@ -129,7 +129,8 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
 	}
 
-	public function test_version_upgrade_migrates_only_legacy_pocket_and_marquee_categories(): void {
+	/** @dataProvider legacy_display_categories */
+	public function test_version_upgrade_migrates_only_legacy_gallery_categories( string $legacy_category ): void {
 		$posts = array();
 		foreach ( array( 'display-pocket', 'display-marquee', 'display-ledger' ) as $gallery_key ) {
 			$posts[ $gallery_key ] = self::factory()->post->create(
@@ -139,7 +140,7 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 				)
 			);
 			update_post_meta( $posts[ $gallery_key ], '_template_gallery_key', $gallery_key );
-			wp_set_object_terms( $posts[ $gallery_key ], 'display', 'wcpos_template_category' );
+			wp_set_object_terms( $posts[ $gallery_key ], $legacy_category, 'wcpos_template_category' );
 		}
 
 		$customized = self::factory()->post->create(
@@ -158,16 +159,44 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 			)
 		);
 		update_post_meta( $mixed, '_template_gallery_key', 'display-marquee' );
-		wp_set_object_terms( $mixed, array( 'display', 'promotion' ), 'wcpos_template_category' );
+		wp_set_object_terms( $mixed, array( $legacy_category, 'promotion' ), 'wcpos_template_category' );
 		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
 
 		new Templates();
 
-		$this->assertSame( array( 'standard' ), wp_get_post_terms( $posts['display-pocket'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
-		$this->assertSame( array( 'standard' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
-		$this->assertSame( array( 'display' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'small-screen' ), wp_get_post_terms( $posts['display-pocket'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'large-screen' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'responsive' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 		$this->assertSame( array( 'promotion' ), wp_get_post_terms( $customized, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
-		$this->assertEqualsCanonicalizing( array( 'promotion', 'standard' ), wp_get_post_terms( $mixed, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertEqualsCanonicalizing( array( 'promotion', 'large-screen' ), wp_get_post_terms( $mixed, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+	}
+
+	public function test_failed_category_migration_keeps_legacy_term_and_latch_until_success(): void {
+		$post_id = Templates::install_gallery_template( 'display-pocket' );
+		wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category' );
+		$this->delete_default_term( 'small-screen', 'wcpos_template_category' );
+		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
+		$refuse = static function ( $term, $taxonomy ) {
+			return 'wcpos_template_category' === $taxonomy ? new \WP_Error( 'test_refused', 'refused' ) : $term;
+		};
+		add_filter( 'pre_insert_term', $refuse, 10, 2 );
+		try {
+			new Templates();
+		} finally {
+			remove_filter( 'pre_insert_term', $refuse, 10 );
+		}
+
+		$this->assertSame( array( 'standard' ), wp_get_post_terms( $post_id, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION - 1, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+
+		new Templates();
+
+		$this->assertSame( array( 'small-screen' ), wp_get_post_terms( $post_id, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
+	public function legacy_display_categories(): array {
+		return array( array( 'display' ), array( 'standard' ) );
 	}
 
 	private function delete_default_term( string $slug, string $taxonomy ): void {

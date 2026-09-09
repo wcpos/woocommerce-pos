@@ -1,6 +1,6 @@
 <!--
-Eid — the Ledger with a night-blue-and-gold idle screen for Ramadan and Eid al-Fitr. Edit the greeting in the idle section; every other state is the Ledger.
-Built on the Ledger (responsive).
+Eid — a night arch under a crescent, with a star-tile band.
+Built on the Ledger (responsive): every other state is the Ledger; edit the idle section to make it yours.
 -->
 <style>
 :root{--ledger-ink:#0f172a;--ledger-muted:#64748b;--ledger-line:#e2e8f0;--ledger-bg:#f8fafc;--ledger-accent:#0f766e;--ledger-ok:#15803d;--ledger-bad:#b91c1c;--ledger-new:#ecfeff}
@@ -65,24 +65,30 @@ html,body{margin:0;min-height:100%}
   .wcpos-ledger__brand{font-size:40px}
   .wcpos-ledger__welcome{font-size:20px}
 }
-.wcpos-ledger__headline{margin:0;font-size:clamp(40px,6vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
-.wcpos-ledger__subline{margin:0;font-size:clamp(18px,2.2vw,26px);font-weight:500;opacity:.85;max-width:36ch;text-wrap:balance}
-.wcpos-ledger__rule{width:120px;height:2px;background:currentColor;opacity:.5}
-/* The merchant's logo keeps the white ground it has on receipts, so a dark-ink logo stays legible on the themed background. */
-.wcpos-ledger--idle .wcpos-ledger__logo{background:#fff;padding:18px 26px;border-radius:20px;max-height:200px}
-.wcpos-ledger--idle .wcpos-ledger__brand{font-size:clamp(22px,3vw,32px);font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
-.wcpos-ledger--idle{background:#0f2a44;color:#fdf6e3;gap:22px}
-.wcpos-ledger__crescent{width:72px;height:72px;border-radius:50%;box-shadow:18px 0 0 0 #e2b352;margin-right:18px}
-.wcpos-ledger__rule{background:#e2b352}
+
+/* Idle screen */
+.wcpos-idle--eid{position:relative;height:100vh;overflow:hidden;background:radial-gradient(circle at 80% 10%,#1f4a6e 0%,#0d2238 40%,#071628 100%);color:#f7ecd2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center}
+.wcpos-idle--eid .stars{position:absolute;inset:0;background-image:radial-gradient(circle,#f7d774 0 1.5px,transparent 2.5px),radial-gradient(circle,rgba(247,215,116,.6) 0 1px,transparent 2px);background-size:170px 130px,110px 90px;background-position:30px 20px,70px 50px;opacity:.8}
+.wcpos-idle--eid .moon{position:absolute;top:8vh;right:9vw;width:150px;height:150px;border-radius:50%;box-shadow:34px -10px 0 0 #f2c14e;filter:drop-shadow(0 0 30px rgba(242,193,78,.45))}
+.wcpos-idle--eid .arch{position:relative;width:min(560px,78vw);padding:46px 40px 44px;border:2px solid #d8b45a;border-radius:280px 280px 24px 24px/360px 360px 24px 24px;background:rgba(7,22,40,.55);text-align:center;box-shadow:inset 0 0 0 10px rgba(7,22,40,.6),inset 0 0 0 12px rgba(216,180,90,.5)}
+.wcpos-idle--eid .brand{height:96px;width:auto;object-fit:contain;background:#fff;border-radius:50%;padding:14px;box-shadow:0 10px 28px rgba(0,0,0,.35);margin:6px auto 22px;display:block}
+.wcpos-idle--eid h1{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Georgia,serif;margin:0 0 12px;font-size:clamp(46px,6.6vw,88px);font-weight:600;letter-spacing:.02em;line-height:1;color:#f7d774}
+.wcpos-idle--eid p{margin:0;font-size:clamp(17px,2vw,24px);opacity:.92;text-wrap:balance;max-width:30ch;margin-inline:auto}
+.wcpos-idle--eid .band{position:absolute;left:0;right:0;bottom:0;height:56px;background:conic-gradient(from 45deg at 50% 50%,#d8b45a 0 12.5%,transparent 0 25%,#d8b45a 0 37.5%,transparent 0 50%,#d8b45a 0 62.5%,transparent 0 75%,#d8b45a 0 87.5%,transparent 0);background-size:56px 56px;opacity:.55}
+@media (max-width:600px){.wcpos-idle--eid .moon{width:90px;height:90px;box-shadow:22px -6px 0 0 #f2c14e;top:5vh;right:6vw}
+.wcpos-idle--eid .arch{padding:34px 22px}}
+.wcpos-idle--eid .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
 </style>
 
-<section class="wcpos-ledger wcpos-ledger--idle" data-wcpos-state="idle">
-  {{#store.logo}}<img class="wcpos-ledger__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
-  {{^store.logo}}<div class="wcpos-ledger__brand">{{store.name}}</div>{{/store.logo}}
-  <div class="wcpos-ledger__crescent" aria-hidden="true"></div>
-  <h1 class="wcpos-ledger__headline">Eid Mubarak</h1>
-  <div class="wcpos-ledger__rule"></div>
-  <p class="wcpos-ledger__subline">Wishing you and your family a blessed Eid.</p>
+<section class="wcpos-idle wcpos-idle--eid" data-wcpos-state="idle">
+  <div class="stars"></div>
+  <div class="moon"></div>
+  <div class="arch">
+    {{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}
+    <h1>Eid Mubarak</h1>
+    <p>Wishing you and your family a blessed Eid.</p>
+  </div>
+  <div class="band"></div>
 </section>
 
 <section class="wcpos-ledger" data-wcpos-state="cart">

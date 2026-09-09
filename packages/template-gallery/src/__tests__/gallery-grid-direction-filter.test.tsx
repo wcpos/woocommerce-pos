@@ -52,23 +52,23 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 							key: 'phone',
 							title: 'Phone Display',
 							type: 'display',
-							screen: 'phone',
+							category: 'small-screen',
 						},
 						{
 							...ltrTemplate,
 							key: 'responsive',
 							title: 'Responsive Display',
 							type: 'display',
-							screen: 'responsive',
+							category: 'responsive',
 						},
 						{
 							...ltrTemplate,
 							key: 'large',
 							title: 'Large Display',
 							type: 'display',
-							screen: 'large-screen',
+							category: 'large-screen',
 						},
-						{ ...legacyTemplate, type: 'display', screen: 'responsive' },
+						{ ...legacyTemplate, type: 'display', category: 'responsive' },
 					]
 				: [ltrTemplate, rtlTemplate, legacyTemplate],
 	}),
@@ -152,7 +152,6 @@ describe('GalleryGrid direction filter', () => {
 		const container = mountGrid();
 		const text = () => container.textContent ?? '';
 
-		expect(container.querySelector('input[name="filter-screen"]')).toBeNull();
 		expect(text()).toContain('Standard Receipt');
 		expect(text()).toContain('Standard Receipt (RTL)');
 		expect(text()).toContain('Legacy Receipt');
@@ -177,24 +176,31 @@ describe('GalleryGrid direction filter', () => {
 });
 
 describe('GalleryGrid display templates', () => {
-	it('filters defaulted responsive templates out of phone results and supports clearing', () => {
+	it('filters by screen-fit category in gallery order and supports clearing', () => {
 		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		const container = mountGrid();
 		expect(container.textContent).toContain('Responsive Display');
 		expect(container.textContent).toContain('Large Display');
-		const phone = container.querySelector<HTMLInputElement>(
-			'input[name="filter-screen"][value="phone"]'
+		const categories = Array.from(
+			container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
 		);
+		expect(categories.map((input) => input.parentElement?.textContent)).toEqual([
+			'category.small-screen',
+			'category.responsive',
+			'category.large-screen',
+		]);
+		const phone = categories[0];
 		expect(phone).not.toBeNull();
 		act(() => phone!.click());
 		expect(container.textContent).toContain('Phone Display');
 		expect(container.textContent).not.toContain('Legacy Receipt');
 		expect(container.textContent).not.toContain('Responsive Display');
 		expect(container.textContent).not.toContain('Large Display');
-		const responsive = container.querySelector<HTMLInputElement>(
-			'input[name="filter-screen"][value="responsive"]'
-		);
-		act(() => responsive!.click());
+		const responsive = categories[1];
+		act(() => {
+			phone!.click();
+			responsive!.click();
+		});
 		expect(container.textContent).toContain('Legacy Receipt');
 		expect(container.textContent).toContain('Responsive Display');
 		expect(container.textContent).not.toContain('Phone Display');
@@ -219,8 +225,6 @@ describe('GalleryGrid display templates', () => {
 		expect(
 			container.querySelector('a[href="https://docs.wcpos.com/customer-display"]')
 		).not.toBeNull();
-		expect(container.textContent).toContain('filter.screen');
-		expect(container.querySelectorAll('input[name="filter-screen"]')).toHaveLength(4);
 		expect(container.querySelector('input[name="filter-format"]')).toBeNull();
 		expect(container.querySelector('input[name="filter-direction"]')).toBeNull();
 		expect(container.querySelector('button[aria-label="common.preview"]')).toBeNull();

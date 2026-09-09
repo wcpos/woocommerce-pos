@@ -1,6 +1,6 @@
 <!--
-Lunar New Year — the Ledger with a red-and-gold idle screen. Edit the greeting in the idle section; every other state is the Ledger.
-Built on the Ledger (responsive).
+Lunar New Year — hanging lanterns over a gold cloud band.
+Built on the Ledger (responsive): every other state is the Ledger; edit the idle section to make it yours.
 -->
 <style>
 :root{--ledger-ink:#0f172a;--ledger-muted:#64748b;--ledger-line:#e2e8f0;--ledger-bg:#f8fafc;--ledger-accent:#0f766e;--ledger-ok:#15803d;--ledger-bad:#b91c1c;--ledger-new:#ecfeff}
@@ -65,24 +65,32 @@ html,body{margin:0;min-height:100%}
   .wcpos-ledger__brand{font-size:40px}
   .wcpos-ledger__welcome{font-size:20px}
 }
-.wcpos-ledger__headline{margin:0;font-size:clamp(40px,6vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
-.wcpos-ledger__subline{margin:0;font-size:clamp(18px,2.2vw,26px);font-weight:500;opacity:.85;max-width:36ch;text-wrap:balance}
-.wcpos-ledger__rule{width:120px;height:2px;background:currentColor;opacity:.5}
-/* The merchant's logo keeps the white ground it has on receipts, so a dark-ink logo stays legible on the themed background. */
-.wcpos-ledger--idle .wcpos-ledger__logo{background:#fff;padding:18px 26px;border-radius:20px;max-height:200px}
-.wcpos-ledger--idle .wcpos-ledger__brand{font-size:clamp(22px,3vw,32px);font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
-.wcpos-ledger--idle{background:#9f1239;color:#fde68a;gap:22px}
-.wcpos-ledger__ring{width:88px;height:88px;border:6px double #f5c542;border-radius:50%}
-.wcpos-ledger__rule{background:#f5c542}
+
+/* Idle screen */
+.wcpos-idle--lunar-new-year{position:relative;height:100vh;overflow:hidden;background:radial-gradient(120% 90% at 50% 110%,#7f0f22 0%,#a8122b 55%,#c1182f 100%);color:#ffe8a3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:16vh;box-sizing:border-box}
+.wcpos-idle--lunar-new-year .lan{position:absolute;top:0;width:96px;transform:scale(var(--s));transform-origin:top center}
+.wcpos-idle--lunar-new-year .lan i{display:block;width:2px;height:var(--h);background:#f2c14e;margin:0 auto}
+.wcpos-idle--lunar-new-year .lan b{display:block;width:96px;height:120px;border-radius:48px/40px;background:radial-gradient(circle at 35% 30%,#ff6b6b,#e11d2f 60%,#9f0b1e);box-shadow:0 0 60px 10px rgba(255,120,80,.35);position:relative}
+.wcpos-idle--lunar-new-year .lan b:before,.wcpos-idle--lunar-new-year .lan b:after{content:"";position:absolute;left:18px;right:18px;height:10px;background:#f2c14e;border-radius:3px}
+.wcpos-idle--lunar-new-year .lan b:before{top:-6px}
+.wcpos-idle--lunar-new-year .lan b:after{bottom:-6px}
+.wcpos-idle--lunar-new-year .lan u{display:block;width:6px;height:44px;margin:8px auto 0;background:#f2c14e;border-radius:3px}
+.wcpos-idle--lunar-new-year .brand{height:92px;width:auto;object-fit:contain;background:#fff;border-radius:16px;padding:12px 18px;box-shadow:0 12px 30px rgba(0,0,0,.25);margin-bottom:26px}
+.wcpos-idle--lunar-new-year h1{margin:0 0 10px;font-size:clamp(40px,7.5vw,104px);font-weight:900;letter-spacing:-.03em;line-height:.95;color:#ffd166;text-shadow:0 6px 0 rgba(0,0,0,.12);text-align:center;text-wrap:balance;padding:0 5vw}
+.wcpos-idle--lunar-new-year p{margin:0;font-size:clamp(17px,2.1vw,26px);color:#ffe8a3;opacity:.95;text-wrap:balance;max-width:34ch;text-align:center}
+.wcpos-idle--lunar-new-year .clouds{position:absolute;left:0;right:0;bottom:0;height:64px;background:radial-gradient(circle at 20px 64px,#f2c14e 0 22px,transparent 23px),radial-gradient(circle at 60px 64px,#f2c14e 0 30px,transparent 31px);background-size:80px 64px;opacity:.9}
+.wcpos-idle--lunar-new-year .clouds:after{content:"";position:absolute;inset:auto 0 0 0;height:14px;background:#f2c14e}
+@media (max-width:600px){.wcpos-idle--lunar-new-year{padding-bottom:22vh}
+.wcpos-idle--lunar-new-year .lan{transform:scale(calc(var(--s) * .7))}}
+.wcpos-idle--lunar-new-year .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
 </style>
 
-<section class="wcpos-ledger wcpos-ledger--idle" data-wcpos-state="idle">
-  {{#store.logo}}<img class="wcpos-ledger__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
-  {{^store.logo}}<div class="wcpos-ledger__brand">{{store.name}}</div>{{/store.logo}}
-  <div class="wcpos-ledger__ring" aria-hidden="true"></div>
-  <h1 class="wcpos-ledger__headline">Happy Lunar New Year</h1>
-  <div class="wcpos-ledger__rule"></div>
-  <p class="wcpos-ledger__subline">Wishing you good fortune and prosperity in the year ahead.</p>
+<section class="wcpos-idle wcpos-idle--lunar-new-year" data-wcpos-state="idle">
+  <div class="lan" style="left:12%;--h:60px;--s:1"><i></i><b></b><u></u></div><div class="lan" style="left:30%;--h:140px;--s:0.8"><i></i><b></b><u></u></div><div class="lan" style="left:60%;--h:40px;--s:1.1"><i></i><b></b><u></u></div><div class="lan" style="left:82%;--h:120px;--s:0.85"><i></i><b></b><u></u></div>
+  {{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}
+  <h1>Happy Lunar New Year</h1>
+  <p>Wishing you good fortune and prosperity in the year ahead.</p>
+  <div class="clouds"></div>
 </section>
 
 <section class="wcpos-ledger" data-wcpos-state="cart">

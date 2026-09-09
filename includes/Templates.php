@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 3;
+	public const DEFAULT_TERMS_VERSION = 4;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -120,13 +120,18 @@ class Templates {
 	}
 
 	/**
-	 * Move Pocket and Marquee installs that still carry the legacy `display` category to `standard`.
+	 * Move legacy display gallery categories to their screen-fit category.
 	 *
-	 * Only the `display` term is swapped; any other category the merchant assigned stays.
+	 * Only `display` and `standard` terms are swapped; merchant-assigned categories stay.
 	 *
 	 * @return bool True when every assignment succeeded (or there was nothing to migrate).
 	 */
 	private function migrate_legacy_display_gallery_categories(): bool {
+		$categories = array(
+			'display-pocket'  => 'small-screen',
+			'display-marquee' => 'large-screen',
+			'display-ledger'  => 'responsive',
+		);
 		$post_ids = get_posts(
 			array(
 				'post_type'      => 'wcpos_template',
@@ -136,7 +141,7 @@ class Templates {
 				'meta_query'     => array(
 					array(
 						'key'     => '_template_gallery_key',
-						'value'   => array( 'display-pocket', 'display-marquee' ),
+						'value'   => array_keys( $categories ),
 						'compare' => 'IN',
 					),
 				),
@@ -144,7 +149,7 @@ class Templates {
 					array(
 						'taxonomy' => 'wcpos_template_category',
 						'field'    => 'slug',
-						'terms'    => 'display',
+						'terms'    => array( 'display', 'standard' ),
 					),
 				),
 			)
@@ -152,10 +157,11 @@ class Templates {
 
 		$ok = true;
 		foreach ( $post_ids as $post_id ) {
-			// Add first, remove second: a post that fails half-way keeps `display` and is
+			// Add first, remove second: a post that fails half-way keeps its legacy term and is
 			// selected again on the retry instead of being stranded without a category.
-			$added = wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category', true );
-			if ( is_wp_error( $added ) || true !== wp_remove_object_terms( $post_id, 'display', 'wcpos_template_category' ) ) {
+			$category = $categories[ get_post_meta( $post_id, '_template_gallery_key', true ) ];
+			$added    = wp_set_object_terms( $post_id, $category, 'wcpos_template_category', true );
+			if ( is_wp_error( $added ) || true !== wp_remove_object_terms( $post_id, array( 'display', 'standard' ), 'wcpos_template_category' ) ) {
 				$ok = false;
 			}
 		}
@@ -1213,9 +1219,6 @@ class Templates {
 		$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
 			? 'rtl'
 			: 'ltr';
-		if ( 'display' === $metadata['type'] ) {
-			$metadata['screen'] = $metadata['screen'] ?? 'responsive';
-		}
 
 		return $metadata;
 	}
@@ -1479,7 +1482,9 @@ class Templates {
 			'purchase-order' => /* translators: Receipt template post type or template option label. */ __( 'Purchase Order', 'woocommerce-pos' ),
 			'kitchen-ticket' => /* translators: Receipt template post type or template option label. */ __( 'Kitchen Ticket', 'woocommerce-pos' ),
 			'bar-ticket'     => /* translators: Receipt template post type or template option label. */ __( 'Bar Ticket', 'woocommerce-pos' ),
-			'standard'       => /* translators: Display template category label. */ __( 'Standard', 'woocommerce-pos' ),
+			'responsive'     => /* translators: Display template category label. */ __( 'Responsive', 'woocommerce-pos' ),
+			'small-screen'   => /* translators: Display template category label. */ __( 'Small screen', 'woocommerce-pos' ),
+			'large-screen'   => /* translators: Display template category label. */ __( 'Large screen', 'woocommerce-pos' ),
 			'seasonal'       => /* translators: Display template category label. */ __( 'Seasonal', 'woocommerce-pos' ),
 			'promotion'      => /* translators: Display template category label. */ __( 'Promotion', 'woocommerce-pos' ),
 		);

@@ -61,45 +61,40 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Display entries declare screen and category facets without changing receipts.
+	 * Display entries declare screen-fit or themed categories.
 	 */
-	public function test_registry_display_entries_have_expected_facets(): void {
+	public function test_registry_display_entries_have_expected_categories(): void {
 		$expected = array(
-			'display-diwali'            => array( 'responsive', 'seasonal' ),
-			'display-eid'               => array( 'responsive', 'seasonal' ),
-			'display-ledger'            => array( 'responsive', 'standard' ),
-			'display-lunar-new-year'    => array( 'responsive', 'seasonal' ),
-			'display-marquee'           => array( 'large-screen', 'standard' ),
-			'display-pocket'            => array( 'phone', 'standard' ),
-			'display-sale'              => array( 'responsive', 'promotion' ),
-			'display-seasons-greetings' => array( 'responsive', 'seasonal' ),
+			'display-diwali'            => 'seasonal',
+			'display-eid'               => 'seasonal',
+			'display-ledger'            => 'responsive',
+			'display-lunar-new-year'    => 'seasonal',
+			'display-marquee'           => 'large-screen',
+			'display-pocket'            => 'small-screen',
+			'display-sale'              => 'promotion',
+			'display-seasons-greetings' => 'seasonal',
 		);
 		$entries = Gallery_Registry::all();
 
-		foreach ( $expected as $key => $facets ) {
+		foreach ( $expected as $key => $category ) {
 			$this->assertArrayHasKey( $key, $entries );
 			$this->assertSame( 'display', $entries[ $key ]['type'] );
-			$this->assertSame( $facets, array( $entries[ $key ]['screen'], $entries[ $key ]['category'] ) );
+			$this->assertSame( $category, $entries[ $key ]['category'] );
 			$this->assertSame( 'logicless', $entries[ $key ]['engine'] );
 			$this->assertSame( 'html', $entries[ $key ]['output_type'] );
 			$this->assertSame( 1, $entries[ $key ]['version'] );
 			$this->assertNull( $entries[ $key ]['paper_width'] );
 			$this->assertNull( $entries[ $key ]['preview_data'] );
-			if ( 'standard' === $facets[1] ) {
+			if ( in_array( $category, array( 'responsive', 'small-screen', 'large-screen' ), true ) ) {
 				$this->assertArrayNotHasKey( 'preview_state', $entries[ $key ] );
 			} else {
 				$this->assertSame( 'idle', $entries[ $key ]['preview_state'] );
 			}
 		}
-		foreach ( $entries as $entry ) {
-			if ( 'receipt' === $entry['type'] ) {
-				$this->assertArrayNotHasKey( 'screen', $entry );
-			}
-		}
 	}
 
 	/**
-	 * Display gallery payloads put standard designs before themed designs.
+	 * Display gallery payloads put screen-fit designs before themed designs.
 	 */
 	public function test_display_gallery_templates_have_expected_order(): void {
 		$this->assertSame(

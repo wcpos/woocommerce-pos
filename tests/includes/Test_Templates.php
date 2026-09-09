@@ -1136,7 +1136,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$bar_ticket = term_exists( 'bar-ticket', 'wcpos_template_category' );
 		$this->assertNotNull( $bar_ticket );
 
-		foreach ( array( 'standard' => 'Standard', 'seasonal' => 'Seasonal', 'promotion' => 'Promotion' ) as $slug => $label ) {
+		foreach ( array( 'responsive' => 'Responsive', 'small-screen' => 'Small screen', 'large-screen' => 'Large screen', 'seasonal' => 'Seasonal', 'promotion' => 'Promotion' ) as $slug => $label ) {
 			$term = get_term_by( 'slug', $slug, 'wcpos_template_category' );
 			$this->assertInstanceOf( \WP_Term::class, $term );
 			$this->assertSame( $label, $term->name );
@@ -1453,17 +1453,6 @@ class Test_Templates extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( 'ltr', $ltr['direction'] );
 		$this->assertSame( 'rtl', $rtl['direction'] );
-	}
-
-	/**
-	 * Display metadata without a screen defaults to responsive.
-	 */
-	public function test_gallery_metadata_missing_screen_defaults_to_responsive(): void {
-		$method = new \ReflectionMethod( Templates::class, 'prepare_gallery_metadata' );
-		$method->setAccessible( true );
-		$metadata = $method->invoke( null, 'display-custom', array( 'type' => 'display' ) );
-
-		$this->assertSame( 'responsive', $metadata['screen'] );
 	}
 
 	/**
