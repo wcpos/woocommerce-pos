@@ -24,6 +24,8 @@ interface PreviewModalProps {
 	isGallery: boolean;
 	onClose: () => void;
 	onActivate?: () => void;
+	/** Label for the primary action on an installed template; defaults to Activate. */
+	activateLabel?: string;
 	onCustomize?: () => void;
 }
 
@@ -164,6 +166,7 @@ function PreviewModalContent({
 	isGallery,
 	onClose,
 	onActivate,
+	activateLabel,
 	onCustomize,
 	preview,
 	isFetching,
@@ -432,7 +435,7 @@ function PreviewModalContent({
 									onClose();
 								}}
 							>
-								{t('common.activate')}
+								{activateLabel ?? t('common.activate')}
 							</Button>
 						)}
 						{preview?.preview_url && (

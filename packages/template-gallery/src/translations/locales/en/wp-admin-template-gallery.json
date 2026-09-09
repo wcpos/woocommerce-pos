@@ -64,6 +64,7 @@
 	"filter.rtl": "Right-to-left",
 	"filter.clear_all": "Clear all filters",
 	"modal.display_state": "Display state",
+	"modal.set_live": "Show on customer display",
 	"modal.state_idle": "Idle",
 	"modal.state_cart_empty": "Empty cart",
 	"modal.state_cart": "Cart",
