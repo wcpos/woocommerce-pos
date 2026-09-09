@@ -33,6 +33,14 @@ const rtlTemplate: GalleryTemplate = {
 	direction: 'rtl',
 };
 
+// An installed template is a post, not a gallery entry: it must carry no `key`.
+const { key: _installedKey, ...installedDisplay } = {
+	...ltrTemplate,
+	id: 'installed-display',
+	type: 'display',
+	is_disabled: false,
+};
+
 const { direction: _direction, ...legacyTemplate } = {
 	...ltrTemplate,
 	key: 'legacy-receipt',
@@ -52,23 +60,23 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 							key: 'phone',
 							title: 'Phone Display',
 							type: 'display',
-							screen: 'phone',
+							category: 'small-screen',
 						},
 						{
 							...ltrTemplate,
 							key: 'responsive',
 							title: 'Responsive Display',
 							type: 'display',
-							screen: 'responsive',
+							category: 'responsive',
 						},
 						{
 							...ltrTemplate,
 							key: 'large',
 							title: 'Large Display',
 							type: 'display',
-							screen: 'large-screen',
+							category: 'large-screen',
 						},
-						{ ...legacyTemplate, type: 'display', screen: 'responsive' },
+						{ ...legacyTemplate, type: 'display', category: 'responsive' },
 					]
 				: [ltrTemplate, rtlTemplate, legacyTemplate],
 	}),
@@ -80,7 +88,9 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 }));
 
 vi.mock('../hooks/use-templates', () => ({
-	useTemplates: () => ({ data: [] }),
+	useTemplates: () => ({
+		data: useSearch({ from: '/' }).type === 'display' ? [installedDisplay] : [],
+	}),
 	useSetActiveTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useToggleTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useToggleVirtualTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
@@ -88,13 +98,7 @@ vi.mock('../hooks/use-templates', () => ({
 	useDeleteTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 }));
 
-vi.mock('../components/active-templates-table', () => ({
-	TemplatesTable: () => <div data-testid="templates-table" />,
-}));
-
-vi.mock('../components/preview-modal', () => ({
-	PreviewModal: () => null,
-}));
+vi.mock('../hooks/use-preview', () => ({ usePreview: vi.fn(() => ({})) }));
 
 vi.mock('../translations', () => ({
 	t: (key: string) => key,
@@ -103,6 +107,13 @@ vi.mock('../translations', () => ({
 const mountedRoots: Root[] = [];
 
 beforeEach(() => {
+	vi.stubGlobal(
+		'ResizeObserver',
+		class {
+			observe() {}
+			disconnect() {}
+		}
+	);
 	vi.mocked(useSearch).mockReturnValue({ type: 'receipt' });
 	(
 		window as Window & {
@@ -123,6 +134,7 @@ afterEach(() => {
 	}
 	mountedRoots.length = 0;
 	document.body.innerHTML = '';
+	vi.unstubAllGlobals();
 	delete (window as Window & { wcpos?: unknown }).wcpos;
 });
 
@@ -152,7 +164,6 @@ describe('GalleryGrid direction filter', () => {
 		const container = mountGrid();
 		const text = () => container.textContent ?? '';
 
-		expect(container.querySelector('input[name="filter-screen"]')).toBeNull();
 		expect(text()).toContain('Standard Receipt');
 		expect(text()).toContain('Standard Receipt (RTL)');
 		expect(text()).toContain('Legacy Receipt');
@@ -177,24 +188,31 @@ describe('GalleryGrid direction filter', () => {
 });
 
 describe('GalleryGrid display templates', () => {
-	it('filters defaulted responsive templates out of phone results and supports clearing', () => {
+	it('filters by screen-fit category in gallery order and supports clearing', () => {
 		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		const container = mountGrid();
 		expect(container.textContent).toContain('Responsive Display');
 		expect(container.textContent).toContain('Large Display');
-		const phone = container.querySelector<HTMLInputElement>(
-			'input[name="filter-screen"][value="phone"]'
+		const categories = Array.from(
+			container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
 		);
+		expect(categories.map((input) => input.parentElement?.textContent)).toEqual([
+			'category.small-screen',
+			'category.responsive',
+			'category.large-screen',
+		]);
+		const phone = categories[0];
 		expect(phone).not.toBeNull();
 		act(() => phone!.click());
 		expect(container.textContent).toContain('Phone Display');
 		expect(container.textContent).not.toContain('Legacy Receipt');
 		expect(container.textContent).not.toContain('Responsive Display');
 		expect(container.textContent).not.toContain('Large Display');
-		const responsive = container.querySelector<HTMLInputElement>(
-			'input[name="filter-screen"][value="responsive"]'
-		);
-		act(() => responsive!.click());
+		const responsive = categories[1];
+		act(() => {
+			phone!.click();
+			responsive!.click();
+		});
 		expect(container.textContent).toContain('Legacy Receipt');
 		expect(container.textContent).toContain('Responsive Display');
 		expect(container.textContent).not.toContain('Phone Display');
@@ -207,7 +225,7 @@ describe('GalleryGrid display templates', () => {
 		expect(container.textContent).toContain('Large Display');
 	});
 
-	it('shows the Pro requirement, display creation link and no output filters or previews', () => {
+	it('shows the Pro requirement, display creation link and previews without output filters', () => {
 		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		Object.assign((window as any).wcpos.templateGallery, { isProActive: false });
 		const container = mountGrid();
@@ -219,12 +237,29 @@ describe('GalleryGrid display templates', () => {
 		expect(
 			container.querySelector('a[href="https://docs.wcpos.com/customer-display"]')
 		).not.toBeNull();
-		expect(container.textContent).toContain('filter.screen');
-		expect(container.querySelectorAll('input[name="filter-screen"]')).toHaveLength(4);
 		expect(container.querySelector('input[name="filter-format"]')).toBeNull();
 		expect(container.querySelector('input[name="filter-direction"]')).toBeNull();
-		expect(container.querySelector('button[aria-label="common.preview"]')).toBeNull();
+		expect(container.querySelector('button[aria-label="common.preview"]')).not.toBeNull();
 		expect(container.textContent).toContain('common.use_template');
+	});
+
+	it.each(['thumbnail', 'card', 'table'])('opens display modal from the %s', (source) => {
+		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
+		Object.assign((window as any).wcpos.templateGallery, {
+			isProActive: true,
+			displayPreviewUrl: 'https://example.test/wcpos-display/',
+		});
+		const container = mountGrid();
+		const selector = source === 'table' ? 'tbody button' : 'section:nth-child(2) button';
+		const previews = Array.from(container.querySelectorAll<HTMLButtonElement>(selector)).filter(
+			(button) =>
+				button.textContent === 'common.preview' ||
+				button.getAttribute('aria-label') === 'common.preview'
+		);
+		act(() => previews[source === 'card' ? 1 : 0]!.click());
+		expect(container.querySelector('[role="dialog"] iframe')?.getAttribute('src')).toBe(
+			`https://example.test/wcpos-display/?preview=cart&${source === 'table' ? 'template=installed-display' : 'gallery=phone'}`
+		);
 	});
 
 	it('does not apply a receipt direction filter after switching to display', () => {

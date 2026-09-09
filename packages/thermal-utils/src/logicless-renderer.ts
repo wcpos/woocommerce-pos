@@ -65,9 +65,13 @@ function processBarcodeMarkers(html: string): string {
 	return doc.body.innerHTML;
 }
 
-export function renderLogiclessPreview(template: string, data: Record<string, unknown>): string {
+export function renderLogiclessPreview(
+	template: string,
+	data: Record<string, unknown>,
+	partials?: Record<string, string>
+): string {
 	try {
-		const rendered = Mustache.render(stripHtmlComments(template), sanitizeReceiptDataForRendering(data));
+		const rendered = Mustache.render(stripHtmlComments(template), sanitizeReceiptDataForRendering(data), partials);
 		return processBarcodeMarkers(rendered);
 	} catch (error) {
 		console.warn('Mustache rendering error:', error);

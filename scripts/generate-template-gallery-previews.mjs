@@ -84,18 +84,36 @@ function replaceAssetUrls(value) {
 	if (value && typeof value === 'object') {
 		return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, replaceAssetUrls(v)]));
 	}
-	if (typeof value === 'string' && value.includes('/assets/img/template-gallery/preview-assets/')) {
-		const assetPath = value.slice(value.indexOf('/assets/img/template-gallery/preview-assets/') + 1);
+	if (typeof value === 'string' && value.includes('/assets/img/template-gallery/')) {
+		const assetPath = value.slice(value.indexOf('/assets/img/template-gallery/') + 1);
 		return '/@fs/${repoRootForBrowser}/' + assetPath;
 	}
 	return value;
 }
 
+// Display templates may define reusable blocks as <template data-wcpos-partial="name">
+// and use them as {{> name}}; the Pro display engine lifts them out the same way.
+function extractPartials(template) {
+	const parsed = document.createElement('template');
+	parsed.innerHTML = template;
+	// Serialising text escapes ">" and "&", which would hide {{> name}} and {{& name}} from Mustache.
+	const restoreTags = (html) => html.replace(/\{\{&gt;/g, '{{>').replace(/\{\{&amp;/g, '{{&');
+	const partials = {};
+	Array.from(parsed.content.children).forEach((element) => {
+		if (element.tagName === 'TEMPLATE' && element.dataset.wcposPartial) {
+			partials[element.dataset.wcposPartial] = restoreTags(element.innerHTML);
+			element.remove();
+		}
+	});
+	return { source: restoreTags(parsed.innerHTML), partials };
+}
+
 const receiptData = replaceAssetUrls(payload.receipt_data);
 const isDisplay = payload.type === 'display';
+const display = isDisplay ? extractPartials(payload.template_content) : null;
 const bodyHtml = !isDisplay && payload.engine === 'thermal'
 	? renderThermalPreview(payload.template_content, receiptData)
-	: renderLogiclessPreview(payload.template_content, { t: true, ...receiptData });
+	: renderLogiclessPreview(display?.source ?? payload.template_content, { t: true, ...receiptData }, display?.partials);
 
 const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
@@ -156,6 +174,9 @@ if (!baseUrl) throw new Error('Unable to start Vite preview server');
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1800, height: 2400 }, deviceScaleFactor: screenshotScale });
+// Templates animate state changes and idle ornaments behind prefers-reduced-motion; a capture
+// wants the settled design, not a frame of the entrance.
+await page.emulateMedia({ reducedMotion: 'reduce' });
 
 try {
 	for (const payload of payloads) {
@@ -172,7 +193,15 @@ try {
 		const webpPath = path.join(outputDir, `${payload.key}.webp`);
 		await capture.screenshot({ path: pngPath });
 		if (payload.type === 'display') await page.setViewportSize(viewport);
-		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
+		// Receipts are text on paper and stay lossless so the type is crisp. Display captures are
+		// full-bleed art shown at card size, where lossless costs half a megabyte each (a photograph
+		// nearly two) and lossy at this quality is indistinguishable.
+		execFileSync(
+			'cwebp',
+			payload.type === 'display'
+				? ['-quiet', '-q', '90', '-m', '6', pngPath, '-o', webpPath]
+				: ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]
+		);
 		console.log(`generated ${payload.key}.webp`);
 	}
 } finally {

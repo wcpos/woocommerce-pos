@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { useSearch } from '@tanstack/react-router';
 
-import { TemplatesTable } from '../components/active-templates-table';
+import { TemplatesTable, isTemplateEnabled } from '../components/active-templates-table';
 import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
 import { GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
@@ -28,7 +28,6 @@ function matchesFilters(
 		engine?: string;
 		output_type?: string;
 		direction?: 'ltr' | 'rtl';
-		screen?: GalleryTemplate['screen'];
 	},
 	filters: FilterState
 ): boolean {
@@ -50,10 +49,6 @@ function matchesFilters(
 	}
 
 	if (filters.direction !== 'all' && (template.direction ?? 'ltr') !== filters.direction) {
-		return false;
-	}
-
-	if (filters.screen !== 'all' && template.screen !== filters.screen) {
 		return false;
 	}
 
@@ -187,7 +182,6 @@ export function GalleryGrid() {
 						<FilterSidebar
 							filters={filters}
 							showOutputFilters={type !== 'display'}
-							showScreenFilter={type === 'display'}
 							onChange={setFilters}
 							availableCategories={Array.from(
 								new Set(galleryTemplates.map((tmpl) => tmpl.category).filter((c) => c.length > 0))
@@ -204,7 +198,6 @@ export function GalleryGrid() {
 											key={tmpl.key}
 											template={tmpl}
 											isGallery
-											hidePreview={type === 'display'}
 											onPreview={() => setPreviewId(tmpl.key)}
 											onCustomize={() => installGallery.mutate(tmpl.key)}
 										/>
@@ -224,13 +217,18 @@ export function GalleryGrid() {
 			{previewTemplate && (
 				<PreviewModal
 					templateId={previewTemplateId ?? ''}
+					templateType={previewTemplate.type === 'display' ? 'display' : 'receipt'}
 					templateName={previewTemplate.title}
 					templateDescription={previewTemplate.description}
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
+					activateLabel={previewTemplate.type === 'display' ? t('modal.set_live') : undefined}
+					canActivate={previewTemplate.type !== 'display' || (!previewIsGallery && isTemplateEnabled(previewTemplate as AnyTemplate))}
 					onActivate={() => {
 						if (previewId == null) return;
-						handleToggle(previewId);
+						// A display has one Live template; receipts toggle enabled/disabled.
+						if (previewTemplate.type === 'display') setActiveTemplate.mutate(previewId);
+						else handleToggle(previewId);
 					}}
 					onCustomize={() => {
 						if (!previewIsGallery) return;

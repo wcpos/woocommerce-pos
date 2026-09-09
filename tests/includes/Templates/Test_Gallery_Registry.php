@@ -24,6 +24,19 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 	private const EXPECTED_KEYS = array(
 		'detailed-receipt',
 		'display-ledger',
+		'display-carousel',
+		'display-specials',
+		'display-follow',
+		'display-valentines',
+		'display-mothers-day',
+		'display-fathers-day',
+		'display-easter',
+		'display-halloween',
+		'display-thanksgiving',
+		'display-hanukkah',
+		'display-new-year',
+		'display-nowruz',
+		'display-black-friday',
 		'display-seasons-greetings',
 		'display-lunar-new-year',
 		'display-eid',
@@ -61,45 +74,53 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Display entries declare screen and category facets without changing receipts.
+	 * Display entries declare screen-fit or themed categories.
 	 */
-	public function test_registry_display_entries_have_expected_facets(): void {
+	public function test_registry_display_entries_have_expected_categories(): void {
 		$expected = array(
-			'display-diwali'            => array( 'responsive', 'seasonal' ),
-			'display-eid'               => array( 'responsive', 'seasonal' ),
-			'display-ledger'            => array( 'responsive', 'standard' ),
-			'display-lunar-new-year'    => array( 'responsive', 'seasonal' ),
-			'display-marquee'           => array( 'large-screen', 'standard' ),
-			'display-pocket'            => array( 'phone', 'standard' ),
-			'display-sale'              => array( 'responsive', 'promotion' ),
-			'display-seasons-greetings' => array( 'responsive', 'seasonal' ),
+			'display-carousel'          => 'general',
+			'display-specials'          => 'general',
+			'display-follow'            => 'general',
+			'display-valentines'        => 'seasonal',
+			'display-mothers-day'       => 'seasonal',
+			'display-fathers-day'       => 'seasonal',
+			'display-easter'            => 'seasonal',
+			'display-halloween'         => 'seasonal',
+			'display-thanksgiving'      => 'seasonal',
+			'display-hanukkah'          => 'seasonal',
+			'display-new-year'          => 'seasonal',
+			'display-nowruz'            => 'seasonal',
+			'display-black-friday'      => 'promotion',
+			'display-diwali'            => 'seasonal',
+			'display-eid'               => 'seasonal',
+			'display-ledger'            => 'responsive',
+			'display-lunar-new-year'    => 'seasonal',
+			'display-marquee'           => 'large-screen',
+			'display-pocket'            => 'small-screen',
+			'display-sale'              => 'promotion',
+			'display-seasons-greetings' => 'seasonal',
 		);
 		$entries = Gallery_Registry::all();
 
-		foreach ( $expected as $key => $facets ) {
+		foreach ( $expected as $key => $category ) {
 			$this->assertArrayHasKey( $key, $entries );
 			$this->assertSame( 'display', $entries[ $key ]['type'] );
-			$this->assertSame( $facets, array( $entries[ $key ]['screen'], $entries[ $key ]['category'] ) );
+			$this->assertSame( $category, $entries[ $key ]['category'] );
 			$this->assertSame( 'logicless', $entries[ $key ]['engine'] );
 			$this->assertSame( 'html', $entries[ $key ]['output_type'] );
 			$this->assertSame( 1, $entries[ $key ]['version'] );
 			$this->assertNull( $entries[ $key ]['paper_width'] );
 			$this->assertNull( $entries[ $key ]['preview_data'] );
-			if ( 'standard' === $facets[1] ) {
+			if ( in_array( $category, array( 'responsive', 'small-screen', 'large-screen' ), true ) ) {
 				$this->assertArrayNotHasKey( 'preview_state', $entries[ $key ] );
 			} else {
 				$this->assertSame( 'idle', $entries[ $key ]['preview_state'] );
 			}
 		}
-		foreach ( $entries as $entry ) {
-			if ( 'receipt' === $entry['type'] ) {
-				$this->assertArrayNotHasKey( 'screen', $entry );
-			}
-		}
 	}
 
 	/**
-	 * Display gallery payloads put standard designs before themed designs.
+	 * Display gallery payloads put screen-fit designs before themed designs.
 	 */
 	public function test_display_gallery_templates_have_expected_order(): void {
 		$this->assertSame(
@@ -107,11 +128,24 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 				'display-ledger',
 				'display-pocket',
 				'display-marquee',
+				'display-carousel',
+				'display-specials',
+				'display-follow',
 				'display-seasons-greetings',
 				'display-lunar-new-year',
 				'display-eid',
 				'display-diwali',
+				'display-valentines',
+				'display-mothers-day',
+				'display-fathers-day',
+				'display-easter',
+				'display-halloween',
+				'display-thanksgiving',
+				'display-hanukkah',
+				'display-new-year',
+				'display-nowruz',
 				'display-sale',
+				'display-black-friday',
 			),
 			array_column( Templates::get_gallery_templates( 'display' ), 'key' )
 		);

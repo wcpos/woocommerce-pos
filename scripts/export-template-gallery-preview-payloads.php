@@ -53,6 +53,10 @@ foreach ( $templates as $template ) {
 			'state'   => 'started',
 			'message' => '',
 		);
+		// Same folder the display host page hands templates as {{assets.url}}.
+		$receipt_data['assets']  = array(
+			'url' => \WCPOS\WooCommercePOS\PLUGIN_URL . 'assets/img/template-gallery/',
+		);
 	}
 
 	$payload = array(

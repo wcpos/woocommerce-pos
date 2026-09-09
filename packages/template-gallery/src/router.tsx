@@ -1,9 +1,5 @@
-import {
-	createRouter,
-	createRootRoute,
-	createRoute,
-	createHashHistory,
-} from '@tanstack/react-router';
+import { createBrowserHistory, parseHref } from '@tanstack/history';
+import { createRouter, createRootRoute, createRoute } from '@tanstack/react-router';
 import apiFetch from '@wordpress/api-fetch';
 
 import { GalleryLayout } from './layouts/gallery-layout';
@@ -42,7 +38,12 @@ const routeTree = rootRoute.addChildren([indexRoute]);
 export const router = createRouter({
 	routeTree,
 	basepath: '/',
-	history: createHashHistory(),
+	// WordPress owns the outer query string; hash history must not append it to the route.
+	history: createBrowserHistory({
+		window,
+		parseLocation: () => parseHref(window.location.hash.slice(1) || '/', window.history.state),
+		createHref: (href) => `${window.location.pathname}${window.location.search}#${href}`,
+	}),
 });
 
 declare module '@tanstack/react-router' {

@@ -68,13 +68,21 @@ describe('FilterSidebar direction filter', () => {
 			<FilterSidebar
 				filters={{ ...DEFAULT_FILTERS }}
 				onChange={() => {}}
-				availableCategories={['standard', 'seasonal', 'promotion']}
+				availableCategories={[
+					'responsive',
+					'small-screen',
+					'large-screen',
+					'seasonal',
+					'promotion',
+				]}
 				collapsed={false}
 				onToggleCollapse={() => {}}
 			/>
 		);
 
-		expect(markup).toContain('category.standard');
+		expect(markup).toContain('category.responsive');
+		expect(markup).toContain('category.small-screen');
+		expect(markup).toContain('category.large-screen');
 		expect(markup).toContain('category.seasonal');
 		expect(markup).toContain('category.promotion');
 	});

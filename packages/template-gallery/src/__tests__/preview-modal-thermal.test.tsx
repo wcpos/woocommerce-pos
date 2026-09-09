@@ -59,7 +59,7 @@ describe('PreviewModal thermal previews', () => {
 			isLoading: false,
 			isFetching: false,
 			isError: false,
-		} as ReturnType<typeof usePreview>);
+		} as unknown as ReturnType<typeof usePreview>);
 
 		const container = document.createElement('div');
 		const root = createRoot(container);
@@ -69,6 +69,7 @@ describe('PreviewModal thermal previews', () => {
 		await act(async () => {
 			root.render(
 				<PreviewModal
+					templateType="receipt"
 					templateId="thermal-simple-58mm"
 					templateName="Thermal"
 					isGallery

@@ -120,27 +120,22 @@ describe('display tabs and table', () => {
 		expect(markup).toContain('category.seasonal');
 	});
 
-	it.each([true, false])(
-		'only links to display previews when Pro is active (%s)',
-		(isProActive) => {
-			(window as any).wcpos = {
-				templateGallery: {
-					isProActive,
-					displayPreviewUrl: 'https://example.test/wcpos-display/',
-				},
-			};
-			const container = document.createElement('div');
-			container.innerHTML = renderToStaticMarkup(<TemplatesTable {...props} />);
-			const preview = container.querySelector('a[target="_blank"]');
-			if (isProActive) {
-				expect(preview?.getAttribute('href')).toBe(
-					'https://example.test/wcpos-display/?preview=cart&template=123'
-				);
-				expect(preview?.getAttribute('rel')).toBe('noopener noreferrer');
-			} else {
-				expect(preview).toBeNull();
-				expect(container.textContent).not.toContain('common.preview');
+	it.each([true, false])('opens display previews with Pro active %s', (isProActive) => {
+		(window as any).wcpos = { templateGallery: { isProActive } };
+		vi.stubGlobal(
+			'ResizeObserver',
+			class {
+				observe() {}
+				disconnect() {}
 			}
-		}
-	);
+		);
+		const container = mount(<TemplatesTable {...props} />);
+		const preview = Array.from(container.querySelectorAll('button')).find(
+			(button) => button.textContent === 'common.preview'
+		);
+		expect(preview).toBeDefined();
+		act(() => preview!.click());
+		expect(props.onPreview).toHaveBeenCalledWith(123);
+		expect(container.querySelector('a[target="_blank"]')).toBeNull();
+	});
 });
