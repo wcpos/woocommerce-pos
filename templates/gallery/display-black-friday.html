@@ -92,8 +92,8 @@ html,body{margin:0;min-height:100%}
 .wcpos-idle--black-friday .tick.t{top:0}
 .wcpos-idle--black-friday .tick.b{bottom:0}
 .wcpos-idle--black-friday .tick span{padding:0 28px}
-@media (prefers-reduced-motion:no-preference){.wcpos-idle--black-friday .tick{animation:none}
-.wcpos-idle--black-friday .tick span{display:inline-block}
+.wcpos-idle--black-friday .track{display:flex;flex:none}
+@media (prefers-reduced-motion:no-preference){.wcpos-idle--black-friday .track{animation:bf-tick 24s linear infinite}
 .wcpos-idle--black-friday .k{animation:bf-pulse 2s ease-in-out infinite}}
 .wcpos-idle--black-friday img.brand{max-width:min(70vw,360px);object-fit:contain}
 .wcpos-idle--black-friday .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
@@ -106,9 +106,9 @@ html,body{margin:0;min-height:100%}
 @media (max-width:820px){.wcpos-ledger__note{margin:0 0 6px;font-size:13px;padding:6px 10px}}
 </style>
 
-<section class="wcpos-idle wcpos-idle--black-friday" data-wcpos-state="idle"><div class="tick t"><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span></div>
+<section class="wcpos-idle wcpos-idle--black-friday" data-wcpos-state="idle"><div class="tick t"><div class="track"><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span></div></div>
 {{#store.logo}}<img class="brand" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}{{^store.logo}}<div class="brand brand--name">{{store.name}}</div>{{/store.logo}}<div class="k">One day only</div><h1>Black <b>Friday</b></h1><p>Ask us in store for today's offers.</p>
-<div class="tick b"><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span></div></section>
+<div class="tick b"><div class="track"><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span><span>Deals all day</span></div></div></section>
 
 <section class="wcpos-ledger" data-wcpos-state="cart">
   <div class="wcpos-ledger__list">
