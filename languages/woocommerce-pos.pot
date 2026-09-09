@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.10.7\n"
+"Project-Id-Version: WCPOS 1.10.9\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-05T13:41:30+00:00\n"
+"POT-Creation-Date: 2026-09-09T13:02:27+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -362,7 +362,6 @@ msgid "Authentication required."
 msgstr ""
 
 #: includes/API.php:558
-#: includes/Templates/Auth.php:322
 msgid "You do not have permission to access the POS."
 msgstr ""
 
@@ -1221,6 +1220,23 @@ msgstr ""
 #: includes/Services/Auth.php:342
 #: includes/Services/Auth.php:421
 msgid "JWT is not configured properly, please contact the admin"
+msgstr ""
+
+#. translators: %s: Comma-separated missing capability names.
+#: includes/Services/Cashier.php:247
+#, php-format
+msgid "This account cannot use the POS. Missing capabilities: %s."
+msgstr ""
+
+#. translators: %s: Comma-separated role names.
+#: includes/Services/Cashier.php:258
+#, php-format
+msgid "It has the roles %s. A capability denied on one role can override a grant from another, and role-editor plugins such as Members apply that deny first. Remove the extra role or clear the deny in the role editor."
+msgstr ""
+
+#. translators: Guidance for granting missing POS capabilities.
+#: includes/Services/Cashier.php:262
+msgid "Grant them under WCPOS Settings, Access, or assign a role that has them."
 msgstr ""
 
 #: includes/Services/Cloud_Print_Relay_Service.php:84
@@ -3222,7 +3238,7 @@ msgstr ""
 msgid "Can not save settings with id %s"
 msgstr ""
 
-#: includes/Services/Settings/Access_Section.php:183
+#: includes/Services/Settings/Access_Section.php:225
 msgid "You do not have permission to update access settings."
 msgstr ""
 
@@ -3661,56 +3677,51 @@ msgstr ""
 msgid "Bar Ticket"
 msgstr ""
 
-#: includes/Templates/Auth.php:112
+#: includes/Templates/Auth.php:113
 msgid "Missing or invalid redirect_uri parameter."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:118
+#: includes/Templates/Auth.php:119
 msgid "Missing state parameter."
 msgstr ""
 
-#: includes/Templates/Auth.php:130
+#: includes/Templates/Auth.php:131
 msgid "Too many requests. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:255
+#: includes/Templates/Auth.php:256
 msgid "Auth session expired. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:261
+#: includes/Templates/Auth.php:262
 msgid "Invalid auth session. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:281
+#: includes/Templates/Auth.php:282
 msgid "Security check failed. Please try again."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:291
+#: includes/Templates/Auth.php:292
 msgid "Authentication failed."
 msgstr ""
 
-#: includes/Templates/Auth.php:301
+#: includes/Templates/Auth.php:302
 msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:342
+#: includes/Templates/Auth.php:343
 msgid "Failed to generate authentication tokens."
 msgstr ""
 
-#: includes/Templates/Auth.php:392
+#: includes/Templates/Auth.php:393
 msgid "Please enter both username and password."
 msgstr ""
 
-#: includes/Templates/Auth.php:406
-#: includes/Templates/Auth.php:415
+#: includes/Templates/Auth.php:407
+#: includes/Templates/Auth.php:416
 msgid "Invalid username or password."
-msgstr ""
-
-#. translators: Authorization error shown when a logged-in user lacks permission to open the POS page.
-#: includes/Templates/Frontend.php:59
-msgid "You do not have sufficient permissions to access this page."
 msgstr ""
 
 #. translators: Gallery template name shown in the admin Template Gallery.
