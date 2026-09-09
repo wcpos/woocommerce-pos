@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-export type PreviewPaperWidth = 'a4' | '58mm' | '80mm';
+export type PreviewPaperWidth = 'a4' | '58mm' | '80mm' | 'screen' | 'phone';
 
 export const PREVIEW_ZOOM_STEPS = [
 	10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200,
@@ -23,6 +23,8 @@ interface ContentSize {
  */
 export const PAPER_DIMENSIONS: Record<PreviewPaperWidth, ContentSize> = {
 	a4: { width: 794, height: 1123 },
+	screen: { width: 1280, height: 800 },
+	phone: { width: 390, height: 844 },
 	'58mm': { width: 219, height: 520 },
 	'80mm': { width: 302, height: 520 },
 };

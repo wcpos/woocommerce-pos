@@ -65,8 +65,22 @@ html,body{margin:0;min-height:100%}
   .wcpos-ledger__brand{font-size:40px}
   .wcpos-ledger__welcome{font-size:20px}
 }
+/* Motion: one short entrance per state change, a pop on approval, a shake on decline.
+   Off entirely when the device asks for reduced motion. */
+@keyframes wcpos-ledger-rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes wcpos-ledger-pop{0%{transform:scale(.92);opacity:0}60%{transform:scale(1.03);opacity:1}100%{transform:scale(1)}}
+@keyframes wcpos-ledger-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@keyframes wcpos-ledger-new{from{background:var(--ledger-new)}to{background:transparent}}
+@media (prefers-reduced-motion:no-preference){
+.wcpos-ledger{animation:wcpos-ledger-rise .32s ease-out}
+.wcpos-ledger__card--ok{animation:wcpos-ledger-pop .5s cubic-bezier(.2,.9,.3,1.2)}
+.wcpos-ledger__card--bad{animation:wcpos-ledger-shake .45s ease-in-out}
+.wcpos-ledger__row.wcpos-line-new{animation:wcpos-ledger-new 1.8s ease-out forwards}
+}
 
 /* Idle screen */
+@keyframes eid-twinkle{0%,100%{opacity:.55}50%{opacity:.95}}
+@keyframes eid-moon{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 .wcpos-idle--eid{position:relative;height:100vh;overflow:hidden;background:radial-gradient(circle at 80% 10%,#1f4a6e 0%,#0d2238 40%,#071628 100%);color:#f7ecd2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center}
 .wcpos-idle--eid .stars{position:absolute;inset:0;background-image:radial-gradient(circle,#f7d774 0 1.5px,transparent 2.5px),radial-gradient(circle,rgba(247,215,116,.6) 0 1px,transparent 2px);background-size:170px 130px,110px 90px;background-position:30px 20px,70px 50px;opacity:.8}
 .wcpos-idle--eid .moon{position:absolute;top:8vh;right:9vw;width:150px;height:150px;border-radius:50%;box-shadow:34px -10px 0 0 #f2c14e;filter:drop-shadow(0 0 30px rgba(242,193,78,.45))}
@@ -77,6 +91,8 @@ html,body{margin:0;min-height:100%}
 .wcpos-idle--eid .band{position:absolute;left:0;right:0;bottom:0;height:56px;background:conic-gradient(from 45deg at 50% 50%,#d8b45a 0 12.5%,transparent 0 25%,#d8b45a 0 37.5%,transparent 0 50%,#d8b45a 0 62.5%,transparent 0 75%,#d8b45a 0 87.5%,transparent 0);background-size:56px 56px;opacity:.55}
 @media (max-width:600px){.wcpos-idle--eid .moon{width:90px;height:90px;box-shadow:22px -6px 0 0 #f2c14e;top:5vh;right:6vw}
 .wcpos-idle--eid .arch{padding:34px 22px}}
+@media (prefers-reduced-motion:no-preference){.wcpos-idle--eid .stars{animation:eid-twinkle 4.5s ease-in-out infinite}
+.wcpos-idle--eid .moon{animation:eid-moon 7s ease-in-out infinite}}
 .wcpos-idle--eid .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
 </style>
 

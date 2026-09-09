@@ -198,7 +198,6 @@ export function GalleryGrid() {
 											key={tmpl.key}
 											template={tmpl}
 											isGallery
-											hidePreview={type === 'display'}
 											onPreview={() => setPreviewId(tmpl.key)}
 											onCustomize={() => installGallery.mutate(tmpl.key)}
 										/>
@@ -218,6 +217,7 @@ export function GalleryGrid() {
 			{previewTemplate && (
 				<PreviewModal
 					templateId={previewTemplateId ?? ''}
+					templateType={previewTemplate.type === 'display' ? 'display' : 'receipt'}
 					templateName={previewTemplate.title}
 					templateDescription={previewTemplate.description}
 					isGallery={previewIsGallery}

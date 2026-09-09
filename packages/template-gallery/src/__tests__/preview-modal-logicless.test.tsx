@@ -103,7 +103,7 @@ describe('PreviewModal logicless previews', () => {
 			isLoading: false,
 			isFetching: false,
 			isError: false,
-		} as ReturnType<typeof usePreview>);
+		} as unknown as ReturnType<typeof usePreview>);
 
 		const container = document.createElement('div');
 		const root = createRoot(container);
@@ -112,7 +112,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="legacy" templateName="Legacy" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="legacy"
+					templateName="Legacy"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 
@@ -141,7 +147,7 @@ describe('PreviewModal logicless previews', () => {
 			isLoading: false,
 			isFetching: false,
 			isError: false,
-		} as ReturnType<typeof usePreview>);
+		} as unknown as ReturnType<typeof usePreview>);
 
 		const container = document.createElement('div');
 		const root = createRoot(container);
@@ -150,7 +156,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="empty" templateName="Empty" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="empty"
+					templateName="Empty"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 
@@ -169,7 +181,7 @@ describe('PreviewModal logicless previews', () => {
 			isLoading: false,
 			isFetching: false,
 			isError: false,
-		} as ReturnType<typeof usePreview>);
+		} as unknown as ReturnType<typeof usePreview>);
 
 		const container = document.createElement('div');
 		const root = createRoot(container);
@@ -178,7 +190,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="legacy" templateName="Legacy" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="legacy"
+					templateName="Legacy"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 
@@ -208,7 +226,7 @@ describe('PreviewModal logicless previews', () => {
 						data: samplePreview,
 						isFetching: false,
 						isError: false,
-					} as ReturnType<typeof usePreview>);
+					} as unknown as ReturnType<typeof usePreview>);
 		});
 
 		const container = document.createElement('div');
@@ -218,7 +236,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="invoice" templateName="Invoice" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="invoice"
+					templateName="Invoice"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 		await act(async () => {
@@ -249,7 +273,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="invoice" templateName="Invoice" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="invoice"
+					templateName="Invoice"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 		await act(async () => {

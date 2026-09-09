@@ -1,5 +1,7 @@
 import * as React from 'react';
 
+import { addQueryArgs } from '@wordpress/url';
+
 import {
 	buildPreviewFrameHtml,
 	renderLogiclessPreview,
@@ -8,12 +10,14 @@ import {
 import { Button, PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
+import { getGalleryPreviewSrc } from '../preview-assets';
 import { t } from '../translations';
 import { PreviewToggle } from './preview-toggle';
 
 import type { PreviewResponse } from '../types';
 
 interface PreviewModalProps {
+	templateType: 'receipt' | 'display';
 	templateId: number | string;
 	templateName: string;
 	templateDescription?: string;
@@ -113,7 +117,47 @@ function isFullHtmlDocument(html: string): boolean {
 	return h.startsWith('<!doctype') || h.startsWith('<html');
 }
 
-export function PreviewModal({
+export function buildDisplayPreviewUrl(
+	base: string,
+	{ state, ...target }: { state: string; gallery?: string; template?: number | string }
+): string {
+	return addQueryArgs(base, { preview: state, ...target });
+}
+
+export function PreviewModal(props: PreviewModalProps) {
+	return props.templateType === 'display' ? (
+		<PreviewModalContent {...props} />
+	) : (
+		<ReceiptPreviewModal {...props} />
+	);
+}
+
+function ReceiptPreviewModal(props: PreviewModalProps) {
+	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
+	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
+	const orderId = source === 'order' ? 'latest' : undefined;
+	const { data: preview, isFetching, isError } = usePreview(props.templateId, orderId);
+
+	// Let the errored order observer mount and retry before falling back.
+	React.useEffect(() => {
+		if (!isError || isFetching || source !== 'order') return;
+
+		const fallbackTimer = window.setTimeout(() => setSource('sample'), 0);
+		return () => window.clearTimeout(fallbackTimer);
+	}, [isError, isFetching, source]);
+
+	return (
+		<PreviewModalContent
+			{...props}
+			preview={preview}
+			isFetching={isFetching}
+			controls={<PreviewToggle source={source} disabled={!hasPosOrders} onToggle={setSource} />}
+		/>
+	);
+}
+
+function PreviewModalContent({
+	templateType,
 	templateId,
 	templateName,
 	templateDescription,
@@ -121,11 +165,19 @@ export function PreviewModal({
 	onClose,
 	onActivate,
 	onCustomize,
-}: PreviewModalProps) {
-	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
-	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
-	const orderId = source === 'order' ? 'latest' : undefined;
-	const { data: preview, isFetching, isError } = usePreview(templateId, orderId);
+	preview,
+	isFetching,
+	controls,
+}: PreviewModalProps & {
+	preview?: PreviewResponse;
+	isFetching?: boolean;
+	controls?: React.ReactNode;
+}) {
+	const [state, setState] = React.useState('cart');
+	const [viewport, setViewport] = React.useState<'screen' | 'phone'>('screen');
+	const { isProActive, displayPreviewUrl } = (window as any).wcpos?.templateGallery ?? {};
+	const isDisplay = templateType === 'display';
+	const imageSrc = isDisplay && isGallery ? getGalleryPreviewSrc(String(templateId)) : undefined;
 	const dialogRef = React.useRef<HTMLDivElement>(null);
 	const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 	const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
@@ -135,14 +187,6 @@ export function PreviewModal({
 		(preview.engine === 'thermal' || preview.engine === 'logicless') &&
 		((preview.template_content != null && preview.receipt_data) || preview.preview_html)
 	);
-
-	// Let the errored order observer mount and retry before falling back.
-	React.useEffect(() => {
-		if (!isError || isFetching || source !== 'order') return;
-
-		const fallbackTimer = window.setTimeout(() => setSource('sample'), 0);
-		return () => window.clearTimeout(fallbackTimer);
-	}, [isError, isFetching, source]);
 
 	React.useEffect(() => {
 		previousFocusedElementRef.current =
@@ -224,7 +268,53 @@ export function PreviewModal({
 						)}
 					</div>
 					<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:shrink-0">
-						<PreviewToggle source={source} disabled={!hasPosOrders} onToggle={setSource} />
+						{controls}
+						{isDisplay && isProActive && (
+							<>
+								<select
+									value={state}
+									onChange={(e) => setState(e.target.value)}
+									aria-label={t('modal.display_state')}
+								>
+									{[
+										'idle',
+										'cart.empty',
+										'cart',
+										'payment.started',
+										'payment.approved',
+										'payment.declined',
+										'payment.complete',
+									].map((value) => (
+										<option key={value} value={value}>
+											{t(`modal.state_${value.replace('.', '_')}`)}
+										</option>
+									))}
+								</select>
+								<div
+									role="radiogroup"
+									aria-label={t('modal.viewport')}
+									className="wcpos:flex wcpos:bg-slate-100 wcpos:rounded wcpos:border wcpos:border-slate-200 wcpos:overflow-hidden"
+								>
+									{(['screen', 'phone'] as const).map((value) => (
+										<button
+											key={value}
+											type="button"
+											role="radio"
+											aria-checked={viewport === value}
+											onClick={() => setViewport(value)}
+											className={`wcpos:px-2.5 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:transition-colors ${viewport === value ? 'wcpos:text-white' : 'wcpos:text-slate-500 wcpos:cursor-pointer'}`}
+											style={
+												viewport === value
+													? { backgroundColor: 'var(--wp-admin-theme-color, #007cba)' }
+													: undefined
+											}
+										>
+											{t(`modal.viewport_${value}`)}
+										</button>
+									))}
+								</div>
+							</>
+						)}
 						<button
 							ref={closeButtonRef}
 							type="button"
@@ -239,7 +329,45 @@ export function PreviewModal({
 
 				{/* Preview iframe */}
 				<div className="wcpos:flex-1 wcpos:min-h-0 wcpos:flex wcpos:flex-col wcpos:p-4 wcpos:bg-gray-50">
-					{isFetching ? (
+					{isDisplay ? (
+						isProActive || imageSrc ? (
+							<PreviewViewport
+								paperWidth={isProActive ? viewport : 'screen'}
+								zoomInLabel={t('modal.zoom_in')}
+								zoomOutLabel={t('modal.zoom_out')}
+							>
+								{isProActive ? (
+									<iframe
+										key={viewport}
+										src={buildDisplayPreviewUrl(displayPreviewUrl, {
+											state,
+											...(isGallery ? { gallery: String(templateId) } : { template: templateId }),
+										})}
+										title={t('modal.preview_title', { templateName })}
+										className={PREVIEW_IFRAME_CLASS}
+									/>
+								) : (
+									<img
+										src={imageSrc}
+										alt={t('modal.preview_title', { templateName })}
+										className="wcpos:w-full wcpos:h-full wcpos:object-contain"
+									/>
+								)}
+							</PreviewViewport>
+						) : (
+							<p className="wcpos:text-gray-500 wcpos:text-center">
+								{t('modal.display_needs_pro')}{' '}
+								<a
+									href="https://docs.wcpos.com/customer-display"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"
+								>
+									{t('layout.learn_more')}
+								</a>
+							</p>
+						)
+					) : isFetching ? (
 						<div className="wcpos:flex wcpos:flex-1 wcpos:items-center wcpos:justify-center">
 							<span className="wcpos:text-gray-400">{t('modal.loading')}</span>
 						</div>

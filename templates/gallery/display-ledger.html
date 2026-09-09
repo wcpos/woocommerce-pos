@@ -68,6 +68,18 @@ html,body{margin:0;min-height:100%}
   .wcpos-ledger__brand{font-size:40px}
   .wcpos-ledger__welcome{font-size:20px}
 }
+/* Motion: one short entrance per state change, a pop on approval, a shake on decline.
+   Off entirely when the device asks for reduced motion. */
+@keyframes wcpos-ledger-rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes wcpos-ledger-pop{0%{transform:scale(.92);opacity:0}60%{transform:scale(1.03);opacity:1}100%{transform:scale(1)}}
+@keyframes wcpos-ledger-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@keyframes wcpos-ledger-new{from{background:var(--ledger-new)}to{background:transparent}}
+@media (prefers-reduced-motion:no-preference){
+.wcpos-ledger{animation:wcpos-ledger-rise .32s ease-out}
+.wcpos-ledger__card--ok{animation:wcpos-ledger-pop .5s cubic-bezier(.2,.9,.3,1.2)}
+.wcpos-ledger__card--bad{animation:wcpos-ledger-shake .45s ease-in-out}
+.wcpos-ledger__row.wcpos-line-new{animation:wcpos-ledger-new 1.8s ease-out forwards}
+}
 </style>
 
 <section class="wcpos-ledger wcpos-ledger--idle" data-wcpos-state="idle">

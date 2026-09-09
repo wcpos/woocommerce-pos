@@ -10,7 +10,6 @@ import {
 	extractClosestEdge,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/reorder-with-edge';
-import { addQueryArgs } from '@wordpress/url';
 import classnames from 'classnames';
 
 import { Toggle } from '@wcpos/ui';
@@ -96,7 +95,6 @@ function DraggableRow({
 
 	const adminUrl =
 		(window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
-	const { isProActive, displayPreviewUrl } = (window as any).wcpos?.templateGallery ?? {};
 	const isVirtual = template.is_virtual;
 	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
 	const canDelete = !isVirtual;
@@ -200,26 +198,13 @@ function DraggableRow({
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
 				<div className="wcpos:flex wcpos:gap-3 wcpos:items-center">
-					{type === 'display' ? (
-						isProActive && (
-							<a
-								href={addQueryArgs(displayPreviewUrl, { preview: 'cart', template: template.id })}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"
-							>
-								{t('common.preview')}
-							</a>
-						)
-					) : (
-						<button
-							type="button"
-							onClick={() => onPreview(template.id)}
-							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-						>
-							{t('common.preview')}
-						</button>
-					)}
+					<button
+						type="button"
+						onClick={() => onPreview(template.id)}
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+					>
+						{t('common.preview')}
+					</button>
 					{editUrl && (
 						<a
 							href={editUrl}
