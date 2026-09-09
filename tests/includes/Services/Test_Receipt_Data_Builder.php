@@ -1973,6 +1973,52 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Virtual fixed-cart discounts have a human label without a shop_coupon post.
+	 */
+	public function test_build_virtual_fixed_cart_discount_has_type_and_label(): void {
+		$order = wc_create_order();
+		$item = new \WC_Order_Item_Coupon();
+		$item->set_code( 'pos-discount' );
+		$item->add_meta_data(
+			'_wcpos_quick_discount',
+			array(
+				'discount_type' => 'fixed_cart',
+				'amount' => '10',
+			)
+		);
+		$order->add_item( $item );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertSame( 'fixed_cart', $payload['discounts'][0]['discount_type'] );
+		$this->assertSame( 'Discount', $payload['discounts'][0]['label'] );
+	}
+
+	/**
+	 * Virtual percent labels trim decimal zeroes, retaining the coupon type.
+	 */
+	public function test_build_virtual_percent_discount_has_trimmed_label(): void {
+		$order = wc_create_order();
+		$item = new \WC_Order_Item_Coupon();
+		$item->set_code( 'pos-discount' );
+		$item->add_meta_data(
+			'_wcpos_quick_discount',
+			array(
+				'discount_type' => 'percent',
+				'amount' => '10.00',
+			)
+		);
+		$order->add_item( $item );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertSame( 'percent', $payload['discounts'][0]['discount_type'] );
+		$this->assertSame( 'Discount (10%)', $payload['discounts'][0]['label'] );
+	}
+
+	/**
 	 * Test extensions can reshape the receipt payload through woocommerce_pos_receipt_data.
 	 */
 	public function test_build_applies_receipt_data_filter_with_order_and_mode(): void {

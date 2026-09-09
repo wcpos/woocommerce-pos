@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -261,6 +262,15 @@ class Order_Writer extends Null_Writer {
 				$order->set_created_via( 'woocommerce-pos' );
 			}
 		};
+		$qd = new Quick_Discount();
+		$persist_discount = static function ( $order, $request, $creating ) use ( $qd, $context, &$forwarded_order, $prepared ) {
+			// save_object() reloads the order before this action: compare IDs, not objects.
+			$id = 'create' === $context['operation'] ? ( $forwarded_order ? $forwarded_order->get_id() : 0 ) : $context['id'];
+			if ( $order instanceof \WC_Order && $id === $order->get_id()
+				&& $request->get_route() === $prepared['route'] && ( 'create' === $context['operation'] ) === $creating ) {
+				$qd->persist( $order );
+			}
+		};
 		$use_filter = 'create' === $context['operation'] || array() !== $context['fill_meta'];
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
@@ -269,8 +279,15 @@ class Order_Writer extends Null_Writer {
 			add_action( 'woocommerce_before_order_object_save', $created_via );
 		}
 		try {
+			$error = $qd->register_from_lines( is_array( $prepared['payload']['coupon_lines'] ?? null ) ? $prepared['payload']['coupon_lines'] : array() );
+			if ( is_wp_error( $error ) ) {
+				return $error;
+			}
+			add_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10, 3 );
 			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
 		} finally {
+			$qd->clear();
+			remove_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10 );
 			if ( $use_filter ) {
 				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10 );
 			}

@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_Order_Item_Product;
+use WCPOS\WooCommercePOS\Services\Quick_Discount;
 
 /**
  * Shapes a POS order document into the body forwarded to the STOCK wc/v3 orders
@@ -452,7 +453,7 @@ final class Order_Write_Payload {
 	 * `woocommerce_rest_coupon_item_id_readonly` (400) on any line carrying an `id` —
 	 * but the POS always pushes the complete order document, whose coupon_lines carry
 	 * the ids from the previous ack, so every update of a couponed order would fail.
-	 * Mirror the v1 semantics at the forward seam: when the requested coupon code-set
+	 * Mirror the v1 semantics at the forward seam: when the requested coupon code-and-intent set
 	 * equals the order's current coupons, drop coupon_lines from the forward entirely
 	 * (skip the recalculation, preserving stable coupon line ids — v1 returned false);
 	 * when the sets differ, strip the ids and let wc/v3 do its remove-and-reapply.
@@ -480,11 +481,17 @@ final class Order_Write_Payload {
 				$all_lines_valid = false;
 				break;
 			}
-			$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
+			$intent = Quick_Discount::intent_from_line( $line );
+			if ( is_wp_error( $intent ) ) {
+				// Keep invalid intent in the payload for the writer's pre-forward 400.
+				$all_lines_valid = false;
+				break;
+			}
+			$requested_codes[] = Quick_Discount::set_key( $code, $intent );
 		}
 		$existing_codes = array_map(
 			static function ( $coupon ) {
-				return wc_strtolower( $coupon->get_code() );
+				return Quick_Discount::set_key( $coupon->get_code(), Quick_Discount::intent_from_item( $coupon ) );
 			},
 			array_values( $order->get_coupons() )
 		);
