@@ -119,6 +119,18 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws \Throwable If checkout stock validation cannot be completed.
 	 */
 	protected function save_object( $request, $creating = false ) {
+		// Refuse an invalid or code-taken quick discount BEFORE the parent saves the
+		// prepared order, so a 400 never leaves a partially applied update behind.
+		$qd = new Quick_Discount();
+		try {
+			$error = $qd->register_from_lines( \is_array( $request['coupon_lines'] ?? null ) ? $request['coupon_lines'] : array() );
+			if ( is_wp_error( $error ) ) {
+				return $error;
+			}
+		} finally {
+			$qd->clear();
+		}
+
 		$validator = Stock_Validator::instance();
 		if ( ! $creating || ! \wcpos_request() || ! SettingsService::instance()->prevent_overselling_enabled() || ! $validator->should_validate_create_request( $request ) ) {
 			return parent::save_object( $request, $creating );

@@ -373,24 +373,17 @@ class Test_Rest_Dispatch_Quick_Discount extends Sync_REST_Store_Test_Case {
 			$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
 			$this->assertSame( 'woocommerce_pos_rest_invalid_quick_discount', $response->get_data()['code'] );
 			$this->assertCount( 0, wc_get_order( $order->get_id() )->get_coupons() );
-			if ( 0 === $id && 'v1' === $lane ) {
-				// Stock save_object retains failed coupon creates as checkout-draft.
-				$draft_id = $response->get_data()['data']['new_draft_order_id'];
-				$draft = wc_get_order( $draft_id );
-				$this->assertSame( 'checkout-draft', $draft->get_status() );
-				$this->assertCount( 0, $draft->get_coupons() );
-			} else {
-				$this->assertSame(
-					$before,
-					wc_get_orders(
-						array(
-							'limit' => -1,
-							'return' => 'ids',
-							'status' => array_merge( array_keys( wc_get_order_statuses() ), array( 'wc-checkout-draft' ) ),
-						)
+			// Both lanes refuse BEFORE anything is saved: no checkout-draft, no new order, nothing changed.
+			$this->assertSame(
+				$before,
+				wc_get_orders(
+					array(
+						'limit' => -1,
+						'return' => 'ids',
+						'status' => array_merge( array_keys( wc_get_order_statuses() ), array( 'wc-checkout-draft' ) ),
 					)
-				);
-			}
+				)
+			);
 			$this->assert_unscoped();
 		}
 	}
@@ -416,18 +409,80 @@ class Test_Rest_Dispatch_Quick_Discount extends Sync_REST_Store_Test_Case {
 	}
 
 	/** @dataProvider lanes */
-	public function test_arbitrary_shared_code_uses_virtual_only_during_pos_write( string $lane ): void {
+	public function test_code_owned_by_a_store_coupon_is_refused_on_both_lanes( string $lane ): void {
 		$real = new WC_Coupon();
 		$real->set_code( 'cashier-choice' );
 		$real->set_discount_type( 'percent' );
 		$real->set_amount( '90' );
-		$real->set_exclude_sale_items( true );
 		$real->save();
-		$order = $this->created_order( $lane, $this->payload( array( $this->quick_line( 'fixed_cart', '10', 'CASHIER-CHOICE' ) ) ) );
+		try {
+			$order = $this->created_order( $lane, $this->payload( array() ) );
+			$line = $this->quick_line( 'fixed_cart', '10', 'CASHIER-CHOICE' );
+			foreach ( array( 0, $order->get_id() ) as $id ) {
+				$payload = $id ? array( 'coupon_lines' => array( $line ) ) : $this->payload( array( $line ) );
+				$payload['status'] = 'processing';
+				$response = $this->write_order( $lane, $payload, $id );
+				$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
+				$this->assertSame( 'woocommerce_pos_rest_quick_discount_code_taken', $response->get_data()['code'] );
+				$this->assertCount( 0, wc_get_order( $order->get_id() )->get_coupons() );
+				$this->assertSame( 0, ( new WC_Coupon( $real->get_id() ) )->get_usage_count() );
+				$this->assertFalse( ( new WC_Coupon( 'cashier-choice' ) )->get_virtual() );
+				$this->assert_unscoped();
+			}
+		} finally {
+			$real->delete( true );
+		}
+	}
+
+	public function test_v1_update_with_invalid_intent_commits_nothing(): void {
+		$payload = $this->payload( array() );
+		$payload['customer_note'] = 'before';
+		$order = $this->created_order( 'v1', $payload );
+		$response = $this->write_order(
+			'v1',
+			array(
+				'customer_note' => 'after',
+				'coupon_lines' => array( $this->quick_line( 'percent', '150' ) ),
+			),
+			$order->get_id()
+		);
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_quick_discount', $response->get_data()['code'] );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 'before', $order->get_customer_note() );
+		$this->assertCount( 0, $order->get_coupons() );
+		$this->assert_unscoped();
+	}
+
+	/** @dataProvider lanes */
+	public function test_later_store_coupon_with_same_code_does_not_rewrite_a_pos_order_on_recalculate( string $lane ): void {
+		$order = $this->created_order( $lane, $this->payload( array( $this->quick_line( 'percent', '8.333333' ) ) ) );
 		$this->assert_money( $order, '110.00', '18.33', '8.33' );
-		$this->assert_saved_intent( $order, 'fixed_cart', '10' );
-		$this->assertSame( $real->get_id(), ( new WC_Coupon( 'cashier-choice' ) )->get_id() );
-		$this->assertFalse( ( new WC_Coupon( 'cashier-choice' ) )->get_virtual() );
+		$this->assert_unscoped();
+		$real = new WC_Coupon();
+		$real->set_code( 'pos-discount' );
+		$real->set_discount_type( 'fixed_cart' );
+		$real->set_amount( '50' );
+		$real->save();
+		$rebuilt = null;
+		$capture = static function ( $coupon ) use ( &$rebuilt ) {
+			$rebuilt = $coupon;
+			return $coupon;
+		};
+		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', $capture, 100 );
+		try {
+			$order = wc_get_order( $order->get_id() );
+			$order->recalculate_coupons();
+			$this->assertInstanceOf( WC_Coupon::class, $rebuilt );
+			$this->assertSame( 'percent', $rebuilt->get_discount_type() );
+			$this->assertSame( 8.333333, (float) $rebuilt->get_amount() );
+			$this->assertTrue( $rebuilt->get_virtual() );
+			$this->assert_money( $order, '110.00', '18.33', '8.33' );
+		} finally {
+			remove_filter( 'woocommerce_order_recalculate_coupons_coupon_object', $capture, 100 );
+			$real->delete( true );
+		}
+		$this->assert_unscoped();
 	}
 
 	/** @dataProvider lanes */

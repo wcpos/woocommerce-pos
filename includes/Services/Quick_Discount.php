@@ -14,8 +14,8 @@ use WCPOS\WooCommercePOS\Sync\Meta_Entry;
  * Never install these filters globally: storefront customers must not be able
  * to redeem a till's virtual coupon. Callers must clear in a finally block.
  *
- * Accepted risk: an app-chosen code can share a real coupon's code; the virtual
- * coupon wins during this write. Negative fees remain accepted, unchanged.
+ * A code that resolves to a real coupon is refused.
+ * Negative fees remain accepted, unchanged.
  *
  * @see https://github.com/wcpos/roadmap/issues/91
  * @see https://github.com/wcpos/woocommerce-pos/issues/1504
@@ -113,11 +113,23 @@ final class Quick_Discount {
 			if ( null === $intent || ! is_string( $line['code'] ?? null ) || '' === trim( $line['code'] ) ) {
 				continue;
 			}
+			$code = self::normalize_code( $line['code'] );
+			if ( wc_get_coupon_id_by_code( $code ) ) {
+				return new \WP_Error(
+					'woocommerce_pos_rest_quick_discount_code_taken',
+					sprintf(
+						/* translators: %s: Coupon code. */
+						__( 'Quick discount code "%s" belongs to a store coupon. Use another code.', 'woocommerce-pos' ),
+						$code
+					),
+					array( 'status' => 400 )
+				);
+			}
 			if ( ! $this->intents ) {
 				add_filter( 'woocommerce_get_shop_coupon_data', array( $this, 'filter_data' ), 10, 2 );
 				add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'filter_recalculation' ), 10, 2 );
 			}
-			$this->intents[ self::normalize_code( $line['code'] ) ] = $intent;
+			$this->intents[ $code ] = $intent;
 		}
 		return null;
 	}
@@ -151,6 +163,33 @@ final class Quick_Discount {
 	 */
 	public function filter_recalculation( $coupon, string $code ) {
 		return $this->coupon( $code ) ?? $coupon;
+	}
+
+	/**
+	 * Keep persisted cashier intent authoritative when a POS order is recalculated.
+	 *
+	 * @param \WC_Coupon|false      $coupon WooCommerce's rebuilt coupon.
+	 * @param string                $code   Coupon code.
+	 * @param \WC_Order_Item_Coupon $item   Persisted coupon item.
+	 * @param \WC_Order             $order  Order being recalculated.
+	 * @return \WC_Coupon|false
+	 */
+	public static function recalculate_coupon_object( $coupon, $code, $item, $order ) {
+		if ( ! $item instanceof \WC_Order_Item_Coupon || ! \wcpos_is_pos_order( $order ) ) {
+			return $coupon;
+		}
+		$intent = self::intent_from_item( $item );
+		if ( null === $intent ) {
+			return $coupon;
+		}
+		$coupon = new \WC_Coupon();
+		$coupon->set_code( $code );
+		$coupon->set_discount_type( $intent['discount_type'] );
+		$coupon->set_amount( $intent['amount'] );
+		$coupon->set_virtual( true );
+		$coupon->set_individual_use( false );
+		$coupon->set_exclude_sale_items( false );
+		return $coupon;
 	}
 
 	/**

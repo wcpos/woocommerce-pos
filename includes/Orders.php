@@ -71,6 +71,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( __CLASS__, 'fee_after_calculate_taxes' ), 10, 2 );
+		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( Services\Quick_Discount::class, 'recalculate_coupon_object' ), 10, 4 );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid_for_product', array( $this, 'coupon_is_valid_for_product' ), 10, 4 );
 		add_action( 'woocommerce_order_after_calculate_totals', array( __CLASS__, 'cleanup_temp_caches' ), 999 );
