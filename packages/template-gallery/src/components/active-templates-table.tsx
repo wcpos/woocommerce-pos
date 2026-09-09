@@ -56,7 +56,7 @@ function formatCategory(slug: string | undefined): string {
 	return t(`category.${slug}`, { defaultValue: fallback });
 }
 
-function isTemplateEnabled(template: AnyTemplate): boolean {
+export function isTemplateEnabled(template: AnyTemplate): boolean {
 	if (template.is_virtual) {
 		return !('is_disabled' in template && (template as VirtualTemplate).is_disabled);
 	}

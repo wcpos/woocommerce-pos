@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { useSearch } from '@tanstack/react-router';
 
-import { TemplatesTable } from '../components/active-templates-table';
+import { TemplatesTable, isTemplateEnabled } from '../components/active-templates-table';
 import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
 import { GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
@@ -223,7 +223,7 @@ export function GalleryGrid() {
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
 					activateLabel={previewTemplate.type === 'display' ? t('modal.set_live') : undefined}
-					canActivate={previewTemplate.type !== 'display' || !previewIsGallery && !(previewTemplate as Template).is_disabled}
+					canActivate={previewTemplate.type !== 'display' || (!previewIsGallery && isTemplateEnabled(previewTemplate))}
 					onActivate={() => {
 						if (previewId == null) return;
 						// A display has one Live template; receipts toggle enabled/disabled.
