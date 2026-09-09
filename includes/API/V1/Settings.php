@@ -162,6 +162,45 @@ class Settings extends WP_REST_Controller {
 		// stay hand-registered.
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/payment-gateways/readers',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'permission_callback' => function () {
+					return $this->section_update_permission_check( 'payment_gateways' );
+				},
+				'args'                => array(
+					'gateway_id' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'refresh'    => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
+				),
+				'callback'            => function ( WP_REST_Request $request ) {
+					$gateway_id = $request['gateway_id'];
+					$refresh    = $request['refresh'];
+					/**
+					 * Filters the terminals available for a payment gateway.
+					 *
+					 * @param array|null|WP_Error $readers     Readers, unavailable, or provider error.
+					 * @param string              $gateway_id Gateway id.
+					 * @param bool                $refresh    Request fresh discovery.
+					 * @hook wcpos_payment_gateway_readers
+					 */
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments hook.
+					$readers = apply_filters( 'wcpos_payment_gateway_readers', null, $gateway_id, $refresh );
+					if ( null === $readers ) {
+						return new WP_Error( 'wcpos_readers_unavailable', __( 'This payment method does not list terminals.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+					}
+					return is_wp_error( $readers ) ? $readers : new WP_REST_Response( array( 'readers' => $readers ), 200 );
+				},
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/tax_ids/detection',
 			array(
 				'methods'             => WP_REST_Server::READABLE,

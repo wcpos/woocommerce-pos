@@ -968,4 +968,117 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 
 		return array_keys( $allowed );
 	}
+
+	/**
+	 * REST PATCH replaces whole reader lists and preserves omitted fields.
+	 */
+	public function test_patch_replaces_reader_list_wholesale(): void {
+		$section = SettingsService::instance()->sections()->get( 'payment_gateways' );
+		$gateway = array(
+			'default_reader'  => 'a',
+			'allowed_readers' => array( 'a', 'b', 'c' ),
+			'lock_to_default' => true,
+		);
+		// Through the PATCH merge like a real save — a bare partial option has no
+		// default_gateway and the v1 option filter trips on it.
+		$section->write( $section->merge( $section->read(), array( 'gateways' => array( 'pos_cash' => $gateway ) ) ) );
+		foreach ( array( array( 'b' ), array() ) as $readers ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/settings/payment-gateways' );
+			$request->set_body_params( array( 'gateways' => array( 'pos_cash' => array( 'allowed_readers' => $readers ) ) ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$gateway = $response->get_data()['gateways']['pos_cash'];
+			$this->assertSame( $readers, $gateway['allowed_readers'] );
+			$this->assertSame( 'a', $gateway['default_reader'] );
+			$this->assertTrue( $gateway['lock_to_default'] );
+		}
+	}
+
+	/**
+	 * Present terminal keys must have their exact REST types.
+	 */
+	public function test_rest_invalid_terminal_types_are_rejected(): void {
+		$invalid = array(
+			array( 'default_reader' => 1 ),
+			array( 'default_reader' => null ),
+			array( 'allowed_readers' => 'a' ),
+			array( 'allowed_readers' => null ),
+			array( 'allowed_readers' => array( '' ) ),
+			array( 'allowed_readers' => array( 1 ) ),
+			array( 'allowed_readers' => array( 'key' => 'a' ) ),
+			array( 'lock_to_default' => 'false' ),
+			array( 'lock_to_default' => null ),
+		);
+		foreach ( $invalid as $patch ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/settings/payment-gateways' );
+			$request->set_body_params( array( 'gateways' => array( 'pos_cash' => $patch ) ) );
+			$this->assertSame( 400, $this->server->dispatch( $request )->get_status(), wp_json_encode( $patch ) );
+		}
+	}
+
+	/**
+	 * No provider means reader discovery is unavailable.
+	 */
+	public function test_readers_without_filter_returns_404(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/settings/payment-gateways/readers' );
+		$request->set_param( 'gateway_id', 'pos_cash' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_readers_unavailable', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Reader arrays are relayed with the requested gateway and boolean refresh.
+	 */
+	public function test_readers_filter_receives_gateway_and_boolean_refresh(): void {
+		add_filter(
+			'wcpos_payment_gateway_readers',
+			function ( $readers, $gateway_id, $refresh ) {
+				$this->assertNull( $readers );
+				$this->assertSame( 'pos_cash', $gateway_id );
+				$this->assertIsBool( $refresh );
+				return array( array( 'id' => $refresh ? 'fresh' : 'saved' ) );
+			},
+			10,
+			3
+		);
+		foreach ( array( false, true ) as $refresh ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/settings/payment-gateways/readers' );
+			$request->set_param( 'gateway_id', 'pos_cash' );
+			if ( $refresh ) {
+				$request->set_param( 'refresh', '1' );
+			}
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( 'readers' => array( array( 'id' => $refresh ? 'fresh' : 'saved' ) ) ), $response->get_data() );
+		}
+	}
+
+	/**
+	 * Provider errors retain their code, message and status.
+	 */
+	public function test_readers_provider_error_passes_through(): void {
+		add_filter(
+			'wcpos_payment_gateway_readers',
+			static function () {
+				return new WP_Error( 'provider_error', 'Provider unavailable.', array( 'status' => 503 ) );
+			}
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/settings/payment-gateways/readers' );
+		$request->set_param( 'gateway_id', 'pos_cash' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 503, $response->get_status() );
+		$this->assertSame( 'provider_error', $response->get_data()['code'] );
+		$this->assertSame( 'Provider unavailable.', $response->get_data()['message'] );
+	}
+
+	/**
+	 * Discovery requires the settings update permission.
+	 */
+	public function test_readers_unauthenticated_request_is_refused(): void {
+		wp_set_current_user( 0 );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/settings/payment-gateways/readers' );
+		$request->set_param( 'gateway_id', 'pos_cash' );
+		$this->assertSame( 401, $this->server->dispatch( $request )->get_status() );
+	}
 }
