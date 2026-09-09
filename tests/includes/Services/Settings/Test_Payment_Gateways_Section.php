@@ -109,4 +109,42 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		$stored_checkout = get_option( 'woocommerce_pos_settings_checkout' );
 		$this->assertArrayNotHasKey( 'order_status', $stored_checkout, 'checkout save strips the reflected seed' );
 	}
+
+	/**
+	 * Installed gateways expose defaults and a freshly resolved mode.
+	 */
+	public function test_read_exposes_terminal_defaults_and_resolved_mode(): void {
+		$section = new Payment_Gateways_Section();
+		$gateway = $section->read()['gateways']['pos_cash'];
+		$this->assertSame( 'manual', $gateway['capture_mode'] );
+		$this->assertSame( '', $gateway['default_reader'] );
+		$this->assertSame( array(), $gateway['allowed_readers'] );
+		$this->assertFalse( $gateway['lock_to_default'] );
+		$section->write( $section->read() );
+		add_filter(
+			'wcpos_payment_method_capture_mode',
+			static function () {
+				return 'server';
+			}
+		);
+		$this->assertSame( 'server', $section->read()['gateways']['pos_cash']['capture_mode'] );
+	}
+
+	/**
+	 * Direct writes normalize terminal values before storing them.
+	 */
+	public function test_write_normalizes_terminal_settings(): void {
+		$section = new Payment_Gateways_Section();
+		$gateway = array(
+			'default_reader'  => 12,
+			'allowed_readers' => array( 'a', '', 'a', 'b', false ),
+			'lock_to_default' => 1,
+		);
+		$gateway['allowed_readers'] = array_combine( array( 2, 4, 5, 6, 7 ), $gateway['allowed_readers'] );
+		$section->write( array( 'gateways' => array( 'pos_cash' => $gateway ) ) );
+		$gateway = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways']['pos_cash'];
+		$this->assertSame( '12', $gateway['default_reader'] );
+		$this->assertSame( array( 'a', 'b' ), $gateway['allowed_readers'] );
+		$this->assertTrue( $gateway['lock_to_default'] );
+	}
 }
