@@ -79,10 +79,10 @@ html,body{margin:0;min-height:100%}
 }
 
 /* Idle screen */
-@keyframes lny-sway{0%,100%{transform:scale(var(--s)) rotate(-2.5deg)}50%{transform:scale(var(--s)) rotate(2.5deg)}}
+@keyframes lny-sway{0%,100%{transform:scale(calc(var(--s) * var(--k,1))) rotate(-2.5deg)}50%{transform:scale(calc(var(--s) * var(--k,1))) rotate(2.5deg)}}
 @keyframes lny-glow{0%,100%{box-shadow:0 0 60px 10px rgba(255,120,80,.3)}50%{box-shadow:0 0 70px 16px rgba(255,150,90,.5)}}
 .wcpos-idle--lunar-new-year{position:relative;height:100vh;overflow:hidden;background:radial-gradient(120% 90% at 50% 110%,#7f0f22 0%,#a8122b 55%,#c1182f 100%);color:#ffe8a3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:16vh;box-sizing:border-box}
-.wcpos-idle--lunar-new-year .lan{position:absolute;top:0;width:96px;transform:scale(var(--s));transform-origin:top center}
+.wcpos-idle--lunar-new-year .lan{position:absolute;top:0;width:96px;transform:scale(calc(var(--s) * var(--k,1)));transform-origin:top center}
 .wcpos-idle--lunar-new-year .lan i{display:block;width:2px;height:var(--h);background:#f2c14e;margin:0 auto}
 .wcpos-idle--lunar-new-year .lan b{display:block;width:96px;height:120px;border-radius:48px/40px;background:radial-gradient(circle at 35% 30%,#ff6b6b,#e11d2f 60%,#9f0b1e);box-shadow:0 0 60px 10px rgba(255,120,80,.35);position:relative}
 .wcpos-idle--lunar-new-year .lan b:before,.wcpos-idle--lunar-new-year .lan b:after{content:"";position:absolute;left:18px;right:18px;height:10px;background:#f2c14e;border-radius:3px}
@@ -95,13 +95,14 @@ html,body{margin:0;min-height:100%}
 .wcpos-idle--lunar-new-year .clouds{position:absolute;left:0;right:0;bottom:0;height:64px;background:radial-gradient(circle at 20px 64px,#f2c14e 0 22px,transparent 23px),radial-gradient(circle at 60px 64px,#f2c14e 0 30px,transparent 31px);background-size:80px 64px;opacity:.9}
 .wcpos-idle--lunar-new-year .clouds:after{content:"";position:absolute;inset:auto 0 0 0;height:14px;background:#f2c14e}
 @media (max-width:600px){.wcpos-idle--lunar-new-year{padding-bottom:22vh}
-.wcpos-idle--lunar-new-year .lan{transform:scale(calc(var(--s) * .7))}}
+.wcpos-idle--lunar-new-year .lan{--k:.7}}
 @media (prefers-reduced-motion:no-preference){.wcpos-idle--lunar-new-year .lan{animation:lny-sway 5s ease-in-out infinite}
 .wcpos-idle--lunar-new-year .lan:nth-child(2){animation-delay:-1.3s}
 .wcpos-idle--lunar-new-year .lan:nth-child(3){animation-delay:-2.6s}
 .wcpos-idle--lunar-new-year .lan:nth-child(4){animation-delay:-3.9s}
 .wcpos-idle--lunar-new-year .lan b{animation:lny-glow 4s ease-in-out infinite}}
 .wcpos-idle--lunar-new-year img.brand{max-width:min(70vw,360px);object-fit:contain}
+.wcpos-idle--lunar-new-year .brand--name{color:#111827}
 .wcpos-idle--lunar-new-year .brand--name{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px}
 
 /* Theme carried into every state: accent colour, a bar on the panel, a one-line note. */

@@ -223,6 +223,7 @@ export function GalleryGrid() {
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
 					activateLabel={previewTemplate.type === 'display' ? t('modal.set_live') : undefined}
+					canActivate={previewTemplate.type !== 'display' || !previewIsGallery && !(previewTemplate as Template).is_disabled}
 					onActivate={() => {
 						if (previewId == null) return;
 						// A display has one Live template; receipts toggle enabled/disabled.

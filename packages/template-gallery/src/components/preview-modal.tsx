@@ -26,6 +26,8 @@ interface PreviewModalProps {
 	onActivate?: () => void;
 	/** Label for the primary action on an installed template; defaults to Activate. */
 	activateLabel?: string;
+	/** Hide the primary action, e.g. a disabled display cannot be set Live. */
+	canActivate?: boolean;
 	onCustomize?: () => void;
 }
 
@@ -167,6 +169,7 @@ function PreviewModalContent({
 	onClose,
 	onActivate,
 	activateLabel,
+	canActivate = true,
 	onCustomize,
 	preview,
 	isFetching,
@@ -427,7 +430,7 @@ function PreviewModalContent({
 							>
 								{t('common.use_template')}
 							</Button>
-						) : (
+						) : canActivate ? (
 							<Button
 								variant="primary"
 								onClick={() => {
@@ -437,7 +440,7 @@ function PreviewModalContent({
 							>
 								{activateLabel ?? t('common.activate')}
 							</Button>
-						)}
+						) : null}
 						{preview?.preview_url && (
 							<a
 								href={preview.preview_url}
