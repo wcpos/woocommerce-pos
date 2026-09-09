@@ -184,6 +184,17 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 							))}
 						</div>
 					)}
+					{readers.length > 0 && !loading && !error && (
+						<label className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:mt-2 wcpos:text-sm">
+							<input
+								type="radio"
+								name="default_reader"
+								checked={!defaultReader}
+								onChange={() => setDefaultReader('')}
+							/>
+							{t('checkout.terminals.no_default')}
+						</label>
+					)}
 					<div className="wcpos:mt-2">
 						<Checkbox
 							label={t('checkout.terminals.lock')}

@@ -115,6 +115,7 @@
 	"checkout.terminals.available": "Available at the till",
 	"checkout.terminals.default": "Default",
 	"checkout.terminals.lock": "Lock to the default terminal",
+	"checkout.terminals.no_default": "No default — the cashier chooses",
 	"checkout.prevent_overselling": "Prevent overselling",
 	"checkout.prevent_overselling_tip": "Reject orders at checkout when quantities exceed available stock.",
 	"checkout.admin_emails": "Admin emails",

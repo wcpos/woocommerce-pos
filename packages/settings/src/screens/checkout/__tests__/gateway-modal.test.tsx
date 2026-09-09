@@ -149,3 +149,25 @@ it('shows the provider error and recovers on refresh', async () => {
 	await screen.findByText('Front');
 	expect(vi.mocked(apiFetch).mock.calls[1][0].path).toContain('refresh=1');
 });
+
+it('clears the default with the no-default option, keeping the reader available', async () => {
+	const mutate = vi.fn();
+	render(
+		<GatewayModal
+			gateway={{ ...gateway, default_reader: 'a', allowed_readers: ['a'], lock_to_default: true }}
+			mutate={mutate}
+			closeModal={vi.fn()}
+		/>
+	);
+	await screen.findByText('Front');
+	const available = screen.getAllByRole('checkbox', { name: 'Available at the till' });
+	expect(available[0]).toBeDisabled(); // the only available reader
+	fireEvent.click(screen.getByRole('radio', { name: 'No default — the cashier chooses' }));
+	expect(screen.getByRole('checkbox', { name: 'Lock to the default terminal' })).toBeDisabled();
+	fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+	expect(mutate.mock.calls[0][0].gateways.terminal).toMatchObject({
+		default_reader: '',
+		allowed_readers: ['a'],
+		lock_to_default: false,
+	});
+});
