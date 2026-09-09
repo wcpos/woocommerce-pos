@@ -159,7 +159,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Check if a given request has access to update a customer.
 	 *
-	 * WCPOS never widens WooCommerce's customer update check, which refuses
+	 * WCPOS never widens WooCommerce's credential fence, which refuses
 	 * email/password changes on non-customer roles. The guard additionally
 	 * keeps non-admins off staff accounts, testing capabilities rather than
 	 * WooCommerce's first-role-only test.

@@ -315,6 +315,17 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * The guard documentation records the cleared-target role-name bypass.
+	 */
+	public function test_protected_capabilities_filter_documents_cleared_target_role_bypass(): void {
+		$source = (string) file_get_contents( dirname( __DIR__, 3 ) . '/includes/Services/Customer_Account_Guard.php' );
+
+		$this->assertStringContainsString( 'Narrowing the list moves a target into', $source );
+		$this->assertStringContainsString( "Cleared targets bypass WooCommerce's", $source );
+		$this->assertStringContainsString( 'woocommerce_shop_manager_editable_roles role-name restriction', $source );
+	}
+
+	/**
 	 * WooCommerce reads only the first role, so a capability test must gate deletes.
 	 *
 	 * @dataProvider customer_lanes

@@ -35,9 +35,10 @@ class Customer_Account_Guard {
 		 * holding any of these. The default marks site and store administration
 		 * (manage_options, manage_woocommerce), user management (edit_users, which
 		 * the Cashier role holds) and an author seat in wp-admin (edit_posts:
-		 * editors, authors and contributors). Narrowing the list only relaxes this
-		 * check; it never widens WooCommerce's own permission checks, which still
-		 * run.
+		 * editors, authors and contributors). Narrowing the list moves a target into
+		 * the cleared path. Cleared targets bypass WooCommerce's
+		 * woocommerce_shop_manager_editable_roles role-name restriction before
+		 * WooCommerce re-judges them.
 		 *
 		 * @param {array} $capabilities
 		 * @returns {array} $capabilities
