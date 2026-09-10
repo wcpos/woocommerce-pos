@@ -70,6 +70,87 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Product/class coverage, including a changed jurisdiction that must not be remapped.
+	 *
+	 * @return array
+	 */
+	public function jurisdiction_order_provider(): array {
+		return array(
+			array( 'simple', '', false ),
+			array( 'variation', 'reduced-rate', false ),
+			array( 'misc', '', false ),
+			array( 'simple', '', true ),
+		);
+	}
+
+	/**
+	 * Response property order must not repurpose existing jurisdiction rate IDs.
+	 *
+	 * @dataProvider jurisdiction_order_provider
+	 * @param string $kind Product kind.
+	 * @param string $tax_class Product tax class.
+	 * @param bool   $changed_jurisdiction Whether the label set genuinely changed.
+	 */
+	public function test_pos_priming_preserves_jurisdiction_order_and_rate_values( string $kind, string $tax_class, bool $changed_jurisdiction ): void {
+		// Arrange: the till already knows county tax at priority 2.
+		foreach ( \WC_Tax::get_rates_for_tax_class( '' ) as $rate ) {
+			\WC_Tax::_delete_tax_rate( $rate->tax_rate_id );
+		}
+		$labels = array( 'Special', 'County', 'City', 'State' );
+		foreach ( $labels as $priority => $label ) {
+			\WC_Tax::_insert_tax_rate(
+				array(
+					'tax_rate_country' => 'US', 'tax_rate_state' => 'CA',
+					'tax_rate' => array( 0, 0.5, 0, 5 )[ $priority ],
+					'tax_rate_name' => 'Fixture County Fixture City : ' . $label . ' Tax',
+					'tax_rate_priority' => $priority + 1,
+					'tax_rate_class' => $tax_class,
+				)
+			);
+		}
+		$product = $this->product( 25 );
+		if ( 'variation' === $kind ) {
+			$parent = new \WC_Product_Variable();
+			$parent->set_tax_class( $tax_class );
+			$parent->save();
+			$product = new \WC_Product_Variation();
+			$product->set_parent_id( $parent->get_id() );
+			$product->set_regular_price( '25' );
+			$product->save();
+		}
+		$item = (object) array(
+			'id' => 'misc' === $kind ? '0' : (string) $product->get_id(), 'combined_tax_rate' => 0.056,
+			'special_tax_rate' => 0, 'city_tax_rate' => 0,
+			'county_tax_rate' => 0.006, 'state_tax_rate' => 0.05,
+		);
+		$shipping = clone $item;
+		unset( $shipping->id );
+		$this->taxjar->taxjar_response = (object) array(
+			'rate' => 0.056,
+			'jurisdictions' => (object) array( 'county' => $changed_jurisdiction ? 'Other County' : 'Fixture County', 'city' => 'Fixture City' ),
+			'breakdown' => (object) array( 'line_items' => array( $item ), 'shipping' => $shipping ),
+		);
+		$before = (array) $item;
+
+		// Act: pass through the POS priming path, not a direct helper call.
+		$created = $this->v1_create( 'pos-open', array( $this->line( $product ) ) );
+
+		// Assert: only rate-field ordering changes; a real rate increase survives.
+		$this->assertSame( 201, $created->get_status() );
+		$rate_keys = $changed_jurisdiction ? array( 'special_tax_rate', 'city_tax_rate', 'county_tax_rate', 'state_tax_rate' ) : array( 'special_tax_rate', 'county_tax_rate', 'city_tax_rate', 'state_tax_rate' );
+		$this->assertSame( $rate_keys, array_keys( array_intersect_key( (array) $item, array_flip( $rate_keys ) ) ) );
+		$shipping_keys = '' === $tax_class ? $rate_keys : array( 'special_tax_rate', 'city_tax_rate', 'county_tax_rate', 'state_tax_rate' );
+		$this->assertSame( $shipping_keys, array_keys( array_intersect_key( (array) $shipping, array_flip( $rate_keys ) ) ) );
+		$this->assertSame( 0.006, $item->county_tax_rate );
+		$this->assertSame( 0.056, $this->taxjar->taxjar_response->rate );
+		$this->assertSame( $before, array_replace( $before, (array) $item ) );
+		$this->assertFalse( has_filter( 'woocommerce_services_override_tax_rate' ), 'The response hook must not leak outside priming.' );
+		$this->taxjar->taxjar_response->breakdown->line_items = array( (object) $before );
+		$this->taxjar->calculate_tax( $this->taxjar->calculate_tax_calls[0] );
+		$this->assertSame( $before, (array) $this->taxjar->taxjar_response->breakdown->line_items[0], 'A later non-priming calculation must be untouched.' );
+	}
+
+	/**
 	 * Statuses an order can hold while the till is still editing it.
 	 *
 	 * @return array<string, array{0: string}>
@@ -591,6 +672,7 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
 		$this->assert_order_amounts( (int) $created->get_data()['document']['id'], 1.0, 11.0 );
+		$this->assertFalse( has_filter( 'woocommerce_services_override_tax_rate' ), 'Priming exceptions must also remove the temporary hook.' );
 	}
 
 	/**

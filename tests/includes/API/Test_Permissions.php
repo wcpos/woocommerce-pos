@@ -397,6 +397,7 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 403, $response->get_status() );
 	}
 
+
 	// ──────────────────────────────────────────────
 	// Taxes - role-based tests
 	// ──────────────────────────────────────────────

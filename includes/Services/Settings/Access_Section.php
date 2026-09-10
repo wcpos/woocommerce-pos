@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WP_Error;
+use WP_User;
 
 /**
  * The Access Settings Section.
@@ -45,6 +46,47 @@ class Access_Section implements Settings_Section_Interface {
 		$caps = self::get_caps();
 
 		return array_merge( $caps['wcpos'], $caps['wc'], $caps['wp'] );
+	}
+
+	/**
+	 * Capabilities the user can actually exercise, in the Access-settings vocabulary.
+	 *
+	 * The user_can() check is what every REST permission callback asks, so it is the
+	 * answer the client must be given; it also runs the `user_has_cap` filter that
+	 * role editors such as Members use to make a Deny on one role override a grant
+	 * on another. The two singular meta caps (edit_product, delete_product) cannot
+	 * go through user_can() without a post, so they are read from allcaps after the
+	 * same filter has run.
+	 *
+	 * @param WP_User $user User to report on.
+	 *
+	 * @return string[] Capability names, in capability_names() order.
+	 */
+	public static function effective_capabilities( WP_User $user ): array {
+		$names = self::capability_names();
+		// A multisite super admin holds every capability before the filter runs
+		// (WP_User::has_cap), so mirror that bypass for the two filtered names.
+		$super_admin = is_multisite() && is_super_admin( $user->ID );
+
+		return array_values(
+			array_filter(
+				$names,
+				function ( $cap ) use ( $user, $super_admin ) {
+					if ( ! in_array( $cap, array( 'edit_product', 'delete_product' ), true ) ) {
+						return user_can( $user, $cap );
+					}
+					if ( $super_admin ) {
+						return true;
+					}
+					// Same argument shape as WP_User::has_cap(): the caps being
+					// checked, then the requested cap and user id.
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core capability filter, run so role-editor denies apply.
+					$filtered = apply_filters( 'user_has_cap', $user->allcaps, array( $cap ), array( $cap, $user->ID ), $user );
+
+					return ! empty( $filtered[ $cap ] );
+				}
+			)
+		);
 	}
 
 	/**
