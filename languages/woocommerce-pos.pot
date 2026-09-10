@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.10.9\n"
+"Project-Id-Version: WCPOS 1.10.10\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-09T13:04:51+00:00\n"
+"POT-Creation-Date: 2026-09-10T17:10:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -268,7 +268,7 @@ msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
 #. translators: Checkout/payment form error message title.
-#: includes/Admin/Settings.php:58
+#: includes/Admin/Settings.php:59
 #: includes/Form_Handler.php:54
 #: includes/Form_Handler.php:66
 #: includes/Form_Handler.php:80
@@ -279,7 +279,7 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: includes/Admin/Settings.php:59
+#: includes/Admin/Settings.php:60
 msgid "Settings failed to load, please contact support"
 msgstr ""
 

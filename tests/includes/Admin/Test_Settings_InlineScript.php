@@ -12,6 +12,27 @@ namespace WCPOS\WooCommercePOS\Tests\Admin;
  */
 class Test_Settings_InlineScript extends \WP_UnitTestCase {
 	/**
+	 * Test the environment reports a request without CF-Ray as not proxied.
+	 */
+	public function test_inline_script_without_cf_ray_contains_unproxied_environment(): void {
+		// Arrange.
+		$server   = $_SERVER;
+		$settings = new \WCPOS\WooCommercePOS\Admin\Settings();
+		$method   = new \ReflectionMethod( \WCPOS\WooCommercePOS\Admin\Settings::class, 'inline_script' );
+		$method->setAccessible( true );
+		unset( $_SERVER['HTTP_CF_RAY'] );
+		try {
+			// Act.
+			$script = str_replace( ' ', '', $method->invoke( $settings ) );
+			// Assert.
+			$this->assertStringContainsString( 'environment:', $script );
+			$this->assertStringContainsString( '"proxied":false', $script );
+		} finally {
+			$_SERVER = $server;
+		}
+	}
+
+	/**
 	 * Test cloud print store options filter defaults to an empty array.
 	 */
 	public function test_store_options_filter_defaults_to_empty_array(): void {
