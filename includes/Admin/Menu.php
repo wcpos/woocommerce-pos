@@ -567,14 +567,14 @@ JS;
 			'wcpos-template-gallery-styles',
 			PLUGIN_URL . $dir . '/css/template-gallery.css',
 			array(),
-			$this->asset_version( $dir . '/css/template-gallery.css' )
+			self::asset_version( $dir . '/css/template-gallery.css' )
 		);
 
 		wp_enqueue_script(
 			'wcpos-template-gallery',
 			PLUGIN_URL . $dir . '/js/template-gallery.js',
 			array( 'react', 'react-dom', 'wp-api-fetch', \WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE, 'wp-url' ),
-			$this->asset_version( $dir . '/js/template-gallery.js' ),
+			self::asset_version( $dir . '/js/template-gallery.js' ),
 			true
 		);
 
@@ -586,10 +586,11 @@ JS;
 	 * redeploy of the same plugin version (dev sites deploy every merge) is never served stale
 	 * from a long-lived browser cache.
 	 *
-	 * @param string $relative Path under the plugin directory.
+	 * @param string      $relative Path under the plugin directory.
+	 * @param string|null $base     Directory the path is relative to; the plugin directory by default.
 	 */
-	private function asset_version( string $relative ): string {
-		$path = PLUGIN_PATH . $relative;
+	public static function asset_version( string $relative, ?string $base = null ): string {
+		$path = ( $base ?? PLUGIN_PATH ) . $relative;
 		return file_exists( $path ) ? PLUGIN_VERSION . '.' . (string) filemtime( $path ) : PLUGIN_VERSION;
 	}
 
