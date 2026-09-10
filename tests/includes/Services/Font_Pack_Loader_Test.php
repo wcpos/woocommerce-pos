@@ -57,6 +57,10 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 		delete_transient( 'wcpos_font_pack_failed_dejavu' );
 		delete_transient( 'wcpos_font_pack_failed_map' );
 		delete_transient( 'wcpos_font_pack_lock_dejavu' );
+		// Earlier suites call Activator::single_activate(), which enqueues this
+		// action and then creates the sync tables; that DDL commits the test
+		// transaction, so the queued action outlives its test. Start clean.
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
 	}
 
 	/** Remove fixtures and restore WordPress state. */
@@ -185,28 +189,24 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 
 	/** A receipt request cannot enqueue another install while the action is running. */
 	public function test_schedule_does_not_enqueue_while_action_is_running(): void {
-		// Arrange: inspect the real queue from inside an executing action.
+		// Arrange: mark a due action in-progress through the store, as the queue
+		// runner does, instead of running the shared queue, whose leftover actions
+		// from earlier suites would be claimed ahead of this one.
 		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
-		$observed = null;
-		$probe    = static function () use ( &$observed ): void {
-			Font_Pack_Loader::schedule();
-			$observed = as_get_scheduled_actions(
-				array(
-					'hook'   => Font_Pack_Loader::ACTION,
-					'status' => \ActionScheduler_Store::STATUS_PENDING,
-				),
-				'ids'
-			);
-		};
-		add_action( Font_Pack_Loader::ACTION, $probe, 1 );
-		as_schedule_single_action( time() - 1, Font_Pack_Loader::ACTION, array( 'refresh' => false ), 'wcpos' );
+		$id = as_schedule_single_action( time() - 1, Font_Pack_Loader::ACTION, array( 'refresh' => false ), 'wcpos' );
+		\ActionScheduler::store()->log_execution( $id );
+		$query = array(
+			'hook'   => Font_Pack_Loader::ACTION,
+			'status' => \ActionScheduler_Store::STATUS_PENDING,
+		);
 		try {
 			// Act.
-			\ActionScheduler_QueueRunner::instance()->run();
+			Font_Pack_Loader::schedule();
 			// Assert.
-			$this->assertSame( array(), $observed );
+			$this->assertSame( array(), as_get_scheduled_actions( $query, 'ids' ) );
+			$this->assertTrue( as_next_scheduled_action( Font_Pack_Loader::ACTION ) );
 		} finally {
-			remove_action( Font_Pack_Loader::ACTION, $probe, 1 );
+			\ActionScheduler::store()->cancel_action( $id );
 		}
 	}
 
@@ -230,7 +230,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			// Act.
 			Font_Pack_Loader::schedule();
 			// Assert.
-			$this->assertSame( array(), as_get_scheduled_actions( array( 'hook' => Font_Pack_Loader::ACTION ), 'ids' ) );
+			$this->assertSame( array(), as_get_scheduled_actions( array( 'hook' => Font_Pack_Loader::ACTION, 'status' => \ActionScheduler_Store::STATUS_PENDING ), 'ids' ) );
 		} finally {
 			wp_clear_scheduled_hook( Font_Pack_Loader::ACTION, array( false ) );
 		}
