@@ -35,6 +35,7 @@ class Font_Pack_Notice_Test extends \WP_UnitTestCase {
 		$this->notices = $this->storage->getValue();
 		$this->storage->setValue( null, array() );
 		delete_transient( 'wcpos_font_pack_lock_dejavu' );
+		delete_transient( 'wcpos_font_pack_failed_map' );
 		set_transient( 'wcpos_font_pack_failed_dejavu', 1, HOUR_IN_SECONDS );
 		$this->notice = new Font_Pack_Notice();
 	}
@@ -45,6 +46,7 @@ class Font_Pack_Notice_Test extends \WP_UnitTestCase {
 		remove_filter( 'upload_dir', array( $this, 'upload_dir' ) );
 		$this->storage->setValue( null, $this->notices );
 		delete_transient( 'wcpos_font_pack_failed_dejavu' );
+		delete_transient( 'wcpos_font_pack_failed_map' );
 		delete_transient( 'wcpos_font_pack_lock_dejavu' );
 		if ( is_dir( $this->uploads ) ) {
 			$items = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $this->uploads, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
@@ -78,6 +80,21 @@ class Font_Pack_Notice_Test extends \WP_UnitTestCase {
 		// Assert.
 		$this->assertStringContainsString( 'notice-warning', $output );
 		$this->assertStringContainsString( 'WCPOS could not download its receipt fonts from cdn.jsdelivr.net. Receipts will use a basic Latin-only font until the download succeeds. WCPOS retries automatically every hour. If your host blocks outgoing HTTP requests, ask them to allow cdn.jsdelivr.net.', $output );
+	}
+
+	/** A shared map write failure points administrators to uploads permissions. */
+	public function test_admin_init_failed_map_outputs_writable_uploads_warning(): void {
+		// Arrange.
+		delete_transient( 'wcpos_font_pack_failed_dejavu' );
+		set_transient( 'wcpos_font_pack_failed_map', 1, HOUR_IN_SECONDS );
+		// Act.
+		$this->notice->admin_init();
+		ob_start();
+		( new Notices() )->admin_notices();
+		$output = ob_get_clean();
+		// Assert.
+		$this->assertStringContainsString( 'WCPOS could not publish its receipt font map.', $output );
+		$this->assertStringContainsString( 'Check that the uploads directory is writable.', $output );
 	}
 
 	/** Installed fonts suppress even a stale failure transient. */

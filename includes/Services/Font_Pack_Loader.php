@@ -90,6 +90,9 @@ class Font_Pack_Loader {
 
 	/** Whether any enabled pack has a cached installation failure. */
 	public function failed(): bool {
+		if ( get_transient( 'wcpos_font_pack_failed_map' ) ) {
+			return true;
+		}
 		foreach ( self::packs() as $pack ) {
 			if ( get_transient( 'wcpos_font_pack_failed_' . $pack ) ) {
 				return true;
@@ -101,29 +104,37 @@ class Font_Pack_Loader {
 	/**
 	 * Enqueue font installation outside the receipt request.
 	 *
-	 * A plain install is skipped while one is already pending; an upgrade
-	 * refresh always enqueues. Only the pending status is consulted, so the
-	 * retry a failed run schedules for itself is not blocked by that run.
+	 * A plain install is skipped while one is pending or running; an upgrade
+	 * refresh always enqueues. A delayed failure retry checks only pending
+	 * actions so the running job does not block its own retry.
 	 *
 	 * @param bool $refresh Refresh packs after a plugin upgrade.
 	 * @param int  $delay   Seconds to wait before the install may run.
 	 */
 	public static function schedule( bool $refresh = false, int $delay = 0 ): void {
+		if ( ! $refresh && 0 === $delay && ( new self() )->failed() ) {
+			return;
+		}
+		if ( ! $refresh && wp_next_scheduled( self::ACTION, array( false ) ) ) {
+			return;
+		}
 		// Guard every helper by name: WooCommerce 5.3 bundles an Action Scheduler
 		// without the newer as_has_scheduled_action(), and phpstan narrows per name.
-		if ( function_exists( 'as_schedule_single_action' ) && function_exists( 'as_get_scheduled_actions' ) ) {
+		if ( function_exists( 'as_schedule_single_action' ) && function_exists( 'as_get_scheduled_actions' ) && function_exists( 'as_next_scheduled_action' ) ) {
 			$pending = array(
 				'hook'     => self::ACTION,
 				'status'   => 'pending',
 				'per_page' => 1,
 			);
-			if ( ! $refresh && array() !== as_get_scheduled_actions( $pending, 'ids' ) ) {
-				return;
+			if ( ! $refresh ) {
+				if ( 0 === $delay && as_next_scheduled_action( self::ACTION ) ) {
+					return;
+				}
+				if ( 0 < $delay && array() !== as_get_scheduled_actions( $pending, 'ids' ) ) {
+					return;
+				}
 			}
 			as_schedule_single_action( time() + $delay, self::ACTION, array( 'refresh' => $refresh ), 'wcpos' );
-			return;
-		}
-		if ( ! $refresh && wp_next_scheduled( self::ACTION ) ) {
 			return;
 		}
 		wp_schedule_single_event( time() + $delay, self::ACTION, array( $refresh ) );
@@ -141,7 +152,7 @@ class Font_Pack_Loader {
 	 */
 	public static function run_scheduled( $refresh = false ): void {
 		if ( ! ( new self() )->ensure_all( (bool) $refresh ) ) {
-			self::schedule( false, self::FAILED_TTL );
+			self::schedule( false, self::FAILED_TTL + 1 );
 		}
 	}
 
@@ -248,7 +259,9 @@ class Font_Pack_Loader {
 			// shared map; rebuilding it from the receipts on disk self-heals that on
 			// the next call, and writes nothing when it is already current.
 			$this->write_map( $this->dir() );
+			delete_transient( 'wcpos_font_pack_failed_map' );
 		} catch ( \RuntimeException $e ) {
+			set_transient( 'wcpos_font_pack_failed_map', 1, self::FAILED_TTL );
 			Logger::log( 'Font packs: ' . $e->getMessage() );
 			return false;
 		}
