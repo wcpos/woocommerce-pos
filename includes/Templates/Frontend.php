@@ -115,6 +115,24 @@ class Frontend {
 	}
 
 	/**
+	 * Resolve the explicit web-bundle override, or null when unset.
+	 */
+	public static function explicit_web_bundle_ref(): ?string {
+		$explicit_bundle_ref = null;
+		$env_bundle_ref      = getenv( 'WCPOS_WEB_BUNDLE_REF' );
+		if ( \defined( 'WCPOS_WEB_BUNDLE_REF' ) && WCPOS_WEB_BUNDLE_REF ) {
+			$explicit_bundle_ref = WCPOS_WEB_BUNDLE_REF;
+		} elseif ( ! empty( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) );
+		} elseif ( false !== $env_bundle_ref && '' !== $env_bundle_ref ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $env_bundle_ref ) );
+		} elseif ( ! empty( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) );
+		}
+		return $explicit_bundle_ref;
+	}
+
+	/**
 	 * Output the footer scripts.
 	 */
 	public function footer(): void {
@@ -139,18 +157,7 @@ class Frontend {
 
 		$user                 = wp_get_current_user();
 
-		// Explicit web-bundle override (constant or env). Null when unset.
-		$explicit_bundle_ref = null;
-		$env_bundle_ref      = getenv( 'WCPOS_WEB_BUNDLE_REF' );
-		if ( \defined( 'WCPOS_WEB_BUNDLE_REF' ) && WCPOS_WEB_BUNDLE_REF ) {
-			$explicit_bundle_ref = WCPOS_WEB_BUNDLE_REF;
-		} elseif ( ! empty( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) ) {
-			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) );
-		} elseif ( false !== $env_bundle_ref && '' !== $env_bundle_ref ) {
-			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $env_bundle_ref ) );
-		} elseif ( ! empty( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) ) {
-			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) );
-		}
+		$explicit_bundle_ref = self::explicit_web_bundle_ref();
 
 		// Default to the plugin's own major.minor so the stable lane tracks the
 		// version automatically: a 1.9.x plugin loads `@1.9`, a 1.10.x plugin loads
