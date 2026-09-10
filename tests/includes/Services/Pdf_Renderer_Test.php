@@ -556,7 +556,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 			$pdf = $this->renderer->render_html( '<html><body>Receipt</body></html>' );
 			// Assert.
 			$this->assertStringStartsWith( '%PDF', $pdf );
-			$this->assertTrue( as_has_scheduled_action( Font_Pack_Loader::ACTION ) );
+			$this->assertNotFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ) );
 			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
 		} finally {
 			remove_filter( 'upload_dir', $filter );

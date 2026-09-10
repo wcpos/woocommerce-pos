@@ -199,6 +199,59 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 		$this->assertSame( 1, $after_refresh['version'] );
 	}
 
+	/** A failed run books exactly one retry for when the failure cache expires. */
+	public function test_run_scheduled_failure_schedules_one_retry_after_failed_ttl(): void {
+		// Arrange: an extra pack whose CDN is unreachable (HTTP is mocked to fail).
+		$broken = static function ( array $sources ): array {
+			$sources['broken'] = 'https://cdn.example.invalid/%s/';
+			return $sources;
+		};
+		add_filter( 'woocommerce_pos_font_pack_sources', $broken );
+		$query = array(
+			'hook'   => Font_Pack_Loader::ACTION,
+			'status' => \ActionScheduler_Store::STATUS_PENDING,
+		);
+		try {
+			// Act.
+			Font_Pack_Loader::run_scheduled();
+			$pending = as_get_scheduled_actions( $query, OBJECT );
+			// A second failed run while the retry is pending must not add another.
+			delete_transient( 'wcpos_font_pack_failed_broken' );
+			Font_Pack_Loader::run_scheduled();
+			// Assert.
+			$this->assertCount( 1, $pending );
+			$this->assertEqualsWithDelta( time() + Font_Pack_Loader::FAILED_TTL, reset( $pending )->get_schedule()->get_date()->getTimestamp(), 5 );
+			$this->assertCount( 1, as_get_scheduled_actions( $query, 'ids' ) );
+			$this->assertFalse( $this->loader->installed() );
+		} finally {
+			remove_filter( 'woocommerce_pos_font_pack_sources', $broken );
+			delete_transient( 'wcpos_font_pack_failed_broken' );
+			delete_transient( 'wcpos_font_pack_lock_broken' );
+		}
+	}
+
+	/** A successful run books nothing further. */
+	public function test_run_scheduled_success_schedules_no_retry(): void {
+		// Act.
+		Font_Pack_Loader::run_scheduled();
+		// Assert.
+		$this->assertTrue( $this->loader->installed() );
+		$this->assertFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ) );
+	}
+
+	/** A stale or damaged map reads as not installed until the next run rebuilds it. */
+	public function test_installed_false_when_map_content_is_stale(): void {
+		// Arrange.
+		$this->assertTrue( $this->loader->ensure_all() );
+		$map = $this->loader->dir() . '/installed-fonts.json';
+		file_put_contents( $map, '{}' );
+		// Act / Assert.
+		$this->assertFalse( $this->loader->installed() );
+		$this->assertTrue( $this->loader->ensure_all() );
+		$this->assertTrue( $this->loader->installed() );
+		$this->assertSame( array(), $this->requests );
+	}
+
 	/** A background callback with no arguments installs the local pack. */
 	public function test_run_scheduled_installs_pack(): void {
 		// Arrange.
