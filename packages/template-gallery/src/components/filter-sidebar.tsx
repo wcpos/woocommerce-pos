@@ -5,6 +5,7 @@ export interface FilterState {
 	categories: string[];
 	output: 'all' | 'html' | 'escpos';
 	direction: 'all' | 'ltr' | 'rtl';
+	screen: 'all' | 'responsive' | 'small-screen' | 'large-screen';
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -12,10 +13,12 @@ export const DEFAULT_FILTERS: FilterState = {
 	categories: [],
 	output: 'all',
 	direction: 'all',
+	screen: 'all',
 };
 
 interface FilterSidebarProps {
 	showOutputFilters?: boolean;
+	showScreenFilter?: boolean;
 	filters: FilterState;
 	onChange: (filters: FilterState) => void;
 	availableCategories: string[];
@@ -71,12 +74,14 @@ function isFiltered(filters: FilterState): boolean {
 		filters.search !== '' ||
 		filters.categories.length > 0 ||
 		filters.output !== 'all' ||
-		filters.direction !== 'all'
+		filters.direction !== 'all' ||
+		filters.screen !== 'all'
 	);
 }
 
 export function FilterSidebar({
 	showOutputFilters = true,
+	showScreenFilter = false,
 	filters,
 	onChange,
 	availableCategories,
@@ -148,6 +153,21 @@ export function FilterSidebar({
 			/>
 
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+
+			{/* Screen */}
+			<RadioGroup
+				hidden={!showScreenFilter}
+				label={t('filter.screen')}
+				name="filter-screen"
+				value={filters.screen}
+				options={[
+					{ value: 'all', label: t('filter.all') },
+					{ value: 'responsive', label: t('filter.screen_responsive') },
+					{ value: 'small-screen', label: t('filter.screen_small') },
+					{ value: 'large-screen', label: t('filter.screen_large') },
+				]}
+				onChange={(v) => onChange({ ...filters, screen: v as FilterState['screen'] })}
+			/>
 
 			{/* Categories */}
 			<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">

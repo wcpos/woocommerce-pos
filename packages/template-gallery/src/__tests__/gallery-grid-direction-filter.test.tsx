@@ -60,23 +60,26 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 							key: 'phone',
 							title: 'Phone Display',
 							type: 'display',
-							category: 'small-screen',
+							category: 'general',
+							screen: 'small-screen',
 						},
 						{
 							...ltrTemplate,
 							key: 'responsive',
 							title: 'Responsive Display',
 							type: 'display',
-							category: 'responsive',
+							category: 'general',
+							screen: 'responsive',
 						},
 						{
 							...ltrTemplate,
 							key: 'large',
 							title: 'Large Display',
 							type: 'display',
-							category: 'large-screen',
+							category: 'general',
+							screen: 'large-screen',
 						},
-						{ ...legacyTemplate, type: 'display', category: 'responsive' },
+						{ ...legacyTemplate, type: 'display', category: 'seasonal', screen: 'responsive' },
 					]
 				: [ltrTemplate, rtlTemplate, legacyTemplate],
 	}),
@@ -164,6 +167,7 @@ describe('GalleryGrid direction filter', () => {
 		const container = mountGrid();
 		const text = () => container.textContent ?? '';
 
+		expect(container.querySelector('input[name="filter-screen"]')).toBeNull();
 		expect(text()).toContain('Standard Receipt');
 		expect(text()).toContain('Standard Receipt (RTL)');
 		expect(text()).toContain('Legacy Receipt');
@@ -188,41 +192,57 @@ describe('GalleryGrid direction filter', () => {
 });
 
 describe('GalleryGrid display templates', () => {
-	it('filters by screen-fit category in gallery order and supports clearing', () => {
+	it('filters screen fit independently of category and supports clearing', () => {
 		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		const container = mountGrid();
-		expect(container.textContent).toContain('Responsive Display');
-		expect(container.textContent).toContain('Large Display');
-		const categories = Array.from(
-			container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+		const radios = Array.from(
+			container.querySelectorAll<HTMLInputElement>('input[name="filter-screen"]')
 		);
-		expect(categories.map((input) => input.parentElement?.textContent)).toEqual([
-			'category.small-screen',
-			'category.responsive',
-			'category.large-screen',
+		expect(radios.map((input) => input.value)).toEqual([
+			'all',
+			'responsive',
+			'small-screen',
+			'large-screen',
 		]);
-		const phone = categories[0];
-		expect(phone).not.toBeNull();
-		act(() => phone!.click());
-		expect(container.textContent).toContain('Phone Display');
-		expect(container.textContent).not.toContain('Legacy Receipt');
-		expect(container.textContent).not.toContain('Responsive Display');
-		expect(container.textContent).not.toContain('Large Display');
-		const responsive = categories[1];
-		act(() => {
-			phone!.click();
-			responsive!.click();
-		});
-		expect(container.textContent).toContain('Legacy Receipt');
-		expect(container.textContent).toContain('Responsive Display');
-		expect(container.textContent).not.toContain('Phone Display');
+		const titles = () => Array.from(container.querySelectorAll('h3')).map((h) => h.textContent);
+		expect(titles()).toEqual([
+			'Phone Display',
+			'Responsive Display',
+			'Large Display',
+			'Legacy Receipt',
+		]);
+		act(() => radios[2].click());
+		expect(titles()).toEqual(['Phone Display']);
+		act(() => radios[3].click());
+		expect(titles()).toEqual(['Large Display']);
+		act(() => radios[1].click());
+		expect(titles()).toEqual(['Responsive Display', 'Legacy Receipt']);
 		const clear = Array.from(container.querySelectorAll('button')).find(
 			(button) => button.textContent === 'filter.clear_all'
 		);
 		expect(clear).toBeDefined();
+		const categories = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+		expect(Array.from(categories).map((input) => input.parentElement?.textContent)).toEqual([
+			'category.general',
+			'category.seasonal',
+		]);
+		act(() => categories[1].click());
+		expect(titles()).toEqual(['Legacy Receipt']);
 		act(() => clear!.click());
-		expect(container.textContent).toContain('Responsive Display');
-		expect(container.textContent).toContain('Large Display');
+		expect(titles()).toHaveLength(4);
+		act(() => radios[2].click());
+		vi.mocked(useSearch).mockReturnValue({ type: 'receipt' });
+		act(() => mountedRoots[0].render(<GalleryGrid />));
+		expect(container.querySelector('input[name="filter-screen"]')).toBeNull();
+		expect(titles()).toEqual(['Standard Receipt', 'Standard Receipt (RTL)', 'Legacy Receipt']);
+	});
+
+	it('shows the screen tag before the category tag on a display card', () => {
+		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
+		const container = mountGrid();
+		const card = container.querySelector('h3')?.parentElement?.parentElement;
+		expect(card?.textContent).toContain('filter.screen_small');
+		expect(card?.textContent).toMatch(/filter.screen_small.*category.general/);
 	});
 
 	it('shows the Pro requirement, display creation link and previews without output filters', () => {
@@ -257,7 +277,11 @@ describe('GalleryGrid display templates', () => {
 				button.getAttribute('aria-label') === 'common.preview'
 		);
 		act(() => previews[source === 'card' ? 1 : 0]!.click());
-		expect(container.querySelector('[role="dialog"] iframe')?.getAttribute('src')).toBe(
+		expect(
+			container
+				.querySelector('[role="dialog"] [data-testid="display-preview-frame"]')
+				?.getAttribute('src')
+		).toBe(
 			`https://example.test/wcpos-display/?preview=cart&${source === 'table' ? 'template=installed-display' : 'gallery=phone'}`
 		);
 	});

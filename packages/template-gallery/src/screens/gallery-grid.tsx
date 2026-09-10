@@ -28,6 +28,7 @@ function matchesFilters(
 		engine?: string;
 		output_type?: string;
 		direction?: 'ltr' | 'rtl';
+		screen?: GalleryTemplate['screen'];
 	},
 	filters: FilterState
 ): boolean {
@@ -36,6 +37,10 @@ function matchesFilters(
 	}
 
 	if (filters.categories.length > 0 && !filters.categories.includes(template.category)) {
+		return false;
+	}
+
+	if (filters.screen !== 'all' && template.screen !== filters.screen) {
 		return false;
 	}
 
@@ -182,6 +187,7 @@ export function GalleryGrid() {
 						<FilterSidebar
 							filters={filters}
 							showOutputFilters={type !== 'display'}
+							showScreenFilter={type === 'display'}
 							onChange={setFilters}
 							availableCategories={Array.from(
 								new Set(galleryTemplates.map((tmpl) => tmpl.category).filter((c) => c.length > 0))
@@ -223,7 +229,10 @@ export function GalleryGrid() {
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
 					activateLabel={previewTemplate.type === 'display' ? t('modal.set_live') : undefined}
-					canActivate={previewTemplate.type !== 'display' || (!previewIsGallery && isTemplateEnabled(previewTemplate as AnyTemplate))}
+					canActivate={
+						previewTemplate.type !== 'display' ||
+						(!previewIsGallery && isTemplateEnabled(previewTemplate as AnyTemplate))
+					}
 					onActivate={() => {
 						if (previewId == null) return;
 						// A display has one Live template; receipts toggle enabled/disabled.

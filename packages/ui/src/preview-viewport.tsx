@@ -60,9 +60,13 @@ export function PreviewViewport({
 	const containerRef = React.useRef<HTMLDivElement>(null);
 	const canvasRef = React.useRef<HTMLDivElement>(null);
 	const fallback = PAPER_DIMENSIONS[paperWidth];
+	// A screen or phone preview is a device frame: the document inside fills it and may scroll,
+	// so its scroll size must not drive the canvas (a wide template would snap the frame back
+	// to desktop width). Paper previews keep tracking the rendered document.
+	const isDeviceFrame = paperWidth === 'screen' || paperWidth === 'phone';
 	const [contentSize, setContentSize] = React.useState<ContentSize | null>(null);
-	const canvasW = contentSize?.width ?? fallback.width;
-	const canvasH = contentSize?.height ?? fallback.height;
+	const canvasW = (isDeviceFrame ? null : contentSize?.width) ?? fallback.width;
+	const canvasH = (isDeviceFrame ? null : contentSize?.height) ?? fallback.height;
 	const [zoom, setZoom] = React.useState<PreviewZoom>(100);
 	const [userPicked, setUserPicked] = React.useState(false);
 
@@ -80,7 +84,7 @@ export function PreviewViewport({
 	// measurable; a cross-origin `src` falls back to the paper dimensions.
 	React.useEffect(() => {
 		const canvas = canvasRef.current;
-		if (!canvas) return;
+		if (!canvas || isDeviceFrame) return;
 
 		let iframe: HTMLIFrameElement | null = null;
 		let resizeObserver: ResizeObserver | null = null;
@@ -158,7 +162,7 @@ export function PreviewViewport({
 			iframe?.removeEventListener('load', handleLoad);
 			resizeObserver?.disconnect();
 		};
-	}, []);
+	}, [isDeviceFrame]);
 
 	// Auto-fit the preview to the viewport until the user picks a zoom; re-runs
 	// when the measured content size changes so a freshly measured frame is

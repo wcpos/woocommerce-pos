@@ -36,8 +36,9 @@ class Gallery_Registry {
 					'woocommerce-pos'
 				),
 				'type'          => 'display',
+				'screen'        => 'small-screen',
 				'order'         => 20,
-				'category'      => 'small-screen',
+				'category'      => 'general',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
@@ -56,8 +57,9 @@ class Gallery_Registry {
 					'woocommerce-pos'
 				),
 				'type'          => 'display',
+				'screen'        => 'large-screen',
 				'order'         => 30,
-				'category'      => 'large-screen',
+				'category'      => 'general',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
@@ -70,8 +72,9 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The responsive default: itemised list with a totals panel on wide screens, a docked total on narrow ones. Install it to customise.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 10,
-				'category'      => 'responsive',
+				'category'      => 'general',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
@@ -84,6 +87,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'Rotate your own pictures between sales. Swap the three image links for yours and edit the captions; a small version keeps cycling under the totals.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 40,
 				'category'      => 'general',
 				'engine'        => 'logicless',
@@ -99,6 +103,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A short list of featured items and prices for the idle screen, with an "ask about today\'s specials" line on the order screens. Edit the four lines.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 41,
 				'category'      => 'general',
 				'engine'        => 'logicless',
@@ -114,6 +119,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'Your social handle and a QR code between sales; paste in your own QR image. Adds your handle to the order screens.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 42,
 				'category'      => 'general',
 				'engine'        => 'logicless',
@@ -129,6 +135,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a festive idle screen for the December–January window; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 50,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -144,6 +151,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a red-and-gold idle screen wishing customers good fortune; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 51,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -159,6 +167,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a night-blue-and-gold idle screen for Ramadan and Eid al-Fitr; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 52,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -174,6 +183,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a warm idle screen of lights; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 53,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -189,6 +199,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A love letter with a wax seal on a blush ground; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 54,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -204,6 +215,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A ring of petals around the greeting, with a soft accent on the order screens. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 55,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -219,6 +231,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A workshop card between plaid bands. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 56,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -234,6 +247,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A row of patterned eggs on a spring gradient. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 57,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -249,6 +263,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'An orange moon, bats and jagged grass. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 58,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -264,6 +279,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A harvest wreath of leaves. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 59,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -279,6 +295,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'A menorah of nine candles. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 60,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -294,6 +311,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'Confetti and a gold burst. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 61,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -309,6 +327,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'Tulips for the spring equinox. Edit the greeting.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 62,
 				'category'      => 'seasonal',
 				'engine'        => 'logicless',
@@ -324,6 +343,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'The Ledger with a promotional idle screen: a headline and an offer line you edit for each promotion.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 70,
 				'category'      => 'promotion',
 				'engine'        => 'logicless',
@@ -339,6 +359,7 @@ class Gallery_Registry {
 				/* translators: Gallery template description shown in the admin Template Gallery. */
 				'description'   => __( 'Blackout with a deals ticker, and the offer line repeated on the order screens. Edit the offer.', 'woocommerce-pos' ),
 				'type'          => 'display',
+				'screen'        => 'responsive',
 				'order'         => 71,
 				'category'      => 'promotion',
 				'engine'        => 'logicless',

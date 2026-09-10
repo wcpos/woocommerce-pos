@@ -174,17 +174,17 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 
 		new Templates();
 
-		$this->assertSame( array( 'small-screen' ), wp_get_post_terms( $posts['display-pocket'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
-		$this->assertSame( array( 'large-screen' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
-		$this->assertSame( array( 'responsive' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $posts['display-pocket'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 		$this->assertSame( array( 'promotion' ), wp_get_post_terms( $customized, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
-		$this->assertEqualsCanonicalizing( array( 'promotion', 'large-screen' ), wp_get_post_terms( $mixed, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertEqualsCanonicalizing( array( 'promotion', 'general' ), wp_get_post_terms( $mixed, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 	}
 
 	public function test_failed_category_migration_keeps_legacy_term_and_latch_until_success(): void {
 		$post_id = Templates::install_gallery_template( 'display-pocket' );
 		wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category' );
-		$this->delete_default_term( 'small-screen', 'wcpos_template_category' );
+		$this->delete_default_term( 'general', 'wcpos_template_category' );
 		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
 		$refuse = static function ( $term, $taxonomy ) {
 			return 'wcpos_template_category' === $taxonomy ? new \WP_Error( 'test_refused', 'refused' ) : $term;
@@ -201,12 +201,12 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 
 		new Templates();
 
-		$this->assertSame( array( 'small-screen' ), wp_get_post_terms( $post_id, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $post_id, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
 	}
 
 	public function legacy_display_categories(): array {
-		return array( array( 'display' ), array( 'standard' ) );
+		return array( array( 'display' ), array( 'standard' ), array( 'responsive' ), array( 'small-screen' ), array( 'large-screen' ) );
 	}
 
 	private function delete_default_term( string $slug, string $taxonomy ): void {

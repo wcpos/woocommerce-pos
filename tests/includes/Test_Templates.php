@@ -1112,11 +1112,21 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test that default template categories are registered.
 	 */
 	public function test_default_categories_registered(): void {
+		foreach ( array( 'responsive', 'small-screen', 'large-screen' ) as $slug ) {
+			$term = get_term_by( 'slug', $slug, 'wcpos_template_category' );
+			if ( $term ) {
+				wp_delete_term( $term->term_id, 'wcpos_template_category' );
+			}
+		}
 		// Re-trigger seeding to insert terms within this test's transaction:
 		// construction only seeds when the DEFAULT_TERMS_VERSION latch is below
 		// the current version (Test_Templates_Default_Terms pins that).
 		delete_option( Templates::DEFAULT_TERMS_OPTION );
 		new Templates();
+
+		foreach ( array( 'responsive', 'small-screen', 'large-screen' ) as $slug ) {
+			$this->assertNull( term_exists( $slug, 'wcpos_template_category' ) );
+		}
 
 		$receipt = term_exists( 'receipt', 'wcpos_template_category' );
 		$this->assertNotNull( $receipt );
@@ -1139,7 +1149,11 @@ class Test_Templates extends WP_UnitTestCase {
 		$bar_ticket = term_exists( 'bar-ticket', 'wcpos_template_category' );
 		$this->assertNotNull( $bar_ticket );
 
-		foreach ( array( 'responsive' => 'Responsive', 'small-screen' => 'Small screen', 'large-screen' => 'Large screen', 'general' => 'General', 'seasonal' => 'Seasonal', 'promotion' => 'Promotion' ) as $slug => $label ) {
+		foreach ( array(
+			'general' => 'General',
+			'seasonal' => 'Seasonal',
+			'promotion' => 'Promotion',
+		) as $slug => $label ) {
 			$term = get_term_by( 'slug', $slug, 'wcpos_template_category' );
 			$this->assertInstanceOf( \WP_Term::class, $term );
 			$this->assertSame( $label, $term->name );
@@ -1426,7 +1440,7 @@ class Test_Templates extends WP_UnitTestCase {
 	/**
 	 * Test gallery metadata lookup returns registry metadata without file contents.
 	 *
-	 * get_template() resolves preview_data through this lookup, so it must never
+	 * The get_template() method resolves preview_data through this lookup, so it must never
 	 * carry template content — reading content is what made the old path scan the
 	 * whole gallery directory.
 	 */
@@ -1499,7 +1513,7 @@ class Test_Templates extends WP_UnitTestCase {
 	/**
 	 * Test gallery template lookup by key still returns the bundled content.
 	 *
-	 * get_gallery_template_by_key() now reads only the requested key's file; the
+	 * The get_gallery_template_by_key() method now reads only the requested key's file; the
 	 * returned record must stay identical to the matching entry in the full list.
 	 */
 	public function test_get_gallery_template_by_key_matches_full_gallery_listing(): void {
