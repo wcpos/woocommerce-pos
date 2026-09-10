@@ -692,23 +692,7 @@ class Escpos_Thermal_Emitter {
 		// GS ( k only executes at the beginning of a line in standard mode.
 		$this->close_open_line();
 
-		// Select model 2.
-		$this->raw( array( 0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00 ) );
-		// Set module size.
-		$this->raw( array( 0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, $size ) );
-		// Set error correction level (M).
-		$this->raw( array( 0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31 ) );
-
-		// Store data.
-		$data    = substr( $value, 0, 0xffff - 3 );
-		$payload = \strlen( $data ) + 3;
-		$p_l     = $payload & 0xff;
-		$p_h     = ( $payload >> 8 ) & 0xff;
-		$this->raw( array( 0x1d, 0x28, 0x6b, $p_l, $p_h, 0x31, 0x50, 0x30 ) );
-		$this->raw_string( $data );
-
-		// Print the stored symbol.
-		$this->raw( array( 0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30 ) );
+		$this->raw_string( Escpos_Qr::bytes( $value, $size ) );
 	}
 
 	/**

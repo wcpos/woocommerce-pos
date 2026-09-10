@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Html_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Tspl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Zpl_Output_Adapter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Qr;
 use WC_REST_Unit_Test_Case;
 
 /**
@@ -125,7 +126,7 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 
 		$this->assertStringContainsString( Escpos_Output_Adapter::CODEPAGE_PREFIX . chr( 16 ), $output );
 		$this->assertStringContainsString( Escpos_Output_Adapter::DRAWER_KICK, $output );
-		$this->assertStringContainsString( '[QR] FISCAL-QR-1001', $output );
+		$this->assertStringContainsString( Escpos_Qr::bytes( 'FISCAL-QR-1001', 4 ), $output );
 		$this->assertStringEndsWith( Escpos_Output_Adapter::CUT_PARTIAL, $output );
 	}
 
@@ -250,5 +251,35 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 
 		$factory = new Receipt_Output_Adapter_Factory();
 		$factory->create( 'starprnt' );
+	}
+
+	/**
+	 * A fiscal QR payload emits native commands instead of a text placeholder.
+	 */
+	public function test_escpos_fiscal_qr_payload_emits_native_qr(): void {
+		$receipt_data                        = $this->get_fixture_payload();
+		$receipt_data['fiscal']['qr_payload'] = 'https://example.test/r/1';
+
+		$output = ( new Escpos_Output_Adapter() )->transform( $receipt_data, array( 'print_qr' => true ) );
+
+		$this->assertStringContainsString(
+			Escpos_Output_Adapter::ALIGN_CENTER . Escpos_Qr::bytes( 'https://example.test/r/1', 4 )
+			. Escpos_Output_Adapter::LF . Escpos_Output_Adapter::ALIGN_LEFT,
+			$output
+		);
+		$this->assertStringNotContainsString( '[QR]', $output );
+	}
+
+	/**
+	 * An empty fiscal payload emits neither QR commands nor a placeholder.
+	 */
+	public function test_escpos_empty_fiscal_qr_payload_emits_no_qr(): void {
+		$receipt_data                        = $this->get_fixture_payload();
+		$receipt_data['fiscal']['qr_payload'] = '';
+
+		$output = ( new Escpos_Output_Adapter() )->transform( $receipt_data, array( 'print_qr' => true ) );
+
+		$this->assertStringNotContainsString( "\x1d\x28\x6b", $output );
+		$this->assertStringNotContainsString( '[QR]', $output );
 	}
 }
