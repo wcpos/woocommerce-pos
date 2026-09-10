@@ -17,6 +17,7 @@ use Exception;
 use WC_Customer;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Customer_Account_Guard;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -158,21 +159,70 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Check if a given request has access to update a customer.
 	 *
-	 * WC checks edit_users. The POS fallback also checks edit_users so the
-	 * Access settings page toggle controls this behaviour.
+	 * WCPOS never widens WooCommerce's credential fence, which refuses
+	 * email/password changes on non-customer roles. The guard additionally
+	 * keeps non-admins off staff accounts, testing capabilities rather than
+	 * WooCommerce's first-role-only test.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return WP_Error|bool
 	 */
 	public function update_item_permissions_check( $request ) {
-		$permission = parent::update_item_permissions_check( $request );
+		return $this->wcpos_guarded_permissions_check(
+			(int) $request['id'],
+			function () use ( $request ) {
+				return parent::update_item_permissions_check( $request );
+			}
+		);
+	}
 
-		if ( is_wp_error( $permission ) && current_user_can( 'edit_users' ) ) {
-			return true;
+	/**
+	 * Check if a given request has access to delete a customer.
+	 *
+	 * WooCommerce refuses deleting a user whose role is outside its allowed
+	 * list, but it reads only the FIRST role, so an administrator who also
+	 * holds the customer role is deleted by any POS user with delete_users.
+	 * The guard closes that by capability.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|bool
+	 */
+	public function delete_item_permissions_check( $request ) {
+		return $this->wcpos_guarded_permissions_check(
+			(int) $request['id'],
+			function () use ( $request ) {
+				return parent::delete_item_permissions_check( $request );
+			}
+		);
+	}
+
+	/**
+	 * Run WooCommerce's own check behind the staff account guard.
+	 *
+	 * The guard runs first and can only refuse. When it clears the target,
+	 * that target's roles are allowed through WooCommerce's shop_manager
+	 * role-name restriction for the duration of the check, so a cleared
+	 * subscriber or membership-plugin role is judged by capability.
+	 *
+	 * @param int      $target_id Target user ID.
+	 * @param callable $check     Returns WooCommerce's verdict.
+	 *
+	 * @return WP_Error|bool
+	 */
+	private function wcpos_guarded_permissions_check( int $target_id, callable $check ) {
+		if ( ! Customer_Account_Guard::can_modify( get_current_user_id(), $target_id ) ) {
+			return Customer_Account_Guard::denial();
 		}
 
-		return $permission;
+		$restore = Customer_Account_Guard::allow_target_roles( $target_id );
+
+		try {
+			return $check();
+		} finally {
+			$restore();
+		}
 	}
 
 	/**

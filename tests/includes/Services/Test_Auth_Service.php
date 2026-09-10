@@ -36,6 +36,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	public function tearDown(): void {
+		remove_filter( 'user_has_cap', array( $this, 'apply_role_denies' ), 10 );
+		foreach ( $this->denied_caps as $cap ) {
+			get_role( 'customer' )->remove_cap( $cap );
+		}
+		$this->denied_caps = array();
+
 		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'] );
 		parent::tearDown();
 		unset( $this->auth_service );
@@ -2019,5 +2025,87 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$session = $this->store_session_with_context( $context );
 
 		return $session['device_info'];
+	}
+
+	/**
+	 * Capabilities denied on the customer role by the current test, removed in tearDown.
+	 *
+	 * @var string[]
+	 */
+	private $denied_caps = array();
+
+	/**
+	 * Create a customer-first administrator with Members-style role denies.
+	 *
+	 * @param string[] $denied Capabilities denied on the customer role.
+	 * @return \WP_User
+	 */
+	private function create_denied_user( array $denied ): \WP_User {
+		$this->denied_caps = $denied;
+		foreach ( $denied as $cap ) {
+			get_role( 'customer' )->add_cap( $cap, false );
+		}
+		$user_id = wp_insert_user(
+			array(
+				'user_login' => 'members-denied-user',
+				'user_pass'  => 'test-password',
+				'role'       => 'customer',
+			)
+		);
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_role( 'administrator' );
+		add_filter( 'user_has_cap', array( $this, 'apply_role_denies' ), 10, 4 );
+
+		return $user;
+	}
+
+	/**
+	 * Emulate Members: a deny on any role overrides grants for multi-role users.
+	 *
+	 * @param array    $allcaps Merged grants.
+	 * @param string[] $caps    Required capabilities.
+	 * @param array    $args    Capability check arguments.
+	 * @param \WP_User $user    User being checked.
+	 * @return array
+	 */
+	public function apply_role_denies( array $allcaps, array $caps, array $args, \WP_User $user ): array {
+		if ( count( $user->roles ) >= 2 ) {
+			foreach ( $user->roles as $role ) {
+				foreach ( get_role( $role )->capabilities as $cap => $grant ) {
+					if ( false === $grant ) {
+						$allcaps[ $cap ] = false;
+					}
+				}
+			}
+		}
+
+		return $allcaps;
+	}
+
+	/**
+	 * Payload excludes a role-editor deny even when raw administrator grants win.
+	 */
+	public function test_get_user_data_capabilities_excludes_capability_denied_by_user_has_cap_filter(): void {
+		$user = $this->create_denied_user( array( 'read_private_products' ) );
+		$this->assertTrue( $user->allcaps['read_private_products'] );
+
+		$data = $this->auth_service->get_user_data( $user );
+
+		$this->assertNotContains( 'read_private_products', $data['capabilities'] );
+		$this->assertContains( 'access_woocommerce_pos', $data['capabilities'] );
+		$this->assertContains( 'edit_product', $data['capabilities'] );
+		$this->assertFalse( user_can( $user, 'read_private_products' ) );
+	}
+
+	/**
+	 * Singular meta grants also respect the role-editor deny filter.
+	 */
+	public function test_get_user_data_capabilities_excludes_meta_cap_denied_by_user_has_cap_filter(): void {
+		$user = $this->create_denied_user( array( 'edit_product' ) );
+		$this->assertTrue( $user->allcaps['edit_product'] );
+
+		$data = $this->auth_service->get_user_data( $user );
+
+		$this->assertNotContains( 'edit_product', $data['capabilities'] );
 	}
 }

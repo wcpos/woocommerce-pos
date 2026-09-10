@@ -19,6 +19,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use WCPOS\WooCommercePOS\Services\Cashier;
 use WP_Error;
 use WP_User;
 
@@ -317,9 +318,9 @@ class Auth {
 		}
 
 		// Check if user has access to POS.
-		if ( ! user_can( $user, 'access_woocommerce_pos' ) ) {
+		if ( ! Cashier::instance()->can_open_pos( $user ) ) {
 			$this->log_auth_attempt( $username, 'no_permission' );
-			$this->error = __( 'You do not have permission to access the POS.', 'woocommerce-pos' );
+			$this->error = Cashier::instance()->missing_pos_capabilities_message( $user );
 
 			return;
 		}

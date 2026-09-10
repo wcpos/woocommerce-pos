@@ -128,6 +128,20 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.10.10 - 2026/09/09 =
+
+- **Security: cashiers can no longer change the email or password of administrator or other staff accounts** through the POS. POS users can only edit customer accounts.
+- **Users with more than one role (for example administrator plus customer through the Members plugin) no longer get "forbidden" on every product load and sale**, and when access really is denied the error names the missing capability.
+- **Stores using WooCommerce Tax (TaxJar) keep stable tax-rate IDs on POS saves**, so county and city rates no longer swap places on the order.
+- **Stores using WooCommerce Tax with tax based on the store address send the store's street to TaxJar**, not the customer's, when a customer shares the store's location.
+- **An installed Windows printer no longer hides behind the "no printers yet" screen**, and generic Bluetooth printer profiles set up correctly on iOS and Android.
+- **Tapping the cart quantity on iOS and Android selects the number so typing replaces it**, and two-digit quantities no longer clip.
+- **Fewer stalls on iPad while the till is idle**: the background variation check runs as one query instead of one per product.
+- **The web app repairs a damaged local bookkeeping file** instead of logging the same storage error on every sync.
+- **Faster, safer local saves on iOS and Android**: the storage swap file is copied natively and an interrupted write is recovered on the next open.
+- **The iOS and Android apps report crashes when telemetry is enabled.**
+- Updated translations.
+
 = 1.10.9 - 2026/09/07 =
 
 - **A sale with a coupon no longer stays "POS - Open" after it is paid.**
