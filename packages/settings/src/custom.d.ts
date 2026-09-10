@@ -3,6 +3,7 @@
 
 declare global {
 	interface WcposSettings {
+		environment?: { cloudflare?: { proxied: boolean; plugin_active: boolean } };
 		barcodes?: string[];
 		order_statuses?: Record<string, string>;
 		countries?: Record<string, string>;

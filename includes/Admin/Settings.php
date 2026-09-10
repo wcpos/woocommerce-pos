@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\API\V1\Logs;
+use WCPOS\WooCommercePOS\Services\Cloudflare_Detector;
 use WCPOS\WooCommercePOS\Services\Extensions as ExtensionsService;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
@@ -147,6 +148,7 @@ class Settings {
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
+            environment: %s,
             barcodes: %s,
             order_statuses: %s,
             countries: %s,
@@ -158,6 +160,7 @@ class Settings {
             anon_id: %s,
             site_uuid: %s
         }; wcpos.translationVersion = %s;',
+			json_encode( array( 'cloudflare' => ( new Cloudflare_Detector() )->detect() ) ),
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
 			json_encode( $countries ),
