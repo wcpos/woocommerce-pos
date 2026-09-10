@@ -94,7 +94,8 @@ class Font_Pack_Loader {
 			return null !== $installed;
 		}
 		set_transient( $lock, 1, self::LOCK_TTL );
-		$staged = array();
+		$staged    = array();
+		$published = 0;
 		try {
 			$local    = $this->local_pack_dir( $pack );
 			$local    = '' !== $local && is_file( $local . '/pack.json' ) ? $local : '';
@@ -125,25 +126,22 @@ class Font_Pack_Loader {
 			$staged[ $receipt ] = $this->stage( $receipt, $json );
 			foreach ( $staged as $path => $temp ) {
 				if ( ! @rename( $temp, $path ) ) {
-					throw new \RuntimeException( 'Cannot write ' . basename( $path ) );
+					throw new \RuntimeException( 'Cannot write ' . esc_html( basename( $path ) ) );
 				}
 				unset( $staged[ $path ] );
+				++$published;
 			}
-			$families = array();
-			foreach ( glob( $dir . '/*.json' ) as $path ) {
-				if ( basename( $path ) !== 'installed-fonts.json' ) {
-					$manifest = json_decode( (string) @file_get_contents( $path ), true );
-					$families = array_merge( $families, $manifest['families'] ?? array() );
-				}
-			}
-			$map = $dir . '/installed-fonts.json';
-			if ( ! @rename( $this->stage( $map, (string) wp_json_encode( $families ) ), $map ) ) {
-				throw new \RuntimeException( 'Cannot write installed-fonts.json' );
-			}
+			$this->write_map( $dir );
 			return true;
 		} catch ( \RuntimeException $e ) {
 			foreach ( $staged as $temp ) {
 				@unlink( $temp );
+			}
+			if ( $published > 0 ) {
+				// Some files were replaced before the failure: without its receipt the pack
+				// no longer passes the installed check with mixed versions, and the next
+				// ensure() repairs it whole instead of rendering with mismatched metrics.
+				@unlink( $receipt );
 			}
 			set_transient( $failed, 1, self::FAILED_TTL );
 			Logger::log( 'Font pack ' . $pack . ': ' . $e->getMessage() );
@@ -158,13 +156,50 @@ class Font_Pack_Loader {
 	 *
 	 * @param bool $refresh Reinstall packs whose source version changed (plugin upgrades).
 	 * @return bool Whether every pack is installed.
+	 * @throws \RuntimeException Caught within the method; a map write failure becomes a false return.
 	 */
 	public function ensure_all( bool $refresh = false ): bool {
 		$success = true;
 		foreach ( self::packs() as $pack ) {
 			$success = $this->ensure( $pack, $refresh ) && $success;
 		}
+		try {
+			// Installs of different packs hold separate locks and can race on the
+			// shared map; rebuilding it from the receipts on disk self-heals that on
+			// the next call, and writes nothing when it is already current.
+			$this->write_map( $this->dir() );
+		} catch ( \RuntimeException $e ) {
+			Logger::log( 'Font packs: ' . $e->getMessage() );
+			return false;
+		}
 		return $success;
+	}
+
+	/**
+	 * Rebuild Dompdf's user font map from every installed pack receipt.
+	 *
+	 * @param string $dir Font directory.
+	 * @throws \RuntimeException On a write failure.
+	 */
+	private function write_map( string $dir ): void {
+		$families = array();
+		foreach ( glob( $dir . '/*.json' ) as $path ) {
+			if ( 'installed-fonts.json' !== basename( $path ) ) {
+				$manifest = json_decode( (string) @file_get_contents( $path ), true );
+				$families = array_merge( $families, $manifest['families'] ?? array() );
+			}
+		}
+		if ( array() === $families ) {
+			return;
+		}
+		$map  = $dir . '/installed-fonts.json';
+		$json = (string) wp_json_encode( $families );
+		if ( @file_get_contents( $map ) === $json ) {
+			return;
+		}
+		if ( ! @rename( $this->stage( $map, $json ), $map ) ) {
+			throw new \RuntimeException( 'Cannot write installed-fonts.json' );
+		}
 	}
 
 	/**

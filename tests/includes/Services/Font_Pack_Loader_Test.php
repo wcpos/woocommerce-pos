@@ -301,4 +301,38 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			remove_filter( 'woocommerce_pos_font_pack_sources', $filter );
 		}
 	}
+
+	/** A stale shared map is rebuilt from the installed receipts on the next call. */
+	public function test_ensure_all_rebuilds_stale_font_map(): void {
+		// Arrange.
+		$this->assertTrue( $this->loader->ensure_all() );
+		$map = $this->loader->dir() . '/installed-fonts.json';
+		file_put_contents( $map, '{}' );
+		// Act.
+		$result = $this->loader->ensure_all();
+		// Assert.
+		$this->assertTrue( $result );
+		$this->assertArrayHasKey( 'dejavu sans', json_decode( file_get_contents( $map ), true ) );
+	}
+
+	/** A publish interrupted after some files were replaced must not leave a pack that passes the installed check. */
+	public function test_ensure_publish_failure_forgets_the_pack(): void {
+		// Arrange: one destination is blocked by a directory so its rename fails mid-publish.
+		$this->assertTrue( $this->loader->ensure( 'dejavu' ) );
+		$receipt = $this->loader->dir() . '/dejavu.json';
+		$blocked = $this->loader->dir() . '/DejaVuSansMono-Bold.ufm';
+		unlink( $blocked );
+		mkdir( $blocked );
+		try {
+			// Act.
+			$result = $this->loader->ensure( 'dejavu' );
+			// Assert.
+			$this->assertFalse( $result );
+			$this->assertFileDoesNotExist( $receipt );
+			$this->assertSame( array(), glob( $this->loader->dir() . '/*.tmp' ) );
+			$this->assertNotFalse( get_transient( 'wcpos_font_pack_failed_dejavu' ) );
+		} finally {
+			rmdir( $blocked );
+		}
+	}
 }
