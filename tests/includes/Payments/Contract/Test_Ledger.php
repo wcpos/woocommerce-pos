@@ -31,6 +31,44 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		} );
 	}
 
+	public function test_record_provenance_survives_transitions_and_register_replay_conflicts(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$input = $this->payment( 'pos_cash', '20.00' );
+		$input['register_id'] = strtoupper( wp_generate_uuid4() );
+		$input['session_id'] = strtoupper( wp_generate_uuid4() );
+		$row = $ledger->record( $order, $input, array( 'register_id' => wp_generate_uuid4(), 'session_id' => wp_generate_uuid4() ) );
+		$this->assertSame( strtolower( $input['register_id'] ), $row['register_id'] );
+		$this->assertSame( strtolower( $input['session_id'] ), $row['session_id'] );
+		$stored = $ledger->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame( $row['register_id'], $stored['register_id'] );
+		$this->assertSame( $row['session_id'], $stored['session_id'] );
+		$row['status'] = 'authorized';
+		foreach ( array( 'captured', 'voided' ) as $status ) {
+			$row = $ledger->apply_transition( $row, array( 'status' => $status, 'register_id' => wp_generate_uuid4(), 'session_id' => wp_generate_uuid4() ) );
+			$this->assertSame( $status, $row['status'] );
+			$this->assertSame( strtolower( $input['register_id'] ), $row['register_id'] );
+			$this->assertSame( strtolower( $input['session_id'] ), $row['session_id'] );
+		}
+		$input['session_id'] = wp_generate_uuid4();
+		$this->assertIsArray( $ledger->record( $order, $input ) );
+		$input['register_id'] = wp_generate_uuid4();
+		$error = $ledger->record( $order, $input );
+		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
+		$this->assertSame( 409, $error->get_error_data()['status'] );
+	}
+
+	public function test_record_invalid_provenance_normalizes_to_null(): void {
+		$order = $this->create_pos_order();
+		$input = array_merge( $this->payment( 'pos_cash', '20.00' ), array( 'register_id' => array(), 'session_id' => 'bad' ) );
+		$row = Ledger::instance()->record( $order, $input );
+		$this->assertNull( $row['register_id'] );
+		$this->assertNull( $row['session_id'] );
+		$stored = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertNull( $stored['register_id'] );
+		$this->assertNull( $stored['session_id'] );
+	}
+
 	public function test_intent_disabled_method_returns_403(): void {
 		$order = $this->create_pos_order();
 		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {

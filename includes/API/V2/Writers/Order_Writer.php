@@ -63,6 +63,9 @@ class Order_Writer extends Null_Writer {
 		}
 		$meta_data = isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array();
 		$till_meta = Pos_Order_Audit::till_meta_from_payload( $meta_data );
+		if ( isset( $till_meta['_wcpos_sale_time'] ) ) {
+			$till_meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
+		}
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
 		if ( self::asserts_payment( $payload ) ) {
@@ -339,6 +342,7 @@ class Order_Writer extends Null_Writer {
 		$clear_email = isset( $forward['billing'] ) && is_array( $forward['billing'] )
 			&& array_key_exists( 'email', $forward['billing'] ) && '' === $forward['billing']['email'];
 		$fill_meta = array();
+		$provenance_refused = array();
 		$pre_store = null;
 		$order     = wc_get_order( $id );
 		if ( $order ) {
@@ -366,6 +370,21 @@ class Order_Writer extends Null_Writer {
 					$fill_meta[ $key ] = $till[ $key ];
 				}
 			}
+			// Sale provenance is fillable while the order still needs payment (a
+			// failed final leg re-stamps it) and frozen once the order is paid.
+			$unpaid = $order->needs_payment();
+			foreach ( Pos_Order_Audit::provenance_meta_keys() as $key ) {
+				if ( ! isset( $till[ $key ] ) ) {
+					continue;
+				}
+				$stored = (string) $order->get_meta( $key );
+				if ( '' === $stored || ( $unpaid && $stored !== $till[ $key ] ) ) {
+					$fill_meta[ $key ]                       = $till[ $key ];
+					$fill_meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
+				} elseif ( $stored !== $till[ $key ] ) {
+					$provenance_refused[] = $key;
+				}
+			}
 			if ( $authorized && (string) $order->get_meta( '_pos_store' ) !== (string) $reassignment['_pos_store'] ) {
 				$fill_meta['_pos_store'] = (string) $reassignment['_pos_store'];
 			}
@@ -380,6 +399,7 @@ class Order_Writer extends Null_Writer {
 				'store_authorized' => $authorized,
 				'pre_store' => $pre_store,
 				'fill_meta' => $fill_meta,
+				'provenance_refused' => $provenance_refused,
 			),
 		);
 	}
@@ -389,6 +409,9 @@ class Order_Writer extends Null_Writer {
 		$order = wc_get_order( $id );
 		if ( ! $order || ! is_array( $data ) ) {
 			return;
+		}
+		if ( ! empty( $context['provenance_refused'] ) ) {
+			Order_Notes::add_provenance_refused_note( $order, $context['provenance_refused'] );
 		}
 		$current_user = get_current_user_id();
 		$change       = $context['reassignment'];
@@ -460,6 +483,16 @@ class Order_Writer extends Null_Writer {
 			$value = Meta_Entry::value( $entry ) ?? '';
 			if ( is_scalar( $key ) && in_array( (string) $key, Pos_Order_Audit::cash_meta_keys(), true ) && is_scalar( $value ) && '' !== (string) $value ) {
 				$meta[ (string) $key ] = (string) $value;
+			}
+		}
+		$till = Pos_Order_Audit::till_meta_from_payload( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() );
+		$order = wc_get_order( $id );
+		foreach ( Pos_Order_Audit::provenance_meta_keys() as $key ) {
+			if ( isset( $till[ $key ] ) ) {
+				$meta[ $key ] = $till[ $key ];
+				if ( $order && '' === (string) $order->get_meta( $key ) && '' === (string) $order->get_meta( '_wcpos_sale_received_gmt' ) ) {
+					$meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
+				}
 			}
 		}
 		if ( $meta ) {

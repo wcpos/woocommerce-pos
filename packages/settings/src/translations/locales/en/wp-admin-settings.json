@@ -331,5 +331,17 @@
 	"cloud_print.trigger_paid": "once it's paid",
 	"cloud_print.trigger_created": "as soon as it's created",
 	"cloud_print.rule_copies_suffix": ".",
-	"cloud_print.add_rule": "+ Add rule"
+	"cloud_print.add_rule": "+ Add rule",
+	"registers.registers": "Registers",
+	"registers.name": "Name",
+	"registers.platform": "Platform",
+	"registers.last_seen": "Last seen",
+	"registers.default_float": "Default float",
+	"registers.status": "Status",
+	"registers.active": "Active",
+	"registers.retired": "Retired",
+	"registers.retire": "Retire",
+	"registers.reactivate": "Reactivate",
+	"registers.empty": "No registers have connected yet.",
+	"registers.save_failed": "Register could not be saved."
 }

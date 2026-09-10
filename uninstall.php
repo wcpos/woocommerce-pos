@@ -50,6 +50,7 @@ function woocommerce_pos_uninstall_table_suffixes(): array {
 		'wcpos_sync_journal',
 		'wcpos_sync_stored_digest',
 		'wcpos_sync_mutations',
+		'wcpos_registers',
 		// Legacy (pre-unified-journal) tables.
 		'wcpos_sync_change_log',
 		'wcpos_sync_order_index',

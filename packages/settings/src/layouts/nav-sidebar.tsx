@@ -46,6 +46,11 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 					<NavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
 					<NavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
 					<NavItem
+						to="/registers"
+						label={t('registers.registers', 'Registers')}
+						onClick={onNavItemClick}
+					/>
+					<NavItem
 						to="/extensions"
 						label={t('common.extensions', 'Extensions')}
 						badge={updateExtensionsCount ?? undefined}
