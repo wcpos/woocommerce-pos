@@ -234,4 +234,71 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			remove_filter( 'woocommerce_pos_font_packs', '__return_empty_array' );
 		}
 	}
+
+	/** A failed repair must leave every previously installed file in place. */
+	public function test_ensure_repair_failure_preserves_installed_files(): void {
+		// Arrange: a complete install, one file lost, and the CDN serving a corrupt replacement for another.
+		$this->assertTrue( $this->loader->ensure( 'dejavu' ) );
+		unlink( $this->loader->dir() . '/DejaVuSansMono.ufm' );
+		$this->use_cdn();
+		$this->corrupt = 'DejaVuSans-Bold.ttf';
+		// Act.
+		$result = $this->loader->ensure( 'dejavu' );
+		// Assert.
+		$this->assertFalse( $result );
+		$this->assertFileExists( $this->loader->dir() . '/DejaVuSans.ttf' );
+		$this->assertFileExists( $this->loader->dir() . '/dejavu.json' );
+		$this->assertSame( array(), glob( $this->loader->dir() . '/*.tmp' ) );
+	}
+
+	/** Refresh reinstalls only when the source manifest version changed. */
+	public function test_ensure_refresh_reinstalls_only_when_version_changes(): void {
+		// Arrange.
+		$this->assertTrue( $this->loader->ensure( 'dejavu' ) );
+		$receipt = $this->loader->dir() . '/dejavu.json';
+		$files   = glob( $this->loader->dir() . '/*' );
+		foreach ( $files as $file ) {
+			touch( $file, 1000000000 );
+		}
+		// Act 1: same version, nothing rewritten.
+		$same = $this->loader->ensure( 'dejavu', true );
+		clearstatcache();
+		// Assert 1.
+		$this->assertTrue( $same );
+		foreach ( $files as $file ) {
+			$this->assertSame( 1000000000, filemtime( $file ) );
+		}
+		// Act 2: the installed receipt claims an older version.
+		$stale            = json_decode( file_get_contents( $receipt ), true );
+		$stale['version'] = 0;
+		file_put_contents( $receipt, wp_json_encode( $stale ) );
+		$changed = $this->loader->ensure( 'dejavu', true );
+		clearstatcache();
+		// Assert 2.
+		$this->assertTrue( $changed );
+		$this->assertSame( 1, json_decode( file_get_contents( $receipt ), true )['version'] );
+		$this->assertNotSame( 1000000000, filemtime( $this->loader->dir() . '/DejaVuSans.ttf' ) );
+	}
+
+	/** The sources filter can add a pack that is fetched from its own CDN. */
+	public function test_ensure_sources_filter_adds_pack(): void {
+		// Arrange.
+		$this->cdn = true;
+		$filter    = static function ( array $sources ): array {
+			$sources['extra'] = 'https://cdn.example.com/packs/extra@%s/';
+			return $sources;
+		};
+		add_filter( 'woocommerce_pos_font_pack_sources', $filter );
+		try {
+			// Act.
+			$result = $this->loader->ensure( 'extra' );
+			// Assert.
+			$this->assertTrue( $result );
+			$this->assertContains( 'extra', Font_Pack_Loader::packs() );
+			$this->assertStringStartsWith( 'https://cdn.example.com/packs/extra@' . Frontend::cdn_ref() . '/', $this->requests[0] );
+			$this->assertFileExists( $this->loader->dir() . '/extra.json' );
+		} finally {
+			remove_filter( 'woocommerce_pos_font_pack_sources', $filter );
+		}
+	}
 }

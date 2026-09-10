@@ -315,7 +315,9 @@ class Raster_Thermal_Emitter {
 	 * them.
 	 *
 	 * @param bool $filtered Whether to run the filter. The support probe skips it
-	 *                       so a broken filter cannot make the emitter look absent.
+	 *                       while the pack face exists, so a broken filter cannot
+	 *                       make the emitter look absent; without the pack a
+	 *                       readable filtered face still counts.
 	 *
 	 * @return string The readable font path, or '' when none resolves.
 	 */
@@ -324,8 +326,8 @@ class Raster_Thermal_Emitter {
 		$loader->ensure_all();
 		$bundled = $loader->font_path( 'DejaVuSansMono.ttf' );
 
-		if ( ! $filtered ) {
-			return is_readable( $bundled ) ? $bundled : '';
+		if ( ! $filtered && is_readable( $bundled ) ) {
+			return $bundled;
 		}
 
 		/**

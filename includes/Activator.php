@@ -354,7 +354,7 @@ class Activator {
 		}
 
 		if ( $locked_plugin_needs_upgrade ) {
-			( new Font_Pack_Loader() )->ensure_all();
+			( new Font_Pack_Loader() )->ensure_all( true );
 			Services\Settings::bump_versions();
 		}
 
