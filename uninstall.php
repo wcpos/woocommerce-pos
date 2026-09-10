@@ -401,6 +401,13 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
 		wp_unschedule_hook( $hook );
 	}
+	// The background font install is queued on Action Scheduler (WooCommerce is
+	// normally still active during an uninstall). Cancel it like the cron events
+	// above, whether or not Pro is present: an installed-but-inactive Pro would
+	// leave the action with no callback, and an active Pro re-queues on demand.
+	if ( \function_exists( 'as_unschedule_all_actions' ) ) {
+		as_unschedule_all_actions( 'wcpos_install_font_packs' );
+	}
 
 	// 2. Drop plugin tables. All are derived from WooCommerce data and are
 	// rebuilt on reinstall.
@@ -523,11 +530,6 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		// installs into the same directory, so they stay while Pro is installed.
 		if ( ! $pro_installed ) {
 			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-fonts' );
-			// WooCommerce, and so Action Scheduler, is normally still active while
-			// WCPOS is uninstalled; cancel the pending background install too.
-			if ( \function_exists( 'as_unschedule_all_actions' ) ) {
-				as_unschedule_all_actions( 'wcpos_install_font_packs' );
-			}
 		}
 
 		if ( ! $pro_installed ) {

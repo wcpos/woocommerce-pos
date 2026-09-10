@@ -669,9 +669,10 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Installed receipt fonts and their pending background install are removed
-	 * on uninstall, unless Pro is installed: its bundled core shares the same
-	 * directory and queue.
+	 * Installed receipt fonts are removed on uninstall unless Pro is installed,
+	 * whose bundled core shares the directory. The pending background install
+	 * is cancelled either way: an inactive Pro would leave it without a callback
+	 * and an active one re-queues on demand.
 	 */
 	public function test_uninstall_font_packs_removed_unless_pro_installed(): void {
 		$uploads = get_temp_dir() . 'wcpos-uninstall-' . wp_generate_uuid4();
@@ -689,9 +690,10 @@ class Test_Uninstall extends WP_UnitTestCase {
 			$this->run_uninstall( false );
 
 			$this->assertFileExists( $fonts . 'DejaVuSans.ttf', 'Installed Pro shares the font directory' );
-			$this->assertNotFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ), 'Installed Pro shares the install queue' );
+			$this->assertFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ), 'The queued install is cancelled even with Pro installed' );
 
 			$this->pin_pro_installed( false );
+			Font_Pack_Loader::schedule();
 			$this->run_uninstall( false );
 
 			$this->assertDirectoryDoesNotExist( $fonts );
