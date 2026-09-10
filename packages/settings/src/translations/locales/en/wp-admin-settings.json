@@ -1,4 +1,8 @@
 {
+	"cloudflare.title": "Your store is behind Cloudflare",
+	"cloudflare.body": "Cloudflare's security checks (Bot Fight Mode, Under Attack Mode and WAF challenges) can stop the WCPOS app from reaching your store's REST API. If the app reports \"This store's hosting setup is blocking the app\" (HOST121) or opens a security-check window, add a WAF Skip rule for /wp-json/ in your Cloudflare dashboard.",
+	"cloudflare.plugin_note": "The Cloudflare WordPress plugin does not manage these rules. They live in the Cloudflare dashboard.",
+	"cloudflare.docs_link": "How to add the rule",
 	"common.access": "Access",
 	"common.account": "Account",
 	"common.all": "All",
