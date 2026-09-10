@@ -93,9 +93,8 @@ describe('display preview', () => {
 			'false',
 			'false',
 		]);
-		act(() =>
-			rows.find((row) => row.textContent?.includes('modal.state_payment_approved'))!.click()
-		);
+		// Fifth row: payment.approved.
+		act(() => rows[4]!.click());
 		expect(frame().getAttribute('src')).toBe(
 			'https://example.test/wcpos-display/?preview=payment.approved&gallery=display-pocket'
 		);
