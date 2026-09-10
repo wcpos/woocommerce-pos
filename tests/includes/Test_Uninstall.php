@@ -22,6 +22,7 @@ use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge;
@@ -315,6 +316,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->assertContains( Cloud_Print_Trigger_Service::CRON_SUBMIT, $hooks );
 		$this->assertContains( Cloud_Print_Relay_Service::REREGISTER_HOOK, $hooks );
 		$this->assertContains( Lifecycle_Events::REFRESH_HOOK, $hooks );
+		$this->assertContains( Font_Pack_Loader::ACTION, $hooks );
 		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
 			$this->assertContains( $hook, $hooks );
 		}
@@ -663,6 +665,48 @@ class Test_Uninstall extends WP_UnitTestCase {
 				rmdir( $fallback_dir );
 			}
 			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * Installed receipt fonts and their pending background install are removed
+	 * on uninstall, unless Pro is installed: its bundled core shares the same
+	 * directory and queue.
+	 */
+	public function test_uninstall_font_packs_removed_unless_pro_installed(): void {
+		$uploads = get_temp_dir() . 'wcpos-uninstall-' . wp_generate_uuid4();
+		$filter  = static function ( array $dirs ) use ( $uploads ): array {
+			$dirs['basedir'] = $uploads;
+			return $dirs;
+		};
+		add_filter( 'upload_dir', $filter );
+		$fonts = $uploads . '/wcpos-fonts/';
+		wp_mkdir_p( $fonts );
+		file_put_contents( $fonts . 'DejaVuSans.ttf', 'ttf' );
+		try {
+			$this->pin_pro_installed( true );
+			Font_Pack_Loader::schedule();
+			$this->run_uninstall( false );
+
+			$this->assertFileExists( $fonts . 'DejaVuSans.ttf', 'Installed Pro shares the font directory' );
+			$this->assertNotFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ), 'Installed Pro shares the install queue' );
+
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+
+			$this->assertDirectoryDoesNotExist( $fonts );
+			$this->assertFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ) );
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+			as_unschedule_all_actions( Font_Pack_Loader::ACTION );
+			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			if ( is_dir( $uploads ) ) {
+				$items = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $uploads, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
+				foreach ( $items as $item ) {
+					$item->isDir() ? rmdir( $item->getPathname() ) : unlink( $item->getPathname() );
+				}
+				rmdir( $uploads );
+			}
 		}
 	}
 

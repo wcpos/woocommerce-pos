@@ -69,6 +69,9 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
 		'wcpos_analytics_group_refresh',
+		// WP-Cron fallback for the receipt font install (Action Scheduler is the
+		// primary queue; its pending actions are cancelled in the sweep below).
+		'wcpos_install_font_packs',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -515,6 +518,17 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-languages' );
 		}
 		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-templates' );
+
+		// Receipt fonts are re-downloadable derived state, but Pro's bundled core
+		// installs into the same directory, so they stay while Pro is installed.
+		if ( ! $pro_installed ) {
+			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-fonts' );
+			// WooCommerce, and so Action Scheduler, is normally still active while
+			// WCPOS is uninstalled; cancel the pending background install too.
+			if ( \function_exists( 'as_unschedule_all_actions' ) ) {
+				as_unschedule_all_actions( 'wcpos_install_font_packs' );
+			}
+		}
 
 		if ( ! $pro_installed ) {
 			$log_files = glob( trailingslashit( $uploads['basedir'] ) . 'wc-logs/woocommerce-pos-*.log' );

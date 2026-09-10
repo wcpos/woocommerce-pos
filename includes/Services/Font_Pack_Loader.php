@@ -30,7 +30,7 @@ class Font_Pack_Loader {
 	 * @return string Absolute path without a trailing slash.
 	 */
 	public function dir(): string {
-		return wp_upload_dir()['basedir'] . '/wcpos/fonts';
+		return wp_upload_dir()['basedir'] . '/wcpos-fonts';
 	}
 
 	/**
