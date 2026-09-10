@@ -186,7 +186,9 @@ class Pdf_Renderer {
 	private function build( string $html, array $opts ) {
 		$temp_dir = $this->writable_dir();
 		$loader   = new Font_Pack_Loader();
-		$loader->ensure_all();
+		if ( ! $loader->installed() ) {
+			Font_Pack_Loader::schedule();
+		}
 
 		$options = new Options();
 		$options->set( 'isRemoteEnabled', false );

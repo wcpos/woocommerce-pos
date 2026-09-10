@@ -15,6 +15,8 @@ use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 
 /** Installs font packs for Dompdf and GD. */
 class Font_Pack_Loader {
+	/** Background font installation hook. */
+	const ACTION = 'wcpos_install_font_packs';
 	/** One base URL per pack so a heavy pack (CJK) can later live in another repo; %s is Frontend::cdn_ref(). */
 	const PACKS = array( 'dejavu' => 'https://cdn.jsdelivr.net/gh/wcpos/woocommerce-pos@%s/fonts/packs/dejavu/' );
 	/** A dead CDN or read-only uploads must not be re-probed on every receipt. */
@@ -63,6 +65,58 @@ class Font_Pack_Loader {
 		 * @hook woocommerce_pos_font_packs
 		 */
 		return apply_filters( 'woocommerce_pos_font_packs', array_keys( self::sources() ) );
+	}
+
+	/** Whether every enabled pack and the shared font map are installed. */
+	public function installed(): bool {
+		$packs = self::packs();
+		foreach ( $packs as $pack ) {
+			if ( null === $this->installed_manifest( $pack ) ) {
+				return false;
+			}
+		}
+		return array() === $packs || is_file( $this->dir() . '/installed-fonts.json' );
+	}
+
+	/** Whether any enabled pack has a cached installation failure. */
+	public function failed(): bool {
+		foreach ( self::packs() as $pack ) {
+			if ( get_transient( 'wcpos_font_pack_failed_' . $pack ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Enqueue font installation outside the receipt request.
+	 *
+	 * @param bool $refresh Refresh packs after a plugin upgrade.
+	 */
+	public static function schedule( bool $refresh = false ): void {
+		if ( function_exists( 'as_enqueue_async_action' ) ) {
+			if ( ! $refresh && as_has_scheduled_action( self::ACTION ) ) {
+				return;
+			}
+			as_enqueue_async_action( self::ACTION, array( 'refresh' => $refresh ), 'wcpos' );
+			return;
+		}
+		if ( ! $refresh && wp_next_scheduled( self::ACTION ) ) {
+			return;
+		}
+		wp_schedule_single_event( time(), self::ACTION, array( $refresh ) );
+	}
+
+	/**
+	 * Install packs in the background.
+	 *
+	 * Action Scheduler and WP-Cron both pass action args positionally, so the
+	 * `refresh` value arrives as the first parameter, not as an array.
+	 *
+	 * @param mixed $refresh Truthy to reinstall packs whose source version changed.
+	 */
+	public static function run_scheduled( $refresh = false ): void {
+		( new self() )->ensure_all( (bool) $refresh );
 	}
 
 	/**

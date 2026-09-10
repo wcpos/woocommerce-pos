@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Admin\Consent;
 use WCPOS\WooCommercePOS\Admin\Menu;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WCPOS\WooCommercePOS\Services\Extensions;
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 
@@ -60,6 +61,7 @@ class Init {
 	 * | 1 | `activated_plugin`, `upgrader_process_complete`, `admin_enqueue_scripts`, `admin_notices`, `rest_api_init` | `Admin\Consent` (5 callbacks) | 10 | irrelevant | Default. What matters is that `Consent` is built during `plugins_loaded`, so its lifecycle hooks exist before an activation/update request fires them. |
 	 * | 2 | `woocommerce_pos_rest_api_controllers` | `Sync\Api::register_controllers` | 10 | irrelevant | Default; sole callback. |
 	 * | 3 | `wcpos_integrity_digest_rebuild` | `Sync\Integrity_Digest::run_scheduled_rebuild` | 10 | irrelevant | Default; sole callback. Registered OUTSIDE the schema latch, so an already-scheduled rebuild still has a callback while the latch is down. |
+	 * | 3a | `wcpos_install_font_packs` | `Services\Font_Pack_Loader::run_scheduled` | 10 | irrelevant | Default; sole callback. Always registered, including WP-Cron and Action Scheduler requests. |
 	 * | 4 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product`, `..._serialized_order` | `Sync\Meta_Normalizer::normalize` | **5** | **ORDER-CRITICAL** | Must precede `Revision` at 9 so the stamped revision bytes equal what the write path recomputes from a bare `wc/v3` re-read. See `Sync\Augmentation_Pipeline` class docblock and `Sync\Meta_Normalizer::register_hooks()`. Kept out of the pipeline because it also serves the ORDER lane. |
 	 * | 5 | `woocommerce_pos_sync_serialized_order` | `Sync\Pos_Uuid::stamp_serialized_record` | 10 | order-critical (by number) | After `Meta_Normalizer` at 5, in step with the product lane's stampers. |
 	 * | 6 | `woocommerce_pos_sync_order_pull_payloads` | `Sync\Integrity_Digest::stamp_proxy_order_digests` | 10 | irrelevant | Default; sole callback on that filter. |
@@ -126,6 +128,7 @@ class Init {
 		new Consent();
 		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
 		add_action( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::REBUILD_HOOK, array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'run_scheduled_rebuild' ) );
+		add_action( Font_Pack_Loader::ACTION, array( Font_Pack_Loader::class, 'run_scheduled' ) );
 		// Gate on the schema latch, not a live Health probe: the latch is only
 		// set AFTER install verified every table (latch-after-verify), so a
 		// per-request SHOW TABLES sweep buys nothing — and a table lost after

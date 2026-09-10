@@ -170,7 +170,7 @@ class Activator {
 		}
 
 		if ( $install_sync_schema ) {
-			( new Font_Pack_Loader() )->ensure_all();
+			Font_Pack_Loader::schedule();
 			$this->install_sync_schema();
 		}
 
@@ -354,7 +354,7 @@ class Activator {
 		}
 
 		if ( $locked_plugin_needs_upgrade ) {
-			( new Font_Pack_Loader() )->ensure_all( true );
+			Font_Pack_Loader::schedule( true );
 			Services\Settings::bump_versions();
 		}
 

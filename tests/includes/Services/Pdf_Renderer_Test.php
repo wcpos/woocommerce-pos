@@ -33,6 +33,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	/** Restore the HTTP boundary. */
 	public function tearDown(): void {
 		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
 		parent::tearDown();
 	}
 
@@ -530,11 +531,43 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 * silent fallback. The embedded font name can.
 	 */
 	public function test_render_html_embeds_pack_font(): void {
+		// Arrange.
+		$this->assertTrue( ( new Font_Pack_Loader() )->ensure_all() );
 		// Act.
 		$pdf = $this->renderer->render_html( '<html><body><p>Ünïcödé receipt ✓</p></body></html>' );
 		// Assert.
 		$this->assertStringContainsString( 'DejaVuSans', $pdf );
 		$this->assertStringNotContainsString( 'Times-Roman', $pdf );
+	}
+
+	/** A missing pack schedules background work without blocking the PDF. */
+	public function test_build_pack_missing_schedules_install_and_still_renders(): void {
+		// Arrange.
+		$dir    = get_temp_dir() . 'wcpos-pdf-fonts-' . wp_generate_uuid4();
+		$filter = static function ( array $uploads ) use ( $dir ): array {
+			$uploads['basedir'] = $dir;
+			return $uploads;
+		};
+		add_filter( 'upload_dir', $filter );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
+		try {
+			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
+			// Act.
+			$pdf = $this->renderer->render_html( '<html><body>Receipt</body></html>' );
+			// Assert.
+			$this->assertStringStartsWith( '%PDF', $pdf );
+			$this->assertTrue( as_has_scheduled_action( Font_Pack_Loader::ACTION ) );
+			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+			if ( is_dir( $dir ) ) {
+				$items = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
+				foreach ( $items as $item ) {
+					$item->isDir() ? rmdir( $item->getPathname() ) : unlink( $item->getPathname() );
+				}
+				rmdir( $dir );
+			}
+		}
 	}
 
 	/**

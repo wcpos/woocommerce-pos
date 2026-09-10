@@ -64,6 +64,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 		remove_filter( 'pre_http_request', array( $this, 'http_response' ), 10 );
 		delete_transient( 'wcpos_font_pack_failed_dejavu' );
 		delete_transient( 'wcpos_font_pack_lock_dejavu' );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
 		$this->remove_dir( $this->uploads );
 		parent::tearDown();
 	}
@@ -137,6 +138,76 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 				return '';
 			}
 		};
+	}
+
+	/** Installation requires all pack receipts and the shared map. */
+	public function test_installed_reports_true_only_with_all_receipts_and_map(): void {
+		// Arrange / Assert: isolated uploads start empty.
+		$this->assertFalse( $this->loader->installed() );
+		// Act / Assert.
+		$this->assertTrue( $this->loader->ensure_all() );
+		$this->assertTrue( $this->loader->installed() );
+		unlink( $this->loader->dir() . '/installed-fonts.json' );
+		$this->assertFalse( $this->loader->installed() );
+		$this->assertSame( array(), $this->requests );
+	}
+
+	/** Cached failures are visible until their transient is cleared. */
+	public function test_failed_reflects_failure_transient(): void {
+		// Arrange / Assert.
+		$this->assertFalse( $this->loader->failed() );
+		// Act / Assert.
+		set_transient( 'wcpos_font_pack_failed_dejavu', 1, HOUR_IN_SECONDS );
+		$this->assertTrue( $this->loader->failed() );
+		delete_transient( 'wcpos_font_pack_failed_dejavu' );
+		$this->assertFalse( $this->loader->failed() );
+	}
+
+	/** Normal installs deduplicate, but upgrades always enqueue a refresh. */
+	public function test_schedule_enqueues_once_and_refresh_enqueues_again(): void {
+		// Arrange.
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
+		$query = array(
+			'hook'   => Font_Pack_Loader::ACTION,
+			'status' => \ActionScheduler_Store::STATUS_PENDING,
+		);
+		// Act / Assert.
+		Font_Pack_Loader::schedule();
+		Font_Pack_Loader::schedule();
+		$this->assertCount( 1, as_get_scheduled_actions( $query, 'ids' ) );
+		Font_Pack_Loader::schedule( true );
+		$actions = as_get_scheduled_actions( $query, OBJECT );
+		$this->assertCount( 2, $actions );
+		$this->assertSame( array( array( 'refresh' => false ), array( 'refresh' => true ) ), array_values( array_map( static fn( $a ) => $a->get_args(), $actions ) ) );
+	}
+
+	/** The handler receives the refresh flag positionally, as Action Scheduler and WP-Cron pass it. */
+	public function test_run_scheduled_refresh_flag_reinstalls_changed_version(): void {
+		// Arrange: install, then age the receipt so only a refresh reinstalls.
+		$this->assertTrue( $this->loader->ensure_all() );
+		$receipt = $this->loader->dir() . '/dejavu.json';
+		$aged    = json_decode( (string) file_get_contents( $receipt ), true );
+		$aged['version'] = 0;
+		file_put_contents( $receipt, wp_json_encode( $aged ) );
+		// Act.
+		Font_Pack_Loader::run_scheduled( false );
+		$after_plain = json_decode( (string) file_get_contents( $receipt ), true );
+		Font_Pack_Loader::run_scheduled( true );
+		$after_refresh = json_decode( (string) file_get_contents( $receipt ), true );
+		// Assert.
+		$this->assertSame( 0, $after_plain['version'] );
+		$this->assertSame( 1, $after_refresh['version'] );
+	}
+
+	/** A background callback with no arguments installs the local pack. */
+	public function test_run_scheduled_installs_pack(): void {
+		// Arrange.
+		$this->assertFalse( $this->loader->installed() );
+		// Act.
+		Font_Pack_Loader::run_scheduled();
+		// Assert.
+		$this->assertTrue( $this->loader->installed() );
+		$this->assertSame( array(), $this->requests );
 	}
 
 	/** Missing local installation must copy every face and publish the map. */

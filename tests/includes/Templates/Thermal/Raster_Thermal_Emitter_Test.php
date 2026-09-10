@@ -31,6 +31,9 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	private $emitter;
 
+	/** @var int HTTP attempts during the test. */
+	private $requests = 0;
+
 	/**
 	 * Set up the parser and emitter instances.
 	 *
@@ -39,6 +42,10 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	public function setUp(): void {
 		parent::setUp();
 		add_filter( 'pre_http_request', array( $this, 'block_http' ) );
+		delete_transient( 'wcpos_font_pack_failed_dejavu' );
+		delete_transient( 'wcpos_font_pack_lock_dejavu' );
+		( new Font_Pack_Loader() )->ensure_all();
+		$this->requests = 0;
 		if ( ! Raster_Thermal_Emitter::is_supported() ) {
 			$this->markTestSkipped( 'GD with FreeType is required to rasterize receipts.' );
 		}
@@ -54,6 +61,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	public function tearDown(): void {
 		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
 		remove_all_filters( 'woocommerce_pos_receipt_raster_font' );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
 		parent::tearDown();
 	}
 
@@ -63,6 +71,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 * @return \WP_Error Blocked request.
 	 */
 	public function block_http(): \WP_Error {
+		++$this->requests;
 		return new \WP_Error( 'network_disabled' );
 	}
 
@@ -76,29 +85,17 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 		};
 		wp_mkdir_p( $dir );
 		add_filter( 'upload_dir', $filter );
-		$loader = new class() extends Font_Pack_Loader {
-			/**
-			 * Hide the local pack.
-			 *
-			 * @param string $pack Pack name.
-			 * @return string No local directory.
-			 */
-			protected function local_pack_dir( string $pack ): string {
-				return '';
-			}
-		};
 		set_transient( 'wcpos_font_pack_failed_dejavu', 1, HOUR_IN_SECONDS );
 		$method = new \ReflectionMethod( Raster_Thermal_Emitter::class, 'font_path' );
 		$method->setAccessible( true );
 		try {
-			// Act: the cached failure precedes local-source selection in both loaders.
-			$installed = $loader->ensure_all();
+			// Act.
 			$font      = $method->invoke( null, false );
 			$supported = Raster_Thermal_Emitter::is_supported();
 			// Assert.
-			$this->assertFalse( $installed );
 			$this->assertSame( '', $font );
 			$this->assertFalse( $supported );
+			$this->assertSame( 0, $this->requests );
 		} finally {
 			remove_filter( 'upload_dir', $filter );
 			delete_transient( 'wcpos_font_pack_failed_dejavu' );
@@ -120,9 +117,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 		};
 		wp_mkdir_p( $dir );
 		add_filter( 'upload_dir', $filter );
-		add_filter( 'pre_http_request', '__return_false' );
 		add_filter( 'woocommerce_pos_receipt_raster_font', $face );
-		set_transient( 'wcpos_font_pack_failed_dejavu', 1, HOUR_IN_SECONDS );
 		$method = new \ReflectionMethod( Raster_Thermal_Emitter::class, 'font_path' );
 		$method->setAccessible( true );
 		try {
@@ -130,9 +125,11 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 			$font = $method->invoke( null, false );
 			// Assert.
 			$this->assertSame( $face(), $font );
+			$this->assertTrue( Raster_Thermal_Emitter::is_supported() );
+			$this->assertSame( 0, $this->requests );
+			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
 		} finally {
 			remove_filter( 'upload_dir', $filter );
-			remove_filter( 'pre_http_request', '__return_false' );
 			remove_filter( 'woocommerce_pos_receipt_raster_font', $face );
 			delete_transient( 'wcpos_font_pack_failed_dejavu' );
 			delete_transient( 'wcpos_font_pack_lock_dejavu' );

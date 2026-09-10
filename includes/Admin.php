@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 
 use Automattic\WooCommerce\Admin\PageController;
 use WCPOS\WooCommercePOS\Admin\Analytics;
+use WCPOS\WooCommercePOS\Admin\Font_Pack_Notice;
 use WCPOS\WooCommercePOS\Admin\Notices;
 use WCPOS\WooCommercePOS\Admin\Orders\HPOS_List_Orders;
 use WCPOS\WooCommercePOS\Admin\Orders\HPOS_Single_Order;
@@ -87,6 +88,7 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
+		new Font_Pack_Notice();
 	}
 
 	/**
