@@ -474,6 +474,30 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed' ) ) ) );
 	}
 
+	public function test_create_loose_sale_time_shapes_are_dropped(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00' ) as $shape ) {
+			$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( array( '_wcpos_sale_time' => $shape ) ) ) );
+			$this->assertSame( 201, $result->get_status() );
+			$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+			$this->assertSame( '', $order->get_meta( '_wcpos_sale_time' ), $shape );
+		}
+	}
+
+	public function test_update_paid_order_never_gains_a_missing_provenance_key(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertFalse( $order->needs_payment() );
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '9' ) ) );
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
 	public function test_create_far_future_sale_time_is_kept(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$tuple  = array( '_wcpos_sale_time' => '2031-06-01T12:00:00+02:00' );

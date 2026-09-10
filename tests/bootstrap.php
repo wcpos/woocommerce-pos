@@ -45,6 +45,7 @@ class Bootstrap {
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_font_packs' ), 30 );
+tests_add_filter( 'muplugins_loaded', array( $this, 'install_register_table' ), 30 );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
@@ -157,6 +158,16 @@ class Bootstrap {
 	 * so without this the raster support probe reads as unsupported for the
 	 * whole run and every cloud-print media-type expectation loses `image/png`.
 	 * The checkout ships the pack, so this is a local copy, not a download.
+	 */
+	public function install_register_table(): void {
+		// Create wcpos_registers before the per-test transactions begin: dbDelta is
+		// DDL, and a CREATE TABLE inside a test commits that test's transaction.
+		( new \WCPOS\WooCommercePOS\Services\Register_Store() )->install();
+	}
+
+	/**
+	 * Install the receipt font pack the way a real site has it after the
+	 * background job ran.
 	 */
 	public function install_font_packs(): void {
 		( new \WCPOS\WooCommercePOS\Services\Font_Pack_Loader() )->ensure_all();

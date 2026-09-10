@@ -1171,6 +1171,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			// Record provenance only; receipt calculations continue to infer historical
 			// pricing from the persisted line-item data of offline-synced orders.
 			$order->update_meta_data( '_woocommerce_pos_version', VERSION );
+			// A till-stamped sale time gets its server-received twin on v1 too.
+			if ( '' !== (string) $order->get_meta( '_wcpos_sale_time' ) && '' === (string) $order->get_meta( '_wcpos_sale_received_gmt' ) ) {
+				$order->update_meta_data( '_wcpos_sale_received_gmt', gmdate( 'Y-m-d\TH:i:s\Z' ) );
+			}
 		}
 
 		/**

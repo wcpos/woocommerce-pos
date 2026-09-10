@@ -201,7 +201,9 @@ final class Pos_Order_Audit {
 			case '_wcpos_session':
 				return Pos_Uuid::is_uuid( $value );
 			case '_wcpos_sale_time':
-				if ( ! preg_match( '/(?:Z|[+-]\d{2}:?\d{2})$/iD', $value ) ) {
+				// The full ISO 8601 shape with an explicit offset — PHP's parser is far
+				// more permissive than the contract, so the grammar is checked first.
+				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/D', $value ) ) {
 					return false;
 				}
 				// Any parseable offset timestamp is kept, however wrong the clock:
@@ -218,7 +220,7 @@ final class Pos_Order_Audit {
 				return 1 === preg_match( '/^[1-9]\d{0,17}$/D', $value );
 			case '_wcpos_app_version':
 			case '_wcpos_app_build':
-				return mb_strlen( $value ) <= 64;
+				return \strlen( $value ) <= 64;
 		}
 		if ( \in_array( $key, self::CASH_META_KEYS, true ) && 1 !== preg_match( '/^\d+(?:\.\d+)?$/', (string) $value ) ) {
 			return false;

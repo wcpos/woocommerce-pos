@@ -166,7 +166,7 @@ class Registers_Controller extends WP_REST_Controller {
 		$fields = array();
 		if ( $creating || $request->has_param( 'name' ) ) {
 			$name = $request['name'];
-			if ( ! is_string( $name ) || mb_strlen( $name ) > 191 || '' === trim( sanitize_text_field( $name ) ) ) {
+			if ( ! is_string( $name ) || \strlen( $name ) > 191 || '' === trim( sanitize_text_field( $name ) ) ) {
 				return $this->invalid( 'name' );
 			}
 			$fields['name'] = sanitize_text_field( $name );
@@ -177,7 +177,7 @@ class Registers_Controller extends WP_REST_Controller {
 			if ( ! in_array( $fields['platform'], array( '', 'ios', 'android', 'web', 'electron' ), true ) ) {
 				return $this->invalid( 'platform' );
 			}
-			if ( ! is_string( $fields['app_version'] ) || mb_strlen( $fields['app_version'] ) > 64 ) {
+			if ( ! is_string( $fields['app_version'] ) || \strlen( $fields['app_version'] ) > 64 ) {
 				return $this->invalid( 'app_version' );
 			}
 		} else {

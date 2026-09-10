@@ -378,10 +378,12 @@ class Order_Writer extends Null_Writer {
 					continue;
 				}
 				$stored = (string) $order->get_meta( $key );
-				if ( '' === $stored || ( $unpaid && $stored !== $till[ $key ] ) ) {
+				if ( $unpaid && $stored !== $till[ $key ] ) {
 					$fill_meta[ $key ]                       = $till[ $key ];
 					$fill_meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
-				} elseif ( $stored !== $till[ $key ] ) {
+				} elseif ( ! $unpaid && $stored !== $till[ $key ] ) {
+					// A paid order is frozen: a missing key stays missing and a
+					// different value is refused — nothing invents audit data later.
 					$provenance_refused[] = $key;
 				}
 			}
@@ -485,16 +487,9 @@ class Order_Writer extends Null_Writer {
 				$meta[ (string) $key ] = (string) $value;
 			}
 		}
-		$till = Pos_Order_Audit::till_meta_from_payload( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() );
-		$order = wc_get_order( $id );
-		foreach ( Pos_Order_Audit::provenance_meta_keys() as $key ) {
-			if ( isset( $till[ $key ] ) ) {
-				$meta[ $key ] = $till[ $key ];
-				if ( $order && '' === (string) $order->get_meta( $key ) && '' === (string) $order->get_meta( '_wcpos_sale_received_gmt' ) ) {
-					$meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
-				}
-			}
-		}
+		// Provenance is written pre-insert (prepare_order_update_after_read); the
+		// post-forward fill stays cash-only so a paid order never gains a key here.
+
 		if ( $meta ) {
 			$this->store->persist_order_audit_meta( $id, $meta );
 		}

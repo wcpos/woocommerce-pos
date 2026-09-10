@@ -62,9 +62,16 @@ final class Register_Store {
 		) {$charset_collate};";
 	}
 
-	/** Install the table, independently of sync health. */
+	/**
+	 * Install the table, independently of sync health. A no-op once the table
+	 * exists: dbDelta is DDL, and DDL commits any open transaction (the PHPUnit
+	 * per-test transaction included), so it must not run on every upgrade pass.
+	 */
 	public function install(): void {
 		global $wpdb;
+		if ( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $this->table_name() ) ) {
+			return;
+		}
 		if ( ! function_exists( 'dbDelta' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		}
@@ -93,6 +100,12 @@ final class Register_Store {
 			$data['store_id'] = $fields['store_id'] ?? null;
 			$data['created_at_gmt'] = $data['last_seen_at_gmt'];
 			$result = $wpdb->insert( $this->table_name(), $data );
+			if ( false === $result && $this->exists( $id ) ) {
+				// Two first registrations raced on the primary key: the loser touches
+				// the row the winner created instead of failing the till's sign-in.
+				unset( $data['id'], $data['name'], $data['store_id'], $data['created_at_gmt'] );
+				$result = $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) );
+			}
 		}
 		if ( false === $result ) {
 			throw new \RuntimeException( 'Register write failed.' );
