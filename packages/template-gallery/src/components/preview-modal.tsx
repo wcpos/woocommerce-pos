@@ -7,7 +7,7 @@ import {
 	renderLogiclessPreview,
 	renderThermalPreview,
 } from '@wcpos/thermal-utils';
-import { Button, PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
+import { Button, PAPER_DIMENSIONS, PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
 import { getGalleryPreviewSrc } from '../preview-assets';
@@ -160,6 +160,86 @@ function ReceiptPreviewModal(props: PreviewModalProps) {
 	);
 }
 
+// The seven display states in the order a sale happens, grouped the way a cashier thinks
+// about them. Each row of the strip is a live thumbnail of that state.
+const DISPLAY_STATE_GROUPS: readonly { group: string; states: readonly string[] }[] = [
+	{ group: 'between_sales', states: ['idle'] },
+	{ group: 'during_sale', states: ['cart.empty', 'cart'] },
+	{
+		group: 'paying',
+		states: ['payment.started', 'payment.approved', 'payment.declined', 'payment.complete'],
+	},
+];
+const THUMB_SCALE = 96 / PAPER_DIMENSIONS.screen.width;
+
+function DisplayStateStrip({
+	state,
+	onChange,
+	urlFor,
+}: {
+	state: string;
+	onChange: (state: string) => void;
+	urlFor: (state: string) => string;
+}) {
+	return (
+		<div
+			role="radiogroup"
+			aria-label={t('modal.display_state')}
+			data-testid="display-state-strip"
+			className="wcpos:w-60 wcpos:shrink-0 wcpos:overflow-y-auto wcpos:pr-1 wcpos:flex wcpos:flex-col wcpos:gap-1"
+		>
+			{DISPLAY_STATE_GROUPS.map(({ group, states }) => (
+				<React.Fragment key={group}>
+					<div className="wcpos:text-[11px] wcpos:font-semibold wcpos:uppercase wcpos:tracking-wider wcpos:text-gray-500 wcpos:px-1.5 wcpos:pt-2 wcpos:pb-0.5">
+						{t(`modal.state_group_${group}`)}
+					</div>
+					{states.map((value) => {
+						const key = value.replace('.', '_');
+						const selected = state === value;
+						return (
+							<button
+								key={value}
+								type="button"
+								role="radio"
+								aria-checked={selected}
+								onClick={() => onChange(value)}
+								className={`wcpos:flex wcpos:items-center wcpos:gap-2.5 wcpos:w-full wcpos:text-left wcpos:rounded-md wcpos:border-2 wcpos:p-1 wcpos:cursor-pointer wcpos:bg-transparent ${selected ? 'wcpos:border-wp-admin-theme-color wcpos:bg-blue-50' : 'wcpos:border-transparent hover:wcpos:bg-gray-100'}`}
+							>
+								<div
+									className="wcpos:relative wcpos:shrink-0 wcpos:overflow-hidden wcpos:rounded wcpos:bg-white wcpos:shadow-sm"
+									style={{ width: 96, height: PAPER_DIMENSIONS.screen.height * THUMB_SCALE }}
+								>
+									<iframe
+										src={urlFor(value)}
+										tabIndex={-1}
+										aria-hidden="true"
+										title={t(`modal.state_${key}`)}
+										className="wcpos:border-0 wcpos:pointer-events-none"
+										style={{
+											width: PAPER_DIMENSIONS.screen.width,
+											height: PAPER_DIMENSIONS.screen.height,
+											transform: `scale(${THUMB_SCALE})`,
+											transformOrigin: 'top left',
+										}}
+									/>
+								</div>
+								<div className="wcpos:min-w-0 wcpos:leading-tight">
+									<div className="wcpos:text-[13px] wcpos:font-medium wcpos:text-gray-900">
+										{t(`modal.state_${key}`)}
+									</div>
+									<div className="wcpos:text-[11px] wcpos:text-gray-500 wcpos:mt-0.5">
+										{t(`modal.state_desc_${key}`)}
+									</div>
+								</div>
+							</button>
+						);
+					})}
+				</React.Fragment>
+			))}
+		</div>
+	);
+}
+
 function PreviewModalContent({
 	templateType,
 	templateId,
@@ -277,25 +357,6 @@ function PreviewModalContent({
 						{controls}
 						{isDisplay && isProActive && (
 							<>
-								<select
-									value={state}
-									onChange={(e) => setState(e.target.value)}
-									aria-label={t('modal.display_state')}
-								>
-									{[
-										'idle',
-										'cart.empty',
-										'cart',
-										'payment.started',
-										'payment.approved',
-										'payment.declined',
-										'payment.complete',
-									].map((value) => (
-										<option key={value} value={value}>
-											{t(`modal.state_${value.replace('.', '_')}`)}
-										</option>
-									))}
-								</select>
 								<div
 									role="radiogroup"
 									aria-label={t('modal.viewport')}
@@ -337,29 +398,45 @@ function PreviewModalContent({
 				<div className="wcpos:flex-1 wcpos:min-h-0 wcpos:flex wcpos:flex-col wcpos:p-4 wcpos:bg-gray-50">
 					{isDisplay ? (
 						isProActive || imageSrc ? (
-							<PreviewViewport
-								paperWidth={isProActive ? viewport : 'screen'}
-								zoomInLabel={t('modal.zoom_in')}
-								zoomOutLabel={t('modal.zoom_out')}
-							>
-								{isProActive ? (
-									<iframe
-										key={viewport}
-										src={buildDisplayPreviewUrl(displayPreviewUrl, {
-											state,
-											...(isGallery ? { gallery: String(templateId) } : { template: templateId }),
-										})}
-										title={t('modal.preview_title', { templateName })}
-										className={PREVIEW_IFRAME_CLASS}
-									/>
-								) : (
-									<img
-										src={imageSrc}
-										alt={t('modal.preview_title', { templateName })}
-										className="wcpos:w-full wcpos:h-full wcpos:object-contain"
+							<div className="wcpos:flex wcpos:flex-1 wcpos:min-h-0 wcpos:gap-3">
+								{isProActive && (
+									<DisplayStateStrip
+										state={state}
+										onChange={setState}
+										urlFor={(value) =>
+											buildDisplayPreviewUrl(displayPreviewUrl, {
+												state: value,
+												...(isGallery ? { gallery: String(templateId) } : { template: templateId }),
+											})
+										}
 									/>
 								)}
-							</PreviewViewport>
+								<PreviewViewport
+									paperWidth={isProActive ? viewport : 'screen'}
+									zoomInLabel={t('modal.zoom_in')}
+									zoomOutLabel={t('modal.zoom_out')}
+									className="wcpos:flex-1 wcpos:min-w-0"
+								>
+									{isProActive ? (
+										<iframe
+											key={viewport}
+											data-testid="display-preview-frame"
+											src={buildDisplayPreviewUrl(displayPreviewUrl, {
+												state,
+												...(isGallery ? { gallery: String(templateId) } : { template: templateId }),
+											})}
+											title={t('modal.preview_title', { templateName })}
+											className={PREVIEW_IFRAME_CLASS}
+										/>
+									) : (
+										<img
+											src={imageSrc}
+											alt={t('modal.preview_title', { templateName })}
+											className="wcpos:w-full wcpos:h-full wcpos:object-contain"
+										/>
+									)}
+								</PreviewViewport>
+							</div>
 						) : (
 							<p className="wcpos:text-gray-500 wcpos:text-center">
 								{t('modal.display_needs_pro')}{' '}

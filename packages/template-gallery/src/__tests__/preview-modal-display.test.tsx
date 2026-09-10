@@ -57,7 +57,8 @@ describe('display preview', () => {
 
 	it('changes state and viewport without fetching a receipt preview', () => {
 		const container = mount();
-		const frame = () => container.querySelector('iframe')!;
+		const frame = () =>
+			container.querySelector<HTMLIFrameElement>('[data-testid="display-preview-frame"]')!;
 		const canvas = () =>
 			container.querySelector<HTMLElement>('[data-testid="preview-viewport-canvas"]')!;
 		expect(frame()?.getAttribute('src')).toBe(
@@ -67,20 +68,34 @@ describe('display preview', () => {
 		expect(frame().hasAttribute('sandbox')).toBe(false);
 		expect(canvas().style.width).toBe('1280px');
 		expect(canvas().style.height).toBe('800px');
-		const select = container.querySelector('select')!;
-		expect(Array.from(select.options).map((option) => option.value)).toEqual([
-			'idle',
-			'cart.empty',
-			'cart',
-			'payment.started',
-			'payment.approved',
-			'payment.declined',
-			'payment.complete',
+		// The filmstrip: one live thumbnail per state, in the order a sale happens.
+		const strip = container.querySelector('[data-testid="display-state-strip"]')!;
+		const rows = Array.from(strip.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+		expect(rows.map((row) => row.querySelector('iframe')?.getAttribute('src'))).toEqual(
+			[
+				'idle',
+				'cart.empty',
+				'cart',
+				'payment.started',
+				'payment.approved',
+				'payment.declined',
+				'payment.complete',
+			].map(
+				(value) => `https://example.test/wcpos-display/?preview=${value}&gallery=display-pocket`
+			)
+		);
+		expect(rows.map((row) => row.getAttribute('aria-checked'))).toEqual([
+			'false',
+			'false',
+			'true',
+			'false',
+			'false',
+			'false',
+			'false',
 		]);
-		act(() => {
-			select.value = 'payment.approved';
-			select.dispatchEvent(new Event('change', { bubbles: true }));
-		});
+		act(() =>
+			rows.find((row) => row.textContent?.includes('modal.state_payment_approved'))!.click()
+		);
 		expect(frame().getAttribute('src')).toBe(
 			'https://example.test/wcpos-display/?preview=payment.approved&gallery=display-pocket'
 		);
@@ -99,9 +114,9 @@ describe('display preview', () => {
 
 	it.each([123, 'virtual-display'])('previews installed template %s', (id) => {
 		const container = mount(false, id);
-		expect(container.querySelector('iframe')?.getAttribute('src')).toBe(
-			`https://example.test/wcpos-display/?preview=cart&template=${id}`
-		);
+		expect(
+			container.querySelector('[data-testid="display-preview-frame"]')?.getAttribute('src')
+		).toBe(`https://example.test/wcpos-display/?preview=cart&template=${id}`);
 		expect(usePreview).not.toHaveBeenCalled();
 	});
 
