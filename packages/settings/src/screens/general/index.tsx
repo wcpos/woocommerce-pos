@@ -13,7 +13,7 @@ import { TaxIdsSection } from './tax-ids-section';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
-import { Skeleton } from '../../components/skeleton';
+import { FormSkeleton, Skeleton } from '../../components/skeleton';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { syncConsent } from '../../lib/analytics';
@@ -102,7 +102,6 @@ function General() {
 
 	return (
 		<>
-			<CloudflareCallout />
 			{/* eslint-disable-next-line react-hooks/static-components -- resolved from the pro registry; identity is stable (memoized above) */}
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
 			<FormSection title={t('settings.products_section_title')} divider>
@@ -256,4 +255,21 @@ function General() {
 	);
 }
 
-export default General;
+/**
+ * The Cloudflare callout reads only the synchronous bootstrap payload, so it
+ * sits outside the settings query's Suspense boundary: a merchant whose REST
+ * API is being challenged must see the diagnosis even while the settings
+ * request is slow or hanging.
+ */
+function GeneralPage() {
+	return (
+		<>
+			<CloudflareCallout />
+			<React.Suspense fallback={<FormSkeleton rows={5} />}>
+				<General />
+			</React.Suspense>
+		</>
+	);
+}
+
+export default GeneralPage;

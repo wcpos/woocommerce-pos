@@ -18,7 +18,7 @@ export function CloudflareCallout() {
 				<p>
 					{t(
 						'cloudflare.body',
-						"Cloudflare's security checks (Bot Fight Mode, Under Attack Mode and WAF challenges) can stop the WCPOS app from reaching your store's REST API. If the app reports \"This store's hosting setup is blocking the app\" (HOST121) or opens a security-check window, add a WAF Skip rule for /wp-json/ in your Cloudflare dashboard."
+						"Cloudflare's security checks (Bot Fight Mode, Under Attack Mode and WAF challenges) can stop the WCPOS app from reaching your store's REST API. If the app reports \"This store's hosting setup is blocking the app\" (HOST121) or opens a security-check window, the fix is in your Cloudflare dashboard: a WAF Skip rule for /wp-json/, or turning off Bot Fight Mode, which no rule can bypass."
 					)}
 				</p>
 				{cloudflare.plugin_active === true && (

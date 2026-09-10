@@ -22,7 +22,7 @@ class Cloudflare_Detector_Test extends \WP_UnitTestCase {
 		// Act.
 		$result = $detector->detect( array( 'HTTP_CF_RAY' => 'abc123-MAD' ), array() );
 		// Assert.
-		$this->assertSame( true, $result['proxied'] );
+		$this->assertTrue( $result['proxied'] );
 	}
 
 	/**
@@ -34,7 +34,7 @@ class Cloudflare_Detector_Test extends \WP_UnitTestCase {
 		// Act.
 		$result = $detector->detect( array(), array() );
 		// Assert.
-		$this->assertSame( false, $result['proxied'] );
+		$this->assertFalse( $result['proxied'] );
 	}
 
 	/**
@@ -46,7 +46,7 @@ class Cloudflare_Detector_Test extends \WP_UnitTestCase {
 		// Act.
 		$result = $detector->detect( array( 'HTTP_CF_RAY' => '' ), array() );
 		// Assert.
-		$this->assertSame( false, $result['proxied'] );
+		$this->assertFalse( $result['proxied'] );
 	}
 
 	/**
@@ -58,7 +58,7 @@ class Cloudflare_Detector_Test extends \WP_UnitTestCase {
 		// Act.
 		$result = $detector->detect( array(), array( 'cloudflare/cloudflare.php' ) );
 		// Assert.
-		$this->assertSame( true, $result['plugin_active'] );
+		$this->assertTrue( $result['plugin_active'] );
 	}
 
 	/**
@@ -70,6 +70,6 @@ class Cloudflare_Detector_Test extends \WP_UnitTestCase {
 		// Act.
 		$result = $detector->detect( array(), array( 'other/other.php' ) );
 		// Assert.
-		$this->assertSame( false, $result['plugin_active'] );
+		$this->assertFalse( $result['plugin_active'] );
 	}
 }
