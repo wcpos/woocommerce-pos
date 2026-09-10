@@ -54,6 +54,7 @@ jobs:
             --exclude='node_modules' \
             --exclude='packages/*/node_modules' \
             --exclude='tests' \
+            --exclude='assets/img/template-gallery/previews' \
             --exclude='.gitignore' \
             --exclude='.editorconfig' \
             --exclude='composer.json' \

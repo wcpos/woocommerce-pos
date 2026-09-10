@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Templates\Frontend;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
@@ -580,6 +581,32 @@ JS;
 	}
 
 	/**
+	 * Get the preview host for the site's development or release lane.
+	 */
+	private function gallery_preview_base_url(): string {
+		// Same development signal as the web bundle (constant, env, or filter), so a
+		// local setup previews its working-tree images instead of the CDN's.
+		if ( Frontend::is_development_mode() ) {
+			return PLUGIN_URL . 'assets/img/template-gallery/previews';
+		}
+		$ref = implode( '.', \array_slice( explode( '.', PLUGIN_VERSION ), 0, 2 ) );
+		if ( 'next' === Frontend::explicit_web_bundle_ref() ) {
+			$ref = 'next';
+		}
+		$url = 'https://cdn.jsdelivr.net/gh/wcpos/woocommerce-pos@' . $ref . '/assets/img/template-gallery/previews';
+
+		/**
+		 * Filters the preview base URL so a site can use its own host.
+		 *
+		 * @since 1.11.0
+		 *
+		 * @param string $url Preview base URL without a trailing slash.
+		 * @hook woocommerce_pos_template_gallery_preview_base_url
+		 */
+		return apply_filters( 'woocommerce_pos_template_gallery_preview_base_url', $url );
+	}
+
+	/**
 	 * Generate the inline script for gallery data.
 	 */
 	private function gallery_inline_script(): string {
@@ -600,7 +627,7 @@ JS;
 				),
 				$json_encode_flags
 			),
-			wp_json_encode( PLUGIN_URL . 'assets/img/template-gallery/previews', $json_encode_flags ),
+			wp_json_encode( $this->gallery_preview_base_url(), $json_encode_flags ),
 			wp_json_encode( wcpos_display_url(), $json_encode_flags ),
 			wp_json_encode( TRANSLATION_VERSION, $json_encode_flags )
 		);

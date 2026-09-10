@@ -474,4 +474,49 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 
 		return $reflection->invokeArgs( $this->renderer, $args );
 	}
+
+	/**
+	 * The build retains only receipt font faces.
+	 */
+	public function test_build_ships_only_used_dejavu_faces(): void {
+		// Arrange.
+		$dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/lib/fonts/';
+		// Assert.
+		foreach ( array( 'DejaVuSans', 'DejaVuSans-Bold', 'DejaVuSans-Oblique', 'DejaVuSansMono', 'DejaVuSansMono-Bold' ) as $face ) {
+			$this->assertFileExists( $dir . $face . '.ttf' );
+		}
+		foreach ( array( 'DejaVuSerif', 'DejaVuSans-BoldOblique', 'DejaVuSansMono-Oblique' ) as $face ) {
+			$this->assertFileDoesNotExist( $dir . $face . '.ttf' );
+		}
+	}
+
+	/**
+	 * Removed styles resolve to retained faces instead of Dompdf fallbacks.
+	 */
+	public function test_font_map_aliases_removed_variants(): void {
+		// Arrange.
+		$options = new \WCPOS\Vendor\Dompdf\Options();
+		$options->set( 'defaultFont', 'dejavu sans' );
+		$dompdf = new \WCPOS\Vendor\Dompdf\Dompdf( $options );
+		// Act.
+		$metrics = $dompdf->getFontMetrics();
+		// Assert.
+		$this->assertSame( 'DejaVuSans-Oblique', basename( $metrics->getFont( 'dejavu sans', 'italic' ) ) );
+		$this->assertSame( 'DejaVuSans-Bold', basename( $metrics->getFont( 'dejavu sans', 'bold_italic' ) ) );
+		$this->assertSame( 'DejaVuSansMono', basename( $metrics->getFont( 'dejavu sans mono', 'italic' ) ) );
+		$this->assertNull( $metrics->getFont( 'dejavu serif', 'normal' ) );
+	}
+
+	/**
+	 * Italic and bold italic receipt text still produces a PDF.
+	 */
+	public function test_render_html_renders_italic_and_bold_italic_text(): void {
+		// Arrange.
+		$html = '<html><body><span style="font-style: italic">Note</span>'
+			. '<span style="font-weight: bold; font-style: italic">Total</span></body></html>';
+		// Act.
+		$pdf = $this->renderer->render_html( $html );
+		// Assert.
+		$this->assertStringStartsWith( '%PDF', $pdf );
+	}
 }
