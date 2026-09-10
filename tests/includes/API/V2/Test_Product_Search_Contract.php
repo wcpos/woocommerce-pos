@@ -154,6 +154,6 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		$this->assertCount( 30, $response->get_data() );
 		$headers = $response->get_headers();
-		$this->assertEquals( 130, $headers['X-WP-Total'] );
+		$this->assertSame( 130, $headers['X-WP-Total'] );
 	}
 }
