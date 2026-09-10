@@ -70,7 +70,7 @@ describe('display preview', () => {
 		expect(canvas().style.height).toBe('800px');
 		// The filmstrip: one live thumbnail per state, in the order a sale happens.
 		const strip = container.querySelector('[data-testid="display-state-strip"]')!;
-		const rows = Array.from(strip.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+		const rows = Array.from(strip.querySelectorAll<HTMLElement>('[role="radio"]'));
 		expect(rows.map((row) => row.querySelector('iframe')?.getAttribute('src'))).toEqual(
 			[
 				'idle',
@@ -95,6 +95,25 @@ describe('display preview', () => {
 		]);
 		// Fifth row: payment.approved.
 		act(() => rows[4]!.click());
+		expect(rows.map((row) => row.getAttribute('tabindex'))).toEqual([
+			'-1',
+			'-1',
+			'-1',
+			'-1',
+			'0',
+			'-1',
+			'-1',
+		]);
+		// Arrow keys walk the states in sale order from the strip's single tab stop.
+		act(() => {
+			strip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+		});
+		expect(frame().getAttribute('src')).toBe(
+			'https://example.test/wcpos-display/?preview=payment.declined&gallery=display-pocket'
+		);
+		act(() => {
+			strip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+		});
 		expect(frame().getAttribute('src')).toBe(
 			'https://example.test/wcpos-display/?preview=payment.approved&gallery=display-pocket'
 		);

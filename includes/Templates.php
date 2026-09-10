@@ -130,7 +130,14 @@ class Templates {
 		$registry   = Gallery_Registry::all();
 		$categories = array();
 		foreach ( array( 'display-pocket', 'display-marquee', 'display-ledger' ) as $key ) {
-			$categories[ $key ] = $registry[ $key ]['category'];
+			// A key missing from the registry is left alone: an empty category would "succeed"
+			// in wp_set_object_terms() and strand the post without one.
+			if ( ! empty( $registry[ $key ]['category'] ) ) {
+				$categories[ $key ] = $registry[ $key ]['category'];
+			}
+		}
+		if ( ! $categories ) {
+			return true;
 		}
 		$legacy_slugs = array( 'display', 'standard', 'responsive', 'small-screen', 'large-screen' );
 		$post_ids     = get_posts(

@@ -181,27 +181,45 @@ function DisplayStateStrip({
 	onChange: (state: string) => void;
 	urlFor: (state: string) => string;
 }) {
+	const order = DISPLAY_STATE_GROUPS.flatMap((group) => group.states);
+	const stripRef = React.useRef<HTMLDivElement>(null);
+	// One tab stop for the whole strip; arrow keys walk the states in sale order.
+	const onKeyDown = (event: React.KeyboardEvent) => {
+		const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+		if (!step) return;
+		event.preventDefault();
+		const next = order[(order.indexOf(state) + step + order.length) % order.length];
+		onChange(next);
+		stripRef.current?.querySelector<HTMLElement>(`[data-state="${next}"]`)?.focus();
+	};
 	return (
 		<div
+			ref={stripRef}
 			role="radiogroup"
 			aria-label={t('modal.display_state')}
 			data-testid="display-state-strip"
+			onKeyDown={onKeyDown}
 			className="wcpos:w-60 wcpos:shrink-0 wcpos:overflow-y-auto wcpos:pr-1 wcpos:flex wcpos:flex-col wcpos:gap-1"
 		>
 			{DISPLAY_STATE_GROUPS.map(({ group, states }) => (
 				<React.Fragment key={group}>
-					<div className="wcpos:text-[11px] wcpos:font-semibold wcpos:uppercase wcpos:tracking-wider wcpos:text-gray-500 wcpos:px-1.5 wcpos:pt-2 wcpos:pb-0.5">
+					<div
+						role="presentation"
+						className="wcpos:text-[11px] wcpos:font-semibold wcpos:uppercase wcpos:tracking-wider wcpos:text-gray-500 wcpos:px-1.5 wcpos:pt-2 wcpos:pb-0.5"
+					>
 						{t(`modal.state_group_${group}`)}
 					</div>
 					{states.map((value) => {
 						const key = value.replace('.', '_');
 						const selected = state === value;
 						return (
-							<button
+							<div
 								key={value}
-								type="button"
 								role="radio"
 								aria-checked={selected}
+								aria-label={t(`modal.state_${key}`)}
+								tabIndex={selected ? 0 : -1}
+								data-state={value}
 								onClick={() => onChange(value)}
 								className={`wcpos:flex wcpos:items-center wcpos:gap-2.5 wcpos:w-full wcpos:text-left wcpos:rounded-md wcpos:border-2 wcpos:p-1 wcpos:cursor-pointer wcpos:bg-transparent ${selected ? 'wcpos:border-wp-admin-theme-color wcpos:bg-blue-50' : 'wcpos:border-transparent hover:wcpos:bg-gray-100'}`}
 							>
@@ -211,6 +229,7 @@ function DisplayStateStrip({
 								>
 									<iframe
 										src={urlFor(value)}
+										loading="lazy"
 										tabIndex={-1}
 										aria-hidden="true"
 										title={t(`modal.state_${key}`)}
@@ -231,7 +250,7 @@ function DisplayStateStrip({
 										{t(`modal.state_desc_${key}`)}
 									</div>
 								</div>
-							</button>
+							</div>
 						);
 					})}
 				</React.Fragment>
