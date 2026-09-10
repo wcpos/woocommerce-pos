@@ -93,6 +93,9 @@ class Test_Uninstall extends WP_UnitTestCase {
 		parent::tearDown();
 
 		( new Activator() )->install_sync_schema();
+		// The sweep removes the bootstrap-installed font pack from the real
+		// uploads directory; later suites need it for the raster support probe.
+		( new Font_Pack_Loader() )->ensure_all();
 		$this->restore_roles_and_caps();
 		( new \WCPOS\WooCommercePOS\Templates() )->register_taxonomy();
 		if ( 0 !== $this->committed_user_id ) {
