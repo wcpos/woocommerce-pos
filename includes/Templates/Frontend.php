@@ -134,6 +134,14 @@ class Frontend {
 	}
 
 	/**
+	 * CDN lane shared by plugin assets and font packs.
+	 */
+	public static function cdn_ref(): string {
+		$ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
+		return 'next' === self::explicit_web_bundle_ref() ? 'next' : $ref;
+	}
+
+	/**
 	 * Whether the site runs the POS in development mode (local bundles and assets).
 	 */
 	public static function is_development_mode(): bool {

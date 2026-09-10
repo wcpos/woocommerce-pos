@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Consent;
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
@@ -169,6 +170,7 @@ class Activator {
 		}
 
 		if ( $install_sync_schema ) {
+			( new Font_Pack_Loader() )->ensure_all();
 			$this->install_sync_schema();
 		}
 
@@ -352,6 +354,7 @@ class Activator {
 		}
 
 		if ( $locked_plugin_needs_upgrade ) {
+			( new Font_Pack_Loader() )->ensure_all();
 			Services\Settings::bump_versions();
 		}
 

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Templates\Thermal\Raster_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
@@ -37,6 +38,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		add_filter( 'pre_http_request', array( $this, 'block_http' ) );
 		if ( ! Raster_Thermal_Emitter::is_supported() ) {
 			$this->markTestSkipped( 'GD with FreeType is required to rasterize receipts.' );
 		}
@@ -50,8 +52,59 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 * @return void
 	 */
 	public function tearDown(): void {
+		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
 		remove_all_filters( 'woocommerce_pos_receipt_raster_font' );
 		parent::tearDown();
+	}
+
+	/**
+	 * Keep renderer tests offline even if the local pack is missing.
+	 *
+	 * @return \WP_Error Blocked request.
+	 */
+	public function block_http(): \WP_Error {
+		return new \WP_Error( 'network_disabled' );
+	}
+
+	/** A cached pack failure must leave the support probe unavailable, not fatal. */
+	public function test_font_path_failed_pack_reports_no_font(): void {
+		// Arrange.
+		$dir    = get_temp_dir() . 'wcpos-raster-fonts-' . wp_generate_uuid4();
+		$filter = static function ( array $uploads ) use ( $dir ): array {
+			$uploads['basedir'] = $dir;
+			return $uploads;
+		};
+		wp_mkdir_p( $dir );
+		add_filter( 'upload_dir', $filter );
+		$loader = new class() extends Font_Pack_Loader {
+			/**
+			 * Hide the local pack.
+			 *
+			 * @param string $pack Pack name.
+			 * @return string No local directory.
+			 */
+			protected function local_pack_dir( string $pack ): string {
+				return '';
+			}
+		};
+		set_transient( 'wcpos_font_pack_failed_dejavu', 1, HOUR_IN_SECONDS );
+		$method = new \ReflectionMethod( Raster_Thermal_Emitter::class, 'font_path' );
+		$method->setAccessible( true );
+		try {
+			// Act: the cached failure precedes local-source selection in both loaders.
+			$installed = $loader->ensure_all();
+			$font      = $method->invoke( null, false );
+			$supported = Raster_Thermal_Emitter::is_supported();
+			// Assert.
+			$this->assertFalse( $installed );
+			$this->assertSame( '', $font );
+			$this->assertFalse( $supported );
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+			delete_transient( 'wcpos_font_pack_failed_dejavu' );
+			delete_transient( 'wcpos_font_pack_lock_dejavu' );
+			rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+		}
 	}
 
 	/**
