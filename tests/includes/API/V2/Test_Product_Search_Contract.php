@@ -96,7 +96,8 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			array( 'exact-barcode-first', '5012345678900', array( 'Scanner Test Item', 'Manual for 5012345678900' ) ),
 			array( 'short-term', 'k2', array( 'K2 Skis' ) ),
 			array( 'description-never-matches', 'phantom', array() ),
-			array( 'stock-status-is-not-search', 'ghost', array( 'Ghost Pepper Sauce' ) ),
+			array( 'out-of-stock-rows-are-searched', 'ghost', array( 'Ghost Pepper Sauce' ) ),
+			array( 'stock-status-field-is-not-searched', 'outofstock', array() ),
 			array( 'and-across-fields', 'cobalt zinc', array( 'Cobalt Lamp' ) ),
 			array( 'no-match', 'zzqx', array() ),
 		);
@@ -110,7 +111,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 	 * @param string $query          Search terms.
 	 * @param array  $expected_names Expected product names in order.
 	 */
-	public function test_trap( string $name, string $query, array $expected_names ): void {
+	public function test_product_search_trap_returns_expected_ranked_names( string $name, string $query, array $expected_names ): void {
 		$rows = $this->read(
 			array(
 				'search'  => $query,
