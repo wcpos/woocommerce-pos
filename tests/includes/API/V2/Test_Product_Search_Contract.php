@@ -41,6 +41,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			array( 'K2 Skis', 'SKU-3008', '', '', 'instock' ),
 			array( 'Plain Mug', 'SKU-3009', '', 'A phantom word lives only in the description.', 'instock' ),
 			array( 'Ghost Pepper Sauce', 'SKU-3010', '', '', 'outofstock' ),
+			array( 'Cobalt Lamp', 'ZINC-77', '', '', 'instock' ),
 		);
 
 		foreach ( $fixtures as $fixture ) {
@@ -96,6 +97,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			array( 'short-term', 'k2', array( 'K2 Skis' ) ),
 			array( 'description-never-matches', 'phantom', array() ),
 			array( 'stock-status-is-not-search', 'ghost', array( 'Ghost Pepper Sauce' ) ),
+			array( 'and-across-fields', 'cobalt zinc', array( 'Cobalt Lamp' ) ),
 			array( 'no-match', 'zzqx', array() ),
 		);
 	}
