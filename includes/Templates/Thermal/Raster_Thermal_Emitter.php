@@ -323,7 +323,9 @@ class Raster_Thermal_Emitter {
 	 */
 	private static function font_path( bool $filtered = true ): string {
 		$loader = new Font_Pack_Loader();
-		$loader->ensure_all();
+		if ( ! $loader->installed() ) {
+			Font_Pack_Loader::schedule();
+		}
 		$bundled = $loader->font_path( 'DejaVuSansMono.ttf' );
 
 		if ( ! $filtered && is_readable( $bundled ) ) {

@@ -69,6 +69,9 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
 		'wcpos_analytics_group_refresh',
+		// WP-Cron fallback for the receipt font install (Action Scheduler is the
+		// primary queue; its pending actions are cancelled in the sweep below).
+		'wcpos_install_font_packs',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -398,6 +401,13 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
 		wp_unschedule_hook( $hook );
 	}
+	// The background font install is queued on Action Scheduler (WooCommerce is
+	// normally still active during an uninstall). Cancel it like the cron events
+	// above, whether or not Pro is present: an installed-but-inactive Pro would
+	// leave the action with no callback, and an active Pro re-queues on demand.
+	if ( \function_exists( 'as_unschedule_all_actions' ) ) {
+		as_unschedule_all_actions( 'wcpos_install_font_packs' );
+	}
 
 	// 2. Drop plugin tables. All are derived from WooCommerce data and are
 	// rebuilt on reinstall.
@@ -515,6 +525,12 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-languages' );
 		}
 		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-templates' );
+
+		// Receipt fonts are re-downloadable derived state, but Pro's bundled core
+		// installs into the same directory, so they stay while Pro is installed.
+		if ( ! $pro_installed ) {
+			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-fonts' );
+		}
 
 		if ( ! $pro_installed ) {
 			$log_files = glob( trailingslashit( $uploads['basedir'] ) . 'wc-logs/woocommerce-pos-*.log' );

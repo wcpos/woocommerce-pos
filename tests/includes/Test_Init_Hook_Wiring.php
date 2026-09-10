@@ -251,6 +251,9 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'update_option_woocommerce_pos_settings_visibility'     => array( 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
+			// Font_Pack_Loader (row 3a): the background install needs its callback on
+			// every request, WP-Cron and Action Scheduler runs included.
+			'wcpos_install_font_packs'                              => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
 			// Payments_Sweeper (row 12b): a live payment leg is reconciled even while the
 			// sync schema is down, so the sweep and its interval register unlatched.

@@ -44,6 +44,7 @@ class Bootstrap {
 		tests_add_filter( 'muplugins_loaded', array( $this, 'manually_load_plugin' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_font_packs' ), 30 );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
@@ -148,6 +149,17 @@ class Bootstrap {
 	 */
 	public function seed_woocommerce_options(): void {
 		add_option( 'woocommerce_enable_coupons', 'yes' );
+	}
+
+	/**
+	 * Install the receipt font pack the way a real site has it after the
+	 * background job ran. Nothing in the request path downloads fonts any more,
+	 * so without this the raster support probe reads as unsupported for the
+	 * whole run and every cloud-print media-type expectation loses `image/png`.
+	 * The checkout ships the pack, so this is a local copy, not a download.
+	 */
+	public function install_font_packs(): void {
+		( new \WCPOS\WooCommercePOS\Services\Font_Pack_Loader() )->ensure_all();
 	}
 
 	/**

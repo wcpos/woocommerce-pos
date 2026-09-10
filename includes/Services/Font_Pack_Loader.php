@@ -15,6 +15,8 @@ use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 
 /** Installs font packs for Dompdf and GD. */
 class Font_Pack_Loader {
+	/** Background font installation hook. */
+	const ACTION = 'wcpos_install_font_packs';
 	/** One base URL per pack so a heavy pack (CJK) can later live in another repo; %s is Frontend::cdn_ref(). */
 	const PACKS = array( 'dejavu' => 'https://cdn.jsdelivr.net/gh/wcpos/woocommerce-pos@%s/fonts/packs/dejavu/' );
 	/** A dead CDN or read-only uploads must not be re-probed on every receipt. */
@@ -28,7 +30,7 @@ class Font_Pack_Loader {
 	 * @return string Absolute path without a trailing slash.
 	 */
 	public function dir(): string {
-		return wp_upload_dir()['basedir'] . '/wcpos/fonts';
+		return wp_upload_dir()['basedir'] . '/wcpos-fonts';
 	}
 
 	/**
@@ -63,6 +65,95 @@ class Font_Pack_Loader {
 		 * @hook woocommerce_pos_font_packs
 		 */
 		return apply_filters( 'woocommerce_pos_font_packs', array_keys( self::sources() ) );
+	}
+
+	/**
+	 * Whether every enabled pack is installed and the shared font map is current.
+	 *
+	 * The map is compared byte-for-byte with what the receipts on disk produce,
+	 * so a stale or damaged map reads as not installed and gets rebuilt by the
+	 * next scheduled run instead of silently leaving Dompdf on its core fonts.
+	 */
+	public function installed(): bool {
+		$packs = self::packs();
+		foreach ( $packs as $pack ) {
+			if ( null === $this->installed_manifest( $pack ) ) {
+				return false;
+			}
+		}
+		if ( array() === $packs ) {
+			return true;
+		}
+		$dir = $this->dir();
+		return @file_get_contents( $dir . '/installed-fonts.json' ) === $this->map_json( $dir );
+	}
+
+	/** Whether any enabled pack has a cached installation failure. */
+	public function failed(): bool {
+		if ( get_transient( 'wcpos_font_pack_failed_map' ) ) {
+			return true;
+		}
+		foreach ( self::packs() as $pack ) {
+			if ( get_transient( 'wcpos_font_pack_failed_' . $pack ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Enqueue font installation outside the receipt request.
+	 *
+	 * A plain install is skipped while one is pending or running; an upgrade
+	 * refresh always enqueues. A delayed failure retry checks only pending
+	 * actions so the running job does not block its own retry.
+	 *
+	 * @param bool $refresh Refresh packs after a plugin upgrade.
+	 * @param int  $delay   Seconds to wait before the install may run.
+	 */
+	public static function schedule( bool $refresh = false, int $delay = 0 ): void {
+		if ( ! $refresh && 0 === $delay && ( new self() )->failed() ) {
+			return;
+		}
+		if ( ! $refresh && wp_next_scheduled( self::ACTION, array( false ) ) ) {
+			return;
+		}
+		// Guard every helper by name: WooCommerce 5.3 bundles an Action Scheduler
+		// without the newer as_has_scheduled_action(), and phpstan narrows per name.
+		if ( function_exists( 'as_schedule_single_action' ) && function_exists( 'as_get_scheduled_actions' ) && function_exists( 'as_next_scheduled_action' ) ) {
+			$pending = array(
+				'hook'     => self::ACTION,
+				'status'   => 'pending',
+				'per_page' => 1,
+			);
+			if ( ! $refresh ) {
+				if ( 0 === $delay && as_next_scheduled_action( self::ACTION ) ) {
+					return;
+				}
+				if ( 0 < $delay && array() !== as_get_scheduled_actions( $pending, 'ids' ) ) {
+					return;
+				}
+			}
+			as_schedule_single_action( time() + $delay, self::ACTION, array( 'refresh' => $refresh ), 'wcpos' );
+			return;
+		}
+		wp_schedule_single_event( time() + $delay, self::ACTION, array( $refresh ) );
+	}
+
+	/**
+	 * Install packs in the background.
+	 *
+	 * Action Scheduler and WP-Cron both pass action args positionally, so the
+	 * `refresh` value arrives as the first parameter, not as an array. A failed
+	 * run books one retry for when the failure cache expires, so a site that
+	 * prints no receipts in the meantime still recovers without a request.
+	 *
+	 * @param mixed $refresh Truthy to reinstall packs whose source version changed.
+	 */
+	public static function run_scheduled( $refresh = false ): void {
+		if ( ! ( new self() )->ensure_all( (bool) $refresh ) ) {
+			self::schedule( false, self::FAILED_TTL + 1 );
+		}
 	}
 
 	/**
@@ -168,7 +259,9 @@ class Font_Pack_Loader {
 			// shared map; rebuilding it from the receipts on disk self-heals that on
 			// the next call, and writes nothing when it is already current.
 			$this->write_map( $this->dir() );
+			delete_transient( 'wcpos_font_pack_failed_map' );
 		} catch ( \RuntimeException $e ) {
+			set_transient( 'wcpos_font_pack_failed_map', 1, self::FAILED_TTL );
 			Logger::log( 'Font packs: ' . $e->getMessage() );
 			return false;
 		}
@@ -182,24 +275,35 @@ class Font_Pack_Loader {
 	 * @throws \RuntimeException On a write failure.
 	 */
 	private function write_map( string $dir ): void {
-		$families = array();
-		foreach ( glob( $dir . '/*.json' ) as $path ) {
-			if ( 'installed-fonts.json' !== basename( $path ) ) {
-				$manifest = json_decode( (string) @file_get_contents( $path ), true );
-				$families = array_merge( $families, $manifest['families'] ?? array() );
-			}
-		}
-		if ( array() === $families ) {
+		$json = $this->map_json( $dir );
+		if ( '' === $json ) {
 			return;
 		}
-		$map  = $dir . '/installed-fonts.json';
-		$json = (string) wp_json_encode( $families );
+		$map = $dir . '/installed-fonts.json';
 		if ( @file_get_contents( $map ) === $json ) {
 			return;
 		}
 		if ( ! @rename( $this->stage( $map, $json ), $map ) ) {
 			throw new \RuntimeException( 'Cannot write installed-fonts.json' );
 		}
+	}
+
+	/**
+	 * The font map every installed pack receipt implies, or '' when none is installed.
+	 *
+	 * @param string $dir Font directory.
+	 */
+	private function map_json( string $dir ): string {
+		$families = array();
+		foreach ( glob( $dir . '/*.json' ) as $path ) {
+			if ( 'installed-fonts.json' !== basename( $path ) ) {
+				$manifest = json_decode( (string) @file_get_contents( $path ), true );
+				if ( is_array( $manifest['families'] ?? null ) ) {
+					$families = array_merge( $families, $manifest['families'] );
+				}
+			}
+		}
+		return array() === $families ? '' : (string) wp_json_encode( $families );
 	}
 
 	/**
@@ -233,7 +337,9 @@ class Font_Pack_Loader {
 		$dir      = $this->dir();
 		$receipt  = $dir . '/' . $pack . '.json';
 		$manifest = is_file( $receipt ) ? json_decode( (string) @file_get_contents( $receipt ), true ) : null;
-		if ( ! is_array( $manifest ) || empty( $manifest['files'] ) || ! is_array( $manifest['files'] ) ) {
+		// A receipt is ours, but a damaged one must read as not installed rather than
+		// fatal in map_json() on every receipt render.
+		if ( ! is_array( $manifest ) || empty( $manifest['files'] ) || ! is_array( $manifest['files'] ) || ! is_array( $manifest['families'] ?? null ) ) {
 			return null;
 		}
 		foreach ( array_keys( $manifest['files'] ) as $file ) {
