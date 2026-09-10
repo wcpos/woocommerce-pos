@@ -16,6 +16,18 @@ use const WCPOS\WooCommercePOS\VERSION;
  * @coversNothing
  */
 class Test_Gallery_Asset_Version extends WP_UnitTestCase {
+	public function setUp(): void {
+		parent::setUp();
+		wp_deregister_script( 'wcpos-template-gallery' );
+		wp_deregister_style( 'wcpos-template-gallery-styles' );
+	}
+
+	public function tearDown(): void {
+		wp_deregister_script( 'wcpos-template-gallery' );
+		wp_deregister_style( 'wcpos-template-gallery-styles' );
+		parent::tearDown();
+	}
+
 	public function test_asset_version_is_plugin_version_plus_file_mtime(): void {
 		$base = trailingslashit( sys_get_temp_dir() ) . 'wcpos-gallery-assets-' . wp_generate_password( 8, false ) . '/';
 		wp_mkdir_p( $base . 'assets/js' );
