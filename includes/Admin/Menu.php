@@ -18,6 +18,7 @@ use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Templates\Frontend;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
@@ -566,18 +567,30 @@ JS;
 			'wcpos-template-gallery-styles',
 			PLUGIN_URL . $dir . '/css/template-gallery.css',
 			array(),
-			PLUGIN_VERSION
+			$this->asset_version( $dir . '/css/template-gallery.css' )
 		);
 
 		wp_enqueue_script(
 			'wcpos-template-gallery',
 			PLUGIN_URL . $dir . '/js/template-gallery.js',
 			array( 'react', 'react-dom', 'wp-api-fetch', \WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE, 'wp-url' ),
-			PLUGIN_VERSION,
+			$this->asset_version( $dir . '/js/template-gallery.js' ),
 			true
 		);
 
 		wp_add_inline_script( 'wcpos-template-gallery', $this->gallery_inline_script(), 'before' );
+	}
+
+	/**
+	 * Cache-busting version for a built asset: the plugin version plus the file's mtime, so a
+	 * redeploy of the same plugin version (dev sites deploy every merge) is never served stale
+	 * from a long-lived browser cache.
+	 *
+	 * @param string $relative Path under the plugin directory.
+	 */
+	private function asset_version( string $relative ): string {
+		$path = PLUGIN_PATH . $relative;
+		return file_exists( $path ) ? PLUGIN_VERSION . '.' . (string) filemtime( $path ) : PLUGIN_VERSION;
 	}
 
 	/**
