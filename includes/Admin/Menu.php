@@ -590,7 +590,7 @@ JS;
 	 * @param string|null $base     Directory the path is relative to; the plugin directory by default.
 	 */
 	public static function asset_version( string $relative, ?string $base = null ): string {
-		$path = ( $base ?? PLUGIN_PATH ) . $relative;
+		$path = trailingslashit( $base ?? PLUGIN_PATH ) . $relative;
 		return file_exists( $path ) ? PLUGIN_VERSION . '.' . (string) filemtime( $path ) : PLUGIN_VERSION;
 	}
 

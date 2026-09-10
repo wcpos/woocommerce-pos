@@ -16,13 +16,22 @@ use const WCPOS\WooCommercePOS\VERSION;
  * @coversNothing
  */
 class Test_Gallery_Asset_Version extends WP_UnitTestCase {
+	/** @var mixed */
+	private $development;
+
 	public function setUp(): void {
 		parent::setUp();
 		wp_deregister_script( 'wcpos-template-gallery' );
 		wp_deregister_style( 'wcpos-template-gallery-styles' );
+		// The enqueue reads $_ENV['DEVELOPMENT'] to pick build/ over assets/; pin the release path.
+		$this->development = $_ENV['DEVELOPMENT'] ?? null;
+		unset( $_ENV['DEVELOPMENT'] );
 	}
 
 	public function tearDown(): void {
+		if ( null !== $this->development ) {
+			$_ENV['DEVELOPMENT'] = $this->development;
+		}
 		wp_deregister_script( 'wcpos-template-gallery' );
 		wp_deregister_style( 'wcpos-template-gallery-styles' );
 		parent::tearDown();
