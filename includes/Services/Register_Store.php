@@ -100,11 +100,13 @@ final class Register_Store {
 			$data['store_id'] = $fields['store_id'] ?? null;
 			$data['created_at_gmt'] = $data['last_seen_at_gmt'];
 			$result = $wpdb->insert( $this->table_name(), $data );
-			if ( false === $result && $this->exists( $id ) ) {
+			if ( false === $result ) {
 				// Two first registrations raced on the primary key: the loser touches
 				// the row the winner created instead of failing the till's sign-in.
+				// No row affected means the insert failed for another reason.
 				unset( $data['id'], $data['name'], $data['store_id'], $data['created_at_gmt'] );
-				$result = $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) );
+				$touched = $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) );
+				$result  = ( false === $touched || 0 === $touched ) ? false : $touched;
 			}
 		}
 		if ( false === $result ) {
