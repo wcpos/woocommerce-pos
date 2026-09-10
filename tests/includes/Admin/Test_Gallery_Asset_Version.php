@@ -37,7 +37,7 @@ class Test_Gallery_Asset_Version extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
-	public function test_asset_version_is_plugin_version_plus_file_mtime(): void {
+	public function test_asset_version_existing_file_returns_plugin_version_with_mtime(): void {
 		$base = trailingslashit( sys_get_temp_dir() ) . 'wcpos-gallery-assets-' . wp_generate_password( 8, false ) . '/';
 		wp_mkdir_p( $base . 'assets/js' );
 		file_put_contents( $base . 'assets/js/template-gallery.js', '// built' );
@@ -60,7 +60,7 @@ class Test_Gallery_Asset_Version extends WP_UnitTestCase {
 		unlink( $base . '/assets/js/template-gallery.js' );
 	}
 
-	public function test_gallery_bundle_is_enqueued_with_the_versioned_string(): void {
+	public function test_enqueue_gallery_assets_registers_bundle_with_versioned_string(): void {
 		( new Menu() )->enqueue_gallery_assets();
 
 		$this->assertSame( Menu::asset_version( 'assets/js/template-gallery.js' ), wp_scripts()->registered['wcpos-template-gallery']->ver );
