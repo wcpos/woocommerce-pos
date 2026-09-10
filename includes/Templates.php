@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 5;
+	public const DEFAULT_TERMS_VERSION = 6;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -120,19 +120,20 @@ class Templates {
 	}
 
 	/**
-	 * Move legacy display gallery categories to their screen-fit category.
+	 * Move legacy display gallery categories to their registry theme.
 	 *
-	 * Only `display` and `standard` terms are swapped; merchant-assigned categories stay.
+	 * Only legacy display and screen-fit terms are swapped; other merchant-assigned categories stay.
 	 *
 	 * @return bool True when every assignment succeeded (or there was nothing to migrate).
 	 */
 	private function migrate_legacy_display_gallery_categories(): bool {
-		$categories = array(
-			'display-pocket'  => 'small-screen',
-			'display-marquee' => 'large-screen',
-			'display-ledger'  => 'responsive',
-		);
-		$post_ids = get_posts(
+		$registry   = Gallery_Registry::all();
+		$categories = array();
+		foreach ( array( 'display-pocket', 'display-marquee', 'display-ledger' ) as $key ) {
+			$categories[ $key ] = $registry[ $key ]['category'];
+		}
+		$legacy_slugs = array( 'display', 'standard', 'responsive', 'small-screen', 'large-screen' );
+		$post_ids     = get_posts(
 			array(
 				'post_type'      => 'wcpos_template',
 				'post_status'    => 'any',
@@ -149,7 +150,7 @@ class Templates {
 					array(
 						'taxonomy' => 'wcpos_template_category',
 						'field'    => 'slug',
-						'terms'    => array( 'display', 'standard' ),
+						'terms'    => $legacy_slugs,
 					),
 				),
 			)
@@ -158,7 +159,7 @@ class Templates {
 		// Only terms that exist can be removed: `standard` is no longer seeded, and core reads
 		// the term-taxonomy id of a missing slug without checking for it (a warning on PHP 8).
 		$legacy = array();
-		foreach ( array( 'display', 'standard' ) as $slug ) {
+		foreach ( $legacy_slugs as $slug ) {
 			if ( term_exists( $slug, 'wcpos_template_category' ) ) {
 				$legacy[] = $slug;
 			}
@@ -1491,9 +1492,6 @@ class Templates {
 			'purchase-order' => /* translators: Receipt template post type or template option label. */ __( 'Purchase Order', 'woocommerce-pos' ),
 			'kitchen-ticket' => /* translators: Receipt template post type or template option label. */ __( 'Kitchen Ticket', 'woocommerce-pos' ),
 			'bar-ticket'     => /* translators: Receipt template post type or template option label. */ __( 'Bar Ticket', 'woocommerce-pos' ),
-			'responsive'     => /* translators: Display template category label. */ __( 'Responsive', 'woocommerce-pos' ),
-			'small-screen'   => /* translators: Display template category label. */ __( 'Small screen', 'woocommerce-pos' ),
-			'large-screen'   => /* translators: Display template category label. */ __( 'Large screen', 'woocommerce-pos' ),
 			'general'        => /* translators: Display template category label. */ __( 'General', 'woocommerce-pos' ),
 			'seasonal'       => /* translators: Display template category label. */ __( 'Seasonal', 'woocommerce-pos' ),
 			'promotion'      => /* translators: Display template category label. */ __( 'Promotion', 'woocommerce-pos' ),

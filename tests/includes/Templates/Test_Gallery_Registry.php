@@ -74,7 +74,7 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Display entries declare screen-fit or themed categories.
+	 * Display entries declare themed categories.
 	 */
 	public function test_registry_display_entries_have_expected_categories(): void {
 		$expected = array(
@@ -93,10 +93,10 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 			'display-black-friday'      => 'promotion',
 			'display-diwali'            => 'seasonal',
 			'display-eid'               => 'seasonal',
-			'display-ledger'            => 'responsive',
+			'display-ledger'            => 'general',
 			'display-lunar-new-year'    => 'seasonal',
-			'display-marquee'           => 'large-screen',
-			'display-pocket'            => 'small-screen',
+			'display-marquee'           => 'general',
+			'display-pocket'            => 'general',
 			'display-sale'              => 'promotion',
 			'display-seasons-greetings' => 'seasonal',
 		);
@@ -111,10 +111,28 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 			$this->assertSame( 1, $entries[ $key ]['version'] );
 			$this->assertNull( $entries[ $key ]['paper_width'] );
 			$this->assertNull( $entries[ $key ]['preview_data'] );
-			if ( in_array( $category, array( 'responsive', 'small-screen', 'large-screen' ), true ) ) {
+			if ( in_array( $key, array( 'display-ledger', 'display-pocket', 'display-marquee' ), true ) ) {
 				$this->assertArrayNotHasKey( 'preview_state', $entries[ $key ] );
 			} else {
 				$this->assertSame( 'idle', $entries[ $key ]['preview_state'] );
+			}
+		}
+	}
+
+	/**
+	 * Screen fit is display-only metadata, independent of the theme.
+	 */
+	public function test_registry_screen_metadata_matches_display_fit(): void {
+		$screens = array(
+			'display-pocket' => 'small-screen',
+			'display-marquee' => 'large-screen',
+		);
+		foreach ( Gallery_Registry::all() as $key => $entry ) {
+			if ( 'display' === $entry['type'] ) {
+				$this->assertArrayHasKey( 'screen', $entry );
+				$this->assertSame( $screens[ $key ] ?? 'responsive', $entry['screen'], $key );
+			} else {
+				$this->assertArrayNotHasKey( 'screen', $entry, $key );
 			}
 		}
 	}

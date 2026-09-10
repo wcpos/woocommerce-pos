@@ -1470,9 +1470,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$templates = $response->get_data();
 		// Gallery order: screen-fit first (Ledger, then the screen-specific pair), then general, seasonal, and promotion.
 		$expected = array(
-			'display-ledger'            => 'responsive',
-			'display-pocket'            => 'small-screen',
-			'display-marquee'           => 'large-screen',
+			'display-ledger'            => 'general',
+			'display-pocket'            => 'general',
+			'display-marquee'           => 'general',
 			'display-carousel'          => 'general',
 			'display-specials'          => 'general',
 			'display-follow'            => 'general',
@@ -1493,7 +1493,13 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			'display-black-friday'      => 'promotion',
 		);
 		$this->assertSame( array_keys( $expected ), array_column( $templates, 'key' ) );
+		$screens = array(
+			'display-pocket' => 'small-screen',
+			'display-marquee' => 'large-screen',
+		);
 		foreach ( $templates as $template ) {
+			$this->assertArrayHasKey( 'screen', $template );
+			$this->assertSame( $screens[ $template['key'] ] ?? 'responsive', $template['screen'] );
 			$this->assertSame( 'display', $template['type'] );
 			$this->assertSame( $expected[ $template['key'] ], $template['category'] );
 			$this->assertArrayHasKey( 'preview_data', $template );
