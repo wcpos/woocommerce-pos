@@ -1,0 +1,22 @@
+{
+	"consent.modal_title": "Help us make WCPOS better",
+	"consent.modal_intro_v2": "WCPOS gets better when we can see what's working and what's breaking. If you're happy to, it can send us anonymous usage data and error reports — that's how we find bugs, fix them faster, and decide what to build next.",
+	"consent.callout_title": "Help us make WCPOS better",
+	"consent.callout_body_v2": "Can WCPOS send anonymous usage data and error reports so we can fix bugs and improve the product? No personal or customer data is ever included. You can change this any time in POS > Settings > General.",
+	"consent.allow": "Allow",
+	"consent.deny": "No thanks",
+	"consent.learn_more": "Learn what's collected",
+	"consent.dismiss": "Dismiss",
+	"consent.dismiss_notice": "Dismiss this notice.",
+	"consent.save_error": "We couldn't save your choice. Please try again.",
+	"consent.modal_includes": "Here's what that includes:",
+	"consent.modal_setup_label": "Your setup",
+	"consent.modal_setup_desc": "things like your PHP and WooCommerce versions, your country, and your currency, so we know which environments to support and test.",
+	"consent.modal_store_label": "Your store size",
+	"consent.modal_store_desc": "roughly how many products, orders, and POS users you have, so we understand the kinds of stores using WCPOS.",
+	"consent.modal_usage_label": "How you use WCPOS",
+	"consent.modal_usage_desc": "which screens you open and which features you turn on, so we build what people actually use.",
+	"consent.modal_errors_label": "When something breaks",
+	"consent.modal_errors_desc_v2": "what went wrong, in the app or in the WCPOS plugin on your server — the error and the versions involved — so we can spot bugs and ship fixes before you need to write in.",
+	"consent.modal_exclusions": "We never see customer details, order contents, prices, your site address, or anything that could identify you or your customers. You can change your mind any time."
+}
