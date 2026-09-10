@@ -334,7 +334,8 @@ export function TemplatesTable({
 						).map((key) => (
 							<th
 								key={key}
-								className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider"
+								// The Live radio is centred in its cell; its heading sits over it.
+								className={`wcpos:px-3 wcpos:py-2 ${key === 'table.header_live' ? 'wcpos:text-center' : 'wcpos:text-left'} wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider`}
 							>
 								{t(key)}
 							</th>
