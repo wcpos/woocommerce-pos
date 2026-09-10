@@ -41,6 +41,7 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	public function tearDown(): void {
 		unset( $_ENV['WCPOS_WEB_BUNDLE_REF'], $_ENV['DEVELOPMENT'] );
 		remove_all_filters( 'woocommerce_pos_template_gallery_preview_base_url' );
+		remove_all_filters( 'woocommerce_pos_development_mode' );
 		wp_set_current_user( 0 );
 		wp_deregister_script( 'wcpos-template-gallery' );
 		parent::tearDown();
@@ -119,6 +120,18 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 		$this->menu->enqueue_gallery_assets();
 		// Assert.
 		$this->assertSame( 'https://example.com/previews', $this->preview_base_url() );
+	}
+
+	/**
+	 * The shared development-mode filter (the WCPOS_DEVELOPMENT constant path) also selects local previews.
+	 */
+	public function test_preview_url_development_filter_uses_local_files(): void {
+		// Arrange.
+		add_filter( 'woocommerce_pos_development_mode', '__return_true' );
+		// Act.
+		$this->menu->enqueue_gallery_assets();
+		// Assert.
+		$this->assertSame( PLUGIN_URL . 'assets/img/template-gallery/previews', $this->preview_base_url() );
 	}
 
 	/**

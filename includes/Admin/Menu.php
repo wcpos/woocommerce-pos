@@ -584,9 +584,9 @@ JS;
 	 * Get the preview host for the site's development or release lane.
 	 */
 	private function gallery_preview_base_url(): string {
-		$is_development = isset( $_ENV['DEVELOPMENT'] )
-			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );
-		if ( $is_development ) {
+		// Same development signal as the web bundle (constant, env, or filter), so a
+		// local setup previews its working-tree images instead of the CDN's.
+		if ( Frontend::is_development_mode() ) {
 			return PLUGIN_URL . 'assets/img/template-gallery/previews';
 		}
 		$ref = implode( '.', \array_slice( explode( '.', PLUGIN_VERSION ), 0, 2 ) );

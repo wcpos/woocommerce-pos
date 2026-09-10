@@ -133,9 +133,9 @@ class Frontend {
 	}
 
 	/**
-	 * Output the footer scripts.
+	 * Whether the site runs the POS in development mode (local bundles and assets).
 	 */
-	public function footer(): void {
+	public static function is_development_mode(): bool {
 		/**
 		 * Filters whether the POS is in development mode.
 		 *
@@ -150,10 +150,17 @@ class Frontend {
 		 *
 		 * @hook woocommerce_pos_development_mode
 		 */
-		$development = apply_filters(
+		return (bool) apply_filters(
 			'woocommerce_pos_development_mode',
 			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) ) )
 		);
+	}
+
+	/**
+	 * Output the footer scripts.
+	 */
+	public function footer(): void {
+		$development = self::is_development_mode();
 
 		$user                 = wp_get_current_user();
 
