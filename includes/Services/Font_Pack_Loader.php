@@ -298,7 +298,9 @@ class Font_Pack_Loader {
 		foreach ( glob( $dir . '/*.json' ) as $path ) {
 			if ( 'installed-fonts.json' !== basename( $path ) ) {
 				$manifest = json_decode( (string) @file_get_contents( $path ), true );
-				$families = array_merge( $families, $manifest['families'] ?? array() );
+				if ( is_array( $manifest['families'] ?? null ) ) {
+					$families = array_merge( $families, $manifest['families'] );
+				}
 			}
 		}
 		return array() === $families ? '' : (string) wp_json_encode( $families );
@@ -335,7 +337,9 @@ class Font_Pack_Loader {
 		$dir      = $this->dir();
 		$receipt  = $dir . '/' . $pack . '.json';
 		$manifest = is_file( $receipt ) ? json_decode( (string) @file_get_contents( $receipt ), true ) : null;
-		if ( ! is_array( $manifest ) || empty( $manifest['files'] ) || ! is_array( $manifest['files'] ) ) {
+		// A receipt is ours, but a damaged one must read as not installed rather than
+		// fatal in map_json() on every receipt render.
+		if ( ! is_array( $manifest ) || empty( $manifest['files'] ) || ! is_array( $manifest['files'] ) || ! is_array( $manifest['families'] ?? null ) ) {
 			return null;
 		}
 		foreach ( array_keys( $manifest['files'] ) as $file ) {

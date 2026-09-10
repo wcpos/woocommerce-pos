@@ -294,6 +294,22 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 		$this->assertFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ) );
 	}
 
+	/** A receipt whose families are not an array reads as not installed and is reinstalled, never fatal. */
+	public function test_installed_damaged_receipt_families_reinstalls_without_error(): void {
+		// Arrange.
+		$this->assertTrue( $this->loader->ensure_all() );
+		$receipt = $this->loader->dir() . '/dejavu.json';
+		$damaged = json_decode( (string) file_get_contents( $receipt ), true );
+		$damaged['families'] = 'broken';
+		file_put_contents( $receipt, wp_json_encode( $damaged ) );
+		// Act / Assert.
+		$this->assertFalse( $this->loader->installed() );
+		$this->assertTrue( $this->loader->ensure_all() );
+		$this->assertTrue( $this->loader->installed() );
+		$this->assertArrayHasKey( 'dejavu sans', json_decode( (string) file_get_contents( $this->loader->dir() . '/installed-fonts.json' ), true ) );
+		$this->assertSame( array(), $this->requests );
+	}
+
 	/** A stale or damaged map reads as not installed until the next run rebuilds it. */
 	public function test_installed_false_when_map_content_is_stale(): void {
 		// Arrange.
