@@ -22,7 +22,7 @@
  * are reported for the transport to request with `X-Star-Cut` /
  * `X-Star-CashDrawer` headers, and the drawer connector cannot be selected.
  *
- * Glyph coverage is the bundled DejaVu Sans Mono's: Latin, Greek, Cyrillic,
+ * Glyph coverage is DejaVu Sans Mono's: Latin, Greek, Cyrillic,
  * Arabic and currency symbols, but not CJK, Hebrew or Thai. Sites needing those
  * point `woocommerce_pos_receipt_raster_font` at a face that has them — see
  * issue #1682.
@@ -39,6 +39,7 @@
 
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Local_Image_Resolver;
 use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 
@@ -309,21 +310,24 @@ class Raster_Thermal_Emitter {
 	/**
 	 * Path to the receipt raster font.
 	 *
-	 * Defaults to the DejaVu Sans Mono that already ships inside the bundled
-	 * dompdf, so no font is added to the plugin. A site whose receipts need
+	 * Defaults to DejaVu Sans Mono from the dejavu font pack. A site needing
 	 * glyphs DejaVu lacks — CJK, Hebrew, Thai — points this at a face that has
 	 * them.
 	 *
 	 * @param bool $filtered Whether to run the filter. The support probe skips it
-	 *                       so a broken filter cannot make the emitter look absent.
+	 *                       while the pack face exists, so a broken filter cannot
+	 *                       make the emitter look absent; without the pack a
+	 *                       readable filtered face still counts.
 	 *
 	 * @return string The readable font path, or '' when none resolves.
 	 */
 	private static function font_path( bool $filtered = true ): string {
-		$bundled = \dirname( __DIR__, 3 ) . '/vendor_prefixed/dompdf/dompdf/lib/fonts/DejaVuSansMono.ttf';
+		$loader = new Font_Pack_Loader();
+		$loader->ensure_all();
+		$bundled = $loader->font_path( 'DejaVuSansMono.ttf' );
 
-		if ( ! $filtered ) {
-			return is_readable( $bundled ) ? $bundled : '';
+		if ( ! $filtered && is_readable( $bundled ) ) {
+			return $bundled;
 		}
 
 		/**

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Pdf_Renderer;
 
 /**
@@ -25,7 +26,23 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		add_filter( 'pre_http_request', array( $this, 'block_http' ) );
 		$this->renderer = new Pdf_Renderer();
+	}
+
+	/** Restore the HTTP boundary. */
+	public function tearDown(): void {
+		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
+		parent::tearDown();
+	}
+
+	/**
+	 * Keep renderer tests offline even if the local pack is missing.
+	 *
+	 * @return \WP_Error Blocked request.
+	 */
+	public function block_http(): \WP_Error {
+		return new \WP_Error( 'network_disabled' );
 	}
 
 	/**
@@ -476,18 +493,13 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The build retains only receipt font faces.
+	 * The build ships no DejaVu faces; receipts use downloaded packs.
 	 */
-	public function test_build_ships_only_used_dejavu_faces(): void {
+	public function test_build_ships_no_dejavu_faces(): void {
 		// Arrange.
 		$dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/lib/fonts/';
 		// Assert.
-		foreach ( array( 'DejaVuSans', 'DejaVuSans-Bold', 'DejaVuSans-Oblique', 'DejaVuSansMono', 'DejaVuSansMono-Bold' ) as $face ) {
-			$this->assertFileExists( $dir . $face . '.ttf' );
-		}
-		foreach ( array( 'DejaVuSerif', 'DejaVuSans-BoldOblique', 'DejaVuSansMono-Oblique' ) as $face ) {
-			$this->assertFileDoesNotExist( $dir . $face . '.ttf' );
-		}
+		$this->assertSame( array(), glob( $dir . 'DejaVu*.ttf' ) );
 	}
 
 	/**
@@ -495,7 +507,10 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_font_map_aliases_removed_variants(): void {
 		// Arrange.
+		$loader = new Font_Pack_Loader();
+		$this->assertTrue( $loader->ensure_all() );
 		$options = new \WCPOS\Vendor\Dompdf\Options();
+		$options->set( 'fontDir', $loader->dir() );
 		$options->set( 'defaultFont', 'dejavu sans' );
 		$dompdf = new \WCPOS\Vendor\Dompdf\Dompdf( $options );
 		// Act.
@@ -505,6 +520,21 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 		$this->assertSame( 'DejaVuSans-Bold', basename( $metrics->getFont( 'dejavu sans', 'bold_italic' ) ) );
 		$this->assertSame( 'DejaVuSansMono', basename( $metrics->getFont( 'dejavu sans mono', 'italic' ) ) );
 		$this->assertNull( $metrics->getFont( 'dejavu serif', 'normal' ) );
+	}
+
+	/**
+	 * Receipt PDFs embed the pack's DejaVu face, not Dompdf's core Times fallback.
+	 *
+	 * Without the pack installed and fontDir pointed at it, Dompdf still returns
+	 * a PDF — in Times, Latin-1 only — so a bytes-start check cannot catch a
+	 * silent fallback. The embedded font name can.
+	 */
+	public function test_render_html_embeds_pack_font(): void {
+		// Act.
+		$pdf = $this->renderer->render_html( '<html><body><p>Ünïcödé receipt ✓</p></body></html>' );
+		// Assert.
+		$this->assertStringContainsString( 'DejaVuSans', $pdf );
+		$this->assertStringNotContainsString( 'Times-Roman', $pdf );
 	}
 
 	/**
