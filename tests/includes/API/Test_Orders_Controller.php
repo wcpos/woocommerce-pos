@@ -152,6 +152,29 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
 	}
 
+	public function test_order_api_get_all_ids_with_register_returns_only_matching_cpt_order(): void {
+		$register = '550e8400-e29b-41d4-a716-446655440000';
+		OrderHelper::create_order();
+		$matching_order = OrderHelper::create_order();
+		$matching_order->add_meta_data( '_wcpos_register', $register, true );
+		$matching_order->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( array( $matching_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'pos_register', $register );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $matching_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
 	public function test_order_api_get_all_ids_with_date_modified_gmt(): void {
 		$order1    = OrderHelper::create_order();
 		$order2    = OrderHelper::create_order();
