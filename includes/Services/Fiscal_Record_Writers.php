@@ -103,7 +103,7 @@ final class Fiscal_Record_Writers {
 	 * @param string   $reason Operator reason.
 	 */
 	public function handle_void( WC_Order $order, array $previous_row, array $applied, string $reason ): void {
-		if ( 'captured' !== $previous_row['status'] || 'voided' !== $applied['status'] ) {
+		if ( 'captured' !== $previous_row['status'] || 'voided' !== $applied['status'] || ! wcpos_is_pos_order( $order ) ) {
 			return;
 		}
 		$this->write(

@@ -657,7 +657,11 @@ class Receipt_Data_Builder {
 			)
 		);
 		$data['fiscal']['corrects'] = $corrects;
-		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, 'refund' );
+		$identity = array_intersect_key( $data['fiscal'], array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id', 'corrects' ) ) );
+		$data     = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, 'refund' );
+		// The minted identity is core-owned: an extension unaware of the refund mode
+		// cannot rewrite it after the number and the row are fixed.
+		$data['fiscal']         = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
 		$data['fiscal']['hash'] = '';
 		$json = wp_json_encode( $data );
 		if ( ! is_string( $json ) ) {
