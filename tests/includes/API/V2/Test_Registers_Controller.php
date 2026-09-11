@@ -64,4 +64,54 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'wcpos_register_not_found', $response->get_data()['code'] );
 	}
+
+	public function test_health_pos_user_receives_diagnostics(): void {
+		$cashier = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_user_by( 'id', $cashier )->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $cashier );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'registers', $response->get_data() );
+		$this->assertArrayHasKey( 'unregistered', $response->get_data() );
+	}
+
+	public function test_health_without_pos_access_returns_forbidden(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	public function test_health_literal_is_not_an_item_id_and_is_protocol_exempt(): void {
+		$routes = $this->server->get_routes();
+		$this->assertArrayHasKey( '/wcpos/v2/registers/health', $routes );
+		foreach ( array_keys( $routes ) as $route ) {
+			if ( 0 === strpos( $route, '/wcpos/v2/registers/' ) && false !== strpos( $route, '(?P<id>' ) ) {
+				$this->assertSame( 0, preg_match( '@^' . $route . '$@', '/wcpos/v2/registers/health' ) );
+			}
+		}
+		$controller = new \WCPOS\WooCommercePOS\API\V2\Registers_Controller();
+		$this->assertContains( '/wcpos/v2/registers/health', $controller->wcpos_route_classifications()['protocol_exempt'] );
+	}
+
+	public function test_health_includes_retired_registers_and_applies_store_scope(): void {
+		$store = new Register_Store();
+		$id = wp_generate_uuid4();
+		$store->upsert( array( 'id' => $id, 'name' => 'Retired', 'store_id' => 123 ) );
+		$store->update( $id, array( 'status' => 'retired' ) );
+		$store->upsert( array( 'id' => wp_generate_uuid4(), 'name' => 'Other store', 'store_id' => 456 ) );
+		$scope = function ( $args, $request ) {
+			$this->assertSame( 'all', $args['status'] );
+			$this->assertSame( '/wcpos/v2/registers/health', $request->get_route() );
+			$args['store_id'] = 123;
+			return $args;
+		};
+		add_filter( 'woocommerce_pos_registers_list_args', $scope, 10, 2 );
+		try {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_registers_list_args', $scope );
+		}
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $id ), array_column( $response->get_data()['registers'], 'id' ) );
+	}
 }

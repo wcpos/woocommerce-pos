@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Provenance_Health;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -37,6 +38,9 @@ class Registers_Controller extends WP_REST_Controller {
 				'GET' => 'get_items',
 				'POST' => 'create_item',
 			),
+			'/' . $this->rest_base . '/health' => array(
+				'GET' => 'get_health',
+			),
 			'/' . $this->rest_base . '/(?P<id>[0-9a-fA-F-]{36})' => array(
 				'GET' => 'get_item',
 				'PATCH' => 'update_item',
@@ -57,7 +61,7 @@ class Registers_Controller extends WP_REST_Controller {
 
 	/** Settings cookie requests carry no client protocol claim. */
 	public function wcpos_route_classifications(): array {
-		return array( 'protocol_exempt' => array( '/wcpos/v2/registers' ) );
+		return array( 'protocol_exempt' => array( '/wcpos/v2/registers', '/wcpos/v2/registers/health' ) );
 	}
 
 	/**
@@ -117,6 +121,21 @@ class Registers_Controller extends WP_REST_Controller {
 		/** Filter authorized store scope for the register list. */
 		$args = apply_filters( 'woocommerce_pos_registers_list_args', $args, $request );
 		return new WP_REST_Response( ( new Register_Store() )->list( $args ) );
+	}
+
+	/**
+	 * List provenance diagnostics using the same authorized store scope as registers.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_health( $request ) {
+		$registers = ( new Register_Store() )->list( apply_filters( 'woocommerce_pos_registers_list_args', array( 'status' => 'all' ), $request ) );
+		try {
+			return new WP_REST_Response( ( new Provenance_Health() )->report( $registers ) );
+		} catch ( \RuntimeException $e ) {
+			return new WP_Error( 'woocommerce_pos_provenance_health_failed', $e->getMessage(), array( 'status' => 500 ) );
+		}
 	}
 
 	/**

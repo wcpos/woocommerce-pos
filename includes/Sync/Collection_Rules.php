@@ -403,7 +403,7 @@ final class Collection_Rules {
 	 *
 	 * @return string
 	 */
-	private static function detect_storage( string $collection ): string {
+	public static function detect_storage( string $collection ): string {
 		if ( 'orders' !== $collection ) {
 			return self::STORAGE_POSTS;
 		}
