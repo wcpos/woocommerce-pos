@@ -476,7 +476,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	public function test_create_loose_sale_time_shapes_are_dropped(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00' ) as $shape ) {
+		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00', '2026-02-30T12:00:00+02:00' ) as $shape ) {
 			$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( array( '_wcpos_sale_time' => $shape ) ) ) );
 			$this->assertSame( 201, $result->get_status() );
 			$order = wc_get_order( (int) $result->get_data()['document']['id'] );

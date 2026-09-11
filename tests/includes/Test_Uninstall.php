@@ -415,6 +415,27 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Registers are user-authored configuration: kept by a plain uninstall,
+	 * dropped only by a full wipe.
+	 */
+	public function test_registers_table_survives_default_uninstall_and_goes_with_remove_all(): void {
+		global $wpdb;
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Store();
+		$store->install();
+		$table = $wpdb->prefix . 'wcpos_registers';
+		$this->assertTrue( Health::table_exists( $table ), 'Precondition: registers table installed' );
+
+		$this->run_uninstall( false );
+		$this->assertTrue( Health::table_exists( $table ), 'A plain uninstall keeps the registers table' );
+
+		$this->run_uninstall( true );
+		$this->assertFalse( Health::table_exists( $table ), 'A full wipe drops the registers table' );
+
+		// Restore for the classes that run after this one.
+		$store->install();
+	}
+
+	/**
 	 * Default uninstall clears every scheduled event for every plugin hook.
 	 */
 	public function test_uninstall_default_clears_cron_events(): void {

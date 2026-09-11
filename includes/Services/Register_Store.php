@@ -103,10 +103,10 @@ final class Register_Store {
 			if ( false === $result ) {
 				// Two first registrations raced on the primary key: the loser touches
 				// the row the winner created instead of failing the till's sign-in.
-				// No row affected means the insert failed for another reason.
+				// A zero-row update is fine (identical values); no row at all is not.
 				unset( $data['id'], $data['name'], $data['store_id'], $data['created_at_gmt'] );
 				$touched = $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) );
-				$result  = ( false === $touched || 0 === $touched ) ? false : $touched;
+				$result  = ( false !== $touched && null !== $this->get( $id ) ) ? true : false;
 			}
 		}
 		if ( false === $result ) {

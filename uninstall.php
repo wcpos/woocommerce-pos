@@ -50,7 +50,6 @@ function woocommerce_pos_uninstall_table_suffixes(): array {
 		'wcpos_sync_journal',
 		'wcpos_sync_stored_digest',
 		'wcpos_sync_mutations',
-		'wcpos_registers',
 		// Legacy (pre-unified-journal) tables.
 		'wcpos_sync_change_log',
 		'wcpos_sync_order_index',
@@ -414,6 +413,13 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	// rebuilt on reinstall.
 	foreach ( woocommerce_pos_uninstall_table_suffixes() as $suffix ) {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table names; uninstall context.
+	}
+
+	// Registers are user-authored configuration (names, store bindings, default
+	// floats, retired state) and the anchor of every sale's provenance, so the
+	// table goes only with a full wipe, like templates and the receipt sequence.
+	if ( $remove_all ) {
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_registers" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
 	}
 
 	// 3. Delete plugin post types: the print-job queue always; receipt

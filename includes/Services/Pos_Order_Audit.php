@@ -209,11 +209,17 @@ final class Pos_Order_Audit {
 				// Any parseable offset timestamp is kept, however wrong the clock:
 				// skew is a Store health finding, never a rejection (fiscal groundwork).
 				try {
-					new \DateTimeImmutable( $value );
-					return true;
+					$parsed = new \DateTimeImmutable( $value );
 				} catch ( \Exception $error ) {
 					return false;
 				}
+				// PHP normalises 2026-02-30 to 2026-03-02 instead of failing: refuse
+				// anything the parser had to repair.
+				$errors = \DateTimeImmutable::getLastErrors();
+				if ( \is_array( $errors ) && ( $errors['warning_count'] > 0 || $errors['error_count'] > 0 ) ) {
+					return false;
+				}
+				return substr( $value, 0, 19 ) === $parsed->format( 'Y-m-d\TH:i:s' );
 			case '_wcpos_sale_tz':
 				return in_array( $value, timezone_identifiers_list(), true );
 			case '_wcpos_sale_counter':
@@ -237,7 +243,17 @@ final class Pos_Order_Audit {
 	 * @return int
 	 */
 	public static function char_length( string $value ): int {
-		return \function_exists( 'mb_strlen' ) ? mb_strlen( $value ) : \strlen( $value );
+		if ( \function_exists( 'mb_strlen' ) ) {
+			return mb_strlen( $value, 'UTF-8' );
+		}
+		if ( \function_exists( 'iconv_strlen' ) ) {
+			$length = iconv_strlen( $value, 'UTF-8' );
+			if ( false !== $length ) {
+				return $length;
+			}
+		}
+		$count = preg_match_all( '/./su', $value );
+		return false === $count ? \strlen( $value ) : $count;
 	}
 
 	/**

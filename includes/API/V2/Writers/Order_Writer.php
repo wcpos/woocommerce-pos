@@ -254,6 +254,14 @@ class Order_Writer extends Null_Writer {
 				foreach ( $context['fill_meta'] as $key => $value ) {
 					$order->update_meta_data( $key, $value );
 				}
+				// Provenance on update: decided here, on the object about to be
+				// written, so a payment that completed since the pre-read wins.
+				if ( ! empty( $context['fill_provenance'] ) && $order instanceof \WC_Order && $order->needs_payment() ) {
+					foreach ( $context['fill_provenance'] as $key => $value ) {
+						$order->update_meta_data( $key, $value );
+					}
+					$order->update_meta_data( '_wcpos_sale_received_gmt', gmdate( 'Y-m-d\TH:i:s\Z' ) );
+				}
 			}
 			if ( $is_create && $creating && null !== $context['created_gmt'] && $order instanceof \WC_Order ) {
 				$order->set_date_created( $context['created_gmt'] );
@@ -274,7 +282,7 @@ class Order_Writer extends Null_Writer {
 				$qd->persist( $order );
 			}
 		};
-		$use_filter = 'create' === $context['operation'] || array() !== $context['fill_meta'];
+		$use_filter = 'create' === $context['operation'] || array() !== $context['fill_meta'] || array() !== ( $context['fill_provenance'] ?? array() );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
 		}
@@ -341,7 +349,8 @@ class Order_Writer extends Null_Writer {
 		}
 		$clear_email = isset( $forward['billing'] ) && is_array( $forward['billing'] )
 			&& array_key_exists( 'email', $forward['billing'] ) && '' === $forward['billing']['email'];
-		$fill_meta = array();
+		$fill_meta          = array();
+		$fill_provenance    = array();
 		$provenance_refused = array();
 		$pre_store = null;
 		$order     = wc_get_order( $id );
@@ -371,7 +380,10 @@ class Order_Writer extends Null_Writer {
 				}
 			}
 			// Sale provenance is fillable while the order still needs payment (a
-			// failed final leg re-stamps it) and frozen once the order is paid.
+			// failed final leg re-stamps it) and frozen once the order is paid. The
+			// decision is re-taken on the fresh order inside the pre-insert callback
+			// (`fill_provenance`), so a payment completing between this read and the
+			// write cannot be followed by a provenance write.
 			$unpaid = $order->needs_payment();
 			foreach ( Pos_Order_Audit::provenance_meta_keys() as $key ) {
 				if ( ! isset( $till[ $key ] ) ) {
@@ -379,8 +391,7 @@ class Order_Writer extends Null_Writer {
 				}
 				$stored = (string) $order->get_meta( $key );
 				if ( $unpaid && $stored !== $till[ $key ] ) {
-					$fill_meta[ $key ]                       = $till[ $key ];
-					$fill_meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
+					$fill_provenance[ $key ] = $till[ $key ];
 				} elseif ( ! $unpaid && $stored !== $till[ $key ] ) {
 					// A paid order is frozen: a missing key stays missing and a
 					// different value is refused — nothing invents audit data later.
@@ -401,6 +412,7 @@ class Order_Writer extends Null_Writer {
 				'store_authorized' => $authorized,
 				'pre_store' => $pre_store,
 				'fill_meta' => $fill_meta,
+				'fill_provenance' => $fill_provenance,
 				'provenance_refused' => $provenance_refused,
 			),
 		);
