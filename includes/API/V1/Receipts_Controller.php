@@ -144,6 +144,7 @@ class Receipts_Controller extends WP_REST_Controller {
 					'order_id' => array(
 						'type' => 'integer',
 						'required' => true,
+						'validate_callback' => 'rest_validate_request_arg',
 						'sanitize_callback' => 'absint',
 					),
 				),
