@@ -1278,7 +1278,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order_with_cashier->get_id() ), $ids );
 	}
 
-	public function test_filter_order_by_register(): void {
+	public function test_filter_order_by_register_returns_only_that_registers_orders(): void {
 		$register = '550e8400-e29b-41d4-a716-446655440000';
 
 		// An order without a register (excluded) and one with (included).
@@ -1292,9 +1292,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( 1, \count( $data ) );
-		$this->assertEquals( array( $order_with_register->get_id() ), wp_list_pluck( $data, 'id' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $data );
+		$this->assertSame( array( $order_with_register->get_id() ), wp_list_pluck( $data, 'id' ) );
 	}
 
 	public function test_filter_order_by_store(): void {
