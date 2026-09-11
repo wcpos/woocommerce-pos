@@ -14,17 +14,20 @@ import { t } from '../../translations';
 interface Register {
 	id: string;
 	name: string;
+	store_id: number | null;
 	platform: string;
 	last_seen_at_gmt: string;
 	default_float: string | null;
 	status: 'active' | 'retired';
 }
 
-type RegisterEdit = Partial<Pick<Register, 'name' | 'default_float' | 'status'>>;
+type RegisterEdit = Partial<Pick<Register, 'name' | 'default_float' | 'status' | 'store_id'>>;
 
 function Registers() {
 	const queryClient = useQueryClient();
 	const { setNotice } = useNotices();
+	const rawStoreOptions = window.wcpos?.settings?.cloudPrintStoreOptions;
+	const storeOptions = Array.isArray(rawStoreOptions) ? rawStoreOptions : [];
 	const { data } = useSuspenseQuery({
 		queryKey: ['registers'],
 		queryFn: () =>
@@ -34,6 +37,7 @@ function Registers() {
 				headers: { 'X-WCPOS': '1' },
 			}),
 	});
+	const showStore = storeOptions.length > 1 || data.some((row) => row.store_id !== null);
 	const mutation = useMutation({
 		mutationFn: ({ id, fields }: { id: string; fields: RegisterEdit }) =>
 			apiFetch<Register>({
@@ -71,6 +75,7 @@ function Registers() {
 							<tr className="wcpos:border-b wcpos:border-gray-200">
 								{[
 									t('registers.name', 'Name'),
+									...(showStore ? [t('registers.store', 'Store')] : []),
 									t('registers.platform', 'Platform'),
 									t('registers.last_seen', 'Last seen'),
 									t('registers.default_float', 'Default float'),
@@ -103,6 +108,35 @@ function Registers() {
 											}}
 										/>
 									</td>
+									{showStore && (
+										<td className="wcpos:p-3">
+											<select
+												aria-label={t('registers.store', 'Store')}
+												className="wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs wcpos:transition-colors wcpos:duration-150 wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-offset-0 wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color wcpos:focus:ring-wp-admin-theme-color wcpos:disabled:bg-gray-50 wcpos:disabled:text-gray-500 wcpos:disabled:cursor-not-allowed"
+												value={
+													storeOptions.some((store) => store.id === row.store_id)
+														? row.store_id ?? ''
+														: ''
+												}
+												disabled={mutation.isPending}
+												onChange={(event) =>
+													mutation.mutate({
+														id: row.id,
+														fields: { store_id: Number(event.currentTarget.value) },
+													})
+												}
+											>
+												<option value="" disabled={row.store_id !== null}>
+													— {t('registers.store_unassigned', 'Unassigned')}
+												</option>
+												{storeOptions.map((store) => (
+													<option key={store.id} value={store.id}>
+														{store.name}
+													</option>
+												))}
+											</select>
+										</td>
+									)}
 									<td className="wcpos:p-3">{row.platform || '—'}</td>
 									<td className="wcpos:p-3">{new Date(row.last_seen_at_gmt).toLocaleString()}</td>
 									<td className="wcpos:p-3">

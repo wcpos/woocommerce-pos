@@ -338,6 +338,8 @@
 	"cloud_print.add_rule": "+ Add rule",
 	"registers.registers": "Registers",
 	"registers.name": "Name",
+	"registers.store": "Store",
+	"registers.store_unassigned": "Unassigned",
 	"registers.platform": "Platform",
 	"registers.last_seen": "Last seen",
 	"registers.default_float": "Default float",
