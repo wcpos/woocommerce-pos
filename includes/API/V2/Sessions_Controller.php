@@ -35,6 +35,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			'/sessions' => 'GET,POST',
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})' => 'GET',
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})/status' => 'POST',
+			'/sessions/(?P<id>[0-9a-fA-F-]{36})/approve' => 'POST',
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})/movements' => 'GET',
 			'/movements' => 'POST',
 		) as $route => $methods ) {
@@ -83,6 +84,9 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$row = $store->get( $request['id'] );
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
+			}
+			if ( substr( rtrim( $request->get_route(), '/' ), -8 ) === '/approve' ) {
+				return $row ? $this->approve( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
 			if ( $row ) {
 				return new WP_REST_Response( $row );
@@ -162,6 +166,28 @@ class Sessions_Controller extends \WP_REST_Controller {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
 		return $fields;
+	}
+
+	/** Check manager credentials for this request only; persist only the approver id.
+	 *
+	 * @param \WP_REST_Request       $request Request.
+	 * @param array                  $row Current row.
+	 * @param Register_Session_Store $store Owner.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function approve( $request, array $row, Register_Session_Store $store ) {
+		if ( 'counting' !== $row['status'] ) {
+			return $this->error( 'wcpos_session_transition_refused', 409 );
+		}
+		if ( ! is_string( $request['username'] ) || ! is_string( $request['password'] ) ) {
+			return $this->error( 'wcpos_override_refused', 403 );
+		}
+		$user = wp_authenticate( $request['username'], $request['password'] );
+		if ( is_wp_error( $user ) || get_current_user_id() === $user->ID || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+			return $this->error( 'wcpos_override_refused', 403 );
+		}
+		$result = $store->approve( $row, $user->ID );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result );
 	}
 
 	/** Validate a state transition and optional second-user authorization.

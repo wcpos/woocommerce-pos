@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Session and movement REST contracts. */
@@ -103,7 +104,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$user = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_user_by( 'id', $user )->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $user );
-		foreach ( array( 'sessions', 'sessions/' . $fields['id'] . '/status', 'movements' ) as $route ) {
+		foreach ( array( 'sessions', 'sessions/' . $fields['id'] . '/status', 'sessions/' . $fields['id'] . '/approve', 'movements' ) as $route ) {
 			$this->assertSame( 403, $this->post( $route, $fields )->get_status() );
 		}
 		foreach ( array( 'sessions', 'sessions/' . $fields['id'], 'sessions/' . $fields['id'] . '/movements' ) as $route ) {
@@ -185,6 +186,216 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$result = $this->post( $route, $fields );
 		$this->assertSame( 200, $result->get_status() );
 		$this->assertSame( $cashier->ID, $result->get_data()['approved_by'] );
+	}
+
+	/** Credentials must identify another closure manager, without changing the cashier. */
+	public function test_approve_credentials_require_another_manager(): void {
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$cashier = wp_get_current_user();
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$credentials = array(
+			'username' => $manager->user_login,
+			'password' => 'approval-fixture',
+		);
+		$route = 'sessions/' . $id . '/approve';
+		$refused = $this->post( $route, $credentials );
+		$this->assertSame( 403, $refused->get_status() );
+		$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		wp_set_password( 'cashier-fixture', $cashier->ID );
+		$cashier->add_cap( 'manage_woocommerce_pos_closures' );
+		foreach ( array(
+			array(
+				'username' => $manager->user_login,
+				'password' => 'wrong',
+			),
+			array(
+				'username' => $cashier->user_login,
+				'password' => 'cashier-fixture',
+			),
+			array(
+				'username' => array(),
+				'password' => 'approval-fixture',
+			),
+			array(
+				'username' => $manager->user_login,
+				'password' => array(),
+			),
+		) as $invalid ) {
+			$refused = $this->post( $route, $invalid );
+			$this->assertSame( 403, $refused->get_status() );
+			$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+			$this->assertNull( ( new Register_Session_Store() )->get( $id )['approved_by'] );
+		}
+		$response = $this->post( $route, $credentials );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
+		$this->assertSame( $manager->ID, ( new Register_Session_Store() )->get( $id )['approved_by'] );
+		$this->assertSame( $cashier->ID, get_current_user_id() );
+		$this->assertArrayNotHasKey( 'password', $response->get_data() );
+		$unchanged = $this->post( $route, $credentials );
+		$this->assertSame( 409, $unchanged->get_status() );
+		$this->assertSame( 'wcpos_session_transition_refused', $unchanged->get_data()['code'] );
+	}
+
+	/** Open and closed sessions cannot receive credential approval. */
+	public function test_approve_non_counting_session_returns_conflict(): void {
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		foreach ( array( 'open', 'counting', 'closed' ) as $status ) {
+			$this->post(
+				'sessions/' . $id . '/status',
+				array(
+					'status' => $status,
+					'at' => '2026-09-11T11:00:00Z',
+					'counted' => array( 'cash' => '100' ),
+				)
+			);
+			if ( 'counting' === $status ) {
+				continue;
+			}
+			$response = $this->post(
+				'sessions/' . $id . '/approve',
+				array(
+					'username' => $manager->user_login,
+					'password' => 'approval-fixture',
+				)
+			);
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'wcpos_session_transition_refused', $response->get_data()['code'] );
+		}
+	}
+
+	/** A close fixture derives expected cash from a captured ledger row, not the float. */
+	private function counting_session_with_cash_sale(): string {
+		$fields = array_merge( $this->fields(), array( 'counted_float' => '0' ) );
+		$id = $this->post( 'sessions', $fields )->get_data()['id'];
+		$order = new \WC_Order();
+		$order->set_total( '100' );
+		$order->save();
+		$payment = Ledger::instance()->record(
+			$order,
+			array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount' => '100',
+				'session_id' => $id,
+			)
+		);
+		$this->assertSame( 'captured', $payment['status'] );
+		$this->assertSame( array( 'cash' => '100.0000' ), ( new Register_Session_Store() )->expected( ( new Register_Session_Store() )->get( $id ) ) );
+		$this->assertSame(
+			200,
+			$this->post(
+				'sessions/' . $id . '/status',
+				array(
+					'status' => 'counting',
+					'at' => '2026-09-11T11:00:00Z',
+				)
+			)->get_status()
+		);
+		return $id;
+	}
+
+	/** Over-threshold cash requires persisted approval or the existing manager token. */
+	public function test_close_over_threshold_requires_approval(): void {
+		$settings = static function ( $values ) {
+			$values['variance_threshold'] = '5.00';
+			return $values;
+		};
+		add_filter( 'woocommerce_pos_general_settings', $settings );
+		try {
+			$id = $this->counting_session_with_cash_sale();
+			$route = 'sessions/' . $id . '/status';
+			$close = array(
+				'status' => 'closed',
+				'at' => '2026-09-11T12:00:00Z',
+				'counted' => array( 'cash' => '80' ),
+			);
+			$response = $this->post( $route, $close );
+			$this->assertSame( 403, $response->get_status() );
+			$this->assertSame( 'wcpos_override_refused', $response->get_data()['code'] );
+			$this->assertSame( '-20.0000', $response->get_data()['data']['variance'] );
+			$this->assertSame( '5.00', $response->get_data()['data']['threshold'] );
+			$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+			$manager = self::factory()->user->create_and_get(
+				array(
+					'role' => 'subscriber',
+					'user_pass' => 'approval-fixture',
+				)
+			);
+			$manager->add_cap( 'manage_woocommerce_pos_closures' );
+			$this->assertSame(
+				200,
+				$this->post(
+					'sessions/' . $id . '/approve',
+					array(
+						'username' => $manager->user_login,
+						'password' => 'approval-fixture',
+					)
+				)->get_status()
+			);
+			$response = $this->post( $route, $close );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
+			$id = $this->counting_session_with_cash_sale();
+			$close['approver_token'] = Auth::instance()->generate_access_token( $manager );
+			$response = $this->post( 'sessions/' . $id . '/status', $close );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_general_settings', $settings );
+		}
+	}
+
+	/** Blank thresholds and exact decimal boundaries determine whether approval is needed. */
+	public function test_close_threshold_boundaries_are_enforced(): void {
+		foreach ( array( array( '', '80', 200 ), array( '5.00', '96', 200 ), array( '5.00', '95', 200 ), array( '5.00', '105', 200 ), array( '4.99999', '95', 403 ) ) as list( $threshold, $cash, $status ) ) {
+			$settings = static function ( $values ) use ( $threshold ) {
+				$values['variance_threshold'] = $threshold;
+				return $values;
+			};
+			add_filter( 'woocommerce_pos_general_settings', $settings );
+			try {
+				$id = $this->counting_session_with_cash_sale();
+				$response = $this->post(
+					'sessions/' . $id . '/status',
+					array(
+						'status' => 'closed',
+						'at' => '2026-09-11T12:00:00Z',
+						'counted' => array( 'cash' => $cash ),
+					)
+				);
+				$this->assertSame( $status, $response->get_status() );
+				if ( 200 === $status ) {
+					$this->assertNull( $response->get_data()['approved_by'] );
+				} else {
+					$this->assertSame( 'wcpos_override_refused', $response->get_data()['code'] );
+					$this->assertSame( '-5.0000', $response->get_data()['data']['variance'] );
+					$this->assertSame( '4.99999', $response->get_data()['data']['threshold'] );
+				}
+			} finally {
+				remove_filter( 'woocommerce_pos_general_settings', $settings );
+			}
+		}
 	}
 
 	/** Movements enforce amounts, append once, and refuse invalid void targets. */

@@ -150,6 +150,32 @@ final class Register_Session_Store {
 		return $this->get( $fields['id'] );
 	}
 
+	/** Stamp a manager approval only while the session is counting.
+	 *
+	 * @param array $session Current row.
+	 * @param int   $user_id Approving manager.
+	 * @return array|\WP_Error
+	 * @throws \RuntimeException On database failure.
+	 */
+	public function approve( array $session, int $user_id ) {
+		global $wpdb;
+		$updated = $wpdb->update(
+			$this->table_name(),
+			array( 'approved_by' => $user_id ),
+			array(
+				'id' => $session['id'],
+				'status' => 'counting',
+			)
+		);
+		if ( false === $updated ) {
+			throw new \RuntimeException( 'Session write failed.' );
+		}
+		if ( 0 === $updated ) {
+			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		return $this->get( $session['id'] );
+	}
+
 	/** Apply a validated transition, conditional on the observed state.
 	 *
 	 * @return array|\WP_Error
@@ -160,6 +186,37 @@ final class Register_Session_Store {
 	 */
 	public function transition( array $session, array $fields ) {
 		global $wpdb;
+		if ( 'counting' === $session['status'] && 'closed' === $fields['status'] ) {
+			$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
+			$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
+			if ( null === $session['approved_by'] && ! isset( $fields['approved_by'] ) && is_string( $threshold ) && preg_match( '/^\d+(?:\.\d+)?$/D', $threshold ) ) {
+				// Truncate, not round: a four-decimal variance above the threshold must still require approval.
+				$comparison_threshold = preg_replace( '/(\.\d{4})\d+$/D', '$1', $threshold );
+				$variance = $wpdb->get_row(
+					$wpdb->prepare(
+						'SELECT variance, ABS(variance) > CAST(%s AS DECIMAL(65,4)) AS exceeds_threshold FROM (SELECT CAST(%s AS DECIMAL(65,4)) - CAST(%s AS DECIMAL(65,4)) AS variance) AS amounts',
+						$comparison_threshold,
+						$fields['counted']['cash'],
+						$this->expected( $session )['cash']
+					),
+					ARRAY_A
+				);
+				if ( null === $variance ) {
+					throw new \RuntimeException( 'Session variance calculation failed.' );
+				}
+				if ( '1' === $variance['exceeds_threshold'] ) {
+					return new \WP_Error(
+						'wcpos_override_refused',
+						__( 'Manager approval is required to close this session.', 'woocommerce-pos' ),
+						array(
+							'status' => 403,
+							'variance' => $variance['variance'],
+							'threshold' => $threshold,
+						)
+					);
+				}
+			}
+		}
 		if ( isset( $fields['counted'] ) ) {
 			$fields['counted'] = wp_json_encode( $fields['counted'] );
 		}
