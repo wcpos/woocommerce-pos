@@ -350,6 +350,8 @@
 	"registers.last_seen": "Last seen",
 	"registers.default_float": "Default float",
 	"registers.status": "Status",
+	"registers.add": "Add register",
+	"registers.create": "Create register",
 	"registers.active": "Active",
 	"registers.retired": "Retired",
 	"registers.retire": "Retire",

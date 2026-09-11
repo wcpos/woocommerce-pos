@@ -129,7 +129,10 @@ final class Provenance_Health {
 			$value = $meta['_wcpos_sale_counter'] ?? '';
 			$counter = filter_var( $value, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) );
 			if ( Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_counter', $value ) && false !== $counter ) {
-				$till = strtolower( $meta['_wcpos_till'] ?? $register['id'] );
+				$till_value = $meta['_wcpos_till'] ?? '';
+				$till       = Pos_Order_Audit::is_valid_till_value( '_wcpos_till', $till_value )
+					? strtolower( (string) $till_value )
+					: $register['id'];
 				$tills[ $till ][ $counter ][] = $id;
 			}
 			$skew = $this->order_skew( $id, $meta );
