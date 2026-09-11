@@ -879,4 +879,22 @@ class Test_Uninstall extends WP_UnitTestCase {
 		update_option( 'wcpos_remove_all_data', 'no' );
 		$this->assertFalse( woocommerce_pos_uninstall_remove_all_data(), 'wcpos_remove_all_data=no must NOT enable full wipe' );
 	}
+	/** Fiscal history and counters survive unless a full wipe is requested. */
+	public function test_fiscal_records_survive_default_uninstall_and_drop_with_remove_all(): void {
+		$store = new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store();
+		$store->install();
+		update_option( 'wcpos_fiscal_sequence_refund', 17, false );
+		try {
+			$this->assertTrue( Health::table_exists( $store->table_name() ) );
+			$this->run_uninstall( false );
+			$this->assertTrue( Health::table_exists( $store->table_name() ) );
+			$this->assertSame( 17, (int) get_option( 'wcpos_fiscal_sequence_refund' ) );
+			$this->run_uninstall( true );
+			$this->assertFalse( Health::table_exists( $store->table_name() ) );
+			$this->assertFalse( get_option( 'wcpos_fiscal_sequence_refund' ) );
+		} finally {
+			$store->install();
+		}
+	}
+
 }

@@ -129,6 +129,12 @@ class Init {
 		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
 		add_action( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::REBUILD_HOOK, array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'run_scheduled_rebuild' ) );
 		add_action( Font_Pack_Loader::ACTION, array( Font_Pack_Loader::class, 'run_scheduled' ) );
+		add_action(
+			'woocommerce_pos_order_services_ready',
+			static function (): void {
+				Services\Fiscal_Record_Writers::instance();
+			}
+		);
 		// Gate on the schema latch, not a live Health probe: the latch is only
 		// set AFTER install verified every table (latch-after-verify), so a
 		// per-request SHOW TABLES sweep buys nothing — and a table lost after

@@ -46,6 +46,7 @@ class Bootstrap {
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_font_packs' ), 30 );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_register_table' ), 30 );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_fiscal_record_table' ), 30 );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
@@ -163,6 +164,11 @@ class Bootstrap {
 		// Create wcpos_registers before the per-test transactions begin: dbDelta is
 		// DDL, and a CREATE TABLE inside a test commits that test's transaction.
 		( new \WCPOS\WooCommercePOS\Services\Register_Store() )->install();
+	}
+
+	/** Install fiscal history before per-test transactions; dbDelta is DDL. */
+	public function install_fiscal_record_table(): void {
+		( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->install();
 	}
 
 	/**
