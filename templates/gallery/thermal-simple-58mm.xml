@@ -10,6 +10,7 @@ column and a fixed amount column on the right; do not replace the star
 columns with hard-coded numeric widths.
 -->
 <receipt paper-width="32">
+  {{#fiscal.is_reprint}}<align mode="center"><bold><text align="center" bold="true">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</text></bold></align>{{/fiscal.is_reprint}}
 
   <!-- ── Logo + store identity ─────────────── -->
   {{#store.logo}}
@@ -153,6 +154,12 @@ columns with hard-coded numeric widths.
   <align mode="center">
     <barcode type="code128" height="40">{{order.number}}</barcode>
   </align>
+
+  {{#fiscal.qr_payload}}<align mode="center"><qrcode size="4">{{fiscal.qr_payload}}</qrcode></align>{{/fiscal.qr_payload}}
+  {{#register.name}}<align mode="center"><text>{{i18n.register}}: {{register.name}}</text></align>{{/register.name}}
+  {{#fiscal.receipt_number}}<align mode="center"><text>#{{fiscal.receipt_number}}</text></align>{{/fiscal.receipt_number}}
+  {{#fiscal.sale_time.datetime}}<align mode="center"><text>{{i18n.sale_time}}: {{fiscal.sale_time.datetime}}</text></align>{{/fiscal.sale_time.datetime}}
+  {{#software.name}}<align mode="center"><text>{{software.name}} {{software.plugin_version}}{{#software.app_version}} · {{software.app_version}}{{/software.app_version}}</text></align>{{/software.name}}
 
   <!-- ── Personal note ─────────────── -->
   <feed lines="1" />

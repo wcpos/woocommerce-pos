@@ -30,7 +30,7 @@ class Template_Pdf_Service {
 	 *
 	 * @param array             $template Template metadata/content (must include 'engine').
 	 * @param WC_Abstract_Order $order    The order to render.
-	 * @param array|null        $receipt_data Optional frozen document payload.
+	 * @param array|null        $receipt_data Optional prepared receipt or frozen refund payload.
 	 *
 	 * @return string The PDF document bytes (begins with '%PDF-').
 	 * @throws \RuntimeException When a native integration cannot consume a frozen document.
@@ -38,7 +38,9 @@ class Template_Pdf_Service {
 	public function render( array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): string {
 		$engine = isset( $template['engine'] ) ? (string) $template['engine'] : '';
 
-		if ( null !== $receipt_data && null !== $this->wp_overnight_document_type( $template ) ) {
+		// Prepared sale data is also passed by the PDF route; only refund documents
+		// must not fall back to a native integration that would render the sale.
+		if ( 'refund' === ( $receipt_data['fiscal']['document_type'] ?? '' ) && $this->is_native( $template ) ) {
 			throw new \RuntimeException( 'WP Overnight templates cannot render frozen receipt documents.' );
 		}
 		$wp_overnight_pdf = $this->maybe_render_wp_overnight_pdf( $template, $order );
@@ -151,6 +153,16 @@ class Template_Pdf_Service {
 	}
 
 	/**
+	 * Whether the template renders through a native integration whose bytes this
+	 * service cannot mark (WP Overnight documents).
+	 *
+	 * @param array $template Template metadata.
+	 */
+	public function is_native( array $template ): bool {
+		return null !== $this->wp_overnight_document_type( $template );
+	}
+
+	/**
 	 * Map WCPOS virtual template IDs to WP Overnight document types.
 	 *
 	 * @param array $template Template metadata/content.
@@ -177,12 +189,12 @@ class Template_Pdf_Service {
 	 * @param string            $engine   The template engine.
 	 * @param array             $template Template metadata/content.
 	 * @param WC_Abstract_Order $order    The order to render.
-	 * @param array|null        $receipt_data Optional frozen document payload.
+	 * @param array|null        $receipt_data Optional prepared receipt or frozen refund payload.
 	 *
 	 * @return string The captured receipt HTML.
 	 */
 	private function render_html_engine( string $engine, array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): string {
-		$receipt_data = null === $receipt_data ? ( new Receipt_Data_Builder() )->build( $order, 'live' ) : $receipt_data;
+		$receipt_data = $receipt_data ?? ( new Receipt_Data_Builder() )->build( $order, 'live' );
 		$renderer     = ( new Receipt_Renderer_Factory() )->create( $engine );
 
 		ob_start();

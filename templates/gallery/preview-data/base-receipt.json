@@ -1,7 +1,23 @@
 {
   "description": "Shared Coffee Monster paid retail receipt data used as the default gallery preview fixture.",
   "overrides": {
+    "register": {
+      "id": "preview-register",
+      "name": "Front counter"
+    },
+    "software": {
+      "name": "WCPOS",
+      "plugin_version": "preview",
+      "app_version": "preview"
+    },
     "fiscal": {
+      "qr_payload": "https://coffeemonster.example/verify?id=CM-00042",
+      "receipt_number": "CM-00042",
+      "sale_time": {
+        "datetime": "Jan 15, 2024 11:30"
+      },
+      "is_reprint": false,
+      "reprint_count": 0,
       "corrects": ""
     },
     "order": {

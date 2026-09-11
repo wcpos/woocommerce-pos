@@ -511,4 +511,115 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$this->assertIsArray( $template );
 		$this->assertNotEquals( $post_id, $template['id'] );
 	}
+	/**
+	 * Each default template renders fiscal additions only when their values exist.
+	 *
+	 * @dataProvider fiscal_gallery_templates
+	 * @param string $key Gallery key.
+	 */
+	public function test_gallery_fiscal_blocks_are_value_guarded( string $key ): void {
+		$data = ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build();
+		$this->assertFalse( $data['fiscal']['is_reprint'] );
+		// Gallery templates are files installed into the template CPT, not virtual ids:
+		// build the template array from the gallery file the way the installer does.
+		$entry = \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all()[ $key ] ?? null;
+		$this->assertNotNull( $entry, $key );
+		$file = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $key . ( 'thermal' === $entry['engine'] ? '.xml' : '.html' );
+		$this->assertFileExists( $file );
+		$template = array_merge(
+			$entry,
+			array(
+				'id'      => $key,
+				'content' => (string) file_get_contents( $file ),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$qr = base64_encode( \WCPOS\WooCommercePOS\Templates\Barcode_Image::qrcode_png( $data['fiscal']['qr_payload'], 4 ) );
+		$this->assertNotSame( '', $qr );
+		$identity_parts = array(
+			$data['i18n']['register'] . ': ' . $data['register']['name'],
+			'#' . $data['fiscal']['receipt_number'],
+			$data['i18n']['sale_time'] . ': ' . $data['fiscal']['sale_time']['datetime'],
+			$data['software']['name'] . ' ' . $data['software']['plugin_version'] . ' · ' . $data['software']['app_version'],
+		);
+		$html = $this->render_fiscal_gallery( $template, $order, $data );
+		$this->assertStringContainsString( $qr, $html, $key );
+		$dom = new \DOMDocument();
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		$lines = array();
+		foreach ( ( new \DOMXPath( $dom ) )->query( '//div[not(*)]' ) as $node ) {
+			$lines[] = trim( $node->textContent );
+		}
+		foreach ( $identity_parts as $part ) {
+			$this->assertContains( $part, $lines, $key );
+		}
+		$data['fiscal']['is_reprint'] = true;
+		$data['fiscal']['reprint_count'] = 2;
+		$data['order']['printed']['datetime'] = 'Sep 11, 2026 12:00';
+		$copy = $data['i18n']['copy'] . ' 2 · Sep 11, 2026 12:00';
+		$html = $this->render_fiscal_gallery( $template, $order, $data );
+		$this->assertStringContainsString( $copy, $this->fiscal_gallery_text( $html ), $key );
+
+		// A pre-1.4 payload has none of the new identities, even if fiscal exists.
+		$data['fiscal']['qr_payload'] = '';
+		$data['fiscal']['is_reprint'] = false;
+		unset( $data['register'], $data['software'], $data['fiscal']['sale_time'], $data['fiscal']['receipt_number'] );
+		$html = $this->render_fiscal_gallery( $template, $order, $data );
+		$text = $this->fiscal_gallery_text( $html );
+		$this->assertStringNotContainsString( $qr, $html, $key );
+		$this->assertStringNotContainsString( $copy, $text, $key );
+		$this->assertStringNotContainsString( $data['i18n']['register'] . ':', $text, $key );
+		$this->assertStringNotContainsString( $data['i18n']['sale_time'] . ':', $text, $key );
+		foreach ( $identity_parts as $part ) {
+			$this->assertStringNotContainsString( $part, $text, $key );
+		}
+
+		// A single present part renders independently of the missing parts.
+		$data['register'] = array( 'name' => 'SINGLE-REGISTER' );
+		$html = $this->render_fiscal_gallery( $template, $order, $data );
+		$this->assertStringContainsString( $data['i18n']['register'] . ': SINGLE-REGISTER', $this->fiscal_gallery_text( $html ) );
+		$dom = new \DOMDocument();
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		$nodes = ( new \DOMXPath( $dom ) )->query( '//*[contains(text(), "SINGLE-REGISTER")]' );
+		$this->assertSame( 1, $nodes->length );
+		$this->assertSame( $data['i18n']['register'] . ': SINGLE-REGISTER', trim( $nodes->item( 0 )->textContent ) );
+	}
+
+	/** @return array Gallery cases. */
+	public static function fiscal_gallery_templates(): array {
+		return array_map( static fn( $key ) => array( $key ), array(
+			'standard-receipt', 'standard-receipt-rtl', 'detailed-receipt',
+			'thermal-simple-80mm', 'thermal-simple-58mm', 'thermal-simple-80mm-rtl',
+			'thermal-detailed-80mm', 'thermal-detailed-58mm',
+		) );
+	}
+
+	/** Render through the real HTML or thermal AST pipeline, without a printer. */
+	private function render_fiscal_gallery( array $template, $order, array $data ): string {
+		if ( 'thermal' === $template['engine'] ) {
+			$ast = ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->build_ast( $template, $order, $data );
+			if ( ! empty( $data['register']['name'] ) ) {
+				foreach ( $ast['children'] as $node ) {
+					$raw = $node['children'][0]['children'][0]['value'] ?? '';
+					if ( false !== strpos( $raw, $data['register']['name'] ) ) {
+						$this->assertStringNotContainsString( "\n", $raw, 'Each identity part is a single text line.' );
+					}
+				}
+			}
+			return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter() )->emit( $ast );
+		}
+		ob_start();
+		try {
+			( new \WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer() )->render( $template, $order, $data );
+		} finally {
+			$html = ob_get_clean();
+		}
+		return (string) $html;
+	}
+
+	/** Normalize layout whitespace while retaining rendered separators and labels. */
+	private function fiscal_gallery_text( string $html ): string {
+		return trim( preg_replace( '/\s+/u', ' ', html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' ) ) );
+	}
+
 }
