@@ -137,16 +137,13 @@ trait Closure_Test_Fixture {
 		foreach ( array(
 			array(
 				'amount' => '50',
-				'refunded_amount' => '1',
+				// The ledger records refunds on the captured row's refunded_amount.
+				'refunded_amount' => '10',
 			),
-			array(
-				'amount' => '3',
-				'kind' => 'refund',
-			),
-			array( 'amount' => '-6' ),
 			array(
 				'amount' => '30',
 				'method_id' => 'pos_card',
+				'kind' => 'card',
 			),
 			array(
 				'amount' => '999',

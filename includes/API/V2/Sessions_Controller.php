@@ -81,7 +81,8 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$request->set_param( 'id', strtolower( $request['id'] ) );
 			$movement = '/wcpos/v2/movements' === rtrim( $request->get_route(), '/' );
 			$store = $movement ? new Cash_Movement_Store() : new Register_Session_Store();
-			$row = $store->get( $request['id'] );
+			/** Filter a directly addressed session or movement row; Pro returns null outside the caller's stores. */
+			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( $request['id'] ), $request );
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -107,7 +108,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 	private function read( $request ) {
 		$store = new Register_Session_Store();
 		if ( $request['id'] ) {
-			$row = $store->get( strtolower( $request['id'] ) );
+			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( strtolower( $request['id'] ) ), $request );
 			if ( ! $row ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -234,7 +235,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 		} else {
 			$fields['counting_started_at_gmt'] = 'counting' === $status ? $at : null;
 		}
-		if ( $request->has_param( 'approver_token' ) ) {
+		if ( 'closed' === $status && $request->has_param( 'approver_token' ) ) {
 			$token = is_string( $request['approver_token'] ) ? Auth::instance()->validate_token( $request['approver_token'] ) : null;
 			$user = ! $token || is_wp_error( $token ) ? 0 : (int) $token->data->user->id;
 			if ( ! $user || get_current_user_id() === $user || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
