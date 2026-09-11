@@ -11,6 +11,8 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
+use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
@@ -24,6 +26,176 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
+	/** Provenance uses the sale zone, not UTC or the current store zone. */
+	public function test_build_provenance_in_both_modes(): void {
+		$order = OrderHelper::create_order();
+		$id = wp_generate_uuid4();
+		( new Register_Store() )->upsert(
+			array(
+				'id' => $id,
+				'name' => 'Front till',
+				'platform' => 'ios',
+			)
+		);
+		foreach ( array(
+			'register' => $id,
+			'app_version' => '1.8.7',
+			'app_build' => '42',
+			'sale_time' => '2024-01-15T10:30:00Z',
+			'sale_tz' => 'Europe/Madrid',
+			'sale_counter' => '0',
+			'sale_received_gmt' => '2024-01-15T10:35:00Z',
+		) as $key => $value ) {
+			$order->update_meta_data( '_wcpos_' . $key, $value );
+		}
+		$order->save();
+		$store = new class() {
+			/** Store timezone for date assertions. */
+			public function get_timezone(): string {
+				return 'America/New_York';
+			}
+		};
+		foreach ( array( 'live', 'fiscal' ) as $mode ) {
+			$data = $this->builder->build( $order, $mode, $store );
+			$this->assertSame(
+				array(
+					'id' => $id,
+					'name' => 'Front till',
+				),
+				$data['register']
+			);
+			$this->assertSame(
+				array(
+					'name' => 'WCPOS',
+					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+					'app_version' => '1.8.7',
+					'app_build' => '42',
+					'platform' => 'ios',
+				),
+				$data['software']
+			);
+			$this->assertStringContainsString( '11:30', $data['fiscal']['sale_time']['time'] );
+			$this->assertStringNotContainsString( '10:30', $data['fiscal']['sale_time']['time'] );
+			$this->assertStringContainsString( '5:35', $data['fiscal']['received_at']['time'] );
+			$this->assertSame( 'Europe/Madrid', $data['fiscal']['sale_tz'] );
+			$this->assertSame( 0, $data['fiscal']['sale_counter'] );
+			$this->assertSame( 'sale', $data['fiscal']['document_type'] );
+			$this->assertTrue( $data['fiscal']['is_sale_document'] );
+		}
+		foreach ( array( '', 'Invalid/Zone' ) as $zone ) {
+			$order->update_meta_data( '_wcpos_sale_tz', $zone );
+			$data = $this->builder->build( $order, 'live', $store );
+			$this->assertStringContainsString( '5:30', $data['fiscal']['sale_time']['time'] );
+			$this->assertSame( $zone, $data['fiscal']['sale_tz'] );
+		}
+	}
+
+	/** Missing provenance and missing register rows retain empty identity. */
+	public function test_build_without_provenance_uses_defaults(): void {
+		$order = OrderHelper::create_order();
+		foreach ( array( '', wp_generate_uuid4() ) as $id ) {
+			$order->update_meta_data( '_wcpos_register', $id );
+			foreach ( array( 'live', 'fiscal' ) as $mode ) {
+				$data = $this->builder->build( $order, $mode );
+				$this->assertSame(
+					array(
+						'id' => '',
+						'name' => '',
+					),
+					$data['register']
+				);
+				$this->assertSame(
+					array(
+						'name' => 'WCPOS',
+						'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+						'app_version' => '',
+						'app_build' => '',
+						'platform' => '',
+					),
+					$data['software']
+				);
+				foreach ( array( 'sale_time', 'received_at', 'sale_counter', 'sequence' ) as $key ) {
+					$this->assertNull( $data['fiscal'][ $key ] );
+				}
+				foreach ( array( 'sale_tz', 'corrects', 'immutable_id', 'receipt_number', 'qr_payload' ) as $key ) {
+					$this->assertSame( '', $data['fiscal'][ $key ] );
+				}
+			}
+		}
+	}
+
+	/** Only the identity allowlist freezes; order and provenance remain live. */
+	public function test_live_build_preserves_snapshot_identity_after_edits(): void {
+		$order = OrderHelper::create_order();
+		$id = wp_generate_uuid4();
+		$registers = new Register_Store();
+		$registers->upsert(
+			array(
+				'id' => $id,
+				'name' => 'Original till',
+				'platform' => 'ios',
+			)
+		);
+		$order->update_meta_data( '_wcpos_register', $id );
+		$order->update_meta_data( '_wcpos_app_version', '1.8.7' );
+		$order->save();
+		$snapshot = $this->builder->build( $order, 'fiscal' );
+		foreach ( array( 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label' ) as $key ) {
+			$snapshot['fiscal'][ $key ] = 'Frozen-' . $key;
+		}
+		$snapshot['fiscal']['extra_fields'] = array(
+			array(
+				'label' => 'Code',
+				'value' => 'Frozen',
+			),
+		);
+		$store = Receipt_Snapshot_Store::instance();
+		$store->persist_snapshot( $order->get_id(), $snapshot );
+		$snapshot = $store->get_snapshot( $order->get_id() );
+		$order = wc_get_order( $order->get_id() );
+		$order->set_customer_note( 'Edited note' );
+		$order->update_meta_data( '_wcpos_app_version', 'changed' );
+		$order->update_meta_data( '_wcpos_sale_counter', '7' );
+		$order->save();
+		$registers->update( $id, array( 'name' => 'Renamed till' ) );
+		$data = $this->builder->build( $order, 'live' );
+		foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
+			$this->assertSame( $snapshot['fiscal'][ $key ], $data['fiscal'][ $key ] );
+		}
+		$this->assertSame( $snapshot['register'], $data['register'] );
+		$this->assertSame( $snapshot['software'], $data['software'] );
+		$this->assertSame( 'Edited note', $data['order']['customer_note'] );
+		$this->assertSame( 7, $data['fiscal']['sale_counter'] );
+		// An extension recomputing identity live through the receipt-data filter
+		// must not beat the frozen snapshot; its non-identity edits still land.
+		$rebuild = static function ( array $data ) {
+			$data['fiscal']['qr_payload']  = 'Recomputed-live';
+			$data['fiscal']['extra_fields'] = array();
+			$data['order']['customer_note'] = 'Filtered note';
+			return $data;
+		};
+		add_filter( 'woocommerce_pos_receipt_data', $rebuild );
+		try {
+			$data = $this->builder->build( $order, 'live' );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $rebuild );
+		}
+		$this->assertSame( 'Frozen-qr_payload', $data['fiscal']['qr_payload'] );
+		$this->assertSame( $snapshot['fiscal']['extra_fields'], $data['fiscal']['extra_fields'] );
+		$this->assertSame( 'Filtered note', $data['order']['customer_note'] );
+		$fiscal = $this->builder->build( $order, 'fiscal' );
+		$this->assertSame( '', $fiscal['fiscal']['immutable_id'] );
+		$this->assertSame( 'Renamed till', $fiscal['register']['name'] );
+		$this->assertSame( 'changed', $fiscal['software']['app_version'] );
+		unset( $snapshot['register'], $snapshot['software'], $snapshot['fiscal']['qr_payload'] );
+		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_PAYLOAD, wp_json_encode( $snapshot ) );
+		$order->save();
+		$data = $this->builder->build( $order, 'live' );
+		$this->assertSame( $fiscal['register'], $data['register'] );
+		$this->assertSame( $fiscal['software'], $data['software'] );
+		$this->assertSame( '', $data['fiscal']['qr_payload'] );
+	}
+
 	/**
 	 * Customer greetings use the billing first name, not the full name.
 	 */

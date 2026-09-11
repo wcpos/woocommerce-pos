@@ -20,6 +20,42 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
+	/** Schema 1.4 publishes provenance without requiring optional fiscal fields. */
+	public function test_identity_contract_1_4(): void {
+		$schema = Receipt_Data_Schema::get_json_schema();
+		$tree   = Receipt_Data_Schema::get_field_tree();
+		$mock   = Receipt_Data_Schema::get_mock_receipt_data();
+		$this->assertSame( '1.4.0', $schema['x-schema-version'] );
+		$this->assertSame( 'COPY', Receipt_I18n_Labels::get_labels()['copy'] );
+		foreach ( array(
+			'software' => array( 'name', 'plugin_version', 'app_version', 'app_build', 'platform' ),
+			'register' => array( 'id', 'name' ),
+		) as $section => $keys ) {
+			// Optional at the validation boundary: a stored 1.3 snapshot has neither block.
+			$this->assertNotContains( $section, $schema['required'] );
+			$this->assertArrayHasKey( $section, $schema['properties'] );
+			$this->assertSame( $keys, array_keys( $tree[ $section ]['fields'] ) );
+			$this->assertSame( $keys, array_keys( $mock[ $section ] ) );
+		}
+		// The 1.3 required list is unchanged, so a 1.3 payload still satisfies 1.4.
+		$this->assertSame(
+			array( 'order', 'store', 'cashier', 'customer', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax', 'tax_summary', 'has_tax_summary', 'payments', 'refunds', 'fiscal', 'presentation_hints', 'i18n' ),
+			$schema['required']
+		);
+		foreach ( array( 'document_type', 'sale_time', 'sale_tz', 'sale_counter', 'received_at', 'corrects', 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report' ) as $key ) {
+			$this->assertArrayHasKey( $key, $tree['fiscal']['fields'] );
+			$this->assertArrayHasKey( $key, $mock['fiscal'] );
+			$this->assertArrayHasKey( 'default', $schema['properties']['fiscal']['properties'][ $key ] );
+		}
+		foreach ( array( 'sale_time', 'received_at' ) as $key ) {
+			$this->assertSame( array( 'object', 'null' ), $schema['properties']['fiscal']['properties'][ $key ]['type'] );
+			$this->assertSame( array_keys( $mock['order']['created'] ), array_keys( $mock['fiscal'][ $key ] ) );
+		}
+		$this->assertSame( 'sale', $mock['fiscal']['document_type'] );
+		$this->assertTrue( $mock['fiscal']['is_sale_document'] );
+		$this->assertSame( 'Europe/Madrid', $mock['fiscal']['sale_tz'] );
+	}
+
 	/**
 	 * MONEY_FIELDS is a hand-typed copy of every `money` leaf in the field tree,
 	 * declared ~130 lines away from the tree it mirrors, so the two drift in
@@ -397,7 +433,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'store.tax_ids', 'store.address', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'i18n' );
+		$expected_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'store.tax_ids', 'store.address', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'software', 'register', 'i18n' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -439,7 +475,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
 
-		$scalar_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
+		$scalar_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'cashier', 'customer', 'totals', 'fiscal', 'software', 'register' );
 		foreach ( $scalar_sections as $section ) {
 			$this->assertFalse( $tree[ $section ]['is_array'] ?? false, "{$section} should not be marked as array" );
 		}

@@ -227,8 +227,15 @@ class Receipt_I18n_Labels {
 			// Fiscal.
 			'signature'              => /* translators: Receipt label for a customer or staff signature line. */ __( 'Signature', 'woocommerce-pos' ),
 			'document_type'          => /* translators: Fiscal receipt label for document type/category. */ __( 'Document Type', 'woocommerce-pos' ),
-			'copy'                   => /* translators: Fiscal receipt label for a printed copy of a document. */ __( 'Copy', 'woocommerce-pos' ),
+			'copy'                   => /* translators: Fiscal receipt label for a printed copy of a document. */ __( 'COPY', 'woocommerce-pos' ),
 			'copy_number'            => /* translators: Fiscal receipt label for copy number/sequence. */ __( 'Copy No.', 'woocommerce-pos' ),
+			'reprint'                => /* translators: Fiscal receipt label marking a document printed again after the original. */ __( 'Reprint', 'woocommerce-pos' ),
+			'register'               => /* translators: Fiscal receipt label for the till (register) that rang the sale. */ __( 'Register', 'woocommerce-pos' ),
+			'sale_time'              => /* translators: Fiscal receipt label for the time the sale was rung at the till, in the till's own zone. */ __( 'Sale time', 'woocommerce-pos' ),
+			'document_refund'        => /* translators: Fiscal receipt heading for a refund document (credit note). */ __( 'Refund', 'woocommerce-pos' ),
+			'document_void'          => /* translators: Fiscal receipt heading for a void document (a sale cancelled before completion). */ __( 'Void', 'woocommerce-pos' ),
+			'document_cancellation'  => /* translators: Fiscal receipt heading for a cancellation document (a completed sale later cancelled). */ __( 'Cancelled', 'woocommerce-pos' ),
+			'software'               => /* translators: Fiscal receipt label preceding the software name and version that produced the receipt. */ __( 'Software', 'woocommerce-pos' ),
 
 			// Order meta + footer (used by detailed-receipt header / order column / footer).
 			'status'                 => /* translators: Receipt label for order/document status. */ __( 'Status', 'woocommerce-pos' ),
