@@ -107,8 +107,12 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 	 * @return array<string,array<string,mixed>> Receipt payloads.
 	 */
 	private function build_contract_sample_payloads(): array {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_wcpos_sale_time', '2024-01-15T10:30:00Z' );
+		$order->update_meta_data( '_wcpos_sale_tz', 'Europe/Madrid' );
+		$order->update_meta_data( '_wcpos_sale_received_gmt', '2024-01-15T10:35:00Z' );
 		return array(
-			'live'        => ( new Receipt_Data_Builder() )->build( OrderHelper::create_order(), 'live' ),
+			'live'        => ( new Receipt_Data_Builder() )->build( $order, 'live' ),
 			'live_refund' => ( new Receipt_Data_Builder() )->build( $this->create_refunded_order(), 'live' ),
 			'preview'     => ( new Preview_Receipt_Builder() )->build(),
 		);
@@ -358,7 +362,7 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 		$preview = ( new Preview_Receipt_Builder() )->build();
 
 		$this->assertSame( array_keys( $live ), array_keys( $preview ) );
-		foreach ( array( 'order', 'store', 'cashier', 'customer', 'totals', 'tax', 'presentation_hints', 'fiscal' ) as $section ) {
+		foreach ( array( 'order', 'store', 'cashier', 'customer', 'totals', 'tax', 'presentation_hints', 'fiscal', 'software', 'register' ) as $section ) {
 			$live_keys    = array_keys( $live[ $section ] );
 			$preview_keys = array_keys( $preview[ $section ] );
 			sort( $live_keys );

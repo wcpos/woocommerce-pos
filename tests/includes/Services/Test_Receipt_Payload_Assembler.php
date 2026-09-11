@@ -93,11 +93,36 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 			'is_reprint'        => false,
 			'reprint_count'     => 0,
 			'extra_fields'      => array(),
+			'document_type' => 'sale',
+			'sale_time' => null,
+			'sale_tz' => '',
+			'sale_counter' => null,
+			'received_at' => null,
+			'corrects' => '',
+			'is_sale_document' => true,
+			'is_refund_document' => false,
+			'is_void_document' => false,
+			'is_cancellation_document' => false,
+			'is_closure_document' => false,
+			'is_x_report' => false,
 		);
 
 		$fiscal = Receipt_Payload_Assembler::fiscal( array_reverse( $values, true ) );
 
 		$this->assertSame( $values, $fiscal );
+		foreach ( array(
+			'sale' => 'is_sale_document',
+			'refund' => 'is_refund_document',
+			'void' => 'is_void_document',
+			'cancellation' => 'is_cancellation_document',
+			'closure' => 'is_closure_document',
+			'x_report' => 'is_x_report',
+		) as $type => $flag ) {
+			$values['document_type'] = $type;
+			$fiscal = Receipt_Payload_Assembler::fiscal( $values );
+			$this->assertTrue( $fiscal[ $flag ] );
+			$this->assertCount( 1, array_filter( array_intersect_key( $fiscal, array_flip( array( 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report' ) ) ) ) );
+		}
 	}
 
 	/**
@@ -111,6 +136,8 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 		return array(
 			'order'              => array( 'id' => 42 ),
 			'store'              => array( 'name' => 'Test Store' ),
+			'software'           => array( 'name' => 'WCPOS' ),
+			'register'           => array( 'id' => 'till' ),
 			'cashier'            => array( 'name' => 'Cashier' ),
 			'customer'           => array( 'name' => 'Customer' ),
 			'lines'              => array(),
@@ -136,6 +163,8 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 		return array(
 			'order',
 			'store',
+			'software',
+			'register',
 			'cashier',
 			'customer',
 			'lines',

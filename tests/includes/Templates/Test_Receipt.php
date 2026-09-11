@@ -20,6 +20,31 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt extends WC_REST_Unit_Test_Case {
+	/** Live rendering must carry the persisted fiscal identity through the real builder. */
+	public function test_live_render_uses_frozen_identity(): void {
+		$order = OrderHelper::create_order();
+		$snapshot = ( new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder() )->build( $order, 'fiscal' );
+		$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
+		$store = \WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store::instance();
+		$store->persist_snapshot( $order->get_id(), $snapshot );
+		$number = $store->get_snapshot( $order->get_id() )['fiscal']['receipt_number'];
+		$receipt = new Receipt( $order->get_id() );
+		$method = new \ReflectionMethod( Receipt::class, 'get_receipt_data' );
+		$method->setAccessible( true );
+		$data = $method->invoke( $receipt, $order, 'live' );
+		$output = $this->invoke_render_custom_template(
+			$receipt,
+			array(
+				'engine' => 'logicless',
+				'content' => '<p>ID:{{fiscal.receipt_number}} {{fiscal.qr_payload}}</p>',
+			),
+			$order,
+			$data
+		);
+		$this->assertStringContainsString( 'FROZEN-QR-243', $output );
+		$this->assertStringContainsString( 'ID:' . $number, $output );
+	}
+
 	/**
 	 * Test fiscal mode falls back to live data when snapshot is unavailable.
 	 */

@@ -21,8 +21,7 @@ class Receipt_Data_Builder {
 	 * Build a canonical receipt payload.
 	 *
 	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param string            $mode      Reserved for caller compatibility; the receipt mode is
-	 *                                     carried in the request, not the payload.
+	 * @param string            $mode      Live builds retain frozen fiscal identity when available.
 	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
 	 *
 	 * @return array
@@ -418,8 +417,35 @@ class Receipt_Data_Builder {
 
 		$tax_summary = $this->get_tax_summary( $order );
 
+		$register_id = (string) $order->get_meta( '_wcpos_register' );
+		$register_row = '' !== $register_id ? ( new Register_Store() )->get( $register_id ) : null;
+		$register = array(
+			'id' => $register_row['id'] ?? '',
+			'name' => $register_row['name'] ?? '',
+		);
+		$software = array(
+			'name'           => 'WCPOS',
+			'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+			'app_version'    => (string) $order->get_meta( '_wcpos_app_version' ),
+			'app_build'      => (string) $order->get_meta( '_wcpos_app_build' ),
+			'platform'       => $register_row['platform'] ?? '',
+		);
+		$sale_tz = (string) $order->get_meta( '_wcpos_sale_tz' );
+		try {
+			$sale_timezone = '' !== $sale_tz ? new DateTimeZone( $sale_tz ) : $date_timezone;
+		} catch ( \Exception $e ) {
+			$sale_timezone = $date_timezone;
+		}
+		$sale_time = strtotime( (string) $order->get_meta( '_wcpos_sale_time' ) );
+		$received_at = strtotime( (string) $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$sale_counter = $order->get_meta( '_wcpos_sale_counter' );
+
 		$fiscal = Receipt_Payload_Assembler::fiscal(
 			array(
+				'sale_time'         => false === $sale_time ? null : Receipt_Date_Formatter::from_timestamp( $sale_time, $sale_timezone, $date_locale ),
+				'sale_tz'           => $sale_tz,
+				'sale_counter'      => '' === $sale_counter ? null : (int) $sale_counter,
+				'received_at'       => false === $received_at ? null : Receipt_Date_Formatter::from_timestamp( $received_at, $date_timezone, $date_locale ),
 				'immutable_id'      => '',
 				'receipt_number'    => '',
 				'sequence'          => null,
@@ -439,6 +465,8 @@ class Receipt_Data_Builder {
 			array(
 				'order'              => $order_data,
 				'store'              => $store,
+				'software'           => $software,
+				'register'           => $register,
 				'cashier'            => $cashier,
 				'customer'           => $customer,
 				'lines'              => $lines,
@@ -472,7 +500,31 @@ class Receipt_Data_Builder {
 		 *
 		 * @hook woocommerce_pos_receipt_data
 		 */
-		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
+		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
+
+		// Frozen identity on live builds (roadmap#243): when a snapshot exists, the
+		// fiscal identity is copied from it, never rebuilt. Applied AFTER the filter
+		// so an extension that recomputes a QR or a label live cannot overwrite what
+		// was captured at the sale; enrichment belongs in the snapshot
+		// (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
+		// stay live. A 1.3 snapshot without a key keeps the live value.
+		if ( 'live' === $mode ) {
+			$snapshot = Receipt_Snapshot_Store::instance()->get_snapshot( $order->get_id() );
+			if ( null !== $snapshot ) {
+				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
+					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
+						$data['fiscal'][ $key ] = $snapshot['fiscal'][ $key ];
+					}
+				}
+				foreach ( array( 'register', 'software' ) as $key ) {
+					if ( array_key_exists( $key, $snapshot ) ) {
+						$data[ $key ] = $snapshot[ $key ];
+					}
+				}
+			}
+		}
+
+		return $data;
 	}
 
 
