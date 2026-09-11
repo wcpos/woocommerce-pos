@@ -117,4 +117,28 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'value', $tax_id );
 		}
 	}
+
+	/**
+	 * The app's store payload mirrors WooCommerce's billing tax setting.
+	 */
+	public function test_stores_api_tax_based_on_billing_returns_billing(): void {
+		$original = get_option( 'woocommerce_tax_based_on', null );
+		update_option( 'woocommerce_tax_based_on', 'billing' );
+
+		try {
+			$request  = $this->wp_rest_get_request( '/wcpos/v1/stores' );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$stores = $response->get_data();
+			$this->assertCount( 1, $stores );
+			$this->assertSame( 'billing', $stores[0]['tax_based_on'] );
+		} finally {
+			if ( null === $original ) {
+				delete_option( 'woocommerce_tax_based_on' );
+			} else {
+				update_option( 'woocommerce_tax_based_on', $original );
+			}
+		}
+	}
 }
