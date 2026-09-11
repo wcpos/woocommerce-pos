@@ -1572,6 +1572,31 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test missing historical store identifiers retain non-numeric values.
+	 */
+	public function test_build_preserves_missing_non_numeric_historical_store_identifier(): void {
+		$missing_store_id = 'store-uuid-abc';
+		$order            = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_store', $missing_store_id );
+		$order->save();
+
+		$store_filter = static function ( $store, $the_store ) use ( $missing_store_id ) {
+			return $missing_store_id === $the_store ? false : $store;
+		};
+
+		try {
+			add_filter( 'woocommerce_pos_get_store', $store_filter, 10, 3 );
+
+			$store = $this->builder->build( $order, 'live' )['store'];
+
+			$this->assertSame( $missing_store_id, $store['id'] );
+			$this->assertSame( 'Store #' . $missing_store_id, $store['name'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter, 10 );
+		}
+	}
+
+	/**
 	 * Test the order section includes rich date data for created/paid/completed/printed.
 	 */
 	public function test_build_includes_order_date_sections(): void {

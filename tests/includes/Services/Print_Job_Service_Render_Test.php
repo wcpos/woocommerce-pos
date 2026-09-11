@@ -348,6 +348,7 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 			$out = $this->jobs->render_payload( $this->jobs->get( $job_id ) );
 
 			$this->assertSame( $native_pdf, $out );
+			$this->assertSame( 0, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
 		} finally {
 			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
 			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
@@ -465,6 +466,40 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( '', $out );
+		$this->assertSame( 0, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+	}
+
+	/**
+	 * It does not persist a job count when saving the order count fails.
+	 */
+	public function test_render_payload_does_not_persist_job_count_before_order_count_save(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id' => 'p1',
+				'order_id'   => $order->get_id(),
+				'format'     => 'epos-xml',
+			)
+		);
+		$fail_count_save = static function ( $saving_order ) use ( $order ): void {
+			if ( $order->get_id() === $saving_order->get_id() && $saving_order->meta_exists( '_wcpos_receipt_print_count' ) ) {
+				throw new \RuntimeException( 'Simulated receipt count save failure.' );
+			}
+		};
+
+		try {
+			add_action( 'woocommerce_before_order_object_save', $fail_count_save, 10, 1 );
+
+			// Act.
+			$out = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+			// Assert.
+			$this->assertSame( '', $out );
+			$this->assertSame( '', get_post_meta( $id, Print_Job_Service::META_PRINT_COUNT, true ) );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $fail_count_save, 10 );
+		}
 	}
 
 	/**
