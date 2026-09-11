@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -166,7 +167,7 @@ class Registers_Controller extends WP_REST_Controller {
 		$fields = array();
 		if ( $creating || $request->has_param( 'name' ) ) {
 			$name = $request['name'];
-			if ( ! is_string( $name ) || \strlen( $name ) > 191 || '' === trim( sanitize_text_field( $name ) ) ) {
+			if ( ! is_string( $name ) || Pos_Order_Audit::char_length( $name ) > 191 || '' === trim( sanitize_text_field( $name ) ) ) {
 				return $this->invalid( 'name' );
 			}
 			$fields['name'] = sanitize_text_field( $name );
@@ -177,7 +178,7 @@ class Registers_Controller extends WP_REST_Controller {
 			if ( ! in_array( $fields['platform'], array( '', 'ios', 'android', 'web', 'electron' ), true ) ) {
 				return $this->invalid( 'platform' );
 			}
-			if ( ! is_string( $fields['app_version'] ) || \strlen( $fields['app_version'] ) > 64 ) {
+			if ( ! is_string( $fields['app_version'] ) || Pos_Order_Audit::char_length( $fields['app_version'] ) > 64 ) {
 				return $this->invalid( 'app_version' );
 			}
 		} else {

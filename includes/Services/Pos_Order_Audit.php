@@ -220,13 +220,24 @@ final class Pos_Order_Audit {
 				return 1 === preg_match( '/^[1-9]\d{0,17}$/D', $value );
 			case '_wcpos_app_version':
 			case '_wcpos_app_build':
-				return \strlen( $value ) <= 64;
+				return self::char_length( $value ) <= 64;
 		}
 		if ( \in_array( $key, self::CASH_META_KEYS, true ) && 1 !== preg_match( '/^\d+(?:\.\d+)?$/', (string) $value ) ) {
 			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Character length with or without ext-mbstring (optional on supported hosts).
+	 *
+	 * @param string $value The value.
+	 *
+	 * @return int
+	 */
+	public static function char_length( string $value ): int {
+		return \function_exists( 'mb_strlen' ) ? mb_strlen( $value ) : \strlen( $value );
 	}
 
 	/**
