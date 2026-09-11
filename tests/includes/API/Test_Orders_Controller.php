@@ -2360,4 +2360,41 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $uuids, 'There should be exactly one uuid after regeneration.' );
 		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated uuid should be valid.' );
 	}
+
+	/**
+	 * The v2 register filter returns only matching orders and none for an unknown UUID.
+	 */
+	public function test_v2_pos_register_filter_returns_only_matching_orders(): void {
+		// Arrange.
+		$register_a = '550e8400-e29b-41d4-a716-446655440000';
+		$register_b = '550e8400-e29b-41d4-a716-446655440001';
+		$order1     = OrderHelper::create_order();
+		$order2     = OrderHelper::create_order();
+		$order3     = OrderHelper::create_order();
+		$order1->add_meta_data( '_wcpos_register', $register_a, true );
+		$order1->save();
+		$order2->add_meta_data( '_wcpos_register', $register_a, true );
+		$order2->save();
+		$order3->add_meta_data( '_wcpos_register', $register_b, true );
+		$order3->save();
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register_a );
+		$response = $this->server->dispatch( $request );
+
+		// Assert exact membership, independent of default order.
+		$this->assertSame( 200, $response->get_status() );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+		$expected = array( $order1->get_id(), $order2->get_id() );
+		sort( $ids );
+		sort( $expected );
+		$this->assertSame( $expected, $ids );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', '550e8400-e29b-41d4-a716-446655440002' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data() );
+	}
 }

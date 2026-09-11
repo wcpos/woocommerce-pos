@@ -32,6 +32,7 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		'order'       => 'order',
 		'pos_cashier' => 'pos_cashier',
 		'pos_store'   => 'pos_store',
+		'pos_register' => 'pos_register',
 		'created_via' => 'created_via',
 		'include'     => array(
 			'key' => 'include',
