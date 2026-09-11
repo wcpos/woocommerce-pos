@@ -336,6 +336,220 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 	}
 
+	private function provenance_tuple(): array {
+		return array(
+			'_wcpos_register' => wp_generate_uuid4(),
+			'_wcpos_sale_time' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ),
+			'_wcpos_sale_tz' => 'Europe/Madrid',
+			'_wcpos_sale_counter' => '123',
+			'_wcpos_session' => wp_generate_uuid4(),
+			'_wcpos_app_version' => 'test',
+			'_wcpos_app_build' => '456',
+		);
+	}
+
+	private function provenance_payload( array $tuple ): array {
+		$meta = array();
+		foreach ( $tuple as $key => $value ) {
+			$meta[] = array( 'key' => $key, 'value' => $value );
+		}
+		return array( 'meta_data' => $meta );
+	}
+
+	private function update_provenance_order( $order, array $payload ) {
+		// Keep identity resolution fake, but exercise the real missing-only audit store.
+		$fake = new Fake_Mutation_Store();
+		$fake->resolve = $order->get_id();
+		$store = new class( $fake ) {
+			private $fake;
+			public function __construct( Fake_Mutation_Store $fake ) {
+				$this->fake = $fake;
+			}
+			public function __call( $method, $arguments ) {
+				return $this->fake->{$method}( ...$arguments );
+			}
+			public function persist_order_audit_meta( int $id, array $meta, string $created_via = '' ): void {
+				( new \WCPOS\WooCommercePOS\Sync\Mutation_Store() )->persist_order_audit_meta( $id, $meta, $created_via );
+			}
+		};
+		$current = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+		$envelope = $this->envelope( array(
+			'collection' => 'orders',
+			'operation' => 'update',
+			'baseRevision' => Order_Serializer::canonical_revision( $current ),
+			'payload' => $payload,
+		) );
+		return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+	}
+
+	public function test_create_full_provenance_tuple_is_stored_with_received_time(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tuple = $this->provenance_tuple();
+		$before = time();
+		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$this->assertSame( 201, $result->get_status() );
+		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+		foreach ( $tuple as $key => $value ) {
+			$this->assertSame( $value, $order->get_meta( $key ), $key );
+		}
+		$this->assertGreaterThanOrEqual( $before, strtotime( $order->get_meta( '_wcpos_sale_received_gmt' ) ) );
+		$this->assertLessThanOrEqual( time(), strtotime( $order->get_meta( '_wcpos_sale_received_gmt' ) ) );
+	}
+
+	public function test_update_completing_sale_fills_missing_provenance_before_payment(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$tuple = $this->provenance_tuple();
+		$seen = array();
+		$recorder = static function ( $id ) use ( &$seen, $tuple ) {
+			$sale = wc_get_order( $id );
+			foreach ( $tuple as $key => $value ) {
+				$seen[ $key ] = $sale->get_meta( $key );
+			}
+			$seen['_wcpos_sale_received_gmt'] = $sale->get_meta( '_wcpos_sale_received_gmt' );
+		};
+		add_action( 'woocommerce_payment_complete', $recorder, 5 );
+		try {
+			$result = $this->update_provenance_order( $order, array_merge( $this->provenance_payload( $tuple ), array( 'set_paid' => true, 'payment_method' => 'pos_cash' ) ) );
+		} finally {
+			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		foreach ( $tuple as $key => $value ) {
+			$this->assertSame( $value, $order->get_meta( $key ), $key );
+			$this->assertSame( $value, $seen[ $key ], $key );
+		}
+		$this->assertNotEmpty( $seen['_wcpos_sale_received_gmt'] );
+	}
+
+	public function test_update_changed_provenance_is_refused_with_one_note(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$tuple = $this->provenance_tuple();
+		foreach ( $tuple as $key => $value ) {
+			$order->update_meta_data( $key, $value );
+		}
+		$order->update_meta_data( '_wcpos_sale_received_gmt', '2026-01-01T00:00:00Z' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertFalse( $order->needs_payment(), 'fixture must be a paid order' );
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => wp_generate_uuid4(), '_wcpos_sale_counter' => '124' ) ) );
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $tuple['_wcpos_register'], $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( '123', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '2026-01-01T00:00:00Z', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$notes = array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed after the sale:' ) ) );
+		$this->assertCount( 1, $notes );
+		$this->assertStringContainsString( '_wcpos_register', $notes[0] );
+		$this->assertStringContainsString( '_wcpos_sale_counter', $notes[0] );
+	}
+
+	public function test_update_unpaid_order_restamps_provenance_and_received_time(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$tuple = $this->provenance_tuple();
+		foreach ( $tuple as $key => $value ) {
+			$order->update_meta_data( $key, $value );
+		}
+		$order->update_meta_data( '_wcpos_sale_received_gmt', '2026-01-01T00:00:00Z' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment(), 'fixture must still need payment' );
+		$register = wp_generate_uuid4();
+		$result   = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => $register, '_wcpos_sale_counter' => '124' ) ) );
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $register, $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( '124', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertNotSame( '2026-01-01T00:00:00Z', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed' ) ) ) );
+	}
+
+	public function test_create_loose_sale_time_shapes_are_dropped(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00', '2026-02-30T12:00:00+02:00' ) as $shape ) {
+			$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( array( '_wcpos_sale_time' => $shape ) ) ) );
+			$this->assertSame( 201, $result->get_status() );
+			$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+			$this->assertSame( '', $order->get_meta( '_wcpos_sale_time' ), $shape );
+		}
+	}
+
+	public function test_update_paid_order_never_gains_a_missing_provenance_key(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertFalse( $order->needs_payment() );
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '9' ) ) );
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
+	public function test_payment_completing_between_pre_read_and_write_refuses_provenance_with_a_note(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment() );
+		// Simulate a gateway completing the order after the writer's pre-read.
+		$race = static function ( $incoming ) use ( $order ) {
+			if ( $incoming instanceof \WC_Order && $incoming->get_id() === $order->get_id() ) {
+				$incoming->set_status( 'completed' );
+			}
+			return $incoming;
+		};
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
+		try {
+			$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '77', '_wcpos_register' => wp_generate_uuid4() ) ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$notes = array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed after the sale:' ) ) );
+		$this->assertCount( 1, $notes );
+		$this->assertStringContainsString( '_wcpos_sale_counter', $notes[0] );
+	}
+
+	public function test_create_far_future_sale_time_is_kept(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tuple  = array( '_wcpos_sale_time' => '2031-06-01T12:00:00+02:00' );
+		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$this->assertSame( 201, $result->get_status() );
+		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+		$this->assertSame( '2031-06-01T12:00:00+02:00', $order->get_meta( '_wcpos_sale_time' ) );
+		$this->assertNotSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
+	public function test_create_invalid_provenance_is_silently_dropped(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tuple = array( '_wcpos_register' => 'bad', '_wcpos_session' => 'bad', '_wcpos_sale_time' => '2026-01-01T12:00:00', '_wcpos_sale_tz' => 'Not/AZone', '_wcpos_sale_counter' => '0' );
+		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$this->assertSame( 201, $result->get_status() );
+		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+		foreach ( $tuple as $key => $value ) {
+			$this->assertSame( '', $order->get_meta( $key ), $key );
+		}
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
 	public function test_unknown_collection_is_rejected_400_without_reserving(): void {
 		$store = new Fake_Mutation_Store();
 		$result = $this->push( $store, array( 'collection' => 'nonsense' ) );

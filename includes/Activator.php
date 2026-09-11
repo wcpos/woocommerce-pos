@@ -17,6 +17,7 @@ use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
+use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use const DOING_AJAX;
 
@@ -190,6 +191,7 @@ class Activator {
 		$journal->install();
 		( new Integrity_Digest() )->install();
 		( new Mutation_Store() )->install();
+		( new Register_Store() )->install();
 
 		if ( ! Sync_Health::is_healthy() ) {
 			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
@@ -612,6 +614,8 @@ class Activator {
 		if ( Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
 			$this->install_sync_schema();
 		}
+
+		( new Register_Store() )->install();
 
 		// Installs that predate 2026-09 wrote the per-request latches with
 		// autoload off; every upgrade re-asserts autoload so the flip is

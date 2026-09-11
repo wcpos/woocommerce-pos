@@ -15,6 +15,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /**
  * Pos_Order_Audit service.
@@ -25,7 +26,7 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version' );
+	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count' );
 
 	/**
 	 * Audit keys sourced from the till at the sale (client-supplied, validated,
@@ -33,7 +34,16 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
+	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback', '_wcpos_register', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
+
+	/**
+	 * Write-once sale provenance tuple.
+	 *
+	 * @return string[]
+	 */
+	public static function provenance_meta_keys(): array {
+		return array( '_wcpos_register', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
+	}
 
 	/**
 	 * The subset of till keys that are monetary AMOUNTS (unsigned plain decimals);
@@ -185,11 +195,65 @@ final class Pos_Order_Audit {
 		if ( ! \is_scalar( $value ) || '' === (string) $value ) {
 			return false;
 		}
+		$value = (string) $value;
+		switch ( $key ) {
+			case '_wcpos_register':
+			case '_wcpos_session':
+				return Pos_Uuid::is_uuid( $value );
+			case '_wcpos_sale_time':
+				// The full ISO 8601 shape with an explicit offset — PHP's parser is far
+				// more permissive than the contract, so the grammar is checked first.
+				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/D', $value ) ) {
+					return false;
+				}
+				// Any parseable offset timestamp is kept, however wrong the clock:
+				// skew is a Store health finding, never a rejection (fiscal groundwork).
+				try {
+					$parsed = new \DateTimeImmutable( $value );
+				} catch ( \Exception $error ) {
+					return false;
+				}
+				// PHP normalises 2026-02-30 to 2026-03-02 instead of failing: refuse
+				// anything the parser had to repair.
+				$errors = \DateTimeImmutable::getLastErrors();
+				if ( \is_array( $errors ) && ( $errors['warning_count'] > 0 || $errors['error_count'] > 0 ) ) {
+					return false;
+				}
+				return substr( $value, 0, 19 ) === $parsed->format( 'Y-m-d\TH:i:s' );
+			case '_wcpos_sale_tz':
+				return in_array( $value, timezone_identifiers_list(), true );
+			case '_wcpos_sale_counter':
+				return 1 === preg_match( '/^[1-9]\d{0,17}$/D', $value );
+			case '_wcpos_app_version':
+			case '_wcpos_app_build':
+				return self::char_length( $value ) <= 64;
+		}
 		if ( \in_array( $key, self::CASH_META_KEYS, true ) && 1 !== preg_match( '/^\d+(?:\.\d+)?$/', (string) $value ) ) {
 			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Character length with or without ext-mbstring (optional on supported hosts).
+	 *
+	 * @param string $value The value.
+	 *
+	 * @return int
+	 */
+	public static function char_length( string $value ): int {
+		if ( \function_exists( 'mb_strlen' ) ) {
+			return mb_strlen( $value, 'UTF-8' );
+		}
+		if ( \function_exists( 'iconv_strlen' ) ) {
+			$length = iconv_strlen( $value, 'UTF-8' );
+			if ( false !== $length ) {
+				return $length;
+			}
+		}
+		$count = preg_match_all( '/./su', $value );
+		return false === $count ? \strlen( $value ) : $count;
 	}
 
 	/**

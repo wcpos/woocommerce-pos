@@ -256,6 +256,8 @@ class Ledger {
 				'refunds'         => array(),
 				'seen_events'     => array(),
 				'expires_at'      => null,
+				'register_id'     => Pos_Uuid::is_uuid( $input['register_id'] ?? null ) ? strtolower( $input['register_id'] ) : null,
+				'session_id'      => Pos_Uuid::is_uuid( $input['session_id'] ?? null ) ? strtolower( $input['session_id'] ) : null,
 				'cashier_id'      => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
 				'store_id'        => isset( $context['store_id'] ) ? (int) $context['store_id'] : null,
 			)
@@ -359,6 +361,8 @@ class Ledger {
 				'amount' => $amount,
 				'currency' => $currency,
 				'status' => 'pending',
+				'register_id' => $input['register_id'] ?? null,
+				'session_id' => $input['session_id'] ?? null,
 				'cashier_id' => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
 				'store_id' => isset( $context['store_id'] ) ? (int) $context['store_id'] : null,
 			)
@@ -624,6 +628,10 @@ class Ledger {
 			'amount'    => $amount,
 			'currency'  => $currency,
 		);
+		if ( Pos_Uuid::is_uuid( $input['register_id'] ?? null ) ) {
+			$comparable['register_id'] = $stored['register_id'] ?? null;
+			$requested['register_id'] = strtolower( $input['register_id'] );
+		}
 		foreach ( $requested as $field => $value ) {
 			if ( $comparable[ $field ] !== $value ) {
 				return new WP_Error(
@@ -961,6 +969,8 @@ class Ledger {
 			'receipt' => array(),
 			'cashier_id' => 0,
 			'store_id' => null,
+			'register_id' => null,
+			'session_id' => null,
 			'created_at_gmt' => $this->valid_time( $row['created_at_gmt'] ?? null ) ? $this->valid_time( $row['created_at_gmt'] ?? null ) : $now,
 			// Keep a valid captured_at_gmt across later transitions (a voided authorized leg
 			// keeps the time the reader approved it); default to now only when the row counts.
@@ -968,6 +978,9 @@ class Ledger {
 			'updated_at_gmt' => $now,
 		);
 		$row = array_merge( $defaults, $row );
+		foreach ( array( 'register_id', 'session_id' ) as $key ) {
+			$row[ $key ] = Pos_Uuid::is_uuid( $row[ $key ] ) ? strtolower( $row[ $key ] ) : null;
+		}
 		$row['id']               = strtolower( (string) $row['id'] );
 		$row['order_id']         = $order->get_id();
 		$row['amount']           = $amount;

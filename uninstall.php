@@ -415,6 +415,13 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table names; uninstall context.
 	}
 
+	// Registers are user-authored configuration (names, store bindings, default
+	// floats, retired state) and the anchor of every sale's provenance, so the
+	// table goes only with a full wipe, like templates and the receipt sequence.
+	if ( $remove_all ) {
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_registers" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
+	}
+
 	// 3. Delete plugin post types: the print-job queue always; receipt
 	// templates (including revisions and taxonomies) only on a full wipe.
 	woocommerce_pos_uninstall_post_type( 'wcpos_print_job' );

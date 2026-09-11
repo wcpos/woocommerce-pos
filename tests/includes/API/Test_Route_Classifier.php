@@ -193,6 +193,7 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 				'/wcpos/v2/star-online/devices',
 				'/wcpos/v2/extensions',
 				'/wcpos/v2/logs',
+				'/wcpos/v2/registers',
 			),
 			$built_classifications['protocol_exempt']
 		);

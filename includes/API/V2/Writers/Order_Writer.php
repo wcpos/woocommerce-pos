@@ -39,6 +39,15 @@ class Order_Writer extends Null_Writer {
 	/** @var Order_Write_Payload Order forward payload shaper. */
 	private Order_Write_Payload $order_payload;
 
+	/**
+	 * Provenance keys the pre-insert callback refused because the order had
+	 * been paid between the pre-read and the write; consumed by the update
+	 * phase's order note so the refusal never goes unrecorded.
+	 *
+	 * @var string[]
+	 */
+	private array $late_provenance_refusals = array();
+
 	/** Construct the order writer. */
 	public function __construct( object $store, ?Order_Write_Payload $order_payload = null ) {
 		$this->store         = $store;
@@ -63,6 +72,9 @@ class Order_Writer extends Null_Writer {
 		}
 		$meta_data = isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array();
 		$till_meta = Pos_Order_Audit::till_meta_from_payload( $meta_data );
+		if ( isset( $till_meta['_wcpos_sale_time'] ) ) {
+			$till_meta['_wcpos_sale_received_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z' );
+		}
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
 		if ( self::asserts_payment( $payload ) ) {
@@ -241,7 +253,7 @@ class Order_Writer extends Null_Writer {
 	private function forward_with_order_lifecycle( array $prepared, callable $forward ) {
 		$context         = $prepared['context'];
 		$forwarded_order = null;
-		$pre_insert      = static function ( $order, $request, $creating ) use ( $context, &$forwarded_order ) {
+		$pre_insert      = function ( $order, $request, $creating ) use ( $context, &$forwarded_order ) {
 			$is_create = 'create' === $context['operation'];
 			if ( $is_create && $creating && $order instanceof \WC_Order && null === $forwarded_order ) {
 				$forwarded_order = $order;
@@ -250,6 +262,19 @@ class Order_Writer extends Null_Writer {
 			if ( $target ) {
 				foreach ( $context['fill_meta'] as $key => $value ) {
 					$order->update_meta_data( $key, $value );
+				}
+				// Provenance on update: decided here, on the object about to be
+				// written, so a payment that completed since the pre-read wins.
+				if ( ! empty( $context['fill_provenance'] ) && $order instanceof \WC_Order ) {
+					if ( $order->needs_payment() ) {
+						foreach ( $context['fill_provenance'] as $key => $value ) {
+							$order->update_meta_data( $key, $value );
+						}
+						$order->update_meta_data( '_wcpos_sale_received_gmt', gmdate( 'Y-m-d\TH:i:s\Z' ) );
+					} else {
+						// Paid since the pre-read: refused here, noted after the forward.
+						$this->late_provenance_refusals = array_keys( $context['fill_provenance'] );
+					}
 				}
 			}
 			if ( $is_create && $creating && null !== $context['created_gmt'] && $order instanceof \WC_Order ) {
@@ -271,7 +296,7 @@ class Order_Writer extends Null_Writer {
 				$qd->persist( $order );
 			}
 		};
-		$use_filter = 'create' === $context['operation'] || array() !== $context['fill_meta'];
+		$use_filter = 'create' === $context['operation'] || array() !== $context['fill_meta'] || array() !== ( $context['fill_provenance'] ?? array() );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
 		}
@@ -338,7 +363,9 @@ class Order_Writer extends Null_Writer {
 		}
 		$clear_email = isset( $forward['billing'] ) && is_array( $forward['billing'] )
 			&& array_key_exists( 'email', $forward['billing'] ) && '' === $forward['billing']['email'];
-		$fill_meta = array();
+		$fill_meta          = array();
+		$fill_provenance    = array();
+		$provenance_refused = array();
 		$pre_store = null;
 		$order     = wc_get_order( $id );
 		if ( $order ) {
@@ -366,6 +393,25 @@ class Order_Writer extends Null_Writer {
 					$fill_meta[ $key ] = $till[ $key ];
 				}
 			}
+			// Sale provenance is fillable while the order still needs payment (a
+			// failed final leg re-stamps it) and frozen once the order is paid. The
+			// decision is re-taken on the fresh order inside the pre-insert callback
+			// (`fill_provenance`), so a payment completing between this read and the
+			// write cannot be followed by a provenance write.
+			$unpaid = $order->needs_payment();
+			foreach ( Pos_Order_Audit::provenance_meta_keys() as $key ) {
+				if ( ! isset( $till[ $key ] ) ) {
+					continue;
+				}
+				$stored = (string) $order->get_meta( $key );
+				if ( $unpaid && $stored !== $till[ $key ] ) {
+					$fill_provenance[ $key ] = $till[ $key ];
+				} elseif ( ! $unpaid && $stored !== $till[ $key ] ) {
+					// A paid order is frozen: a missing key stays missing and a
+					// different value is refused — nothing invents audit data later.
+					$provenance_refused[] = $key;
+				}
+			}
 			if ( $authorized && (string) $order->get_meta( '_pos_store' ) !== (string) $reassignment['_pos_store'] ) {
 				$fill_meta['_pos_store'] = (string) $reassignment['_pos_store'];
 			}
@@ -380,6 +426,8 @@ class Order_Writer extends Null_Writer {
 				'store_authorized' => $authorized,
 				'pre_store' => $pre_store,
 				'fill_meta' => $fill_meta,
+				'fill_provenance' => $fill_provenance,
+				'provenance_refused' => $provenance_refused,
 			),
 		);
 	}
@@ -389,6 +437,11 @@ class Order_Writer extends Null_Writer {
 		$order = wc_get_order( $id );
 		if ( ! $order || ! is_array( $data ) ) {
 			return;
+		}
+		$refused                        = array_values( array_unique( array_merge( $context['provenance_refused'] ?? array(), $this->late_provenance_refusals ) ) );
+		$this->late_provenance_refusals = array();
+		if ( ! empty( $refused ) ) {
+			Order_Notes::add_provenance_refused_note( $order, $refused );
 		}
 		$current_user = get_current_user_id();
 		$change       = $context['reassignment'];
@@ -462,6 +515,9 @@ class Order_Writer extends Null_Writer {
 				$meta[ (string) $key ] = (string) $value;
 			}
 		}
+		// Provenance is written pre-insert (prepare_order_update_after_read); the
+		// post-forward fill stays cash-only so a paid order never gains a key here.
+
 		if ( $meta ) {
 			$this->store->persist_order_audit_meta( $id, $meta );
 		}
