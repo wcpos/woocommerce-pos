@@ -84,20 +84,20 @@ final class Receipt_Print_Counter {
 	 * @param callable $work  function ( int $next_count ): mixed.
 	 *
 	 * @return mixed
+	 * @throws Print_Counter_Busy_Exception When the lock is not taken within the wait.
 	 */
 	private function locked( WC_Order $order, callable $work ) {
 		global $wpdb;
 		$lock   = 'wcpos_receipt_print_count_' . $order->get_id();
-		$locked = 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', $lock, self::LOCK_WAIT_SECONDS ) );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', $lock, self::LOCK_WAIT_SECONDS ) ) ) {
+			// Never count on stale state: a caller that cannot take the lock does not print as counted.
+			throw new Print_Counter_Busy_Exception( 'The receipt print counter is busy for this order.' );
+		}
 		try {
-			if ( $locked ) {
-				$order->read_meta_data( true );
-			}
+			$order->read_meta_data( true );
 			return $work( (int) $order->get_meta( '_wcpos_receipt_print_count' ) + 1 );
 		} finally {
-			if ( $locked ) {
-				$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
-			}
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
 		}
 	}
 

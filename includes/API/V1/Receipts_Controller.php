@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Print_Counter;
+use WCPOS\WooCommercePOS\Services\Print_Counter_Busy_Exception;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Receipt_Service;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
@@ -182,8 +183,12 @@ class Receipts_Controller extends WP_REST_Controller {
 		}
 
 		if ( 'print' === $request->get_param( 'intent' ) ) {
-			$counter = new Receipt_Print_Counter();
-			$payload = $counter->mark( $payload, $counter->count( $order ), $order );
+			try {
+				$counter = new Receipt_Print_Counter();
+				$payload = $counter->mark( $payload, $counter->count( $order ), $order );
+			} catch ( Print_Counter_Busy_Exception $e ) {
+				return $this->counter_busy();
+			}
 		}
 
 		return array(
@@ -207,7 +212,11 @@ class Receipts_Controller extends WP_REST_Controller {
 			return new WP_Error( 'wcpos_receipt_invalid_order', __( 'Invalid order.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		$counter = new Receipt_Print_Counter();
-		$count = $counter->count( $order );
+		try {
+			$count = $counter->count( $order );
+		} catch ( Print_Counter_Busy_Exception $e ) {
+			return $this->counter_busy();
+		}
 
 		return array_merge( array( 'print_count' => $count ), $counter->mark( array(), $count )['fiscal'] );
 	}
@@ -273,6 +282,8 @@ class Receipts_Controller extends WP_REST_Controller {
 			} else {
 				$pdf = $service->render( $template, $order, $data );
 			}
+		} catch ( Print_Counter_Busy_Exception $e ) {
+			return $this->counter_busy();
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 
@@ -299,6 +310,11 @@ class Receipts_Controller extends WP_REST_Controller {
 				'Cache-Control'       => 'no-store',
 			)
 		);
+	}
+
+	/** Another print of this order holds the counter; the caller retries. */
+	private function counter_busy(): WP_Error {
+		return new WP_Error( 'wcpos_receipt_print_busy', __( 'Another print of this order is in progress; try again.', 'woocommerce-pos' ), array( 'status' => 503 ) );
 	}
 
 	/**
