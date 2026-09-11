@@ -18,21 +18,16 @@ use WC_Abstract_Order;
  */
 class Receipt_Data_Builder {
 	/**
-	 * Build a canonical receipt payload.
+	 * The POS store a receipt for this order is rendered under: the order's own
+	 * `_pos_store` when it still exists, else the current store, else an empty
+	 * store object (a stub when the order's store is gone, so nothing is invented).
 	 *
-	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param string            $mode      Live builds retain frozen fiscal identity when available.
-	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
+	 * @param WC_Abstract_Order $order     Order.
+	 * @param object|null       $pos_store Explicit store override.
 	 *
-	 * @return array
+	 * @return object
 	 */
-	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
-		$status_label = '';
-		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
-			$status_label = (string) wc_get_order_status_name( $wc_status );
-		}
-
+	public static function resolve_pos_store( WC_Abstract_Order $order, $pos_store = null ) {
 		$order_store_id         = (int) $order->get_meta( '_pos_store' );
 		$missing_order_store_id = 0;
 		if ( null === $pos_store ) {
@@ -53,6 +48,29 @@ class Receipt_Data_Builder {
 		if ( ! \is_object( $pos_store ) ) {
 			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
 		}
+
+		return $pos_store;
+	}
+
+	/**
+	 * Build a canonical receipt payload.
+	 *
+	 * @param WC_Abstract_Order $order     Receipt order.
+	 * @param string            $mode      Live builds retain frozen fiscal identity when available.
+	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
+	 *
+	 * @return array
+	 */
+	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
+		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
+		$status_label = '';
+		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
+			$status_label = (string) wc_get_order_status_name( $wc_status );
+		}
+
+		$pos_store = self::resolve_pos_store( $order, $pos_store );
+		// A stub store means the order's own store is gone (see resolve_pos_store()).
+		$missing_order_store_id = $pos_store instanceof \stdClass ? (int) $order->get_meta( '_pos_store' ) : 0;
 
 		$store_resolver = new Receipt_Store_Resolver( $pos_store );
 		$date_timezone  = $store_resolver->resolve_store_timezone();

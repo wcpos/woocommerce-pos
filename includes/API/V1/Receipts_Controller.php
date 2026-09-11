@@ -183,7 +183,7 @@ class Receipts_Controller extends WP_REST_Controller {
 
 		if ( 'print' === $request->get_param( 'intent' ) ) {
 			$counter = new Receipt_Print_Counter();
-			$payload = $counter->mark( $payload, $counter->count( $order ) );
+			$payload = $counter->mark( $payload, $counter->count( $order ), $order );
 		}
 
 		return array(
@@ -259,13 +259,20 @@ class Receipts_Controller extends WP_REST_Controller {
 			if ( is_wp_error( $receipt ) ) {
 				return $receipt;
 			}
-			$data    = $receipt['data'];
-			$counter = new Receipt_Print_Counter();
+			$data = $receipt['data'];
 			if ( $counting ) {
-				// Prospective marking; the count is committed only once a PDF exists.
-				$data = $counter->mark( $data, $counter->peek( $order ) );
+				// The count is reserved under the order lock for the whole render and
+				// committed only once a PDF exists.
+				$counter = new Receipt_Print_Counter();
+				$pdf     = $counter->count_after(
+					$order,
+					static function ( int $count ) use ( $counter, $service, $template, $order, $data ): string {
+						return $service->render( $template, $order, $counter->mark( $data, $count, $order ) );
+					}
+				);
+			} else {
+				$pdf = $service->render( $template, $order, $data );
 			}
-			$pdf = $service->render( $template, $order, $data );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 
@@ -283,10 +290,6 @@ class Receipts_Controller extends WP_REST_Controller {
 				array( 'status' => 500 )
 			);
 		}
-		if ( $counting ) {
-			$counter->count( $order );
-		}
-
 		return Raw_Response::serve(
 			$pdf,
 			'application/pdf',

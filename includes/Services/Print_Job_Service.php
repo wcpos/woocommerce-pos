@@ -410,7 +410,7 @@ class Print_Job_Service {
 			update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $count );
 		}
 
-		return $counter->mark( ( new Receipt_Data_Builder() )->build( $order, 'live' ), $count );
+		return $counter->mark( ( new Receipt_Data_Builder() )->build( $order, 'live' ), $count, $order );
 	}
 
 	/**
