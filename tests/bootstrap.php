@@ -164,6 +164,8 @@ class Bootstrap {
 		// Create wcpos_registers before the per-test transactions begin: dbDelta is
 		// DDL, and a CREATE TABLE inside a test commits that test's transaction.
 		( new \WCPOS\WooCommercePOS\Services\Register_Store() )->install();
+		( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->install();
+		( new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() )->install();
 	}
 
 	/** Install fiscal history before per-test transactions; dbDelta is DDL. */

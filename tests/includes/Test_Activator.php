@@ -470,12 +470,46 @@ class Test_Activator extends WP_UnitTestCase {
 			'Migration queueing should set an upgrade lock'
 		);
 
-		do_action( 'shutdown' );
+		do_action( 'shutdown' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Exercise the WordPress lifecycle.
 
 		$this->assertFalse(
 			get_option( self::DB_UPGRADE_LOCK_OPTION, false ),
 			'Shutdown fallback should release the upgrade lock if migration never runs'
 		);
+	}
+
+	/** Both activation and the versioned upgrade install missing bookkeeping tables. */
+	public function test_activation_and_upgrade_install_session_and_movement_tables(): void {
+		global $wpdb;
+		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() );
+		$activator = new Activator();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		try {
+			foreach ( array( 'activation', 'upgrade' ) as $path ) {
+				foreach ( $stores as $store ) {
+					$wpdb->query( 'DROP TABLE IF EXISTS ' . $store->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Test-owned table.
+					$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $store->table_name() ) );
+				}
+				if ( 'activation' === $path ) {
+					// single_activate( false ) skips the sync schema; activation installs through this.
+					$activator->install_sync_schema();
+				} else {
+					// db_upgrade() at the current version includes no update file (each was
+					// already included once in this process) but still runs the table installs.
+					$method = ( new ReflectionClass( $activator ) )->getMethod( 'db_upgrade' );
+					$method->setAccessible( true );
+					$method->invoke( $activator, \WCPOS\WooCommercePOS\VERSION, \WCPOS\WooCommercePOS\VERSION );
+				}
+				foreach ( $stores as $store ) {
+					$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $store->table_name() ), $path );
+				}
+			}
+		} finally {
+			foreach ( $stores as $store ) {
+				$store->install();
+			}
+		}
 	}
 
 	/**

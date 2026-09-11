@@ -194,6 +194,8 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 				'/wcpos/v2/extensions',
 				'/wcpos/v2/logs',
 				'/wcpos/v2/registers',
+				'/wcpos/v2/sessions',
+				'/wcpos/v2/movements',
 			),
 			$built_classifications['protocol_exempt']
 		);
