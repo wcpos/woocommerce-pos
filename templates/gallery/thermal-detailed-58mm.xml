@@ -80,11 +80,11 @@ the star to the remaining 32-CPL space at render time.
   <!-- ── Order info ─────────────── -->
   <row>
     <col width="10">{{i18n.order}}:</col>
-    <col width="*" align="right">#{{order.number}}</col>
+    <col width="*" align="right">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</col>
   </row>
   <row>
     <col width="10">{{i18n.date}}:</col>
-    <col width="*" align="right">{{order.created.datetime}}</col>
+    <col width="*" align="right">{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</col>
   </row>
   {{#cashier.name}}
   <row>

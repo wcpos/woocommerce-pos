@@ -191,10 +191,10 @@ if ( ! empty( $receipt_data['fiscal']['is_refund_document'] ) && ! empty( $recei
 }
 ?>
 
-			<?php $order_number = $receipt_data['order']['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
+			<?php $order_number = ! empty( $receipt_data['fiscal']['is_refund_document'] ) ? $receipt_data['fiscal']['receipt_number'] : ( $receipt_data['order']['number'] ?? $receipt_data['meta']['order_number'] ?? '' ); ?>
 			<div class="meta-number">#<?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></div>
 
-			<?php $created_at = $receipt_data['order']['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
+			<?php $created_at = ! empty( $receipt_data['fiscal']['is_refund_document'] ) ? $receipt_data['fiscal']['sale_time']['datetime'] : ( $receipt_data['order']['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? '' ); ?>
 			<?php if ( '' !== $created_at ) : ?>
 				<div class="meta-line spaced"><?php echo esc_html( $created_at ); ?></div>
 			<?php endif; ?>

@@ -46,11 +46,11 @@ these star columns with hard-coded widths.
   {{/fiscal.is_refund_document}}
   <!-- ── Order info (label on the right, value on the left) ─────────────── -->
   <row>
-    <col width="*">#{{order.number}}</col>
+    <col width="*">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</col>
     <col width="12" align="right">:{{i18n.order}}</col>
   </row>
   <row>
-    <col width="*">{{order.created.datetime}}</col>
+    <col width="*">{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</col>
     <col width="12" align="right">:{{i18n.date}}</col>
   </row>
   {{#cashier.name}}

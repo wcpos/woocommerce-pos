@@ -61,10 +61,10 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-top: 2px solid #111827; border-bottom: 2px solid #111827; font-size: 13px;">
 		<div>
 			<span style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-right: 6px;">{{i18n.order}}</span>
-			<strong>#{{order.number}}</strong>
+			<strong>#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</strong>
 		</div>
 		<div style="color: #6b7280;">
-			{{order.created.datetime}}{{#cashier.name}} · {{i18n.cashier}}: {{cashier.name}}{{/cashier.name}}{{#customer.name}} · {{i18n.customer}}: {{customer.name}}{{/customer.name}}
+			{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}{{#cashier.name}} · {{i18n.cashier}}: {{cashier.name}}{{/cashier.name}}{{#customer.name}} · {{i18n.customer}}: {{customer.name}}{{/customer.name}}
 		</div>
 	</div>
 

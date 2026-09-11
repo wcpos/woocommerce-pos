@@ -60,7 +60,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{#fiscal.is_refund_document}}
 			{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
 			{{/fiscal.is_refund_document}}
-			<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; line-height: 1;">#{{order.number}}</div>
+			<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; line-height: 1;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>
 			{{#order.status_label}}
 			<div style="display: inline-block; margin-top: 10px; padding: 3px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;">{{order.status_label}}</div>
 			{{/order.status_label}}
@@ -105,7 +105,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 		<div>
 			<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; font-weight: 600;">{{i18n.details}}</div>
 			<div style="font-size: 12px;">
-				<div style="display: flex; justify-content: space-between; padding: 1px 0;"><span style="color: #6b7280;">{{i18n.issued}}</span><span>{{order.created.datetime}}</span></div>
+				<div style="display: flex; justify-content: space-between; padding: 1px 0;"><span style="color: #6b7280;">{{i18n.issued}}</span><span>{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</span></div>
 				{{#cashier.name}}<div style="display: flex; justify-content: space-between; padding: 1px 0;"><span style="color: #6b7280;">{{i18n.cashier}}</span><span>{{cashier.name}}</span></div>{{/cashier.name}}
 			</div>
 		</div>
@@ -208,7 +208,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<div style="margin-bottom: 18px; padding: 14px 18px; border: 1px solid #e5e7eb; border-radius: 8px;">
 		<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 8px;">{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</div>
 		{{#payments}}
-		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px;"><span>{{i18n.paid_via}} {{method_title}}{{#transaction_id}} <span style="color: #6b7280; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">{{transaction_id}}</span>{{/transaction_id}}</span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
+		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px;"><span>{{^fiscal.is_refund_document}}{{i18n.paid_via}} {{/fiscal.is_refund_document}}{{method_title}}{{#transaction_id}} <span style="color: #6b7280; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">{{transaction_id}}</span>{{/transaction_id}}</span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
 		{{/payments}}
 	</div>
 	{{/payments.0}}

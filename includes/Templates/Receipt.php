@@ -89,9 +89,13 @@ class Receipt {
 			}
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$is_preview = isset( $_GET['wcpos_preview_template'] ) && current_user_can( 'manage_woocommerce_pos' );
+			$receipt_data = $this->resolve_document_payload( $order, $is_preview ? 'preview' : 'live' );
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
 			if ( 'pdf' === $format ) {
-				$this->render_pdf( $order );
+				$this->render_pdf( $order, $receipt_data );
 			}
 
 			/*
@@ -110,9 +114,7 @@ class Receipt {
 			 * Check for custom template first.
 			 */
 			$custom_template = $this->get_custom_template();
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$is_preview      = isset( $_GET['wcpos_preview_template'] ) && current_user_can( 'manage_woocommerce_pos' );
-			$receipt_data    = $this->get_receipt_data( $order, $is_preview ? 'preview' : 'live' );
+			$receipt_data    = $receipt_data ?? $this->get_receipt_data( $order, $is_preview ? 'preview' : 'live' );
 
 			// Start output buffering and register shutdown handler for fatal errors.
 			self::$rendering = true;
@@ -158,11 +160,12 @@ class Receipt {
 	/**
 	 * Render and serve a custom receipt template as a PDF download.
 	 *
-	 * @param \WC_Abstract_Order $order Order object.
+	 * @param \WC_Abstract_Order $order        Order object.
+	 * @param array|null         $receipt_data Optional frozen document payload.
 	 *
 	 * @return void
 	 */
-	private function render_pdf( \WC_Abstract_Order $order ): void {
+	private function render_pdf( \WC_Abstract_Order $order, ?array $receipt_data ): void {
 		/*
 		 * Filters the receipt template used for storefront PDF downloads.
 		 *
@@ -188,8 +191,18 @@ class Receipt {
 			);
 		}
 
+		/*
+		 * Filters prepared document data passed to the storefront PDF service.
+		 *
+		 * @param array|null        $receipt_data Frozen payload, or null to build sale data.
+		 * @param WC_Abstract_Order $order        Order object.
+		 * @returns array|null Prepared receipt data.
+		 * @hook woocommerce_pos_receipt_pdf_data
+		 */
+		$receipt_data = apply_filters( 'woocommerce_pos_receipt_pdf_data', $receipt_data, $order );
+
 		try {
-			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order, $receipt_data );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 			wp_die(
@@ -463,14 +476,13 @@ class Receipt {
 	}
 
 	/**
-	 * Get receipt data payload for the selected mode.
+	 * Resolve a requested document before dispatching HTML or PDF rendering.
 	 *
 	 * @param \WC_Abstract_Order $order Order object.
 	 * @param string             $mode  Receipt mode.
-	 *
-	 * @return array
+	 * @return array|null Frozen payload, or null when no document applies.
 	 */
-	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
+	private function resolve_document_payload( \WC_Abstract_Order $order, string $mode ): ?array {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$query_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
 		// Preview remains sample/live data, never a frozen refund document.
@@ -484,6 +496,18 @@ class Receipt {
 			}
 			return $payload;
 		}
+		return null;
+	}
+
+	/**
+	 * Get receipt data payload for the selected mode.
+	 *
+	 * @param \WC_Abstract_Order $order Order object.
+	 * @param string             $mode  Receipt mode.
+	 *
+	 * @return array
+	 */
+	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
 		$mode = 'fiscal' === $mode ? 'live' : $mode;
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$store_id  = 'preview' === $mode && isset( $_GET['store_id'] ) ? (int) $_GET['store_id'] : 0;

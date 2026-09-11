@@ -41,8 +41,8 @@ columns with hard-coded numeric widths.
   </align>
   {{/fiscal.is_refund_document}}
   <!-- ── Order info ─────────────── -->
-  <text>{{i18n.order}}: #{{order.number}}</text>
-  <text>{{i18n.date}}: {{order.created.datetime}}</text>
+  <text>{{i18n.order}}: #{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</text>
+  <text>{{i18n.date}}: {{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</text>
   {{#cashier.name}}<text>{{i18n.cashier}}: {{cashier.name}}</text>{{/cashier.name}}
   {{#customer.name}}<text>{{i18n.customer}}: {{customer.name}}</text>{{/customer.name}}
 

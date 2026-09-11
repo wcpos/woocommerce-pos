@@ -45,6 +45,14 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		foreach ( array( 'Refund', 'Corrects', 'SALE-1', 'Widget' ) as $text ) {
 			$this->assertStringContainsString( $text, $output );
 		}
+		// Invoice retains a secondary sale number in its payment reference section.
+		$number_output = 'invoice' === $key ? explode( '</header>', $output )[0] : $output;
+		$this->assertStringContainsString( '#7</', $number_output );
+		$this->assertStringNotContainsString( '#' . $order->get_order_number() . '</', $number_output );
+		$this->assertStringContainsString( $data['fiscal']['sale_time']['datetime'], $output );
+		if ( 'invoice' === $key ) {
+			$this->assertStringNotContainsString( 'Paid via', $output );
+		}
 		if ( 'narrow-receipt' !== $key ) {
 			$this->assertStringContainsString( 'Refunded to', $output );
 		}
@@ -86,15 +94,34 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$params = array( 'key' => $order->get_order_key(), 'template' => 'standard-receipt', 'document' => 'refund:' . $refund->get_id(), 'mode' => 'ignored' );
 		$page = $this->render_receipt_page( $order->get_id(), $params );
 		$this->assertNull( $page['error'] );
-		foreach ( array( 'FROZEN-REFUND', 'Refund', 'Corrects', 'SALE-1', 'Widget' ) as $text ) {
+		foreach ( array( '#7</', 'Refund', 'Corrects', 'SALE-1', 'Widget' ) as $text ) {
 			$this->assertStringContainsString( $text, $page['output'] );
 		}
 		$this->assertStringNotContainsString( 'Edited after refund', $page['output'] );
 
+		$pdf_data = null;
+		$capture_pdf = static function ( $data ) use ( &$pdf_data ) {
+			$pdf_data = $data;
+			throw new \Error( 'Receipt page stopped for test.' );
+		};
+		add_filter( 'woocommerce_pos_receipt_pdf_data', $capture_pdf );
+		try {
+			$params['format'] = 'pdf';
+			$this->render_receipt_page( $order->get_id(), $params );
+			$this->assertIsArray( $pdf_data );
+			$this->assertSame( 'FROZEN-REFUND', $pdf_data['order']['number'] );
+			$params['mode'] = 'preview';
+			$this->render_receipt_page( $order->get_id(), $params );
+			$this->assertNull( $pdf_data );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_pdf_data', $capture_pdf );
+			unset( $params['format'] );
+		}
+
 		$params['mode'] = 'preview';
 		$page = $this->render_receipt_page( $order->get_id(), $params );
 		$this->assertNull( $page['error'] );
-		$this->assertStringNotContainsString( 'FROZEN-REFUND', $page['output'] );
+		$this->assertStringNotContainsString( '#7</', $page['output'] );
 		unset( $params['mode'] );
 		$missing = $this->render_receipt_page( 0, $params );
 		$this->assertNotNull( $missing['error'] );
@@ -115,6 +142,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$order->remove_order_items();
 		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_date_created( '2025-01-02 10:00:00' );
 		$order->set_payment_method( 'pos_cash' );
 		$order->set_payment_method_title( 'Cash' );
 		$item = new \WC_Order_Item_Product();
@@ -128,6 +156,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$order->save();
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
+		$refund->set_date_created( '2025-02-03 11:30:00' );
 		$refund->set_amount( 5 );
 		$line = new \WC_Order_Item_Product();
 		$line->set_name( 'Widget' );
