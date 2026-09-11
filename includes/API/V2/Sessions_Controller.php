@@ -255,7 +255,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) || ! in_array( $request['type'], array( 'paid_in', 'paid_out', 'no_sale', 'void' ), true ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['created_at'] ) || ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
-		$session = ( new Register_Session_Store() )->get( $request['session_id'] );
+		$session = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
 		if ( ! $session || 'open' !== $session['status'] ) {
 			return $this->error( 'wcpos_session_not_open', 409 );
 		}
