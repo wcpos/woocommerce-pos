@@ -331,8 +331,19 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 	public function test_gallery_fiscal_blocks_are_value_guarded( string $key ): void {
 		$data = ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build();
 		$this->assertFalse( $data['fiscal']['is_reprint'] );
-		$template = \WCPOS\WooCommercePOS\Services\Print_Job_Service::load_template( $key );
-		$this->assertNotNull( $template );
+		// Gallery templates are files installed into the template CPT, not virtual ids:
+		// build the template array from the gallery file the way the installer does.
+		$entry = \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all()[ $key ] ?? null;
+		$this->assertNotNull( $entry, $key );
+		$file = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $key . ( 'thermal' === $entry['engine'] ? '.xml' : '.html' );
+		$this->assertFileExists( $file );
+		$template = array_merge(
+			$entry,
+			array(
+				'id'      => $key,
+				'content' => (string) file_get_contents( $file ),
+			)
+		);
 		$order = OrderHelper::create_order();
 		$qr = base64_encode( \WCPOS\WooCommercePOS\Templates\Barcode_Image::qrcode_png( $data['fiscal']['qr_payload'], 4 ) );
 		$this->assertNotSame( '', $qr );
