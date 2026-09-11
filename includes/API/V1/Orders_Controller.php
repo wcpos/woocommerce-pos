@@ -76,6 +76,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		'exclude'     => 'wcpos_exclude',
 		'pos_cashier' => 'pos_cashier',
 		'pos_store'   => 'pos_store',
+		'pos_register' => 'pos_register',
 	);
 
 	/**

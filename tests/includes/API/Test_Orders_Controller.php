@@ -1278,6 +1278,25 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order_with_cashier->get_id() ), $ids );
 	}
 
+	public function test_filter_order_by_register(): void {
+		$register = '550e8400-e29b-41d4-a716-446655440000';
+
+		// An order without a register (excluded) and one with (included).
+		OrderHelper::create_order();
+		$order_with_register = OrderHelper::create_order();
+		$order_with_register->add_meta_data( '_wcpos_register', $register, true );
+		$order_with_register->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'pos_register', $register );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( array( $order_with_register->get_id() ), wp_list_pluck( $data, 'id' ) );
+	}
+
 	public function test_filter_order_by_store(): void {
 		// Use a unique store ID for testing (doesn't need to be a real store post)
 		$test_store_id = 12345;
