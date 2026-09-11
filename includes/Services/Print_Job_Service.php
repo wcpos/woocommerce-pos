@@ -445,17 +445,22 @@ class Print_Job_Service {
 			return $render( $counter->mark( $data, $count, $order ) );
 		}
 		try {
-			return $counter->count_after(
+			$reserved = 0;
+			$result   = $counter->count_after(
 				$order,
-				function ( int $reserved ) use ( $job, $order, $render, $counter, $data, $is_empty ) {
-					$result = $render( $counter->mark( $data, $reserved, $order ) );
-					if ( ! $is_empty( $result ) ) {
-						update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $reserved );
-					}
-					return $result;
+				static function ( int $count ) use ( &$reserved, $order, $render, $counter, $data ) {
+					$reserved = $count;
+					return $render( $counter->mark( $data, $count, $order ) );
 				},
 				$is_empty
 			);
+			// The order's count is saved first (inside count_after); the job remembers
+			// its number only once that save is done, so a failed save cannot leave a
+			// job holding a number the order never took.
+			if ( ! $is_empty( $result ) ) {
+				update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $reserved );
+			}
+			return $result;
 		} catch ( Print_Counter_Busy_Exception $e ) {
 			\WCPOS\WooCommercePOS\Logger::log(
 				sprintf( 'Cloud print: print counter busy for order %d (job %d); printed unmarked and uncounted.', $order->get_id(), (int) $job['id'] )
