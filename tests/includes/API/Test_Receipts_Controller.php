@@ -326,7 +326,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 			$store = Receipt_Snapshot_Store::instance();
 			$store->handle_payment_complete( $order->get_id() );
 			$snapshot = $store->get_snapshot( $order->get_id() );
-			$route = '/wcpos/v1/receipts/' . $order->get_id();
+			$route = '/wcpos/v2/receipts/' . $order->get_id();
 			foreach ( array( array( 'print', false, 0, 1 ), array( null, false, 0, 1 ), array( 'print', true, 1, 2 ), array( null, false, 0, 2 ) ) as $case ) {
 				$request = $this->wp_rest_get_request( $route );
 				$request->set_param( 'mode', $mode );
@@ -361,7 +361,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$template_id = $this->create_receipt_template();
 		Receipt_Snapshot_Store::instance()->handle_payment_complete( $order->get_id() );
 		foreach ( array( 'live', 'fiscal' ) as $index => $mode ) {
-			$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() . '/pdf' );
 			$request->set_param( 'template_id', (string) $template_id );
 			$request->set_param( 'mode', $mode );
 			$request->set_param( 'intent', 'print' );
@@ -378,7 +378,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Invalid intent and unauthorized counting must not update the order. */
 	public function test_print_routes_reject_invalid_intent_and_missing_capability(): void {
 		$order = OrderHelper::create_order();
-		$route = '/wcpos/v1/receipts/' . $order->get_id();
+		$route = '/wcpos/v2/receipts/' . $order->get_id();
 		$request = $this->wp_rest_get_request( $route );
 		$request->set_param( 'intent', 'preview' );
 		$response = $this->server->dispatch( $request );
