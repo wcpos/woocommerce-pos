@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.10
+Stable tag: 1.10.11
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,18 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.11 - 2026/09/11 =
+
+- **The web app's local database can shrink again after it has grown large.** The clean-up that reclaims space failed on every attempt once the file was very large, so it only ever grew and the till could fail to start on it.
+- **Rows zeroed by a power cut or an unfinished write no longer stop local database clean-up**; they are recognised as empty and dropped.
+- **Stores behind Cloudflare: a security check during connection now reports HOST121 with a link to the Cloudflare guide**, instead of "Site does not seem to be a WordPress site".
+- **Stores behind Cloudflare see a notice on the POS General settings screen** explaining which firewall rule to add so the POS is not blocked.
+- **Firefox and Safari: cancelling a product search no longer records a SYNC321 error.**
+- **A new order sent to WooCommerce no longer carries stale line ids**, which WooCommerce rejected with "invalid item id" when the order had already been acknowledged once.
+- **Product search no longer loops or crawls on large catalogues.** A search with more than 100 matching products could re-request the same pages until the page was reloaded, and every scroll re-fetched the results from the start.
+- **Search results are no longer capped at 100 products**; scrolling loads the rest, one page at a time.
+- **Product search fills the grid faster on slow hosting**: one request per page replaces the previous escalating sequence of four.
 
 = 1.10.10 - 2026/09/09 =
 
