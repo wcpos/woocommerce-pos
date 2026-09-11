@@ -1295,6 +1295,13 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $data );
 		$this->assertSame( array( $order_with_register->get_id() ), wp_list_pluck( $data, 'id' ) );
+
+		// Current-lane coverage alongside the legacy pin: the same filter on wcpos/v2.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $order_with_register->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 	}
 
 	public function test_filter_order_by_register_on_v2_returns_only_that_registers_orders(): void {
