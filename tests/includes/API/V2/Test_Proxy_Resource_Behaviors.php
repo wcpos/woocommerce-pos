@@ -209,4 +209,28 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$this->assertTrue( $inside );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'shop_coupon' ) );
 	}
+
+	/**
+	 * Register filtering is claimed by the proxy and preserves the UUID in its meta query.
+	 */
+	public function test_order_behavior_pos_register_claims_param_and_adds_meta_query(): void {
+		$uuid     = '550e8400-e29b-41d4-a716-446655440000';
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request();
+		$input    = array( 'pos_register' => $uuid, 'dp' => '2' );
+		$request->set_query_params( $input );
+
+		$forwarded = $behavior->forwarded_params( $input, $request );
+		$filtered  = $behavior->around(
+			static function () use ( $request ): array {
+				return apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request );
+			}
+		);
+
+		$this->assertArrayNotHasKey( 'pos_register', $forwarded );
+		$this->assertSame(
+			array( array( 'key' => '_wcpos_register', 'value' => $uuid ) ),
+			$filtered['meta_query']
+		);
+	}
 }

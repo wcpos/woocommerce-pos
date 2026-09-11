@@ -200,6 +200,29 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
 	}
 
+	public function test_order_api_get_all_ids_with_register_returns_only_matching_hpos_order(): void {
+		$register = '550e8400-e29b-41d4-a716-446655440000';
+		OrderHelper::create_order();
+		$matching_order = OrderHelper::create_order();
+		$matching_order->add_meta_data( '_wcpos_register', $register, true );
+		$matching_order->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( array( $matching_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'pos_register', $register );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $matching_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
 	public function test_order_api_get_all_ids_with_date_modified_gmt(): void {
 		$order1    = OrderHelper::create_order();
 		$order2    = OrderHelper::create_order();
@@ -1208,5 +1231,42 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertArrayNotHasKey( 'error', $data['update'][0] );
 		$this->assertEquals( 'completed', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * The v2 register filter returns only matching orders and none for an unknown UUID.
+	 */
+	public function test_v2_pos_register_filter_returns_only_matching_orders(): void {
+		// Arrange.
+		$register_a = '550e8400-e29b-41d4-a716-446655440000';
+		$register_b = '550e8400-e29b-41d4-a716-446655440001';
+		$order1     = OrderHelper::create_order();
+		$order2     = OrderHelper::create_order();
+		$order3     = OrderHelper::create_order();
+		$order1->add_meta_data( '_wcpos_register', $register_a, true );
+		$order1->save();
+		$order2->add_meta_data( '_wcpos_register', $register_a, true );
+		$order2->save();
+		$order3->add_meta_data( '_wcpos_register', $register_b, true );
+		$order3->save();
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register_a );
+		$response = $this->server->dispatch( $request );
+
+		// Assert exact membership, independent of default order.
+		$this->assertSame( 200, $response->get_status() );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+		$expected = array( $order1->get_id(), $order2->get_id() );
+		sort( $ids );
+		sort( $expected );
+		$this->assertSame( $expected, $ids );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', '550e8400-e29b-41d4-a716-446655440002' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data() );
 	}
 }
