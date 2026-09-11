@@ -44,6 +44,7 @@ class Bootstrap {
 		tests_add_filter( 'muplugins_loaded', array( $this, 'manually_load_plugin' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
+		tests_add_filter( 'wp_loaded', array( $this, 'rebuild_roles_after_installs' ) );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
@@ -148,6 +149,28 @@ class Bootstrap {
 	 */
 	public function seed_woocommerce_options(): void {
 		add_option( 'woocommerce_enable_coupons', 'yes' );
+	}
+
+	/**
+	 * Rebuild the roles global once every install in the boot has run.
+	 *
+	 * On a fresh test database WooCommerce installs itself at init:5 and grants
+	 * its capabilities through WP_Roles::add_cap(), which updates WP_Roles::$roles
+	 * and the wp_user_roles option but never the WP_Role objects that
+	 * WP_User::get_role_caps() reads through get_role() (core trac #28374). The
+	 * wordpress-develop test installer used to hand the pre-drop roles object to
+	 * populate_roles(), which wrote wp-env's activated roles back and hid this;
+	 * trunk now discards that object before populating, so every RC/beta lane
+	 * (wp-env pairs those cores with the trunk library) ran with role objects
+	 * that held no WooCommerce capability and answered every REST request 403.
+	 *
+	 * Dropping the global after wp_loaded rebuilds the objects from the option,
+	 * which by then carries WooCommerce's caps and the plugin's own. It is the
+	 * same idiom WooCommerce's test bootstrap uses after WC_Install::install().
+	 */
+	public function rebuild_roles_after_installs(): void {
+		unset( $GLOBALS['wp_roles'] );
+		wp_roles();
 	}
 
 	/**
