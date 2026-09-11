@@ -45,7 +45,7 @@ class Bootstrap {
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_font_packs' ), 30 );
-tests_add_filter( 'muplugins_loaded', array( $this, 'install_register_table' ), 30 );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_register_table' ), 30 );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
