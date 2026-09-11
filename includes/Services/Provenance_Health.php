@@ -15,7 +15,7 @@ use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 final class Provenance_Health {
 	/** Store health is a daily check; closures own the long history. */
 	public const WINDOW_DAYS = 30;
-	/** The newest orders in the window keep the query bounded on a big store. */
+	/** The newest POS-stamped orders in the window keep the query bounded on a big store. */
 	public const ORDER_CAP = 5000;
 	/** Beyond normal clock drift, ahead clocks and delayed offline sales merit a look. */
 	public const SKEW_SECONDS = 600;
@@ -25,17 +25,23 @@ final class Provenance_Health {
 	/**
 	 * Report the window for the supplied register list, preserving its order.
 	 *
-	 * @param array $registers Register_Store::list() rows, already scoped by the caller.
+	 * @param array      $registers Register_Store::list() rows, already scoped by the caller.
+	 * @param array      $known_ids All register ids known to the site, without store or status filtering.
+	 * @param array|null $store_ids Authorized order store ids, or null for all stores.
 	 * @return array
 	 */
-	public function report( array $registers ): array {
+	public function report( array $registers, array $known_ids, ?array $store_ids = null ): array {
 		$orders = array();
 		foreach ( $this->provenance_rows() as $row ) {
 			$orders[ (int) $row['order_id'] ][ $row['meta_key'] ] = $row['meta_value'];
 		}
 		$groups = array();
+		$store_ids = null === $store_ids ? null : array_map( 'strval', $store_ids );
 		foreach ( $orders as $id => $meta ) {
-			$register = $meta['_wcpos_register'] ?? '';
+			if ( null !== $store_ids && ! in_array( $meta['_pos_store'] ?? '', $store_ids, true ) ) {
+				continue;
+			}
+			$register = strtolower( $meta['_wcpos_register'] ?? '' );
 			if ( '' !== $register ) {
 				$groups[ $register ][ $id ] = $meta;
 			}
@@ -43,13 +49,14 @@ final class Provenance_Health {
 		$report = array(
 			'window_days' => self::WINDOW_DAYS,
 			'skew_seconds' => self::SKEW_SECONDS,
+			'truncated' => count( $orders ) === self::ORDER_CAP,
 			'registers' => array(),
 			'unregistered' => array(),
 		);
 		foreach ( $registers as $register ) {
 			$report['registers'][] = $this->register_report( $register, $groups[ $register['id'] ] ?? array() );
 		}
-		foreach ( array_diff_key( $groups, array_column( $registers, null, 'id' ) ) as $register => $group ) {
+		foreach ( array_diff_key( $groups, array_flip( $known_ids ) ) as $register => $group ) {
 			$ids = array_slice( array_keys( $group ), 0, self::SAMPLE_LIMIT );
 			$report['unregistered'][] = array(
 				'register_id' => $register,
@@ -62,7 +69,7 @@ final class Provenance_Health {
 	}
 
 	/**
-	 * Fetch four meta keys in one query, capping orders before joining their meta.
+	 * Fetch five meta keys in one query, capping POS orders before joining their meta.
 	 *
 	 * @return array
 	 * @throws \RuntimeException When the diagnostic query fails.
@@ -79,11 +86,13 @@ final class Provenance_Health {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT m.{$foreign_key} AS order_id, m.meta_key, m.meta_value
-				FROM (SELECT id FROM {$orders}
-					WHERE {$type} = 'shop_order' AND {$date} >= %s
-					ORDER BY {$date} DESC, id DESC LIMIT %d) recent
+				FROM (SELECT o.id FROM {$orders} o
+					WHERE o.{$type} = 'shop_order' AND o.{$date} >= %s
+					AND EXISTS (SELECT 1 FROM {$meta} stamp
+						WHERE stamp.{$foreign_key} = o.id AND stamp.meta_key = '_wcpos_register')
+					ORDER BY o.{$date} DESC, o.id DESC LIMIT %d) recent
 				INNER JOIN {$meta} m ON m.{$foreign_key} = recent.id
-				WHERE m.meta_key IN ('_wcpos_register', '_wcpos_sale_counter', '_wcpos_sale_time', '_wcpos_sale_received_gmt')
+				WHERE m.meta_key IN ('_wcpos_register', '_wcpos_sale_counter', '_wcpos_sale_time', '_wcpos_sale_received_gmt', '_pos_store')
 				ORDER BY recent.id DESC",
 				gmdate( 'Y-m-d H:i:s', time() - self::WINDOW_DAYS * DAY_IN_SECONDS ),
 				self::ORDER_CAP

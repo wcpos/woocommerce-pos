@@ -24,7 +24,7 @@ trait Provenance_Health_Tests {
 		$number = static function ( $number, $order ) { return 'SALE-' . $order->get_id(); };
 		add_filter( 'woocommerce_order_number', $number, 10, 2 );
 		try {
-			$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ) );
+			$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
 		} finally {
 			remove_filter( 'woocommerce_order_number', $number );
 		}
@@ -45,7 +45,7 @@ trait Provenance_Health_Tests {
 		foreach ( array( '11', '12', '13' ) as $counter ) {
 			$this->provenance_order( $id, $counter );
 		}
-		$report = ( new Provenance_Health() )->report( array( array( 'id' => $empty, 'name' => 'Empty' ), array( 'id' => $id, 'name' => 'Clean' ) ) );
+		$report = ( new Provenance_Health() )->report( array( array( 'id' => $empty, 'name' => 'Empty' ), array( 'id' => $id, 'name' => 'Clean' ) ), array( $empty, $id ) );
 		$this->assertSame( array( $empty, $id ), array_column( $report['registers'], 'id' ) );
 		$this->assertSame( array( 'Empty', 'Clean' ), array_column( $report['registers'], 'name' ) );
 		$this->assertSame( 0, $report['registers'][0]['orders'] );
@@ -68,7 +68,7 @@ trait Provenance_Health_Tests {
 		$this->provenance_order( $id, '5', 'not-a-time', $received );
 		$this->provenance_order( $id, '6', '2026-02-30T00:00:00+02:00', $received );
 		$this->provenance_order( $id, '7', '2026-09-11T00:42:10+02:00', '' );
-		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ) );
+		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
 		$this->assertSame( array(
 			array( 'order_id' => $behind, 'order_number' => (string) $behind, 'sale_time' => '2026-09-10T22:42:10+02:00', 'received_gmt' => $received, 'skew_seconds' => -7200, 'direction' => 'behind' ),
 			array( 'order_id' => $ahead, 'order_number' => (string) $ahead, 'sale_time' => '2026-09-11T00:57:10+02:00', 'received_gmt' => $received, 'skew_seconds' => 900, 'direction' => 'ahead' ),
@@ -78,7 +78,7 @@ trait Provenance_Health_Tests {
 	public function test_health_unknown_register_lists_sampled_orders(): void {
 		$id = wp_generate_uuid4();
 		$ids = array( $this->provenance_order( $id ), $this->provenance_order( $id ) );
-		$report = ( new Provenance_Health() )->report( array() );
+		$report = ( new Provenance_Health() )->report( array(), array() );
 		$this->assertSame( array(), $report['registers'] );
 		$rows = array_column( $report['unregistered'], null, 'register_id' );
 		$this->assertSame( 2, $rows[ $id ]['orders'] );
@@ -94,7 +94,7 @@ trait Provenance_Health_Tests {
 		foreach ( array( '0', '-1', '1.5', '01', '9999999999999999999', 'abc', '' ) as $counter ) {
 			$this->provenance_order( $id, $counter );
 		}
-		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ) );
+		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
 		$row = $report['registers'][0];
 		$this->assertSame( 7, $row['orders'] );
 		$this->assertNull( $row['first_counter'] );
@@ -118,7 +118,7 @@ trait Provenance_Health_Tests {
 		};
 		add_filter( 'woocommerce_order_number', $number, 10, 2 );
 		try {
-			$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ) );
+			$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
 		} finally {
 			remove_filter( 'woocommerce_order_number', $number );
 		}
@@ -131,5 +131,45 @@ trait Provenance_Health_Tests {
 		$this->assertCount( 20, $unregistered['order_ids'] );
 		$sampled = array_merge( $row['duplicates'][0]['order_ids'], array_column( $row['skew'], 'order_id' ), $unregistered['order_ids'] );
 		$this->assertEqualsCanonicalizing( array_unique( $sampled ), array_unique( $resolved ) );
+	}
+
+	public function test_health_known_out_of_scope_register_is_omitted(): void {
+		$id = wp_generate_uuid4();
+		$other = wp_generate_uuid4();
+		$this->provenance_order( $id );
+		$this->provenance_order( $other );
+		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id, $other ) );
+		$this->assertSame( array( $id ), array_column( $report['registers'], 'id' ) );
+		$this->assertNotContains( $other, array_column( $report['unregistered'], 'register_id' ) );
+	}
+
+	public function test_health_store_scope_ignores_other_store_orders(): void {
+		$id = wp_generate_uuid4();
+		$unknown = wp_generate_uuid4();
+		foreach ( array( array( $id, 1 ), array( $id, 2 ), array( $unknown, 2 ) ) as list( $register, $store ) ) {
+			$order = wc_get_order( $this->provenance_order( $register ) );
+			$order->update_meta_data( '_pos_store', $store );
+			$order->save();
+		}
+		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ), array( 1 ) );
+		$this->assertSame( 1, $report['registers'][0]['orders'] );
+		$this->assertNotContains( $unknown, array_column( $report['unregistered'], 'register_id' ) );
+	}
+
+	public function test_health_uppercase_stamp_groups_under_lowercase_register(): void {
+		$id = 'abcdefab-1234-4234-8234-abcdefabcdef';
+		$this->provenance_order( strtoupper( $id ) );
+		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
+		$this->assertSame( $id, $report['registers'][0]['id'] );
+		$this->assertSame( 1, $report['registers'][0]['orders'] );
+		$this->assertNotContains( $id, array_column( $report['unregistered'], 'register_id' ) );
+		$this->assertNotContains( strtoupper( $id ), array_column( $report['unregistered'], 'register_id' ) );
+	}
+
+	public function test_health_small_fixture_is_not_truncated(): void {
+		$this->provenance_order( wp_generate_uuid4() );
+		$report = ( new Provenance_Health() )->report( array(), array() );
+		$this->assertArrayHasKey( 'truncated', $report );
+		$this->assertFalse( $report['truncated'] );
 	}
 }
