@@ -83,23 +83,8 @@ trait Session_Expected_Tests {
 				$this->assertSame( 'captured', $payment['status'] );
 				$rows = $ledger->read( $order );
 				if ( 'pos_cash' === $method ) {
-					// Cover native refunded_amount plus refund-kind and signed refund legs.
-					$rows[0]['refunded_amount'] = '1.00';
-					$rows[] = array_merge(
-						$payment,
-						array(
-							'id' => wp_generate_uuid4(),
-							'kind' => 'refund',
-							'amount' => '3',
-						)
-					);
-					$rows[] = array_merge(
-						$payment,
-						array(
-							'id' => wp_generate_uuid4(),
-							'amount' => '-6',
-						)
-					);
+					// The ledger records a refund on the original row's refunded_amount (no refund row).
+					$rows[0]['refunded_amount'] = '10.00';
 				}
 				foreach ( array( 'authorized', 'pending', 'failed', 'voided' ) as $status ) {
 					$rows[] = array_merge(

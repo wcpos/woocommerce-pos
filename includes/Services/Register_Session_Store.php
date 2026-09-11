@@ -247,13 +247,11 @@ final class Register_Session_Store {
 		$totals = array( 'cash' => array( $session['counted_float'] ) );
 		foreach ( $this->captured_orders( $session ) as $rows ) {
 			foreach ( $rows as $row ) {
+				// Every cash-kind gateway (pos_cash, cod, an extension's cash tender) is the drawer.
 				$method = $row['method'] ?? $row['method_id'];
-				$method = array(
-					'pos_cash' => 'cash',
-					'pos_card' => 'card',
-				)[ $method ] ?? $method;
-				$amount = $row['amount'];
-				$totals[ $method ][] = 'refund' === $row['kind'] ? '-' . ltrim( $amount, '-' ) : $amount;
+				$method = 'cash' === ( $row['kind'] ?? '' ) ? 'cash' : ( array( 'pos_card' => 'card' )[ $method ] ?? $method );
+				$totals[ $method ][] = $row['amount'];
+				// A refund is the original row's refunded_amount (the ledger keeps no refund row).
 				$totals[ $method ][] = '-' . ltrim( $row['refunded_amount'] ?? '0', '-' );
 			}
 		}
