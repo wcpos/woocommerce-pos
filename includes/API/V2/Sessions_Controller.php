@@ -77,7 +77,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
 				return $this->error( 'rest_invalid_param', 400 );
 			}
-			$request['id'] = strtolower( $request['id'] );
+			$request->set_param( 'id', strtolower( $request['id'] ) );
 			$movement = '/wcpos/v2/movements' === rtrim( $request->get_route(), '/' );
 			$store = $movement ? new Cash_Movement_Store() : new Register_Session_Store();
 			$row = $store->get( $request['id'] );
