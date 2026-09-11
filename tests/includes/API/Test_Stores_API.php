@@ -126,7 +126,8 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 		update_option( 'woocommerce_tax_based_on', 'billing' );
 
 		try {
-			$request  = $this->wp_rest_get_request( '/wcpos/v1/stores' );
+			// The lane the app reads (wcpos/v2); a v1 dispatch does not count as coverage.
+			$request  = $this->wp_rest_get_request( '/wcpos/v2/stores' );
 			$response = $this->server->dispatch( $request );
 
 			$this->assertSame( 200, $response->get_status() );
