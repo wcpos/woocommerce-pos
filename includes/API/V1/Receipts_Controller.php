@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Receipt_Service;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WP_Error;
 use WP_REST_Controller;
@@ -61,6 +62,7 @@ class Receipts_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'get_item' ),
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
+					'document' => array( 'type' => 'string' ),
 					'order_id' => array(
 						'type'              => 'integer',
 						'required'          => true,
@@ -69,7 +71,9 @@ class Receipts_Controller extends WP_REST_Controller {
 					'mode'     => array(
 						'type'              => 'string',
 						'required'          => false,
-						'enum'              => array( 'fiscal', 'live' ),
+						'validate_callback' => static function ( $value, $request ): bool {
+							return null !== $request->get_param( 'document' ) || in_array( $value, array( 'fiscal', 'live' ), true );
+						},
 						'sanitize_callback' => 'sanitize_text_field',
 					),
 				),
@@ -84,6 +88,7 @@ class Receipts_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'get_pdf' ),
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
+					'document' => array( 'type' => 'string' ),
 					'order_id'    => array(
 						'type'              => 'integer',
 						'required'          => true,
@@ -119,8 +124,12 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
+		$document = $this->get_document_payload( $request );
+		if ( is_wp_error( $document ) ) {
+			return $document;
+		}
 		$snapshot_store = Receipt_Snapshot_Store::instance();
-		$requested_mode = $request->get_param( 'mode' );
+		$requested_mode = null !== $document ? 'fiscal' : $request->get_param( 'mode' );
 		if ( null !== $requested_mode && ! \in_array( $requested_mode, array( 'fiscal', 'live' ), true ) ) {
 			return new WP_Error(
 				'wcpos_receipt_invalid_mode',
@@ -134,7 +143,7 @@ class Receipts_Controller extends WP_REST_Controller {
 		$payload        = null;
 
 		if ( 'fiscal' === $mode ) {
-			$payload = $snapshot_store->get_snapshot( $order_id );
+			$payload = null !== $document ? $document : $snapshot_store->get_snapshot( $order_id );
 			if ( ! $payload ) {
 				return new WP_Error(
 					'wcpos_receipt_snapshot_missing',
@@ -172,6 +181,11 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
+		$document = $this->get_document_payload( $request );
+		if ( is_wp_error( $document ) ) {
+			return $document;
+		}
+
 		$template_id = trim( (string) $request->get_param( 'template_id' ) );
 		if ( '' === $template_id ) {
 			return new WP_Error(
@@ -191,7 +205,7 @@ class Receipts_Controller extends WP_REST_Controller {
 		}
 
 		try {
-			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order, $document );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 
@@ -219,6 +233,24 @@ class Receipts_Controller extends WP_REST_Controller {
 				'Cache-Control'       => 'no-store',
 			)
 		);
+	}
+
+	/**
+	 * Resolve only a frozen refund belonging to the requested order.
+	 *
+	 * @param WP_REST_Request $request Receipt request.
+	 * @return array|WP_Error|null
+	 */
+	private function get_document_payload( WP_REST_Request $request ) {
+		$document = $request->get_param( 'document' );
+		if ( null === $document ) {
+			return null;
+		}
+		if ( ! is_string( $document ) || ! preg_match( '/\Arefund:([1-9][0-9]*)\z/', $document, $matches ) ) {
+			return new WP_Error( 'wcpos_receipt_invalid_document', __( 'Invalid receipt document.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		$record = ( new Fiscal_Record_Store() )->find_refund( (int) $request['order_id'], (int) $matches[1] );
+		return $record ? $record['payload'] : new WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 	}
 
 	/**

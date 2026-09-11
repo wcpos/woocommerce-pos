@@ -263,6 +263,8 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
 			'woocommerce_duplicate_product_exclude_meta'            => array( 10 ),
 			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
+			// Fiscal_Record_Writers (row 3b): armed once the order services are ready.
+			'woocommerce_pos_order_services_ready'                  => array( 10 ),
 			'woocommerce_product_duplicate_before_save'             => array( 10 ),
 			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),

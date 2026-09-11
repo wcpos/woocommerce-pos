@@ -94,6 +94,10 @@ class Receipt_Snapshot_Store {
 		}
 
 		if ( $this->has_snapshot( $order_id ) ) {
+			$snapshot = $this->get_snapshot( $order_id );
+			if ( null !== $snapshot ) {
+				Fiscal_Record_Writers::instance()->record_sale( $order, $snapshot, (int) $order->get_meta( self::META_KEY_SEQUENCE, true ) );
+			}
 			return;
 		}
 
@@ -188,7 +192,7 @@ class Receipt_Snapshot_Store {
 				throw new RuntimeException( 'Failed to encode receipt snapshot to JSON' );
 			}
 
-			$checksum = hash( 'sha256', $json );
+			$checksum = self::checksum( $json );
 			$order    = wc_get_order( $order_id );
 			if ( ! $order ) {
 				throw new RuntimeException( 'Order not found when persisting snapshot' );
@@ -198,6 +202,7 @@ class Receipt_Snapshot_Store {
 			$order->update_meta_data( self::META_KEY_SEQUENCE, (string) $sequence );
 			$order->update_meta_data( self::META_KEY_CREATED_AT, $created );
 			$order->save();
+			Fiscal_Record_Writers::instance()->record_sale( $order, $snapshot, $sequence );
 
 			/* translators: %d: receipt sequence number. */
 			$order->add_order_note( \sprintf( __( 'POS fiscal receipt snapshot created (receipt #%d).', 'woocommerce-pos' ), $sequence ) );
@@ -208,6 +213,15 @@ class Receipt_Snapshot_Store {
 				$wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock_name )
 			);
 		}
+	}
+
+	/**
+	 * Hash the exact JSON bytes shared by snapshots and fiscal records.
+	 *
+	 * @param string $json Encoded payload.
+	 */
+	public static function checksum( string $json ): string {
+		return hash( 'sha256', $json );
 	}
 
 	/**
