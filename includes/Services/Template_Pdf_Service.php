@@ -147,6 +147,16 @@ class Template_Pdf_Service {
 	}
 
 	/**
+	 * Whether the template renders through a native integration whose bytes this
+	 * service cannot mark (WP Overnight documents).
+	 *
+	 * @param array $template Template metadata.
+	 */
+	public function is_native( array $template ): bool {
+		return null !== $this->wp_overnight_document_type( $template );
+	}
+
+	/**
 	 * Map WCPOS virtual template IDs to WP Overnight document types.
 	 *
 	 * @param array $template Template metadata/content.

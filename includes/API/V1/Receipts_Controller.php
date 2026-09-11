@@ -247,14 +247,25 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
+		$service = new Template_Pdf_Service();
+		// A native (WP Overnight) document cannot carry the copy marking, so a print
+		// of one is not counted: the audit count only advances for documents that show it.
+		$counting = 'print' === $request->get_param( 'intent' ) && ! $service->is_native( $template );
 		try {
 			$receipt_request = clone $request;
 			$receipt_request->set_param( 'mode', $request->get_param( 'mode' ) ?? 'live' );
+			$receipt_request->set_param( 'intent', null );
 			$receipt = $this->get_item( $receipt_request );
 			if ( is_wp_error( $receipt ) ) {
 				return $receipt;
 			}
-			$pdf = ( new Template_Pdf_Service() )->render( $template, $order, $receipt['data'] );
+			$data    = $receipt['data'];
+			$counter = new Receipt_Print_Counter();
+			if ( $counting ) {
+				// Prospective marking; the count is committed only once a PDF exists.
+				$data = $counter->mark( $data, $counter->peek( $order ) );
+			}
+			$pdf = $service->render( $template, $order, $data );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 
@@ -271,6 +282,9 @@ class Receipts_Controller extends WP_REST_Controller {
 				__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
 				array( 'status' => 500 )
 			);
+		}
+		if ( $counting ) {
+			$counter->count( $order );
 		}
 
 		return Raw_Response::serve(
