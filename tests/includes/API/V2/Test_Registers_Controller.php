@@ -89,8 +89,10 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( 0, preg_match( '@^' . $route . '$@', '/wcpos/v2/registers/health' ) );
 			}
 		}
-		$controller = new \WCPOS\WooCommercePOS\API\V2\Registers_Controller();
-		$this->assertContains( '/wcpos/v2/registers/health', $controller->wcpos_route_classifications()['protocol_exempt'] );
+		// The registers entry covers every route below it; no separate health entry.
+		$classifier = new \WCPOS\WooCommercePOS\API\Route_Classifier( array( 'wcpos/v2' ) );
+		$classifier->merge( ( new \WCPOS\WooCommercePOS\API\V2\Registers_Controller() )->wcpos_route_classifications() );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/wcpos/v2/registers/health' ) );
 	}
 
 	public function test_health_includes_retired_registers_and_applies_store_scope(): void {

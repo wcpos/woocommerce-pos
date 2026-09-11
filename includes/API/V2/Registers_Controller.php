@@ -61,7 +61,7 @@ class Registers_Controller extends WP_REST_Controller {
 
 	/** Settings cookie requests carry no client protocol claim. */
 	public function wcpos_route_classifications(): array {
-		return array( 'protocol_exempt' => array( '/wcpos/v2/registers', '/wcpos/v2/registers/health' ) );
+		return array( 'protocol_exempt' => array( '/wcpos/v2/registers' ) );
 	}
 
 	/**
