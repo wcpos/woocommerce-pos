@@ -166,6 +166,23 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( $snapshot['software'], $data['software'] );
 		$this->assertSame( 'Edited note', $data['order']['customer_note'] );
 		$this->assertSame( 7, $data['fiscal']['sale_counter'] );
+		// An extension recomputing identity live through the receipt-data filter
+		// must not beat the frozen snapshot; its non-identity edits still land.
+		$rebuild = static function ( array $data ) {
+			$data['fiscal']['qr_payload']  = 'Recomputed-live';
+			$data['fiscal']['extra_fields'] = array();
+			$data['order']['customer_note'] = 'Filtered note';
+			return $data;
+		};
+		add_filter( 'woocommerce_pos_receipt_data', $rebuild );
+		try {
+			$data = $this->builder->build( $order, 'live' );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $rebuild );
+		}
+		$this->assertSame( 'Frozen-qr_payload', $data['fiscal']['qr_payload'] );
+		$this->assertSame( $snapshot['fiscal']['extra_fields'], $data['fiscal']['extra_fields'] );
+		$this->assertSame( 'Filtered note', $data['order']['customer_note'] );
 		$fiscal = $this->builder->build( $order, 'fiscal' );
 		$this->assertSame( '', $fiscal['fiscal']['immutable_id'] );
 		$this->assertSame( 'Renamed till', $fiscal['register']['name'] );

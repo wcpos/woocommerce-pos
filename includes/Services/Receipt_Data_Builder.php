@@ -483,23 +483,6 @@ class Receipt_Data_Builder {
 			)
 		);
 
-		if ( 'live' === $mode ) {
-			$snapshot = Receipt_Snapshot_Store::instance()->get_snapshot( $order->get_id() );
-			if ( null !== $snapshot ) {
-				// Only fiscal identity freezes; order details and provenance remain live.
-				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
-					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
-						$data['fiscal'][ $key ] = $snapshot['fiscal'][ $key ];
-					}
-				}
-				foreach ( array( 'register', 'software' ) as $key ) {
-					if ( array_key_exists( $key, $snapshot ) ) {
-						$data[ $key ] = $snapshot[ $key ];
-					}
-				}
-			}
-		}
-
 		/**
 		 * Filters the canonical receipt data before it is rendered or snapshotted.
 		 *
@@ -517,7 +500,31 @@ class Receipt_Data_Builder {
 		 *
 		 * @hook woocommerce_pos_receipt_data
 		 */
-		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
+		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
+
+		// Frozen identity on live builds (roadmap#243): when a snapshot exists, the
+		// fiscal identity is copied from it, never rebuilt. Applied AFTER the filter
+		// so an extension that recomputes a QR or a label live cannot overwrite what
+		// was captured at the sale; enrichment belongs in the snapshot
+		// (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
+		// stay live. A 1.3 snapshot without a key keeps the live value.
+		if ( 'live' === $mode ) {
+			$snapshot = Receipt_Snapshot_Store::instance()->get_snapshot( $order->get_id() );
+			if ( null !== $snapshot ) {
+				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
+					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
+						$data['fiscal'][ $key ] = $snapshot['fiscal'][ $key ];
+					}
+				}
+				foreach ( array( 'register', 'software' ) as $key ) {
+					if ( array_key_exists( $key, $snapshot ) ) {
+						$data[ $key ] = $snapshot[ $key ];
+					}
+				}
+			}
+		}
+
+		return $data;
 	}
 
 
