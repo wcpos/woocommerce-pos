@@ -246,11 +246,8 @@ class Receipts_Controller extends WP_REST_Controller {
 		if ( null === $document ) {
 			return null;
 		}
-		if ( ! is_string( $document ) || ! preg_match( '/\Arefund:([1-9][0-9]*)\z/', $document, $matches ) ) {
-			return new WP_Error( 'wcpos_receipt_invalid_document', __( 'Invalid receipt document.', 'woocommerce-pos' ), array( 'status' => 400 ) );
-		}
-		$record = ( new Fiscal_Record_Store() )->find_refund( (int) $request['order_id'], (int) $matches[1] );
-		return $record ? $record['payload'] : new WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		// Shared with the legacy receipt page: the store owns the selector format and the 400/404 contract.
+		return ( new Fiscal_Record_Store() )->resolve_document( (int) $request['order_id'], is_string( $document ) ? $document : '' );
 	}
 
 	/**

@@ -34,6 +34,12 @@ columns with hard-coded numeric widths.
   </align>
   <line />
 
+  {{#fiscal.is_refund_document}}
+  <align mode="center">
+    <bold><text>{{fiscal.document_label}}</text></bold>
+    {{#fiscal.corrects}}<text>{{i18n.corrects}} {{fiscal.corrects}}</text>{{/fiscal.corrects}}
+  </align>
+  {{/fiscal.is_refund_document}}
   <!-- ── Order info ─────────────── -->
   <text>{{i18n.order}}: #{{order.number}}</text>
   <text>{{i18n.date}}: {{order.created.datetime}}</text>
@@ -121,7 +127,7 @@ columns with hard-coded numeric widths.
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
   <line style="dashed" />
-  <bold><text>{{i18n.paid}}</text></bold>
+  <bold><text>{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</text></bold>
   {{/payments.0}}
   {{#payments}}
   <row>

@@ -39,7 +39,10 @@ that would smear or waste ink on thermal/B&W printers.
 
 	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
 
-	<div style="text-align: center; font-weight: 700; margin-bottom: 6px;">{{i18n.receipt}}</div>
+	<div style="text-align: center; font-weight: 700; margin-bottom: 6px;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.receipt}}{{/fiscal.document_label}}</div>
+	{{#fiscal.is_refund_document}}
+	{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
+	{{/fiscal.is_refund_document}}
 
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 2px;">
 		<tr>

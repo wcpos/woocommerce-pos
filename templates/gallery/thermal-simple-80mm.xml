@@ -31,6 +31,12 @@ star columns with hard-coded widths.
   </align>
   <line />
 
+  {{#fiscal.is_refund_document}}
+  <align mode="center">
+    <bold><text>{{fiscal.document_label}}</text></bold>
+    {{#fiscal.corrects}}<text>{{i18n.corrects}} {{fiscal.corrects}}</text>{{/fiscal.corrects}}
+  </align>
+  {{/fiscal.is_refund_document}}
   <!-- ── Order info ─────────────── -->
   <row>
     <col width="12">{{i18n.order}}:</col>
@@ -134,7 +140,7 @@ star columns with hard-coded widths.
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
   <line style="dashed" />
-  <bold><text>{{i18n.paid}}</text></bold>
+  <bold><text>{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</text></bold>
   {{/payments.0}}
   {{#payments}}
   <row>

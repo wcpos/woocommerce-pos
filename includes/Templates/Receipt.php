@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
@@ -470,6 +471,19 @@ class Receipt {
 	 * @return array
 	 */
 	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$query_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
+		// Preview remains sample/live data, never a frozen refund document.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 'preview' !== $mode && 'preview' !== $query_mode && isset( $_GET['document'] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$document = sanitize_text_field( wp_unslash( $_GET['document'] ) );
+			$payload = ( new Fiscal_Record_Store() )->resolve_document( $order->get_id(), $document );
+			if ( is_wp_error( $payload ) ) {
+				wp_die( esc_html( $payload->get_error_message() ), '', array( 'response' => (int) ( $payload->get_error_data()['status'] ?? 404 ) ) );
+			}
+			return $payload;
+		}
 		$mode = 'fiscal' === $mode ? 'live' : $mode;
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$store_id  = 'preview' === $mode && isset( $_GET['store_id'] ) ? (int) $_GET['store_id'] : 0;

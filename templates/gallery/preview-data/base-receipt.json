@@ -1,6 +1,9 @@
 {
   "description": "Shared Coffee Monster paid retail receipt data used as the default gallery preview fixture.",
   "overrides": {
+    "fiscal": {
+      "corrects": ""
+    },
     "order": {
       "id": 1234,
       "number": "POS-1234",
