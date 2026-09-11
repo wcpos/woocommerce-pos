@@ -69,7 +69,7 @@ final class Provenance_Health {
 	}
 
 	/**
-	 * Fetch five meta keys in one query, capping POS orders before joining their meta.
+	 * Fetch provenance meta keys in one query, capping POS orders before joining their meta.
 	 *
 	 * @return array
 	 * @throws \RuntimeException When the diagnostic query fails.
@@ -92,7 +92,7 @@ final class Provenance_Health {
 						WHERE stamp.{$foreign_key} = o.id AND stamp.meta_key = '_wcpos_register')
 					ORDER BY o.{$date} DESC, o.id DESC LIMIT %d) recent
 				INNER JOIN {$meta} m ON m.{$foreign_key} = recent.id
-				WHERE m.meta_key IN ('_wcpos_register', '_wcpos_sale_counter', '_wcpos_sale_time', '_wcpos_sale_received_gmt', '_pos_store')
+				WHERE m.meta_key IN ('_wcpos_register', '_wcpos_till', '_wcpos_sale_counter', '_wcpos_sale_time', '_wcpos_sale_received_gmt', '_pos_store')
 				ORDER BY recent.id DESC",
 				gmdate( 'Y-m-d H:i:s', time() - self::WINDOW_DAYS * DAY_IN_SECONDS ),
 				self::ORDER_CAP
@@ -124,41 +124,49 @@ final class Provenance_Health {
 			'duplicates' => array(),
 			'skew' => array(),
 		);
-		$counters = array();
+		$tills = array();
 		foreach ( $orders as $id => $meta ) {
 			$value = $meta['_wcpos_sale_counter'] ?? '';
 			$counter = filter_var( $value, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) );
 			if ( Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_counter', $value ) && false !== $counter ) {
-				$counters[ $counter ][] = $id;
+				$till_value = $meta['_wcpos_till'] ?? '';
+				$till       = Pos_Order_Audit::is_valid_till_value( '_wcpos_till', $till_value )
+					? strtolower( (string) $till_value )
+					: $register['id'];
+				$tills[ $till ][ $counter ][] = $id;
 			}
 			$skew = $this->order_skew( $id, $meta );
 			if ( null !== $skew ) {
 				$result['skew'][] = $skew;
 			}
 		}
-		ksort( $counters, SORT_NUMERIC );
-		$previous = null;
-		foreach ( $counters as $counter => $ids ) {
-			if ( null === $previous ) {
-				$result['first_counter'] = $counter;
-			} elseif ( $counter - $previous > 1 ) {
-				$result['gaps'][] = array(
-					'after' => $previous,
-					'before' => $counter,
-					'missing' => $counter - $previous - 1,
-				);
+		foreach ( $tills as $till => $counters ) {
+			ksort( $counters, SORT_NUMERIC );
+			$previous = null;
+			foreach ( $counters as $counter => $ids ) {
+				if ( null === $previous ) {
+					$result['first_counter'] = null === $result['first_counter'] ? $counter : min( $result['first_counter'], $counter );
+				} elseif ( $counter - $previous > 1 ) {
+					$result['gaps'][] = array(
+						'till' => $till,
+						'after' => $previous,
+						'before' => $counter,
+						'missing' => $counter - $previous - 1,
+					);
+				}
+				if ( count( $ids ) > 1 ) {
+					$ids = array_slice( $ids, 0, self::SAMPLE_LIMIT );
+					$result['duplicates'][] = array(
+						'till' => $till,
+						'counter' => $counter,
+						'order_ids' => $ids,
+						'order_numbers' => array_map( array( $this, 'order_number' ), $ids ),
+					);
+				}
+				$result['last_counter'] = max( $result['last_counter'] ?? 0, $counter );
+				$previous = $counter;
 			}
-			if ( count( $ids ) > 1 ) {
-				$ids = array_slice( $ids, 0, self::SAMPLE_LIMIT );
-				$result['duplicates'][] = array(
-					'counter' => $counter,
-					'order_ids' => $ids,
-					'order_numbers' => array_map( array( $this, 'order_number' ), $ids ),
-				);
-			}
-			$previous = $counter;
 		}
-		$result['last_counter'] = $previous;
 		usort(
 			$result['skew'],
 			static function ( $a, $b ) {

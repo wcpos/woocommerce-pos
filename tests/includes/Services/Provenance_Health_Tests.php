@@ -32,9 +32,26 @@ trait Provenance_Health_Tests {
 		$this->assertSame( 6, $row['orders'] );
 		$this->assertSame( 1, $row['first_counter'] );
 		$this->assertSame( 8, $row['last_counter'] );
-		$this->assertSame( array( array( 'after' => 3, 'before' => 5, 'missing' => 1 ), array( 'after' => 5, 'before' => 8, 'missing' => 2 ) ), $row['gaps'] );
+		$this->assertSame(
+			array(
+				array(
+					'till' => $id,
+					'after' => 3,
+					'before' => 5,
+					'missing' => 1,
+				),
+				array(
+					'till' => $id,
+					'after' => 5,
+					'before' => 8,
+					'missing' => 2,
+				),
+			),
+			$row['gaps']
+		);
 		$this->assertCount( 1, $row['duplicates'] );
 		$this->assertSame( 5, $row['duplicates'][0]['counter'] );
+		$this->assertSame( $id, $row['duplicates'][0]['till'] );
 		$this->assertEqualsCanonicalizing( array( $ids[3], $ids[4] ), $row['duplicates'][0]['order_ids'] );
 		$this->assertSame( array_map( static function ( $id ) { return 'SALE-' . $id; }, $row['duplicates'][0]['order_ids'] ), $row['duplicates'][0]['order_numbers'] );
 	}
@@ -166,10 +183,63 @@ trait Provenance_Health_Tests {
 		$this->assertNotContains( strtoupper( $id ), array_column( $report['unregistered'], 'register_id' ) );
 	}
 
+	public function test_health_invalid_till_falls_back_to_register_for_counters(): void {
+		$id = wp_generate_uuid4();
+		$ids = array(
+			$this->provenance_order( $id ),
+			$this->provenance_order( $id ),
+		);
+		$order = wc_get_order( $ids[1] );
+		$order->update_meta_data( '_wcpos_till', 'invalid-till' );
+		$order->save();
+		$row = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) )['registers'][0];
+		$this->assertCount( 1, $row['duplicates'] );
+		$this->assertSame( $id, $row['duplicates'][0]['till'] );
+		$this->assertEqualsCanonicalizing( $ids, $row['duplicates'][0]['order_ids'] );
+	}
+
 	public function test_health_small_fixture_is_not_truncated(): void {
 		$this->provenance_order( wp_generate_uuid4() );
 		$report = ( new Provenance_Health() )->report( array(), array() );
 		$this->assertArrayHasKey( 'truncated', $report );
 		$this->assertFalse( $report['truncated'] );
+	}
+	/** Each till owns its counter sequence even on a shared register. */
+	public function test_health_two_tills_keep_counter_sequences_separate(): void {
+		$id = wp_generate_uuid4();
+		$tills = array( wp_generate_uuid4(), wp_generate_uuid4() );
+		foreach ( $tills as $till ) {
+			foreach ( array( '1', '2', '3' ) as $counter ) {
+				$order = wc_get_order( $this->provenance_order( $id, $counter ) );
+				$order->update_meta_data( '_wcpos_till', $till );
+				$order->save();
+			}
+		}
+		$health = new Provenance_Health();
+		$registers = array(
+			array(
+				'id' => $id,
+				'name' => 'Front',
+			),
+		);
+		$row = $health->report( $registers, array( $id ) )['registers'][0];
+		$this->assertSame( array(), $row['gaps'] );
+		$this->assertSame( array(), $row['duplicates'] );
+		$order = wc_get_order( $this->provenance_order( $id, '5' ) );
+		$order->update_meta_data( '_wcpos_till', $tills[0] );
+		$order->save();
+		$row = $health->report( $registers, array( $id ) )['registers'][0];
+		$this->assertSame(
+			array(
+				array(
+					'till' => $tills[0],
+					'after' => 3,
+					'before' => 5,
+					'missing' => 1,
+				),
+			),
+			$row['gaps']
+		);
+		$this->assertSame( array(), $row['duplicates'] );
 	}
 }

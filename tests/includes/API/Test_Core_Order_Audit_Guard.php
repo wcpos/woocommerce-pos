@@ -66,6 +66,27 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_counter' ) );
 	}
 
+	/** JWT-authenticated updates cannot change the till. */
+	public function test_audit_guard_jwt_till_update_returns_403(): void {
+		$order = OrderHelper::create_order();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_till',
+						'value' => wp_generate_uuid4(),
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_till' ) );
+	}
+
 	/**
 	 * JWT-authenticated creates cannot supply POS audit meta.
 	 */

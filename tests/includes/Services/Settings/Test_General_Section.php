@@ -133,4 +133,25 @@ class Test_General_Section extends WP_UnitTestCase {
 		$this->assertCount( 1, $merged['store_tax_ids'] );
 		$this->assertEquals( '9', $merged['store_tax_ids'][0]['value'] );
 	}
+	/** Register defaults and endpoint validators follow the till contract. */
+	public function test_register_settings_defaults_and_validation(): void {
+		$section = new General_Section();
+		$defaults = $section->defaults();
+		$this->assertFalse( $defaults['register_sessions'] );
+		$this->assertSame( '', $defaults['variance_threshold'] );
+		$this->assertSame( '', $defaults['expected_close_time'] );
+		$args = $section->endpoint_args();
+		foreach ( array(
+			array( 'register_sessions', true, true ),
+			array( 'register_sessions', 'true', false ),
+			array( 'expected_close_time', '25:00', false ),
+			array( 'expected_close_time', '18:30', true ),
+			array( 'expected_close_time', '', true ),
+			array( 'variance_threshold', '-5', false ),
+			array( 'variance_threshold', '5.00', true ),
+			array( 'variance_threshold', '', true ),
+		) as list( $key, $value, $valid ) ) {
+			$this->assertSame( $valid, $args[ $key ]['validate_callback']( $value, null, $key ), $key );
+		}
+	}
 }

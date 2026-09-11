@@ -283,4 +283,18 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_store', 'uuid-or-slug' ) );
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_store', '' ) );
 	}
+	/** Till UUIDs share the register's create and strip rules. */
+	public function test_till_uuid_is_validated_and_protected(): void {
+		$meta = array(
+			array(
+				'key' => '_wcpos_till',
+				'value' => wp_generate_uuid4(),
+			),
+		);
+		$this->assertSame( $meta, Pos_Order_Audit::sanitize_create_meta( $meta ) );
+		$this->assertSame( array(), Pos_Order_Audit::strip_audit_meta( $meta ) );
+		$this->assertContains( '_wcpos_till', Pos_Order_Audit::provenance_meta_keys() );
+		$meta[0]['value'] = 'bad';
+		$this->assertSame( array(), Pos_Order_Audit::sanitize_create_meta( $meta ) );
+	}
 }

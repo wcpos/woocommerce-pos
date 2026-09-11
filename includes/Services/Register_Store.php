@@ -79,40 +79,43 @@ final class Register_Store {
 	}
 
 	/**
-	 * Register a till, or refresh only its client-owned fields.
+	 * Create a server-owned register.
 	 *
-	 * @param array $fields Validated fields.
+	 * @param array                 $fields Validated fields.
+	 * @param \WP_REST_Request|null $request REST create context for the Pro fields filter.
 	 * @throws \RuntimeException When storage fails.
 	 */
-	public function upsert( array $fields ): array {
+	public function create( array $fields, ?\WP_REST_Request $request = null ): array {
 		global $wpdb;
 		$this->ensure_installed();
-		$id = $fields['id'];
-		$data = array_intersect_key( $fields, array_flip( array( 'platform', 'app_version' ) ) );
-		$data['last_seen_at_gmt'] = gmdate( 'Y-m-d H:i:s' );
-		if ( $this->exists( $id ) ) {
-			// An existing register only refreshes what the till reports about
-			// itself; its name is set at creation and renamed only through PATCH.
-			$result = $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) );
-		} else {
-			$data['id'] = $id;
-			$data['name'] = $fields['name'];
-			$data['store_id'] = $fields['store_id'] ?? null;
-			$data['created_at_gmt'] = $data['last_seen_at_gmt'];
-			$result = $wpdb->insert( $this->table_name(), $data );
-			if ( false === $result ) {
-				// Two first registrations raced on the primary key: the loser touches
-				// the row the winner created instead of failing the till's sign-in.
-				// A zero-row update is fine (identical values); no row at all is not.
-				unset( $data['id'], $data['name'], $data['store_id'], $data['created_at_gmt'] );
-				$touched = $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) );
-				$result  = ( false !== $touched && null !== $this->get( $id ) ) ? true : false;
-			}
+		$id           = wp_generate_uuid4();
+		$fields['id'] = $id;
+		if ( null !== $request ) {
+			/** Filter initial registration fields; Pro may set store_id. */
+			$fields = apply_filters( 'woocommerce_pos_register_upsert_fields', $fields, $request );
 		}
-		if ( false === $result ) {
+		$fields['id'] = $id;
+		$now = gmdate( 'Y-m-d H:i:s' );
+		$data = array(
+			'id' => $fields['id'],
+			'name' => $fields['name'],
+			'store_id' => $fields['store_id'] ?? null,
+			'default_float' => $fields['default_float'] ?? null,
+			'status' => 'active',
+			'created_at_gmt' => $now,
+			'last_seen_at_gmt' => $now,
+		);
+		if ( false === $wpdb->insert( $this->table_name(), $data ) ) {
 			throw new \RuntimeException( 'Register write failed.' );
 		}
-		return $this->get( $id );
+		return $this->get( $fields['id'] );
+	}
+
+	/** Seed an active register during activation and upgrade only. */
+	public function ensure_default(): void {
+		if ( ! $this->list( array( 'status' => 'active' ) ) ) {
+			$this->create( array( 'name' => __( 'Register', 'woocommerce-pos' ) ) );
+		}
 	}
 
 	/**
@@ -190,6 +193,12 @@ final class Register_Store {
 		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt', 'last_seen_at_gmt' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : str_replace( ' ', 'T', $row[ $key ] ) . 'Z';
 		}
+		// The closure landing (roadmap#249) supplies the real counter values.
+		$row['counters'] = array(
+			'last_closure_number' => 0,
+			'perpetual_sales_total' => '0',
+			'perpetual_refunds_total' => '0',
+		);
 		return $row;
 	}
 }
