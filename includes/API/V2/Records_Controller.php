@@ -135,7 +135,15 @@ class Records_Controller extends WP_REST_Controller {
 	 */
 	public function get_item( $request ) {
 		$row = ( new Fiscal_Record_Store() )->get( (int) $request['id'] );
-		return $row ? new WP_REST_Response( $row ) : $this->not_found();
+		if ( ! $row ) {
+			return $this->not_found();
+		}
+		// The same store scope the list applies (Pro sets store_id); out of scope reads as absent.
+		$args = apply_filters( 'woocommerce_pos_records_list_args', array(), $request );
+		if ( isset( $args['store_id'] ) && ! in_array( (int) $row['store_id'], array_map( 'intval', (array) $args['store_id'] ), true ) ) {
+			return $this->not_found();
+		}
+		return new WP_REST_Response( $row );
 	}
 
 	/** Describe the read-only resource. */

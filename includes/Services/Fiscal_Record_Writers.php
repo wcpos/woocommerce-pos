@@ -42,6 +42,34 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
+	 * Insert through the store and make a failed write visible on the order.
+	 *
+	 * The business transition has already happened when a writer runs, so a
+	 * refused insert (lock timeout, database error) cannot roll it back. The
+	 * sale row is self-repairing on the next payment_complete; the others are
+	 * surfaced as an order note and an action for a recovery job to pick up.
+	 *
+	 * @param WC_Order $order  Order the record describes.
+	 * @param array    $fields Record fields.
+	 */
+	private function write( WC_Order $order, array $fields ): void {
+		if ( null !== $this->store->record( $fields ) ) {
+			return;
+		}
+		$type = (string) ( $fields['type'] ?? '' );
+		/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
+		$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		/**
+		 * Fires when a write-once fiscal record could not be inserted.
+		 *
+		 * @param string   $type   Record type.
+		 * @param WC_Order $order  Order.
+		 * @param array    $fields Record fields as offered to the store.
+		 */
+		do_action( 'woocommerce_pos_fiscal_record_failed', $type, $order, $fields );
+	}
+
+	/**
 	 * Store or repair the sale using the receipt's already-minted sequence.
 	 *
 	 * @param WC_Order $order Source order.
@@ -51,7 +79,8 @@ final class Fiscal_Record_Writers {
 	public function record_sale( WC_Order $order, array $snapshot, int $sequence ): void {
 		// Snapshot capture also runs for storefront orders; fiscal history is POS-only.
 		if ( wcpos_is_pos_order( $order ) ) {
-			$this->store->record(
+			$this->write(
+				$order,
 				array_merge(
 					$this->store->provenance_from_order( $order ),
 					array(
@@ -77,7 +106,8 @@ final class Fiscal_Record_Writers {
 		if ( 'captured' !== $previous_row['status'] || 'voided' !== $applied['status'] ) {
 			return;
 		}
-		$this->store->record(
+		$this->write(
+			$order,
 			array_merge(
 				$this->store->provenance_from_order( $order ),
 				array(
@@ -112,7 +142,8 @@ final class Fiscal_Record_Writers {
 		if ( ! $sale ) {
 			return;
 		}
-		$this->store->record(
+		$this->write(
+			$order,
 			array_merge(
 				$this->store->provenance_from_order( $order ),
 				array(
@@ -147,7 +178,8 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		$sale = $this->store->find_sale( $order_id );
-		$this->store->record(
+		$this->write(
+			$order,
 			array_merge(
 				$this->store->provenance_from_order( $order ),
 				array(
