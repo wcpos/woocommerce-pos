@@ -207,6 +207,7 @@ final class Closure_Store {
 	 *
 	 * @param array     $fields Validated client fields.
 	 * @param bool|null $created Whether this call inserted the document.
+	 * @param-out bool $created
 	 * @return array|\WP_Error
 	 * @throws \RuntimeException On database failure; the entire close is rolled back.
 	 */
