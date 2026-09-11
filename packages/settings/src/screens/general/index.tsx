@@ -115,24 +115,32 @@ function General() {
 						label={t('settings.register_sessions')}
 					/>
 				</FormRow>
-				<FormRow label={t('settings.variance_threshold')} description={t('settings.variance_threshold_tip')}>
+				<FormRow
+					label={t('settings.variance_threshold')}
+					description={t('settings.variance_threshold_tip')}
+				>
 					<TextInput
 						key={data?.variance_threshold}
 						defaultValue={data?.variance_threshold ?? ''}
 						pattern="\d+(?:\.\d+)?"
 						onBlur={(event) => {
-							if (event.currentTarget.reportValidity()) mutate({ variance_threshold: event.currentTarget.value });
+							if (event.currentTarget.reportValidity())
+								mutate({ variance_threshold: event.currentTarget.value });
 						}}
 					/>
 				</FormRow>
-				<FormRow label={t('settings.expected_close_time')} description={t('settings.expected_close_time_tip')}>
+				<FormRow
+					label={t('settings.expected_close_time')}
+					description={t('settings.expected_close_time_tip')}
+				>
 					<TextInput
 						key={data?.expected_close_time}
 						defaultValue={data?.expected_close_time ?? ''}
 						placeholder="HH:MM"
 						pattern="(?:[01]\d|2[0-3]):[0-5]\d"
 						onBlur={(event) => {
-							if (event.currentTarget.reportValidity()) mutate({ expected_close_time: event.currentTarget.value });
+							if (event.currentTarget.reportValidity())
+								mutate({ expected_close_time: event.currentTarget.value });
 						}}
 					/>
 				</FormRow>

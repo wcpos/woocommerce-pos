@@ -29,6 +29,7 @@ function Registers() {
 	const [adding, setAdding] = React.useState(false);
 	const [name, setName] = React.useState('');
 	const [defaultFloat, setDefaultFloat] = React.useState('');
+	const [storeId, setStoreId] = React.useState('');
 	const { setNotice } = useNotices();
 	const rawStoreOptions = window.wcpos?.settings?.cloudPrintStoreOptions;
 	const storeOptions = Array.isArray(rawStoreOptions) ? rawStoreOptions : [];
@@ -58,12 +59,18 @@ function Registers() {
 			}),
 	});
 	const create = useMutation({
-		mutationFn: () => apiFetch<Register>({
-			path: '/wcpos/v2/registers',
-			method: 'POST',
-			headers: { 'X-WCPOS': '1' },
-			data: { name, default_float: defaultFloat === '' ? null : defaultFloat },
-		}),
+		mutationFn: () =>
+			apiFetch<Register>({
+				path: '/wcpos/v2/registers',
+				method: 'POST',
+				headers: { 'X-WCPOS': '1' },
+				data: {
+					name,
+					default_float: defaultFloat === '' ? null : defaultFloat,
+					// Pro reads store_id off the body (Free's controller ignores it).
+					...(storeId === '' ? {} : { store_id: Number(storeId) }),
+				},
+			}),
 		onMutate: () => setNotice(null),
 		onSuccess: () => {
 			setAdding(false);
@@ -71,10 +78,11 @@ function Registers() {
 			setDefaultFloat('');
 			return queryClient.invalidateQueries({ queryKey: ['registers'] });
 		},
-		onError: (error: Error) => setNotice({
-			type: 'error',
-			message: error.message || t('registers.save_failed', 'Register could not be saved.'),
-		}),
+		onError: (error: Error) =>
+			setNotice({
+				type: 'error',
+				message: error.message || t('registers.save_failed', 'Register could not be saved.'),
+			}),
 	});
 	const saveInput = (
 		event: React.FocusEvent<HTMLInputElement>,
@@ -93,25 +101,66 @@ function Registers() {
 				{t('registers.add', 'Add register')}
 			</Button>
 			{adding && (
-				<form className="wcpos:my-4 wcpos:max-w-md" onSubmit={(event) => {
-					event.preventDefault();
-					create.mutate();
-				}}>
+				<form
+					className="wcpos:my-4 wcpos:max-w-md"
+					onSubmit={(event) => {
+						event.preventDefault();
+						create.mutate();
+					}}
+				>
 					<FormRow label={t('registers.name', 'Name')}>
-						<TextInput data-testid="new-register-name" required maxLength={191}
-							value={name} onChange={(event) => setName(event.target.value)} disabled={create.isPending} />
+						<TextInput
+							data-testid="new-register-name"
+							required
+							maxLength={191}
+							value={name}
+							onChange={(event) => setName(event.target.value)}
+							disabled={create.isPending}
+						/>
 					</FormRow>
 					<FormRow label={t('registers.default_float', 'Default float')}>
-						<TextInput data-testid="new-register-float" pattern="\d+(?:\.\d+)?"
-							value={defaultFloat} onChange={(event) => setDefaultFloat(event.target.value)} disabled={create.isPending} />
+						<TextInput
+							data-testid="new-register-float"
+							pattern="\d+(?:\.\d+)?"
+							value={defaultFloat}
+							onChange={(event) => setDefaultFloat(event.target.value)}
+							disabled={create.isPending}
+						/>
 					</FormRow>
+					{storeOptions.length > 0 && (
+						<FormRow label={t('registers.store', 'Store')}>
+							<select
+								data-testid="new-register-store"
+								aria-label={t('registers.store', 'Store')}
+								className="wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs wcpos:border-gray-300"
+								value={storeId}
+								disabled={create.isPending}
+								onChange={(event) => setStoreId(event.currentTarget.value)}
+							>
+								<option value="">{t('registers.store_unassigned', 'Unassigned')}</option>
+								{storeOptions.map((store) => (
+									<option key={store.id} value={store.id}>
+										{store.name}
+									</option>
+								))}
+							</select>
+						</FormRow>
+					)}
 					<div className="wcpos:flex wcpos:gap-2">
-						<Button type="submit" disabled={create.isPending}>{t('registers.create', 'Create register')}</Button>
-						<Button type="button" onClick={() => {
-							setName('');
-							setDefaultFloat('');
-							setAdding(false);
-						}} disabled={create.isPending}>{t('common.cancel', 'Cancel')}</Button>
+						<Button type="submit" disabled={create.isPending}>
+							{t('registers.create', 'Create register')}
+						</Button>
+						<Button
+							type="button"
+							onClick={() => {
+								setName('');
+								setDefaultFloat('');
+								setAdding(false);
+							}}
+							disabled={create.isPending}
+						>
+							{t('common.cancel', 'Cancel')}
+						</Button>
 					</div>
 				</form>
 			)}
@@ -164,7 +213,7 @@ function Registers() {
 												className="wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs wcpos:transition-colors wcpos:duration-150 wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-offset-0 wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color wcpos:focus:ring-wp-admin-theme-color wcpos:disabled:bg-gray-50 wcpos:disabled:text-gray-500 wcpos:disabled:cursor-not-allowed"
 												value={
 													storeOptions.some((store) => store.id === row.store_id)
-														? row.store_id ?? ''
+														? (row.store_id ?? '')
 														: ''
 												}
 												disabled={mutation.isPending}

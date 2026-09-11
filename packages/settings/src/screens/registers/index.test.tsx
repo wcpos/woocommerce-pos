@@ -67,24 +67,31 @@ describe('Registers store column', () => {
 
 	it('creates a register from the form and refreshes the list', async () => {
 		const created = { ...register, id: '22222222-2222-4222-8222-222222222222', name: 'Back desk' };
-		apiFetchMock.mockResolvedValueOnce([register]).mockResolvedValueOnce(created)
+		apiFetchMock
+			.mockResolvedValueOnce([register])
+			.mockResolvedValueOnce(created)
 			.mockResolvedValue([register, created]);
 		renderScreen();
 		fireEvent.click(await screen.findByRole('button', { name: 'Add register' }));
 		fireEvent.change(screen.getByTestId('new-register-name'), { target: { value: 'Back desk' } });
 		fireEvent.change(screen.getByTestId('new-register-float'), { target: { value: '25.00' } });
 		fireEvent.click(screen.getByRole('button', { name: 'Create register' }));
-		await waitFor(() => expect(apiFetchMock).toHaveBeenCalledWith({
-			path: '/wcpos/v2/registers', method: 'POST', headers: { 'X-WCPOS': '1' },
-			data: { name: 'Back desk', default_float: '25.00' },
-		}));
+		await waitFor(() =>
+			expect(apiFetchMock).toHaveBeenCalledWith({
+				path: '/wcpos/v2/registers',
+				method: 'POST',
+				headers: { 'X-WCPOS': '1' },
+				data: { name: 'Back desk', default_float: '25.00' },
+			})
+		);
 		expect(await screen.findByTestId(`register-${created.id}`)).toBeInTheDocument();
 		expect(screen.getByDisplayValue('Back desk')).toBeInTheDocument();
 	});
 
 	it('clears a failed-create notice when retrying successfully', async () => {
 		const created = { ...register, id: '22222222-2222-4222-8222-222222222222', name: 'Back desk' };
-		apiFetchMock.mockResolvedValueOnce([register])
+		apiFetchMock
+			.mockResolvedValueOnce([register])
 			.mockRejectedValueOnce(new Error('Register could not be saved.'))
 			.mockResolvedValueOnce(created)
 			.mockResolvedValue([register, created]);
@@ -171,14 +178,17 @@ describe('Registers store column', () => {
 		expect(select).toHaveDisplayValue('Main store');
 	});
 
-	it.each([null, 99])('shows Unassigned for store_id %s rather than the first store', async (id) => {
-		window.wcpos = { settings: { cloudPrintStoreOptions: storeOptions } };
-		apiFetchMock.mockResolvedValue([{ ...register, store_id: id }]);
-		renderScreen();
+	it.each([null, 99])(
+		'shows Unassigned for store_id %s rather than the first store',
+		async (id) => {
+			window.wcpos = { settings: { cloudPrintStoreOptions: storeOptions } };
+			apiFetchMock.mockResolvedValue([{ ...register, store_id: id }]);
+			renderScreen();
 
-		const select = await screen.findByRole('combobox', { name: 'Store' });
-		expect(select).toHaveDisplayValue('— Unassigned');
-	});
+			const select = await screen.findByRole('combobox', { name: 'Store' });
+			expect(select).toHaveDisplayValue('— Unassigned');
+		}
+	);
 
 	it('shows the column for an assigned row even with only one store option', async () => {
 		window.wcpos = { settings: { cloudPrintStoreOptions: [storeOptions[0]] } };
