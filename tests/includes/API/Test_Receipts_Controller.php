@@ -318,4 +318,54 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		return false === $body ? '' : $body;
 	}
+	public function test_refund_document_routes_return_frozen_payload_and_pdf(): void {
+		$order = OrderHelper::create_order();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( 5 );
+		$refund->save();
+		$payload = ( new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder() )->build_refund_document( $order, $refund, 1, null );
+		$payload['order']['number'] = 'FROZEN-REFUND';
+		$record = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->record( array( 'type' => 'refund', 'order_id' => $order->get_id(), 'refund_id' => $refund->get_id(), 'payload' => $payload ) );
+		$order->set_customer_note( 'Edited after refund' );
+		$order->save();
+		foreach ( array( 'v1', 'v2' ) as $lane ) {
+			$request = $this->wp_rest_get_request( '/wcpos/' . $lane . '/receipts/' . $order->get_id() );
+			$request->set_param( 'document', 'refund:' . $refund->get_id() );
+			$request->set_param( 'mode', 'ignored' );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( 'fiscal', $response->get_data()['mode'] );
+			$this->assertSame( $record['payload'], $response->get_data()['data'] );
+		}
+		$template_id = $this->create_receipt_template();
+		// A live rebuild must not be consulted by either rendering engine.
+		$reject_live = static function () { throw new \RuntimeException( 'Unexpected live build' ); };
+		add_filter( 'woocommerce_pos_receipt_data', $reject_live );
+		try {
+			foreach ( array( 'thermal', 'logicless' ) as $engine ) {
+				update_post_meta( $template_id, '_template_engine', $engine );
+				$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() . '/pdf' );
+				$request->set_param( 'template_id', (string) $template_id );
+				$request->set_param( 'document', 'refund:' . $refund->get_id() );
+				$request->set_param( 'mode', 'live' );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$this->assertStringStartsWith( '%PDF-', $this->serve_raw_response_body( $response, $request ) );
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $reject_live );
+		}
+		$wrong_order = OrderHelper::create_order();
+		foreach ( array( '' , '/pdf' ) as $suffix ) {
+			foreach ( array( 'refund:' . $refund->get_id() => 404, 'refund:99999999' => 404, 'sale:1' => 400, 'refund:0' => 400, 'refund:1junk' => 400, '' => 400 ) as $document => $status ) {
+				$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $wrong_order->get_id() . $suffix );
+				$request->set_param( 'template_id', (string) $template_id );
+				$request->set_param( 'document', $document );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( $status, $response->get_status(), $document . $suffix );
+			}
+		}
+	}
+
 }

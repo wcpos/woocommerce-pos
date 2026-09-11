@@ -103,7 +103,7 @@ final class Fiscal_Record_Store {
 	/**
 	 * Insert once for the type's identity; replays return the original row.
 	 *
-	 * @param array $fields Record fields; payload is an array.
+	 * @param array $fields Record fields; payload is an array or callable receiving the minted number.
 	 */
 	public function record( array $fields ): ?array {
 		global $wpdb;
@@ -117,7 +117,7 @@ final class Fiscal_Record_Store {
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';
-		if ( empty( $fields[ $identity ] ) || ! is_array( $fields['payload'] ?? null ) || ( 'sale' === $type && empty( $fields['number'] ) ) ) {
+		if ( empty( $fields[ $identity ] ) || ( ! is_array( $fields['payload'] ?? null ) && ! is_callable( $fields['payload'] ?? null ) ) || ( 'sale' === $type && empty( $fields['number'] ) ) ) {
 			return null;
 		}
 		$this->ensure_installed();
@@ -134,11 +134,6 @@ final class Fiscal_Record_Store {
 			if ( $existing ) {
 				return $existing;
 			}
-			$json = wp_json_encode( $fields['payload'] );
-			if ( ! is_string( $json ) ) {
-				Logger::log( 'Unable to encode fiscal record payload.' );
-				return null;
-			}
 			$data = array_intersect_key( $fields, array_flip( array( 'type', 'series', 'order_id', 'refund_id', 'payment_id', 'closure_id', 'source_id', 'corrects_record_id', 'register_id', 'session_id', 'store_id', 'cashier_id', 'approver_id', 'device_time', 'device_tz' ) ) );
 			$data['series'] = $data['series'] ?? '';
 			if ( 'sale' === $type ) {
@@ -153,6 +148,12 @@ final class Fiscal_Record_Store {
 					Logger::log( 'Unable to advance fiscal record sequence.' );
 					return null;
 				}
+			}
+			$payload = is_callable( $fields['payload'] ) ? $fields['payload']( $data['number'] ) : $fields['payload'];
+			$json = is_array( $payload ) ? wp_json_encode( $payload ) : false;
+			if ( ! is_string( $json ) ) {
+				Logger::log( 'Unable to encode fiscal record payload.' );
+				return null;
 			}
 			$data['payload'] = $json;
 			$data['checksum'] = Receipt_Snapshot_Store::checksum( $json );
@@ -192,6 +193,23 @@ final class Fiscal_Record_Store {
 			array(
 				'type' => 'sale',
 				'order_id' => $order_id,
+			)
+		);
+	}
+
+	/**
+	 * Read a refund belonging to its parent order.
+	 *
+	 * @param int $order_id Parent ID.
+	 * @param int $refund_id Refund ID.
+	 */
+	public function find_refund( int $order_id, int $refund_id ): ?array {
+		$this->ensure_installed();
+		return $this->find(
+			array(
+				'type' => 'refund',
+				'order_id' => $order_id,
+				'refund_id' => $refund_id,
 			)
 		);
 	}

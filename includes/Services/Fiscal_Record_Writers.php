@@ -146,6 +146,7 @@ final class Fiscal_Record_Writers {
 		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) || ! $refund instanceof WC_Order_Refund ) {
 			return;
 		}
+		$sale = $this->store->find_sale( $order_id );
 		$this->store->record(
 			array_merge(
 				$this->store->provenance_from_order( $order ),
@@ -153,32 +154,15 @@ final class Fiscal_Record_Writers {
 					'type' => 'refund',
 					'order_id' => $order_id,
 					'refund_id' => $refund_id,
-					'corrects_record_id' => $this->store->find_sale( $order_id )['id'] ?? null,
+					'corrects_record_id' => $sale['id'] ?? null,
 					'device_time' => null,
 					'device_tz' => null,
-					'payload' => $this->build_refund_payload( $order, $refund ),
+					'cashier_id' => (int) $refund->get_refunded_by(),
+					'payload' => static function ( int $number ) use ( $order, $refund, $sale ): array {
+						return ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, $number, $sale['payload']['fiscal']['immutable_id'] ?? null );
+					},
 				)
 			)
-		);
-	}
-
-	/**
-	 * Build the stage-one refund payload.
-	 *
-	 * @param WC_Order        $order Parent order.
-	 * @param WC_Order_Refund $refund Refund.
-	 */
-	public function build_refund_payload( WC_Order $order, WC_Order_Refund $refund ): array {
-		// Stage 2 replaces this payload with the receipt builder's refund document.
-		$allocations = $refund->get_meta( '_wcpos_refund_allocations', true );
-		return array(
-			'document_type' => 'refund',
-			'refund_id' => $refund->get_id(),
-			'order_id' => $order->get_id(),
-			'amount' => (string) $refund->get_amount(),
-			'reason' => $refund->get_reason(),
-			'allocations' => $allocations ? $allocations : array(),
-			'allocation' => $allocations ? 'allocated' : 'unallocated',
 		);
 	}
 }

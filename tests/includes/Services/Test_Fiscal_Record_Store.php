@@ -107,4 +107,31 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 		$this->assertNull( $store->find_sale( 902 ) );
 	}
 
+	public function test_callable_payload_receives_number_and_array_payload_still_works(): void {
+		$store = new Fiscal_Record_Store();
+		$seen = array();
+		$fields = array( 'type' => 'refund', 'refund_id' => 950, 'payload' => static function ( int $number ) use ( &$seen ): array {
+			$seen[] = $number;
+			return array( 'receipt_number' => (string) $number );
+		} );
+		$record = $store->record( $fields );
+		$this->assertSame( array( 1 ), $seen );
+		$this->assertSame( array( 'receipt_number' => '1' ), $record['payload'] );
+		$this->assertSame( $record, $store->record( $fields ) );
+		$this->assertSame( array( 1 ), $seen );
+		$array = $store->record( array( 'type' => 'refund', 'refund_id' => 951, 'payload' => array( 'array' => true ) ) );
+		$this->assertSame( 2, $array['number'] );
+		$this->assertSame( array( 'array' => true ), $array['payload'] );
+	}
+
+	public function test_array_callable_payload_is_invoked_not_serialized(): void {
+		$builder = new class() {
+			public function build( int $number ): array {
+				return array( 'number' => $number, 'document_type' => 'refund' );
+			}
+		};
+		$record = ( new Fiscal_Record_Store() )->record( array( 'type' => 'refund', 'refund_id' => 952, 'payload' => array( $builder, 'build' ) ) );
+		$this->assertSame( array( 'number' => 1, 'document_type' => 'refund' ), $record['payload'] );
+	}
+
 }

@@ -138,10 +138,10 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( $number, $records[0]['number'] );
 			$this->assertSame( $refund->get_id(), $records[0]['refund_id'] );
 			$this->assertSame( $sale['id'], $records[0]['corrects_record_id'] );
-			$this->assertSame( 'refund', $records[0]['payload']['document_type'] );
-			$this->assertSame( (string) $refund->get_amount(), $records[0]['payload']['amount'] );
-			$this->assertSame( 'unallocated', $records[0]['payload']['allocation'] );
-			$this->assertSame( array(), $records[0]['payload']['allocations'] );
+			$this->assertSame( 'refund', $records[0]['payload']['fiscal']['document_type'] );
+			$this->assertEquals( 10, $records[0]['payload']['totals']['total_incl'] );
+			$this->assertSame( 'unallocated', $records[0]['payload']['fiscal']['extra_fields']['allocation'] );
+			$this->assertSame( array(), $records[0]['payload']['fiscal']['extra_fields']['allocations'] );
 			$this->assertNull( $records[0]['device_time'] );
 			$this->assertNull( $records[0]['device_tz'] );
 		}
@@ -152,10 +152,60 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
 		$refund->set_amount( 5 );
-		$allocations = array( array( 'payment_id' => wp_generate_uuid4(), 'amount' => '5.00' ) );
+		$allocations = array( array( 'payment_id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00' ) );
 		$refund->update_meta_data( '_wcpos_refund_allocations', $allocations );
-		$payload = Fiscal_Record_Writers::instance()->build_refund_payload( $order, $refund );
-		$this->assertSame( $allocations, $payload['allocations'] );
-		$this->assertSame( 'allocated', $payload['allocation'] );
+		$refund->save();
+		Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
+		$payload = ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'refund' ) )[0]['payload'];
+		$this->assertSame( $allocations, $payload['fiscal']['extra_fields']['allocations'] );
+		$this->assertSame( 'allocated', $payload['fiscal']['extra_fields']['allocation'] );
+	}
+	public function test_admin_refund_freezes_positive_lines_and_single_cash_allocation(): void {
+		$order = $this->order();
+		$item = new \WC_Order_Item_Product();
+		$item->set_name( 'Returned item' );
+		$item->set_quantity( 2 );
+		$item->set_subtotal( 100 );
+		$item->set_total( 100 );
+		$order->add_item( $item );
+		$order->save();
+		$row = Ledger::instance()->record( $order, array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '100.00' ) );
+		$this->assertIsArray( $row );
+		$store = new Fiscal_Record_Store();
+		$sale = $store->find_sale( $order->get_id() );
+		$refund = wc_create_refund( array( 'order_id' => $order->get_id(), 'amount' => 25, 'refund_payment' => false, 'line_items' => array( $item->get_id() => array( 'qty' => 1, 'refund_total' => 25 ) ) ) );
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		$record = $store->list( array( 'order_id' => $order->get_id(), 'type' => 'refund' ) )[0];
+		$data = $record['payload'];
+		$this->assertSame( 'refund', $data['fiscal']['document_type'] );
+		$this->assertSame( '1', $data['fiscal']['receipt_number'] );
+		$this->assertSame( $sale['payload']['fiscal']['immutable_id'], $data['fiscal']['corrects'] );
+		$this->assertEquals( 25, $data['lines'][0]['line_total_excl'] );
+		$this->assertEquals( 1, $data['lines'][0]['qty'] );
+		$this->assertSame( 'allocated', $data['fiscal']['extra_fields']['allocation'] );
+		$this->assertSame( array( array( 'payment_id' => $row['id'], 'method_id' => 'pos_cash', 'amount' => '25.00' ) ), $data['fiscal']['extra_fields']['allocations'] );
+		$this->assertSame( $row['id'], $data['payments'][0]['payment_id'] );
+		$this->assertEquals( 25, $data['payments'][0]['amount'] );
+		$order->set_billing_first_name( 'Edited later' );
+		$item->set_total( 80 );
+		$item->save();
+		$order->save();
+		do_action( 'woocommerce_order_refunded', $order->get_id(), $refund->get_id() );
+		$this->assertSame( $data, $store->get( $record['id'] )['payload'] );
+	}
+
+	public function test_refund_with_two_counting_rows_without_meta_is_unallocated(): void {
+		$order = $this->order();
+		$rows = array();
+		foreach ( array( 'authorized', 'captured' ) as $status ) {
+			$rows[] = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '50.00', 'status' => $status );
+		}
+		Ledger::instance()->save( $order, $rows );
+		$refund = wc_create_refund( array( 'order_id' => $order->get_id(), 'amount' => 10, 'refund_payment' => false ) );
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		$data = ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'refund' ) )[0]['payload'];
+		$this->assertSame( 'unallocated', $data['fiscal']['extra_fields']['allocation'] );
+		$this->assertSame( array(), $data['fiscal']['extra_fields']['allocations'] );
+		$this->assertSame( array(), $data['payments'] );
 	}
 }

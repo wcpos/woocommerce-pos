@@ -21,12 +21,11 @@ class Receipt_Data_Builder {
 	 * Build a canonical receipt payload.
 	 *
 	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param string            $mode      Live builds retain frozen fiscal identity when available.
 	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
 	 *
 	 * @return array
 	 */
-	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
+	private function build_data( WC_Abstract_Order $order, $pos_store = null ): array {
 		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
 		$status_label = '';
 		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
@@ -483,6 +482,19 @@ class Receipt_Data_Builder {
 			)
 		);
 
+		return $data;
+	}
+
+	/**
+	 * Build a canonical receipt, retaining frozen identity in live mode.
+	 *
+	 * @param WC_Abstract_Order $order Receipt order.
+	 * @param string            $mode Receipt mode.
+	 * @param object|null       $pos_store POS store override.
+	 */
+	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
+		$data = $this->build_data( $order, $pos_store );
+
 		/**
 		 * Filters the canonical receipt data before it is rendered or snapshotted.
 		 *
@@ -494,7 +506,7 @@ class Receipt_Data_Builder {
 		 *
 		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
 		 * @param WC_Abstract_Order $order Order the receipt is for.
-		 * @param string            $mode  Receipt mode: 'live' or 'fiscal'.
+		 * @param string            $mode  Receipt mode: 'live', 'fiscal' or 'refund'.
 		 *
 		 * @since 1.10.8
 		 *
@@ -525,6 +537,219 @@ class Receipt_Data_Builder {
 		}
 
 		return $data;
+	}
+
+
+	/**
+	 * Build the write-once refund receipt without changing the sale or its money.
+	 *
+	 * @param \WC_Order        $order Parent sale.
+	 * @param \WC_Order_Refund $refund Refund document source.
+	 * @param int              $number Minted refund sequence.
+	 * @param string|null      $corrects Original sale identity.
+	 * @throws \RuntimeException When the refund document cannot be encoded.
+	 */
+	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects ): array {
+		$data = $this->build_data( $order );
+		$display_incl = ! empty( $data['tax']['display_incl'] );
+		$items = $this->get_refund_items( $refund, $display_incl );
+		$data['lines'] = $items['lines'];
+		foreach ( $data['lines'] as &$line ) {
+			foreach ( array( '', '_incl', '_excl' ) as $basis ) {
+				$line[ 'line_total' . $basis ] = $line[ 'total' . $basis ];
+				$line[ 'line_subtotal' . $basis ] = $line[ 'total' . $basis ];
+				$line[ 'unit_price' . $basis ] = $line['qty'] > 0 ? round( $line[ 'total' . $basis ] / $line['qty'], wc_get_price_decimals() ) : 0.0;
+				$line[ 'unit_subtotal' . $basis ] = $line[ 'unit_price' . $basis ];
+				$line[ 'discounts' . $basis ] = 0.0;
+			}
+			$line['qty_refunded'] = 0.0;
+			$line['total_refunded'] = 0.0;
+		}
+		unset( $line );
+		$data['fees'] = $items['fees'];
+		$data['shipping'] = $items['shipping'];
+		$data['discounts'] = array();
+		$data['refunds'] = array();
+		foreach ( $data['totals'] as $key => $value ) {
+			$data['totals'][ $key ] = is_bool( $value ) ? true : 0.0;
+		}
+		$data['totals']['total_incl'] = abs( (float) $refund->get_amount() );
+		$data['totals']['tax_total'] = abs( (float) $refund->get_total_tax() );
+		$data['totals']['total_excl'] = $data['totals']['total_incl'] - $data['totals']['tax_total'];
+		$data['totals']['total'] = $data['totals'][ $display_incl ? 'total_incl' : 'total_excl' ];
+		foreach ( array( '', '_incl', '_excl' ) as $basis ) {
+			$data['totals'][ 'subtotal' . $basis ] = array_sum( array_column( $data['lines'], 'line_subtotal' . $basis ) );
+		}
+		$data['totals']['total_qty'] = array_sum( array_column( $data['lines'], 'qty' ) );
+		$data['totals']['line_count'] = count( $data['lines'] );
+		$data['tax_summary'] = $this->get_tax_summary( $refund );
+		foreach ( $data['tax_summary'] as &$tax ) {
+			foreach ( array( 'taxable_amount_excl', 'tax_amount', 'taxable_amount_incl' ) as $key ) {
+				$tax[ $key ] = null === $tax[ $key ] ? null : abs( $tax[ $key ] );
+			}
+		}
+		unset( $tax );
+		$data['has_tax_summary'] = ! empty( $data['tax_summary'] );
+		$allocations = $refund->get_meta( '_wcpos_refund_allocations', true );
+		if ( ! $refund->meta_exists( '_wcpos_refund_allocations' ) ) {
+			$counting = array_values(
+				array_filter(
+					Ledger::instance()->read( $order ),
+					static function ( array $row ): bool {
+						return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
+					}
+				)
+			);
+			$allocations = 1 === count( $counting ) ? array(
+				array(
+					'payment_id' => $counting[0]['id'],
+					'method_id' => $counting[0]['method_id'],
+					'amount' => wc_format_decimal( $refund->get_amount(), wc_get_price_decimals() ),
+				),
+			) : array();
+		}
+		$data['payments'] = array();
+		foreach ( $allocations as $allocation ) {
+			$method = (string) ( $allocation['method_id'] ?? '' );
+			$descriptor = Descriptor_Builder::instance()->get( $method );
+			$data['payments'][] = array(
+				'payment_id' => $allocation['payment_id'],
+				'method_id' => $method,
+				'method_title' => $descriptor['title'] ?? $method,
+				'amount' => (float) $allocation['amount'],
+				'transaction_id' => '',
+				'tendered' => 0.0,
+				'change' => 0.0,
+			);
+		}
+		$data['totals']['paid_total'] = array_sum( array_column( $data['payments'], 'amount' ) );
+		$cashier_id = (int) $refund->get_refunded_by();
+		$user = $cashier_id ? get_user_by( 'id', $cashier_id ) : false;
+		$data['cashier'] = array(
+			'id' => $cashier_id,
+			'name' => $user ? $user->display_name : '',
+		);
+		$date = $this->format_wc_datetime_in_timezone( $refund->get_date_created(), wp_timezone(), $data['presentation_hints']['locale'] ?? '' );
+		$data['fiscal'] = Receipt_Payload_Assembler::fiscal(
+			array_merge(
+				$data['fiscal'],
+				array(
+					'document_type' => 'refund',
+					'document_label' => $data['i18n']['document_refund'],
+					'receipt_number' => (string) $number,
+					'sequence' => $number,
+					'corrects' => $corrects,
+					'immutable_id' => $refund->get_id() . ':' . $number,
+					'hash' => '',
+					'sale_time' => $date,
+					'sale_tz' => wp_timezone_string(),
+					'received_at' => $date,
+					'sale_counter' => null,
+					'is_reprint' => false,
+					'reprint_count' => 0,
+					// Store health listing of unallocated refunds belongs to a later ticket.
+					'extra_fields' => array(
+						'refund_id' => $refund->get_id(),
+						'allocations' => $allocations,
+						'allocation' => $allocations ? 'allocated' : 'unallocated',
+					),
+				)
+			)
+		);
+		$data['fiscal']['corrects'] = $corrects;
+		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, 'refund' );
+		$data['fiscal']['hash'] = '';
+		$json = wp_json_encode( $data );
+		if ( ! is_string( $json ) ) {
+			throw new \RuntimeException( 'Unable to encode refund document.' );
+		}
+		$data['fiscal']['hash'] = Receipt_Snapshot_Store::checksum( $json );
+		return $data;
+	}
+
+	/**
+	 * Shape positive refund items for embedded refunds and standalone documents.
+	 *
+	 * @param \WC_Order_Refund $refund Refund source.
+	 * @param bool             $display_incl Tax display basis.
+	 */
+	private function get_refund_items( \WC_Order_Refund $refund, bool $display_incl ): array {
+		$refund_lines = array();
+		foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
+			if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$line_total_excl = abs( (float) $refund_item->get_total() );
+			$line_total_tax  = abs( (float) $refund_item->get_total_tax() );
+			$line_total_incl = $line_total_excl + $line_total_tax;
+			$refund_lines[]  = array(
+				'name'       => (string) $refund_item->get_name(),
+				'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
+				'qty'        => abs( (float) $refund_item->get_quantity() ),
+				'total'      => $display_incl ? $line_total_incl : $line_total_excl,
+				'total_incl' => $line_total_incl,
+				'total_excl' => $line_total_excl,
+				'taxes'      => array_map(
+					static function ( array $tax ): array {
+						$tax['amount'] = abs( (float) $tax['amount'] );
+						return $tax;
+					},
+					$this->get_item_taxes( $refund_item )
+				),
+			);
+		}
+
+		$refund_fees = array();
+		foreach ( $refund->get_items( 'fee' ) as $refund_fee ) {
+			if ( ! $refund_fee instanceof \WC_Order_Item_Fee ) {
+				continue;
+			}
+			$fee_total_excl = abs( (float) $refund_fee->get_total() );
+			$fee_total_tax  = abs( (float) $refund_fee->get_total_tax() );
+			$fee_total_incl = $fee_total_excl + $fee_total_tax;
+			$refund_fees[]  = array(
+				'label'      => (string) $refund_fee->get_name(),
+				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
+				'total_incl' => $fee_total_incl,
+				'total_excl' => $fee_total_excl,
+				'taxes'      => array_map(
+					static function ( array $tax ): array {
+						$tax['amount'] = abs( (float) $tax['amount'] );
+						return $tax;
+					},
+					$this->get_item_taxes( $refund_fee )
+				),
+			);
+		}
+
+		$refund_shipping = array();
+		foreach ( $refund->get_items( 'shipping' ) as $refund_ship ) {
+			if ( ! $refund_ship instanceof \WC_Order_Item_Shipping ) {
+				continue;
+			}
+			$ship_total_excl   = abs( (float) $refund_ship->get_total() );
+			$ship_total_tax    = abs( (float) $refund_ship->get_total_tax() );
+			$ship_total_incl   = $ship_total_excl + $ship_total_tax;
+			$refund_shipping[] = array(
+				'label'      => (string) $refund_ship->get_name(),
+				'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
+				'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
+				'total_incl' => $ship_total_incl,
+				'total_excl' => $ship_total_excl,
+				'taxes'      => array_map(
+					static function ( array $tax ): array {
+						$tax['amount'] = abs( (float) $tax['amount'] );
+						return $tax;
+					},
+					$this->get_item_taxes( $refund_ship )
+				),
+			);
+		}
+		return array(
+			'lines' => $refund_lines,
+			'fees' => $refund_fees,
+			'shipping' => $refund_shipping,
+		);
 	}
 
 
@@ -1067,77 +1292,7 @@ class Receipt_Data_Builder {
 				}
 			}
 
-			$refund_lines = array();
-			foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
-				if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
-					continue;
-				}
-				$line_total_excl = abs( (float) $refund_item->get_total() );
-				$line_total_tax  = abs( (float) $refund_item->get_total_tax() );
-				$line_total_incl = $line_total_excl + $line_total_tax;
-				$refund_lines[]  = array(
-					'name'       => (string) $refund_item->get_name(),
-					'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
-					'qty'        => abs( (float) $refund_item->get_quantity() ),
-					'total'      => $display_incl ? $line_total_incl : $line_total_excl,
-					'total_incl' => $line_total_incl,
-					'total_excl' => $line_total_excl,
-					'taxes'      => array_map(
-						static function ( array $tax ): array {
-							$tax['amount'] = abs( (float) $tax['amount'] );
-							return $tax;
-						},
-						$this->get_item_taxes( $refund_item )
-					),
-				);
-			}
-
-			$refund_fees = array();
-			foreach ( $refund->get_items( 'fee' ) as $refund_fee ) {
-				if ( ! $refund_fee instanceof \WC_Order_Item_Fee ) {
-					continue;
-				}
-				$fee_total_excl = abs( (float) $refund_fee->get_total() );
-				$fee_total_tax  = abs( (float) $refund_fee->get_total_tax() );
-				$fee_total_incl = $fee_total_excl + $fee_total_tax;
-				$refund_fees[]  = array(
-					'label'      => (string) $refund_fee->get_name(),
-					'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
-					'total_incl' => $fee_total_incl,
-					'total_excl' => $fee_total_excl,
-					'taxes'      => array_map(
-						static function ( array $tax ): array {
-							$tax['amount'] = abs( (float) $tax['amount'] );
-							return $tax;
-						},
-						$this->get_item_taxes( $refund_fee )
-					),
-				);
-			}
-
-			$refund_shipping = array();
-			foreach ( $refund->get_items( 'shipping' ) as $refund_ship ) {
-				if ( ! $refund_ship instanceof \WC_Order_Item_Shipping ) {
-					continue;
-				}
-				$ship_total_excl   = abs( (float) $refund_ship->get_total() );
-				$ship_total_tax    = abs( (float) $refund_ship->get_total_tax() );
-				$ship_total_incl   = $ship_total_excl + $ship_total_tax;
-				$refund_shipping[] = array(
-					'label'      => (string) $refund_ship->get_name(),
-					'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
-					'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
-					'total_incl' => $ship_total_incl,
-					'total_excl' => $ship_total_excl,
-					'taxes'      => array_map(
-						static function ( array $tax ): array {
-							$tax['amount'] = abs( (float) $tax['amount'] );
-							return $tax;
-						},
-						$this->get_item_taxes( $refund_ship )
-					),
-				);
-			}
+			$items = $this->get_refund_items( $refund, $display_incl );
 
 			$pos_destination = (string) $refund->get_meta( '_pos_refund_destination' );
 			$pos_mode        = (string) $refund->get_meta( '_pos_refund_mode' );
@@ -1170,9 +1325,9 @@ class Receipt_Data_Builder {
 				'gateway_id'       => $pos_gateway_id,
 				'gateway_title'    => $pos_gateway_title,
 				'processing_mode'  => $pos_mode,
-				'lines'            => $refund_lines,
-				'fees'             => $refund_fees,
-				'shipping'         => $refund_shipping,
+				'lines'            => $items['lines'],
+				'fees'             => $items['fees'],
+				'shipping'         => $items['shipping'],
 			);
 		}
 
