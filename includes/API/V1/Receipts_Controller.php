@@ -70,7 +70,11 @@ class Receipts_Controller extends WP_REST_Controller {
 						'validate_callback' => 'rest_validate_request_arg',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
-					'document' => array( 'type' => 'string' ),
+					'document' => array(
+						'type'              => 'string',
+						'validate_callback' => 'rest_validate_request_arg',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 					'order_id' => array(
 						'type'              => 'integer',
 						'required'          => true,
@@ -102,7 +106,11 @@ class Receipts_Controller extends WP_REST_Controller {
 						'validate_callback' => 'rest_validate_request_arg',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
-					'document' => array( 'type' => 'string' ),
+					'document' => array(
+						'type'              => 'string',
+						'validate_callback' => 'rest_validate_request_arg',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 					'order_id'    => array(
 						'type'              => 'integer',
 						'required'          => true,
@@ -113,6 +121,7 @@ class Receipts_Controller extends WP_REST_Controller {
 						'validate_callback' => static function ( $value, $request ): bool {
 							return null !== $request->get_param( 'document' ) || in_array( $value, array( 'fiscal', 'live' ), true );
 						},
+						'sanitize_callback' => 'sanitize_text_field',
 						'default' => 'live',
 					),
 					'template_id' => array(
