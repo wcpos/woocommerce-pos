@@ -318,4 +318,74 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		return false === $body ? '' : $body;
 	}
+
+	/** Count only explicit prints, across live and immutable fiscal payloads. */
+	public function test_print_intent_counts_without_marking_plain_reads_or_snapshot(): void {
+		foreach ( array( 'live', 'fiscal' ) as $mode ) {
+			$order = OrderHelper::create_order();
+			$store = Receipt_Snapshot_Store::instance();
+			$store->handle_payment_complete( $order->get_id() );
+			$snapshot = $store->get_snapshot( $order->get_id() );
+			$route = '/wcpos/v1/receipts/' . $order->get_id();
+			foreach ( array( array( 'print', false, 0, 1 ), array( null, false, 0, 1 ), array( 'print', true, 1, 2 ), array( null, false, 0, 2 ) ) as $case ) {
+				$request = $this->wp_rest_get_request( $route );
+				$request->set_param( 'mode', $mode );
+				if ( null !== $case[0] ) {
+					$request->set_param( 'intent', $case[0] );
+				}
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$fiscal = $response->get_data()['data']['fiscal'];
+				$this->assertSame( $case[1], $fiscal['is_reprint'] );
+				$this->assertSame( $case[2], $fiscal['reprint_count'] );
+				$this->assertSame( $case[3], (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+			}
+			$response = $this->server->dispatch( $this->wp_rest_post_request( $route . '/print' ) );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( 'print_count' => 3, 'is_reprint' => true, 'reprint_count' => 2 ), $response->get_data() );
+			$this->assertSame( $snapshot, $store->get_snapshot( $order->get_id() ) );
+		}
+	}
+
+	/** The base registration also exposes counting in the v2 namespace. */
+	public function test_v2_print_route_counts(): void {
+		$order = OrderHelper::create_order();
+		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/receipts/' . $order->get_id() . '/print' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'print_count' => 1, 'is_reprint' => false, 'reprint_count' => 0 ), $response->get_data() );
+	}
+
+	/** PDF downloads count only when explicitly requested as prints. */
+	public function test_pdf_print_intent_counts(): void {
+		$order = OrderHelper::create_order();
+		$template_id = $this->create_receipt_template();
+		Receipt_Snapshot_Store::instance()->handle_payment_complete( $order->get_id() );
+		foreach ( array( 'live', 'fiscal' ) as $index => $mode ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+			$request->set_param( 'template_id', (string) $template_id );
+			$request->set_param( 'mode', $mode );
+			$request->set_param( 'intent', 'print' );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertStringStartsWith( '%PDF-', $this->serve_raw_response_body( $response, $request ) );
+			$this->assertSame( $index + 1, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+		}
+		$request->set_param( 'intent', null );
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+		$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+	}
+
+	/** Invalid intent and unauthorized counting must not update the order. */
+	public function test_print_routes_reject_invalid_intent_and_missing_capability(): void {
+		$order = OrderHelper::create_order();
+		$route = '/wcpos/v1/receipts/' . $order->get_id();
+		$request = $this->wp_rest_get_request( $route );
+		$request->set_param( 'intent', 'preview' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'subscriber' ) ) );
+		$this->assertSame( 403, $this->server->dispatch( $this->wp_rest_post_request( $route . '/print' ) )->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+	}
+
 }

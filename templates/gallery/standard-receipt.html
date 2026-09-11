@@ -64,6 +64,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{#customer.tax_ids}}<div style="color: #6b7280; font-size: 11px; margin-top: 2px;">{{#label}}{{label}} {{/label}}{{value}}</div>{{/customer.tax_ids}}
 		</div>
 	</header>
+	{{#fiscal.is_reprint}}<div style="text-align: center; font-weight: bold;">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</div>{{/fiscal.is_reprint}}
 
 	<!-- ── Items ─────────────── -->
 	<table style="width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px;">
@@ -161,6 +162,12 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{/payments}}
 	</div>
 	{{/payments.0}}
+
+	{{#fiscal.qr_payload}}<div style="text-align: center;"><barcode type="qrcode" scale="2">{{fiscal.qr_payload}}</barcode></div>{{/fiscal.qr_payload}}
+	{{#register.name}}<div style="text-align: center; font-size: 11px; color: #6b7280;">{{i18n.register}}: {{register.name}}</div>{{/register.name}}
+	{{#fiscal.receipt_number}}<div style="text-align: center; font-size: 11px; color: #6b7280;">#{{fiscal.receipt_number}}</div>{{/fiscal.receipt_number}}
+	{{#fiscal.sale_time.datetime}}<div style="text-align: center; font-size: 11px; color: #6b7280;">{{i18n.sale_time}}: {{fiscal.sale_time.datetime}}</div>{{/fiscal.sale_time.datetime}}
+	{{#software.name}}<div style="text-align: center; font-size: 11px; color: #6b7280;">{{software.name}} {{software.plugin_version}}{{#software.app_version}} · {{software.app_version}}{{/software.app_version}}</div>{{/software.name}}
 
 	<!-- ── Footer ─────────────── -->
 	<div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; font-style: italic;">

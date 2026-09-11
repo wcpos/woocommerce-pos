@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Print_Counter;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Receipt_Service;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
@@ -61,6 +62,12 @@ class Receipts_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'get_item' ),
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
+					'intent' => array(
+						'type' => 'string',
+						'enum' => array( 'print' ),
+						'validate_callback' => 'rest_validate_request_arg',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 					'order_id' => array(
 						'type'              => 'integer',
 						'required'          => true,
@@ -84,15 +91,43 @@ class Receipts_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'get_pdf' ),
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
+					'intent' => array(
+						'type' => 'string',
+						'enum' => array( 'print' ),
+						'validate_callback' => 'rest_validate_request_arg',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 					'order_id'    => array(
 						'type'              => 'integer',
 						'required'          => true,
 						'sanitize_callback' => 'absint',
 					),
+					'mode' => array(
+						'type' => 'string',
+						'enum' => array( 'fiscal', 'live' ),
+						'default' => 'live',
+					),
 					'template_id' => array(
 						'type'              => 'string',
 						'required'          => true,
 						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<order_id>[\\d]+)/print',
+			array(
+				'methods' => WP_REST_Server::CREATABLE,
+				'callback' => array( $this, 'print_item' ),
+				'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				'args' => array(
+					'order_id' => array(
+						'type' => 'integer',
+						'required' => true,
+						'sanitize_callback' => 'absint',
 					),
 				),
 			)
@@ -146,6 +181,11 @@ class Receipts_Controller extends WP_REST_Controller {
 			$payload = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 		}
 
+		if ( 'print' === $request->get_param( 'intent' ) ) {
+			$counter = new Receipt_Print_Counter();
+			$payload = $counter->mark( $payload, $counter->count( $order ) );
+		}
+
 		return array(
 			'order_id'     => $order_id,
 			'mode'         => $mode,
@@ -153,6 +193,23 @@ class Receipts_Controller extends WP_REST_Controller {
 			'submission_status' => ( new Fiscal_Receipt_Service() )->get_submission_status( $order_id ),
 			'data'         => $payload,
 		);
+	}
+
+	/**
+	 * Record a print performed by the caller.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return array|WP_Error Print count and copy marking.
+	 */
+	public function print_item( $request ) {
+		$order = wc_get_order( (int) $request['order_id'] );
+		if ( ! $order ) {
+			return new WP_Error( 'wcpos_receipt_invalid_order', __( 'Invalid order.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
+		$counter = new Receipt_Print_Counter();
+		$count = $counter->count( $order );
+
+		return array_merge( array( 'print_count' => $count ), $counter->mark( array(), $count )['fiscal'] );
 	}
 
 	/**
@@ -191,7 +248,13 @@ class Receipts_Controller extends WP_REST_Controller {
 		}
 
 		try {
-			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+			$receipt_request = clone $request;
+			$receipt_request->set_param( 'mode', $request->get_param( 'mode' ) ?? 'live' );
+			$receipt = $this->get_item( $receipt_request );
+			if ( is_wp_error( $receipt ) ) {
+				return $receipt;
+			}
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order, $receipt['data'] );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 

@@ -19,6 +19,7 @@ class Print_Job_Service {
 	const META_FORMAT     = '_wcpos_pj_format';
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
+	const META_PRINT_COUNT = '_wcpos_pj_print_count';
 	const META_UNCONFIRMED = '_wcpos_pj_unconfirmed';
 	const META_RETRIED_TO = '_wcpos_pj_retried_to';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
@@ -291,7 +292,7 @@ class Print_Job_Service {
 
 			if ( 'pdf' === $job['pn_kind'] ) {
 				try {
-					return self::in_band( ( new Template_Pdf_Service() )->render( $template, $order ) );
+					return self::in_band( ( new Template_Pdf_Service() )->render( $template, $order, $this->counted_receipt_data( $job, $order ) ) );
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
 						sprintf( 'Cloud print: PrintNode PDF render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
@@ -307,7 +308,8 @@ class Print_Job_Service {
 						$template,
 						$order,
 						'escpos',
-						$this->drawer_render_options( $job )
+						$this->drawer_render_options( $job ),
+						$this->counted_receipt_data( $job, $order )
 					);
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
@@ -349,7 +351,8 @@ class Print_Job_Service {
 					$template,
 					$order,
 					$wire,
-					$this->drawer_render_options( $job )
+					$this->drawer_render_options( $job ),
+					$this->counted_receipt_data( $job, $order )
 				);
 			} catch ( \Throwable $e ) {
 				// Defense in depth: never let a malformed template/payload bubble up
@@ -370,7 +373,7 @@ class Print_Job_Service {
 			}
 
 			try {
-				$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+				$data    = $this->counted_receipt_data( $job, $order );
 				$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
 
 				return self::in_band( $adapter->transform( $data ) );
@@ -390,6 +393,24 @@ class Print_Job_Service {
 		$payload = base64_decode( (string) $job['payload'], true );
 
 		return self::in_band( false === $payload ? '' : $payload );
+	}
+
+	/**
+	 * Persist the assigned count on the job so subsequent polls reuse it.
+	 *
+	 * @param array     $job   Job being rendered.
+	 * @param \WC_Order $order Order being printed.
+	 * @return array Marked live receipt data.
+	 */
+	private function counted_receipt_data( array $job, \WC_Order $order ): array {
+		$counter = new Receipt_Print_Counter();
+		$count = (int) get_post_meta( (int) $job['id'], self::META_PRINT_COUNT, true );
+		if ( 0 === $count ) {
+			$count = $counter->count( $order );
+			update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $count );
+		}
+
+		return $counter->mark( ( new Receipt_Data_Builder() )->build( $order, 'live' ), $count );
 	}
 
 	/**

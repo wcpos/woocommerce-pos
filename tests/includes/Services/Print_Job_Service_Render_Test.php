@@ -500,4 +500,42 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( '', $out );
 	}
+
+	/** Re-rendering a claimed job reuses its count even after another job prints. */
+	public function test_render_counts_once_per_job_across_render_branches(): void {
+		foreach ( array( 'fixed', 'thermal', 'escpos', 'pdf' ) as $kind ) {
+			$order = OrderHelper::create_order();
+			$tid = $this->create_thermal_template( '<receipt><text>COUNT:{{fiscal.reprint_count}}</text>{{#fiscal.is_reprint}}<text>COPY</text>{{/fiscal.is_reprint}}</receipt>' );
+			$args = array( 'printer_id' => 'p1', 'order_id' => $order->get_id(), 'format' => 'epos-xml' );
+			if ( 'fixed' !== $kind ) {
+				$args['template_id'] = (string) $tid;
+			}
+			if ( in_array( $kind, array( 'escpos', 'pdf' ), true ) ) {
+				$args['pn_kind'] = $kind;
+			}
+			$id = $this->jobs->create( $args );
+			$this->assertTrue( $this->jobs->try_claim( $id ) );
+			$job = $this->jobs->get( $id );
+			$first = $this->jobs->render_payload( $job );
+			$this->assertNotSame( '', $first, $kind );
+			$this->assertSame( 1, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+			$second_id = $this->jobs->create( $args );
+			$second = $this->jobs->render_payload( $this->jobs->get( $second_id ) );
+			$this->assertNotSame( '', $second, $kind );
+			// A new service and the old job array model a fresh poll, not an in-memory cache.
+			$repeated = ( new Print_Job_Service() )->render_payload( $job );
+			$this->assertNotSame( '', $repeated, $kind );
+			$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+			if ( in_array( $kind, array( 'thermal', 'escpos' ), true ) ) {
+				$this->assertStringContainsString( 'COUNT:0', $first );
+				$this->assertStringNotContainsString( 'COPY', $first );
+				$this->assertStringContainsString( 'COUNT:1', $second );
+				$this->assertStringContainsString( 'COPY', $second );
+				$this->assertStringContainsString( 'COUNT:0', $repeated );
+				$this->assertStringNotContainsString( 'COPY', $repeated );
+			}
+			$this->jobs->set_status( $id, Print_Job_Service::STATUS_PRINTED );
+		}
+	}
+
 }

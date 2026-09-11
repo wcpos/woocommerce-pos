@@ -418,4 +418,19 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'product-meta', wc_get_product( $product->get_id() )->get_meta( '_pos_store' ) );
 	}
+
+	/** Core wc/v3 writes cannot forge the server-derived receipt count. */
+	public function test_audit_guard_jwt_receipt_print_count_update_returns_403(): void {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_wcpos_receipt_print_count', 2 );
+		$order->save();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params( array( 'meta_data' => array( array( 'key' => '_wcpos_receipt_print_count', 'value' => '999' ) ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
+		$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+	}
+
 }
