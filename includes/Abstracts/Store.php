@@ -139,7 +139,12 @@ class Store extends \WC_Data implements StoreInterface {
 	 */
 	public function set_woocommerce_tax_settings() {
 		$this->set_prop( 'prices_include_tax', \WC_Admin_Settings::get_option( 'woocommerce_prices_include_tax' ) );
-		$this->set_prop( 'tax_based_on', 'base' ); // default should be base, perhaps have a setting for this?
+		// Mirrors WooCommerce's Tax → "Calculate tax based on" setting; Pro's per-store value overrides it.
+		$tax_based_on = \WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' );
+		$this->set_prop(
+			'tax_based_on',
+			in_array( $tax_based_on, array( 'base', 'billing', 'shipping' ), true ) ? $tax_based_on : 'base'
+		);
 		$this->set_prop( 'shipping_tax_class', \WC_Admin_Settings::get_option( 'woocommerce_shipping_tax_class' ) );
 		$this->set_prop( 'tax_round_at_subtotal', \WC_Admin_Settings::get_option( 'woocommerce_tax_round_at_subtotal' ) );
 		$this->set_prop( 'tax_display_shop', \WC_Admin_Settings::get_option( 'woocommerce_tax_display_shop' ) );
