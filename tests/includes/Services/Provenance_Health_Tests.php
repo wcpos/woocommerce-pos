@@ -183,6 +183,21 @@ trait Provenance_Health_Tests {
 		$this->assertNotContains( strtoupper( $id ), array_column( $report['unregistered'], 'register_id' ) );
 	}
 
+	public function test_health_invalid_till_falls_back_to_register_for_counters(): void {
+		$id = wp_generate_uuid4();
+		$ids = array(
+			$this->provenance_order( $id ),
+			$this->provenance_order( $id ),
+		);
+		$order = wc_get_order( $ids[1] );
+		$order->update_meta_data( '_wcpos_till', 'invalid-till' );
+		$order->save();
+		$row = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) )['registers'][0];
+		$this->assertCount( 1, $row['duplicates'] );
+		$this->assertSame( $id, $row['duplicates'][0]['till'] );
+		$this->assertEqualsCanonicalizing( $ids, $row['duplicates'][0]['order_ids'] );
+	}
+
 	public function test_health_small_fixture_is_not_truncated(): void {
 		$this->provenance_order( wp_generate_uuid4() );
 		$report = ( new Provenance_Health() )->report( array(), array() );

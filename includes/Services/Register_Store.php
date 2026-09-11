@@ -88,11 +88,13 @@ final class Register_Store {
 	public function create( array $fields, ?\WP_REST_Request $request = null ): array {
 		global $wpdb;
 		$this->ensure_installed();
-		$fields['id'] = wp_generate_uuid4();
+		$id           = wp_generate_uuid4();
+		$fields['id'] = $id;
 		if ( null !== $request ) {
 			/** Filter initial registration fields; Pro may set store_id. */
 			$fields = apply_filters( 'woocommerce_pos_register_upsert_fields', $fields, $request );
 		}
+		$fields['id'] = $id;
 		$now = gmdate( 'Y-m-d H:i:s' );
 		$data = array(
 			'id' => $fields['id'],

@@ -201,7 +201,11 @@ class Registers_Controller extends WP_REST_Controller {
 			if ( null !== $value && ( ! is_string( $value ) || ! preg_match( '/^\d+(?:\.\d+)?$/D', $value ) ) ) {
 				return $this->invalid( 'default_float' );
 			}
-			$fields['default_float'] = null === $value ? null : wc_format_decimal( $value, 4 );
+			$normalized = null === $value ? null : wc_format_decimal( $value, 4 );
+			if ( null !== $normalized && ! preg_match( '/^\d{1,15}\.\d{4}$/D', $normalized ) ) {
+				return $this->invalid( 'default_float' );
+			}
+			$fields['default_float'] = $normalized;
 		}
 		return $fields;
 	}

@@ -64,6 +64,7 @@ function Registers() {
 			headers: { 'X-WCPOS': '1' },
 			data: { name, default_float: defaultFloat === '' ? null : defaultFloat },
 		}),
+		onMutate: () => setNotice(null),
 		onSuccess: () => {
 			setAdding(false);
 			setName('');
@@ -106,7 +107,11 @@ function Registers() {
 					</FormRow>
 					<div className="wcpos:flex wcpos:gap-2">
 						<Button type="submit" disabled={create.isPending}>{t('registers.create', 'Create register')}</Button>
-						<Button type="button" onClick={() => setAdding(false)} disabled={create.isPending}>{t('common.cancel', 'Cancel')}</Button>
+						<Button type="button" onClick={() => {
+							setName('');
+							setDefaultFloat('');
+							setAdding(false);
+						}} disabled={create.isPending}>{t('common.cancel', 'Cancel')}</Button>
 					</div>
 				</form>
 			)}

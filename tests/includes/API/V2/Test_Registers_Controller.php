@@ -65,13 +65,33 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** The Pro filter sees the final server identity before insertion. */
-	public function test_create_filter_receives_server_id_and_original_request(): void {
+	/** Default floats must fit the backing DECIMAL(19,4) column after normalization. */
+	public function test_default_float_rejects_normalized_overflow_on_create_and_update(): void {
+		$response = $this->post_register(
+			array(
+				'name' => 'Front',
+				'default_float' => '999999999999999.99999',
+			)
+		);
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+
+		$id = $this->post_register( array( 'name' => 'Front' ) )->get_data()['id'];
+		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $id );
+		$request->set_body_params( array( 'default_float' => '1000000000000000' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	/** The Pro filter sees, but cannot replace, the final server identity. */
+	public function test_create_filter_cannot_replace_server_id(): void {
 		$seen = null;
 		$filter = function ( $fields, $request ) use ( &$seen ) {
 			$seen = $fields['id'];
 			$this->assertFalse( ( new Register_Store() )->exists( $seen ) );
 			$this->assertSame( 'Front', $request['name'] );
+			$fields['id'] = wp_generate_uuid4();
 			$fields['store_id'] = 123;
 			return $fields;
 		};
