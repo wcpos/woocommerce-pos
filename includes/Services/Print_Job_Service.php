@@ -19,6 +19,7 @@ class Print_Job_Service {
 	const META_FORMAT     = '_wcpos_pj_format';
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
+	const META_PRINT_COUNT = '_wcpos_pj_print_count';
 	const META_UNCONFIRMED = '_wcpos_pj_unconfirmed';
 	const META_RETRIED_TO = '_wcpos_pj_retried_to';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
@@ -291,7 +292,20 @@ class Print_Job_Service {
 
 			if ( 'pdf' === $job['pn_kind'] ) {
 				try {
-					return self::in_band( ( new Template_Pdf_Service() )->render( $template, $order ) );
+					$pdf_service = new Template_Pdf_Service();
+					if ( $pdf_service->is_native( $template ) ) {
+						// A native document cannot carry the marking, so it is not counted.
+						return self::in_band( $pdf_service->render( $template, $order ) );
+					}
+					return self::in_band(
+						$this->render_counted(
+							$job,
+							$order,
+							static function ( array $data ) use ( $pdf_service, $template, $order ): string {
+								return $pdf_service->render( $template, $order, $data );
+							}
+						)
+					);
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
 						sprintf( 'Cloud print: PrintNode PDF render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
@@ -303,11 +317,13 @@ class Print_Job_Service {
 
 			if ( 'escpos' === $job['pn_kind'] ) {
 				try {
-					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control(
-						$template,
+					$drawer = $this->drawer_render_options( $job );
+					return $this->render_counted(
+						$job,
 						$order,
-						'escpos',
-						$this->drawer_render_options( $job )
+						static function ( array $data ) use ( $template, $order, $drawer ): array {
+							return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control( $template, $order, 'escpos', $drawer, $data );
+						}
 					);
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
@@ -345,11 +361,13 @@ class Print_Job_Service {
 			}
 
 			try {
-				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control(
-					$template,
+				$drawer = $this->drawer_render_options( $job );
+				return $this->render_counted(
+					$job,
 					$order,
-					$wire,
-					$this->drawer_render_options( $job )
+					static function ( array $data ) use ( $template, $order, $wire, $drawer ): array {
+						return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control( $template, $order, $wire, $drawer, $data );
+					}
 				);
 			} catch ( \Throwable $e ) {
 				// Defense in depth: never let a malformed template/payload bubble up
@@ -370,10 +388,17 @@ class Print_Job_Service {
 			}
 
 			try {
-				$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 				$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
 
-				return self::in_band( $adapter->transform( $data ) );
+				return self::in_band(
+					$this->render_counted(
+						$job,
+						$order,
+						static function ( array $data ) use ( $adapter ): string {
+							return $adapter->transform( $data );
+						}
+					)
+				);
 			} catch ( \Throwable $e ) {
 				// A stored job can carry a format the factory no longer supports
 				// (e.g. the removed fixed-layout starprnt placeholder). Fail closed
@@ -390,6 +415,58 @@ class Print_Job_Service {
 		$payload = base64_decode( (string) $job['payload'], true );
 
 		return self::in_band( false === $payload ? '' : $payload );
+	}
+
+	/**
+	 * Render a job under its print count: the count is reserved under the order lock
+	 * for the whole render and committed (on the order and on the job) only when the
+	 * render produced something, so a malformed template consumes nothing. A re-poll
+	 * of the same job re-uses the count it was given.
+	 *
+	 * If another print of the same order holds the lock for longer than the wait, the
+	 * job renders UNMARKED and uncounted rather than being lost: the cloud lanes treat
+	 * an empty body as a terminal failure, and a lost receipt is worse than one
+	 * missing from the audit count. Logged, so it is visible.
+	 *
+	 * @param array     $job    Job being rendered.
+	 * @param \WC_Order $order  Order being printed.
+	 * @param callable  $render function ( array $marked_data ): string|array — the branch's render.
+	 *
+	 * @return mixed The render result.
+	 */
+	private function render_counted( array $job, \WC_Order $order, callable $render ) {
+		$counter = new Receipt_Print_Counter();
+		$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$is_empty = static function ( $result ): bool {
+			return is_array( $result ) ? '' === (string) ( $result['body'] ?? '' ) : '' === (string) $result;
+		};
+		$count = (int) get_post_meta( (int) $job['id'], self::META_PRINT_COUNT, true );
+		if ( $count > 0 ) {
+			return $render( $counter->mark( $data, $count, $order ) );
+		}
+		try {
+			$reserved = 0;
+			$result   = $counter->count_after(
+				$order,
+				static function ( int $count ) use ( &$reserved, $order, $render, $counter, $data ) {
+					$reserved = $count;
+					return $render( $counter->mark( $data, $count, $order ) );
+				},
+				$is_empty
+			);
+			// The order's count is saved first (inside count_after); the job remembers
+			// its number only once that save is done, so a failed save cannot leave a
+			// job holding a number the order never took.
+			if ( ! $is_empty( $result ) ) {
+				update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $reserved );
+			}
+			return $result;
+		} catch ( Print_Counter_Busy_Exception $e ) {
+			\WCPOS\WooCommercePOS\Logger::log(
+				sprintf( 'Cloud print: print counter busy for order %d (job %d); printed unmarked and uncounted.', $order->get_id(), (int) $job['id'] )
+			);
+			return $render( $data );
+		}
 	}
 
 	/**

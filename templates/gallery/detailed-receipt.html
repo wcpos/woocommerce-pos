@@ -66,6 +66,7 @@ inline styles on the wrapping element.
 			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{i18n.date}} {{order.created.datetime}}</div>
 		</div>
 	</header>
+	{{#fiscal.is_reprint}}<div style="text-align: center; font-weight: bold;">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</div>{{/fiscal.is_reprint}}
 
 	<!-- ── Bill-to / Ship-to / Order ─────────────── -->
 	<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 22px;">
@@ -307,6 +308,12 @@ inline styles on the wrapping element.
 			</div>
 		</div>
 	</div>
+
+	{{#fiscal.qr_payload}}<div style="text-align: center;"><barcode type="qrcode" scale="2">{{fiscal.qr_payload}}</barcode></div>{{/fiscal.qr_payload}}
+	{{#register.name}}<div style="text-align: center; font-size: 11px; color: #6b7280;">{{i18n.register}}: {{register.name}}</div>{{/register.name}}
+	{{#fiscal.receipt_number}}<div style="text-align: center; font-size: 11px; color: #6b7280;">#{{fiscal.receipt_number}}</div>{{/fiscal.receipt_number}}
+	{{#fiscal.sale_time.datetime}}<div style="text-align: center; font-size: 11px; color: #6b7280;">{{i18n.sale_time}}: {{fiscal.sale_time.datetime}}</div>{{/fiscal.sale_time.datetime}}
+	{{#software.name}}<div style="text-align: center; font-size: 11px; color: #6b7280;">{{software.name}} {{software.plugin_version}}{{#software.app_version}} · {{software.app_version}}{{/software.app_version}}</div>{{/software.name}}
 
 	<!-- ── Personal note (italic), centered ─────────────── -->
 	<div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; font-style: italic;">

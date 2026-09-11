@@ -2357,6 +2357,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$order = OrderHelper::create_order();
 		$order->update_meta_data( '_woocommerce_pos_version', 'trusted-version' );
+		$order->update_meta_data( '_wcpos_receipt_print_count', 2 );
 		$order->save();
 
 		$result = $this->updateOrder(
@@ -2376,6 +2377,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 					array(
 						'key'   => '_woocommerce_pos_version',
 						'value' => 'forged-version',
+					),
+					array(
+						'key'   => '_wcpos_receipt_print_count',
+						'value' => '999',
 					),
 					array(
 						'key'   => 'custom',
@@ -2398,6 +2403,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertNotContains( '_pos_user', $keys );
 		$this->assertNotContains( '_pos_store', $keys );
 		$this->assertNotContains( '_woocommerce_pos_version', $keys );
+		$this->assertNotContains( '_wcpos_receipt_print_count', $keys );
+		$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
 		$this->assertContains( 'custom', $keys );
 		$this->assertArrayNotHasKey( 'created_via', $body );
 		$this->assertSame( 'trusted-version', wc_get_order( $order->get_id() )->get_meta( '_woocommerce_pos_version' ) );
