@@ -63,8 +63,11 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{/order.wc_status}}
 			{{/order.status_label}}
 			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.receipt}}{{/fiscal.document_label}}</div>
-			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
-			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
+			{{#fiscal.is_refund_document}}
+			{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
+			{{/fiscal.is_refund_document}}
+			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>
+			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</div>
 			{{#cashier.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.cashier}}: {{cashier.name}}</div>{{/cashier.name}}
 			{{#customer.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.customer}}: {{customer.name}}</div>{{/customer.name}}
 			{{#customer.tax_ids}}<div style="color: #6b7280; font-size: 11px; margin-top: 2px;">{{#label}}{{label}} {{/label}}{{value}}</div>{{/customer.tax_ids}}
@@ -160,7 +163,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<!-- ── Payments ─────────────── -->
 	{{#payments.0}}
 	<div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb;">
-		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</div>
 		{{#payments}}
 		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span><strong>{{method_title}}</strong></span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
 		{{#tendered}}<div style="font-size: 11px; color: #6b7280; padding-inline-start: 4px; display: flex; justify-content: space-between;"><span>{{i18n.tendered}}</span><span style="font-variant-numeric: tabular-nums;">{{tendered_display}}</span></div>{{/tendered}}

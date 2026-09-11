@@ -8,6 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use WCPOS\WooCommercePOS\Templates\Receipt;
 use WC_REST_Unit_Test_Case;
@@ -20,6 +23,193 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt extends WC_REST_Unit_Test_Case {
+	/**
+	 * Every receipt must identify the refund without labelling sales as corrections.
+	 *
+	 * @dataProvider refund_receipt_templates
+	 * @param string $key Template key.
+	 */
+	public function test_refund_template_renders_credit_note_and_sale_without_corrects( string $key ): void {
+		list( $order, $refund ) = $this->create_refund_order();
+		$builder = new Receipt_Data_Builder();
+		$receipt = new Receipt( $order->get_id() );
+		if ( 'receipt.php' === $key ) {
+			$template = array( 'engine' => 'legacy-php', 'file_path' => \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/receipt.php' );
+		} else {
+			$template = Gallery_Registry::all()[ $key ];
+			$extension = 'thermal' === $template['engine'] ? 'xml' : 'html';
+			$template['content'] = file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $key . '.' . $extension );
+		}
+		$data = $builder->build_refund_document( $order, $refund, 7, 'SALE-1' );
+		$output = $this->invoke_render_custom_template( $receipt, $template, $order, $data );
+		foreach ( array( 'Refund', 'Corrects', 'SALE-1', 'Widget' ) as $text ) {
+			$this->assertStringContainsString( $text, $output );
+		}
+		// Invoice retains a secondary sale number in its payment reference section.
+		$number_output = 'invoice' === $key ? explode( '</header>', $output )[0] : $output;
+		$this->assertStringContainsString( '#7</', $number_output );
+		$this->assertStringNotContainsString( '#' . $order->get_order_number() . '</', $number_output );
+		$this->assertStringContainsString( $data['fiscal']['sale_time']['datetime'], $output );
+		if ( 'invoice' === $key ) {
+			$this->assertStringNotContainsString( 'Paid via', $output );
+		}
+		if ( 'narrow-receipt' !== $key ) {
+			$this->assertStringContainsString( 'Refunded to', $output );
+		}
+		$sale_output = $this->invoke_render_custom_template( $receipt, $template, $order, $builder->build( $order, 'live' ) );
+		$this->assertStringNotContainsString( 'Corrects', $sale_output );
+		$this->assertStringNotContainsString( 'Refunded to', $sale_output );
+	}
+
+	/** Receipt templates only; non-receipt documents deliberately excluded. */
+	public static function refund_receipt_templates(): array {
+		return array_map(
+			static function ( $key ) { return array( $key ); },
+			array(
+				'receipt.php',
+				'thermal-detailed-58mm',
+				'thermal-detailed-80mm',
+				'thermal-simple-58mm',
+				'thermal-simple-80mm',
+				'thermal-simple-80mm-rtl',
+				'detailed-receipt',
+				'invoice',
+				'minimal-receipt',
+				'narrow-receipt',
+				'standard-receipt',
+				'standard-receipt-rtl',
+			)
+		);
+	}
+
+	/** The actual page must use the frozen payload, not rebuild the edited order. */
+	public function test_refund_page_renders_frozen_document_and_rejects_invalid_documents(): void {
+		list( $order, $refund ) = $this->create_refund_order();
+		$payload = ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, 7, 'SALE-1' );
+		$payload['order']['number'] = 'FROZEN-REFUND';
+		$record = ( new Fiscal_Record_Store() )->record( array( 'type' => 'refund', 'order_id' => $order->get_id(), 'refund_id' => $refund->get_id(), 'payload' => $payload ) );
+		$this->assertIsArray( $record );
+		$order->set_customer_note( 'Edited after refund' );
+		$order->save();
+		$params = array( 'key' => $order->get_order_key(), 'template' => 'standard-receipt', 'document' => 'refund:' . $refund->get_id(), 'mode' => 'ignored' );
+		$page = $this->render_receipt_page( $order->get_id(), $params );
+		$this->assertNull( $page['error'] );
+		foreach ( array( '#7</', 'Refund', 'Corrects', 'SALE-1', 'Widget' ) as $text ) {
+			$this->assertStringContainsString( $text, $page['output'] );
+		}
+		$this->assertStringNotContainsString( 'Edited after refund', $page['output'] );
+
+		$pdf_data = null;
+		$capture_pdf = static function ( $data ) use ( &$pdf_data ) {
+			$pdf_data = $data;
+			throw new \Error( 'Receipt page stopped for test.' );
+		};
+		add_filter( 'woocommerce_pos_receipt_pdf_data', $capture_pdf );
+		try {
+			$params['format'] = 'pdf';
+			$this->render_receipt_page( $order->get_id(), $params );
+			$this->assertIsArray( $pdf_data );
+			$this->assertSame( 'FROZEN-REFUND', $pdf_data['order']['number'] );
+			$params['mode'] = 'preview';
+			$pdf_data = null;
+			$this->render_receipt_page( $order->get_id(), $params );
+			$this->assertNull( $pdf_data );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_pdf_data', $capture_pdf );
+			unset( $params['format'] );
+		}
+
+		$params['mode'] = 'preview';
+		$page = $this->render_receipt_page( $order->get_id(), $params );
+		$this->assertNull( $page['error'] );
+		$this->assertStringNotContainsString( '#7</', $page['output'] );
+		unset( $params['mode'] );
+		$missing = $this->render_receipt_page( 0, $params );
+		$this->assertNotNull( $missing['error'] );
+		$params['document'] = 'refund:1junk';
+		$page = $this->render_receipt_page( $order->get_id(), $params );
+		$this->assertSame( 'Invalid receipt document.', $page['error'] );
+		$this->assertSame( 400, $page['status'] );
+		$other = OrderHelper::create_order();
+		$params['key'] = $other->get_order_key();
+		$params['document'] = 'refund:' . $refund->get_id();
+		$page = $this->render_receipt_page( $other->get_id(), $params );
+		$this->assertSame( 'Receipt document not found.', $page['error'] );
+		$this->assertSame( 404, $page['status'] );
+	}
+
+	/** Build real paid POS and refund line fixtures for all receipt surfaces. */
+	private function create_refund_order(): array {
+		$order = OrderHelper::create_order();
+		$order->remove_order_items();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_date_created( '2025-01-02 10:00:00' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->set_payment_method_title( 'Cash' );
+		$item = new \WC_Order_Item_Product();
+		$item->set_name( 'Widget' );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( 5 );
+		$item->set_total( 5 );
+		$order->add_item( $item );
+		$order->calculate_totals();
+		$order->payment_complete();
+		$order->save();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_date_created( '2025-02-03 11:30:00' );
+		$refund->set_amount( 5 );
+		$line = new \WC_Order_Item_Product();
+		$line->set_name( 'Widget' );
+		$line->set_quantity( 1 );
+		$line->set_subtotal( -5 );
+		$line->set_total( -5 );
+		$refund->add_item( $line );
+		$refund->update_meta_data( '_wcpos_refund_allocations', array( array( 'payment_id' => 'refund-payment', 'method_id' => 'pos_cash', 'amount' => '5.00' ) ) );
+		$refund->save();
+		return array( $order, $refund );
+	}
+
+	/**
+	 * Exercise get_template(), stopping at its completion hook before exit.
+	 *
+	 * @param int   $order_id Requested order.
+	 * @param array $params Query parameters.
+	 */
+	private function render_receipt_page( int $order_id, array $params ): array {
+		$original_get = $_GET;
+		$buffer_level = ob_get_level();
+		$page = array( 'output' => '', 'error' => null, 'status' => null );
+		$stop = static function () { throw new \Error( 'Receipt page stopped for test.' ); };
+		$die = static function () use ( &$page, $stop ) {
+			return static function ( $message, $title = '', $args = array() ) use ( &$page, $stop ) {
+				$page['error'] = $message;
+				$page['status'] = $args['response'] ?? null;
+				$stop();
+			};
+		};
+		add_action( 'woocommerce_pos_after_template_render', $stop );
+		add_filter( 'wp_die_handler', $die );
+		$_GET = $params;
+		ob_start();
+		try {
+			( new Receipt( $order_id ) )->get_template();
+		} catch ( \Error $e ) {
+			if ( 'Receipt page stopped for test.' !== $e->getMessage() ) {
+				throw $e;
+			}
+			$page['output'] = (string) ob_get_contents();
+		} finally {
+			while ( ob_get_level() > $buffer_level ) {
+				ob_end_clean();
+			}
+			$_GET = $original_get;
+			remove_action( 'woocommerce_pos_after_template_render', $stop );
+			remove_filter( 'wp_die_handler', $die );
+		}
+		return $page;
+	}
+
 	/** Live rendering must carry the persisted fiscal identity through the real builder. */
 	public function test_live_render_uses_frozen_identity(): void {
 		$order = OrderHelper::create_order();

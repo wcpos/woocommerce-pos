@@ -53,14 +53,18 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{/store.address_lines.0}}
 	</div>
 
+	{{#fiscal.is_refund_document}}
+	<div style="text-align: center; font-weight: 700;">{{fiscal.document_label}}</div>
+	{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
+	{{/fiscal.is_refund_document}}
 	<!-- ── Order band: bold double border ─────────────── -->
 	<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-top: 2px solid #111827; border-bottom: 2px solid #111827; font-size: 13px;">
 		<div>
 			<span style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-right: 6px;">{{i18n.order}}</span>
-			<strong>#{{order.number}}</strong>
+			<strong>#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</strong>
 		</div>
 		<div style="color: #6b7280;">
-			{{order.created.datetime}}{{#cashier.name}} · {{i18n.cashier}}: {{cashier.name}}{{/cashier.name}}{{#customer.name}} · {{i18n.customer}}: {{customer.name}}{{/customer.name}}
+			{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}{{#cashier.name}} · {{i18n.cashier}}: {{cashier.name}}{{/cashier.name}}{{#customer.name}} · {{i18n.customer}}: {{customer.name}}{{/customer.name}}
 		</div>
 	</div>
 
@@ -122,7 +126,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<!-- ── Payments (bordered band) ─────────────── -->
 	{{#payments.0}}
 	<div style="margin-top: 24px; padding: 14px 0; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
-		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</div>
 		{{#payments}}
 		<div style="display: flex; justify-content: space-between; align-items: baseline;">
 			<div>

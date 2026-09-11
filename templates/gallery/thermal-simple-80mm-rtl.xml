@@ -39,13 +39,19 @@ these star columns with hard-coded widths.
   </align>
   <line />
 
+  {{#fiscal.is_refund_document}}
+  <align mode="center">
+    <bold><text>{{fiscal.document_label}}</text></bold>
+    {{#fiscal.corrects}}<text>{{i18n.corrects}} {{fiscal.corrects}}</text>{{/fiscal.corrects}}
+  </align>
+  {{/fiscal.is_refund_document}}
   <!-- ── Order info (label on the right, value on the left) ─────────────── -->
   <row>
-    <col width="*">#{{order.number}}</col>
+    <col width="*">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</col>
     <col width="12" align="right">:{{i18n.order}}</col>
   </row>
   <row>
-    <col width="*">{{order.created.datetime}}</col>
+    <col width="*">{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</col>
     <col width="12" align="right">:{{i18n.date}}</col>
   </row>
   {{#cashier.name}}
@@ -142,7 +148,7 @@ these star columns with hard-coded widths.
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
   <line style="dashed" />
-  <bold><text>{{i18n.paid}}</text></bold>
+  <bold><text>{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</text></bold>
   {{/payments.0}}
   {{#payments}}
   <row>

@@ -233,6 +233,8 @@ class Receipt_I18n_Labels {
 			'register'               => /* translators: Fiscal receipt label for the till (register) that rang the sale. */ __( 'Register', 'woocommerce-pos' ),
 			'sale_time'              => /* translators: Fiscal receipt label for the time the sale was rung at the till, in the till's own zone. */ __( 'Sale time', 'woocommerce-pos' ),
 			'document_refund'        => /* translators: Fiscal receipt heading for a refund document (credit note). */ __( 'Refund', 'woocommerce-pos' ),
+			'corrects'               => /* translators: Receipt label preceding the identity of the sale corrected by a refund. */ __( 'Corrects', 'woocommerce-pos' ),
+			'refunded_to'            => /* translators: Refund receipt payment-section heading identifying where money was returned. */ __( 'Refunded to', 'woocommerce-pos' ),
 			'document_void'          => /* translators: Fiscal receipt heading for a void document (a sale cancelled before completion). */ __( 'Void', 'woocommerce-pos' ),
 			'document_cancellation'  => /* translators: Fiscal receipt heading for a cancellation document (a completed sale later cancelled). */ __( 'Cancelled', 'woocommerce-pos' ),
 			'software'               => /* translators: Fiscal receipt label preceding the software name and version that produced the receipt. */ __( 'Software', 'woocommerce-pos' ),

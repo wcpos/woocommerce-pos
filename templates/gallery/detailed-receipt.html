@@ -62,8 +62,11 @@ inline styles on the wrapping element.
 			</div>
 			{{/order.wc_status}}
 			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase; margin-top: 8px;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</div>
-			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
-			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{i18n.date}} {{order.created.datetime}}</div>
+			{{#fiscal.is_refund_document}}
+			{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
+			{{/fiscal.is_refund_document}}
+			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>
+			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{i18n.date}} {{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</div>
 		</div>
 	</header>
 	{{#fiscal.is_reprint}}<div style="text-align: center; font-weight: bold;">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</div>{{/fiscal.is_reprint}}
@@ -286,7 +289,7 @@ inline styles on the wrapping element.
 	<!-- ── Payments + Order barcode ─────────────── -->
 	<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; align-items: start;">
 		<div>
-			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
+			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</div>
 			<div style="font-size: 12px;">
 				{{#payments}}
 				<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span><strong>{{method_title}}</strong></span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>

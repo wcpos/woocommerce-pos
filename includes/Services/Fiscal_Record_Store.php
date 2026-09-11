@@ -215,6 +215,21 @@ final class Fiscal_Record_Store {
 	}
 
 	/**
+	 * Resolve a frozen refund document belonging to an order.
+	 *
+	 * @param int    $order_id Parent order ID.
+	 * @param string $document Document selector.
+	 * @return array|\WP_Error
+	 */
+	public function resolve_document( int $order_id, string $document ) {
+		if ( ! preg_match( '/\Arefund:([1-9][0-9]*)\z/', $document, $matches ) ) {
+			return new \WP_Error( 'wcpos_receipt_invalid_document', __( 'Invalid receipt document.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		$record = $this->find_refund( $order_id, (int) $matches[1] );
+		return $record ? $record['payload'] : new \WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+	}
+
+	/**
 	 * Resolve an internal equality lookup.
 	 *
 	 * @param array $fields Class-owned column names and values.

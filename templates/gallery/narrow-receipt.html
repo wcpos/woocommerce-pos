@@ -39,16 +39,19 @@ that would smear or waste ink on thermal/B&W printers.
 
 	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
 
-	<div style="text-align: center; font-weight: 700; margin-bottom: 6px;">{{i18n.receipt}}</div>
+	<div style="text-align: center; font-weight: 700; margin-bottom: 6px;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.receipt}}{{/fiscal.document_label}}</div>
+	{{#fiscal.is_refund_document}}
+	{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
+	{{/fiscal.is_refund_document}}
 
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 2px;">
 		<tr>
 			<td style="text-align: left;">{{i18n.order}}</td>
-			<td style="text-align: right;">#{{order.number}}</td>
+			<td style="text-align: right;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</td>
 		</tr>
 		<tr>
 			<td style="text-align: left;">{{i18n.date}}</td>
-			<td style="text-align: right;">{{order.created.datetime}}</td>
+			<td style="text-align: right;">{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</td>
 		</tr>
 		{{#cashier.name}}
 		<tr>
