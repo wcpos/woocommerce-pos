@@ -38,6 +38,12 @@ class Store_With_Test_Tax_Ids extends Store {
 class Test_Store_Abstract extends WP_UnitTestCase {
 	private $store;
 	private $original_default_country;
+	/**
+	 * Original WooCommerce tax location setting.
+	 *
+	 * @var mixed
+	 */
+	private $original_tax_based_on;
 	private $original_general_settings;
 	private $original_pos_store_name;
 	private $original_pos_store_phone;
@@ -46,6 +52,8 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 
 	public function setUp(): void {
 		parent::setUp();
+		$this->original_tax_based_on = get_option( 'woocommerce_tax_based_on', null );
+		delete_option( 'woocommerce_tax_based_on' );
 		$this->original_default_country         = get_option( 'woocommerce_default_country', null );
 		$this->original_general_settings        = get_option( 'woocommerce_pos_settings_general', null );
 		$this->original_pos_store_name          = get_option( 'woocommerce_pos_store_name', null );
@@ -61,6 +69,11 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 	}
 
 	public function tearDown(): void {
+		if ( null === $this->original_tax_based_on ) {
+			delete_option( 'woocommerce_tax_based_on' );
+		} else {
+			update_option( 'woocommerce_tax_based_on', $this->original_tax_based_on );
+		}
 		update_option( 'woocommerce_default_country', $this->original_default_country );
 		if ( null === $this->original_general_settings ) {
 			delete_option( 'woocommerce_pos_settings_general' );
@@ -388,6 +401,42 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$tax_based_on = $this->store->get_tax_based_on();
 		$this->assertIsString( $tax_based_on );
 		$this->assertEquals( 'base', $tax_based_on ); // Default value
+	}
+
+	/**
+	 * WooCommerce's billing setting becomes the store default.
+	 */
+	public function test_get_tax_based_on_billing_returns_billing(): void {
+		update_option( 'woocommerce_tax_based_on', 'billing' );
+		$store = new Store();
+		$this->assertSame( 'billing', $store->get_tax_based_on() );
+	}
+
+	/**
+	 * WooCommerce's shipping setting becomes the store default.
+	 */
+	public function test_get_tax_based_on_shipping_returns_shipping(): void {
+		update_option( 'woocommerce_tax_based_on', 'shipping' );
+		$store = new Store();
+		$this->assertSame( 'shipping', $store->get_tax_based_on() );
+	}
+
+	/**
+	 * Unknown tax location settings fall back to the store base.
+	 */
+	public function test_get_tax_based_on_unknown_returns_base(): void {
+		update_option( 'woocommerce_tax_based_on', 'nonsense' );
+		$store = new Store();
+		$this->assertSame( 'base', $store->get_tax_based_on() );
+	}
+
+	/**
+	 * Empty tax location settings fall back to the store base.
+	 */
+	public function test_get_tax_based_on_empty_returns_base(): void {
+		update_option( 'woocommerce_tax_based_on', '' );
+		$store = new Store();
+		$this->assertSame( 'base', $store->get_tax_based_on() );
 	}
 
 	public function test_get_shipping_tax_class(): void {
