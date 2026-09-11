@@ -291,6 +291,17 @@ class Registers_Controller extends WP_REST_Controller {
 						),
 					),
 				),
+				'unknown_sessions' => array(
+					'type' => 'array',
+					'items' => array(
+						'type' => 'object',
+						'properties' => array(
+							'session_id' => array( 'type' => 'string' ),
+							'orders' => array( 'type' => 'integer' ),
+							'order_ids' => $samples['order_ids'],
+						),
+					),
+				),
 				'unregistered' => array(
 					'type' => 'array',
 					'items' => array(

@@ -326,7 +326,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
-	 * uninstall.php cannot load plugin code, so it mirrors the analytics count
+	 * Uninstall.php cannot load plugin code, so it mirrors the analytics count
 	 * bands by hand. Pin the copy against the constant it mirrors.
 	 */
 	public function test_uninstall_count_bands_match_the_analytics_profile(): void {
@@ -419,20 +419,25 @@ class Test_Uninstall extends WP_UnitTestCase {
 	 * dropped only by a full wipe.
 	 */
 	public function test_registers_table_survives_default_uninstall_and_goes_with_remove_all(): void {
-		global $wpdb;
-		$store = new \WCPOS\WooCommercePOS\Services\Register_Store();
-		$store->install();
-		$table = $wpdb->prefix . 'wcpos_registers';
-		$this->assertTrue( Health::table_exists( $table ), 'Precondition: registers table installed' );
-
-		$this->run_uninstall( false );
-		$this->assertTrue( Health::table_exists( $table ), 'A plain uninstall keeps the registers table' );
-
-		$this->run_uninstall( true );
-		$this->assertFalse( Health::table_exists( $table ), 'A full wipe drops the registers table' );
-
-		// Restore for the classes that run after this one.
-		$store->install();
+		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Store(), new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() );
+		try {
+			foreach ( $stores as $store ) {
+				$store->install();
+				$this->assertTrue( Health::table_exists( $store->table_name() ) );
+			}
+			$this->run_uninstall( false );
+			foreach ( $stores as $store ) {
+				$this->assertTrue( Health::table_exists( $store->table_name() ), 'Default uninstall preserves bookkeeping.' );
+			}
+			$this->run_uninstall( true );
+			foreach ( $stores as $store ) {
+				$this->assertFalse( Health::table_exists( $store->table_name() ), 'Full wipe removes bookkeeping.' );
+			}
+		} finally {
+			foreach ( $stores as $store ) {
+				$store->install();
+			}
+		}
 	}
 
 	/**
@@ -896,5 +901,4 @@ class Test_Uninstall extends WP_UnitTestCase {
 			$store->install();
 		}
 	}
-
 }

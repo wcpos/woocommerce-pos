@@ -36,10 +36,15 @@ final class Provenance_Health {
 			$orders[ (int) $row['order_id'] ][ $row['meta_key'] ] = $row['meta_value'];
 		}
 		$groups = array();
+		$sessions = array();
 		$store_ids = null === $store_ids ? null : array_map( 'strval', $store_ids );
 		foreach ( $orders as $id => $meta ) {
 			if ( null !== $store_ids && ! in_array( $meta['_pos_store'] ?? '', $store_ids, true ) ) {
 				continue;
+			}
+			$session = strtolower( $meta['_wcpos_session'] ?? '' );
+			if ( '' !== $session ) {
+				$sessions[ $session ][] = $id;
 			}
 			$register = strtolower( $meta['_wcpos_register'] ?? '' );
 			if ( '' !== $register ) {
@@ -52,6 +57,7 @@ final class Provenance_Health {
 			'truncated' => count( $orders ) === self::ORDER_CAP,
 			'registers' => array(),
 			'unregistered' => array(),
+			'unknown_sessions' => array(),
 		);
 		foreach ( $registers as $register ) {
 			$report['registers'][] = $this->register_report( $register, $groups[ $register['id'] ] ?? array() );
@@ -64,6 +70,16 @@ final class Provenance_Health {
 				'order_ids' => $ids,
 				'order_numbers' => array_map( array( $this, 'order_number' ), $ids ),
 			);
+		}
+		$session_store = new Register_Session_Store();
+		foreach ( $sessions as $id => $order_ids ) {
+			if ( ! $session_store->get( $id ) ) {
+				$report['unknown_sessions'][] = array(
+					'session_id' => $id,
+					'orders' => count( $order_ids ),
+					'order_ids' => array_slice( $order_ids, 0, self::SAMPLE_LIMIT ),
+				);
+			}
 		}
 		return $report;
 	}
@@ -89,10 +105,10 @@ final class Provenance_Health {
 				FROM (SELECT o.id FROM {$orders} o
 					WHERE o.{$type} = 'shop_order' AND o.{$date} >= %s
 					AND EXISTS (SELECT 1 FROM {$meta} stamp
-						WHERE stamp.{$foreign_key} = o.id AND stamp.meta_key = '_wcpos_register')
+						WHERE stamp.{$foreign_key} = o.id AND stamp.meta_key IN ('_wcpos_register', '_wcpos_session'))
 					ORDER BY o.{$date} DESC, o.id DESC LIMIT %d) recent
 				INNER JOIN {$meta} m ON m.{$foreign_key} = recent.id
-				WHERE m.meta_key IN ('_wcpos_register', '_wcpos_till', '_wcpos_sale_counter', '_wcpos_sale_time', '_wcpos_sale_received_gmt', '_pos_store')
+				WHERE m.meta_key IN ('_wcpos_session', '_wcpos_register', '_wcpos_till', '_wcpos_sale_counter', '_wcpos_sale_time', '_wcpos_sale_received_gmt', '_pos_store')
 				ORDER BY recent.id DESC",
 				gmdate( 'Y-m-d H:i:s', time() - self::WINDOW_DAYS * DAY_IN_SECONDS ),
 				self::ORDER_CAP
