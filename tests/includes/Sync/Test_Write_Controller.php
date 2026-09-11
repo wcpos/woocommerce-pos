@@ -498,6 +498,36 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
 	}
 
+	public function test_payment_completing_between_pre_read_and_write_refuses_provenance_with_a_note(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment() );
+		// Simulate a gateway completing the order after the writer's pre-read.
+		$race = static function ( $incoming ) use ( $order ) {
+			if ( $incoming instanceof \WC_Order && $incoming->get_id() === $order->get_id() ) {
+				$incoming->set_status( 'completed' );
+			}
+			return $incoming;
+		};
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
+		try {
+			$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '77', '_wcpos_register' => wp_generate_uuid4() ) ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$notes = array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed after the sale:' ) ) );
+		$this->assertCount( 1, $notes );
+		$this->assertStringContainsString( '_wcpos_sale_counter', $notes[0] );
+	}
+
 	public function test_create_far_future_sale_time_is_kept(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$tuple  = array( '_wcpos_sale_time' => '2031-06-01T12:00:00+02:00' );
