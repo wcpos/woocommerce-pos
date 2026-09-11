@@ -8,6 +8,7 @@ use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\BypassFinalsHack;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\StaticMockerHack;
 use Automattic\WooCommerce\Testing\Tools\DependencyManagement\MockableLegacyProxy;
+use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Visibility_Observer;
@@ -51,6 +52,11 @@ class Bootstrap {
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
 		require $this->tests_dir . '/includes/bootstrap.php';
+
+		// Core installs fresh role tables in a separate process. Apply each plugin's
+		// activation roles to those tables instead of inheriting pre-install state.
+		\WC_Install::create_roles();
+		( new Activator() )->single_activate( false );
 		$this->detach_bootstrap_sync_observers();
 		$this->includes();
 

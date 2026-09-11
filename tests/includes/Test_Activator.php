@@ -67,6 +67,22 @@ class Test_Activator extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The fresh test database receives the same plugin roles as an activated site.
+	 */
+	public function test_bootstrap_installs_plugin_role_capabilities(): void {
+		$administrator = get_role( 'administrator' );
+		$shop_manager  = get_role( 'shop_manager' );
+
+		$this->assertNotNull( $administrator );
+		$this->assertTrue( $administrator->has_cap( 'manage_woocommerce' ) );
+		$this->assertTrue( $administrator->has_cap( 'access_woocommerce_pos' ) );
+		$this->assertNotNull( $shop_manager );
+		$this->assertTrue( $shop_manager->has_cap( 'manage_woocommerce' ) );
+		$this->assertTrue( $shop_manager->has_cap( 'access_woocommerce_pos' ) );
+		$this->assertNotNull( get_role( 'cashier' ) );
+	}
+
+	/**
 	 * Cashiers can create and edit catalog records by default, but cannot delete them.
 	 *
 	 * @covers ::create_pos_roles
