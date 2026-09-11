@@ -23,6 +23,8 @@ class Receipt_Payload_Assembler {
 		return array(
 			'order'              => $sections['order'],
 			'store'              => $sections['store'],
+			'software'           => $sections['software'],
+			'register'           => $sections['register'],
 			'cashier'            => $sections['cashier'],
 			'customer'           => $sections['customer'],
 			'lines'              => $sections['lines'],
@@ -49,6 +51,7 @@ class Receipt_Payload_Assembler {
 	 * @return array<string,mixed>
 	 */
 	public static function fiscal( array $values ): array {
+		$document_type = $values['document_type'] ?? 'sale';
 		return array(
 			'immutable_id'      => $values['immutable_id'],
 			'receipt_number'    => $values['receipt_number'],
@@ -62,6 +65,18 @@ class Receipt_Payload_Assembler {
 			'is_reprint'        => $values['is_reprint'],
 			'reprint_count'     => $values['reprint_count'],
 			'extra_fields'      => $values['extra_fields'],
+			'document_type'     => $document_type,
+			'sale_time'         => $values['sale_time'] ?? null,
+			'sale_tz'           => $values['sale_tz'] ?? '',
+			'sale_counter'      => $values['sale_counter'] ?? null,
+			'received_at'       => $values['received_at'] ?? null,
+			'corrects'          => $values['corrects'] ?? '',
+			'is_sale_document'         => 'sale' === $document_type,
+			'is_refund_document'       => 'refund' === $document_type,
+			'is_void_document'         => 'void' === $document_type,
+			'is_cancellation_document' => 'cancellation' === $document_type,
+			'is_closure_document'      => 'closure' === $document_type,
+			'is_x_report'              => 'x_report' === $document_type,
 		);
 	}
 }

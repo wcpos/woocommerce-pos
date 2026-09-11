@@ -17,6 +17,30 @@ use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
  */
 class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
+	/** Live rendering must carry the persisted fiscal identity through the real builder. */
+	public function test_live_render_uses_frozen_identity(): void {
+		$order = OrderHelper::create_order();
+		$snapshot = ( new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder() )->build( $order, 'fiscal' );
+		$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
+		$store = \WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store::instance();
+		$store->persist_snapshot( $order->get_id(), $snapshot );
+		$number = $store->get_snapshot( $order->get_id() )['fiscal']['receipt_number'];
+		$template = array(
+			'engine' => 'logicless',
+			'content' => '<p style="font-family: Helvetica">ID:{{fiscal.receipt_number}} {{fiscal.qr_payload}}</p>',
+		);
+		$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+		$this->assertStringStartsWith( '%PDF-', $pdf );
+		preg_match_all( '/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $streams );
+		$output = '';
+		foreach ( $streams[1] as $stream ) {
+			$decoded = @gzuncompress( $stream );
+			$output .= false === $decoded ? $stream : $decoded;
+		}
+		$this->assertStringContainsString( 'FROZEN-QR-243', $output );
+		$this->assertStringContainsString( 'ID:' . $number, $output );
+	}
+
 	/**
 	 * It renders a thermal template for an order into PDF bytes.
 	 */

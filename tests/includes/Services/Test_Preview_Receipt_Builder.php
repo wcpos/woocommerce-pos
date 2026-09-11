@@ -242,6 +242,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 			$this->assertEquals( 'es_ES', $data['presentation_hints']['locale'] );
 			$this->assertEquals( $expected_created, $data['order']['created'] );
+			$this->assertStringNotContainsString( 'am', strtolower( $data['fiscal']['sale_time']['time'] ) );
 			$normalized_time = strtolower( $data['order']['created']['time'] );
 			$this->assertStringNotContainsString( 'am', $normalized_time );
 			$this->assertStringNotContainsString( 'pm', $normalized_time );
@@ -273,6 +274,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$before = time();
 			$data   = $this->builder->build( $store );
 			$after  = time();
+			$this->assertSame( '2024-01-16', $data['fiscal']['received_at']['date_ymd'] );
 
 			$expected_store_dates = array_unique(
 				array(
@@ -1126,6 +1128,17 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	public function test_build_returns_fiscal_with_all_fields(): void {
 		$data   = $this->builder->build();
 		$fiscal = $data['fiscal'];
+		$this->assertSame( 'WCPOS', $data['software']['name'] );
+		$this->assertNotEmpty( $data['software']['plugin_version'] );
+		$this->assertNotEmpty( $data['software']['app_version'] );
+		$this->assertNotEmpty( $data['register']['name'] );
+		$this->assertSame( 'sale', $fiscal['document_type'] );
+		$this->assertTrue( $fiscal['is_sale_document'] );
+		$this->assertSame( 'Europe/Madrid', $fiscal['sale_tz'] );
+		$this->assertStringContainsString( '11:30', $fiscal['sale_time']['time'] );
+		$this->assertIsArray( $fiscal['received_at'] );
+		$this->assertSame( 42, $fiscal['sale_counter'] );
+		$this->assertSame( '', $fiscal['corrects'] );
 
 		// Existing fields.
 		$this->assertArrayHasKey( 'immutable_id', $fiscal );

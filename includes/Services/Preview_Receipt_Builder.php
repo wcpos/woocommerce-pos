@@ -831,6 +831,10 @@ class Preview_Receipt_Builder {
 
 		$fiscal = Receipt_Payload_Assembler::fiscal(
 			array(
+				'sale_time' => Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15T10:30:00Z' ), new \DateTimeZone( 'Europe/Madrid' ), $date_locale ),
+				'sale_tz' => 'Europe/Madrid',
+				'sale_counter' => 42,
+				'received_at' => Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15T10:35:00Z' ), $date_timezone, $date_locale ),
 				'immutable_id'      => '12345:42',
 				'receipt_number'    => '00042',
 				'sequence'          => 42,
@@ -859,6 +863,17 @@ class Preview_Receipt_Builder {
 			array(
 				'order'              => $order,
 				'store'              => $store,
+				'software'           => array(
+					'name' => 'WCPOS',
+					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+					'app_version' => '1.8.7',
+					'app_build' => '42',
+					'platform' => 'ios',
+				),
+				'register'           => array(
+					'id' => 'e705c930-233f-4c8a-b8af-5794ab979d81',
+					'name' => 'Front till',
+				),
 				'cashier'            => $cashier,
 				'customer'           => $customer,
 				'lines'              => $lines,

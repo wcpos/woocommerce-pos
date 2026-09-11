@@ -23,6 +23,8 @@ class Receipt_Data_Schema {
 	const REQUIRED_KEYS = array(
 		'order',
 		'store',
+		'software',
+		'register',
 		'cashier',
 		'customer',
 		'lines',
@@ -43,7 +45,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Receipt data schema contract version.
 	 */
-	const SCHEMA_VERSION = '1.3.0';
+	const SCHEMA_VERSION = '1.4.0';
 
 	/**
 	 * Money keys that must be present in totals.
@@ -1205,9 +1207,119 @@ class Receipt_Data_Schema {
 					),
 				),
 			),
+			'software' => array(
+				'label' => /* translators: Receipt section in the template editor. */ __( 'Software', 'woocommerce-pos' ),
+				'fields' => array(
+					'name' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Software Name', 'woocommerce-pos' ),
+						'default' => 'WCPOS',
+					),
+					'plugin_version' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Plugin Version', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'app_version' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'App Version', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'app_build' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'App Build', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'platform' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Platform', 'woocommerce-pos' ),
+						'default' => '',
+					),
+				),
+			),
+			'register' => array(
+				'label' => /* translators: Receipt section in the template editor. */ __( 'Register', 'woocommerce-pos' ),
+				'fields' => array(
+					'id' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Register ID', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'name' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Register Name', 'woocommerce-pos' ),
+						'default' => '',
+					),
+				),
+			),
 			'fiscal'      => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Fiscal', 'woocommerce-pos' ),
 				'fields' => array(
+					'document_type' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Document Type', 'woocommerce-pos' ),
+						'default' => 'sale',
+					),
+					'sale_time' => array(
+						'type' => 'object',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Time', 'woocommerce-pos' ),
+						'default' => null,
+						'nullable' => true,
+						'fields' => self::get_date_field_tree_fields(),
+					),
+					'received_at' => array(
+						'type' => 'object',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Received At', 'woocommerce-pos' ),
+						'default' => null,
+						'nullable' => true,
+						'fields' => self::get_date_field_tree_fields(),
+					),
+					'sale_tz' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Timezone', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'sale_counter' => array(
+						'type' => 'number',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Counter', 'woocommerce-pos' ),
+						'default' => null,
+						'nullable' => true,
+					),
+					'corrects' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Corrects', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'is_sale_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Sale Document', 'woocommerce-pos' ),
+						'default' => true,
+					),
+					'is_refund_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Refund Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_void_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Void Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_cancellation_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Cancellation Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_closure_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Closure Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_x_report' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is X Report', 'woocommerce-pos' ),
+						'default' => false,
+					),
 					'immutable_id'      => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Immutable ID', 'woocommerce-pos' ),
@@ -1663,6 +1775,15 @@ class Receipt_Data_Schema {
 			'description' => isset( $field['label'] ) ? (string) $field['label'] : '',
 		);
 
+		if ( array_key_exists( 'default', $field ) ) {
+			$schema['default'] = $field['default'];
+		}
+		if ( 'object' === $type && ! empty( $field['fields'] ) ) {
+			foreach ( $field['fields'] as $child_name => $child_field ) {
+				$schema['properties'][ $child_name ] = self::field_metadata_to_json_schema( $child_field );
+			}
+		}
+
 		if ( \in_array( $type, array( 'string[]', 'array' ), true ) ) {
 			$schema['items'] = array( 'type' => 'string[]' === $type ? 'string' : array( 'string', 'number', 'boolean', 'object', 'array', 'null' ) );
 		}
@@ -1725,6 +1846,37 @@ class Receipt_Data_Schema {
 
 		return array(
 			'has_tax_summary' => true,
+			'software' => array(
+				'name' => 'WCPOS',
+				'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+				'app_version' => '1.8.7',
+				'app_build' => '42',
+				'platform' => 'ios',
+			),
+			'register' => array(
+				'id' => 'e705c930-233f-4c8a-b8af-5794ab979d81',
+				'name' => 'Front till',
+			),
+			'fiscal' => Receipt_Payload_Assembler::fiscal(
+				array(
+					'sale_time' => Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15T10:30:00Z' ), new \DateTimeZone( 'Europe/Madrid' ) ),
+					'sale_tz' => 'Europe/Madrid',
+					'sale_counter' => 42,
+					'received_at' => Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15T10:35:00Z' ) ),
+					'immutable_id' => '1001:42',
+					'receipt_number' => '00042',
+					'sequence' => 42,
+					'hash' => '',
+					'qr_payload' => 'https://example.com/verify?id=1001',
+					'tax_agency_code' => '',
+					'signed_at' => '',
+					'signature_excerpt' => '',
+					'document_label' => '',
+					'is_reprint' => false,
+					'reprint_count' => 0,
+					'extra_fields' => array(),
+				)
+			),
 			'order'   => array(
 				'id'            => 1001,
 				'number'        => '1001',
