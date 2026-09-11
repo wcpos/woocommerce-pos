@@ -82,6 +82,7 @@ final class Cash_Movement_Store {
 	/** List all movements oldest first, including voids.
 	 *
 	 * @param string $session_id Session UUID.
+	 * @throws \RuntimeException On read failure.
 	 */
 	public function list( string $session_id ): array {
 		global $wpdb;
@@ -89,6 +90,9 @@ final class Cash_Movement_Store {
 		$table = $this->table_name();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE session_id = %s ORDER BY created_at_gmt, id", $session_id ), ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session movement read failed.' );
+		}
 		foreach ( $rows as &$row ) {
 			$row['actor'] = (int) $row['actor'];
 		}
@@ -107,8 +111,17 @@ final class Cash_Movement_Store {
 		if ( $existing ) {
 			return $existing;
 		}
+		$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
+		if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
+			return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
+		if ( $closure ) {
+			( new Fiscal_Record_Store() )->ensure_installed();
+		}
 		$void = 'void' === $fields['type'];
-		if ( $void && false === $wpdb->query( 'START TRANSACTION' ) ) {
+		$transaction = $void || null !== $closure;
+		if ( $transaction && false === $wpdb->query( 'START TRANSACTION' ) ) {
 			throw new \RuntimeException( 'Movement transaction failed.' );
 		}
 		try {
@@ -132,16 +145,40 @@ final class Cash_Movement_Store {
 					$wpdb->query( 'ROLLBACK' );
 					return new \WP_Error( 'wcpos_movement_void_refused', __( 'The movement has already been voided or is unavailable.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 				}
+			}
+			if ( $closure && null === ( new Fiscal_Record_Store() )->record(
+				array(
+					'type' => 'late_movement',
+					'source_id' => $fields['id'],
+					'closure_id' => $closure['id'],
+					'session_id' => $fields['session_id'],
+					'register_id' => $closure['register_id'],
+					'store_id' => $closure['store_id'],
+					'cashier_id' => $fields['actor'],
+					'payload' => $fields,
+				)
+			) ) {
+				throw new \RuntimeException( 'Late movement write failed.' );
+			}
+			if ( $transaction ) {
 				if ( false === $wpdb->query( 'COMMIT' ) ) {
 					throw new \RuntimeException( 'Movement commit failed.' );
 				}
 			}
 		} catch ( \RuntimeException $error ) {
-			if ( $void ) {
+			if ( $transaction ) {
 				$wpdb->query( 'ROLLBACK' );
 			}
 			throw $error;
 		}
 		return $this->get( $fields['id'] );
+	}
+	/** Offline movements must predate the counting cutoff, strictly.
+	 *
+	 * @param array  $session Session row.
+	 * @param string $created_at UTC SQL timestamp.
+	 */
+	public function accepts( array $session, string $created_at ): bool {
+		return 'open' === $session['status'] || ( in_array( $session['status'], array( 'counting', 'closed' ), true ) && null !== $session['counting_started_at_gmt'] && $created_at < $session['counting_started_at_gmt'] );
 	}
 }

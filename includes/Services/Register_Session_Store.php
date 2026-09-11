@@ -241,6 +241,7 @@ final class Register_Session_Store {
 	/** Derive four-decimal tender balances, without floating-point arithmetic.
 	 *
 	 * @param array $session Session row.
+	 * @throws \RuntimeException On calculation failure.
 	 */
 	public function expected( array $session ): array {
 		global $wpdb;
@@ -264,6 +265,9 @@ final class Register_Session_Store {
 			$sql = 'SELECT ' . implode( ' + ', array_fill( 0, count( $amounts ), 'CAST(%s AS DECIMAL(65,4))' ) );
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Only decimal cast placeholders above.
 			$amounts = $wpdb->get_var( $wpdb->prepare( $sql, $amounts ) );
+			if ( null === $amounts ) {
+				throw new \RuntimeException( 'Session expected calculation failed.' );
+			}
 		}
 		return $totals;
 	}
@@ -276,21 +280,28 @@ final class Register_Session_Store {
 		return count( $this->captured_orders( $session ) );
 	}
 
-	/** Read ledger rows from at most 5000 matching orders in either storage mode.
+	/** Read all captured session rows in either storage mode; fiscal totals cannot truncate.
 	 *
 	 * @param array $session Session row.
+	 * @throws \RuntimeException On read failure.
 	 */
-	private function captured_orders( array $session ): array {
+	public function captured_orders( array $session ): array {
 		global $wpdb;
 		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
 		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
 		$key = $hpos ? 'order_id' : 'post_id';
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s ORDER BY {$key} DESC LIMIT 5000", Ledger::META_KEY, '%' . $wpdb->esc_like( '"session_id":"' . $session['id'] . '"' ) . '%' ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s ORDER BY {$key} DESC", Ledger::META_KEY, '%' . $wpdb->esc_like( '"session_id":"' . $session['id'] . '"' ) . '%' ) );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session ledger read failed.' );
+		}
 		$result = array();
 		foreach ( $ids as $id ) {
 			$order = wc_get_order( $id );
-			foreach ( $order ? Ledger::instance()->read( $order ) : array() as $row ) {
+			if ( ! $order ) {
+				throw new \RuntimeException( 'Session order could not be read.' );
+			}
+			foreach ( Ledger::instance()->read( $order ) as $row ) {
 				if ( ( $row['session_id'] ?? null ) === $session['id'] && 'captured' === ( $row['status'] ?? null ) ) {
 					$result[ $id ][] = $row;
 				}

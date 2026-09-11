@@ -37,7 +37,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 
 	public function test_each_identity_is_write_once_and_sequences_are_per_type(): void {
 		$store = new Fiscal_Record_Store();
-		foreach ( array( 'refund' => 'refund_id', 'void' => 'payment_id', 'cancellation' => 'order_id', 'late_sale' => 'source_id', 'late_movement' => 'source_id', 'recount' => 'source_id' ) as $type => $key ) {
+		foreach ( array( 'refund' => 'refund_id', 'void' => 'payment_id', 'cancellation' => 'order_id', 'late_sale' => 'order_id', 'late_movement' => 'source_id', 'recount' => 'source_id' ) as $type => $key ) {
 			$identity = in_array( $key, array( 'refund_id', 'order_id' ), true ) ? 321 : wp_generate_uuid4();
 			$fields = array( 'type' => $type, $key => $identity, 'payload' => array() );
 			$first = $store->record( $fields );
@@ -55,11 +55,12 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 		$store = new Fiscal_Record_Store();
 		$register = wp_generate_uuid4();
 		$session = wp_generate_uuid4();
-		$base = array( 'type' => 'refund', 'order_id' => 555, 'register_id' => $register, 'session_id' => $session, 'closure_id' => 88, 'store_id' => 12, 'payload' => array() );
+		$closure = wp_generate_uuid4();
+		$base = array( 'type' => 'refund', 'order_id' => 555, 'register_id' => $register, 'session_id' => $session, 'closure_id' => $closure, 'store_id' => 12, 'payload' => array() );
 		$one = $store->record( array_merge( $base, array( 'refund_id' => 1 ) ) );
 		$two = $store->record( array_merge( $base, array( 'refund_id' => 2, 'store_id' => 13 ) ) );
 		$store->record( array( 'type' => 'void', 'payment_id' => wp_generate_uuid4(), 'order_id' => 556, 'payload' => array() ) );
-		foreach ( array( 'order_id' => 555, 'register_id' => $register, 'session_id' => $session, 'closure_id' => 88, 'type' => 'refund' ) as $key => $value ) {
+		foreach ( array( 'order_id' => 555, 'register_id' => $register, 'session_id' => $session, 'closure_id' => $closure, 'type' => 'refund' ) as $key => $value ) {
 			$this->assertSame( array( $two['id'], $one['id'] ), array_column( $store->list( array( $key => $value ) ), 'id' ) );
 			$this->assertSame( 2, $store->count( array( $key => $value ) ) );
 		}

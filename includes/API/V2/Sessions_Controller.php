@@ -81,8 +81,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$request->set_param( 'id', strtolower( $request['id'] ) );
 			$movement = '/wcpos/v2/movements' === rtrim( $request->get_route(), '/' );
 			$store = $movement ? new Cash_Movement_Store() : new Register_Session_Store();
-			/** Filter a directly addressed session or movement row; Pro returns null outside the caller's stores. */
-			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( $request['id'] ), $request );
+			$row = $store->get( $request['id'] );
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -108,7 +107,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 	private function read( $request ) {
 		$store = new Register_Session_Store();
 		if ( $request['id'] ) {
-			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( strtolower( $request['id'] ) ), $request );
+			$row = $store->get( strtolower( $request['id'] ) );
 			if ( ! $row ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -235,7 +234,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 		} else {
 			$fields['counting_started_at_gmt'] = 'counting' === $status ? $at : null;
 		}
-		if ( 'closed' === $status && $request->has_param( 'approver_token' ) ) {
+		if ( $request->has_param( 'approver_token' ) ) {
 			$token = is_string( $request['approver_token'] ) ? Auth::instance()->validate_token( $request['approver_token'] ) : null;
 			$user = ! $token || is_wp_error( $token ) ? 0 : (int) $token->data->user->id;
 			if ( ! $user || get_current_user_id() === $user || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
@@ -257,7 +256,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
 		$session = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
-		if ( ! $session || 'open' !== $session['status'] ) {
+		if ( ! $session || ! ( new Cash_Movement_Store() )->accepts( $session, gmdate( 'Y-m-d H:i:s', strtotime( $request['created_at'] ) ) ) ) {
 			return $this->error( 'wcpos_session_not_open', 409 );
 		}
 		$amount = $this->decimal( $request['amount'] );

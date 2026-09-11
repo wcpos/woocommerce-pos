@@ -193,11 +193,11 @@ final class Register_Store {
 		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt', 'last_seen_at_gmt' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : str_replace( ' ', 'T', $row[ $key ] ) . 'Z';
 		}
-		// The closure landing (roadmap#249) supplies the real counter values.
+		$closure = ( new Closure_Store() )->last( $row['id'] );
 		$row['counters'] = array(
-			'last_closure_number' => 0,
-			'perpetual_sales_total' => '0',
-			'perpetual_refunds_total' => '0',
+			'last_closure_number' => $closure['number'] ?? 0,
+			'perpetual_sales_total' => $closure['perpetual_sales_total'] ?? '0',
+			'perpetual_refunds_total' => $closure['perpetual_refunds_total'] ?? '0',
 		);
 		return $row;
 	}

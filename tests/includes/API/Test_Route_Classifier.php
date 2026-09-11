@@ -5,6 +5,8 @@
  * @package WCPOS\WooCommercePOS\Tests\API
  */
 
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Route classifier fixture controllers share this test file.
+
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use ReflectionClass;
@@ -196,6 +198,7 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 				'/wcpos/v2/registers',
 				'/wcpos/v2/sessions',
 				'/wcpos/v2/movements',
+				'/wcpos/v2/closures',
 			),
 			$built_classifications['protocol_exempt']
 		);

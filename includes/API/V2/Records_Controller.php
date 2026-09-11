@@ -77,7 +77,7 @@ class Records_Controller extends WP_REST_Controller {
 			'page' => 1,
 			'per_page' => Fiscal_Record_Store::DEFAULT_PER_PAGE,
 		);
-		foreach ( array( 'order_id', 'closure_id', 'page', 'per_page', 'store_id' ) as $key ) {
+		foreach ( array( 'order_id', 'page', 'per_page', 'store_id' ) as $key ) {
 			if ( ! $request->has_param( $key ) ) {
 				continue;
 			}
@@ -89,7 +89,7 @@ class Records_Controller extends WP_REST_Controller {
 			}
 			$args[ $key ] = is_array( $request[ $key ] ) ? array_map( 'intval', $values ) : (int) $request[ $key ];
 		}
-		foreach ( array( 'register_id', 'session_id' ) as $key ) {
+		foreach ( array( 'register_id', 'session_id', 'closure_id' ) as $key ) {
 			if ( $request->has_param( $key ) ) {
 				if ( ! Pos_Uuid::is_uuid( $request[ $key ] ) ) {
 					return $this->invalid( $key );
@@ -150,13 +150,13 @@ class Records_Controller extends WP_REST_Controller {
 	/** Describe the read-only resource. */
 	public function get_item_schema(): array {
 		$properties = array();
-		foreach ( array( 'id', 'number', 'order_id', 'refund_id', 'closure_id', 'corrects_record_id', 'store_id', 'cashier_id', 'approver_id', 'print_count' ) as $key ) {
+		foreach ( array( 'id', 'number', 'order_id', 'refund_id', 'corrects_record_id', 'store_id', 'cashier_id', 'approver_id', 'print_count' ) as $key ) {
 			$properties[ $key ] = array(
 				'type' => in_array( $key, array( 'id', 'number', 'print_count' ), true ) ? 'integer' : array( 'integer', 'null' ),
 				'readonly' => true,
 			);
 		}
-		foreach ( array( 'type', 'series', 'payment_id', 'source_id', 'register_id', 'session_id', 'device_time', 'device_tz', 'received_at_gmt', 'checksum', 'last_printed_at_gmt' ) as $key ) {
+		foreach ( array( 'type', 'series', 'payment_id', 'source_id', 'closure_id', 'register_id', 'session_id', 'device_time', 'device_tz', 'received_at_gmt', 'checksum', 'last_printed_at_gmt' ) as $key ) {
 			$properties[ $key ] = array(
 				'type' => in_array( $key, array( 'type', 'series', 'received_at_gmt', 'checksum' ), true ) ? 'string' : array( 'string', 'null' ),
 				'readonly' => true,
