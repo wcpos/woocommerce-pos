@@ -78,6 +78,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$id = $this->post_register( array( 'name' => 'Front' ) )->get_data()['id'];
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $id );
+		$request->set_method( 'PATCH' );
 		$request->set_body_params( array( 'default_float' => '1000000000000000' ) );
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 400, $response->get_status() );
