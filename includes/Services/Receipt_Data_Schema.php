@@ -23,8 +23,8 @@ class Receipt_Data_Schema {
 	const REQUIRED_KEYS = array(
 		'order',
 		'store',
-		'software',
-		'register',
+		// `software` and `register` (schema 1.4) are deliberately NOT required:
+		// stored 1.3 snapshots have neither, and they must keep validating.
 		'cashier',
 		'customer',
 		'lines',

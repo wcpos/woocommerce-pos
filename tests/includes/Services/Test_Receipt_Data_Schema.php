@@ -31,10 +31,17 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			'software' => array( 'name', 'plugin_version', 'app_version', 'app_build', 'platform' ),
 			'register' => array( 'id', 'name' ),
 		) as $section => $keys ) {
-			$this->assertContains( $section, $schema['required'] );
+			// Optional at the validation boundary: a stored 1.3 snapshot has neither block.
+			$this->assertNotContains( $section, $schema['required'] );
+			$this->assertArrayHasKey( $section, $schema['properties'] );
 			$this->assertSame( $keys, array_keys( $tree[ $section ]['fields'] ) );
 			$this->assertSame( $keys, array_keys( $mock[ $section ] ) );
 		}
+		// The 1.3 required list is unchanged, so a 1.3 payload still satisfies 1.4.
+		$this->assertSame(
+			array( 'order', 'store', 'cashier', 'customer', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax', 'tax_summary', 'has_tax_summary', 'payments', 'refunds', 'fiscal', 'presentation_hints', 'i18n' ),
+			$schema['required']
+		);
 		foreach ( array( 'document_type', 'sale_time', 'sale_tz', 'sale_counter', 'received_at', 'corrects', 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report' ) as $key ) {
 			$this->assertArrayHasKey( $key, $tree['fiscal']['fields'] );
 			$this->assertArrayHasKey( $key, $mock['fiscal'] );
