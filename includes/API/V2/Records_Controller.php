@@ -53,7 +53,8 @@ class Records_Controller extends WP_REST_Controller {
 
 	/** Like registers, history reads carry no client protocol claim. */
 	public function wcpos_route_classifications(): array {
-		return array( 'protocol_exempt' => array( '/wcpos/v2/records' ) );
+		// Read only through the app (protocol headers present); no wp-admin screen reads it yet.
+		return array();
 	}
 
 	/**
