@@ -283,6 +283,3 @@ Fixes variations: readable names on products with three or more attributes, vari
 
 = 1.10.0 =
 This is a major update. Please don't update while your store is busy -- pick a time when you have some free time to check everything over, and be ready to roll back if you run into a problem. Don't update lightly.
-
-= 1.9.0 =
-This is a big update with breaking changes. If you're busy, please wait — there's nothing urgent in 1.9.0, and it's safer to give any early bugs a few days to be worked out. Update during quiet time, and always make a backup first.
