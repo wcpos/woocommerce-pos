@@ -543,10 +543,6 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 			$data['i18n']['sale_time'] . ': ' . $data['fiscal']['sale_time']['datetime'],
 			$data['software']['name'] . ' ' . $data['software']['plugin_version'] . ' · ' . $data['software']['app_version'],
 		);
-		if ( 'thermal-simple-80mm-rtl' === $key ) {
-			$identity_parts[0] = $data['register']['name'] . ' :' . $data['i18n']['register'];
-			$identity_parts[2] = $data['fiscal']['sale_time']['datetime'] . ' :' . $data['i18n']['sale_time'];
-		}
 		$html = $this->render_fiscal_gallery( $template, $order, $data );
 		$this->assertStringContainsString( $qr, $html, $key );
 		$dom = new \DOMDocument();
@@ -562,9 +558,6 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$data['fiscal']['reprint_count'] = 2;
 		$data['order']['printed']['datetime'] = 'Sep 11, 2026 12:00';
 		$copy = $data['i18n']['copy'] . ' 2 · Sep 11, 2026 12:00';
-		if ( 'thermal-simple-80mm-rtl' === $key ) {
-			$copy = '2 · Sep 11, 2026 12:00 ' . $data['i18n']['copy'];
-		}
 		$html = $this->render_fiscal_gallery( $template, $order, $data );
 		$this->assertStringContainsString( $copy, $this->fiscal_gallery_text( $html ), $key );
 
@@ -585,15 +578,6 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		// A single present part renders independently of the missing parts.
 		$data['register'] = array( 'name' => 'SINGLE-REGISTER' );
 		$html = $this->render_fiscal_gallery( $template, $order, $data );
-		if ( 'thermal-simple-80mm-rtl' === $key ) {
-			$this->assertStringContainsString( 'SINGLE-REGISTER :' . $data['i18n']['register'], $this->fiscal_gallery_text( $html ) );
-			$dom = new \DOMDocument();
-			$dom->loadHTML( '<?xml encoding="UTF-8">' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
-			$nodes = ( new \DOMXPath( $dom ) )->query( '//*[contains(text(), "SINGLE-REGISTER")]' );
-			$this->assertSame( 1, $nodes->length );
-			$this->assertSame( 'SINGLE-REGISTER :' . $data['i18n']['register'], trim( $nodes->item( 0 )->textContent ) );
-			return;
-		}
 		$this->assertStringContainsString( $data['i18n']['register'] . ': SINGLE-REGISTER', $this->fiscal_gallery_text( $html ) );
 		$dom = new \DOMDocument();
 		$dom->loadHTML( '<?xml encoding="UTF-8">' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );

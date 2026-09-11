@@ -20,7 +20,7 @@ renders correctly on both 42- and 48-CPL 80mm printers; do not replace
 these star columns with hard-coded widths.
 -->
 <receipt paper-width="48">
-  {{#fiscal.is_reprint}}<align mode="center"><bold><text align="center" bold="true">{{fiscal.reprint_count}} · {{order.printed.datetime}} {{i18n.copy}}</text></bold></align>{{/fiscal.is_reprint}}
+  {{#fiscal.is_reprint}}<align mode="center"><bold><text align="center" bold="true">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</text></bold></align>{{/fiscal.is_reprint}}
 
   <!-- ── Logo + store identity ─────────────── -->
   {{#store.logo}}
@@ -176,9 +176,9 @@ these star columns with hard-coded widths.
   </align>
 
   {{#fiscal.qr_payload}}<align mode="center"><qrcode size="4">{{fiscal.qr_payload}}</qrcode></align>{{/fiscal.qr_payload}}
-  {{#register.name}}<align mode="center"><text>{{register.name}} :{{i18n.register}}</text></align>{{/register.name}}
+  {{#register.name}}<align mode="center"><text>{{i18n.register}}: {{register.name}}</text></align>{{/register.name}}
   {{#fiscal.receipt_number}}<align mode="center"><text>#{{fiscal.receipt_number}}</text></align>{{/fiscal.receipt_number}}
-  {{#fiscal.sale_time.datetime}}<align mode="center"><text>{{fiscal.sale_time.datetime}} :{{i18n.sale_time}}</text></align>{{/fiscal.sale_time.datetime}}
+  {{#fiscal.sale_time.datetime}}<align mode="center"><text>{{i18n.sale_time}}: {{fiscal.sale_time.datetime}}</text></align>{{/fiscal.sale_time.datetime}}
   {{#software.name}}<align mode="center"><text>{{software.name}} {{software.plugin_version}}{{#software.app_version}} · {{software.app_version}}{{/software.app_version}}</text></align>{{/software.name}}
 
   <!-- ── Personal note ─────────────── -->
