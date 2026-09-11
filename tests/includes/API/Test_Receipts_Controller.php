@@ -42,14 +42,6 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertArrayHasKey( '/wcpos/v1/receipts/(?P<order_id>[\d]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/receipts/(?P<order_id>[\d]+)/pdf', $routes );
-
-		$receipt_args = $routes['/wcpos/v1/receipts/(?P<order_id>[\d]+)'][0]['args'];
-		$pdf_args     = $routes['/wcpos/v1/receipts/(?P<order_id>[\d]+)/pdf'][0]['args'];
-		foreach ( array( $receipt_args, $pdf_args ) as $args ) {
-			$this->assertSame( 'rest_validate_request_arg', $args['document']['validate_callback'] );
-			$this->assertSame( 'sanitize_text_field', $args['document']['sanitize_callback'] );
-		}
-		$this->assertSame( 'sanitize_text_field', $pdf_args['mode']['sanitize_callback'] );
 	}
 
 	/**

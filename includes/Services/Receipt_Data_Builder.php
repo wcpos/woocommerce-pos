@@ -28,29 +28,25 @@ class Receipt_Data_Builder {
 	 * @return object
 	 */
 	public static function resolve_pos_store( WC_Abstract_Order $order, $pos_store = null ) {
-		$order_store_id = $order->get_meta( '_pos_store' );
-		if ( is_numeric( $order_store_id ) ) {
-			$order_store_id = (int) $order_store_id;
-		}
-		$has_order_store_id     = is_int( $order_store_id ) ? $order_store_id > 0 : '' !== (string) $order_store_id;
-		$missing_order_store_id = null;
+		$order_store_id         = (int) $order->get_meta( '_pos_store' );
+		$missing_order_store_id = 0;
 		if ( null === $pos_store ) {
-			$pos_store = $has_order_store_id ? wcpos_get_store(
+			$pos_store = $order_store_id > 0 ? wcpos_get_store(
 				$order_store_id,
 				array(
 					'status' => array( 'publish', 'trash' ),
 				)
 			) : wcpos_get_store();
 
-			if ( $has_order_store_id && ! \is_object( $pos_store ) ) {
+			if ( $order_store_id > 0 && ! \is_object( $pos_store ) ) {
 				$missing_order_store_id = $order_store_id;
 			}
 		}
-		if ( ! \is_object( $pos_store ) && null === $missing_order_store_id ) {
+		if ( ! \is_object( $pos_store ) && 0 === $missing_order_store_id ) {
 			$pos_store = wcpos_get_store();
 		}
 		if ( ! \is_object( $pos_store ) ) {
-			$pos_store = null !== $missing_order_store_id ? new \stdClass() : new Store();
+			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
 		}
 
 		return $pos_store;
@@ -73,12 +69,7 @@ class Receipt_Data_Builder {
 
 		$pos_store = self::resolve_pos_store( $order, $pos_store );
 		// A stub store means the order's own store is gone (see resolve_pos_store()).
-		$order_store_id = $order->get_meta( '_pos_store' );
-		if ( is_numeric( $order_store_id ) ) {
-			$order_store_id = (int) $order_store_id;
-		}
-		$has_order_store_id     = is_int( $order_store_id ) ? $order_store_id > 0 : '' !== (string) $order_store_id;
-		$missing_order_store_id = $pos_store instanceof \stdClass && $has_order_store_id ? $order_store_id : null;
+		$missing_order_store_id = $pos_store instanceof \stdClass ? (int) $order->get_meta( '_pos_store' ) : 0;
 
 		$store_resolver = new Receipt_Store_Resolver( $pos_store );
 		$date_timezone  = $store_resolver->resolve_store_timezone();
@@ -112,15 +103,15 @@ class Receipt_Data_Builder {
 		$presentation_hints = $store_resolver->build_presentation_hints( (string) $order->get_currency() );
 		$tax                = $store_resolver->build_tax_section();
 
-		// A missing store ID only ever appears alongside the bare \stdClass
+		// $missing_order_store_id > 0 only ever happens alongside the bare \stdClass
 		// assigned above, so no getter resolves and every fallback below is taken.
 		// That is what keeps a deleted store's receipt showing the recorded store ID
 		// rather than silently borrowing the current store's name and address.
 		$store_fallbacks = array();
-		if ( null !== $missing_order_store_id ) {
+		if ( $missing_order_store_id > 0 ) {
 			$store_fallbacks['id'] = $missing_order_store_id;
-			// translators: %s: Historical POS store ID that no longer exists.
-			$store_fallbacks['name'] = sprintf( __( 'Store #%s', 'woocommerce-pos' ), $missing_order_store_id );
+			// translators: %d: Historical POS store ID that no longer exists.
+			$store_fallbacks['name'] = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_order_store_id );
 		}
 
 		$store = $store_resolver->build_store_section( $store_fallbacks );
