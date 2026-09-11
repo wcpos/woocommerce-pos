@@ -419,6 +419,7 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	// floats, retired state) and the anchor of every sale's provenance, so the
 	// table goes only with a full wipe, like templates and the receipt sequence.
 	if ( $remove_all ) {
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_fiscal_records" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_registers" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
 	}
 
@@ -490,6 +491,7 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 				$wpdb->esc_like( 'wcpos_template_order_' ) . '%',
 				$wpdb->esc_like( 'wcpos_disabled_virtual_templates_' ) . '%',
 				$wpdb->esc_like( 'wcpos_receipt_sequence_counter' ),
+				$wpdb->esc_like( 'wcpos_fiscal_sequence_' ) . '%',
 			)
 		);
 	}

@@ -76,6 +76,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		'exclude'     => 'wcpos_exclude',
 		'pos_cashier' => 'pos_cashier',
 		'pos_store'   => 'pos_store',
+		'pos_register' => 'pos_register',
 	);
 
 	/**
@@ -1276,6 +1277,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 		$sql          = '';
+		$register     = sanitize_key( (string) $request->get_param( 'pos_register' ) );
 
 		$statuses = array_map(
 			function ( $status ) {
@@ -1295,6 +1297,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			}
 
 			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->prefix}wc_orders.id" );
+			if ( '' !== $register ) {
+				$sql .= $wpdb->prepare( " AND EXISTS (SELECT 1 FROM {$wpdb->prefix}wc_orders_meta AS register_meta WHERE register_meta.order_id = {$wpdb->prefix}wc_orders.id AND register_meta.meta_key = '_wcpos_register' AND register_meta.meta_value = %s)", $register );
+			}
 			$sql .= " ORDER BY {$wpdb->prefix}wc_orders.date_created_gmt DESC";
 		} else {
 			$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'ID', 'post_modified_gmt' );
@@ -1307,6 +1312,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			}
 
 			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->posts}.ID" );
+			if ( '' !== $register ) {
+				$sql .= $wpdb->prepare( " AND EXISTS (SELECT 1 FROM {$wpdb->postmeta} AS register_meta WHERE register_meta.post_id = {$wpdb->posts}.ID AND register_meta.meta_key = '_wcpos_register' AND register_meta.meta_value = %s)", $register );
+			}
 			$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
 		}
 

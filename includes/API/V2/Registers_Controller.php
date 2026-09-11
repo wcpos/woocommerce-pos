@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Provenance_Health;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -37,6 +38,9 @@ class Registers_Controller extends WP_REST_Controller {
 				'GET' => 'get_items',
 				'POST' => 'create_item',
 			),
+			'/' . $this->rest_base . '/health' => array(
+				'GET' => 'get_health',
+			),
 			'/' . $this->rest_base . '/(?P<id>[0-9a-fA-F-]{36})' => array(
 				'GET' => 'get_item',
 				'PATCH' => 'update_item',
@@ -50,7 +54,7 @@ class Registers_Controller extends WP_REST_Controller {
 					'permission_callback' => array( $this, 'registers_permissions_check' ),
 				);
 			}
-			$endpoints['schema'] = array( $this, 'get_public_item_schema' );
+			$endpoints['schema'] = array( $this, '/' . $this->rest_base . '/health' === $route ? 'get_health_schema' : 'get_public_item_schema' );
 			register_rest_route( $this->namespace, $route, $endpoints );
 		}
 	}
@@ -117,6 +121,24 @@ class Registers_Controller extends WP_REST_Controller {
 		/** Filter authorized store scope for the register list. */
 		$args = apply_filters( 'woocommerce_pos_registers_list_args', $args, $request );
 		return new WP_REST_Response( ( new Register_Store() )->list( $args ) );
+	}
+
+	/**
+	 * List provenance diagnostics using the same authorized store scope as registers.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_health( $request ) {
+		$args = apply_filters( 'woocommerce_pos_registers_list_args', array( 'status' => 'all' ), $request );
+		$registers = ( new Register_Store() )->list( $args );
+		$known_ids = array_column( ( new Register_Store() )->list( array( 'status' => 'all' ) ), 'id' );
+		$store_ids = isset( $args['store_id'] ) ? (array) $args['store_id'] : null;
+		try {
+			return new WP_REST_Response( ( new Provenance_Health() )->report( $registers, $known_ids, $store_ids ) );
+		} catch ( \RuntimeException $e ) {
+			return new WP_Error( 'woocommerce_pos_provenance_health_failed', $e->getMessage(), array( 'status' => 500 ) );
+		}
 	}
 
 	/**
@@ -197,6 +219,97 @@ class Registers_Controller extends WP_REST_Controller {
 			}
 		}
 		return $fields;
+	}
+
+	/** Describe the read-only provenance diagnostics envelope. */
+	public function get_health_schema(): array {
+		$samples = array(
+			'order_ids' => array(
+				'type' => 'array',
+				'items' => array( 'type' => 'integer' ),
+			),
+			'order_numbers' => array(
+				'type' => 'array',
+				'items' => array( 'type' => 'string' ),
+			),
+		);
+		return array(
+			'$schema' => 'http://json-schema.org/draft-04/schema#',
+			'title' => 'provenance_health',
+			'type' => 'object',
+			'properties' => array(
+				'window_days' => array( 'type' => 'integer' ),
+				'skew_seconds' => array( 'type' => 'integer' ),
+				'truncated' => array( 'type' => 'boolean' ),
+				'registers' => array(
+					'type' => 'array',
+					'items' => array(
+						'type' => 'object',
+						'properties' => array(
+							'id' => array(
+								'type' => 'string',
+								'format' => 'uuid',
+							),
+							'name' => array( 'type' => 'string' ),
+							'orders' => array( 'type' => 'integer' ),
+							'first_counter' => array( 'type' => array( 'integer', 'null' ) ),
+							'last_counter' => array( 'type' => array( 'integer', 'null' ) ),
+							'gaps' => array(
+								'type' => 'array',
+								'items' => array(
+									'type' => 'object',
+									'properties' => array(
+										'after' => array( 'type' => 'integer' ),
+										'before' => array( 'type' => 'integer' ),
+										'missing' => array( 'type' => 'integer' ),
+									),
+								),
+							),
+							'duplicates' => array(
+								'type' => 'array',
+								'items' => array(
+									'type' => 'object',
+									'properties' => array( 'counter' => array( 'type' => 'integer' ) ) + $samples,
+								),
+							),
+							'skew' => array(
+								'type' => 'array',
+								'items' => array(
+									'type' => 'object',
+									'properties' => array(
+										'order_id' => array( 'type' => 'integer' ),
+										'order_number' => array( 'type' => 'string' ),
+										'sale_time' => array(
+											'type' => 'string',
+											'format' => 'date-time',
+										),
+										'received_gmt' => array(
+											'type' => 'string',
+											'format' => 'date-time',
+										),
+										'skew_seconds' => array( 'type' => 'integer' ),
+										'direction' => array(
+											'type' => 'string',
+											'enum' => array( 'ahead', 'behind' ),
+										),
+									),
+								),
+							),
+						),
+					),
+				),
+				'unregistered' => array(
+					'type' => 'array',
+					'items' => array(
+						'type' => 'object',
+						'properties' => array(
+							'register_id' => array( 'type' => 'string' ),
+							'orders' => array( 'type' => 'integer' ),
+						) + $samples,
+					),
+				),
+			),
+		);
 	}
 
 	/** Describe the register resource. */

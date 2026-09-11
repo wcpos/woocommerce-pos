@@ -215,6 +215,7 @@ class API {
 				'payment_methods'   => API\V2\Payment_Methods_Controller::class,
 				'payments'          => API\V2\Payments_Controller::class,
 				'registers'         => API\V2\Registers_Controller::class,
+				'records'           => API\V2\Records_Controller::class,
 				'gateway_bootstrap' => API\V2\Gateway_Bootstrap_Controller::class,
 				'checkout'          => API\V2\Checkout_Controller::class,
 				'order_email'       => API\V2\Order_Email_Controller::class,

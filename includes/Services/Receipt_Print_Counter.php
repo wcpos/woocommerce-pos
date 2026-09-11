@@ -35,17 +35,19 @@ final class Receipt_Print_Counter {
 	 * produced something. The per-order lock is held across the render so two
 	 * concurrent prints cannot both be rendered under the same number.
 	 *
-	 * @param WC_Order $order  Order.
-	 * @param callable $render function ( int $count ): string — the document bytes.
+	 * @param WC_Order      $order    Order.
+	 * @param callable      $render   function ( int $count ): mixed — the rendered document.
+	 * @param callable|null $is_empty function ( mixed $result ): bool; default: an empty string.
 	 *
-	 * @return string The rendered document ('' when nothing rendered).
+	 * @return mixed Whatever $render returned.
 	 */
-	public function count_after( WC_Order $order, callable $render ): string {
-		return (string) $this->locked(
+	public function count_after( WC_Order $order, callable $render, ?callable $is_empty = null ) {
+		return $this->locked(
 			$order,
-			function ( int $count ) use ( $order, $render ): string {
-				$result = (string) $render( $count );
-				if ( '' !== $result ) {
+			function ( int $count ) use ( $order, $render, $is_empty ) {
+				$result = $render( $count );
+				$empty  = null === $is_empty ? '' === (string) $result : (bool) $is_empty( $result );
+				if ( ! $empty ) {
 					$this->save( $order, $count );
 				}
 				return $result;

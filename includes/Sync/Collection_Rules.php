@@ -176,6 +176,11 @@ final class Collection_Rules {
 				'type'        => 'integer',
 				'required'    => false,
 			);
+			$params['pos_register'] = array(
+				'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by POS register.', 'woocommerce-pos' ),
+				'type'        => 'string',
+				'required'    => false,
+			);
 		}
 
 		return $params;
@@ -264,6 +269,10 @@ final class Collection_Rules {
 					),
 					'pos_store' => array(
 						'meta' => array( 'key' => '_pos_store' ),
+					),
+					'pos_register' => array(
+						'meta'     => array( 'key' => '_wcpos_register' ),
+						'sanitize' => 'key',
 					),
 
 					/*
@@ -403,7 +412,7 @@ final class Collection_Rules {
 	 *
 	 * @return string
 	 */
-	private static function detect_storage( string $collection ): string {
+	public static function detect_storage( string $collection ): string {
 		if ( 'orders' !== $collection ) {
 			return self::STORAGE_POSTS;
 		}

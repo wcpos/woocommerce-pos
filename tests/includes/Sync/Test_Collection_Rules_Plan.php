@@ -252,6 +252,11 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 					'type'        => 'integer',
 					'required'    => false,
 				),
+				'pos_register' => array(
+					'description' => __( 'Filter orders by POS register.', 'woocommerce-pos' ),
+					'type'        => 'string',
+					'required'    => false,
+				),
 			),
 			Collection_Rules::collection_params( 'orders' )
 		);
@@ -286,5 +291,22 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		}
 
 		return $signature;
+	}
+
+	/**
+	 * Register filtering declares its metadata key and optional string schema.
+	 */
+	public function test_pos_register_rules_expose_sanitized_meta_filter_and_string_param(): void {
+		$rules  = Collection_Rules::rules( 'orders' );
+		$params = Collection_Rules::collection_params( 'orders' );
+
+		$this->assertArrayHasKey( 'pos_register', $rules['filters'] );
+		$this->assertSame(
+			array( 'meta' => array( 'key' => '_wcpos_register' ), 'sanitize' => 'key' ),
+			$rules['filters']['pos_register']
+		);
+		$this->assertArrayHasKey( 'pos_register', $params );
+		$this->assertSame( 'string', $params['pos_register']['type'] );
+		$this->assertFalse( $params['pos_register']['required'] );
 	}
 }

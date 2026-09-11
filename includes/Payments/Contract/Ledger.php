@@ -743,6 +743,7 @@ class Ledger {
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
 			$order->save();
+			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}
 		return $applied;
 	}

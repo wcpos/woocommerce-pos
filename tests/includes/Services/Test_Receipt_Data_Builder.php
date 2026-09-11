@@ -2704,4 +2704,71 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'net_total_display', $formatted['totals'] );
 		$this->assertNotSame( '', $formatted['totals']['net_total_display'] );
 	}
+	public function test_refund_document_uses_refund_amounts_cashier_and_fiscal_identity(): void {
+		$order = OrderHelper::create_order();
+		$cashier = $this->factory->user->create( array( 'display_name' => 'Refund operator' ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_refunded_by( $cashier );
+		$refund->set_date_created( '2026-09-10T12:00:00+00:00' );
+		$refund->set_amount( 36 );
+		foreach ( array( new \WC_Order_Item_Product(), new \WC_Order_Item_Fee(), new \WC_Order_Item_Shipping() ) as $item ) {
+			$item->set_name( 'Refunded item' );
+			$item->set_total( -10 );
+			$item->set_taxes( array( 'total' => array( 1 => -2 ), 'subtotal' => array( 1 => -2 ) ) );
+			if ( $item instanceof \WC_Order_Item_Product ) {
+				$item->set_quantity( -2 );
+				$item->set_subtotal( -10 );
+			}
+			$refund->add_item( $item );
+		}
+		$tax = new \WC_Order_Item_Tax();
+		$tax->set_rate_id( 1 );
+		$tax->set_tax_total( -4 );
+		$tax->set_shipping_tax_total( -2 );
+		$refund->add_item( $tax );
+		$refund->set_cart_tax( -4 );
+		$refund->set_shipping_tax( -2 );
+		$refund->save();
+		$modes = array();
+		$filter = static function ( $data, $source, $mode ) use ( &$modes ) {
+			$modes[] = $mode;
+			$data['fiscal']['extra_fields']['extension'] = $source->get_id();
+			return $data;
+		};
+		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		try {
+			$data = $this->builder->build_refund_document( $order, $refund, 7, 'sale:42' );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $filter );
+		}
+		$this->assertSame( array( 'refund' ), $modes );
+		$this->assertSame( $order->get_id(), $data['order']['id'] );
+		$this->assertSame( $refund->get_id(), $data['fiscal']['extra_fields']['refund_id'] );
+		$this->assertSame( $cashier, $data['cashier']['id'] );
+		$this->assertSame( 'Refund operator', $data['cashier']['name'] );
+		$this->assertSame( 'refund', $data['fiscal']['document_type'] );
+		$this->assertSame( $data['i18n']['document_refund'], $data['fiscal']['document_label'] );
+		$this->assertSame( '7', $data['fiscal']['receipt_number'] );
+		$this->assertSame( 7, $data['fiscal']['sequence'] );
+		$this->assertSame( 'sale:42', $data['fiscal']['corrects'] );
+		$this->assertSame( $refund->get_id() . ':7', $data['fiscal']['immutable_id'] );
+		$this->assertTrue( $data['fiscal']['is_refund_document'] );
+		$this->assertFalse( $data['fiscal']['is_sale_document'] );
+		$this->assertFalse( $data['fiscal']['is_reprint'] );
+		$this->assertSame( 0, $data['fiscal']['reprint_count'] );
+		$this->assertSame( $data['fiscal']['sale_time'], $data['fiscal']['received_at'] );
+		$this->assertSame( '2026-09-10', $data['fiscal']['sale_time']['date_ymd'] );
+		$this->assertEquals( 2, $data['lines'][0]['qty'] );
+		$this->assertEquals( 12, $data['lines'][0]['line_total_incl'] );
+		$this->assertEquals( 12, $data['fees'][0]['total_incl'] );
+		$this->assertEquals( 12, $data['shipping'][0]['total_incl'] );
+		$this->assertEquals( 6, $data['tax_summary'][0]['tax_amount'] );
+		$this->assertEquals( 30, $data['totals']['total_excl'] );
+		$this->assertEquals( 36, $data['totals']['total_incl'] );
+		$hash = $data['fiscal']['hash'];
+		$data['fiscal']['hash'] = '';
+		$this->assertSame( hash( 'sha256', wp_json_encode( $data ) ), $hash );
+	}
+
 }

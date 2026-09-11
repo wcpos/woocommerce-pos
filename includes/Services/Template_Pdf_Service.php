@@ -30,13 +30,19 @@ class Template_Pdf_Service {
 	 *
 	 * @param array             $template Template metadata/content (must include 'engine').
 	 * @param WC_Abstract_Order $order    The order to render.
-	 * @param array|null        $receipt_data Optional canonical receipt payload.
+	 * @param array|null        $receipt_data Optional prepared receipt or frozen refund payload.
 	 *
 	 * @return string The PDF document bytes (begins with '%PDF-').
+	 * @throws \RuntimeException When a native integration cannot consume a frozen document.
 	 */
 	public function render( array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): string {
 		$engine = isset( $template['engine'] ) ? (string) $template['engine'] : '';
 
+		// Prepared sale data is also passed by the PDF route; only refund documents
+		// must not fall back to a native integration that would render the sale.
+		if ( 'refund' === ( $receipt_data['fiscal']['document_type'] ?? '' ) && $this->is_native( $template ) ) {
+			throw new \RuntimeException( 'WP Overnight templates cannot render frozen receipt documents.' );
+		}
 		$wp_overnight_pdf = $this->maybe_render_wp_overnight_pdf( $template, $order );
 		if ( null !== $wp_overnight_pdf ) {
 			return $wp_overnight_pdf;
@@ -183,7 +189,7 @@ class Template_Pdf_Service {
 	 * @param string            $engine   The template engine.
 	 * @param array             $template Template metadata/content.
 	 * @param WC_Abstract_Order $order    The order to render.
-	 * @param array|null        $receipt_data Optional canonical receipt payload.
+	 * @param array|null        $receipt_data Optional prepared receipt or frozen refund payload.
 	 *
 	 * @return string The captured receipt HTML.
 	 */
