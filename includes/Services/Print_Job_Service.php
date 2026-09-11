@@ -407,14 +407,10 @@ class Print_Job_Service {
 		$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 		$count   = (int) get_post_meta( (int) $job['id'], self::META_PRINT_COUNT, true );
 		if ( 0 === $count ) {
-			try {
-				$count = $counter->count( $order );
-			} catch ( Print_Counter_Busy_Exception $e ) {
-				// Another print holds the counter: render this poll unmarked and uncounted
-				// (consistent with each other) rather than fail the claimed job.
-				\WCPOS\WooCommercePOS\Logger::log( sprintf( 'Cloud print: print counter busy for order %d (job %d); rendering unmarked.', $order->get_id(), (int) $job['id'] ) );
-				return $data;
-			}
+			// A busy counter throws; every caller fails closed (empty body), the job
+			// stays claimed and is re-served once stale, and THAT render counts. An
+			// uncounted print would understate the audit trail for good.
+			$count = $counter->count( $order );
 			update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $count );
 		}
 
