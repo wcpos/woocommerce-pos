@@ -10,13 +10,12 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Provenance_Health;
 use WCPOS\WooCommercePOS\Services\Register_Store;
-use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 
-/** Till registration and admin edits. */
+/** Register directory and admin edits. */
 class Registers_Controller extends WP_REST_Controller {
 	/**
 	 * REST namespace.
@@ -71,31 +70,28 @@ class Registers_Controller extends WP_REST_Controller {
 	 * @return bool|WP_Error
 	 */
 	public function registers_permissions_check( $request ) {
-		$capability = 'PATCH' === $request->get_method() ? 'manage_woocommerce_pos' : 'access_woocommerce_pos';
+		$capability = in_array( $request->get_method(), array( 'POST', 'PATCH' ), true ) ? 'manage_woocommerce_pos' : 'access_woocommerce_pos';
 		return current_user_can( $capability ) ? true : new WP_Error( 'rest_forbidden', __( 'Sorry, you cannot access registers.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
 	}
 
 	/**
-	 * Upsert the requesting till.
+	 * Create a server-owned register.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function create_item( $request ) {
-		if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
-			return $this->invalid( 'id' );
+		foreach ( array( 'id', 'platform', 'app_version' ) as $key ) {
+			if ( $request->has_param( $key ) ) {
+				return $this->invalid( $key );
+			}
 		}
 		$fields = $this->validated_fields( $request, true );
 		if ( is_wp_error( $fields ) ) {
 			return $fields;
 		}
-		$fields['id'] = strtolower( $request['id'] );
-		/** Filter initial registration fields; Pro may set store_id. */
-		$fields = apply_filters( 'woocommerce_pos_register_upsert_fields', $fields, $request );
-		$store = new Register_Store();
-		$exists = $store->exists( $fields['id'] );
 		try {
-			return new WP_REST_Response( $store->upsert( $fields ), $exists ? 200 : 201 );
+			return new WP_REST_Response( ( new Register_Store() )->create( $fields, $request ), 201 );
 		} catch ( \RuntimeException $error ) {
 			return $this->write_error();
 		}
@@ -182,7 +178,7 @@ class Registers_Controller extends WP_REST_Controller {
 	 * Validate only the fields owned by this operation.
 	 *
 	 * @param WP_REST_Request $request Request.
-	 * @param bool            $creating Till registration rather than admin edit.
+	 * @param bool            $creating Register creation rather than admin edit.
 	 * @return array|WP_Error
 	 */
 	private function validated_fields( WP_REST_Request $request, bool $creating ) {
@@ -194,29 +190,18 @@ class Registers_Controller extends WP_REST_Controller {
 			}
 			$fields['name'] = sanitize_text_field( $name );
 		}
-		if ( $creating ) {
-			$fields['platform'] = $request['platform'] ?? '';
-			$fields['app_version'] = $request['app_version'] ?? '';
-			if ( ! in_array( $fields['platform'], array( '', 'ios', 'android', 'web', 'electron' ), true ) ) {
-				return $this->invalid( 'platform' );
+		if ( ! $creating && $request->has_param( 'status' ) ) {
+			if ( ! in_array( $request['status'], array( 'active', 'retired' ), true ) ) {
+				return $this->invalid( 'status' );
 			}
-			if ( ! is_string( $fields['app_version'] ) || Pos_Order_Audit::char_length( $fields['app_version'] ) > 64 ) {
-				return $this->invalid( 'app_version' );
+			$fields['status'] = $request['status'];
+		}
+		if ( $request->has_param( 'default_float' ) ) {
+			$value = $request['default_float'];
+			if ( null !== $value && ( ! is_string( $value ) || ! preg_match( '/^\d+(?:\.\d+)?$/D', $value ) ) ) {
+				return $this->invalid( 'default_float' );
 			}
-		} else {
-			if ( $request->has_param( 'status' ) ) {
-				if ( ! in_array( $request['status'], array( 'active', 'retired' ), true ) ) {
-					return $this->invalid( 'status' );
-				}
-				$fields['status'] = $request['status'];
-			}
-			if ( $request->has_param( 'default_float' ) ) {
-				$value = $request['default_float'];
-				if ( null !== $value && ( ! is_string( $value ) || ! preg_match( '/^\d+(?:\.\d+)?$/D', $value ) ) ) {
-					return $this->invalid( 'default_float' );
-				}
-				$fields['default_float'] = null === $value ? null : wc_format_decimal( $value, 4 );
-			}
+			$fields['default_float'] = null === $value ? null : wc_format_decimal( $value, 4 );
 		}
 		return $fields;
 	}
@@ -259,6 +244,7 @@ class Registers_Controller extends WP_REST_Controller {
 								'items' => array(
 									'type' => 'object',
 									'properties' => array(
+										'till' => array( 'type' => 'string' ),
 										'after' => array( 'type' => 'integer' ),
 										'before' => array( 'type' => 'integer' ),
 										'missing' => array( 'type' => 'integer' ),
@@ -269,7 +255,10 @@ class Registers_Controller extends WP_REST_Controller {
 								'type' => 'array',
 								'items' => array(
 									'type' => 'object',
-									'properties' => array( 'counter' => array( 'type' => 'integer' ) ) + $samples,
+									'properties' => array(
+										'till' => array( 'type' => 'string' ),
+										'counter' => array( 'type' => 'integer' ),
+									) + $samples,
 								),
 							),
 							'skew' => array(
@@ -329,6 +318,15 @@ class Registers_Controller extends WP_REST_Controller {
 				'readonly' => true,
 			),
 			'default_float' => array( 'type' => array( 'string', 'null' ) ),
+			'counters' => array(
+				'type' => 'object',
+				'readonly' => true,
+				'properties' => array(
+					'last_closure_number' => array( 'type' => 'integer' ),
+					'perpetual_sales_total' => array( 'type' => 'string' ),
+					'perpetual_refunds_total' => array( 'type' => 'string' ),
+				),
+			),
 			'platform' => array(
 				'type' => 'string',
 				'enum' => array( '', 'ios', 'android', 'web', 'electron' ),

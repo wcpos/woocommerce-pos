@@ -32,9 +32,26 @@ trait Provenance_Health_Tests {
 		$this->assertSame( 6, $row['orders'] );
 		$this->assertSame( 1, $row['first_counter'] );
 		$this->assertSame( 8, $row['last_counter'] );
-		$this->assertSame( array( array( 'after' => 3, 'before' => 5, 'missing' => 1 ), array( 'after' => 5, 'before' => 8, 'missing' => 2 ) ), $row['gaps'] );
+		$this->assertSame(
+			array(
+				array(
+					'till' => $id,
+					'after' => 3,
+					'before' => 5,
+					'missing' => 1,
+				),
+				array(
+					'till' => $id,
+					'after' => 5,
+					'before' => 8,
+					'missing' => 2,
+				),
+			),
+			$row['gaps']
+		);
 		$this->assertCount( 1, $row['duplicates'] );
 		$this->assertSame( 5, $row['duplicates'][0]['counter'] );
+		$this->assertSame( $id, $row['duplicates'][0]['till'] );
 		$this->assertEqualsCanonicalizing( array( $ids[3], $ids[4] ), $row['duplicates'][0]['order_ids'] );
 		$this->assertSame( array_map( static function ( $id ) { return 'SALE-' . $id; }, $row['duplicates'][0]['order_ids'] ), $row['duplicates'][0]['order_numbers'] );
 	}
@@ -171,5 +188,43 @@ trait Provenance_Health_Tests {
 		$report = ( new Provenance_Health() )->report( array(), array() );
 		$this->assertArrayHasKey( 'truncated', $report );
 		$this->assertFalse( $report['truncated'] );
+	}
+	/** Each till owns its counter sequence even on a shared register. */
+	public function test_health_two_tills_keep_counter_sequences_separate(): void {
+		$id = wp_generate_uuid4();
+		$tills = array( wp_generate_uuid4(), wp_generate_uuid4() );
+		foreach ( $tills as $till ) {
+			foreach ( array( '1', '2', '3' ) as $counter ) {
+				$order = wc_get_order( $this->provenance_order( $id, $counter ) );
+				$order->update_meta_data( '_wcpos_till', $till );
+				$order->save();
+			}
+		}
+		$health = new Provenance_Health();
+		$registers = array(
+			array(
+				'id' => $id,
+				'name' => 'Front',
+			),
+		);
+		$row = $health->report( $registers, array( $id ) )['registers'][0];
+		$this->assertSame( array(), $row['gaps'] );
+		$this->assertSame( array(), $row['duplicates'] );
+		$order = wc_get_order( $this->provenance_order( $id, '5' ) );
+		$order->update_meta_data( '_wcpos_till', $tills[0] );
+		$order->save();
+		$row = $health->report( $registers, array( $id ) )['registers'][0];
+		$this->assertSame(
+			array(
+				array(
+					'till' => $tills[0],
+					'after' => 3,
+					'before' => 5,
+					'missing' => 1,
+				),
+			),
+			$row['gaps']
+		);
+		$this->assertSame( array(), $row['duplicates'] );
 	}
 }

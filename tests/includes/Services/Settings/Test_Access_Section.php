@@ -363,4 +363,21 @@ class Test_Access_Section extends WP_UnitTestCase {
 		$this->assertNotNull( $cashier_role, 'Expected cashier role to be registered in test fixtures.' );
 		$this->assertFalse( $cashier_role->has_cap( 'delete_products' ) );
 	}
+	/** Cashiers handle cash and reports; managers also close and reassign sales. */
+	public function test_effective_till_capabilities_follow_default_roles(): void {
+		( new \WCPOS\WooCommercePOS\Activator() )->single_activate( false );
+		foreach ( array( 'cashier', 'shop_manager' ) as $role ) {
+			$user = get_user_by( 'id', self::factory()->user->create( array( 'role' => $role ) ) );
+			$caps = Access_Section::effective_capabilities( $user );
+			$this->assertContains( 'manage_woocommerce_pos_cash', $caps );
+			$this->assertContains( 'view_woocommerce_pos_reports', $caps );
+			if ( 'cashier' === $role ) {
+				$this->assertNotContains( 'manage_woocommerce_pos_closures', $caps );
+				$this->assertNotContains( 'reassign_woocommerce_pos_sales', $caps );
+			} else {
+				$this->assertContains( 'manage_woocommerce_pos_closures', $caps );
+				$this->assertContains( 'reassign_woocommerce_pos_sales', $caps );
+			}
+		}
+	}
 }

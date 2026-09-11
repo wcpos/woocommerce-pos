@@ -193,6 +193,7 @@ class Activator {
 		( new Integrity_Digest() )->install();
 		( new Mutation_Store() )->install();
 		( new Register_Store() )->install();
+		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 
 		if ( ! Sync_Health::is_healthy() ) {
@@ -483,6 +484,8 @@ class Activator {
 
 		// Cashier role.
 		$cashier_capabilities = array(
+			'manage_woocommerce_pos_cash' => true,
+			'view_woocommerce_pos_reports' => true,
 			'read'                      => true,
 			'read_private_products'     => true,
 			'publish_products'          => true,
@@ -511,6 +514,10 @@ class Activator {
 			'cashier'       => $cashier_capabilities,
 			'administrator' => array(
 				'manage_woocommerce_pos',
+				'manage_woocommerce_pos_cash',
+				'view_woocommerce_pos_reports',
+				'manage_woocommerce_pos_closures',
+				'reassign_woocommerce_pos_sales',
 				'access_woocommerce_pos',
 				'edit_wcpos_store',
 				'read_wcpos_store',
@@ -526,7 +533,14 @@ class Activator {
 				'edit_private_wcpos_stores',
 				'edit_published_wcpos_stores',
 			),
-			'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+			'shop_manager'  => array(
+				'manage_woocommerce_pos',
+				'access_woocommerce_pos',
+				'manage_woocommerce_pos_cash',
+				'view_woocommerce_pos_reports',
+				'manage_woocommerce_pos_closures',
+				'reassign_woocommerce_pos_sales',
+			),
 		);
 	}
 
@@ -618,6 +632,7 @@ class Activator {
 		}
 
 		( new Register_Store() )->install();
+		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 
 		// Installs that predate 2026-09 wrote the per-request latches with

@@ -117,6 +117,10 @@ class Access_Section implements Settings_Section_Interface {
 			'wcpos' => array(
 				'access_woocommerce_pos',
 				'manage_woocommerce_pos',
+				'manage_woocommerce_pos_cash',
+				'view_woocommerce_pos_reports',
+				'manage_woocommerce_pos_closures',
+				'reassign_woocommerce_pos_sales',
 			),
 			'wc' => array(
 				$customer_create_cap,

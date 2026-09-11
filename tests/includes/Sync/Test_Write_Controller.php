@@ -339,6 +339,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	private function provenance_tuple(): array {
 		return array(
 			'_wcpos_register' => wp_generate_uuid4(),
+			'_wcpos_till' => wp_generate_uuid4(),
 			'_wcpos_sale_time' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ),
 			'_wcpos_sale_tz' => 'Europe/Madrid',
 			'_wcpos_sale_counter' => '123',
@@ -439,15 +440,26 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$order->set_status( 'completed' );
 		$order->save();
 		$this->assertFalse( $order->needs_payment(), 'fixture must be a paid order' );
-		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => wp_generate_uuid4(), '_wcpos_sale_counter' => '124' ) ) );
+		$result = $this->update_provenance_order(
+			$order,
+			$this->provenance_payload(
+				array(
+					'_wcpos_register' => wp_generate_uuid4(),
+					'_wcpos_till' => wp_generate_uuid4(),
+					'_wcpos_sale_counter' => '124',
+				)
+			)
+		);
 		$this->assertSame( 200, $result->get_status() );
 		$order = wc_get_order( $order->get_id() );
 		$this->assertSame( $tuple['_wcpos_register'], $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( $tuple['_wcpos_till'], $order->get_meta( '_wcpos_till' ) );
 		$this->assertSame( '123', $order->get_meta( '_wcpos_sale_counter' ) );
 		$this->assertSame( '2026-01-01T00:00:00Z', $order->get_meta( '_wcpos_sale_received_gmt' ) );
 		$notes = array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed after the sale:' ) ) );
 		$this->assertCount( 1, $notes );
 		$this->assertStringContainsString( '_wcpos_register', $notes[0] );
+		$this->assertStringContainsString( '_wcpos_till', $notes[0] );
 		$this->assertStringContainsString( '_wcpos_sale_counter', $notes[0] );
 	}
 
@@ -540,8 +552,21 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	public function test_create_invalid_provenance_is_silently_dropped(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		$tuple = array( '_wcpos_register' => 'bad', '_wcpos_session' => 'bad', '_wcpos_sale_time' => '2026-01-01T12:00:00', '_wcpos_sale_tz' => 'Not/AZone', '_wcpos_sale_counter' => '0' );
-		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$tuple = array(
+			'_wcpos_register' => 'bad',
+			'_wcpos_till' => 'bad',
+			'_wcpos_session' => 'bad',
+			'_wcpos_sale_time' => '2026-01-01T12:00:00',
+			'_wcpos_sale_tz' => 'Not/AZone',
+			'_wcpos_sale_counter' => '0',
+		);
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload' => $this->provenance_payload( $tuple ),
+			)
+		);
 		$this->assertSame( 201, $result->get_status() );
 		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
 		foreach ( $tuple as $key => $value ) {

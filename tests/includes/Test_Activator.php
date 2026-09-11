@@ -84,6 +84,8 @@ class Test_Activator extends WP_UnitTestCase {
 		$this->assertNotNull( $role );
 		foreach (
 			array(
+				'manage_woocommerce_pos_cash',
+				'view_woocommerce_pos_reports',
 				'publish_products',
 				'edit_product',
 				'edit_products',
@@ -184,6 +186,11 @@ class Test_Activator extends WP_UnitTestCase {
 		// Assert.
 		$cashier = get_role( 'cashier' );
 		$this->assertNotNull( $cashier );
+		foreach ( array( 'administrator', 'shop_manager' ) as $slug ) {
+			foreach ( array( 'manage_woocommerce_pos_cash', 'view_woocommerce_pos_reports', 'manage_woocommerce_pos_closures', 'reassign_woocommerce_pos_sales' ) as $capability ) {
+				$this->assertTrue( get_role( $slug )->has_cap( $capability ), $capability );
+			}
+		}
 		$definition = $reflection->getMethod( 'role_capability_definition' );
 		$definition->setAccessible( true );
 		foreach ( array_keys( $definition->invoke( null )['cashier'] ) as $capability ) {

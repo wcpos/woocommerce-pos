@@ -57,6 +57,23 @@ afterEach(() => {
 });
 
 describe('Registers store column', () => {
+	it('creates a register from the form and refreshes the list', async () => {
+		const created = { ...register, id: '22222222-2222-4222-8222-222222222222', name: 'Back desk' };
+		apiFetchMock.mockResolvedValueOnce([register]).mockResolvedValueOnce(created)
+			.mockResolvedValue([register, created]);
+		renderScreen();
+		fireEvent.click(await screen.findByRole('button', { name: 'Add register' }));
+		fireEvent.change(screen.getByTestId('new-register-name'), { target: { value: 'Back desk' } });
+		fireEvent.change(screen.getByTestId('new-register-float'), { target: { value: '25.00' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Create register' }));
+		await waitFor(() => expect(apiFetchMock).toHaveBeenCalledWith({
+			path: '/wcpos/v2/registers', method: 'POST', headers: { 'X-WCPOS': '1' },
+			data: { name: 'Back desk', default_float: '25.00' },
+		}));
+		expect(await screen.findByTestId(`register-${created.id}`)).toBeInTheDocument();
+		expect(screen.getByDisplayValue('Back desk')).toBeInTheDocument();
+	});
+
 	it('keeps the Free table unchanged without store options or assigned rows', async () => {
 		apiFetchMock.mockResolvedValue([register]);
 		renderScreen();

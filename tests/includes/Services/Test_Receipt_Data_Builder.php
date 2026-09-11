@@ -29,14 +29,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	/** Provenance uses the sale zone, not UTC or the current store zone. */
 	public function test_build_provenance_in_both_modes(): void {
 		$order = OrderHelper::create_order();
-		$id = wp_generate_uuid4();
-		( new Register_Store() )->upsert(
-			array(
-				'id' => $id,
-				'name' => 'Front till',
-				'platform' => 'ios',
-			)
-		);
+		$registers = new Register_Store();
+		$id = $registers->create( array( 'name' => 'Front till' ) )['id'];
+		// Preserve coverage for legacy register platform data.
+		global $wpdb;
+		$wpdb->update( $registers->table_name(), array( 'platform' => 'ios' ), array( 'id' => $id ) );
 		foreach ( array(
 			'register' => $id,
 			'app_version' => '1.8.7',
@@ -127,15 +124,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	/** Only the identity allowlist freezes; order and provenance remain live. */
 	public function test_live_build_preserves_snapshot_identity_after_edits(): void {
 		$order = OrderHelper::create_order();
-		$id = wp_generate_uuid4();
 		$registers = new Register_Store();
-		$registers->upsert(
-			array(
-				'id' => $id,
-				'name' => 'Original till',
-				'platform' => 'ios',
-			)
-		);
+		$id = $registers->create( array( 'name' => 'Original till' ) )['id'];
+		// Preserve coverage for legacy register platform data.
+		global $wpdb;
+		$wpdb->update( $registers->table_name(), array( 'platform' => 'ios' ), array( 'id' => $id ) );
 		$order->update_meta_data( '_wcpos_register', $id );
 		$order->update_meta_data( '_wcpos_app_version', '1.8.7' );
 		$order->save();

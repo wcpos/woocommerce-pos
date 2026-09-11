@@ -17,28 +17,77 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
-	public function test_post_and_replay_return_created_then_updated_row(): void {
-		$fields = array( 'id' => strtoupper( wp_generate_uuid4() ), 'name' => 'Front', 'platform' => 'ios', 'app_version' => 'test' );
-		$first = $this->post_register( $fields );
+	/** Managers create server identities with read-only counters. */
+	public function test_post_manager_creates_server_uuid_and_get_includes_counters(): void {
+		$first = $this->post_register(
+			array(
+				'name' => 'Front',
+				'default_float' => '5.00',
+			)
+		);
 		$this->assertSame( 201, $first->get_status() );
-		$this->assertSame( strtolower( $fields['id'] ), $first->get_data()['id'] );
-		$fields['name'] = 'Back';
-		$fields['store_id'] = 999;
-		$again = $this->post_register( $fields );
-		$this->assertSame( 200, $again->get_status() );
-		$expected = $first->get_data();
-		// A replay never renames: the name is set at creation, renamed only by PATCH.
-		$expected['last_seen_at_gmt'] = $again->get_data()['last_seen_at_gmt'];
-		$this->assertSame( $expected, $again->get_data() );
+		$row = $first->get_data();
+		$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::is_uuid( $row['id'] ) );
+		$this->assertSame( '5.0000', $row['default_float'] );
+		$this->assertSame(
+			array(
+				'last_closure_number' => 0,
+				'perpetual_sales_total' => '0',
+				'perpetual_refunds_total' => '0',
+			),
+			$row['counters']
+		);
+		$get = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/' . $row['id'] ) );
+		$this->assertSame( 200, $get->get_status() );
+		$this->assertSame( $row['counters'], $get->get_data()['counters'] );
 	}
 
-	public function test_invalid_id_returns_400(): void {
-		$this->assertSame( 400, $this->post_register( array( 'id' => 'bad', 'name' => 'Front' ) )->get_status() );
+	/** POS access alone does not grant register creation. */
+	public function test_post_access_only_user_returns_403(): void {
+		$cashier = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_user_by( 'id', $cashier )->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $cashier );
+		$this->assertSame( 403, $this->post_register( array( 'name' => 'Front' ) )->get_status() );
+	}
+
+	/** Create refuses client-owned identity and malformed admin fields. */
+	public function test_post_rejects_till_fields_and_invalid_create_values(): void {
+		foreach ( array(
+			'id' => wp_generate_uuid4(),
+			'platform' => 'ios',
+			'app_version' => 'test',
+			'default_float' => '-1',
+			'name' => '',
+		) as $key => $value ) {
+			$response = $this->post_register( array_merge( array( 'name' => 'Front' ), array( $key => $value ) ) );
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		}
+	}
+
+	/** The Pro filter sees the final server identity before insertion. */
+	public function test_create_filter_receives_server_id_and_original_request(): void {
+		$seen = null;
+		$filter = function ( $fields, $request ) use ( &$seen ) {
+			$seen = $fields['id'];
+			$this->assertFalse( ( new Register_Store() )->exists( $seen ) );
+			$this->assertSame( 'Front', $request['name'] );
+			$fields['store_id'] = 123;
+			return $fields;
+		};
+		add_filter( 'woocommerce_pos_register_upsert_fields', $filter, 10, 2 );
+		try {
+			$response = $this->post_register( array( 'name' => 'Front' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_register_upsert_fields', $filter );
+		}
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( $seen, $response->get_data()['id'] );
+		$this->assertSame( 123, $response->get_data()['store_id'] );
 	}
 
 	public function test_patch_requires_manager_and_list_defaults_to_active(): void {
-		$id = wp_generate_uuid4();
-		$this->post_register( array( 'id' => $id, 'name' => 'Front' ) );
+		$id = $this->post_register( array( 'name' => 'Front' ) )->get_data()['id'];
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $id );
 		$request->set_method( 'PATCH' );
 		$request->set_body_params( array( 'name' => 'Back', 'status' => 'retired', 'default_float' => '12.50', 'store_id' => 99 ) );
@@ -97,10 +146,19 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_health_includes_retired_registers_and_applies_store_scope(): void {
 		$store = new Register_Store();
-		$id = wp_generate_uuid4();
-		$store->upsert( array( 'id' => $id, 'name' => 'Retired', 'store_id' => 123 ) );
+		$id = $store->create(
+			array(
+				'name' => 'Retired',
+				'store_id' => 123,
+			)
+		)['id'];
 		$store->update( $id, array( 'status' => 'retired' ) );
-		$store->upsert( array( 'id' => wp_generate_uuid4(), 'name' => 'Other store', 'store_id' => 456 ) );
+		$store->create(
+			array(
+				'name' => 'Other store',
+				'store_id' => 456,
+			)
+		);
 		$scope = function ( $args, $request ) {
 			$this->assertSame( 'all', $args['status'] );
 			$this->assertSame( '/wcpos/v2/registers/health', $request->get_route() );
@@ -131,12 +189,20 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_health_scope_keeps_global_known_ids_and_filters_order_stores(): void {
-		$id = wp_generate_uuid4();
-		$other = wp_generate_uuid4();
 		$unknown = wp_generate_uuid4();
 		$store = new Register_Store();
-		$store->upsert( array( 'id' => $id, 'name' => 'Front', 'store_id' => 1 ) );
-		$store->upsert( array( 'id' => $other, 'name' => 'Moved till', 'store_id' => 2 ) );
+		$id = $store->create(
+			array(
+				'name' => 'Front',
+				'store_id' => 1,
+			)
+		)['id'];
+		$other = $store->create(
+			array(
+				'name' => 'Moved till',
+				'store_id' => 2,
+			)
+		)['id'];
 		foreach ( array( array( $id, 1 ), array( $id, 2 ), array( $other, 1 ), array( $unknown, 2 ) ) as list( $register, $store_id ) ) {
 			$order = new \WC_Order();
 			$order->update_meta_data( '_wcpos_register', $register );

@@ -1081,4 +1081,40 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		$request->set_param( 'gateway_id', 'pos_cash' );
 		$this->assertSame( 401, $this->server->dispatch( $request )->get_status() );
 	}
+	/** Register settings validate and round-trip through the v2 settings route. */
+	public function test_v2_register_settings_defaults_validation_and_readback(): void {
+		delete_option( 'woocommerce_pos_settings_general' );
+		$route = '/wcpos/v2/settings/general';
+		$defaults = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
+		$this->assertFalse( $defaults['register_sessions'] );
+		$this->assertSame( '', $defaults['variance_threshold'] );
+		$this->assertSame( '', $defaults['expected_close_time'] );
+		foreach ( array(
+			'expected_close_time' => '25:00',
+			'variance_threshold' => '-5',
+			'register_sessions' => 'true',
+		) as $key => $value ) {
+			$this->assertSame( 400, $this->post_settings( $route, array( $key => $value ) )->get_status() );
+		}
+		$fields = array(
+			'register_sessions' => true,
+			'variance_threshold' => '5.00',
+			'expected_close_time' => '18:30',
+		);
+		$this->assertSame( 200, $this->post_settings( $route, $fields )->get_status() );
+		$read = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
+		foreach ( $fields as $key => $value ) {
+			$this->assertSame( $value, $read[ $key ], $key );
+		}
+		$blank = $this->post_settings(
+			$route,
+			array(
+				'variance_threshold' => '',
+				'expected_close_time' => '',
+			)
+		);
+		$this->assertSame( 200, $blank->get_status() );
+		$this->assertSame( '', $blank->get_data()['variance_threshold'] );
+		$this->assertSame( '', $blank->get_data()['expected_close_time'] );
+	}
 }

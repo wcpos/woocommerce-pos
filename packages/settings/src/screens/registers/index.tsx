@@ -5,6 +5,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { Chip } from '@wcpos/ui';
 
+import { FormRow } from '../../components/form';
 import Notice from '../../components/notice';
 import { ListSkeleton } from '../../components/skeleton';
 import { Button, TextInput } from '../../components/ui';
@@ -25,6 +26,9 @@ type RegisterEdit = Partial<Pick<Register, 'name' | 'default_float' | 'status' |
 
 function Registers() {
 	const queryClient = useQueryClient();
+	const [adding, setAdding] = React.useState(false);
+	const [name, setName] = React.useState('');
+	const [defaultFloat, setDefaultFloat] = React.useState('');
 	const { setNotice } = useNotices();
 	const rawStoreOptions = window.wcpos?.settings?.cloudPrintStoreOptions;
 	const storeOptions = Array.isArray(rawStoreOptions) ? rawStoreOptions : [];
@@ -53,6 +57,24 @@ function Registers() {
 				message: error.message || t('registers.save_failed', 'Register could not be saved.'),
 			}),
 	});
+	const create = useMutation({
+		mutationFn: () => apiFetch<Register>({
+			path: '/wcpos/v2/registers',
+			method: 'POST',
+			headers: { 'X-WCPOS': '1' },
+			data: { name, default_float: defaultFloat === '' ? null : defaultFloat },
+		}),
+		onSuccess: () => {
+			setAdding(false);
+			setName('');
+			setDefaultFloat('');
+			return queryClient.invalidateQueries({ queryKey: ['registers'] });
+		},
+		onError: (error: Error) => setNotice({
+			type: 'error',
+			message: error.message || t('registers.save_failed', 'Register could not be saved.'),
+		}),
+	});
 	const saveInput = (
 		event: React.FocusEvent<HTMLInputElement>,
 		row: Register,
@@ -66,6 +88,28 @@ function Registers() {
 
 	return (
 		<div className="wcpos:p-4">
+			<Button onClick={() => setAdding(true)} disabled={adding}>
+				{t('registers.add', 'Add register')}
+			</Button>
+			{adding && (
+				<form className="wcpos:my-4 wcpos:max-w-md" onSubmit={(event) => {
+					event.preventDefault();
+					create.mutate();
+				}}>
+					<FormRow label={t('registers.name', 'Name')}>
+						<TextInput data-testid="new-register-name" required maxLength={191}
+							value={name} onChange={(event) => setName(event.target.value)} disabled={create.isPending} />
+					</FormRow>
+					<FormRow label={t('registers.default_float', 'Default float')}>
+						<TextInput data-testid="new-register-float" pattern="\d+(?:\.\d+)?"
+							value={defaultFloat} onChange={(event) => setDefaultFloat(event.target.value)} disabled={create.isPending} />
+					</FormRow>
+					<div className="wcpos:flex wcpos:gap-2">
+						<Button type="submit" disabled={create.isPending}>{t('registers.create', 'Create register')}</Button>
+						<Button type="button" onClick={() => setAdding(false)} disabled={create.isPending}>{t('common.cancel', 'Cancel')}</Button>
+					</div>
+				</form>
+			)}
 			{data.length === 0 ? (
 				<Notice status="info">{t('registers.empty', 'No registers have connected yet.')}</Notice>
 			) : (

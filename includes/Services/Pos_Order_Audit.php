@@ -34,7 +34,7 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback', '_wcpos_register', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
+	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback', '_wcpos_register', '_wcpos_till', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
 
 	/**
 	 * Write-once sale provenance tuple.
@@ -42,7 +42,7 @@ final class Pos_Order_Audit {
 	 * @return string[]
 	 */
 	public static function provenance_meta_keys(): array {
-		return array( '_wcpos_register', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
+		return array( '_wcpos_register', '_wcpos_till', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
 	}
 
 	/**
@@ -198,6 +198,7 @@ final class Pos_Order_Audit {
 		$value = (string) $value;
 		switch ( $key ) {
 			case '_wcpos_register':
+			case '_wcpos_till':
 			case '_wcpos_session':
 				return Pos_Uuid::is_uuid( $value );
 			case '_wcpos_sale_time':

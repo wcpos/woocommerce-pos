@@ -35,6 +35,9 @@ class General_Section extends Abstract_Section {
 	 */
 	public function defaults(): array {
 		return array(
+			'register_sessions'           => false,
+			'variance_threshold'          => '',
+			'expected_close_time'         => '',
 			'pos_only_products'           => false,
 			'decimal_qty'                 => false,
 			'force_ssl'                   => true,
@@ -185,6 +188,21 @@ class General_Section extends Abstract_Section {
 	 */
 	public function endpoint_args(): array {
 		return array(
+			'register_sessions'          => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
+			'variance_threshold'         => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^\d+(?:\.\d+)?$/D', $param ) );
+				},
+			),
+			'expected_close_time'        => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $param ) );
+				},
+			),
 			'pos_only_products'          => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_bool( $param );
