@@ -474,7 +474,11 @@ class Error_Reporter {
 			$this->capture(
 				'critical',
 				substr( (string) $error['message'], 0, 8 * 1024 ),
-				array( 'source' => 'fatal' ),
+				array(
+					'source'     => 'fatal',
+					'fatal_file' => $relative,
+					'fatal_line' => $line,
+				),
 				array( 'wcpos-fatal', $relative, $line ),
 				true
 			);
