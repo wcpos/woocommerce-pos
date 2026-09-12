@@ -518,7 +518,7 @@ class Receipt {
 			}
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Cash capability protects the audit write.
 			if ( 'closure' === ( $payload['fiscal']['document_type'] ?? '' ) && 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && ! current_user_can( 'manage_woocommerce_pos_cash' ) ) {
-				wp_die( esc_html__( 'The closure request could not be completed.', 'woocommerce-pos' ), 'rest_forbidden', array( 'response' => 403 ) );
+				wp_die( esc_html__( 'The closure request could not be completed.', 'woocommerce-pos' ), '', array( 'response' => 403 ) );
 			}
 			return $payload;
 		}
