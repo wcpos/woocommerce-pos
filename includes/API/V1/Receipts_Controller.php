@@ -297,7 +297,7 @@ class Receipts_Controller extends WP_REST_Controller {
 
 		$template = $is_closure && ! is_numeric( $template_id ) ? Templates::get_virtual_template( $template_id, 'closure' ) : Print_Job_Service::load_template( $template_id );
 		if ( $is_closure && $template && 'closure' !== ( $template['type'] ?? '' ) ) {
-			$template = null;
+			return new WP_Error( 'wcpos_template_type_mismatch', __( 'A closure template is required.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		if ( null === $template ) {
 			return new WP_Error(
@@ -391,7 +391,11 @@ class Receipts_Controller extends WP_REST_Controller {
 		}
 		// Shared with the legacy receipt page: the store owns the selector format and the 400/404 contract.
 		try {
-			return ( new Fiscal_Record_Store() )->resolve_document( (int) $request['order_id'], is_string( $document ) ? $document : '', $request );
+			$payload = ( new Fiscal_Record_Store() )->resolve_document( (int) $request['order_id'], is_string( $document ) ? $document : '', $request );
+			if ( ! is_wp_error( $payload ) && 'closure' === ( $payload['fiscal']['document_type'] ?? '' ) && 'print' === $request['intent'] && ! current_user_can( 'manage_woocommerce_pos_cash' ) ) {
+				return new WP_Error( 'rest_forbidden', __( 'The closure request could not be completed.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+			}
+			return $payload;
 		} catch ( \RuntimeException $error ) {
 			return new WP_Error( 'wcpos_receipt_document_failed', __( 'Receipt document could not be read.', 'woocommerce-pos' ), array( 'status' => 500 ) );
 		}

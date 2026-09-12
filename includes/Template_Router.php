@@ -226,7 +226,8 @@ class Template_Router {
 			if ( isset( $wp->query_vars[ $query_var ] ) ) {
 				$order_id = absint( $wp->query_vars[ $query_var ] );
 
-				if ( class_exists( $classname ) && $order_id ) {
+				// Receipt documents may be orderless; their handler owns document authorisation.
+				if ( class_exists( $classname ) && ( $order_id || 'wcpos-receipt' === $query_var ) ) {
 					$template = new $classname( $order_id );
 					$template->get_template();
 

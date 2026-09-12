@@ -1386,6 +1386,68 @@ class Receipt_Data_Schema {
 				'fields' => self::get_i18n_field_tree_fields(),
 			),
 		);
+		if ( 'closure' === $type ) {
+			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'register', 'software', 'fiscal', 'i18n' ) ) );
+			$tree['order']['fields'] = array_intersect_key( $tree['order']['fields'], array_flip( array( 'currency' ) ) );
+			$tree['software']['fields'] = array_intersect_key( $tree['software']['fields'], array_flip( array( 'name', 'plugin_version' ) ) );
+			$tree['closure'] = array(
+				'label' => __( 'Closure', 'woocommerce-pos' ),
+				'fields' => array(),
+			);
+			foreach ( array(
+				'id' => __( 'Closure ID', 'woocommerce-pos' ),
+				'number' => __( 'Closure Number', 'woocommerce-pos' ),
+				'printed_number' => __( 'Printed Number', 'woocommerce-pos' ),
+				'register_id' => __( 'Register ID', 'woocommerce-pos' ),
+				'session_id' => __( 'Session ID', 'woocommerce-pos' ),
+				'opened_at_gmt' => __( 'Opened (UTC)', 'woocommerce-pos' ),
+				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
+				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
+				'breakdowns.labels.opened_by_name' => __( 'Opened By', 'woocommerce-pos' ),
+				'breakdowns.labels.closed_by_name' => __( 'Closed By', 'woocommerce-pos' ),
+				'breakdowns.labels.approved_by_name' => __( 'Approved By', 'woocommerce-pos' ),
+				'counted.cash' => __( 'Counted Cash', 'woocommerce-pos' ),
+				'counted.card' => __( 'Counted Card', 'woocommerce-pos' ),
+				'expected.cash' => __( 'Expected Cash', 'woocommerce-pos' ),
+				'expected.card' => __( 'Expected Card', 'woocommerce-pos' ),
+				'variance.cash' => __( 'Cash Variance', 'woocommerce-pos' ),
+				'variance.card' => __( 'Card Variance', 'woocommerce-pos' ),
+				'breakdowns.opening_float.expected' => __( 'Expected Opening Float', 'woocommerce-pos' ),
+				'breakdowns.opening_float.counted' => __( 'Counted Opening Float', 'woocommerce-pos' ),
+				'breakdowns.opening_float.variance' => __( 'Opening Variance', 'woocommerce-pos' ),
+				'breakdowns.transaction_count' => __( 'Transactions', 'woocommerce-pos' ),
+				'breakdowns.refund_count' => __( 'Refunds', 'woocommerce-pos' ),
+				'unsynced_count' => __( 'Unsynced Sales', 'woocommerce-pos' ),
+				'unsynced_total' => __( 'Unsynced Total', 'woocommerce-pos' ),
+				'period_sales_total' => __( 'Period Sales', 'woocommerce-pos' ),
+				'period_refunds_total' => __( 'Period Refunds', 'woocommerce-pos' ),
+				'perpetual_sales_total' => __( 'Perpetual Sales', 'woocommerce-pos' ),
+				'perpetual_refunds_total' => __( 'Perpetual Refunds', 'woocommerce-pos' ),
+				'software_version' => __( 'Software Version', 'woocommerce-pos' ),
+				'printed_at_gmt' => __( 'Printed At (UTC)', 'woocommerce-pos' ),
+				'print_count' => __( 'Print Count', 'woocommerce-pos' ),
+				'last_printed_at_gmt' => __( 'Last Printed At (UTC)', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields'][ $field ] = array(
+					'type' => 'string',
+					'label' => $label,
+				);
+			}
+			foreach ( array(
+				'counted' => __( 'Counted by Tender', 'woocommerce-pos' ),
+				'expected' => __( 'Expected by Tender', 'woocommerce-pos' ),
+				'variance' => __( 'Variance by Tender', 'woocommerce-pos' ),
+				'breakdowns.payment_methods' => __( 'Payment Methods', 'woocommerce-pos' ),
+				'breakdowns.tax_rates' => __( 'Tax Rates', 'woocommerce-pos' ),
+				'breakdowns.movements' => __( 'Cash Movements', 'woocommerce-pos' ),
+				'breakdowns.cashiers' => __( 'Cashiers', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields'][ $field ] = array(
+					'type' => 'array',
+					'label' => $label,
+				);
+			}
+		}
 		if ( 'display' === $type ) {
 			$tree['ledger'] = array(
 				'label'  => __( 'Ledger', 'woocommerce-pos' ),

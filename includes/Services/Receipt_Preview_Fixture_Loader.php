@@ -31,6 +31,20 @@ class Receipt_Preview_Fixture_Loader {
 	 * @return array Receipt data.
 	 */
 	public function build( ?string $profile = null, $pos_store = null ): array {
+		$profile = $this->normalize_profile( $profile );
+		if ( 'closure' === $profile ) {
+			$fixture = $this->load_overrides( $profile );
+			$row = $fixture['closure'];
+			$row['register_id'] = 'preview';
+			$row['software_version'] = $fixture['software']['plugin_version'];
+			$row['breakdowns']['labels'] = array(
+				'register_name' => $fixture['register']['name'],
+				'opened_by_name' => 'Alex',
+				'closed_by_name' => 'Alex',
+				'approved_by_name' => 'Alex',
+			);
+			return ( new Receipt_Data_Builder() )->build_closure_document( $row );
+		}
 		$data = ( new Preview_Receipt_Builder() )->build( $pos_store );
 
 		$base_overrides = $this->load_overrides( self::BASE_PROFILE );
@@ -38,7 +52,6 @@ class Receipt_Preview_Fixture_Loader {
 			$data = self::deep_merge( $data, $base_overrides );
 		}
 
-		$profile = $this->normalize_profile( $profile );
 		if ( self::BASE_PROFILE !== $profile ) {
 			$profile_overrides = $this->load_overrides( $profile );
 			if ( ! empty( $profile_overrides ) ) {

@@ -122,7 +122,13 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 			$values['document_type'] = $type;
 			$fiscal = Receipt_Payload_Assembler::fiscal( $values );
 			$this->assertTrue( $fiscal[ $flag ] );
-			$this->assertCount( 'is_x_report' === $flag ? 2 : 1, array_filter( array_intersect_key( $fiscal, array_flip( array( 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report' ) ) ) ) );
+			foreach ( array( 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report' ) as $candidate ) {
+				if ( $candidate === $flag || ( 'is_x_report' === $flag && 'is_closure_document' === $candidate ) ) {
+					$this->assertTrue( $fiscal[ $candidate ], $type . ': ' . $candidate );
+				} else {
+					$this->assertFalse( $fiscal[ $candidate ], $type . ': ' . $candidate );
+				}
+			}
 		}
 	}
 

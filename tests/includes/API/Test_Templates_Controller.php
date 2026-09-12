@@ -1293,6 +1293,18 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( 0, $data['order_id'] );
 				$this->assertSame( $engine, $data['engine'] );
 				$this->assertSame( 'closure', $data['receipt_data']['fiscal']['document_type'] );
+				foreach ( array( 'lines', 'totals', 'payments', 'customer', 'tax_summary' ) as $section ) {
+					$this->assertArrayNotHasKey( $section, $data['receipt_data'] );
+				}
+				$tree = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( 'closure' );
+				$this->assertArrayHasKey( 'closure', $tree );
+				foreach ( array( 'lines', 'totals', 'payments', 'customer', 'tax_summary', 'order.created' ) as $section ) {
+					$this->assertArrayNotHasKey( $section, $tree );
+				}
+				$this->assertSame( array( 'currency' ), array_keys( $tree['order']['fields'] ) );
+				foreach ( array( 'number', 'printed_number', 'register_id', 'opened_at_gmt', 'closed_at_gmt', 'counted.cash', 'expected.cash', 'variance.cash', 'breakdowns.payment_methods', 'breakdowns.tax_rates', 'breakdowns.movements', 'unsynced_count', 'perpetual_sales_total', 'software_version', 'printed_at_gmt' ) as $field ) {
+					$this->assertArrayHasKey( $field, $tree['closure']['fields'] );
+				}
 			}
 		}
 	}

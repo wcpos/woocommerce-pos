@@ -26,11 +26,11 @@ foreach ( array(
 ) as $event => $label ) :
 	?>
 	<?php if ( ! empty( $closure[ $event . '_at_gmt' ] ) ) : ?>
-		<p><?php echo esc_html( $label . ': ' . $closure[ $event . '_at_gmt' ] . ' UTC · ' . ( get_userdata( (int) ( $closure[ $event . '_by' ] ?? 0 ) )->display_name ?? '' ) ); ?></p>
+		<p><?php echo esc_html( $label . ': ' . $closure[ $event . '_at_gmt' ] . ' UTC · ' . ( $breakdowns['labels'][ $event . '_by_name' ] ?? '' ) ); ?></p>
 	<?php endif; ?>
 <?php endforeach; ?>
 <?php if ( ! empty( $closure['approved_by'] ) ) : ?>
-<p><?php echo esc_html( __( 'Approver', 'woocommerce-pos' ) . ': ' . ( get_userdata( (int) $closure['approved_by'] )->display_name ?? $closure['approved_by'] ) ); ?></p>
+<p><?php echo esc_html( __( 'Approver', 'woocommerce-pos' ) . ': ' . ( $breakdowns['labels']['approved_by_name'] ?? '' ) ); ?></p>
 <?php endif; ?>
 <?php
 foreach ( array(
@@ -63,7 +63,7 @@ foreach ( array(
 	</tbody></table>
 	<?php endif; ?>
 <?php endforeach; ?>
-<?php $tenders = ! empty( $fiscal['is_x_report'] ) ? ( $closure['expected'] ?? array() ) : ( $closure['counted'] ?? array() ); ?>
+<?php $tenders = ( $closure['counted'] ?? array() ) + ( $closure['expected'] ?? array() ); ?>
 <?php if ( $tenders ) : ?>
 <table><thead><tr><th><?php esc_html_e( 'Tender', 'woocommerce-pos' ); ?></th><th><?php esc_html_e( 'Counted', 'woocommerce-pos' ); ?></th><th><?php esc_html_e( 'Expected', 'woocommerce-pos' ); ?></th><th><?php esc_html_e( 'Variance', 'woocommerce-pos' ); ?></th></tr></thead><tbody>
 	<?php foreach ( $tenders as $method => $amount ) : ?>

@@ -25,11 +25,13 @@ class Receipt_Data_Builder {
 	public function build_closure_document( array $row, bool $xreport = false ): array {
 		if ( $xreport ) {
 			$sessions = new Register_Session_Store();
-			$row['expected'] = $sessions->expected( $row );
+			$orders = $sessions->captured_orders( $row );
+			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
+			$row['expected'] = $sessions->expected( $row, $orders, $movements );
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
 			$refund_count = 0;
-			foreach ( $sessions->captured_orders( $row ) as $payments ) {
+			foreach ( $orders as $payments ) {
 				foreach ( $payments as $payment ) {
 					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
 						++$refund_count;
@@ -50,12 +52,20 @@ class Receipt_Data_Builder {
 					'counted' => $row['counted_float'],
 					'variance' => $row['opening_variance'],
 				),
-				'movements' => ( new Cash_Movement_Store() )->list( $row['id'] ),
-				'transaction_count' => $sessions->sales_count( $row ),
+				'movements' => $movements,
+				'transaction_count' => count( $orders ),
 				'refund_count' => $refund_count,
 				'cashiers' => array_values( $cashiers ),
 			);
 		}
+		// Old closures and live X-reports have no label snapshot.
+		$labels = $row['breakdowns']['labels'] ?? array();
+		$register = ( new Register_Store() )->get( $row['register_id'] ) ?? array();
+		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
+		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
+		}
+		$row['breakdowns']['labels'] = $labels;
 		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
 		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
 		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
@@ -70,7 +80,7 @@ class Receipt_Data_Builder {
 		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
 		return array(
 			'closure' => $row,
-			'register' => ( new Register_Store() )->get( $row['register_id'] ) ?? array(),
+			'register' => $register,
 			'software' => array(
 				'name' => 'WCPOS',
 				'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,

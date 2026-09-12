@@ -80,18 +80,26 @@ class Receipt {
 	 */
 	public function get_template(): void {
 		try {
-			$order = wc_get_order( $this->order_id );
+			// Closure selectors are orderless; authorise them before the order-key gate.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Document access is capability checked.
+			$document = sanitize_text_field( wp_unslash( $_GET['document'] ?? '' ) );
+			$orderless = (bool) preg_match( '/\A(closure|xreport):/', $document );
+			if ( $orderless && ! current_user_can( 'access_woocommerce_pos' ) ) {
+				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ), '', array( 'response' => 403 ) );
+			}
+			$order = $orderless ? new \WC_Order() : wc_get_order( $this->order_id );
+			$receipt_data = $orderless ? $this->resolve_document_payload( $order, 'live' ) : null;
 
 			// Validate order key for security. Missing orders share the permission
 			// message so unauthenticated requests cannot enumerate order IDs.
 			$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
-			if ( ! $order || empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) {
+			if ( ! $orderless && ( ! $order || empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) ) {
 				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ) );
 			}
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$is_preview = isset( $_GET['wcpos_preview_template'] ) && current_user_can( 'manage_woocommerce_pos' );
-			$receipt_data = $this->resolve_document_payload( $order, $is_preview ? 'preview' : 'live' );
+			$receipt_data = $receipt_data ?? $this->resolve_document_payload( $order, $is_preview ? 'preview' : 'live' );
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
@@ -501,12 +509,16 @@ class Receipt {
 		$query_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
 		// Preview remains sample/live data, never a frozen refund document.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( 'preview' !== $mode && 'preview' !== $query_mode && isset( $_GET['document'] ) ) {
+		if ( isset( $_GET['document'] ) && ( preg_match( '/\A(closure|xreport):/', sanitize_text_field( wp_unslash( $_GET['document'] ) ) ) || ( 'preview' !== $mode && 'preview' !== $query_mode ) ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$document = sanitize_text_field( wp_unslash( $_GET['document'] ) );
 			$payload = ( new Fiscal_Record_Store() )->resolve_document( $order->get_id(), $document );
 			if ( is_wp_error( $payload ) ) {
 				wp_die( esc_html( $payload->get_error_message() ), '', array( 'response' => (int) ( $payload->get_error_data()['status'] ?? 404 ) ) );
+			}
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Cash capability protects the audit write.
+			if ( 'closure' === ( $payload['fiscal']['document_type'] ?? '' ) && 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && ! current_user_can( 'manage_woocommerce_pos_cash' ) ) {
+				wp_die( esc_html__( 'The closure request could not be completed.', 'woocommerce-pos' ), 'rest_forbidden', array( 'response' => 403 ) );
 			}
 			return $payload;
 		}
