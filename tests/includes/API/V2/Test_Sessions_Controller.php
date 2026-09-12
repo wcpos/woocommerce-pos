@@ -225,6 +225,26 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 400, $response->get_status(), $key );
 			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
 		}
+
+		// A malformed replay id never reaches a field validator, so it names `id` itself.
+		$bad_id = $this->post( 'movements', array_merge( $movement, array( 'id' => 'bad' ) ) );
+		$this->assertSame( 400, $bad_id->get_status() );
+		$this->assertArrayHasKey( 'id', $bad_id->get_data()['data']['params'] );
+
+		// Collection reads name their offending query parameter too.
+		foreach ( array(
+			'status' => 'bad',
+			'page' => '0',
+			'per_page' => '101',
+			'register_id' => 'bad',
+		) as $key => $value ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/sessions' );
+			$request->set_param( $key, $value );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertSame( 'rest_invalid_param', $response->get_data()['code'], $key );
+			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
+		}
 	}
 
 	/** Only specified transitions succeed; close requires counted cash. */
