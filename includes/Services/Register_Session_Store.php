@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -123,6 +124,16 @@ final class Register_Session_Store {
 		global $wpdb;
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
+			// An idempotent replay, not a fault: the outbox retries a write whose response
+			// was lost, and returning the existing row IS the success path. A warning here
+			// would appear in the merchant's log for every recovered network timeout.
+			Logger::log(
+				'Register session already recorded; returning the existing row',
+				array(
+					'session_id' => $existing['id'],
+					'register_id' => $existing['register_id'],
+				)
+			);
 			return $existing;
 		}
 		$open = $this->list(
@@ -132,6 +143,16 @@ final class Register_Session_Store {
 			)
 		);
 		if ( $open ) {
+			Logger::warning(
+				'Register session opening refused: register already has an open session',
+				array(
+					'register_id' => $fields['register_id'],
+					'session_id' => $open[0]['id'],
+					'requested_session_id' => $fields['id'],
+					'status' => $open[0]['status'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			return new \WP_Error(
 				'wcpos_session_already_open',
 				__( 'This register already has an open session.', 'woocommerce-pos' ),
@@ -145,9 +166,26 @@ final class Register_Session_Store {
 		$fields['created_at_gmt'] = current_time( 'mysql', true );
 		$fields['opening_variance'] = null === $fields['expected_float'] ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(%s AS DECIMAL(19,4)) - CAST(%s AS DECIMAL(19,4))', $fields['counted_float'], $fields['expected_float'] ) );
 		if ( false === $wpdb->insert( $this->table_name(), $fields ) ) {
+			Logger::warning(
+				'Register session write refused: storage operation failed',
+				array(
+					'session_id' => $fields['id'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Session write failed.' );
 		}
-		return $this->get( $fields['id'] );
+		$row = $this->get( $fields['id'] );
+		Logger::log(
+			'Register session opened',
+			array(
+				'session_id' => $row['id'],
+				'register_id' => $row['register_id'],
+				'counted_float' => $row['counted_float'],
+				'user_id' => $row['opened_by'],
+			)
+		);
+		return $row;
 	}
 
 	/** Stamp a manager approval only while the session is counting.
@@ -168,11 +206,33 @@ final class Register_Session_Store {
 			)
 		);
 		if ( false === $updated ) {
+			Logger::warning(
+				'Register session write refused: storage operation failed',
+				array(
+					'session_id' => $session['id'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Session write failed.' );
 		}
 		if ( 0 === $updated ) {
+			Logger::warning(
+				'Register session approval refused: status changed or approval already recorded',
+				array(
+					'session_id' => $session['id'],
+					'user_id' => $user_id,
+					'status' => $this->get( $session['id'] )['status'] ?? null,
+				)
+			);
 			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
+		Logger::log(
+			'Register session approved',
+			array(
+				'session_id' => $session['id'],
+				'user_id' => $user_id,
+			)
+		);
 		return $this->get( $session['id'] );
 	}
 
@@ -202,9 +262,19 @@ final class Register_Session_Store {
 					ARRAY_A
 				);
 				if ( null === $variance ) {
+					Logger::warning( 'Register session closing refused: variance calculation failed', array( 'session_id' => $session['id'] ) );
 					throw new \RuntimeException( 'Session variance calculation failed.' );
 				}
 				if ( '1' === $variance['exceeds_threshold'] ) {
+					Logger::warning(
+						'Register session closing refused: variance requires manager approval',
+						array(
+							'session_id' => $session['id'],
+							'variance' => $variance['variance'],
+							'threshold' => $threshold,
+							'user_id' => get_current_user_id(),
+						)
+					);
 					return new \WP_Error(
 						'wcpos_override_refused',
 						__( 'Manager approval is required to close this session.', 'woocommerce-pos' ),
@@ -229,11 +299,41 @@ final class Register_Session_Store {
 			)
 		);
 		if ( false === $updated ) {
+			Logger::warning(
+				'Register session write refused: storage operation failed',
+				array(
+					'session_id' => $session['id'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Session write failed.' );
 		}
 		$row = $this->get( $session['id'] );
 		if ( 0 === $updated && ( $row['status'] ?? null ) !== $fields['status'] ) {
+			Logger::warning(
+				'Register session transition refused: status changed',
+				array(
+					'session_id' => $session['id'],
+					'from' => $session['status'],
+					'to' => $fields['status'],
+					'status' => $row['status'] ?? null,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		// Closure_Store logs its transition after commit, not before a possible rollback.
+		if ( $updated > 0 && $session['status'] !== $fields['status'] && ! isset( $fields['closure_id'] ) ) {
+			Logger::log(
+				'Register session state changed',
+				array(
+					'session_id' => $session['id'],
+					'from' => $session['status'],
+					'to' => $fields['status'],
+					'user_id' => get_current_user_id(),
+					'approved_by' => $row['approved_by'],
+				)
+			);
 		}
 		return $row;
 	}

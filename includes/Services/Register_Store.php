@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /** Owns the registers table; callers validate fields. */
 final class Register_Store {
 	/** Table suffix. */
@@ -106,9 +108,26 @@ final class Register_Store {
 			'last_seen_at_gmt' => $now,
 		);
 		if ( false === $wpdb->insert( $this->table_name(), $data ) ) {
+			Logger::warning(
+				'Register write refused: storage operation failed',
+				array(
+					'register_id' => $id,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Register write failed.' );
 		}
-		return $this->get( $fields['id'] );
+		$row = $this->get( $fields['id'] );
+		Logger::log(
+			'Register created',
+			array(
+				'register_id' => $row['id'],
+				'name' => $row['name'],
+				'default_float' => $row['default_float'],
+				'user_id' => get_current_user_id(),
+			)
+		);
+		return $row;
 	}
 
 	/** Seed an active register during activation and upgrade only. */
@@ -186,14 +205,48 @@ final class Register_Store {
 	 */
 	public function update( string $id, array $fields ): ?array {
 		global $wpdb;
-		if ( ! $this->exists( $id ) ) {
+		$before = $this->get( $id );
+		if ( ! $before ) {
+			Logger::warning(
+				'Register update refused: register_id not found',
+				array(
+					'register_id' => $id,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			return null;
 		}
 		$data = array_intersect_key( $fields, array_flip( array( 'name', 'default_float', 'status', 'store_id' ) ) );
 		if ( $data && false === $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) ) ) {
+			Logger::warning(
+				'Register write refused: storage operation failed',
+				array(
+					'register_id' => $id,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Register write failed.' );
 		}
-		return $this->get( $id );
+		$row = $this->get( $id );
+		$changed = array();
+		foreach ( array_keys( $data ) as $key ) {
+			if ( $before[ $key ] !== $row[ $key ] ) {
+				$changed[] = $key;
+			}
+		}
+		if ( $changed ) {
+			Logger::log(
+				'Register changed',
+				array(
+					'register_id' => $id,
+					'user_id' => get_current_user_id(),
+					'fields' => $changed,
+					'before' => array_intersect_key( $before, array_flip( $changed ) ),
+					'after' => array_intersect_key( $row, array_flip( $changed ) ),
+				)
+			);
+		}
+		return $row;
 	}
 
 	/**
