@@ -68,6 +68,53 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 		$this->assertCount( 0, $normalized['meta_data'] );
 	}
 
+	/**
+	 * A custom class instance is expanded, not waved through.
+	 *
+	 * WordPress unserializes stored meta, so a value can arrive as another plugin's object.
+	 * json_encode serializes its public properties regardless, so skipping the budget for
+	 * anything that is not stdClass would walk straight into the encode this guards.
+	 */
+	public function test_custom_object_with_oversized_property_is_dropped(): void {
+		$huge    = new Oversized_Meta_Fixture( array_fill( 0, Meta_Normalizer::OVERSIZED_META_NODE_LIMIT + 1, 'a' ) );
+		$sibling = array( 'key' => 'normal', 'value' => 'kept' );
+
+		$normalized = Meta_Normalizer::normalize(
+			array( 'meta_data' => array( array( 'key' => 'wrapped', 'value' => $huge ), $sibling ) )
+		);
+
+		$this->assertSame( array( $sibling ), $normalized['meta_data'] );
+	}
+
+	/**
+	 * A small custom object is not falsely withheld.
+	 */
+	public function test_small_custom_object_value_is_kept(): void {
+		$entry = array( 'key' => 'wrapped', 'value' => new Oversized_Meta_Fixture( array( 'a', 'b' ) ) );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertCount( 1, $normalized['meta_data'] );
+		$this->assertSame( 'wrapped', $normalized['meta_data'][0]['key'] );
+	}
+
+	/**
+	 * Keys count toward the byte budget: few entries, enormous keys.
+	 */
+	public function test_oversized_string_keys_are_counted(): void {
+		$entry = array(
+			'key'   => 'fat_keys',
+			'value' => array(
+				str_repeat( 'k', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT ) => 'a',
+				str_repeat( 'j', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT ) => 'b',
+			),
+		);
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertCount( 0, $normalized['meta_data'] );
+	}
+
 	public function test_object_json_string_is_normalized_to_a_typed_value(): void {
 		$document = array(
 			'meta_data' => array(
@@ -281,5 +328,26 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 		$twice = Meta_Normalizer::normalize( $once );
 
 		$this->assertEquals( $once, $twice );
+	}
+}
+
+/**
+ * Stand-in for another plugin's class arriving as an unserialized meta value.
+ *
+ * json_encode serializes the public property, so the budget walker must see it.
+ */
+class Oversized_Meta_Fixture {
+	/**
+	 * Whatever the other plugin stored.
+	 *
+	 * @var mixed
+	 */
+	public $payload;
+
+	/**
+	 * @param mixed $payload Stored payload.
+	 */
+	public function __construct( $payload ) {
+		$this->payload = $payload;
 	}
 }

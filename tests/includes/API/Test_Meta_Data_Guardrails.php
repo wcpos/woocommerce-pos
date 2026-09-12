@@ -66,6 +66,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		$this->uninstall_sync_read_lane();
 		remove_all_filters( 'woocommerce_pos_logging' );
 		remove_all_filters( 'woocommerce_pos_meta_data_warning_threshold' );
 		remove_all_filters( 'woocommerce_pos_meta_data_error_threshold' );
@@ -140,6 +141,9 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_oversized_meta_value_is_withheld_from_v1_product(): void {
 		Meta_Normalizer::reset_request_state();
+		// The suite boots with the sync read lane unwired (see install_sync_read_lane);
+		// without this the v2 proxy response is never normalized.
+		$this->install_sync_read_lane();
 		$product = ProductHelper::create_simple_product(
 			array(
 				'regular_price' => 10,
@@ -149,6 +153,19 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 		update_post_meta( $product->get_id(), 'wcpos_huge', str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT + 1 ) );
 		update_post_meta( $product->get_id(), 'wcpos_small', 'kept' );
 
+		// Current lane first: this is the surface the app actually reads, and the one the
+		// production fatal came from.
+		$current = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$current->set_param( 'include', array( $product->get_id() ) );
+		$current_response = $this->server->dispatch( $current );
+		$this->assertEquals( 200, $current_response->get_status() );
+		$current_rows = $current_response->get_data();
+		$this->assertCount( 1, $current_rows );
+		$current_keys = wp_list_pluck( $current_rows[0]['meta_data'], 'key' );
+		$this->assertNotContains( 'wcpos_huge', $current_keys );
+		$this->assertContains( 'wcpos_small', $current_keys );
+
+		// Legacy lane: same budget, because older installs still read it.
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
 		$response = $this->server->dispatch( $request );
 
@@ -174,6 +191,9 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_large_but_permitted_meta_value_is_still_served(): void {
 		Meta_Normalizer::reset_request_state();
+		// The suite boots with the sync read lane unwired (see install_sync_read_lane);
+		// without this the v2 proxy response is never normalized.
+		$this->install_sync_read_lane();
 		$product = ProductHelper::create_simple_product(
 			array(
 				'regular_price' => 10,
@@ -182,6 +202,14 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 		);
 		$value = str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT - 1 );
 		update_post_meta( $product->get_id(), 'wcpos_big_but_ok', $value );
+
+		$current = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$current->set_param( 'include', array( $product->get_id() ) );
+		$current_response = $this->server->dispatch( $current );
+		$this->assertEquals( 200, $current_response->get_status() );
+		$current_rows = $current_response->get_data();
+		$this->assertCount( 1, $current_rows );
+		$this->assertContains( 'wcpos_big_but_ok', wp_list_pluck( $current_rows[0]['meta_data'], 'key' ) );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
 		$response = $this->server->dispatch( $request );

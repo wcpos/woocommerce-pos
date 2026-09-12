@@ -34,6 +34,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		$this->uninstall_sync_read_lane();
 		parent::tearDown();
 	}
 
@@ -242,10 +243,23 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_oversized_customer_meta_value_is_withheld(): void {
 		Meta_Normalizer::reset_request_state();
+		$this->install_sync_read_lane();
 		$customer = CustomerHelper::create_customer();
 		update_user_meta( $customer->get_id(), 'wcpos_huge', str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT + 1 ) );
 		update_user_meta( $customer->get_id(), 'wcpos_small', 'kept' );
 
+		// Current lane: the surface the app reads.
+		$current          = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$current->set_param( 'include', array( $customer->get_id() ) );
+		$current_response = $this->server->dispatch( $current );
+		$this->assertEquals( 200, $current_response->get_status() );
+		$current_rows = $current_response->get_data();
+		$this->assertCount( 1, $current_rows );
+		$current_keys = wp_list_pluck( $current_rows[0]['meta_data'], 'key' );
+		$this->assertNotContains( 'wcpos_huge', $current_keys );
+		$this->assertContains( 'wcpos_small', $current_keys );
+
+		// Legacy lane: same budget.
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/customers/' . $customer->get_id() );
 		$response = $this->server->dispatch( $request );
 

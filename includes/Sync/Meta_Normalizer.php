@@ -24,10 +24,15 @@ final class Meta_Normalizer {
 	public const OVERSIZED_META_NODE_LIMIT = 20000;
 
 	/**
-	 * Upper bound on string bytes in ONE meta value, summed across nesting (1 MiB) — the
-	 * same cut-off for values that are few but enormous strings.
+	 * Upper bound on string bytes in ONE meta value, summed across nesting and keys (8 MiB):
+	 * the same cut-off for values that are few entries but enormous strings.
+	 *
+	 * Deliberately well clear of legitimate use. `Test_Catalog_Proxy_Meta_Scaling` pins a
+	 * 1 MiB meta value as something that must round-trip, so the cut-off sits eight times
+	 * above the largest size this repo asserts is normal, and still three orders of
+	 * magnitude below the gigabyte that took a store's requests down.
 	 */
-	public const OVERSIZED_META_BYTE_LIMIT = 1048576;
+	public const OVERSIZED_META_BYTE_LIMIT = 8388608;
 
 	/**
 	 * Meta keys already reported as oversized in this request (one warning per key).
@@ -234,8 +239,20 @@ final class Meta_Normalizer {
 	/**
 	 * Whether a meta value is too large to serve. Walks iteratively and stops the moment a
 	 * limit is crossed, so the cost is bounded by the limits, not by the value: a
-	 * 16-million-element value costs the same as a 20,001-element one. Arrays and stdClass
-	 * are expanded in place (no copies); any other object counts as one node.
+	 * 16-million-element value costs the same as a 20,001-element one.
+	 *
+	 * EVERY object is expanded, not just stdClass. WordPress unserializes stored meta, so a
+	 * value can come back as an instance of some other plugin's class, and json_encode
+	 * serializes its public properties just the same — a custom object wrapping the
+	 * multi-million-element array would otherwise walk straight past this check into the
+	 * encode that killed the request. `get_object_vars()` is called from outside the value's
+	 * class, so it sees exactly the public properties the encoder will. Traversal is by
+	 * refcount, never a deep copy.
+	 *
+	 * Keys count toward both budgets: a value can be a few entries under enormous keys.
+	 *
+	 * A self-referencing object graph terminates on the node limit and reports oversized,
+	 * which is correct — json_encode cannot represent one either.
 	 *
 	 * @param mixed $value Meta value as stored.
 	 *
@@ -245,21 +262,26 @@ final class Meta_Normalizer {
 		if ( is_string( $value ) ) {
 			return \strlen( $value ) > self::OVERSIZED_META_BYTE_LIMIT;
 		}
-		if ( ! is_array( $value ) && ! $value instanceof \stdClass ) {
+		if ( ! is_array( $value ) && ! \is_object( $value ) ) {
 			return false;
 		}
 
 		$nodes = 0;
 		$bytes = 0;
-		$stack = array( $value );
+		$stack = array( is_array( $value ) ? $value : get_object_vars( $value ) );
 		while ( array() !== $stack ) {
 			$current = array_pop( $stack );
-			foreach ( $current as $child ) {
+			foreach ( $current as $child_key => $child ) {
 				++$nodes;
+				if ( is_string( $child_key ) ) {
+					$bytes += \strlen( $child_key );
+				}
 				if ( is_string( $child ) ) {
 					$bytes += \strlen( $child );
-				} elseif ( is_array( $child ) || $child instanceof \stdClass ) {
+				} elseif ( is_array( $child ) ) {
 					$stack[] = $child;
+				} elseif ( \is_object( $child ) ) {
+					$stack[] = get_object_vars( $child );
 				}
 				if ( $nodes > self::OVERSIZED_META_NODE_LIMIT || $bytes > self::OVERSIZED_META_BYTE_LIMIT ) {
 					return true;
