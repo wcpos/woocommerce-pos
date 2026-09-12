@@ -37,6 +37,17 @@ final class Meta_Normalizer {
 	private static array $oversized_logged = array();
 
 	/**
+	 * Clear the per-request set of already-reported keys.
+	 *
+	 * The dedupe is request-scoped in production, where the process ends with the
+	 * response. Long-lived processes and the test suite share one process across many
+	 * requests, so they reset at the boundary like the other request-scoped collectors.
+	 */
+	public static function reset_request_state(): void {
+		self::$oversized_logged = array();
+	}
+
+	/**
 	 * Register the shared pre-stamping normalization seams.
 	 */
 	public static function register_hooks(): void {
@@ -190,7 +201,21 @@ final class Meta_Normalizer {
 	 */
 	private static function drop_oversized( array &$meta_data, $index, array $entry ): void {
 		unset( $meta_data[ $index ] );
-		$key = isset( $entry['key'] ) ? (string) $entry['key'] : '';
+		self::note_oversized_meta(
+			isset( $entry['key'] ) ? (string) $entry['key'] : '',
+			(int) ( $entry['id'] ?? 0 )
+		);
+	}
+
+	/**
+	 * Record that an oversized meta entry was withheld, once per key per request.
+	 * The value is never logged. Shared with the v1 lane, which drops the same
+	 * entries at its own serializer rather than through this class.
+	 *
+	 * @param string $key     Meta key that was withheld.
+	 * @param int    $meta_id Meta row id, when known.
+	 */
+	public static function note_oversized_meta( string $key, int $meta_id = 0 ): void {
 		if ( isset( self::$oversized_logged[ $key ] ) ) {
 			return;
 		}
@@ -199,7 +224,7 @@ final class Meta_Normalizer {
 			sprintf(
 				'WCPOS sync: dropped oversized meta "%s" (meta id %d) from the POS payload; the stored value exceeds %d nodes or %d bytes and cannot be served to the POS.',
 				$key,
-				(int) ( $entry['id'] ?? 0 ),
+				$meta_id,
 				self::OVERSIZED_META_NODE_LIMIT,
 				self::OVERSIZED_META_BYTE_LIMIT
 			)
@@ -216,7 +241,7 @@ final class Meta_Normalizer {
 	 *
 	 * @return bool
 	 */
-	private static function exceeds_value_budget( $value ): bool {
+	public static function exceeds_value_budget( $value ): bool {
 		if ( is_string( $value ) ) {
 			return \strlen( $value ) > self::OVERSIZED_META_BYTE_LIMIT;
 		}

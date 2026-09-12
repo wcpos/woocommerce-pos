@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\V1\Customers_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 
 /**
@@ -234,6 +235,26 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
 		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
+	}
+
+	/**
+	 * An oversized customer meta value is withheld rather than fatalling the response.
+	 */
+	public function test_oversized_customer_meta_value_is_withheld(): void {
+		Meta_Normalizer::reset_request_state();
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'wcpos_huge', str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT + 1 ) );
+		update_user_meta( $customer->get_id(), 'wcpos_small', 'kept' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/customers/' . $customer->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$meta = $response->get_data()['meta_data'];
+		$keys = wp_list_pluck( $meta, 'key' );
+		$this->assertNotContains( 'wcpos_huge', $keys );
+		$this->assertContains( 'wcpos_small', $keys );
+		$this->assertSame( range( 0, \count( $meta ) - 1 ), array_keys( $meta ), 'meta_data must stay a list' );
 	}
 
 	/**
