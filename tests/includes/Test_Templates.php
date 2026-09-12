@@ -23,6 +23,17 @@ use WP_UnitTestCase;
  * Class Test_Templates
  */
 class Test_Templates extends WP_UnitTestCase {
+	/** Closure defaults are filesystem templates, never editable posts. */
+	public function test_closure_supported_virtual_default(): void {
+		$this->assertContains( 'closure', Templates::SUPPORTED_TYPES );
+		$template = Templates::get_virtual_template( 'plugin-core', 'closure' );
+		$this->assertTrue( $template['is_virtual'] );
+		$this->assertSame( 'closure', $template['type'] );
+		$this->assertStringEndsWith( '/templates/closure.php', $template['file_path'] );
+		$this->assertContains( 'plugin-core', array_column( Templates::detect_filesystem_templates( 'closure' ), 'id' ) );
+		$this->assertFalse( is_numeric( $template['id'] ) );
+	}
+
 	/**
 	 * Display fields extend the unchanged default receipt tree.
 	 */

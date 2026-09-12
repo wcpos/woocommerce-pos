@@ -154,7 +154,7 @@ export function GalleryGrid() {
 						{t('gallery.your_templates')}
 					</h2>
 					<a
-						href={`${adminUrl}/post-new.php?post_type=wcpos_template${type === 'display' ? '&wcpos_type=display' : ''}`}
+						href={`${adminUrl}/post-new.php?post_type=wcpos_template${type !== 'receipt' ? `&wcpos_type=${type}` : ''}`}
 						className="page-title-action"
 					>
 						{t('gallery.add_new')}
@@ -223,7 +223,7 @@ export function GalleryGrid() {
 			{previewTemplate && (
 				<PreviewModal
 					templateId={previewTemplateId ?? ''}
-					templateType={previewTemplate.type === 'display' ? 'display' : 'receipt'}
+					templateType={type}
 					templateName={previewTemplate.title}
 					templateDescription={previewTemplate.description}
 					isGallery={previewIsGallery}

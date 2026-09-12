@@ -502,7 +502,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_type_enum_values(): void {
 		$params = $this->endpoint->get_collection_params();
 
-		$this->assertEquals( array( 'receipt', 'report', 'display' ), $params['type']['enum'] );
+		$this->assertEquals( Templates::SUPPORTED_TYPES, $params['type']['enum'] );
 	}
 
 	/**
@@ -1273,6 +1273,48 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( is_numeric( $data['id'] ) );
 
 		wp_delete_post( $data['id'], true );
+	}
+
+	/** Closure previews ignore order selectors, including invalid and non-POS orders. */
+	public function test_preview_closure_ignores_order_and_returns_sample_data(): void {
+		$non_pos = OrderHelper::create_order();
+		$pos = OrderHelper::create_order();
+		$pos->set_created_via( 'woocommerce-pos' );
+		$pos->save();
+		foreach ( array( 'logicless', 'thermal' ) as $engine ) {
+			$id = $this->create_template( 'Closure preview', 'closure' );
+			update_post_meta( $id, '_template_engine', $engine );
+			foreach ( array( 'latest', 999999999, $non_pos->get_id(), $pos->get_id() ) as $order_id ) {
+				$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $id . '/preview' );
+				$request->set_param( 'order_id', $order_id );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( 0, $data['order_id'] );
+				$this->assertSame( $engine, $data['engine'] );
+				$this->assertSame( 'closure', $data['receipt_data']['fiscal']['document_type'] );
+				foreach ( array( 'lines', 'totals', 'payments', 'customer', 'tax_summary' ) as $section ) {
+					$this->assertArrayNotHasKey( $section, $data['receipt_data'] );
+				}
+				$tree = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( 'closure' );
+				$this->assertArrayHasKey( 'closure', $tree );
+				foreach ( array( 'lines', 'totals', 'payments', 'customer', 'tax_summary', 'order.created' ) as $section ) {
+					$this->assertArrayNotHasKey( $section, $tree );
+				}
+				$this->assertSame( array( 'currency' ), array_keys( $tree['order']['fields'] ) );
+				$this->assertArrayHasKey( 'store_id', $tree['register']['fields'] );
+				foreach ( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ) as $field ) {
+					$this->assertSame( 'number', $tree['closure']['fields'][ $field ]['type'] );
+				}
+				$this->assertSame( 'string', $tree['closure']['fields']['register_id']['type'] );
+				foreach ( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ) as $field ) {
+					$this->assertSame( 'money', $tree['closure']['fields'][ $field ]['type'] );
+				}
+				foreach ( array( 'number', 'printed_number', 'register_id', 'opened_at_gmt', 'closed_at_gmt', 'counted.cash', 'expected.cash', 'variance.cash', 'breakdowns.payment_methods', 'breakdowns.tax_rates', 'breakdowns.movements', 'unsynced_count', 'perpetual_sales_total', 'software_version', 'printed_at_gmt' ) as $field ) {
+					$this->assertArrayHasKey( $field, $tree['closure']['fields'] );
+				}
+			}
+		}
 	}
 
 	// ---- Task 9: Preview tests ----

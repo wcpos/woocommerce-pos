@@ -231,11 +231,20 @@ final class Fiscal_Record_Store {
 	/**
 	 * Resolve a frozen refund document belonging to an order.
 	 *
-	 * @param int    $order_id Parent order ID.
-	 * @param string $document Document selector.
+	 * @param int                   $order_id Parent order ID.
+	 * @param string                $document Document selector.
+	 * @param \WP_REST_Request|null $request Request for store scoping.
 	 * @return array|\WP_Error
 	 */
-	public function resolve_document( int $order_id, string $document ) {
+	public function resolve_document( int $order_id, string $document, ?\WP_REST_Request $request = null ) {
+		if ( preg_match( '/\A(closure|xreport):([0-9a-fA-F-]{36})\z/', $document, $match ) ) {
+			$row = 'closure' === $match[1] ? ( new Closure_Store() )->get( strtolower( $match[2] ) ) : ( new Register_Session_Store() )->get( strtolower( $match[2] ) );
+			$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/closures' ) );
+			if ( ! current_user_can( 'access_woocommerce_pos' ) || ! $row || ( array_key_exists( 'store_id', $scope ) && ! in_array( (int) $row['store_id'], array_map( 'intval', (array) $scope['store_id'] ), true ) ) || ( 'xreport' === $match[1] && ! in_array( $row['status'], array( 'open', 'counting' ), true ) ) ) {
+				return new \WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+			}
+			return ( new Receipt_Data_Builder() )->build_closure_document( $row, 'xreport' === $match[1] );
+		}
 		if ( ! preg_match( '/\Arefund:([1-9][0-9]*)\z/', $document, $matches ) ) {
 			return new \WP_Error( 'wcpos_receipt_invalid_document', __( 'Invalid receipt document.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}

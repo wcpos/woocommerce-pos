@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 use Exception;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Closure_Print_Counter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
@@ -79,23 +80,31 @@ class Receipt {
 	 */
 	public function get_template(): void {
 		try {
-			$order = wc_get_order( $this->order_id );
+			// Closure selectors are orderless; authorise them before the order-key gate.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Document access is capability checked.
+			$document = sanitize_text_field( wp_unslash( $_GET['document'] ?? '' ) );
+			$orderless = (bool) preg_match( '/\A(closure|xreport):/', $document );
+			if ( $orderless && ! current_user_can( 'access_woocommerce_pos' ) ) {
+				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ), '', array( 'response' => 403 ) );
+			}
+			$order = $orderless ? new \WC_Order() : wc_get_order( $this->order_id );
+			$receipt_data = $orderless ? $this->resolve_document_payload( $order, 'live' ) : null;
 
 			// Validate order key for security. Missing orders share the permission
 			// message so unauthenticated requests cannot enumerate order IDs.
 			$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
-			if ( ! $order || empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) {
+			if ( ! $orderless && ( ! $order || empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) ) {
 				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ) );
 			}
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$is_preview = isset( $_GET['wcpos_preview_template'] ) && current_user_can( 'manage_woocommerce_pos' );
-			$receipt_data = $this->resolve_document_payload( $order, $is_preview ? 'preview' : 'live' );
+			$receipt_data = $receipt_data ?? $this->resolve_document_payload( $order, $is_preview ? 'preview' : 'live' );
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
 			if ( 'pdf' === $format ) {
-				$this->render_pdf( $order, $receipt_data );
+				$this->render_pdf( $order, $receipt_data, $is_preview );
 			}
 
 			/*
@@ -113,7 +122,7 @@ class Receipt {
 			/**
 			 * Check for custom template first.
 			 */
-			$custom_template = $this->get_custom_template();
+			$custom_template = $this->get_custom_template( ! empty( $receipt_data['fiscal']['is_closure_document'] ) ? 'closure' : 'receipt' );
 			$receipt_data    = $receipt_data ?? $this->get_receipt_data( $order, $is_preview ? 'preview' : 'live' );
 
 			// Start output buffering and register shutdown handler for fatal errors.
@@ -121,15 +130,23 @@ class Receipt {
 			register_shutdown_function( array( __CLASS__, 'handle_shutdown' ) );
 			ob_start();
 
-			if ( $custom_template ) {
-				$this->render_custom_template( $custom_template, $order, $receipt_data );
-			} else {
-				/**
-				 * Put WC_Order into the global scope so that the template can access it.
-				 */
-				$path = $this->get_template_path( 'receipt.php' );
-				include $path;
-			}
+			$render = function ( array $receipt_data ) use ( $custom_template, $order ): string {
+				ob_start();
+				try {
+					if ( $custom_template ) {
+						$this->render_custom_template( $custom_template, $order, $receipt_data );
+					} else {
+						include $this->get_template_path( 'receipt.php' );
+					}
+					return ob_get_contents();
+				} finally {
+					ob_end_clean();
+				}
+			};
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Authenticated document render intent.
+			$counting = ! $is_preview && 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && 'closure' === ( $receipt_data['fiscal']['document_type'] ?? '' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Template renderer owns escaping.
+			echo $counting ? ( new Closure_Print_Counter() )->count_after( $receipt_data, $render ) : $render( $receipt_data );
 
 			// If we got here, template rendered successfully.
 			self::$rendering = false;
@@ -162,10 +179,11 @@ class Receipt {
 	 *
 	 * @param \WC_Abstract_Order $order        Order object.
 	 * @param array|null         $receipt_data Optional frozen document payload.
+	 * @param bool               $is_preview   Whether this is a template preview.
 	 *
 	 * @return void
 	 */
-	private function render_pdf( \WC_Abstract_Order $order, ?array $receipt_data ): void {
+	private function render_pdf( \WC_Abstract_Order $order, ?array $receipt_data, bool $is_preview = false ): void {
 		/*
 		 * Filters the receipt template used for storefront PDF downloads.
 		 *
@@ -182,7 +200,7 @@ class Receipt {
 		 *
 		 * @hook woocommerce_pos_storefront_receipt_template
 		 */
-		$template = apply_filters( 'woocommerce_pos_storefront_receipt_template', $this->get_custom_template(), $order );
+		$template = apply_filters( 'woocommerce_pos_storefront_receipt_template', $this->get_custom_template( ! empty( $receipt_data['fiscal']['is_closure_document'] ) ? 'closure' : 'receipt' ), $order );
 		if ( ! \is_array( $template ) || empty( $template ) ) {
 			wp_die(
 				esc_html__( 'No receipt template is configured.', 'woocommerce-pos' ),
@@ -202,7 +220,12 @@ class Receipt {
 		$receipt_data = apply_filters( 'woocommerce_pos_receipt_pdf_data', $receipt_data, $order );
 
 		try {
-			$pdf = ( new Template_Pdf_Service() )->render( $template, $order, $receipt_data );
+			$render = static function ( $data ) use ( $template, $order ): string {
+				return ( new Template_Pdf_Service() )->render( $template, $order, $data );
+			};
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Authenticated document render intent.
+			$counting = ! $is_preview && 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && 'closure' === ( $receipt_data['fiscal']['document_type'] ?? '' );
+			$pdf = $counting ? ( new Closure_Print_Counter() )->count_after( $receipt_data, $render ) : $render( $receipt_data );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
 			wp_die(
@@ -487,12 +510,16 @@ class Receipt {
 		$query_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
 		// Preview remains sample/live data, never a frozen refund document.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( 'preview' !== $mode && 'preview' !== $query_mode && isset( $_GET['document'] ) ) {
+		if ( isset( $_GET['document'] ) && ( preg_match( '/\A(closure|xreport):/', sanitize_text_field( wp_unslash( $_GET['document'] ) ) ) || ( 'preview' !== $mode && 'preview' !== $query_mode ) ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$document = sanitize_text_field( wp_unslash( $_GET['document'] ) );
 			$payload = ( new Fiscal_Record_Store() )->resolve_document( $order->get_id(), $document );
 			if ( is_wp_error( $payload ) ) {
 				wp_die( esc_html( $payload->get_error_message() ), '', array( 'response' => (int) ( $payload->get_error_data()['status'] ?? 404 ) ) );
+			}
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Cash capability protects the audit write.
+			if ( 'closure' === ( $payload['fiscal']['document_type'] ?? '' ) && 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && ! current_user_can( 'manage_woocommerce_pos_cash' ) ) {
+				wp_die( esc_html__( 'The closure request could not be completed.', 'woocommerce-pos' ), '', array( 'response' => 403 ) );
 			}
 			return $payload;
 		}
@@ -522,9 +549,10 @@ class Receipt {
 	/**
 	 * Get the active custom receipt template.
 	 *
+	 * @param string $type Document template type.
 	 * @return null|array Custom template data or null if not found.
 	 */
-	private function get_custom_template(): ?array {
+	private function get_custom_template( string $type = 'receipt' ): ?array {
 		/**
 		 * Filters the active receipt template.
 		 *
@@ -536,7 +564,7 @@ class Receipt {
 		 *
 		 * @hook woocommerce_pos_active_receipt_template
 		 */
-		$template = apply_filters( 'woocommerce_pos_active_receipt_template', null );
+		$template = 'receipt' === $type ? apply_filters( 'woocommerce_pos_active_receipt_template', null ) : null;
 
 		if ( $template ) {
 			return $template;
@@ -554,7 +582,7 @@ class Receipt {
 			}
 
 			// Virtual template (theme/plugin-pro/plugin-core).
-			$template = TemplatesManager::get_virtual_template( $preview_id, 'receipt' );
+			$template = TemplatesManager::get_virtual_template( $preview_id, $type );
 			if ( $template ) {
 				return $template;
 			}
@@ -573,19 +601,19 @@ class Receipt {
 				$post_id  = (int) $template_id;
 				$template = 'publish' === get_post_status( $post_id ) ? TemplatesManager::get_template( $post_id ) : null;
 			} else {
-				$template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
+				$template = TemplatesManager::get_virtual_template( $template_id, $type );
 				if ( ! $template ) {
 					$template = TemplatesManager::get_gallery_template_by_key( $template_id );
 				}
 			}
 
 			// Only allow published receipt templates.
-			if ( $template && 'receipt' === ( $template['type'] ?? '' ) ) {
+			if ( $template && ( $template['type'] ?? '' ) === $type ) {
 				return $template;
 			}
 		}
 
 		// Get active receipt template (can be virtual or from database).
-		return TemplatesManager::get_active_template( 'receipt' );
+		return TemplatesManager::get_active_template( $type );
 	}
 }

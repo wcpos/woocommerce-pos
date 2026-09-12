@@ -240,13 +240,15 @@ final class Register_Session_Store {
 
 	/** Derive four-decimal tender balances, without floating-point arithmetic.
 	 *
-	 * @param array $session Session row.
+	 * @param array      $session Session row.
+	 * @param array|null $orders Captured orders already read for this report.
+	 * @param array|null $movements Movements already read for this report.
 	 * @throws \RuntimeException On calculation failure.
 	 */
-	public function expected( array $session ): array {
+	public function expected( array $session, ?array $orders = null, ?array $movements = null ): array {
 		global $wpdb;
 		$totals = array( 'cash' => array( $session['counted_float'] ) );
-		foreach ( $this->captured_orders( $session ) as $rows ) {
+		foreach ( $orders ?? $this->captured_orders( $session ) as $rows ) {
 			foreach ( $rows as $row ) {
 				// Every cash-kind gateway (pos_cash, cod, an extension's cash tender) is the drawer.
 				$method = $row['method'] ?? $row['method_id'];
@@ -256,7 +258,7 @@ final class Register_Session_Store {
 				$totals[ $method ][] = '-' . ltrim( $row['refunded_amount'] ?? '0', '-' );
 			}
 		}
-		foreach ( ( new Cash_Movement_Store() )->list( $session['id'] ) as $row ) {
+		foreach ( $movements ?? ( new Cash_Movement_Store() )->list( $session['id'] ) as $row ) {
 			if ( null === $row['voided_by'] && in_array( $row['type'], array( 'paid_in', 'paid_out' ), true ) ) {
 				$totals['cash'][] = ( 'paid_out' === $row['type'] ? '-' : '' ) . $row['amount'];
 			}

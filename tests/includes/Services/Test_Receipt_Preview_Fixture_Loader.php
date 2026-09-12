@@ -19,6 +19,18 @@ use WP_UnitTestCase;
  */
 class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 
+	/** Closure previews carry every optional section without sale identity. */
+	public function test_closure_fixture_contains_full_document(): void {
+		$data = ( new Receipt_Preview_Fixture_Loader() )->build( 'closure' );
+		$this->assertSame( 'closure', $data['fiscal']['document_type'] );
+		$this->assertFalse( $data['fiscal']['is_sale_document'] );
+		$this->assertTrue( $data['fiscal']['is_closure_document'] );
+		foreach ( array( 'payment_methods', 'tax_rates', 'opening_float', 'movements', 'transaction_count', 'refund_count', 'cashiers' ) as $section ) {
+			$this->assertNotEmpty( $data['closure']['breakdowns'][ $section ] );
+		}
+		$this->assertSame( '-2.0000', $data['closure']['variance']['cash'] );
+	}
+
 	/**
 	 * Base fixture applies controlled Coffee Monster data and logo asset.
 	 *

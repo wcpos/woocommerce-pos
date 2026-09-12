@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\API\V1;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Closure_Print_Counter;
+use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Print_Counter;
@@ -160,6 +162,30 @@ class Receipts_Controller extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	public function get_item( $request ) {
+		$document = $this->get_document_payload( $request );
+		if ( is_wp_error( $document ) ) {
+			return $document;
+		}
+		if ( ! empty( $document['fiscal']['is_closure_document'] ) ) {
+			try {
+				if ( 'print' === $request['intent'] && ! $document['fiscal']['is_x_report'] ) {
+					$document = ( new Closure_Print_Counter() )->count_after(
+						$document,
+						static function ( $data ) {
+							return $data;
+						}
+					);
+				}
+				return array(
+					'order_id' => 0,
+					'mode' => $document['fiscal']['is_x_report'] ? 'live' : 'fiscal',
+					'has_snapshot' => ! $document['fiscal']['is_x_report'],
+					'data' => $document,
+				);
+			} catch ( \RuntimeException $error ) {
+				return new WP_Error( 'wcpos_closure_print_failed', __( 'The closure print could not be recorded.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+			}
+		}
 		$order_id = (int) $request->get_param( 'order_id' );
 		$order    = wc_get_order( $order_id );
 
@@ -172,10 +198,6 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$document = $this->get_document_payload( $request );
-		if ( is_wp_error( $document ) ) {
-			return $document;
-		}
 		$snapshot_store = Receipt_Snapshot_Store::instance();
 		$requested_mode = null !== $document ? 'fiscal' : $request->get_param( 'mode' );
 		if ( null !== $requested_mode && ! \in_array( $requested_mode, array( 'fiscal', 'live' ), true ) ) {
@@ -250,7 +272,12 @@ class Receipts_Controller extends WP_REST_Controller {
 	 * @return Raw_Response|WP_Error
 	 */
 	public function get_pdf( $request ) {
-		$order = wc_get_order( (int) $request['order_id'] );
+		$document = $this->get_document_payload( $request );
+		if ( is_wp_error( $document ) ) {
+			return $document;
+		}
+		$is_closure = ! empty( $document['fiscal']['is_closure_document'] );
+		$order = $is_closure ? new \WC_Order() : wc_get_order( (int) $request['order_id'] );
 		if ( ! $order ) {
 			return new WP_Error(
 				'wcpos_receipt_order_not_found',
@@ -268,7 +295,10 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$template = Print_Job_Service::load_template( $template_id );
+		$template = $is_closure && ! is_numeric( $template_id ) ? Templates::get_virtual_template( $template_id, 'closure' ) : Print_Job_Service::load_template( $template_id );
+		if ( $is_closure && $template && 'closure' !== ( $template['type'] ?? '' ) ) {
+			return new WP_Error( 'wcpos_template_type_mismatch', __( 'A closure template is required.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
 		if ( null === $template ) {
 			return new WP_Error(
 				'wcpos_receipt_template_not_found',
@@ -277,15 +307,10 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$document = $this->get_document_payload( $request );
-		if ( is_wp_error( $document ) ) {
-			return $document;
-		}
-
 		$service = new Template_Pdf_Service();
 		// A native (WP Overnight) document cannot carry the copy marking, so a print
 		// of one is not counted: the audit count only advances for documents that show it.
-		$counting = 'print' === $request->get_param( 'intent' ) && ! $service->is_native( $template );
+		$counting = 'print' === $request->get_param( 'intent' ) && ! $service->is_native( $template ) && empty( $document['fiscal']['is_x_report'] );
 		try {
 			$data = $document;
 			if ( null === $data ) {
@@ -298,7 +323,14 @@ class Receipts_Controller extends WP_REST_Controller {
 				}
 				$data = $receipt['data'];
 			}
-			if ( $counting ) {
+			if ( $counting && $is_closure ) {
+				$pdf = ( new Closure_Print_Counter() )->count_after(
+					$data,
+					static function ( $marked ) use ( $service, $template, $order ) {
+						return $service->render( $template, $order, $marked );
+					}
+				);
+			} elseif ( $counting ) {
 				// The count is reserved under the order lock for the whole render and
 				// committed only once a PDF exists.
 				$counter = new Receipt_Print_Counter();
@@ -358,7 +390,15 @@ class Receipts_Controller extends WP_REST_Controller {
 			return null;
 		}
 		// Shared with the legacy receipt page: the store owns the selector format and the 400/404 contract.
-		return ( new Fiscal_Record_Store() )->resolve_document( (int) $request['order_id'], is_string( $document ) ? $document : '' );
+		try {
+			$payload = ( new Fiscal_Record_Store() )->resolve_document( (int) $request['order_id'], is_string( $document ) ? $document : '', $request );
+			if ( ! is_wp_error( $payload ) && 'closure' === ( $payload['fiscal']['document_type'] ?? '' ) && 'print' === $request['intent'] && ! current_user_can( 'manage_woocommerce_pos_cash' ) ) {
+				return new WP_Error( 'rest_forbidden', __( 'The closure request could not be completed.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+			}
+			return $payload;
+		} catch ( \RuntimeException $error ) {
+			return new WP_Error( 'wcpos_receipt_document_failed', __( 'Receipt document could not be read.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
 	}
 
 	/**

@@ -310,6 +310,10 @@ final class Closure_Store {
 			$fields['findings'] = $findings ? $findings : null;
 			$fields += array_intersect_key( $session, array_flip( array( 'register_id', 'store_id', 'opened_by', 'approved_by' ) ) );
 			$fields['closed_by'] = 'closed' === $session['status'] ? $session['closed_by'] : get_current_user_id();
+			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->get( $session['register_id'] )['name'] ?? '' );
+			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+				$fields['breakdowns']['labels'][ $key . '_name' ] = get_userdata( (int) ( $fields[ $key ] ?? 0 ) )->display_name ?? '';
+			}
 			$fields['received_at_gmt'] = current_time( 'mysql', true );
 			$table = ( new Fiscal_Record_Store() )->table_name();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned fiscal table.

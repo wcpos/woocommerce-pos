@@ -75,8 +75,8 @@ class Receipt_Payload_Assembler {
 			'is_refund_document'       => 'refund' === $document_type,
 			'is_void_document'         => 'void' === $document_type,
 			'is_cancellation_document' => 'cancellation' === $document_type,
-			'is_closure_document'      => 'closure' === $document_type,
-			'is_x_report'              => 'x_report' === $document_type,
+			'is_closure_document'      => in_array( $document_type, array( 'closure', 'xreport', 'x_report' ), true ),
+			'is_x_report'              => in_array( $document_type, array( 'xreport', 'x_report' ), true ),
 		);
 	}
 }

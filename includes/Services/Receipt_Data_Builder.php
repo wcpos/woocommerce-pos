@@ -17,6 +17,83 @@ use WC_Abstract_Order;
  * Receipt_Data_Builder class.
  */
 class Receipt_Data_Builder {
+	/** Build a stored closure or the explicitly live, unnumbered X-report.
+	 *
+	 * @param array $row Closure or session row.
+	 * @param bool  $xreport Whether to read the live session ledger.
+	 */
+	public function build_closure_document( array $row, bool $xreport = false ): array {
+		if ( $xreport ) {
+			$sessions = new Register_Session_Store();
+			$orders = $sessions->captured_orders( $row );
+			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
+			$row['expected'] = $sessions->expected( $row, $orders, $movements );
+			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
+			$cashiers = array();
+			$refund_count = 0;
+			foreach ( $orders as $payments ) {
+				foreach ( $payments as $payment ) {
+					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
+						++$refund_count;
+					}
+
+					$id = (int) ( $payment['cashier_id'] ?? 0 );
+					if ( $id ) {
+						$cashiers[ $id ] = array(
+							'id' => $id,
+							'name' => get_userdata( $id )->display_name ?? (string) $id,
+						);
+					}
+				}
+			}
+			$row['breakdowns'] = array(
+				'opening_float' => array(
+					'expected' => $row['expected_float'],
+					'counted' => $row['counted_float'],
+					'variance' => $row['opening_variance'],
+				),
+				'movements' => $movements,
+				'transaction_count' => count( $orders ),
+				'refund_count' => $refund_count,
+				'cashiers' => array_values( $cashiers ),
+			);
+		}
+		// Old closures and live X-reports have no label snapshot.
+		$labels = $row['breakdowns']['labels'] ?? array();
+		$register = ( new Register_Store() )->get( $row['register_id'] ) ?? array();
+		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
+		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
+		}
+		$row['breakdowns']['labels'] = $labels;
+		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
+		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
+		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
+		$fiscal += array(
+			'sequence' => null,
+			'signed_at' => null,
+			'is_reprint' => false,
+			'reprint_count' => 0,
+			'extra_fields' => array(),
+		);
+		$fiscal['document_type'] = $xreport ? 'xreport' : 'closure';
+		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
+		return array(
+			'closure' => $row,
+			'register' => $register,
+			'software' => array(
+				'name' => 'WCPOS',
+				'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,
+			),
+			'order' => array(
+				'currency' => get_woocommerce_currency(),
+				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
+			),
+			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),
+			'i18n' => Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() ),
+		);
+	}
+
 	/**
 	 * The POS store a receipt for this order is rendered under: the order's own
 	 * `_pos_store` when it still exists, else the current store, else an empty
