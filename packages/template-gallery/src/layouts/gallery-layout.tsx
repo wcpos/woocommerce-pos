@@ -40,10 +40,10 @@ export function GalleryLayout() {
 
 			<div className="wcpos:mb-6">
 				<h1 className="wcpos:text-2xl wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
-					{t(type === 'display' ? 'layout.display_title' : 'layout.title')}
+					{t(type === 'closure' ? 'layout.closure_title' : type === 'display' ? 'layout.display_title' : 'layout.title')}
 				</h1>
 				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2">
-					{t(type === 'display' ? 'layout.display_description' : 'layout.description')}{' '}
+					{t(type === 'closure' ? 'layout.closure_description' : type === 'display' ? 'layout.display_description' : 'layout.description')}{' '}
 					<a
 						href={
 							type === 'display'

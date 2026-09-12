@@ -92,7 +92,7 @@ describe('PreviewModal logicless previews', () => {
 		expect(buildPreviewModalSrcDoc(preview)).toBe(fullHtml);
 	});
 
-	it('wraps legacy partial preview_html in the modal iframe fallback', async () => {
+	it.each(['receipt', 'closure'] as const)('wraps legacy %s preview_html in the modal iframe fallback', async (type) => {
 		usePreviewMock.mockReturnValue({
 			data: {
 				engine: 'legacy-php',
@@ -113,7 +113,7 @@ describe('PreviewModal logicless previews', () => {
 		await act(async () => {
 			root.render(
 				<PreviewModal
-					templateType="receipt"
+					templateType={type}
 					templateId="legacy"
 					templateName="Legacy"
 					isGallery
@@ -122,6 +122,7 @@ describe('PreviewModal logicless previews', () => {
 			);
 		});
 
+		expect(usePreviewMock).toHaveBeenCalledWith('legacy', undefined, type);
 		const iframe = container.querySelector('iframe');
 		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
@@ -250,8 +251,8 @@ describe('PreviewModal logicless previews', () => {
 		});
 
 		expect(orderObserverMounted).toBe(true);
-		expect(usePreviewMock).toHaveBeenCalledWith('invoice', 'latest');
-		expect(usePreviewMock).toHaveBeenCalledWith('invoice', undefined);
+		expect(usePreviewMock).toHaveBeenCalledWith('invoice', 'latest', 'receipt');
+		expect(usePreviewMock).toHaveBeenCalledWith('invoice', undefined, 'receipt');
 		expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain('Sample preview');
 	});
 
@@ -286,6 +287,6 @@ describe('PreviewModal logicless previews', () => {
 			await new Promise((resolve) => window.setTimeout(resolve, 0));
 		});
 
-		expect(usePreviewMock).not.toHaveBeenCalledWith('invoice', undefined);
+		expect(usePreviewMock).not.toHaveBeenCalledWith('invoice', undefined, 'receipt');
 	});
 });

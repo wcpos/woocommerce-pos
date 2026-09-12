@@ -585,7 +585,7 @@ class Single_Template {
 			: null;
 
 		// Get sample receipt data from the preview builder.
-		$sample_data = self::get_sample_receipt_data();
+		$sample_data = 'closure' === $type ? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( 'closure' ) : self::get_sample_receipt_data();
 
 		$preview_url = rest_url( 'wcpos/v2/templates/' . $post->ID . '/preview' );
 

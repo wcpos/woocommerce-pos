@@ -34,7 +34,7 @@ class Templates {
 	/**
 	 * Supported template types.
 	 */
-	const SUPPORTED_TYPES = array( 'receipt', 'report', 'display' );
+	const SUPPORTED_TYPES = array( 'receipt', 'report', 'display', 'closure' );
 
 	/**
 	 * Engines that support offline (client-side) rendering.
@@ -62,7 +62,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 6;
+	public const DEFAULT_TERMS_VERSION = 7;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -591,7 +591,7 @@ class Templates {
 
 		return array(
 			'id'                => $template_id,
-			'title'             => $metadata[ $template_id ]['title'] ?? $template_id,
+			'title'             => 'closure' === $type ? __( 'Closure', 'woocommerce-pos' ) : ( $metadata[ $template_id ]['title'] ?? $template_id ),
 			'description'       => $metadata[ $template_id ]['description'] ?? '',
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
@@ -1471,6 +1471,10 @@ class Templates {
 					'description' => __( 'Report templates for analytics', 'woocommerce-pos' ),
 				)
 			);
+		}
+
+		if ( ! term_exists( 'closure', 'wcpos_template_type' ) ) {
+			wp_insert_term( 'Closure', 'wcpos_template_type', array( 'slug' => 'closure' ) );
 		}
 
 		if ( ! term_exists( 'display', 'wcpos_template_type' ) ) {

@@ -74,6 +74,10 @@ describe('display tabs and table', () => {
 		const container = mount(<TypeTabs activeType="display" />);
 		const buttons = Array.from(container.querySelectorAll('button'));
 		const display = buttons.find((button) => button.textContent === 'tabs.display');
+		const closure = buttons.find((button) => button.textContent === 'tabs.closures');
+		expect(closure?.disabled).toBe(false);
+		act(() => closure!.click());
+		expect(navigate).toHaveBeenCalledWith({ to: '/', search: { type: 'closure' } });
 		expect(display).toBeDefined();
 		expect(display?.disabled).toBe(false);
 		expect(display?.className).toContain('wcpos:border-wp-admin-theme-color');

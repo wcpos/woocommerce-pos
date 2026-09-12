@@ -17,7 +17,7 @@ import { PreviewToggle } from './preview-toggle';
 import type { PreviewResponse } from '../types';
 
 interface PreviewModalProps {
-	templateType: 'receipt' | 'display';
+	templateType: 'receipt' | 'display' | 'closure';
 	templateId: number | string;
 	templateName: string;
 	templateDescription?: string;
@@ -140,7 +140,7 @@ function ReceiptPreviewModal(props: PreviewModalProps) {
 	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
 	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
 	const orderId = source === 'order' ? 'latest' : undefined;
-	const { data: preview, isFetching, isError } = usePreview(props.templateId, orderId);
+	const { data: preview, isFetching, isError } = usePreview(props.templateId, orderId, props.templateType);
 
 	// Let the errored order observer mount and retry before falling back.
 	React.useEffect(() => {

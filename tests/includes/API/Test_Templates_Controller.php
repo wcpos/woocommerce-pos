@@ -502,7 +502,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_type_enum_values(): void {
 		$params = $this->endpoint->get_collection_params();
 
-		$this->assertEquals( array( 'receipt', 'report', 'display' ), $params['type']['enum'] );
+		$this->assertEquals( Templates::SUPPORTED_TYPES, $params['type']['enum'] );
 	}
 
 	/**

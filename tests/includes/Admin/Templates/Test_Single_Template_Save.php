@@ -207,8 +207,9 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		$previous_get  = $_GET;
 		$handler       = new Single_Template();
 		try {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulate the admin screen under test.
 			$pagenow = 'post-new.php';
-			foreach ( array( 'display', 'receipt', 'unknown', 'report' ) as $type ) {
+			foreach ( array( 'display', 'receipt', 'unknown', 'report', 'closure' ) as $type ) {
 				$_GET = array(
 					'post_type' => 'wcpos_template',
 					'wcpos_type' => $type,
@@ -223,6 +224,7 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 				$this->assertSame( $expected, wp_get_post_terms( $post_id, 'wcpos_template_type', array( 'fields' => 'slugs' ) ) );
 			}
 		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore the original screen.
 			$pagenow = $previous_page;
 			$_GET    = $previous_get;
 			remove_action( 'wp_insert_post', array( $handler, 'assign_new_template_type' ), 10 );

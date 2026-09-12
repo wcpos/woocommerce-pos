@@ -93,7 +93,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description' => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'default'     => 'receipt',
-						'enum'        => array( 'receipt', 'report', 'display' ),
+						'enum'        => TemplatesManager::SUPPORTED_TYPES,
 					),
 				),
 			)
@@ -137,7 +137,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type for ordering.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report', 'display' ),
+						'enum'              => TemplatesManager::SUPPORTED_TYPES,
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -229,7 +229,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report', 'display' ),
+						'enum'              => TemplatesManager::SUPPORTED_TYPES,
 						'sanitize_callback' => 'sanitize_key',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -299,7 +299,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report', 'display' ),
+						'enum'              => TemplatesManager::SUPPORTED_TYPES,
 						'sanitize_callback' => 'sanitize_key',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -1036,13 +1036,16 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		if ( 'closure' === ( $template['type'] ?? '' ) ) {
+			$order = null;
+		}
 		if ( $order ) {
 			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
 			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
 			$preview_data_profile = isset( $template['preview_data'] ) && is_string( $template['preview_data'] )
 				? $template['preview_data']
-				: null;
+				: ( 'closure' === ( $template['type'] ?? '' ) ? 'closure' : null );
 			$receipt_data = null !== $preview_data_profile
 				? ( new Receipt_Preview_Fixture_Loader() )->build( $preview_data_profile, $pos_store )
 				: ( new Preview_Receipt_Builder() )->build( $pos_store );
@@ -1123,6 +1126,22 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 
 			return rest_ensure_response( $response );
+		}
+
+		if ( 'closure' === ( $template['type'] ?? '' ) ) {
+			ob_start();
+			try {
+				( new \WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer() )->render( $template, null, $formatted_data );
+				return rest_ensure_response(
+					array(
+						'engine' => 'legacy-php',
+						'preview_html' => ob_get_contents(),
+						'receipt_data' => $formatted_data,
+					)
+				);
+			} finally {
+				ob_end_clean();
+			}
 		}
 
 		// Legacy-php templates execute arbitrary PHP that expects a real WC_Order
@@ -1382,7 +1401,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'default'           => 'receipt',
-				'enum'              => array( 'receipt', 'report', 'display' ),
+				'enum'              => TemplatesManager::SUPPORTED_TYPES,
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),

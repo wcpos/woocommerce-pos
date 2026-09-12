@@ -1,0 +1,90 @@
+{
+  "closure": {
+    "number": 42,
+    "store_id": 1,
+    "opened_at_gmt": "2026-09-11 08:00:00",
+    "closed_at_gmt": "2026-09-11 17:00:00",
+    "opened_by": 1,
+    "closed_by": 1,
+    "approved_by": 1,
+    "expected": {
+      "cash": "180.0000",
+      "card": "120.0000"
+    },
+    "counted": {
+      "cash": "178.0000",
+      "card": "120.0000"
+    },
+    "variance": {
+      "cash": "-2.0000",
+      "card": "0.0000"
+    },
+    "period_sales_total": "250.0000",
+    "period_refunds_total": "50.0000",
+    "perpetual_sales_total": "5250.0000",
+    "perpetual_refunds_total": "250.0000",
+    "unsynced_count": 2,
+    "unsynced_total": "12.0000",
+    "breakdowns": {
+      "payment_methods": [
+        {
+          "name": "Cash",
+          "sales": "130.0000",
+          "refunds": "50.0000"
+        },
+        {
+          "name": "Card",
+          "sales": "120.0000",
+          "refunds": "0.0000"
+        }
+      ],
+      "tax_rates": [
+        {
+          "name": "VAT 20%",
+          "net": "166.6667",
+          "tax": "33.3333",
+          "gross": "200.0000"
+        }
+      ],
+      "opening_float": {
+        "expected": "100.0000",
+        "counted": "100.0000",
+        "variance": "0.0000"
+      },
+      "movements": [
+        {
+          "created_at_gmt": "2026-09-11 10:00:00",
+          "type": "paid_out",
+          "amount": "5.0000",
+          "reason": "Petty cash",
+          "voided_by": "sample-void"
+        }
+      ],
+      "transaction_count": 12,
+      "refund_count": 2,
+      "cashiers": [
+        {
+          "id": 1,
+          "name": "Alex"
+        }
+      ]
+    }
+  },
+  "register": {
+    "name": "Main register"
+  },
+  "software": {
+    "name": "WCPOS",
+    "plugin_version": "preview"
+  },
+  "fiscal": {
+    "document_type": "closure",
+    "receipt_number": "42",
+    "is_sale_document": false,
+    "is_refund_document": false,
+    "is_closure_document": true,
+    "is_x_report": false,
+    "is_reprint": false,
+    "reprint_count": 0
+  }
+}
