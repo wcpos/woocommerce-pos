@@ -198,6 +198,30 @@ class Starprnt_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Padding follows the magnification the printer applies, not the one requested.
+	 *
+	 * ESC i carries n1/n2 as 0-5, so 6x is the ceiling, while `<size>` accepts up to 8. Padding a
+	 * width-8 line as though its glyphs were 8 cells wide under-counts the margin and throws the
+	 * line off-centre the other way. Raised by Codex review on wcpos/monorepo#2010.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_padding_uses_capped_star_magnification(): void {
+		// Arrange: 2 glyphs at the applied 6x is 12 of 48 columns, leaving 36; half is 18 columns,
+		// which is 3 spaces of 6 cells. Taking the requested 8 would have counted only 2.
+		$text = 'AB';
+
+		// Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><align mode="center"><size width="8" height="1"><text>' . $text . '</text></size></align></receipt>'
+		);
+
+		// Assert: and the emitted command really is the 6x cap (ESC i n2 = 5).
+		$this->assertSame( 3, $this->longest_space_run( $bytes ) );
+		$this->assertGreaterThan( -1, $this->sequence_index( $bytes, array( 0x1b, 0x69, 0x00, 0x05 ) ) );
+	}
+
+	/**
 	 * Unscaled centering padding is unchanged by the scaled-padding fix.
 	 *
 	 * @return void
