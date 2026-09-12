@@ -296,6 +296,9 @@ class Receipts_Controller extends WP_REST_Controller {
 		}
 
 		$template = $is_closure && ! is_numeric( $template_id ) ? Templates::get_virtual_template( $template_id, 'closure' ) : Print_Job_Service::load_template( $template_id );
+		if ( $is_closure && $template && 'closure' !== ( $template['type'] ?? '' ) ) {
+			$template = null;
+		}
 		if ( null === $template ) {
 			return new WP_Error(
 				'wcpos_receipt_template_not_found',

@@ -1275,6 +1275,28 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_delete_post( $data['id'], true );
 	}
 
+	/** Closure previews ignore order selectors, including invalid and non-POS orders. */
+	public function test_preview_closure_ignores_order_and_returns_sample_data(): void {
+		$non_pos = OrderHelper::create_order();
+		$pos = OrderHelper::create_order();
+		$pos->set_created_via( 'woocommerce-pos' );
+		$pos->save();
+		foreach ( array( 'logicless', 'thermal' ) as $engine ) {
+			$id = $this->create_template( 'Closure preview', 'closure' );
+			update_post_meta( $id, '_template_engine', $engine );
+			foreach ( array( 'latest', 999999999, $non_pos->get_id(), $pos->get_id() ) as $order_id ) {
+				$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $id . '/preview' );
+				$request->set_param( 'order_id', $order_id );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( 0, $data['order_id'] );
+				$this->assertSame( $engine, $data['engine'] );
+				$this->assertSame( 'closure', $data['receipt_data']['fiscal']['document_type'] );
+			}
+		}
+	}
+
 	// ---- Task 9: Preview tests ----
 
 	/**

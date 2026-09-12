@@ -13,7 +13,9 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/',
-	validateSearch: (search: Record<string, unknown>): { type: 'receipt' | 'display' | 'closure' } => ({
+	validateSearch: (
+		search: Record<string, unknown>
+	): { type: 'receipt' | 'display' | 'closure' } => ({
 		type: search.type === 'closure' ? 'closure' : search.type === 'display' ? 'display' : 'receipt',
 	}),
 	loaderDeps: ({ search: { type } }) => ({ type }),

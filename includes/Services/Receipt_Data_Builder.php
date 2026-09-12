@@ -28,8 +28,13 @@ class Receipt_Data_Builder {
 			$row['expected'] = $sessions->expected( $row );
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
+			$refund_count = 0;
 			foreach ( $sessions->captured_orders( $row ) as $payments ) {
 				foreach ( $payments as $payment ) {
+					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
+						++$refund_count;
+					}
+
 					$id = (int) ( $payment['cashier_id'] ?? 0 );
 					if ( $id ) {
 						$cashiers[ $id ] = array(
@@ -47,6 +52,7 @@ class Receipt_Data_Builder {
 				),
 				'movements' => ( new Cash_Movement_Store() )->list( $row['id'] ),
 				'transaction_count' => $sessions->sales_count( $row ),
+				'refund_count' => $refund_count,
 				'cashiers' => array_values( $cashiers ),
 			);
 		}

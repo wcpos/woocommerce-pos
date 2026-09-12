@@ -92,49 +92,58 @@ describe('PreviewModal logicless previews', () => {
 		expect(buildPreviewModalSrcDoc(preview)).toBe(fullHtml);
 	});
 
-	it.each(['receipt', 'closure'] as const)('wraps legacy %s preview_html in the modal iframe fallback', async (type) => {
-		usePreviewMock.mockReturnValue({
-			data: {
-				engine: 'legacy-php',
-				preview_html: '<main>Legacy fallback</main>',
-				order_id: 0,
-				template_id: 'legacy',
-			},
-			isLoading: false,
-			isFetching: false,
-			isError: false,
-		} as unknown as ReturnType<typeof usePreview>);
+	it.each(['receipt', 'closure'] as const)(
+		'wraps legacy %s preview_html in the modal iframe fallback',
+		async (type) => {
+			(window as any).wcpos = { templateGallery: { hasPosOrders: true } };
+			usePreviewMock.mockReturnValue({
+				data: {
+					engine: 'legacy-php',
+					preview_html: '<main>Legacy fallback</main>',
+					order_id: 0,
+					template_id: 'legacy',
+				},
+				isLoading: false,
+				isFetching: false,
+				isError: false,
+			} as unknown as ReturnType<typeof usePreview>);
 
-		const container = document.createElement('div');
-		const root = createRoot(container);
-		mountedRoots.push(root);
-		document.body.appendChild(container);
+			const container = document.createElement('div');
+			const root = createRoot(container);
+			mountedRoots.push(root);
+			document.body.appendChild(container);
 
-		await act(async () => {
-			root.render(
-				<PreviewModal
-					templateType={type}
-					templateId="legacy"
-					templateName="Legacy"
-					isGallery
-					onClose={() => {}}
-				/>
+			await act(async () => {
+				root.render(
+					<PreviewModal
+						templateType={type}
+						templateId="legacy"
+						templateName="Legacy"
+						isGallery
+						onClose={() => {}}
+					/>
+				);
+			});
+
+			expect(usePreviewMock).toHaveBeenCalledWith(
+				'legacy',
+				type === 'closure' ? undefined : 'latest',
+				type
 			);
-		});
+			expect(container.querySelector('[role="radiogroup"]') === null).toBe(type === 'closure');
+			const iframe = container.querySelector('iframe');
+			expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
+			expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
 
-		expect(usePreviewMock).toHaveBeenCalledWith('legacy', undefined, type);
-		const iframe = container.querySelector('iframe');
-		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
-		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
-
-		const canvas = container.querySelector(
-			'[data-testid="preview-viewport-canvas"]'
-		) as HTMLElement | null;
-		expect(canvas).toBeTruthy();
-		expect(canvas?.style.width).toBe('794px');
-		expect(canvas?.style.height).toBe('1123px');
-		expect(iframe?.getAttribute('srcdoc')).toContain('width:210mm');
-	});
+			const canvas = container.querySelector(
+				'[data-testid="preview-viewport-canvas"]'
+			) as HTMLElement | null;
+			expect(canvas).toBeTruthy();
+			expect(canvas?.style.width).toBe('794px');
+			expect(canvas?.style.height).toBe('1123px');
+			expect(iframe?.getAttribute('srcdoc')).toContain('width:210mm');
+		}
+	);
 
 	it('renders an empty logicless template when receipt data is present', async () => {
 		usePreviewMock.mockReturnValue({

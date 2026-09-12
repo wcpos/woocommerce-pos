@@ -992,7 +992,7 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		// Build receipt data: real order if order_id provided, otherwise sample data.
-		$raw_order_id = $request->get_param( 'order_id' );
+		$raw_order_id = 'closure' === ( $template['type'] ?? '' ) ? null : $request->get_param( 'order_id' );
 		$order        = null;
 		$order_id     = 0;
 
@@ -1036,9 +1036,6 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		if ( 'closure' === ( $template['type'] ?? '' ) ) {
-			$order = null;
-		}
 		if ( $order ) {
 			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {

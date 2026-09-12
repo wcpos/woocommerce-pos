@@ -82,6 +82,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '', $data['fiscal']['receipt_number'] );
 		$this->assertSame( '140.0000', $data['closure']['expected']['cash'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['transaction_count'] );
+		$this->assertSame( 1, $data['closure']['breakdowns']['refund_count'] );
 		$this->assertStringContainsString( 'X-report · Closure fixture', $this->html( $data ) );
 		$this->assertStringNotContainsString( 'sales not yet on the server', $this->html( $data ) );
 		$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
@@ -106,6 +107,27 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'woocommerce_pos_closures_list_args', $scope );
 		}
 	}
+	/** Refund counts use captured session payment rows, not orders or pending rows. */
+	public function test_xreport_refund_count_uses_live_session_ledger(): void {
+		$session = $this->closure_session();
+		$this->assertSame( 0, $this->document( 'xreport:' . $session['id'] )->get_data()['data']['closure']['breakdowns']['refund_count'] );
+		$order = $this->closure_ledger( $session );
+		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$rows = $ledger->read( $order );
+		$rows[1]['amount'] = '-5';
+		$rows[2]['refunded_amount'] = '10'; // Pending: excluded.
+		$rows[3]['refunded_amount'] = '10'; // Another session: excluded.
+		$refund = $rows[0];
+		$refund['id'] = wp_generate_uuid4();
+		$refund['kind'] = 'refund';
+		$refund['refunded_amount'] = '0';
+		$rows[] = $refund;
+		$ledger->save( $order, $rows, false );
+		$data = $this->document( 'xreport:' . $session['id'] )->get_data()['data'];
+		$this->assertSame( 3, $data['closure']['breakdowns']['refund_count'] );
+		$this->assertSame( 1, $data['closure']['breakdowns']['transaction_count'] );
+	}
+
 	/** PDFs use the same document count, including on the virtual default. */
 	public function test_closure_pdf_count_and_failed_render_rollback(): void {
 		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
@@ -147,6 +169,34 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'test render failure', $error->getMessage() );
 		}
 		$this->assertSame( 2, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
+	}
+
+	/** Closure PDFs reject database templates of every unrelated type before counting. */
+	public function test_closure_pdf_non_closure_template_returns_not_found(): void {
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		foreach ( array( 'receipt', 'report', 'display' ) as $type ) {
+			$id = self::factory()->post->create(
+				array(
+					'post_type' => 'wcpos_template',
+					'post_status' => 'publish',
+					'post_content' => '<p>Wrong layout</p>',
+				)
+			);
+			wp_set_object_terms( $id, $type, 'wcpos_template_type' );
+			update_post_meta( $id, '_template_engine', 'logicless' );
+			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/0/pdf' );
+			$request->set_query_params(
+				array(
+					'document' => 'closure:' . $row['id'],
+					'template_id' => $id,
+					'intent' => 'print',
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 404, $response->get_status() );
+			$this->assertSame( 'wcpos_receipt_template_not_found', $response->get_data()['code'] );
+			$this->assertSame( 0, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
+		}
 	}
 
 	/** Both template preview and merchant-created templates accept the new type. */

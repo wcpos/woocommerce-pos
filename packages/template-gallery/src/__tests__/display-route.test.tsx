@@ -40,9 +40,18 @@ describe('gallery search routes', () => {
 						</QueryClientProvider>
 					);
 				});
-				const type = entry === '/?type=closure' ? 'closure' : entry === '/?type=display' ? 'display' : 'receipt';
+				const type =
+					entry === '/?type=closure'
+						? 'closure'
+						: entry === '/?type=display'
+							? 'display'
+							: 'receipt';
 				expect(container.querySelector('h1')?.textContent).toBe(
-					type === 'closure' ? 'layout.closure_title' : type === 'display' ? 'layout.display_title' : 'layout.title'
+					type === 'closure'
+						? 'layout.closure_title'
+						: type === 'display'
+							? 'layout.display_title'
+							: 'layout.title'
 				);
 				for (const path of ['wcpos/v1/templates', 'wcpos/v1/templates/gallery']) {
 					expect(paths.some((value) => value.startsWith(`${path}?wcpos=1&type=${type}`))).toBe(
