@@ -59,6 +59,18 @@ class Test_Register_Store extends WP_UnitTestCase {
 		);
 		$store->update( $b['id'], array( 'status' => 'retired' ) );
 		$this->assertSame( array( $a['id'], $b['id'] ), array_column( $store->list( array( 'store_id' => 987 ) ), 'id' ) );
+		$closure_queries = array();
+		$trace = static function ( $sql ) use ( &$closure_queries ) {
+			if ( false !== strpos( $sql, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->table_name() ) && false !== stripos( $sql, 'SELECT' ) ) {
+				$closure_queries[] = $sql;
+			}
+			return $sql;
+		};
+		add_filter( 'query', $trace );
+		$listed = $store->list( array( 'store_id' => 987 ) );
+		remove_filter( 'query', $trace );
+		$this->assertSame( array( $a['id'], $b['id'] ), array_column( $listed, 'id' ) );
+		$this->assertCount( 1, $closure_queries );
 		$this->assertSame( array( $a['id'] ), array_column( $store->list( array( 'store_id' => 987, 'status' => 'active' ) ), 'id' ) );
 		$this->assertSame( array(), $store->list( array( 'store_id' => 988 ) ) );
 	}

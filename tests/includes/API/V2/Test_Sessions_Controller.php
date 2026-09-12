@@ -483,6 +483,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$fields['session_id'] = $id;
 		$get = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id . '/movements' ) );
 		$this->assertSame( ( new Cash_Movement_Store() )->list( $id ), $get->get_data() );
+		$fields['created_at'] = '2026-09-11T12:00:00Z';
 		foreach ( array( 'counting', 'closed' ) as $status ) {
 			$this->post(
 				'sessions/' . $id . '/status',

@@ -257,7 +257,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
 		$session = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
-		if ( ! $session || 'open' !== $session['status'] ) {
+		if ( ! $session || ! ( new Cash_Movement_Store() )->accepts( $session, gmdate( 'Y-m-d H:i:s', strtotime( $request['created_at'] ) ) ) ) {
 			return $this->error( 'wcpos_session_not_open', 409 );
 		}
 		$amount = $this->decimal( $request['amount'] );

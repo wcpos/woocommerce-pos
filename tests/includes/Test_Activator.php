@@ -481,7 +481,7 @@ class Test_Activator extends WP_UnitTestCase {
 	/** Both activation and the versioned upgrade install missing bookkeeping tables. */
 	public function test_activation_and_upgrade_install_session_and_movement_tables(): void {
 		global $wpdb;
-		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() );
+		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store(), new \WCPOS\WooCommercePOS\Services\Closure_Store() );
 		$activator = new Activator();
 		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
 		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );

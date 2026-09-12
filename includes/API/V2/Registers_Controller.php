@@ -241,6 +241,39 @@ class Registers_Controller extends WP_REST_Controller {
 							),
 							'name' => array( 'type' => 'string' ),
 							'orders' => array( 'type' => 'integer' ),
+							'closure_gaps' => array(
+								'type' => 'array',
+								'items' => array(
+									'type' => 'object',
+									'properties' => array(
+										'after' => array( 'type' => 'integer' ),
+										'before' => array( 'type' => 'integer' ),
+										'missing' => array( 'type' => 'integer' ),
+									),
+								),
+							),
+							'closure_conflicts' => array(
+								'type' => 'array',
+								'items' => array(
+									'type' => 'object',
+									'properties' => array(
+										'id' => array( 'type' => 'string' ),
+										'number' => array( 'type' => 'integer' ),
+										'printed_number' => array( 'type' => 'integer' ),
+									),
+								),
+							),
+							'closure_total_mismatches' => array(
+								'type' => 'array',
+								'items' => array(
+									'type' => 'object',
+									'properties' => array(
+										'id' => array( 'type' => 'string' ),
+										'number' => array( 'type' => 'integer' ),
+										'findings' => array( 'type' => 'object' ),
+									),
+								),
+							),
 							'first_counter' => array( 'type' => array( 'integer', 'null' ) ),
 							'last_counter' => array( 'type' => array( 'integer', 'null' ) ),
 							'gaps' => array(

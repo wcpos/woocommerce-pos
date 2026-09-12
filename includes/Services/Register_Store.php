@@ -136,6 +136,7 @@ final class Register_Store {
 	 * List registers by name, optionally scoped by store and status.
 	 *
 	 * @param array $args Filters.
+	 * @throws \RuntimeException When latest closure counters cannot be read.
 	 */
 	public function list( array $args ): array {
 		global $wpdb;
@@ -151,7 +152,29 @@ final class Register_Store {
 		$where = implode( ' AND ', $where );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and prepared predicates.
 		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY name", ARRAY_A );
-		return array_map( array( $this, 'normalize_row' ), $rows );
+		$latest = array_fill_keys( array_column( $rows, 'id' ), array() );
+		if ( $rows ) {
+			$closures = new Closure_Store();
+			$closures->ensure_installed();
+			$closure_table = $closures->table_name();
+			$placeholders = implode( ', ', array_fill( 0, count( $rows ), '%s' ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and generated placeholders.
+			$sql = $wpdb->prepare( "SELECT closure.register_id, closure.number, closure.perpetual_sales_total, closure.perpetual_refunds_total FROM {$closure_table} closure INNER JOIN ( SELECT register_id, MAX(number) AS number FROM {$closure_table} WHERE register_id IN ({$placeholders}) GROUP BY register_id ) latest_closure ON latest_closure.register_id = closure.register_id AND latest_closure.number = closure.number", array_column( $rows, 'id' ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
+			$closure_rows = $wpdb->get_results( $sql, ARRAY_A );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Register closure read failed.' );
+			}
+			foreach ( $closure_rows as $closure ) {
+				$latest[ $closure['register_id'] ] = $closure;
+			}
+		}
+		return array_map(
+			function ( $row ) use ( $latest ) {
+				return $this->normalize_row( $row, $latest[ $row['id'] ] );
+			},
+			$rows
+		);
 	}
 
 	/**
@@ -185,19 +208,20 @@ final class Register_Store {
 	/**
 	 * Convert database types to the REST resource types.
 	 *
-	 * @param array $row Database row.
+	 * @param array      $row Database row.
+	 * @param null|array $closure Preloaded latest closure; null loads it here.
 	 */
-	private function normalize_row( array $row ): array {
+	private function normalize_row( array $row, ?array $closure = null ): array {
 		$row['store_id'] = null === $row['store_id'] ? null : (int) $row['store_id'];
 		$row['default_float'] = null === $row['default_float'] ? null : wc_format_decimal( $row['default_float'], 4 );
 		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt', 'last_seen_at_gmt' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : str_replace( ' ', 'T', $row[ $key ] ) . 'Z';
 		}
-		// The closure landing (roadmap#249) supplies the real counter values.
+		$closure = null === $closure ? ( new Closure_Store() )->last( $row['id'] ) : $closure;
 		$row['counters'] = array(
-			'last_closure_number' => 0,
-			'perpetual_sales_total' => '0',
-			'perpetual_refunds_total' => '0',
+			'last_closure_number' => isset( $closure['number'] ) ? (int) $closure['number'] : 0,
+			'perpetual_sales_total' => $closure['perpetual_sales_total'] ?? '0',
+			'perpetual_refunds_total' => $closure['perpetual_refunds_total'] ?? '0',
 		);
 		return $row;
 	}

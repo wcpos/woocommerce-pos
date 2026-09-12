@@ -91,6 +91,46 @@ final class Fiscal_Record_Writers {
 					)
 				)
 			);
+			$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
+			$sale = $this->store->find_sale( $order->get_id() );
+			$snapshot_created = (string) $order->get_meta( Receipt_Snapshot_Store::META_KEY_CREATED_AT, true );
+			// A replay of a sale already included in the closure is not a late sale.
+			if ( $closure && $sale && '' !== $snapshot_created && $snapshot_created >= $closure['received_at_gmt'] && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
+				$rows = array_values(
+					array_filter(
+						\WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order ),
+						static function ( $row ) use ( $closure ) {
+							return 'captured' === ( $row['status'] ?? null ) && ( $row['session_id'] ?? null ) === $closure['session_id'];
+						}
+					)
+				);
+				$cash = array();
+				foreach ( $rows as $row ) {
+					// Every cash-kind gateway is the drawer; a refund is the captured row's refunded_amount.
+					if ( 'cash' === ( $row['kind'] ?? '' ) ) {
+						$cash[] = $row['amount'];
+						$cash[] = '-' . ltrim( $row['refunded_amount'] ?? '0', '-' );
+					}
+				}
+				$delta = array( 'cash' => Closure_Store::sum( $cash ) );
+				$this->write(
+					$order,
+					array_merge(
+						$this->store->provenance_from_order( $order ),
+						array(
+							'type' => 'late_sale',
+							'order_id' => $order->get_id(),
+							'closure_id' => $closure['id'],
+							'corrects_record_id' => $sale['id'],
+							'payload' => array(
+								'tender_rows' => $rows,
+								'expected_delta' => $delta,
+								'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+							),
+						)
+					)
+				);
+			}
 		}
 	}
 

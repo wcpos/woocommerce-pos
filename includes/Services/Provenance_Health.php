@@ -60,7 +60,7 @@ final class Provenance_Health {
 			'unknown_sessions' => array(),
 		);
 		foreach ( $registers as $register ) {
-			$report['registers'][] = $this->register_report( $register, $groups[ $register['id'] ] ?? array() );
+			$report['registers'][] = $this->register_report( $register, $groups[ $register['id'] ] ?? array() ) + ( new Closure_Store() )->health( $register['id'] );
 		}
 		foreach ( array_diff_key( $groups, array_flip( $known_ids ) ) as $register => $group ) {
 			$ids = array_slice( array_keys( $group ), 0, self::SAMPLE_LIMIT );

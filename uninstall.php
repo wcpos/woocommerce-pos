@@ -423,6 +423,7 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_registers" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_register_sessions" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_cash_movements" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_closures" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
 	}
 
 	// 3. Delete plugin post types: the print-job queue always; receipt

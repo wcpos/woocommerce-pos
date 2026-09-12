@@ -20,6 +20,7 @@ use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use const DOING_AJAX;
@@ -197,6 +198,7 @@ class Activator {
 		( new Register_Store() )->install();
 		( new Register_Session_Store() )->install();
 		( new Cash_Movement_Store() )->install();
+		( new Closure_Store() )->install();
 		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 
@@ -638,6 +640,7 @@ class Activator {
 		( new Register_Store() )->install();
 		( new Register_Session_Store() )->install();
 		( new Cash_Movement_Store() )->install();
+		( new Closure_Store() )->install();
 		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 

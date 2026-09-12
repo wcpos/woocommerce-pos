@@ -901,4 +901,17 @@ class Test_Uninstall extends WP_UnitTestCase {
 			$store->install();
 		}
 	}
+	/** Closure documents survive ordinary uninstall and disappear only behind the gate. */
+	public function test_closures_survive_default_uninstall_and_drop_with_remove_all(): void {
+		$store = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+		$store->install();
+		try {
+			$this->run_uninstall( false );
+			$this->assertTrue( Health::table_exists( $store->table_name() ) );
+			$this->run_uninstall( true );
+			$this->assertFalse( Health::table_exists( $store->table_name() ) );
+		} finally {
+			$store->install();
+		}
+	}
 }

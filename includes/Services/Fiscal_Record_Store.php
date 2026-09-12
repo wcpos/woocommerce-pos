@@ -53,7 +53,7 @@ final class Fiscal_Record_Store {
 			order_id BIGINT UNSIGNED NULL,
 			refund_id BIGINT UNSIGNED NULL,
 			payment_id CHAR(36) NULL,
-			closure_id BIGINT UNSIGNED NULL,
+			closure_id CHAR(36) NULL,
 			source_id CHAR(36) NULL,
 			corrects_record_id BIGINT UNSIGNED NULL,
 			register_id CHAR(36) NULL,
@@ -79,10 +79,23 @@ final class Fiscal_Record_Store {
 		) {$charset_collate};";
 	}
 
-	/** No DDL once installed: dbDelta would commit an open transaction. */
+	/** Upgrade the closure link only when needed; callers install before transactions.
+	 *
+	 * @throws \RuntimeException On schema upgrade failure.
+	 */
 	public function install(): void {
 		global $wpdb;
 		if ( Health::table_exists( $this->table_name() ) ) {
+			$table = $this->table_name();
+			// The pre-closure schema used BIGINT; closure documents have client UUIDs.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
+			$column = $wpdb->get_row( "SHOW COLUMNS FROM {$table} LIKE 'closure_id'", ARRAY_A );
+			if ( $column && 'char(36)' !== strtolower( $column['Type'] ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table and fixed definition.
+				if ( false === $wpdb->query( "ALTER TABLE {$table} MODIFY closure_id CHAR(36) NULL" ) ) {
+					throw new \RuntimeException( 'Fiscal closure link upgrade failed.' );
+				}
+			}
 			return;
 		}
 		if ( ! function_exists( 'dbDelta' ) ) {
@@ -114,6 +127,7 @@ final class Fiscal_Record_Store {
 		$identity = array(
 			'sale' => 'order_id',
 			'cancellation' => 'order_id',
+			'late_sale' => 'order_id',
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';
@@ -315,7 +329,7 @@ final class Fiscal_Record_Store {
 	 * @param array $row Database row.
 	 */
 	private function normalize_row( array $row ): array {
-		foreach ( array( 'id', 'number', 'order_id', 'refund_id', 'closure_id', 'corrects_record_id', 'store_id', 'cashier_id', 'approver_id', 'print_count' ) as $key ) {
+		foreach ( array( 'id', 'number', 'order_id', 'refund_id', 'corrects_record_id', 'store_id', 'cashier_id', 'approver_id', 'print_count' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
 		}
 		$row['payload'] = json_decode( $row['payload'], true );
