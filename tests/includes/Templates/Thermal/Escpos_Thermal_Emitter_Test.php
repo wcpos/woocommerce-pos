@@ -310,6 +310,74 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Centering padding is counted in printed columns, not characters.
+	 *
+	 * The pad spaces sit inside the magnified run, so each is as wide as each glyph. Counting
+	 * them against the unscaled width laid down twice the margin asked for and wrapped the line:
+	 * a merchant's 48-column receipt printed the store name as "Evans Hobb" / "y and Tech".
+	 *
+	 * Note the line simulator above cannot see this -- it skips the size commands and counts
+	 * every glyph as one cell, so a double-width line looks correctly centered to it.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_scaled_text_pads_in_columns_not_characters(): void {
+		// Arrange.
+		$text = 'Evans Hobby and Tech';
+
+		// Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><align mode="center"><size width="2" height="2"><text>' . $text . '</text></size></align></receipt>'
+		);
+		$pad = $this->longest_space_run( $bytes );
+
+		// Assert: 20 glyphs at double width is 40 of the 48 columns, leaving 8; half of that is
+		// 4 columns of margin, which is 2 double-width spaces. The old count was 14.
+		$this->assertSame( 2, $pad );
+		$this->assertLessThanOrEqual( 48, ( $pad + \strlen( $text ) ) * 2 );
+	}
+
+	/**
+	 * Unscaled centering padding is unchanged by the scaled-padding fix.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_unscaled_text_padding_is_unchanged(): void {
+		// Arrange.
+		$text = 'Thank you';
+
+		// Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><align mode="center"><text>' . $text . '</text></align></receipt>'
+		);
+
+		// Assert.
+		$this->assertSame( 19, $this->longest_space_run( $bytes ) );
+	}
+
+	/**
+	 * The longest run of spaces in a job -- the alignment padding.
+	 *
+	 * Words inside the text are separated by single spaces, so the padding always wins. Reading
+	 * it off the byte stream avoids depending on where the code-page and size commands fall.
+	 *
+	 * @param string $bytes The emitted byte string.
+	 *
+	 * @return int The longest run of 0x20 bytes.
+	 */
+	private function longest_space_run( string $bytes ): int {
+		$longest = 0;
+		$run     = 0;
+		$length  = \strlen( $bytes );
+		for ( $index = 0; $index < $length; $index++ ) {
+			$run     = 0x20 === \ord( $bytes[ $index ] ) ? $run + 1 : 0;
+			$longest = max( $longest, $run );
+		}
+
+		return $longest;
+	}
+
+	/**
 	 * It computes Unicode display width when mbstring is unavailable.
 	 *
 	 * The no-mbstring branch of code_point() used to call mb_convert_encoding(),

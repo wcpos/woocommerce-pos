@@ -350,7 +350,7 @@ class Starprnt_Thermal_Emitter {
 	private function emit_text_line( array $children ): void {
 		if ( 'left' !== $this->align ) {
 			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
-			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns );
+			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns, $this->width );
 			if ( $pad > 0 ) {
 				$this->raw_string( str_repeat( ' ', $pad ) );
 			}
