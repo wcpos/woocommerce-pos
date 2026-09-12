@@ -17,6 +17,7 @@ namespace WCPOS\WooCommercePOS;
 use WP_Query;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
+use WCPOS\WooCommercePOS\Templates\Gallery_Update_Status;
 
 /**
  * Templates class.
@@ -521,6 +522,8 @@ class Templates {
 			'gallery_key'     => $gallery_key ? $gallery_key : null,
 			'preview_data'    => $preview_data,
 			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
+			// Null for a hand-written template, which has no bundled original to be behind.
+			'gallery_update'  => Gallery_Update_Status::status_for( $template_id ),
 			'status'          => $post->post_status,
 			'source'          => 'custom',
 			'menu_order'      => $post->menu_order,
@@ -1176,7 +1179,7 @@ class Templates {
 				continue;
 			}
 
-			$content_file = self::find_gallery_content_file( $key );
+			$content_file = self::find_gallery_content_file( $key, $metadata );
 
 			if ( '' === $content_file ) {
 				continue;
@@ -1206,11 +1209,19 @@ class Templates {
 	 * Only stats the candidate paths for the given key — it never reads file
 	 * contents, and never touches the other bundled gallery templates.
 	 *
-	 * @param string $key Gallery template key (e.g. "standard-receipt").
+	 * @param string              $key      Gallery template key (e.g. "standard-receipt").
+	 * @param array<string,mixed> $metadata The registry entry, which may name its own content file.
 	 *
 	 * @return string Absolute path to the content file, or '' when none exists.
 	 */
-	private static function find_gallery_content_file( string $key ): string {
+	private static function find_gallery_content_file( string $key, array $metadata = array() ): string {
+		// An entry added through `woocommerce_pos_gallery_templates` lives in another plugin and
+		// cannot put its markup in this one's directory, so it may name its own file. Without this
+		// the filter can only ever re-describe templates that already ship here.
+		if ( isset( $metadata['content_file'] ) && \is_string( $metadata['content_file'] ) ) {
+			return file_exists( $metadata['content_file'] ) ? $metadata['content_file'] : '';
+		}
+
 		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
 
 		foreach ( self::GALLERY_CONTENT_EXTENSIONS as $ext ) {
@@ -1282,7 +1293,7 @@ class Templates {
 			return null;
 		}
 
-		if ( '' === self::find_gallery_content_file( $key ) ) {
+		if ( '' === self::find_gallery_content_file( $key, $registry[ $key ] ) ) {
 			return null;
 		}
 
@@ -1305,7 +1316,7 @@ class Templates {
 			return null;
 		}
 
-		return self::build_gallery_template( $metadata, self::find_gallery_content_file( $key ) );
+		return self::build_gallery_template( $metadata, self::find_gallery_content_file( $key, $metadata ) );
 	}
 
 	/**
@@ -1440,6 +1451,11 @@ class Templates {
 				);
 			}
 		}
+
+		// Fingerprint what was installed, so a later release can tell an untouched copy (safe to
+		// update in place) from one the merchant has edited (theirs; only ever offered).
+		// Must follow the raw save above, which is what finally decides the stored content.
+		Gallery_Update_Status::record_source_hash( $post_id, determine_locale() );
 
 		return $post_id;
 	}

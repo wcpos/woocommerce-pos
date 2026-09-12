@@ -66,6 +66,10 @@ class Admin {
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
 		add_action( 'admin_init', array( $this, 'init' ) );
+		// Self-heals a version bump whose upgrade never reached woocommerce_init, which
+		// Activator::version_check() documents as permanent. Gated on an option, so this is a
+		// version comparison on every admin load and nothing more.
+		add_action( 'admin_init', array( '\WCPOS\WooCommercePOS\Templates\Gallery_Update_Status', 'maintain' ) );
 		add_action( 'admin_init', array( $this, 'register_scripts' ) );
 		add_action( 'current_screen', array( $this, 'current_screen' ) );
 

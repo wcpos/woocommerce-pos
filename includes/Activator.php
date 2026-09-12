@@ -633,6 +633,11 @@ class Activator {
 			}
 		}
 
+		// Bring untouched gallery copies up to the bundled markup. Runs here for immediacy on a
+		// normal upgrade, and again from the admin_init hook that self-heals an upgrade which
+		// bumped the version without reaching woocommerce_init (see maintain()). Idempotent.
+		Templates\Gallery_Update_Status::maintain();
+
 		if ( Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
 			$this->install_sync_schema();
 		}
