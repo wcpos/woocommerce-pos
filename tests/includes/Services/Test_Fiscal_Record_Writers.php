@@ -386,7 +386,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $closure['id'], $records[0]['closure_id'] );
 		$this->assertSame( '40.0000', $records[0]['payload']['expected_delta']['cash'] );
 		$this->assertSame( '-40.0000', $records[0]['payload']['variance_delta']['cash'] );
-		$this->assertCount( 4, $records[0]['payload']['tender_rows'] );
+		// The fixture binds two captured rows to the session: cash 50 (refunded 10) and card 30.
+		$this->assertCount( 2, $records[0]['payload']['tender_rows'] );
 		$this->assertSame( $closure, $store->get( $closure['id'] ) );
 		$open = $this->closure_session( null, 'open' );
 		$early = $this->closure_ledger( $open );

@@ -105,8 +105,9 @@ final class Fiscal_Record_Writers {
 				);
 				$cash = array();
 				foreach ( $rows as $row ) {
-					if ( in_array( $row['method'] ?? $row['method_id'], array( 'cash', 'pos_cash' ), true ) ) {
-						$cash[] = 'refund' === $row['kind'] ? '-' . ltrim( $row['amount'], '-' ) : $row['amount'];
+					// Every cash-kind gateway is the drawer; a refund is the captured row's refunded_amount.
+					if ( 'cash' === ( $row['kind'] ?? '' ) ) {
+						$cash[] = $row['amount'];
 						$cash[] = '-' . ltrim( $row['refunded_amount'] ?? '0', '-' );
 					}
 				}
