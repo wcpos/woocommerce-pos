@@ -33,8 +33,6 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates;
 
-use const WCPOS\WooCommercePOS\VERSION;
-
 /**
  * Gallery_Update_Status class.
  */
@@ -105,21 +103,28 @@ final class Gallery_Update_Status {
 	 * the two differ (slashing, line endings), and hashing the pre-save copy would mark every
 	 * template edited the moment it was installed.
 	 *
-	 * @param int $template_id The template post ID.
+	 * @param int         $template_id The template post ID.
+	 * @param string|null $locale      The locale the content was rendered in, when the caller knows
+	 *                                 it. Null leaves any recorded locale untouched.
 	 *
 	 * @return void
 	 */
-	public static function record_source_hash( int $template_id ): void {
+	public static function record_source_hash( int $template_id, ?string $locale = null ): void {
 		$post = get_post( $template_id );
 		if ( ! $post ) {
 			return;
 		}
 
 		update_post_meta( $template_id, self::META_SOURCE_HASH, self::content_hash( $post->post_content ) );
-		// The bundled phrases were translated for whoever installed it. Without this, a later
-		// automatic replacement re-translates in the locale of whichever admin happens to trigger
-		// the upgrade, and a French template silently becomes English.
-		update_post_meta( $template_id, self::META_SOURCE_LOCALE, determine_locale() );
+
+		// The locale is recorded ONLY when the caller states it, because only the caller knows
+		// which locale the content it just wrote was rendered in. Re-reading `determine_locale()`
+		// here would be wrong on the replacement path: that runs after the locale switch has been
+		// restored, so it would stamp the upgrading admin's language onto a French template and
+		// silently translate it on the NEXT update.
+		if ( null !== $locale && '' !== $locale ) {
+			update_post_meta( $template_id, self::META_SOURCE_LOCALE, $locale );
+		}
 	}
 
 	/**
@@ -205,9 +210,9 @@ final class Gallery_Update_Status {
 	}
 
 	/**
-	 * Option holding the plugin version the gallery maintenance last completed for.
+	 * Option holding the registry fingerprint the gallery maintenance last completed for.
 	 */
-	public const OPTION_SYNCED_VERSION = 'woocommerce_pos_gallery_synced_version';
+	public const OPTION_SYNCED_SIGNATURE = 'woocommerce_pos_gallery_synced_signature';
 
 	/**
 	 * Run the gallery maintenance once per plugin version, self-healing.
@@ -224,14 +229,79 @@ final class Gallery_Update_Status {
 	 * @return void
 	 */
 	public static function maintain(): void {
-		if ( get_option( self::OPTION_SYNCED_VERSION ) === VERSION ) {
+		$signature = self::registry_signature();
+
+		if ( get_option( self::OPTION_SYNCED_SIGNATURE ) === $signature ) {
 			return;
 		}
 
 		self::backfill_source_hashes();
 		self::sync_untouched();
 
-		update_option( self::OPTION_SYNCED_VERSION, VERSION, true );
+		// Stamp only when nothing is left behind. A replacement can legitimately fail — an
+		// unreadable bundled file, a save that did not take — and stamping regardless would end
+		// the retries for good: every later admin load returns at the gate above, while the UI
+		// deliberately hides `outdated-untouched`, so the merchant would print stale receipts with
+		// nothing anywhere saying why. Leaving the signature unset costs one more pass per load
+		// until it succeeds.
+		if ( self::has_pending_untouched() ) {
+			return;
+		}
+
+		update_option( self::OPTION_SYNCED_SIGNATURE, $signature, true );
+	}
+
+	/**
+	 * A fingerprint of every key and version the EFFECTIVE registry currently offers.
+	 *
+	 * Keyed to the registry rather than the plugin version so that a template contributed through
+	 * `woocommerce_pos_gallery_templates` — by Pro, say — can bump its own version and be picked
+	 * up without waiting for a free-plugin release. Keying on VERSION made the documented
+	 * extension point unusable for the one thing versions are for.
+	 *
+	 * @return string The fingerprint.
+	 */
+	private static function registry_signature(): string {
+		$versions = array();
+		foreach ( Gallery_Registry::all() as $key => $metadata ) {
+			$versions[ (string) $key ] = max( 1, (int) ( $metadata['version'] ?? 1 ) );
+		}
+		ksort( $versions );
+
+		return hash( 'sha256', (string) wp_json_encode( $versions ) );
+	}
+
+	/**
+	 * Whether any installed copy is still behind and still unedited.
+	 *
+	 * @return bool True when a replacement is outstanding.
+	 */
+	private static function has_pending_untouched(): bool {
+		$template_ids = get_posts(
+			array(
+				'post_type'     => 'wcpos_template',
+				'post_status'   => 'any',
+				'numberposts'   => -1,
+				'fields'        => 'ids',
+				'meta_query'    => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'     => self::META_SOURCE_HASH,
+						'compare' => 'EXISTS',
+					),
+				),
+				'no_found_rows' => true,
+				'cache_results' => false,
+			)
+		);
+
+		foreach ( $template_ids as $template_id ) {
+			$status = self::status_for( (int) $template_id );
+			if ( null !== $status && self::STATUS_UNTOUCHED === $status['status'] ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -302,6 +372,9 @@ final class Gallery_Update_Status {
 			}
 
 			update_post_meta( $template_id, self::META_SOURCE_HASH, $bundled_hash );
+			// The content matched the bundled markup as rendered in THIS locale, which is itself
+			// proof the copy was installed in it — so it is safe to state here.
+			update_post_meta( $template_id, self::META_SOURCE_LOCALE, determine_locale() );
 			update_post_meta( $template_id, self::META_GALLERY_VERSION, $latest );
 			++$filled;
 		}
@@ -473,6 +546,7 @@ final class Gallery_Update_Status {
 		}
 
 		update_post_meta( $template_id, self::META_GALLERY_VERSION, self::registry_version( $gallery_key ) );
+		// No locale argument: the template keeps the one it was installed with.
 		self::record_source_hash( $template_id );
 
 		return true;

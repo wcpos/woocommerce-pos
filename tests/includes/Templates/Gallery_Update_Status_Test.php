@@ -323,22 +323,86 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	 *
 	 * @return void
 	 */
-	public function test_maintain_runs_once_per_version_and_then_no_ops(): void {
+	public function test_maintain_runs_once_per_registry_change_and_then_no_ops(): void {
 		// Arrange.
-		delete_option( Gallery_Update_Status::OPTION_SYNCED_VERSION );
+		delete_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE );
 		$template_id = $this->install();
 		$this->set_bundled_version( 2 );
 
 		// Act.
 		Gallery_Update_Status::maintain();
 		$after_first = (int) get_post_meta( $template_id, Gallery_Update_Status::META_GALLERY_VERSION, true );
+		$signature   = get_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE );
 
-		// A second call is gated off by the recorded version.
+		// A second call is gated off by the recorded signature.
 		Gallery_Update_Status::maintain();
 
 		// Assert.
 		$this->assertSame( 2, $after_first );
-		$this->assertSame( \WCPOS\WooCommercePOS\VERSION, get_option( Gallery_Update_Status::OPTION_SYNCED_VERSION ) );
+		$this->assertNotEmpty( $signature );
+		$this->assertSame( $signature, get_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE ) );
+	}
+
+	/**
+	 * A failed replacement leaves maintenance pending so the next admin load retries.
+	 *
+	 * Stamping regardless would end the retries for good: the gate would short-circuit every
+	 * later load while the UI hides `outdated-untouched`, so the merchant would print stale
+	 * receipts with nothing anywhere saying why. Raised by Codex review on #1969.
+	 *
+	 * @return void
+	 */
+	public function test_maintain_leaves_the_signature_unset_when_a_replacement_fails(): void {
+		// Arrange: an eligible copy whose bundled content cannot be used.
+		delete_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE );
+		$this->install();
+		$empty_file = wp_tempnam( 'wcpos-empty-gallery' );
+		file_put_contents( $empty_file, '' );
+		add_filter(
+			'woocommerce_pos_gallery_templates',
+			function ( $catalogue ) use ( $empty_file ) {
+				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
+					$catalogue[ $this->gallery_key ]['version']      = 2;
+					$catalogue[ $this->gallery_key ]['content_file'] = $empty_file;
+				}
+
+				return $catalogue;
+			}
+		);
+
+		// Act.
+		Gallery_Update_Status::maintain();
+
+		// Assert: nothing stamped, so the next admin load tries again.
+		$this->assertFalse( get_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE ) );
+
+		unlink( $empty_file );
+	}
+
+	/**
+	 * A replacement keeps the locale the template was installed in.
+	 *
+	 * `translate_in_source_locale()` restores the request locale before the fingerprint is
+	 * refreshed, so re-reading the locale there stamped the upgrading admin's language onto the
+	 * template and would have silently translated it on the NEXT update. Raised by Codex review.
+	 *
+	 * @return void
+	 */
+	public function test_replacement_does_not_overwrite_the_recorded_locale(): void {
+		// Arrange.
+		$template_id = $this->install();
+		update_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE, 'fr_FR' );
+		Gallery_Update_Status::record_source_hash( $template_id );
+		$this->set_bundled_version( 2 );
+
+		// Act.
+		Gallery_Update_Status::sync_untouched();
+
+		// Assert.
+		$this->assertSame(
+			'fr_FR',
+			get_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE, true )
+		);
 	}
 
 	/**
@@ -346,9 +410,9 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	 *
 	 * @return void
 	 */
-	public function test_maintain_runs_again_once_the_plugin_version_moves(): void {
+	public function test_maintain_runs_again_once_a_registry_version_moves(): void {
 		// Arrange: a previous release completed maintenance.
-		update_option( Gallery_Update_Status::OPTION_SYNCED_VERSION, '0.0.1' );
+		update_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE, 'stale-signature' );
 		$template_id = $this->install();
 		$this->set_bundled_version( 2 );
 

@@ -1455,7 +1455,7 @@ class Templates {
 		// Fingerprint what was installed, so a later release can tell an untouched copy (safe to
 		// update in place) from one the merchant has edited (theirs; only ever offered).
 		// Must follow the raw save above, which is what finally decides the stored content.
-		Gallery_Update_Status::record_source_hash( $post_id );
+		Gallery_Update_Status::record_source_hash( $post_id, determine_locale() );
 
 		return $post_id;
 	}
