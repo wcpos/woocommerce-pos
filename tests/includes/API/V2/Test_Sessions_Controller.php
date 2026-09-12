@@ -129,6 +129,104 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $this->post( 'sessions', $fields )->get_data()['opening_variance'] );
 	}
 
+	/** Name the offending field, so the till can say which one and the log can record it.
+	 *
+	 * Without this the client gets a bare 400 with a status and nothing else, and a refused
+	 * cash movement — money that has physically moved — leaves the cashier no way to tell
+	 * whether the amount, the reason or the timestamp was wrong.
+	 */
+	public function test_invalid_param_names_the_offending_field(): void {
+		$opening = $this->fields();
+		foreach ( array(
+			'register_id' => 'bad',
+			'opened_at' => '2026-02-30T10:00:00Z',
+			'counted_float' => '-1',
+			'expected_float' => '1e2',
+			'store_id' => array(),
+		) as $key => $value ) {
+			$response = $this->post( 'sessions', array_merge( $opening, array( $key => $value ) ) );
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertSame( 'rest_invalid_param', $response->get_data()['code'], $key );
+			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
+		}
+
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $id,
+			'type' => 'paid_in',
+			'amount' => '20',
+			'reason' => 'Change',
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+		foreach ( array(
+			// Every shape the POS used to let through: Number('10.') and Number('.5') are both
+			// positive, so the confirm button was happy and the server was not.
+			'amount' => array( '10.', '.5', '1e2', ' 10', '10,50', '0', '-5' ),
+			'reason' => array( '', '   ', str_repeat( 'x', 501 ) ),
+			'created_at' => array( 'bad' ),
+			'type' => array( 'refund' ),
+			'session_id' => array( 'bad' ),
+		) as $key => $values ) {
+			foreach ( $values as $value ) {
+				$response = $this->post(
+					'movements',
+					array_merge(
+						$movement,
+						array(
+							$key => $value,
+							'id' => wp_generate_uuid4(),
+						)
+					)
+				);
+				$this->assertSame( 400, $response->get_status(), $key . '=' . var_export( $value, true ) );
+				$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key . '=' . var_export( $value, true ) );
+			}
+		}
+
+		// A no sale carries no amount but still needs a reason, and used to 400 every single time.
+		$response = $this->post(
+			'movements',
+			array_merge(
+				$movement,
+				array(
+					'id' => wp_generate_uuid4(),
+					'type' => 'no_sale',
+					'amount' => '0',
+					'reason' => '',
+				)
+			)
+		);
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertArrayHasKey( 'reason', $response->get_data()['data']['params'] );
+
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		foreach ( array(
+			'at' => 'bad',
+			'counted' => array( 'cash' => '10.' ),
+		) as $key => $value ) {
+			$response = $this->post(
+				'sessions/' . $id . '/status',
+				array_merge(
+					array(
+						'status' => 'closed',
+						'at' => '2026-09-11T12:00:00Z',
+						'counted' => array( 'cash' => '100' ),
+					),
+					array( $key => $value )
+				)
+			);
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
+		}
+	}
+
 	/** Only specified transitions succeed; close requires counted cash. */
 	public function test_transitions_close_counts_and_noop(): void {
 		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];

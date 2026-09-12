@@ -76,7 +76,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 				return $this->read( $request );
 			}
 			if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
-				return $this->error( 'rest_invalid_param', 400 );
+				return $this->error( 'rest_invalid_param', 400, 'id' );
 			}
 			$request->set_param( 'id', strtolower( $request['id'] ) );
 			$movement = '/wcpos/v2/movements' === rtrim( $request->get_route(), '/' );
@@ -127,16 +127,16 @@ class Sessions_Controller extends \WP_REST_Controller {
 			'per_page' => $request['per_page'] ?? 50,
 		);
 		if ( ! in_array( $args['status'], array( 'all', 'open', 'counting', 'closed' ), true ) ) {
-			return $this->error( 'rest_invalid_param', 400 );
+			return $this->error( 'rest_invalid_param', 400, 'status' );
 		}
 		foreach ( array( 'page', 'per_page' ) as $key ) {
 			if ( ! is_scalar( $args[ $key ] ) || ! preg_match( '/^[1-9]\d*$/D', (string) $args[ $key ] ) || ( 'per_page' === $key && $args[ $key ] > 100 ) ) {
-				return $this->error( 'rest_invalid_param', 400 );
+				return $this->error( 'rest_invalid_param', 400, $key );
 			}
 		}
 		if ( $request->has_param( 'register_id' ) ) {
 			if ( ! Pos_Uuid::is_uuid( $request['register_id'] ) ) {
-				return $this->error( 'rest_invalid_param', 400 );
+				return $this->error( 'rest_invalid_param', 400, 'register_id' );
 			}
 			$args['register_id'] = strtolower( $request['register_id'] );
 		}
@@ -149,8 +149,17 @@ class Sessions_Controller extends \WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	private function opening_fields( $request ) {
-		if ( ! Pos_Uuid::is_uuid( $request['register_id'] ) || ! ( new Register_Store() )->exists( $request['register_id'] ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['opened_at'] ) || null === $this->decimal( $request['counted_float'] ) || ( null !== $request['expected_float'] && null === $this->decimal( $request['expected_float'] ) ) ) {
-			return $this->error( 'rest_invalid_param', 400 );
+		if ( ! Pos_Uuid::is_uuid( $request['register_id'] ) || ! ( new Register_Store() )->exists( $request['register_id'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'register_id' );
+		}
+		if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['opened_at'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'opened_at' );
+		}
+		if ( null === $this->decimal( $request['counted_float'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'counted_float' );
+		}
+		if ( null !== $request['expected_float'] && null === $this->decimal( $request['expected_float'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'expected_float' );
 		}
 		$fields = array(
 			'id' => $request['id'],
@@ -164,7 +173,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 		$scoped = apply_filters( 'woocommerce_pos_session_create_fields', $fields, $request );
 		$fields['store_id'] = $scoped['store_id'] ?? null;
 		if ( null !== $fields['store_id'] && ( ! is_scalar( $fields['store_id'] ) || ! preg_match( '/^\d{1,18}$/D', (string) $fields['store_id'] ) ) ) {
-			return $this->error( 'rest_invalid_param', 400 );
+			return $this->error( 'rest_invalid_param', 400, 'store_id' );
 		}
 		return $fields;
 	}
@@ -212,19 +221,19 @@ class Sessions_Controller extends \WP_REST_Controller {
 			return $this->error( 'wcpos_session_transition_refused', 409 );
 		}
 		if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['at'] ) ) {
-			return $this->error( 'rest_invalid_param', 400 );
+			return $this->error( 'rest_invalid_param', 400, 'at' );
 		}
 		$at = gmdate( 'Y-m-d H:i:s', strtotime( $request['at'] ) );
 		$fields = array( 'status' => $status );
 		if ( 'closed' === $status ) {
 			$counted = $request['counted'];
 			if ( ! is_array( $counted ) || ! isset( $counted['cash'] ) ) {
-				return $this->error( 'rest_invalid_param', 400 );
+				return $this->error( 'rest_invalid_param', 400, 'counted' );
 			}
 			foreach ( $counted as &$amount ) {
 				$amount = $this->decimal( $amount );
 				if ( null === $amount ) {
-					return $this->error( 'rest_invalid_param', 400 );
+					return $this->error( 'rest_invalid_param', 400, 'counted' );
 				}
 			}
 			$fields += array(
@@ -253,8 +262,17 @@ class Sessions_Controller extends \WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	private function movement_fields( $request ) {
-		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) || ! in_array( $request['type'], array( 'paid_in', 'paid_out', 'no_sale', 'void' ), true ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['created_at'] ) || ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
-			return $this->error( 'rest_invalid_param', 400 );
+		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'session_id' );
+		}
+		if ( ! in_array( $request['type'], array( 'paid_in', 'paid_out', 'no_sale', 'void' ), true ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'type' );
+		}
+		if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['created_at'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'created_at' );
+		}
+		if ( ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
+			return $this->error( 'rest_invalid_param', 400, 'reason' );
 		}
 		$session = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
 		if ( ! $session || ! ( new Cash_Movement_Store() )->accepts( $session, gmdate( 'Y-m-d H:i:s', strtotime( $request['created_at'] ) ) ) ) {
@@ -262,13 +280,20 @@ class Sessions_Controller extends \WP_REST_Controller {
 		}
 		$amount = $this->decimal( $request['amount'] );
 		$paid = in_array( $request['type'], array( 'paid_in', 'paid_out' ), true );
-		if ( null === $amount || ( $paid ? (float) $amount <= 0 : '' !== trim( $request['amount'], '0.' ) ) || ( 'void' !== $request['type'] && ( '' === trim( sanitize_textarea_field( $request['reason'] ) ) || $request->has_param( 'voids' ) ) ) ) {
-			return $this->error( 'rest_invalid_param', 400 );
+		if ( null === $amount || ( $paid ? (float) $amount <= 0 : '' !== trim( $request['amount'], '0.' ) ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'amount' );
+		}
+		// Every movement that is not a reversal carries a reason; a no sale is no exception.
+		if ( 'void' !== $request['type'] && '' === trim( sanitize_textarea_field( $request['reason'] ) ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'reason' );
+		}
+		if ( 'void' !== $request['type'] && $request->has_param( 'voids' ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'voids' );
 		}
 		$voids = null;
 		if ( 'void' === $request['type'] ) {
 			if ( ! Pos_Uuid::is_uuid( $request['voids'] ) ) {
-				return $this->error( 'rest_invalid_param', 400 );
+				return $this->error( 'rest_invalid_param', 400, 'voids' );
 			}
 			$voids = strtolower( $request['voids'] );
 			$target = ( new Cash_Movement_Store() )->get( $voids );
@@ -303,10 +328,20 @@ class Sessions_Controller extends \WP_REST_Controller {
 
 	/** Shared error envelope.
 	 *
-	 * @param string $code Error code.
-	 * @param int    $status HTTP status.
+	 * A refused cash movement is money that has already physically moved, so a bare status is
+	 * not enough: name the offending field in `data.params`, the shape core REST already uses,
+	 * so the till can point at the input and the log row can record which one it was.
+	 *
+	 * @param string      $code Error code.
+	 * @param int         $status HTTP status.
+	 * @param string|null $field Offending request field, when one can be named.
 	 */
-	private function error( string $code, int $status ): WP_Error {
-		return new WP_Error( $code, __( 'The session request could not be completed.', 'woocommerce-pos' ), array( 'status' => $status ) );
+	private function error( string $code, int $status, ?string $field = null ): WP_Error {
+		$data = array( 'status' => $status );
+		if ( null !== $field ) {
+			/* translators: %s: name of the request field that was rejected. */
+			$data['params'] = array( $field => sprintf( __( 'Invalid parameter: %s', 'woocommerce-pos' ), $field ) );
+		}
+		return new WP_Error( $code, __( 'The session request could not be completed.', 'woocommerce-pos' ), $data );
 	}
 }
