@@ -33,6 +33,8 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates;
 
+use const WCPOS\WooCommercePOS\VERSION;
+
 /**
  * Gallery_Update_Status class.
  */
@@ -42,6 +44,11 @@ final class Gallery_Update_Status {
 	 * Post meta holding the hash of the content as installed.
 	 */
 	public const META_SOURCE_HASH = '_template_gallery_source_hash';
+
+	/**
+	 * Post meta holding the locale the copy's phrases were translated into.
+	 */
+	public const META_SOURCE_LOCALE = '_template_gallery_source_locale';
 
 	/**
 	 * Post meta holding the gallery key the copy came from.
@@ -109,6 +116,10 @@ final class Gallery_Update_Status {
 		}
 
 		update_post_meta( $template_id, self::META_SOURCE_HASH, self::content_hash( $post->post_content ) );
+		// The bundled phrases were translated for whoever installed it. Without this, a later
+		// automatic replacement re-translates in the locale of whichever admin happens to trigger
+		// the upgrade, and a French template silently becomes English.
+		update_post_meta( $template_id, self::META_SOURCE_LOCALE, determine_locale() );
 	}
 
 	/**
@@ -191,6 +202,36 @@ final class Gallery_Update_Status {
 		$version = $catalogue[ $gallery_key ]['version'] ?? 1;
 
 		return max( 1, (int) $version );
+	}
+
+	/**
+	 * Option holding the plugin version the gallery maintenance last completed for.
+	 */
+	public const OPTION_SYNCED_VERSION = 'woocommerce_pos_gallery_synced_version';
+
+	/**
+	 * Run the gallery maintenance once per plugin version, self-healing.
+	 *
+	 * Deliberately NOT hung off `Activator::db_upgrade()` alone. That path is built for one-time
+	 * schema migrations and, as `version_check()` documents, an upgrade request that bumps the
+	 * stored version without reaching `woocommerce_init` never queues it again — the miss is
+	 * permanent. A one-time migration can live with that; this cannot, because it is a recurring
+	 * reconciliation that has to run for every release that changes a bundled template.
+	 *
+	 * Gating on an option instead means a missed upgrade repairs itself on the next admin load.
+	 * Both passes are idempotent, so running again costs a version comparison and nothing else.
+	 *
+	 * @return void
+	 */
+	public static function maintain(): void {
+		if ( get_option( self::OPTION_SYNCED_VERSION ) === VERSION ) {
+			return;
+		}
+
+		self::backfill_source_hashes();
+		self::sync_untouched();
+
+		update_option( self::OPTION_SYNCED_VERSION, VERSION, true );
 	}
 
 	/**
@@ -319,6 +360,35 @@ final class Gallery_Update_Status {
 	}
 
 	/**
+	 * Translate the bundled phrases in the locale the copy was installed in.
+	 *
+	 * The sync runs in whatever locale the upgrading request happens to carry, which on a site
+	 * whose admins use different dashboard languages is not the locale the template was installed
+	 * in. Re-translating in the wrong one would silently turn a French receipt English — and this
+	 * path writes without asking, so it has to be right rather than merely usually right.
+	 *
+	 * @param int    $template_id The template post ID.
+	 * @param string $content     The bundled markup.
+	 *
+	 * @return string The translated markup.
+	 */
+	private static function translate_in_source_locale( int $template_id, string $content ): string {
+		$locale = get_post_meta( $template_id, self::META_SOURCE_LOCALE, true );
+		if ( ! \is_string( $locale ) || '' === $locale || determine_locale() === $locale ) {
+			return Receipt_I18n_Labels::translate_interpolated_phrases( $content );
+		}
+
+		$switched = switch_to_locale( $locale );
+		try {
+			return Receipt_I18n_Labels::translate_interpolated_phrases( $content );
+		} finally {
+			if ( $switched ) {
+				restore_previous_locale();
+			}
+		}
+	}
+
+	/**
 	 * Move a template's modification time to now.
 	 *
 	 * Written directly for the same reason the content is: `wp_update_post()` would re-run the
@@ -377,7 +447,7 @@ final class Gallery_Update_Status {
 			return false;
 		}
 
-		$content = Receipt_I18n_Labels::translate_interpolated_phrases( $bundled_content );
+		$content = self::translate_in_source_locale( $template_id, $bundled_content );
 		$engine  = (string) get_post_meta( $template_id, '_template_engine', true );
 
 		if ( \in_array( $engine, Templates::OFFLINE_CAPABLE_ENGINES, true ) ) {

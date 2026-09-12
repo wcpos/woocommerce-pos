@@ -633,12 +633,10 @@ class Activator {
 			}
 		}
 
-		// Bring untouched gallery copies up to the bundled markup. This belongs on EVERY upgrade,
-		// not in a versioned migration: the bundled templates change in later releases too, and a
-		// one-time call would mean the very first bump after 1.11.0 silently reached nobody —
-		// outdated-untouched copies are deliberately not surfaced in the UI, so nothing else
-		// would ever have said so. Idempotent, and a no-op when nothing is behind.
-		Templates\Gallery_Update_Status::sync_untouched();
+		// Bring untouched gallery copies up to the bundled markup. Runs here for immediacy on a
+		// normal upgrade, and again from the admin_init hook that self-heals an upgrade which
+		// bumped the version without reaching woocommerce_init (see maintain()). Idempotent.
+		Templates\Gallery_Update_Status::maintain();
 
 		if ( Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
 			$this->install_sync_schema();

@@ -26,6 +26,8 @@ declare( strict_types=1 );
 
 const REGISTRY_PATH = 'includes/Templates/Gallery_Registry.php';
 const GALLERY_DIR   = 'templates/gallery/';
+/** The extensions a gallery template's content file may use (mirrors Templates::GALLERY_CONTENT_EXTENSIONS). */
+const CONTENT_EXTENSIONS = array( 'html', 'php', 'xml' );
 
 /**
  * Run a git command and return its stdout, or null when git itself failed.
@@ -46,6 +48,35 @@ function git( array $args ): ?string {
 	exec( $command, $lines, $status );
 
 	return 0 === $status ? implode( "\n", $lines ) : null;
+}
+
+/**
+ * Keep only the paths that are actually gallery templates.
+ *
+ * `templates/gallery/preview-data/invoice.json` shares a basename with the `invoice` template but
+ * is never copied into a merchant's database. Demanding a bump for it would be a false positive
+ * with real consequences: the bump marks every edited invoice copy outdated and silently rewrites
+ * every untouched one.
+ *
+ * @param array<int, string> $paths Repository-relative paths.
+ *
+ * @return array<int, string> The subset that are top-level gallery content files.
+ */
+function gallery_content_files( array $paths ): array {
+	return array_filter(
+		$paths,
+		static function ( string $path ): bool {
+			if ( '' === $path || 0 !== strpos( $path, GALLERY_DIR ) ) {
+				return false;
+			}
+			// Anything deeper than the gallery directory itself is not a template.
+			if ( substr_count( $path, '/' ) !== substr_count( GALLERY_DIR, '/' ) ) {
+				return false;
+			}
+
+			return \in_array( strtolower( pathinfo( $path, PATHINFO_EXTENSION ) ), CONTENT_EXTENSIONS, true );
+		}
+	);
 }
 
 /**
@@ -111,7 +142,11 @@ function main(): int {
 		return 2;
 	}
 
-	$changed = array_values( array_filter( array_map( 'trim', explode( "\n", $changed_raw ) ) ) );
+	// Only the top-level content files ARE templates. `templates/gallery/preview-data/invoice.json`
+// shares a basename with the `invoice` template but is never copied into a merchant's database,
+// so demanding a bump for it would be a false positive with real consequences: the bump would
+// mark every edited invoice copy outdated and silently rewrite every untouched one.
+$changed = array_values( gallery_content_files( array_map( 'trim', explode( "\n", $changed_raw ) ) ) );
 	if ( array() === $changed ) {
 		echo "No bundled gallery templates changed.\n";
 		return 0;

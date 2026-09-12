@@ -96,6 +96,15 @@ assert_same( true, array_key_exists( 'no-version', $unversioned_parsed ), 'keeps
 // which is the very distinction under test.
 assert_same( null, $unversioned_parsed['no-version'], 'reports the missing version as null' );
 
+// A preview fixture shares its basename with a template but is never copied into a merchant's
+// database. Treating it as a template change would force a bump, and the bump would mark every
+// edited copy outdated and silently rewrite every untouched one.
+assert_same(
+	array( 'templates/gallery/invoice.xml' ),
+	array_values( gallery_content_files( array( 'templates/gallery/invoice.xml', 'templates/gallery/preview-data/invoice.json', 'templates/gallery/README.md' ) ) ),
+	'keeps only top-level gallery content files'
+);
+
 // The real registry must parse, and every key it ships must carry a version — otherwise the guard
 // silently treats that template as new and never asks for a bump.
 $real = file_get_contents( __DIR__ . '/../../includes/Templates/Gallery_Registry.php' );

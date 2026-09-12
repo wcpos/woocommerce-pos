@@ -18,14 +18,9 @@ namespace WCPOS\WooCommercePOS;
 ( new Catalog_Visibility() )->force_all();
 
 /*
- * Gallery templates carry the version they were copied from, so a later release can tell a
- * merchant their copy has fallen behind the bundled one. That comparison needs a fingerprint of
- * the content as installed, which no existing template has — backfill it wherever it can be
- * established safely (see Gallery_Update_Status::backfill_source_hashes).
- *
- * This is the one-time half. The sync that acts on the comparison runs from Activator::db_upgrade()
- * on EVERY upgrade, because later releases change bundled templates too.
- *
- * Nothing a merchant has edited is touched. Idempotent, so activation running it again is a no-op.
+ * Gallery template fingerprinting and syncing are NOT here on purpose. Both run from
+ * Gallery_Update_Status::maintain(), which db_upgrade() calls immediately after this loop and
+ * admin_init calls again if an upgrade ever bumps the version without reaching woocommerce_init.
+ * A versioned file cannot host a recurring reconciliation: this one stops being included the
+ * moment the stored version passes 1.11.0.
  */
-Templates\Gallery_Update_Status::backfill_source_hashes();

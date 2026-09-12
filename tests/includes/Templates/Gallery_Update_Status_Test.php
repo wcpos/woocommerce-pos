@@ -315,6 +315,70 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Maintenance runs once per plugin version and then stops.
+	 *
+	 * It is gated on an option rather than living only in a versioned migration, because an
+	 * upgrade that bumps the version without reaching woocommerce_init never queues db_upgrade()
+	 * again — Activator::version_check() documents that miss as permanent. Raised by Codex review.
+	 *
+	 * @return void
+	 */
+	public function test_maintain_runs_once_per_version_and_then_no_ops(): void {
+		// Arrange.
+		delete_option( Gallery_Update_Status::OPTION_SYNCED_VERSION );
+		$template_id = $this->install();
+		$this->set_bundled_version( 2 );
+
+		// Act.
+		Gallery_Update_Status::maintain();
+		$after_first = (int) get_post_meta( $template_id, Gallery_Update_Status::META_GALLERY_VERSION, true );
+
+		// A second call is gated off by the recorded version.
+		Gallery_Update_Status::maintain();
+
+		// Assert.
+		$this->assertSame( 2, $after_first );
+		$this->assertSame( \WCPOS\WooCommercePOS\VERSION, get_option( Gallery_Update_Status::OPTION_SYNCED_VERSION ) );
+	}
+
+	/**
+	 * Maintenance repairs itself after a missed upgrade.
+	 *
+	 * @return void
+	 */
+	public function test_maintain_runs_again_once_the_plugin_version_moves(): void {
+		// Arrange: a previous release completed maintenance.
+		update_option( Gallery_Update_Status::OPTION_SYNCED_VERSION, '0.0.1' );
+		$template_id = $this->install();
+		$this->set_bundled_version( 2 );
+
+		// Act.
+		Gallery_Update_Status::maintain();
+
+		// Assert.
+		$this->assertSame( 2, (int) get_post_meta( $template_id, Gallery_Update_Status::META_GALLERY_VERSION, true ) );
+	}
+
+	/**
+	 * Installing records the locale the phrases were translated in.
+	 *
+	 * Without it the automatic replacement re-translates in whatever locale the upgrading request
+	 * carries, and an untouched French template silently becomes English. Raised by Codex review.
+	 *
+	 * @return void
+	 */
+	public function test_install_records_the_source_locale(): void {
+		// Arrange / Act.
+		$template_id = $this->install();
+
+		// Assert.
+		$this->assertSame(
+			determine_locale(),
+			get_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE, true )
+		);
+	}
+
+	/**
 	 * The backfill fingerprints a copy that still matches the bundled markup.
 	 *
 	 * @return void
