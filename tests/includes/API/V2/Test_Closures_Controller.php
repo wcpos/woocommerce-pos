@@ -191,6 +191,31 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $this->get( 'closures/' . $id )->get_status() );
 	}
 
+	/** An id-only replay must not become a back door onto a closure's figures. */
+	public function test_closure_replay_redacts_figures_without_the_reports_capability(): void {
+		$session = $this->closure_session();
+		$body = $this->body( $session );
+		$id = $this->post( 'closures', $body )->get_data()['id'];
+		$cashier = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+		$cashier->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $cashier->ID );
+		$replay = $this->post( 'closures', array( 'id' => $id ) );
+		$this->assertSame( 200, $replay->get_status() );
+		$row = $replay->get_data();
+		foreach ( array( 'expected', 'till_expected', 'variance' ) as $field ) {
+			$this->assertArrayNotHasKey( $field, $row, $field );
+		}
+		// The counters the till needs to mint the next number still come back.
+		$this->assertSame( 1, $row['number'] );
+		$this->assertArrayHasKey( 'perpetual_sales_total', $row );
+		$cashier->add_cap( 'view_woocommerce_pos_reports' );
+		// wp_set_current_user() is a no-op for the same id; re-set so the cached caps reload.
+		wp_set_current_user( 0 );
+		wp_set_current_user( $cashier->ID );
+		$this->assertArrayHasKey( 'expected', $this->post( 'closures', array( 'id' => $id ) )->get_data() );
+	}
+
 	/** List filters paging and register counters. */
 	public function test_list_filters_paging_and_register_counters(): void {
 		$a = $this->closure_session();

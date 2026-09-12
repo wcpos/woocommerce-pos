@@ -80,6 +80,22 @@ class Closures_Controller extends \WP_REST_Controller {
 		return true;
 	}
 
+	/** Strip the figures a blind count exists to hide.
+	 *
+	 * An id-only create is an idempotent replay that returns the stored row, so without this
+	 * a cashier holding only the cash capability could read any closure by replaying its id.
+	 * The counters the till needs to mint its next number are not figures and stay.
+	 *
+	 * @param array|null $row Closure row.
+	 * @return array|null
+	 */
+	private function visible( $row ) {
+		if ( ! is_array( $row ) || current_user_can( 'view_woocommerce_pos_reports' ) ) {
+			return $row;
+		}
+		return array_diff_key( $row, array_flip( array( 'expected', 'till_expected', 'variance' ) ) );
+	}
+
 	/** Dispatch, preserving the URL document UUID separately from a recount's body id.
 	 *
 	 * @param \WP_REST_Request $request Request.
@@ -105,7 +121,7 @@ class Closures_Controller extends \WP_REST_Controller {
 					}
 					$row = $store->recount( $row, strtolower( $request['id'] ), $counted, sanitize_textarea_field( $request['reason'] ) );
 				}
-				return new WP_REST_Response( $row );
+				return new WP_REST_Response( $this->visible( $row ) );
 			}
 			if ( 'GET' === $request->get_method() ) {
 				$args = $this->list_args( $request );
@@ -124,9 +140,9 @@ class Closures_Controller extends \WP_REST_Controller {
 							'per_page' => 1,
 						)
 					);
-					return new WP_REST_Response( $store->list( $args )[0] ?? null );
+					return new WP_REST_Response( $this->visible( $store->list( $args )[0] ?? null ) );
 				}
-				return new WP_REST_Response( $store->list( $args ) );
+				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->list( $args ) ) );
 			}
 			if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
 				return $this->error( 'rest_invalid_param', 400 );
@@ -134,7 +150,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			$id = strtolower( $request['id'] );
 			$row = $store->get( $id );
 			if ( $row ) {
-				return new WP_REST_Response( $row );
+				return new WP_REST_Response( $this->visible( $row ) );
 			}
 			$fields = $this->fields( $request );
 			if ( is_wp_error( $fields ) ) {
@@ -142,7 +158,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			$created = false;
 			$row = $store->create( $fields, $created );
-			return is_wp_error( $row ) ? $row : new WP_REST_Response( $row, $created ? 201 : 200 );
+			return is_wp_error( $row ) ? $row : new WP_REST_Response( $this->visible( $row ), $created ? 201 : 200 );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_write_failed', 500 );
 		}
