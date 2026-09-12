@@ -104,7 +104,7 @@ class Receipt {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
 			if ( 'pdf' === $format ) {
-				$this->render_pdf( $order, $receipt_data );
+				$this->render_pdf( $order, $receipt_data, $is_preview );
 			}
 
 			/*
@@ -179,10 +179,11 @@ class Receipt {
 	 *
 	 * @param \WC_Abstract_Order $order        Order object.
 	 * @param array|null         $receipt_data Optional frozen document payload.
+	 * @param bool               $is_preview   Whether this is a template preview.
 	 *
 	 * @return void
 	 */
-	private function render_pdf( \WC_Abstract_Order $order, ?array $receipt_data ): void {
+	private function render_pdf( \WC_Abstract_Order $order, ?array $receipt_data, bool $is_preview = false ): void {
 		/*
 		 * Filters the receipt template used for storefront PDF downloads.
 		 *
@@ -223,7 +224,7 @@ class Receipt {
 				return ( new Template_Pdf_Service() )->render( $template, $order, $data );
 			};
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Authenticated document render intent.
-			$counting = 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && 'closure' === ( $receipt_data['fiscal']['document_type'] ?? '' );
+			$counting = ! $is_preview && 'print' === sanitize_text_field( wp_unslash( $_GET['intent'] ?? '' ) ) && 'closure' === ( $receipt_data['fiscal']['document_type'] ?? '' );
 			$pdf = $counting ? ( new Closure_Print_Counter() )->count_after( $receipt_data, $render ) : $render( $receipt_data );
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Storefront receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );

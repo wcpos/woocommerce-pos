@@ -305,6 +305,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$page = array(
 			'output' => '',
 			'error' => null,
+			'title' => null,
 			'status' => null,
 		);
 		$stop = static function () {
@@ -313,6 +314,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$die = static function () use ( &$page, $stop ) {
 			return static function ( $message, $title = '', $args = array() ) use ( &$page, $stop ) {
 				$page['error'] = $message;
+				$page['title'] = $title;
 				$page['status'] = $args['response'] ?? null;
 				$stop();
 			};
@@ -343,6 +345,42 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		return $page;
 	}
 
+	/** A storefront PDF preview must not enter closure print bookkeeping. */
+	public function test_storefront_closure_pdf_preview_does_not_start_print_counting(): void {
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$user = wp_set_current_user( self::factory()->user->create() );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos_cash' );
+		$queries = array();
+		$observe = static function ( $query ) use ( &$queries ) {
+			$queries[] = $query;
+			return $query;
+		};
+		$native_template = static function () {
+			return array( 'id' => 'wp-overnight-invoice' );
+		};
+		add_filter( 'query', $observe );
+		add_filter( 'woocommerce_pos_storefront_receipt_template', $native_template );
+		try {
+			$page = $this->render_receipt_page(
+				0,
+				array(
+					'document' => 'closure:' . $row['id'],
+					'intent' => 'print',
+					'format' => 'pdf',
+					'wcpos_preview_template' => 1,
+				)
+			);
+		} finally {
+			remove_filter( 'query', $observe );
+			remove_filter( 'woocommerce_pos_storefront_receipt_template', $native_template );
+		}
+		$this->assertSame( 500, $page['status'] );
+		$this->assertNotContains( 'START TRANSACTION', $queries );
+		$this->assertSame( 0, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
+	}
+
 	/** All orderless storefront selectors resolve before the order-key gate. */
 	public function test_storefront_orderless_documents_and_permissions(): void {
 		$session = $this->closure_session();
@@ -371,6 +409,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 			$this->assertSame( 403, $page['status'] );
+			$this->assertSame( '', $page['title'] );
 			$this->assertSame( 0, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
 		}
 		$viewer->add_cap( 'manage_woocommerce_pos_cash' );

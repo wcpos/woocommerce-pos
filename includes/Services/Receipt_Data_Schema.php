@@ -1398,6 +1398,8 @@ class Receipt_Data_Schema {
 				'label' => __( 'Closure', 'woocommerce-pos' ),
 				'fields' => array(),
 			);
+			$field_types = array_fill_keys( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ), 'money' );
+			$field_types += array_fill_keys( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ), 'number' );
 			foreach ( array(
 				'id' => __( 'Closure ID', 'woocommerce-pos' ),
 				'number' => __( 'Closure Number', 'woocommerce-pos' ),
@@ -1433,7 +1435,7 @@ class Receipt_Data_Schema {
 				'last_printed_at_gmt' => __( 'Last Printed At (UTC)', 'woocommerce-pos' ),
 			) as $field => $label ) {
 				$tree['closure']['fields'][ $field ] = array(
-					'type' => 'string',
+					'type' => $field_types[ $field ] ?? 'string',
 					'label' => $label,
 				);
 			}

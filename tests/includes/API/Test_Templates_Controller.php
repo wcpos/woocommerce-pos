@@ -1303,6 +1303,13 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 				}
 				$this->assertSame( array( 'currency' ), array_keys( $tree['order']['fields'] ) );
 				$this->assertArrayHasKey( 'store_id', $tree['register']['fields'] );
+				foreach ( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ) as $field ) {
+					$this->assertSame( 'number', $tree['closure']['fields'][ $field ]['type'] );
+				}
+				$this->assertSame( 'string', $tree['closure']['fields']['register_id']['type'] );
+				foreach ( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ) as $field ) {
+					$this->assertSame( 'money', $tree['closure']['fields'][ $field ]['type'] );
+				}
 				foreach ( array( 'number', 'printed_number', 'register_id', 'opened_at_gmt', 'closed_at_gmt', 'counted.cash', 'expected.cash', 'variance.cash', 'breakdowns.payment_methods', 'breakdowns.tax_rates', 'breakdowns.movements', 'unsynced_count', 'perpetual_sales_total', 'software_version', 'printed_at_gmt' ) as $field ) {
 					$this->assertArrayHasKey( $field, $tree['closure']['fields'] );
 				}
