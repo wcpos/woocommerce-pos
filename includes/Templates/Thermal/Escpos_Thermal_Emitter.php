@@ -436,13 +436,33 @@ class Escpos_Thermal_Emitter {
 	/**
 	 * Compute the GS ! size byte for a width/height multiplier.
 	 *
+	 * `GS ! n` puts the WIDTH magnification in bits 4-7 and the HEIGHT in bits 0-3, each as
+	 * multiplier - 1 over 1x-8x: `n = (width - 1) << 4 | (height - 1)`. These were the wrong way
+	 * round, so every non-square `<size>` printed transposed -- a heading asked to be double-wide
+	 * came out double-high. Square sizes are bit-symmetric, which is why the 2x2 case everything
+	 * uses looked right and hid it.
+	 *
 	 * @param int $width  The width multiplier.
 	 * @param int $height The height multiplier.
 	 *
 	 * @return int The GS ! parameter byte.
 	 */
 	private function size_byte( int $width, int $height ): int {
-		return ( ( $width - 1 ) & 0x0f ) | ( ( ( $height - 1 ) & 0x0f ) << 4 );
+		return ( self::size_nibble( $width ) << 4 ) | self::size_nibble( $height );
+	}
+
+	/**
+	 * One magnification nibble: multiplier - 1, bounded to the 1x-8x the command can express.
+	 *
+	 * Nothing bounds `<size>` on the way in, and a multiplier of 9 unbounded would carry into the
+	 * neighbouring field and silently resize the other axis.
+	 *
+	 * @param int $multiplier The width or height multiplier.
+	 *
+	 * @return int The nibble value (0-7).
+	 */
+	private static function size_nibble( int $multiplier ): int {
+		return max( 1, min( 8, $multiplier ) ) - 1;
 	}
 
 	/**

@@ -460,6 +460,38 @@ PHP;
 	}
 
 	/**
+	 * GS ! carries width in the high nibble and height in the low one.
+	 *
+	 * `n = (width - 1) << 4 | (height - 1)`. The two were swapped, so every non-square `<size>`
+	 * printed transposed. The 2x2 case asserted below is bit-symmetric (0x11) and cannot tell the
+	 * two conventions apart, which is how this survived -- so assert an asymmetric pair.
+	 *
+	 * @return void
+	 */
+	public function test_size_byte_puts_width_in_the_high_nibble(): void {
+		// Arrange / Act.
+		$wide = $this->render( '<receipt paper-width="48"><text><size width="2" height="1">W</size></text></receipt>' );
+		$tall = $this->render( '<receipt paper-width="48"><text><size width="1" height="3">T</size></text></receipt>' );
+
+		// Assert.
+		$this->assertTrue( $this->includes_sequence( $wide, array( 0x1d, 0x21, 0x10 ) ) );
+		$this->assertTrue( $this->includes_sequence( $tall, array( 0x1d, 0x21, 0x02 ) ) );
+	}
+
+	/**
+	 * A multiplier past 8x is bounded instead of carrying into the other axis.
+	 *
+	 * @return void
+	 */
+	public function test_size_byte_bounds_a_multiplier_past_the_commands_range(): void {
+		// Arrange / Act.
+		$bytes = $this->render( '<receipt paper-width="48"><text><size width="9" height="1">X</size></text></receipt>' );
+
+		// Assert: 8x is the ceiling, so the width nibble is 7 and the height nibble stays 0.
+		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1d, 0x21, 0x70 ) ) );
+	}
+
+	/**
 	 * Double-size text emits GS ! and scaled line spacing around the line.
 	 *
 	 * @return void
