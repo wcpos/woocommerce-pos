@@ -17,6 +17,7 @@ namespace WCPOS\WooCommercePOS;
 use WP_Query;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
+use WCPOS\WooCommercePOS\Templates\Gallery_Update_Status;
 
 /**
  * Templates class.
@@ -521,6 +522,8 @@ class Templates {
 			'gallery_key'     => $gallery_key ? $gallery_key : null,
 			'preview_data'    => $preview_data,
 			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
+			// Null for a hand-written template, which has no bundled original to be behind.
+			'gallery_update'  => Gallery_Update_Status::status_for( $template_id ),
 			'status'          => $post->post_status,
 			'source'          => 'custom',
 			'menu_order'      => $post->menu_order,
@@ -1440,6 +1443,11 @@ class Templates {
 				);
 			}
 		}
+
+		// Fingerprint what was installed, so a later release can tell an untouched copy (safe to
+		// update in place) from one the merchant has edited (theirs; only ever offered).
+		// Must follow the raw save above, which is what finally decides the stored content.
+		Gallery_Update_Status::record_source_hash( $post_id );
 
 		return $post_id;
 	}

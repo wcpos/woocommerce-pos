@@ -23,6 +23,26 @@ class Gallery_Registry {
 	 * @return array<string,array<string,mixed>>
 	 */
 	public static function all(): array {
+		/**
+		 * Filter the bundled gallery template catalogue.
+		 *
+		 * The `version` on each entry is load-bearing: it is compared against the version recorded
+		 * on a merchant's installed copy to tell them theirs has fallen behind, so an entry added
+		 * here must carry one and must bump it whenever its markup changes.
+		 *
+		 * @since 1.11.0
+		 *
+		 * @param array<string,array<string,mixed>> $catalogue Gallery templates keyed by template key.
+		 */
+		return (array) apply_filters( 'woocommerce_pos_gallery_templates', self::catalogue() );
+	}
+
+	/**
+	 * The catalogue as this build ships it, before any filtering.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	private static function catalogue(): array {
 		return array(
 			'display-pocket' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */

@@ -1,0 +1,78 @@
+name: Gallery Template Versions
+
+# A merchant who installs a gallery template gets an editable COPY in their database. When we
+# change the bundled markup, their copy does not change — the ONLY thing that can ever tell them
+# they are behind is the `version` in Gallery_Registry, compared against the version recorded on
+# their copy at install time.
+#
+# So a version nobody bumps is worse than no version at all: it reports "up to date" on a template
+# that is not, silently, forever. This job makes the bump mechanical instead of a rule in a doc
+# that everyone means to follow.
+#
+# Deliberately narrow: it only fires when a bundled template or the registry actually changes, and
+# it only ever asks one question — did the version for this key go up?
+
+on:
+  pull_request:
+    branches:
+      - main
+      - next
+    paths:
+      - "templates/gallery/**"
+      - "includes/Templates/Gallery_Registry.php"
+      - "scripts/gallery-template-versions.php"
+      - ".github/workflows/gallery-template-versions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gallery-template-versions:
+    name: Gallery template versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The comparison resolves the merge-base, so shallow history will not do.
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.1"
+          coverage: none
+
+      - name: Guard regression tests
+        run: php scripts/tests/test-gallery-template-versions.php
+
+      - name: Changed gallery templates carry a version bump
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # Same idiom as lane-coverage.yml: on a pull_request event actions/checkout gives us the
+          # merge commit, so the base is the merge-base of its two parents and is already local.
+          # Fetching here would need credentials that persist-credentials: false removes.
+          if git rev-parse -q --verify "HEAD^2" >/dev/null; then
+            base_sha="$(git merge-base "HEAD^1" "HEAD^2")"
+          else
+            base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+          fi
+          if [ -z "$base_sha" ]; then
+            echo "::error::Could not resolve the base commit to compare against."
+            exit 1
+          fi
+          echo "Comparing against merge-base $base_sha ($BASE_REF)"
+
+          status=0
+          php scripts/gallery-template-versions.php "$base_sha" HEAD || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error file=includes/Templates/Gallery_Registry.php::A bundled gallery template changed without a version bump. Merchants hold an editable copy; the registry version is the only thing that tells them theirs is behind."
+          fi
+          exit "$status"
