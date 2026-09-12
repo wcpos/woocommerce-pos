@@ -73,9 +73,14 @@ function registry_versions( string $source ): array {
 		// Anchored at exactly four tabs: the entry's OWN fields. An unanchored match would take
 		// the first 'version' anywhere in the chunk, including one nested inside preview_data,
 		// and silently compare the wrong number.
-		if ( preg_match( "/^\t{4}'version' *=> *(\d+)/m", $chunk, $m ) ) {
-			$versions[ $key ] = (int) $m[1];
-		}
+		//
+		// A key that is present but whose version cannot be read maps to null rather than being
+		// dropped. Dropping it made the entry indistinguishable from one deleted outright, and the
+		// caller waves deletions through — so losing the version field was a way to change a
+		// template with no bump and a green check, which is the exact hole this guard plugs.
+		$versions[ $key ] = preg_match( "/^\t{4}'version' *=> *(\d+)/m", $chunk, $m )
+			? (int) $m[1]
+			: null;
 	}
 
 	return $versions;
@@ -137,6 +142,24 @@ function main(): int {
 		// A template deleted in this change has nothing left to version.
 		if ( ! array_key_exists( $key, $after ) ) {
 			$passes[] = "{$key}: removed from the registry";
+			continue;
+		}
+
+		// Still registered, but its version cannot be read. At runtime registry_version() falls
+		// back to 1 for exactly this entry, so every installed copy would report itself current.
+		if ( null === $after[ $key ] ) {
+			$failures[] = sprintf(
+				"%s\n    %s changed and its 'version' in %s is missing or unreadable.",
+				$key,
+				$file,
+				REGISTRY_PATH
+			);
+			continue;
+		}
+
+		// An entry that had no readable version before cannot be compared against; require one now.
+		if ( null === $before[ $key ] ) {
+			$passes[] = "{$key}: version now readable ({$after[$key]})";
 			continue;
 		}
 

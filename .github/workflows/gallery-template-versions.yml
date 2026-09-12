@@ -23,6 +23,11 @@ on:
       - "scripts/gallery-template-versions.php"
       - ".github/workflows/gallery-template-versions.yml"
   workflow_dispatch:
+    inputs:
+      base:
+        description: "Ref to compare against (a manual run has no pull-request base)."
+        required: false
+        default: "next"
 
 permissions:
   contents: read
@@ -54,15 +59,24 @@ jobs:
       - name: Changed gallery templates carry a version bump
         env:
           BASE_REF: ${{ github.base_ref }}
+          MANUAL_BASE: ${{ inputs.base }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          # Same idiom as lane-coverage.yml: on a pull_request event actions/checkout gives us the
-          # merge commit, so the base is the merge-base of its two parents and is already local.
-          # Fetching here would need credentials that persist-credentials: false removes.
-          if git rev-parse -q --verify "HEAD^2" >/dev/null; then
-            base_sha="$(git merge-base "HEAD^1" "HEAD^2")"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # Same idiom as lane-coverage.yml: on a pull_request event actions/checkout gives us
+            # the merge commit, so the base is the merge-base of its two parents and is already
+            # local. Fetching here would need credentials persist-credentials: false removes.
+            if git rev-parse -q --verify "HEAD^2" >/dev/null; then
+              base_sha="$(git merge-base "HEAD^1" "HEAD^2")"
+            else
+              base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+            fi
           else
-            base_sha="$(git merge-base "origin/$BASE_REF" HEAD)"
+            # A manual run has no pull-request base: github.base_ref is empty, and reusing the
+            # branch above would either run `git merge-base origin/ HEAD` or, on a merge commit,
+            # silently compare two unrelated parents.
+            base_sha="$(git merge-base "origin/$MANUAL_BASE" HEAD || true)"
           fi
           if [ -z "$base_sha" ]; then
             echo "::error::Could not resolve the base commit to compare against."

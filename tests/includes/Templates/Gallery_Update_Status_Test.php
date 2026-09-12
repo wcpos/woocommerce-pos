@@ -245,6 +245,76 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Replacing the content moves the modification time.
+	 *
+	 * `save_raw_post_content()` writes `post_content` straight to the table, so nothing moves
+	 * `post_modified` on its own. The templates collection serves incremental pulls by
+	 * `modified_after`, so without this a POS client whose cursor predates the swap keeps printing
+	 * the old receipt forever. Raised by Codex review on #1969.
+	 *
+	 * @return void
+	 */
+	public function test_sync_untouched_advances_the_modification_time(): void {
+		// Arrange.
+		$template_id = $this->install();
+		$stale       = '2020-01-01 00:00:00';
+		$GLOBALS['wpdb']->update(
+			$GLOBALS['wpdb']->posts,
+			array(
+				'post_modified'     => $stale,
+				'post_modified_gmt' => $stale,
+			),
+			array( 'ID' => $template_id )
+		);
+		clean_post_cache( $template_id );
+		$this->set_bundled_version( 2 );
+
+		// Act.
+		Gallery_Update_Status::sync_untouched();
+
+		// Assert.
+		$this->assertNotSame( $stale, get_post( $template_id )->post_modified );
+		$this->assertNotSame( $stale, get_post( $template_id )->post_modified_gmt );
+	}
+
+	/**
+	 * Unusable bundled content never overwrites a working template.
+	 *
+	 * `file_get_contents()` returns false on an unreadable file and `isset()` accepts false, so an
+	 * unguarded cast would blank the merchant's template and stamp it current. An empty file takes
+	 * the same branch. Raised by Codex review on #1969.
+	 *
+	 * @return void
+	 */
+	public function test_sync_untouched_refuses_empty_bundled_content(): void {
+		// Arrange.
+		$template_id = $this->install();
+		$original    = get_post( $template_id )->post_content;
+		$empty_file  = wp_tempnam( 'wcpos-empty-gallery' );
+		file_put_contents( $empty_file, '' );
+		add_filter(
+			'woocommerce_pos_gallery_templates',
+			function ( $catalogue ) use ( $empty_file ) {
+				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
+					$catalogue[ $this->gallery_key ]['version']      = 2;
+					$catalogue[ $this->gallery_key ]['content_file'] = $empty_file;
+				}
+
+				return $catalogue;
+			}
+		);
+
+		// Act.
+		$updated = Gallery_Update_Status::sync_untouched();
+
+		// Assert: nothing written, and the merchant's content is exactly as it was.
+		$this->assertSame( 0, $updated );
+		$this->assertSame( $original, get_post( $template_id )->post_content );
+
+		unlink( $empty_file );
+	}
+
+	/**
 	 * The backfill fingerprints a copy that still matches the bundled markup.
 	 *
 	 * @return void

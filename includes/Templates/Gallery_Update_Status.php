@@ -319,6 +319,35 @@ final class Gallery_Update_Status {
 	}
 
 	/**
+	 * Move a template's modification time to now.
+	 *
+	 * Written directly for the same reason the content is: `wp_update_post()` would re-run the
+	 * content through wp_kses and strip the XML tags a thermal template is made of.
+	 *
+	 * @param int $template_id The template post ID.
+	 *
+	 * @return void
+	 */
+	private static function touch_modified( int $template_id ): void {
+		global $wpdb;
+
+		$now = current_time( 'mysql' );
+
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_modified'     => $now,
+				'post_modified_gmt' => get_gmt_from_date( $now ),
+			),
+			array( 'ID' => $template_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+
+		clean_post_cache( $template_id );
+	}
+
+	/**
 	 * Overwrite one template's content with the bundled markup and re-stamp its provenance.
 	 *
 	 * Mirrors `Templates::install_gallery_template()` on both counts that decide what the stored
@@ -334,17 +363,32 @@ final class Gallery_Update_Status {
 	private static function replace_with_bundled( int $template_id ): bool {
 		$gallery_key = (string) get_post_meta( $template_id, self::META_GALLERY_KEY, true );
 		$bundled     = Templates::get_gallery_template_by_key( $gallery_key );
-		if ( ! \is_array( $bundled ) || ! isset( $bundled['content'] ) ) {
+
+		// `content` is false when the file exists but could not be read, and isset() accepts
+		// false. Casting that to a string and writing it would replace a merchant's working
+		// template with nothing and stamp it current — the one outcome this whole path exists to
+		// avoid. An empty file is refused for the same reason.
+		$bundled_content = \is_array( $bundled ) && isset( $bundled['content'] ) ? $bundled['content'] : null;
+		if ( ! \is_string( $bundled_content ) || '' === trim( $bundled_content ) ) {
+			Logger::log(
+				sprintf( 'Skipped updating gallery template %d: bundled content for "%s" could not be read.', $template_id, $gallery_key )
+			);
+
 			return false;
 		}
 
-		$content = Receipt_I18n_Labels::translate_interpolated_phrases( (string) $bundled['content'] );
+		$content = Receipt_I18n_Labels::translate_interpolated_phrases( $bundled_content );
 		$engine  = (string) get_post_meta( $template_id, '_template_engine', true );
 
 		if ( \in_array( $engine, Templates::OFFLINE_CAPABLE_ENGINES, true ) ) {
 			if ( ! Templates::save_raw_post_content( $template_id, $content ) ) {
 				return false;
 			}
+			// save_raw_post_content writes post_content straight to the table, so the post's
+			// modification time does not move. The templates collection serves incremental pulls
+			// by `modified_after`, so without this a POS client whose cursor predates the swap
+			// never learns the markup changed and keeps printing the old receipt indefinitely.
+			self::touch_modified( $template_id );
 		} else {
 			$result = wp_update_post(
 				array(

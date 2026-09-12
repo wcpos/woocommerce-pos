@@ -82,6 +82,20 @@ $nested = "<?php\n"
 $nested_versions = registry_versions( $nested );
 assert_same( array( 'thermal-detailed' => 3 ), $nested_versions, "ignores a 'version' nested inside another field" );
 
+// An entry whose version cannot be read must be REPORTED as unreadable, not dropped. Dropping it
+// made it look identical to a deleted entry, which the guard waves through — so deleting the
+// version line was a way to change a template with no bump and a green check.
+$unversioned = "<?php\n"
+	. "\t\t\t'no-version' => array(\n"
+	. "\t\t\t\t'title'         => __( 'Nope', 'woocommerce-pos' ),\n"
+	. "\t\t\t),\n";
+
+$unversioned_parsed = registry_versions( $unversioned );
+assert_same( true, array_key_exists( 'no-version', $unversioned_parsed ), 'keeps an entry whose version is missing' );
+// Not `?? 'absent'` — the null-coalescing operator cannot tell a null value from a missing key,
+// which is the very distinction under test.
+assert_same( null, $unversioned_parsed['no-version'], 'reports the missing version as null' );
+
 // The real registry must parse, and every key it ships must carry a version — otherwise the guard
 // silently treats that template as new and never asks for a bump.
 $real = file_get_contents( __DIR__ . '/../../includes/Templates/Gallery_Registry.php' );
