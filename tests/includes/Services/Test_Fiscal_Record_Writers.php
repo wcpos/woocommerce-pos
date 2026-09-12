@@ -373,6 +373,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$store = new \WCPOS\WooCommercePOS\Services\Closure_Store();
 		$closure = $store->create( $this->closure_fields( $session ) );
 		$order = $this->closure_ledger( $session );
+		$rows = Ledger::instance()->read( $order );
+		$rows[0]['method_id'] = 'extension_cash_drawer';
+		Ledger::instance()->save( $order, $rows, false );
+		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, $closure['received_at_gmt'] );
+		$order->save();
 		$writers = Fiscal_Record_Writers::instance();
 		$writers->record_sale( $order, array( 'fiscal' => array() ), 876543 );
 		$writers->record_sale( $order, array( 'fiscal' => array() ), 876543 );
@@ -422,5 +427,22 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 		$order->delete( true );
 		$early->delete( true );
+	}
+
+	/** Repairing a snapshot captured before close does not duplicate its frozen ledger. */
+	public function test_repaired_preclosure_sale_is_not_a_late_sale(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, '2000-01-01 00:00:00' );
+		$order->save();
+		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+
+		Fiscal_Record_Writers::instance()->record_sale( $order, array( 'fiscal' => array() ), 876545 );
+
+		$records = ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) );
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'sale', $records[0]['type'] );
+		$this->assertSame( $closure, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $closure['id'] ) );
+		$order->delete( true );
 	}
 }

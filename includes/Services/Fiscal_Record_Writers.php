@@ -93,8 +93,9 @@ final class Fiscal_Record_Writers {
 			);
 			$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
 			$sale = $this->store->find_sale( $order->get_id() );
+			$snapshot_created = (string) $order->get_meta( Receipt_Snapshot_Store::META_KEY_CREATED_AT, true );
 			// A replay of a sale already included in the closure is not a late sale.
-			if ( $closure && $sale && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
+			if ( $closure && $sale && '' !== $snapshot_created && $snapshot_created >= $closure['received_at_gmt'] && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
 				$rows = array_values(
 					array_filter(
 						\WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order ),

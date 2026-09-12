@@ -59,7 +59,8 @@ class Closures_Controller extends \WP_REST_Controller {
 	 */
 	public function permissions_check( $request ) {
 		$cap = 'POST' === $request->get_method() ? 'manage_woocommerce_pos_cash' : 'access_woocommerce_pos';
-		if ( '/recount' === substr( rtrim( $request->get_route(), '/' ), -8 ) ) {
+		$route = strtolower( rtrim( $request->get_route(), '/' ) );
+		if ( '/recount' === substr( $route, -8 ) ) {
 			$cap = 'manage_woocommerce_pos_closures';
 		}
 		return current_user_can( $cap ) ? true : $this->error( 'rest_forbidden', rest_authorization_required_code() );
@@ -75,7 +76,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			$store = new Closure_Store();
 			$url = $request->get_url_params();
 			$id = isset( $url['closure_id'] ) ? strtolower( $url['closure_id'] ) : null;
-			$route = rtrim( $request->get_route(), '/' );
+			$route = strtolower( rtrim( $request->get_route(), '/' ) );
 			if ( null !== $id ) {
 				$row = $store->get( $id );
 				if ( ! $row ) {
@@ -161,7 +162,7 @@ class Closures_Controller extends \WP_REST_Controller {
 				$fields[ $key . '_gmt' ] = null;
 				continue;
 			}
-			if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request[ $key ] ) ) {
+			if ( ! is_string( $request[ $key ] ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request[ $key ] ) ) {
 				return $this->error( 'rest_invalid_param', 400 );
 			}
 			$fields[ $key . '_gmt' ] = gmdate( 'Y-m-d H:i:s', strtotime( $request[ $key ] ) );
@@ -227,7 +228,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			$value = $request[ $key ];
 			if ( in_array( $key, array( 'after', 'before' ), true ) ) {
-				if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) {
+				if ( ! is_string( $value ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) {
 					return $this->error( 'rest_invalid_param', 400 );
 				}
 				$value = gmdate( 'Y-m-d H:i:s', strtotime( $value ) );

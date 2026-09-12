@@ -70,6 +70,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $this->post( 'closures', array( 'id' => $row['id'] ) )->get_status() );
 		$this->assertSame( $row, $this->get( 'closures/' . $row['id'] )->get_data() );
 		$this->assertSame( $row, $this->get( 'closures/last', array( 'register_id' => $session['register_id'] ) )->get_data() );
+		$this->assertSame( $row, $this->get( 'closures/LAST', array( 'register_id' => $session['register_id'] ) )->get_data() );
 		foreach ( array( 1, 2 ) as $count ) {
 			$printed = $this->post( 'closures/' . $row['id'] . '/print', array() )->get_data();
 			$this->assertSame( $count, $printed['print_count'] );
@@ -77,6 +78,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			unset( $printed['print_count'], $printed['last_printed_at_gmt'] );
 			$this->assertSame( array_diff_key( $row, array_flip( array( 'print_count', 'last_printed_at_gmt' ) ) ), $printed );
 		}
+		$this->assertSame( 3, $this->post( 'closures/' . $row['id'] . '/PRINT', array() )->get_data()['print_count'] );
 		$recount = array(
 			'id' => wp_generate_uuid4(),
 			'counted' => array( 'cash' => '97' ),
@@ -84,6 +86,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$first = $this->post( 'closures/' . $row['id'] . '/recount', $recount );
 		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( $first->get_data(), $this->post( 'closures/' . $row['id'] . '/ReCoUnT', $recount )->get_data() );
 		$this->assertSame( $recount['id'], $first->get_data()['source_id'] );
 		$this->assertSame( $row['id'], $first->get_data()['closure_id'] );
 		$this->assertSame( array( 'cash' => '-3.0000' ), $first->get_data()['payload']['variance'] );
@@ -115,6 +118,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			'session_id' => 'bad',
 			'number' => 0,
 			'closed_at' => '2026-02-30T12:00:00Z',
+			'opened_at' => array(),
 			'counted' => array( 'cash' => '1e2' ),
 			'period_sales_total' => 'NaN',
 			'unsynced_count' => -1,
@@ -123,6 +127,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 400, $this->post( 'closures', array_merge( $body, array( $key => $value ) ) )->get_status(), $key );
 		}
 		$row = $this->post( 'closures', $body )->get_data();
+		$this->assertSame( 400, $this->get( 'closures', array( 'after' => array() ) )->get_status() );
 		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
 		$user->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $user->ID );
@@ -134,6 +139,17 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			403,
 			$this->post(
 				'closures/' . $row['id'] . '/recount',
+				array(
+					'id' => wp_generate_uuid4(),
+					'counted' => array( 'cash' => '100' ),
+					'reason' => 'Count',
+				)
+			)->get_status()
+		);
+		$this->assertSame(
+			403,
+			$this->post(
+				'closures/' . $row['id'] . '/RECOUNT',
 				array(
 					'id' => wp_generate_uuid4(),
 					'counted' => array( 'cash' => '100' ),
@@ -198,6 +214,8 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->get( 'closures' )->get_data() );
 		remove_filter( 'woocommerce_pos_closures_list_args', $scope );
 		$this->assertSame( 2, $this->get( 'registers/' . $a['register_id'] )->get_data()['counters']['last_closure_number'] );
+		$register_counters = array_column( $this->get( 'registers' )->get_data(), 'counters', 'id' );
+		$this->assertSame( 2, $register_counters[ $a['register_id'] ]['last_closure_number'] );
 		foreach ( array( array( 'per_page' => 101 ), array( 'page' => 0 ), array( 'register_id' => 'bad' ), array( 'after' => 'bad' ) ) as $args ) {
 			$this->assertSame( 400, $this->get( 'closures', $args )->get_status() );
 		}
