@@ -1285,7 +1285,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$id = $this->create_template( 'Closure preview', 'closure' );
 			update_post_meta( $id, '_template_engine', $engine );
 			foreach ( array( 'latest', 999999999, $non_pos->get_id(), $pos->get_id() ) as $order_id ) {
-				$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $id . '/preview' );
+				$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $id . '/preview' );
 				$request->set_param( 'order_id', $order_id );
 				$response = $this->server->dispatch( $request );
 				$this->assertSame( 200, $response->get_status() );
