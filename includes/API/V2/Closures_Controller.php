@@ -59,23 +59,24 @@ class Closures_Controller extends \WP_REST_Controller {
 	 */
 	public function permissions_check( $request ) {
 		$route = strtolower( rtrim( $request->get_route(), '/' ) );
+		// WCPOS access is the floor for every method, so no capability grants a route on its own.
+		$required = array( 'access_woocommerce_pos' );
 		if ( '/recount' === substr( $route, -8 ) ) {
-			$cap = 'manage_woocommerce_pos_closures';
+			$required[] = 'manage_woocommerce_pos_closures';
 		} elseif ( 'POST' === $request->get_method() ) {
-			$cap = 'manage_woocommerce_pos_cash';
+			$required[] = 'manage_woocommerce_pos_cash';
 		} else {
 			// Writing the document is a cash duty; reading it back is also a report.
-			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
-				return $this->error( 'rest_forbidden', rest_authorization_required_code() );
-			}
-			$cap = 'view_woocommerce_pos_reports';
-		}
-		if ( ! current_user_can( $cap ) ) {
-			return $this->error( 'rest_forbidden', rest_authorization_required_code() );
+			$required[] = 'view_woocommerce_pos_reports';
 		}
 		// A print hands over the figures, so a blind cashier may write a closure but never print one.
-		if ( '/print' === substr( $route, -6 ) && ! current_user_can( 'view_woocommerce_pos_reports' ) ) {
-			return $this->error( 'rest_forbidden', rest_authorization_required_code() );
+		if ( '/print' === substr( $route, -6 ) ) {
+			$required[] = 'view_woocommerce_pos_reports';
+		}
+		foreach ( $required as $cap ) {
+			if ( ! current_user_can( $cap ) ) {
+				return $this->error( 'rest_forbidden', rest_authorization_required_code() );
+			}
 		}
 		return true;
 	}
