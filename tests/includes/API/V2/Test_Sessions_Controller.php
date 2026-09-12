@@ -112,6 +112,25 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** The expected figure is a report: a cashier counting blind never receives it. */
+	public function test_blind_cashier_session_read_omits_expected(): void {
+		$fields = $this->fields();
+		$this->post( 'sessions', $fields );
+		$route = '/wcpos/v2/sessions/' . $fields['id'];
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$sighted = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
+		$this->assertArrayHasKey( 'expected', $sighted );
+		$blind = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_user_by( 'id', $blind )->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $blind );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( $route ) );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayNotHasKey( 'expected', $data );
+		$this->assertArrayHasKey( 'sales_count', $data );
+		$this->assertArrayHasKey( 'movements', $data );
+	}
+
 	/** Malformed opening fields are refused and an unknown float has no variance. */
 	public function test_validation_and_null_expected_float(): void {
 		$fields = $this->fields();

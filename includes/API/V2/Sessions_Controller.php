@@ -113,13 +113,18 @@ class Sessions_Controller extends \WP_REST_Controller {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
 			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
-			return new WP_REST_Response(
-				substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ? $movements : $row + array(
-					'movements' => $movements,
-					'expected' => $store->expected( $row ),
-					'sales_count' => $store->sales_count( $row ),
-				)
+			if ( substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ) {
+				return new WP_REST_Response( $movements );
+			}
+			$detail = array(
+				'movements' => $movements,
+				'sales_count' => $store->sales_count( $row ),
 			);
+			// The expected figure is a report: a cashier counting blind never receives it.
+			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {
+				$detail['expected'] = $store->expected( $row );
+			}
+			return new WP_REST_Response( $row + $detail );
 		}
 		$args = array(
 			'status' => $request['status'] ?? 'all',

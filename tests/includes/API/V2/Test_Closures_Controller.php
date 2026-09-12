@@ -131,6 +131,12 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
 		$user->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $user->ID );
+		// Reading a closure back is a report, so POS access alone is not enough.
+		$this->assertSame( 403, $this->get( 'closures' )->get_status() );
+		$user->add_cap( 'view_woocommerce_pos_reports' );
+		// wp_set_current_user() is a no-op for the same id; re-set so the cached caps reload.
+		wp_set_current_user( 0 );
+		wp_set_current_user( $user->ID );
 		$this->assertSame( 200, $this->get( 'closures' )->get_status() );
 		$this->assertSame( 403, $this->post( 'closures', $body )->get_status() );
 		$this->assertSame( 403, $this->post( 'closures/' . $row['id'] . '/print', array() )->get_status() );
@@ -162,6 +168,27 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( 0 );
 		wp_set_current_user( $user->ID );
 		$this->assertSame( 403, $this->get( 'closures' )->get_status() );
+	}
+
+	/** Reading closures back is a report: a blind cashier is refused. */
+	public function test_closure_reads_require_the_reports_capability(): void {
+		$session = $this->closure_session();
+		$created = $this->post( 'closures', $this->body( $session ) );
+		$this->assertSame( 201, $created->get_status() );
+		$id = $created->get_data()['id'];
+		$blind = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$blind->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $blind->ID );
+		foreach ( array( 'closures', 'closures/' . $id, 'closures/last' ) as $route ) {
+			$response = $this->get( $route, array( 'register_id' => $session['register_id'] ) );
+			$this->assertSame( 403, $response->get_status(), $route );
+			$this->assertSame( 'rest_forbidden', $response->get_data()['code'], $route );
+		}
+		$blind->add_cap( 'view_woocommerce_pos_reports' );
+		// wp_set_current_user() is a no-op for the same id; re-set so the cached caps reload.
+		wp_set_current_user( 0 );
+		wp_set_current_user( $blind->ID );
+		$this->assertSame( 200, $this->get( 'closures/' . $id )->get_status() );
 	}
 
 	/** List filters paging and register counters. */

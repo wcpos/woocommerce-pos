@@ -107,6 +107,26 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'woocommerce_pos_closures_list_args', $scope );
 		}
 	}
+	/** A blind cashier can neither read an X-report nor a written closure. */
+	public function test_blind_cashier_cannot_read_register_documents(): void {
+		$session = $this->closure_session();
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $session, 3 ) );
+		$open = $this->closure_session( null, 'open' );
+		$blind = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$blind->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $blind->ID );
+		foreach ( array( 'closure:' . $row['id'], 'xreport:' . $open['id'] ) as $document ) {
+			$response = $this->document( $document );
+			$this->assertSame( 403, $response->get_status(), $document );
+			$this->assertSame( 'rest_forbidden', $response->get_data()['code'], $document );
+		}
+		$blind->add_cap( 'view_woocommerce_pos_reports' );
+		// wp_set_current_user() is a no-op for the same id; re-set so the cached caps reload.
+		wp_set_current_user( 0 );
+		wp_set_current_user( $blind->ID );
+		$this->assertSame( 200, $this->document( 'closure:' . $row['id'] )->get_status() );
+	}
+
 	/** Refund counts use captured session payment rows, not orders or pending rows. */
 	public function test_xreport_refund_count_uses_live_session_ledger(): void {
 		$session = $this->closure_session();
@@ -352,6 +372,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$user->add_cap( 'access_woocommerce_pos' );
 		$user->add_cap( 'manage_woocommerce_pos' );
 		$user->add_cap( 'manage_woocommerce_pos_cash' );
+		$user->add_cap( 'view_woocommerce_pos_reports' );
 		$queries = array();
 		$observe = static function ( $query ) use ( &$queries ) {
 			$queries[] = $query;
@@ -387,6 +408,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
 		$viewer = wp_set_current_user( self::factory()->user->create() );
 		$viewer->add_cap( 'access_woocommerce_pos' );
+		$viewer->add_cap( 'view_woocommerce_pos_reports' );
 		foreach ( array(
 			'closure:' . $row['id'] => 'Closure 1',
 			'xreport:' . $session['id'] => 'X-report',
@@ -434,6 +456,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
 		$viewer = wp_set_current_user( self::factory()->user->create() );
 		$viewer->add_cap( 'access_woocommerce_pos' );
+		$viewer->add_cap( 'view_woocommerce_pos_reports' );
 		foreach ( array( '', '/pdf' ) as $suffix ) {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/0' . $suffix );
 			$request->set_query_params(
