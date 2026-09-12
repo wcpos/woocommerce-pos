@@ -350,7 +350,7 @@ class Starprnt_Thermal_Emitter {
 	private function emit_text_line( array $children ): void {
 		if ( 'left' !== $this->align ) {
 			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
-			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns );
+			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns, $this->effective_magnification( $this->width ) );
 			if ( $pad > 0 ) {
 				$this->raw_string( str_repeat( ' ', $pad ) );
 			}
@@ -432,6 +432,29 @@ class Starprnt_Thermal_Emitter {
 	}
 
 	/**
+	 * The largest magnification ESC i can express: n1/n2 are 0-5, so 6x.
+	 *
+	 * `Thermal_Bounds::SIZE_MULTIPLIER_MAX` is 8, so a template may legitimately ask for more
+	 * than the command can carry.
+	 */
+	private const MAX_MAGNIFICATION = 6;
+
+	/**
+	 * The magnification the printer will actually apply for a requested multiplier.
+	 *
+	 * Anything that measures the printed line -- alignment padding above -- must use this and
+	 * not the requested value, or a `<size width="8">` line is padded as though its glyphs were
+	 * 8 cells wide when ESC i only made them 6, and the line lands off-centre the other way.
+	 *
+	 * @param int $multiplier The requested width or height multiplier.
+	 *
+	 * @return int The applied magnification (1..6).
+	 */
+	private function effective_magnification( int $multiplier ): int {
+		return max( 1, min( self::MAX_MAGNIFICATION, $multiplier ) );
+	}
+
+	/**
 	 * Compute the ESC i magnification byte for a multiplier (0-based, max 6x).
 	 *
 	 * @param int $multiplier The width or height multiplier.
@@ -439,7 +462,7 @@ class Starprnt_Thermal_Emitter {
 	 * @return int The ESC i parameter byte.
 	 */
 	private function magnification_byte( int $multiplier ): int {
-		return max( 0, min( 5, $multiplier - 1 ) );
+		return $this->effective_magnification( $multiplier ) - 1;
 	}
 
 	/**
