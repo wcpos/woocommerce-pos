@@ -1389,6 +1389,10 @@ class Receipt_Data_Schema {
 		if ( 'closure' === $type ) {
 			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'register', 'software', 'fiscal', 'i18n' ) ) );
 			$tree['order']['fields'] = array_intersect_key( $tree['order']['fields'], array_flip( array( 'currency' ) ) );
+			$tree['register']['fields']['store_id'] = array(
+				'type'  => 'number',
+				'label' => __( 'Store ID', 'woocommerce-pos' ),
+			);
 			$tree['software']['fields'] = array_intersect_key( $tree['software']['fields'], array_flip( array( 'name', 'plugin_version' ) ) );
 			$tree['closure'] = array(
 				'label' => __( 'Closure', 'woocommerce-pos' ),

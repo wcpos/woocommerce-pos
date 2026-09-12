@@ -1302,6 +1302,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 					$this->assertArrayNotHasKey( $section, $tree );
 				}
 				$this->assertSame( array( 'currency' ), array_keys( $tree['order']['fields'] ) );
+				$this->assertArrayHasKey( 'store_id', $tree['register']['fields'] );
 				foreach ( array( 'number', 'printed_number', 'register_id', 'opened_at_gmt', 'closed_at_gmt', 'counted.cash', 'expected.cash', 'variance.cash', 'breakdowns.payment_methods', 'breakdowns.tax_rates', 'breakdowns.movements', 'unsynced_count', 'perpetual_sales_total', 'software_version', 'printed_at_gmt' ) as $field ) {
 					$this->assertArrayHasKey( $field, $tree['closure']['fields'] );
 				}
