@@ -14,6 +14,60 @@ use WP_UnitTestCase;
  * @covers \WCPOS\WooCommercePOS\Sync\Meta_Normalizer
  */
 class Test_Meta_Normalizer extends WP_UnitTestCase {
+	/**
+	 * Oversized entity meta is omitted without turning the remaining list into a map.
+	 */
+	public function test_wc_meta_oversized_array_is_dropped_and_list_reindexed(): void {
+		$huge = new \WC_Meta_Data( array( 'id' => 7, 'key' => 'huge', 'value' => array_fill( 0, Meta_Normalizer::OVERSIZED_META_NODE_LIMIT + 1, 'a' ) ) );
+		$sibling = new \WC_Meta_Data( array( 'id' => 8, 'key' => 'normal', 'value' => 'kept' ) );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $huge, $sibling ) ) );
+
+		$this->assertSame( array( $sibling ), $normalized['meta_data'] );
+		$this->assertSame( array( 0 ), array_keys( $normalized['meta_data'] ) );
+		$this->assertSame( '[', substr( wp_json_encode( $normalized['meta_data'] ), 0, 1 ) );
+	}
+
+	/**
+	 * In-budget entity meta retains both its object identity and existing wire shape.
+	 */
+	public function test_wc_meta_small_nested_array_keeps_existing_wire_shape(): void {
+		$entry = new \WC_Meta_Data(
+			array( 'id' => 9, 'key' => 'nested', 'value' => array( 'settings' => array( 'enabled' => true, 'ids' => array( 4, 8 ) ) ) )
+		);
+		$expected = json_decode( wp_json_encode( $entry->get_data() ), true );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertSame( $entry, $normalized['meta_data'][0] );
+		$this->assertSame( $expected, json_decode( wp_json_encode( $normalized['meta_data'][0] ), true ) );
+	}
+
+	/**
+	 * Array-shaped meta applies the byte budget before attempting JSON decoding.
+	 */
+	public function test_array_meta_string_over_byte_limit_is_dropped_and_under_limit_kept(): void {
+		$huge = array( 'key' => 'huge_string', 'value' => str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT + 1 ) );
+		$sibling = array( 'key' => 'normal_string', 'value' => str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT - 1 ) );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $huge, $sibling ) ) );
+
+		$this->assertCount( 1, $normalized['meta_data'] );
+		$this->assertSame( array( $sibling ), $normalized['meta_data'] );
+	}
+
+	/**
+	 * Nodes from separate nested arrays all contribute to the same budget.
+	 */
+	public function test_array_meta_nested_total_over_node_limit_is_dropped(): void {
+		$half = array_fill( 0, (int) ( Meta_Normalizer::OVERSIZED_META_NODE_LIMIT / 2 ), 'a' );
+		$entry = array( 'key' => 'nested_huge', 'value' => array( $half, $half ) );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertCount( 0, $normalized['meta_data'] );
+	}
+
 	public function test_object_json_string_is_normalized_to_a_typed_value(): void {
 		$document = array(
 			'meta_data' => array(

@@ -7,10 +7,35 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /**
  * Normalizes structured meta values before sync documents are hashed or emitted.
  */
 final class Meta_Normalizer {
+	/**
+	 * Upper bound on array elements and object properties in ONE meta value, counted
+	 * across every nesting level. The POS's own structured meta (`_woocommerce_pos_data`,
+	 * attribute maps, line-item meta) is a few hundred nodes; anything past this is another
+	 * plugin's bulk data and is not served: one store carried a 16.7-million-element meta
+	 * value, and the JSON round trip below killed every request that touched the record
+	 * (Sentry WOOCOMMERCE-POS-2KQ, ~22 fatals an hour).
+	 */
+	public const OVERSIZED_META_NODE_LIMIT = 20000;
+
+	/**
+	 * Upper bound on string bytes in ONE meta value, summed across nesting (1 MiB) — the
+	 * same cut-off for values that are few but enormous strings.
+	 */
+	public const OVERSIZED_META_BYTE_LIMIT = 1048576;
+
+	/**
+	 * Meta keys already reported as oversized in this request (one warning per key).
+	 *
+	 * @var array<string, true>
+	 */
+	private static array $oversized_logged = array();
+
 	/**
 	 * Register the shared pre-stamping normalization seams.
 	 */
@@ -91,18 +116,34 @@ final class Meta_Normalizer {
 	 * @return array
 	 */
 	private static function normalize_meta_data( array $meta_data ): array {
+		$was_list = array_keys( $meta_data ) === array_keys( array_values( $meta_data ) );
+		$dropped  = false;
 		foreach ( $meta_data as $index => $entry ) {
 			// Top-level entity meta reaches the filters as live WC_Meta_Data objects
 			// (they only become arrays at JSON-encode time); convert a copy to the
 			// exact shape it would serialize to, and only swap it in when normalization
 			// actually happens — untouched entries keep their original form so
-			// revision hashes of scalar-only records are unchanged.
+			// revision hashes of scalar-only records are unchanged. The budget check
+			// runs on the live value BEFORE the round trip: encoding an oversized value
+			// is the allocation that took the whole request down.
 			$is_meta_object = $entry instanceof \WC_Meta_Data;
 			if ( $is_meta_object ) {
-				$entry = json_decode( wp_json_encode( $entry ), true );
+				$data = $entry->get_data();
+				if ( self::exceeds_value_budget( $data['value'] ?? null ) ) {
+					self::drop_oversized( $meta_data, $index, $data );
+					$dropped = true;
+					continue;
+				}
+				$entry = json_decode( wp_json_encode( $data ), true );
 			}
 
 			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+
+			if ( ! $is_meta_object && self::exceeds_value_budget( $entry['value'] ?? null ) ) {
+				self::drop_oversized( $meta_data, $index, $entry );
+				$dropped = true;
 				continue;
 			}
 
@@ -131,7 +172,77 @@ final class Meta_Normalizer {
 			}
 		}
 
+		if ( $dropped && $was_list ) {
+			// A list with a hole JSON-encodes as an object; the wire expects a list.
+			$meta_data = array_values( $meta_data );
+		}
+
 		return $meta_data;
+	}
+
+	/**
+	 * Remove an oversized entry from the payload and say so once per key per request.
+	 * The value itself is never logged.
+	 *
+	 * @param array      $meta_data Serialized REST meta entries (by reference).
+	 * @param int|string $index     Index of the entry to drop.
+	 * @param array      $entry     Array form of the entry (`id`, `key`, `value`).
+	 */
+	private static function drop_oversized( array &$meta_data, $index, array $entry ): void {
+		unset( $meta_data[ $index ] );
+		$key = isset( $entry['key'] ) ? (string) $entry['key'] : '';
+		if ( isset( self::$oversized_logged[ $key ] ) ) {
+			return;
+		}
+		self::$oversized_logged[ $key ] = true;
+		Logger::warning(
+			sprintf(
+				'WCPOS sync: dropped oversized meta "%s" (meta id %d) from the POS payload; the stored value exceeds %d nodes or %d bytes and cannot be served to the POS.',
+				$key,
+				(int) ( $entry['id'] ?? 0 ),
+				self::OVERSIZED_META_NODE_LIMIT,
+				self::OVERSIZED_META_BYTE_LIMIT
+			)
+		);
+	}
+
+	/**
+	 * Whether a meta value is too large to serve. Walks iteratively and stops the moment a
+	 * limit is crossed, so the cost is bounded by the limits, not by the value: a
+	 * 16-million-element value costs the same as a 20,001-element one. Arrays and stdClass
+	 * are expanded in place (no copies); any other object counts as one node.
+	 *
+	 * @param mixed $value Meta value as stored.
+	 *
+	 * @return bool
+	 */
+	private static function exceeds_value_budget( $value ): bool {
+		if ( is_string( $value ) ) {
+			return \strlen( $value ) > self::OVERSIZED_META_BYTE_LIMIT;
+		}
+		if ( ! is_array( $value ) && ! $value instanceof \stdClass ) {
+			return false;
+		}
+
+		$nodes = 0;
+		$bytes = 0;
+		$stack = array( $value );
+		while ( array() !== $stack ) {
+			$current = array_pop( $stack );
+			foreach ( $current as $child ) {
+				++$nodes;
+				if ( is_string( $child ) ) {
+					$bytes += \strlen( $child );
+				} elseif ( is_array( $child ) || $child instanceof \stdClass ) {
+					$stack[] = $child;
+				}
+				if ( $nodes > self::OVERSIZED_META_NODE_LIMIT || $bytes > self::OVERSIZED_META_BYTE_LIMIT ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
