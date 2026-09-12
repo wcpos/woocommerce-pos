@@ -115,6 +115,57 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 		$this->assertCount( 0, $normalized['meta_data'] );
 	}
 
+	/**
+	 * A JsonSerializable value is budgeted on what the encoder will see.
+	 *
+	 * json_encode() serializes jsonSerialize()'s return, not the object's public properties,
+	 * so an object can expose nothing and still hand the encoder a huge array.
+	 */
+	public function test_json_serializable_with_oversized_payload_is_dropped(): void {
+		$huge    = new Serializable_Meta_Fixture( array_fill( 0, Meta_Normalizer::OVERSIZED_META_NODE_LIMIT + 1, 'a' ) );
+		$sibling = array( 'key' => 'normal', 'value' => 'kept' );
+
+		$normalized = Meta_Normalizer::normalize(
+			array( 'meta_data' => array( array( 'key' => 'wrapped', 'value' => $huge ), $sibling ) )
+		);
+
+		$this->assertSame( array( $sibling ), $normalized['meta_data'] );
+	}
+
+	/**
+	 * The same applies when it is nested rather than the whole value.
+	 */
+	public function test_nested_json_serializable_with_oversized_payload_is_dropped(): void {
+		$huge  = new Serializable_Meta_Fixture( array_fill( 0, Meta_Normalizer::OVERSIZED_META_NODE_LIMIT + 1, 'a' ) );
+		$entry = array( 'key' => 'nested_wrapped', 'value' => array( 'inner' => array( 'deep' => $huge ) ) );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertCount( 0, $normalized['meta_data'] );
+	}
+
+	/**
+	 * A small JsonSerializable value is not withheld.
+	 */
+	public function test_small_json_serializable_value_is_kept(): void {
+		$entry = array( 'key' => 'wrapped', 'value' => new Serializable_Meta_Fixture( array( 'a', 'b' ) ) );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertCount( 1, $normalized['meta_data'] );
+	}
+
+	/**
+	 * A value whose jsonSerialize() throws is withheld: json_encode would fatal on it too.
+	 */
+	public function test_json_serializable_that_throws_is_dropped(): void {
+		$entry = array( 'key' => 'explodes', 'value' => new Throwing_Meta_Fixture() );
+
+		$normalized = Meta_Normalizer::normalize( array( 'meta_data' => array( $entry ) ) );
+
+		$this->assertCount( 0, $normalized['meta_data'] );
+	}
+
 	public function test_object_json_string_is_normalized_to_a_typed_value(): void {
 		$document = array(
 			'meta_data' => array(
@@ -349,5 +400,47 @@ class Oversized_Meta_Fixture {
 	 */
 	public function __construct( $payload ) {
 		$this->payload = $payload;
+	}
+}
+
+/**
+ * Stand-in for a meta value whose encoded form comes from jsonSerialize().
+ */
+class Serializable_Meta_Fixture implements \JsonSerializable {
+	/**
+	 * Hidden from get_object_vars() on purpose.
+	 *
+	 * @var mixed
+	 */
+	private $payload;
+
+	/**
+	 * @param mixed $payload Stored payload.
+	 */
+	public function __construct( $payload ) {
+		$this->payload = $payload;
+	}
+
+	/**
+	 * @return mixed
+	 */
+	#[\ReturnTypeWillChange]
+	public function jsonSerialize() {
+		return $this->payload;
+	}
+}
+
+/**
+ * A meta value whose encoded form cannot be produced at all.
+ */
+class Throwing_Meta_Fixture implements \JsonSerializable {
+	/**
+	 * @throws \RuntimeException Always.
+	 *
+	 * @return mixed
+	 */
+	#[\ReturnTypeWillChange]
+	public function jsonSerialize() {
+		throw new \RuntimeException( 'cannot serialize' );
 	}
 }

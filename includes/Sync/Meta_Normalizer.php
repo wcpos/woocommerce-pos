@@ -259,6 +259,11 @@ final class Meta_Normalizer {
 	 * @return bool
 	 */
 	public static function exceeds_value_budget( $value ): bool {
+		$unencodable = false;
+		$value       = self::as_encoded( $value, $unencodable );
+		if ( $unencodable ) {
+			return true;
+		}
 		if ( is_string( $value ) ) {
 			return \strlen( $value ) > self::OVERSIZED_META_BYTE_LIMIT;
 		}
@@ -276,6 +281,10 @@ final class Meta_Normalizer {
 				if ( is_string( $child_key ) ) {
 					$bytes += \strlen( $child_key );
 				}
+				$child = self::as_encoded( $child, $unencodable );
+				if ( $unencodable ) {
+					return true;
+				}
 				if ( is_string( $child ) ) {
 					$bytes += \strlen( $child );
 				} elseif ( is_array( $child ) ) {
@@ -290,6 +299,44 @@ final class Meta_Normalizer {
 		}
 
 		return false;
+	}
+
+	/**
+	 * What `json_encode()` will actually serialize for a value.
+	 *
+	 * A `JsonSerializable` object is encoded from `jsonSerialize()`, NOT from its public
+	 * properties, so an object can expose nothing and still return a multi-million-element
+	 * array to the encoder. Budgeting `get_object_vars()` alone would wave exactly that
+	 * through. The encoder is going to call this method moments later anyway, so calling it
+	 * here adds no execution that was not already going to happen.
+	 *
+	 * A chain deeper than a handful of levels, or one that throws, is reported as
+	 * unencodable and the entry is withheld: `json_encode()` would fail on it too, and
+	 * failing there is the fatal this guard exists to prevent.
+	 *
+	 * @param mixed $value       Value to resolve.
+	 * @param bool  $unencodable Set to true when the value cannot be resolved safely.
+	 *
+	 * @return mixed
+	 */
+	private static function as_encoded( $value, bool &$unencodable ) {
+		$depth = 0;
+		while ( $value instanceof \JsonSerializable ) {
+			if ( ++$depth > 8 ) {
+				$unencodable = true;
+
+				return null;
+			}
+			try {
+				$value = $value->jsonSerialize();
+			} catch ( \Throwable $error ) {
+				$unencodable = true;
+
+				return null;
+			}
+		}
+
+		return $value;
 	}
 
 	/**
