@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.12
+Stable tag: 1.10.13
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,10 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.13 - 2026/09/13 =
+
+- **Web: start-up repair of a damaged local database now applies each pending change to the row it belongs to**, rather than to that row's position, and refuses a stale change for a row already holding a newer entry. The desktop and mobile apps received this in 1.10.12; the web app loads its storage worker from this plugin, which still carried the previous copy.
 
 = 1.10.12 - 2026/09/13 =
 
