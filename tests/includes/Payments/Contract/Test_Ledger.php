@@ -468,6 +468,25 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'completed', $order->get_status() );
 	}
 
+	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
+	public function test_authorized_at_gmt_is_stamped_on_approval_and_kept_through_capture(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$cash  = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '10.00' ) );
+		$this->assertNull( $cash['authorized_at_gmt'] );
+
+		// Act.
+		$card = Ledger::instance()->record( $order, $this->payment( 'pos_card', '82.95', array( 'status' => 'authorized' ) ) );
+		$approved = $card['authorized_at_gmt'];
+		$captured = Ledger::instance()->apply_result( $order, $card['id'], array( 'status' => 'captured', 'captured_at_gmt' => '2030-01-01T00:00:00+00:00' ) );
+
+		// Assert.
+		$this->assertNotNull( $approved );
+		$this->assertSame( $approved, $captured['authorized_at_gmt'] );
+		$this->assertSame( '2030-01-01T00:00:00+00:00', $captured['captured_at_gmt'] );
+		$this->assertNotSame( $approved, $captured['captured_at_gmt'] );
+	}
+
 	/** A paid order records and returns a stable refusal. */
 	public function test_record_refuses_overpay_when_balance_is_zero(): void {
 		// Arrange.

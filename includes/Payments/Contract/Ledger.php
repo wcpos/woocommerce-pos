@@ -786,7 +786,7 @@ class Ledger {
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
-		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
+		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'authorized_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
 			}
@@ -976,6 +976,10 @@ class Ledger {
 			// Keep a valid captured_at_gmt across later transitions (a voided authorized leg
 			// keeps the time the reader approved it); default to now only when the row counts.
 			'captured_at_gmt' => $this->valid_time( $row['captured_at_gmt'] ?? null ) ? $this->valid_time( $row['captured_at_gmt'] ?? null ) : ( in_array( $status, self::COUNTING_STATUSES, true ) ? $now : null ),
+			// When the reader approved the hold. captured_at_gmt used to double as this and is
+			// overwritten at capture, so a dispute could not tell approval from settlement.
+			// Stamped once, on the first authorized normalization, and kept afterwards.
+			'authorized_at_gmt' => $this->valid_time( $row['authorized_at_gmt'] ?? null ) ? $this->valid_time( $row['authorized_at_gmt'] ?? null ) : ( 'authorized' === $status ? $now : null ),
 			'updated_at_gmt' => $now,
 		);
 		$row = array_merge( $defaults, $row );
@@ -991,6 +995,7 @@ class Ledger {
 		$row['status']           = $status;
 		$row['created_at_gmt']   = $defaults['created_at_gmt'];
 		$row['captured_at_gmt']  = $defaults['captured_at_gmt'];
+		$row['authorized_at_gmt'] = $defaults['authorized_at_gmt'];
 		$row['cashier_id']       = (int) $row['cashier_id'];
 		$row['store_id']         = null === $row['store_id'] ? null : (int) $row['store_id'];
 		$row['recorded_offline'] = (bool) $row['recorded_offline'];
