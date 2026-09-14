@@ -272,6 +272,16 @@ class Ledger {
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
+			Logger::warning( sprintf( 'WCPOS payment %s refused on order #%d: %s (%s %s tendered, %s owed)', $row['id'], $order->get_id(), $row['failure_reason'], $amount, $currency, Money::format( $balance ) ) );
+			/**
+			 * Fires after a new payment row is saved as refused.
+			 *
+			 * @param WC_Order $order Order object.
+			 * @param array    $row   Failed payment row.
+			 *
+			 * @hook woocommerce_pos_payment_refused
+			 */
+			do_action( 'woocommerce_pos_payment_refused', $order, $row );
 			return $this->refusal_error( $row, $order );
 		}
 
@@ -286,7 +296,18 @@ class Ledger {
 		}
 		$this->derive( $order, $this->read( $order ) );
 		$order->save();
-		return $this->find( $order, $row['id'] );
+		$row = $this->find( $order, $row['id'] );
+		Logger::log( sprintf( 'WCPOS payment %s recorded on order #%d: %s %s via %s (%s) by cashier #%d', $row['id'], $order->get_id(), $row['amount'], $row['currency'], $row['method_id'], $row['status'], $row['cashier_id'] ) );
+		/**
+		 * Fires after a new payment row is recorded and the order is saved.
+		 *
+		 * @param WC_Order $order Order object.
+		 * @param array    $row   Recorded payment row.
+		 *
+		 * @hook woocommerce_pos_payment_recorded
+		 */
+		do_action( 'woocommerce_pos_payment_recorded', $order, $row );
+		return $row;
 	}
 
 	/**
@@ -421,9 +442,32 @@ class Ledger {
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
 		$new = $handler ? $handler->capture( $row, $context ) : $this->unsupported();
 		if ( is_wp_error( $new ) ) {
+			$this->record_failure_events( $order, $id, $new );
 			return $new;
 		}
 		return $this->apply_result( $order, $id, $new );
+	}
+
+	/**
+	 * Preserve provider diagnostics even when capture returns no payment result.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param string   $id    Payment ID.
+	 * @param WP_Error $error Provider error carrying redacted events.
+	 */
+	public function record_failure_events( WC_Order $order, string $id, WP_Error $error ): void {
+		$events = $error->get_error_data()['events'] ?? null;
+		if ( ! is_array( $events ) || empty( $events ) ) {
+			return;
+		}
+		$rows = $this->read( $order );
+		foreach ( $rows as $index => $row ) {
+			if ( strtolower( $id ) === $row['id'] ) {
+				$rows[ $index ]['events'] = array_merge( $row['events'] ?? array(), $events );
+				$this->save( $order, $rows, false );
+				return;
+			}
+		}
 	}
 
 	/**
@@ -743,6 +787,7 @@ class Ledger {
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
 			$order->save();
+			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}
 		return $applied;
