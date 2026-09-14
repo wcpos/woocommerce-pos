@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.10.11\n"
+"Project-Id-Version: WCPOS 1.10.13\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-12T20:26:35+00:00\n"
+"POT-Creation-Date: 2026-09-14T14:07:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -598,6 +598,10 @@ msgstr ""
 
 #: includes/API/V1/Orders_Controller.php:1013
 msgid "Display name of the order status."
+msgstr ""
+
+#: includes/API/V1/Orders_Controller.php:1039
+msgid "Whether the order email was sent."
 msgstr ""
 
 #: includes/API/V1/Payment_Gateways.php:154
