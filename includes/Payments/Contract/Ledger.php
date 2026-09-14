@@ -361,6 +361,12 @@ class Ledger {
 				'amount' => $amount,
 				'currency' => $currency,
 				'status' => 'pending',
+				// The reader is the one provider ref the till knows before the provider does:
+				// a device-mode leg is minted for a specific reader, and the order must say
+				// which one took the money. Every other ref comes from the handler.
+				'provider_refs' => is_string( $input['provider_refs']['reader'] ?? null ) && '' !== $input['provider_refs']['reader']
+					? array( 'reader' => sanitize_text_field( $input['provider_refs']['reader'] ) )
+					: array(),
 				'register_id' => $input['register_id'] ?? null,
 				'session_id' => $input['session_id'] ?? null,
 				'cashier_id' => (int) ( $context['cashier_id'] ?? get_current_user_id() ),

@@ -102,6 +102,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, Integrity_Handler::$calls );
 	}
 
+	/** A device leg is minted for one reader; the order keeps which one, and nothing else the till claims. */
+	public function test_intent_keeps_the_reader_from_the_row_and_no_other_client_ref(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00', array( 'provider_refs' => array( 'reader' => 'sn-1', 'payment_intent' => 'pi_forged' ) ) );
+		Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$this->assertSame( array( 'reader' => 'sn-1' ), Ledger::instance()->find( $order, $input['id'] )['provider_refs'] );
+	}
+
 	public function test_intent_handler_error_does_not_persist(): void {
 		$order = $this->create_pos_order();
 		$input = $this->payment( 'pos_card', '20.00' );
