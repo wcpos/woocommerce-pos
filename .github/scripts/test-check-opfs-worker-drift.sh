@@ -118,6 +118,30 @@ if ( cd "$TMP_DIR" && GH_TOKEN= bash "$CHECK_SCRIPT" >/dev/null 2>&1 ); then
   fail "expected a non-zero exit when GH_TOKEN is unset"
 fi
 
+# Execute the full check: a version-bumped plugin must not ship the old worker.
+mkdir "$TMP_DIR/bin"
+cat > "$TMP_DIR/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  'api --paginate repos/wcpos/web-bundle/git/matching-refs/tags/v1.10.'*)
+    printf 'v1.10.9\nv1.10.23\nv1.11.0\n' ;;
+  'api repos/wcpos/web-bundle/contents/build/opfs.worker.js?ref=v1.10.23 -H Accept: application/vnd.github.raw')
+    printf 'new worker' ;;
+  *) echo "Unexpected GitHub request: $*" >&2; exit 1 ;;
+esac
+STUB
+chmod +x "$TMP_DIR/bin/gh"
+mk_version_file '1.10.14' "$TMP_DIR/release.php"
+printf 'old worker' > "$TMP_DIR/worker.js"
+if PATH="$TMP_DIR/bin:$PATH" GH_TOKEN=test PLUGIN_FILE="$TMP_DIR/release.php" \
+  WORKER_FILE="$TMP_DIR/worker.js" bash "$CHECK_SCRIPT" > "$TMP_DIR/drift.log" 2>&1; then
+  fail "version bump passed with a worker behind the newest bundle tag"
+fi
+printf 'new worker' > "$TMP_DIR/worker.js"
+PATH="$TMP_DIR/bin:$PATH" GH_TOKEN=test PLUGIN_FILE="$TMP_DIR/release.php" \
+  WORKER_FILE="$TMP_DIR/worker.js" bash "$CHECK_SCRIPT" \
+  || fail "version bump failed after vendoring the newest bundle worker"
+
 # ---------------------------------------------------------------------------
 # Wiring
 # ---------------------------------------------------------------------------
