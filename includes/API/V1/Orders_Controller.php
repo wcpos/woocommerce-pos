@@ -337,7 +337,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 						)
 					),
 				),
-				'schema' => array(),
+				'schema' => array( $this, 'wcpos_get_public_send_email_schema' ),
 			)
 		);
 
@@ -1012,6 +1012,32 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				'name' => array(
 					'description' => __( 'Display name of the order status.', 'woocommerce-pos' ),
 					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+			),
+		);
+	}
+
+	/**
+	 * Get the route schema for the send-email action.
+	 *
+	 * Registered as the route-level `schema` callback. WordPress invokes it with
+	 * `call_user_func()` whenever a namespace index is requested with
+	 * `context=help`, so it must be a real callable — an empty array there
+	 * passes `isset()` and then fatals with a TypeError.
+	 *
+	 * @return array
+	 */
+	public function wcpos_get_public_send_email_schema() {
+		return array(
+			'$schema'    => 'http://json-schema.org/draft-04/schema#',
+			'title'      => 'order_email',
+			'type'       => 'object',
+			'properties' => array(
+				'success' => array(
+					'description' => __( 'Whether the order email was sent.', 'woocommerce-pos' ),
+					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),

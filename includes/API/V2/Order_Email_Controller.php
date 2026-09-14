@@ -48,7 +48,7 @@ class Order_Email_Controller extends \WCPOS\WooCommercePOS\API\V1\Orders_Control
 						)
 					),
 				),
-				'schema' => array(),
+				'schema' => array( $this, 'wcpos_get_public_send_email_schema' ),
 			)
 		);
 	}
