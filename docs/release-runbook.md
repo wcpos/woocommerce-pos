@@ -25,4 +25,6 @@ For maintainers cutting or recovering a free-plugin release. Release scope belon
 2. Recovery requires the tag's plugin header to match the input and the release to exist. A published release that already carries `woocommerce-pos.zip` is refused: a shipped asset is never replaced. A draft's asset is re-uploaded with `--clobber`. It does not alter release notes or publication state and does not redeploy WordPress.org.
 3. Verify the resulting downloadable ZIP and version markers. A fresh rebuild is not promised byte-identical to the original build. If GitHub is unavailable, wait for it to recover and dispatch again; do not add an empty commit or bump the plugin version to repair an asset.
 
+Pro's `release.yml` has the same `version` dispatch. It additionally pins the bundled Free plugin to Free's tag `v<version>` (Pro's `composer.json` floats Free on `dev-main`, so an unpinned rebuild would bundle today's Free `main`), refuses if that Free tag does not exist, and publishes a still-draft release as latest exactly as the push run would have.
+
 For a failed **WordPress.org deployment**, use `wporg-deploy.yml` with the published version instead. Rebuilding the GitHub asset does not repair SVN, and an absent GitHub asset does not imply SVN failed.
