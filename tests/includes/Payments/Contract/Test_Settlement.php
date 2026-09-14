@@ -40,6 +40,18 @@ class Test_Settlement extends \WP_UnitTestCase {
 		$this->assertSame( array( 'brand' => 'visa' ), Ledger::instance()->find( $order, $row['id'] )['receipt'] );
 	}
 
+	/** The provider's approval time, not the server's receipt time, is what the row keeps. */
+	public function test_settlement_keeps_the_provider_approval_time(): void {
+		list( $order, $row ) = $this->pending();
+		$this->assertTrue( wcpos_settle_payment( $row['id'], array(
+			'status' => 'authorized', 'amount' => '20.00', 'currency' => $row['currency'],
+			'authorized_at_gmt' => '2030-01-01T00:00:00+00:00',
+		) ) );
+		$stored = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame( 'authorized', $stored['status'] );
+		$this->assertSame( '2030-01-01T00:00:00+00:00', $stored['authorized_at_gmt'] );
+	}
+
 	public function test_settlement_duplicate_event_does_not_verify_or_write_again(): void {
 		list( $order, $row ) = $this->pending();
 		$patch = array( 'event_id' => 'evt-1', 'status' => 'captured' );

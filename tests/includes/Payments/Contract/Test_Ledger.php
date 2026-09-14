@@ -486,7 +486,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$card = Ledger::instance()->record( $order, $this->payment( 'pos_card', '82.95', array( 'status' => 'authorized' ) ) );
 		$approved = $card['authorized_at_gmt'];
-		$captured = Ledger::instance()->apply_result( $order, $card['id'], array( 'status' => 'captured', 'captured_at_gmt' => '2030-01-01T00:00:00+00:00' ) );
+		// A capture answer that carries no approval time (here an explicit null) must not erase it.
+		$captured = Ledger::instance()->apply_result( $order, $card['id'], array( 'status' => 'captured', 'captured_at_gmt' => '2030-01-01T00:00:00+00:00', 'authorized_at_gmt' => null ) );
 
 		// Assert.
 		$this->assertNotNull( $approved );

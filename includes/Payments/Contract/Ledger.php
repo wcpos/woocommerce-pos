@@ -792,10 +792,15 @@ class Ledger {
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
-		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'authorized_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
+		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
 			}
+		}
+		// The approval time is write-once: a later capture, void or status answer that
+		// carries none (or an invalid one) must not erase the stamp already on the row.
+		if ( $this->valid_time( $new['authorized_at_gmt'] ?? null ) ) {
+			$row['authorized_at_gmt'] = $this->valid_time( $new['authorized_at_gmt'] );
 		}
 		return $row;
 	}
