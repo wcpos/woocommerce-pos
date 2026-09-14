@@ -144,7 +144,12 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertSame( $session, $store->create( array( 'id' => $session['id'] ) ) );
-		$this->assert_event( 'warning', 'Register session already exists', array( 'session_id' => $session['id'] ) );
+		// An idempotent replay returns the existing row: the success path, not a fault.
+		$this->assert_event(
+			'info',
+			'Register session already recorded; returning the existing row',
+			array( 'session_id' => $session['id'] )
+		);
 		$this->assertWPError(
 			$store->create(
 				array(
@@ -283,7 +288,12 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			);
 		}
 		$this->assertSame( $row, $store->create( array( 'id' => $row['id'] ) ) );
-		$this->assert_event( 'warning', 'Cash movement already exists', array( 'movement_id' => $row['id'] ) );
+		// An idempotent replay returns the existing row: the success path, not a fault.
+		$this->assert_event(
+			'info',
+			'Cash movement already recorded; returning the existing row',
+			array( 'movement_id' => $row['id'] )
+		);
 		$fields['id'] = wp_generate_uuid4();
 		$this->assertWPError( $store->create( $fields ) );
 		$this->assert_event(
@@ -330,7 +340,12 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertSame( $closure, $store->create( array( 'id' => $closure['id'] ) ) );
-		$this->assert_event( 'warning', 'Register closure already exists', array( 'closure_id' => $closure['id'] ) );
+		// An idempotent replay returns the existing row: the success path, not a fault.
+		$this->assert_event(
+			'info',
+			'Register closure already recorded; returning the existing row',
+			array( 'closure_id' => $closure['id'] )
+		);
 		$id = wp_generate_uuid4();
 		$store->recount( $closure, $id, array( 'cash' => '102' ), 'Coin recount' );
 		$this->assert_event(
