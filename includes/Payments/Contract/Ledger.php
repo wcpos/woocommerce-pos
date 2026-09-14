@@ -382,6 +382,12 @@ class Ledger {
 				'amount' => $amount,
 				'currency' => $currency,
 				'status' => 'pending',
+				// The reader is the one provider ref the till knows before the provider does:
+				// a device-mode leg is minted for a specific reader, and the order must say
+				// which one took the money. Every other ref comes from the handler.
+				'provider_refs' => is_string( $input['provider_refs']['reader'] ?? null ) && '' !== $input['provider_refs']['reader']
+					? array( 'reader' => sanitize_text_field( $input['provider_refs']['reader'] ) )
+					: array(),
 				'register_id' => $input['register_id'] ?? null,
 				'session_id' => $input['session_id'] ?? null,
 				'cashier_id' => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
@@ -836,6 +842,11 @@ class Ledger {
 				$row[ $field ] = $new[ $field ];
 			}
 		}
+		// The approval time is write-once: a later capture, void or status answer that
+		// carries none (or an invalid one) must not erase the stamp already on the row.
+		if ( $this->valid_time( $new['authorized_at_gmt'] ?? null ) ) {
+			$row['authorized_at_gmt'] = $this->valid_time( $new['authorized_at_gmt'] );
+		}
 		return $row;
 	}
 
@@ -1021,6 +1032,10 @@ class Ledger {
 			// Keep a valid captured_at_gmt across later transitions (a voided authorized leg
 			// keeps the time the reader approved it); default to now only when the row counts.
 			'captured_at_gmt' => $this->valid_time( $row['captured_at_gmt'] ?? null ) ? $this->valid_time( $row['captured_at_gmt'] ?? null ) : ( in_array( $status, self::COUNTING_STATUSES, true ) ? $now : null ),
+			// When the reader approved the hold. captured_at_gmt used to double as this and is
+			// overwritten at capture, so a dispute could not tell approval from settlement.
+			// Stamped once, on the first authorized normalization, and kept afterwards.
+			'authorized_at_gmt' => $this->valid_time( $row['authorized_at_gmt'] ?? null ) ? $this->valid_time( $row['authorized_at_gmt'] ?? null ) : ( 'authorized' === $status ? $now : null ),
 			'updated_at_gmt' => $now,
 		);
 		$row = array_merge( $defaults, $row );
@@ -1036,6 +1051,7 @@ class Ledger {
 		$row['status']           = $status;
 		$row['created_at_gmt']   = $defaults['created_at_gmt'];
 		$row['captured_at_gmt']  = $defaults['captured_at_gmt'];
+		$row['authorized_at_gmt'] = $defaults['authorized_at_gmt'];
 		$row['cashier_id']       = (int) $row['cashier_id'];
 		$row['store_id']         = null === $row['store_id'] ? null : (int) $row['store_id'];
 		$row['recorded_offline'] = (bool) $row['recorded_offline'];

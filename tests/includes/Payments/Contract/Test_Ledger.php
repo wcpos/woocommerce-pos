@@ -102,6 +102,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, Integrity_Handler::$calls );
 	}
 
+	/** A device leg is minted for one reader; the order keeps which one, and nothing else the till claims. */
+	public function test_intent_keeps_the_reader_from_the_row_and_no_other_client_ref(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00', array( 'provider_refs' => array( 'reader' => 'sn-1', 'payment_intent' => 'pi_forged' ) ) );
+		Ledger::instance()->intent( $order, $input['id'], $input, array() );
+		$this->assertSame( array( 'reader' => 'sn-1' ), Ledger::instance()->find( $order, $input['id'] )['provider_refs'] );
+	}
+
 	public function test_intent_handler_error_does_not_persist(): void {
 		$order = $this->create_pos_order();
 		$input = $this->payment( 'pos_card', '20.00' );
@@ -466,6 +474,26 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '92.95', $summary['paid'] );
 		$this->assertSame( '0.00', $summary['balance'] );
 		$this->assertSame( 'completed', $order->get_status() );
+	}
+
+	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
+	public function test_authorized_at_gmt_is_stamped_on_approval_and_kept_through_capture(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$cash  = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '10.00' ) );
+		$this->assertNull( $cash['authorized_at_gmt'] );
+
+		// Act.
+		$card = Ledger::instance()->record( $order, $this->payment( 'pos_card', '82.95', array( 'status' => 'authorized' ) ) );
+		$approved = $card['authorized_at_gmt'];
+		// A capture answer that carries no approval time (here an explicit null) must not erase it.
+		$captured = Ledger::instance()->apply_result( $order, $card['id'], array( 'status' => 'captured', 'captured_at_gmt' => '2030-01-01T00:00:00+00:00', 'authorized_at_gmt' => null ) );
+
+		// Assert.
+		$this->assertNotNull( $approved );
+		$this->assertSame( $approved, $captured['authorized_at_gmt'] );
+		$this->assertSame( '2030-01-01T00:00:00+00:00', $captured['captured_at_gmt'] );
+		$this->assertNotSame( $approved, $captured['captured_at_gmt'] );
 	}
 
 	/** A paid order records and returns a stable refusal. */
