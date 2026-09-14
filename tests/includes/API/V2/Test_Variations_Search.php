@@ -449,9 +449,9 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Every variation search term must match a searchable carrier.
+	 * The whole variation search phrase must match one carrier.
 	 */
-	public function test_variation_search_matches_every_term(): void {
+	public function test_variation_search_excludes_split_carrier_phrase(): void {
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
 		$sku     = wp_generate_password( 8, false );
 		$barcode = wp_generate_password( 8, false );
@@ -462,8 +462,60 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		update_post_meta( $other->get_id(), '_sku', $sku );
 		update_post_meta( $other->get_id(), '_barcode', wp_generate_password( 8, false ) );
 
-		$this->assertSame( array( $match->get_id() ), $this->variation_ids( array( 'search' => $sku . ' ' . $barcode ) ) );
+		$this->assertSame( array(), $this->variation_ids( array( 'search' => $sku . ' ' . $barcode ) ) );
 		$this->assertSame( array(), $this->variation_ids( array( 'search' => $sku . ' zzzz' ) ) );
+	}
+
+	/**
+	 * Both identifier carriers preserve complete phrases, including literal characters.
+	 *
+	 * @dataProvider variation_phrases
+	 * @param string $phrase Search phrase.
+	 * @param string $decoy  Nonmatching carrier value.
+	 */
+	public function test_variation_phrase_matches_one_literal_carrier( string $phrase, string $decoy ): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
+		$sku     = $this->create_variation( 'PHRASE-SKU' );
+		$barcode = $this->create_variation( 'PHRASE-BARCODE' );
+		$other   = $this->create_variation( 'PHRASE-DECOY' );
+		update_post_meta( $sku->get_id(), '_sku', wp_slash( 'xx' . $phrase . 'xx' ) );
+		update_post_meta( $barcode->get_id(), '_barcode', wp_slash( $phrase ) );
+		update_post_meta( $other->get_id(), '_sku', wp_slash( $decoy ) );
+
+		$this->assertSame( array( $barcode->get_id(), $sku->get_id() ), $this->variation_ids( array( 'search' => $phrase, 'include' => array( $sku->get_id(), $barcode->get_id(), $other->get_id() ) ) ) );
+	}
+
+	/**
+	 * Phrase carriers must not be split, normalized, or truncated.
+	 *
+	 * @return array
+	 */
+	public function variation_phrases(): array {
+		return array(
+			array( 'MY საბარგული', 'საბარგული MY' ),
+			array( 'A საბარგული', 'A other საბარგული' ),
+			array( '0', 'BBB' ),
+			array( '0.4', '0 4' ),
+			array( '%30', '30' ),
+			array( '100%', '1000' ),
+			array( 'MY_code', 'MYXcode' ),
+			array( 'MY\\code', 'MYcode' ),
+			array( 'MY"code', 'MYcode' ),
+			array( "MY'code", 'MYcode' ),
+			array( 'MY  საბარგული', 'MY საბარგული' ),
+			array( 'MY+საბარგული', 'MY საბარგული' ),
+			array( 'one two three four five six seven eight nine ten eleven', 'one two three four five six seven eight nine ten' ),
+		);
+	}
+
+	/**
+	 * Literal-preserving sanitation does not accept array search values.
+	 */
+	public function test_variation_search_array_retains_validation_error(): void {
+		$response = $this->variations_request( array( 'search' => array( 'MY' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
 	}
 
 	/**
@@ -539,13 +591,15 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 * Pagination returns a stable descending page and the unpaged total.
 	 */
 	public function test_search_paginates_with_total(): void {
-		$first = $this->create_variation( 'PAGE-MATCH-1' );
-		$this->create_variation( 'PAGE-MATCH-2' );
-		$this->create_variation( 'PAGE-MATCH-3' );
+		$first = $this->create_variation( 'PAGE MATCH-1' );
+		$this->create_variation( 'PAGE MATCH-2' );
+		$this->create_variation( 'PAGE MATCH-3' );
+		$this->create_variation( 'PAGE Other MATCH' );
+		$this->create_variation( 'MATCH PAGE' );
 
 		$response = $this->variations_request(
 			array(
-				'search'   => 'PAGE-MATCH',
+				'search'   => 'PAGE MATCH',
 				'per_page' => 2,
 				'page'     => 2,
 			)
@@ -602,7 +656,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4096 ) ) ),
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 100, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
-			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 10, 'term' ) ) ) ),
+			'long phrase'       => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
 			'page'              => array(
 				array(
 					'search' => 'boundary',
@@ -623,17 +677,10 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4097 ) ) ),
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
-			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
 			'empty sku search length' => array(
 				array(
 					'sku'    => ', ',
 					'search' => str_repeat( 'S', 257 ),
-				),
-			),
-			'empty sku search terms'  => array(
-				array(
-					'sku'    => ', ',
-					'search' => implode( ' ', array_fill( 0, 11, 'term' ) ),
 				),
 			),
 			'page'              => array(

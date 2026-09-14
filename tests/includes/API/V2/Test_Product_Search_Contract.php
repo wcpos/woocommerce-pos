@@ -14,7 +14,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  * Server-side twin of the POS client's search fixture catalogue.
  *
  * Source of truth: wcpos/monorepo packages/sync-core/src/searchFixtureCatalogue.ts.
- * Terms are ANDed across title, SKU, and barcode substring matches (OR fields).
+ * The complete phrase must occur within one title, SKU, or barcode field.
  * Exact SKU/barcode matches rank first, then id descending; descriptions never match.
  */
 class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
@@ -88,7 +88,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function search_traps(): array {
 		return array(
-			array( 'and-across-terms', 'banana berry', array( 'Strawberry Banana Split', 'Banana Berry Smoothie' ) ),
+			array( 'complete-phrase', 'banana berry', array( 'Banana Berry Smoothie' ) ),
 			array( 'accent-fold', 'creme', array( 'Crème Brûlée Kit' ) ),
 			array( 'unicode-fold', 'skoda', array( 'Škoda Model Car' ) ),
 			array( 'compound-substring', 'board', array( 'Skateboard Deck' ) ),
@@ -98,7 +98,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			array( 'description-never-matches', 'phantom', array() ),
 			array( 'out-of-stock-rows-are-searched', 'ghost', array( 'Ghost Pepper Sauce' ) ),
 			array( 'stock-status-field-is-not-searched', 'outofstock', array() ),
-			array( 'and-across-fields', 'cobalt zinc', array( 'Cobalt Lamp' ) ),
+			array( 'no-cross-field-phrase', 'cobalt zinc', array() ),
 			array( 'no-match', 'zzqx', array() ),
 		);
 	}
@@ -122,6 +122,81 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		$this->assertSame( $expected_names, wp_list_pluck( $rows, 'name' ), $name );
+	}
+
+	/**
+	 * Literal phrases survive REST sanitation and WordPress search parsing.
+	 *
+	 * @dataProvider literal_phrases
+	 * @param string $phrase Search phrase.
+	 * @param array  $decoys Nonmatching titles.
+	 */
+	public function test_phrase_search_matches_only_complete_literal_title( string $phrase, array $decoys ): void {
+		$wanted = ProductHelper::create_simple_product( array( 'sku' => '' ) );
+		wp_update_post( wp_slash( array( 'ID' => $wanted->get_id(), 'post_title' => 'xx' . $phrase . 'xx' ) ) );
+		$this->assertSame( 'xx' . $phrase . 'xx', get_post_field( 'post_title', $wanted->get_id() ) );
+		$ids = array( $wanted->get_id() );
+		foreach ( $decoys as $title ) {
+			$product = ProductHelper::create_simple_product( array( 'name' => $title, 'sku' => '' ) );
+			$ids[]   = $product->get_id();
+		}
+
+		$rows = $this->read( array( 'search' => '  ' . $phrase . '  ', 'include' => $ids ) );
+
+		$this->assertSame( array( $wanted->get_id() ), wp_list_pluck( $rows, 'id' ) );
+	}
+
+	/**
+	 * Literal transport and per-field phrase cases.
+	 *
+	 * @return array
+	 */
+	public function literal_phrases(): array {
+		return array(
+			array( 'MY საბარგული', array( 'M3 საბარგული', 'საბარგული MY', 'MY xxxx საბარგული' ) ),
+			array( 'A საბარგული', array( 'M3 საბარგული', 'საბარგული A' ) ),
+			array( 'MY', array( 'M3' ) ),
+			array( 'A', array( 'BBB' ) ),
+			array( 'A B', array( 'B A', 'A xx B' ) ),
+			array( '0', array( 'BBB' ) ),
+			array( '0.4', array( '0 4', '4.0' ) ),
+			array( 'red-shirt', array( 'red shirt' ) ),
+			array( 'MY+საბარგული', array( 'MY საბარგული', 'MY,საბარგული' ) ),
+			array( '100%', array( '1000' ) ),
+			array( '%30', array( '30', '0' ) ),
+			array( 'MY_code', array( 'MYXcode' ) ),
+			array( 'MY\\code', array( 'MYcode' ) ),
+			array( 'MY"code', array( 'MYcode', 'MY code' ) ),
+			array( "MY'code", array( 'MYcode' ) ),
+			array( 'MY  საბარგული', array( 'MY საბარგული' ) ),
+			array( '東京 コー', array( '東京 別 コー' ) ),
+		);
+	}
+
+	/**
+	 * Phrase filtering happens before totals and stable multi-page selection.
+	 */
+	public function test_phrase_search_pages_count_matches_once(): void {
+		$ids = array();
+		foreach ( range( 1, 3 ) as $index ) {
+			$product = ProductHelper::create_simple_product( array( 'name' => 'Paged Phrase' ) );
+			add_post_meta( $product->get_id(), '_sku', 'Paged Phrase' );
+			add_post_meta( $product->get_id(), '_sku', 'Paged Phrase' );
+			$ids[] = $product->get_id();
+		}
+		ProductHelper::create_simple_product( array( 'name' => 'Paged Other Phrase' ) );
+		ProductHelper::create_simple_product( array( 'name' => 'Phrase Paged' ) );
+		$served = array();
+		foreach ( array( 1, 2 ) as $page ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+			$request->set_query_params( array( 'search' => 'Paged Phrase', 'orderby' => 'title', 'order' => 'desc', 'per_page' => 2, 'page' => $page ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( 3, $response->get_headers()['X-WP-Total'] );
+			$this->assertSame( 2, $response->get_headers()['X-WP-TotalPages'] );
+			$served = array_merge( $served, wp_list_pluck( $response->get_data(), 'id' ) );
+		}
+		$this->assertSame( $ids, $served );
 	}
 
 	/**
