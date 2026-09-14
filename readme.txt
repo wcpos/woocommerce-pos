@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.13
+Stable tag: 1.10.14
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.14 - 2026/09/14 =
+
+- **Product search matches what you type as one phrase, in the order you typed it.** Searching for two words no longer also returns products with those words reversed, separated, or split between the title and the SKU. Partial and exact SKU and barcode matches work as before, and one- and two-character searches now match anywhere in a word.
+- **The receipt template dropdown now lists templates in the order you set them**, for global templates and Pro per-store templates alike.
+- **Switching the app language repeatedly no longer holds every previous product search index in memory.**
+- **The WCPOS REST API index no longer errors when a client asks it for route help.** Only developers and integrations reading the API index were affected.
 
 = 1.10.13 - 2026/09/13 =
 
