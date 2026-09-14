@@ -23,15 +23,17 @@ final class Product_Search {
 	 */
 	public static function posts_search( string $search, WP_Query $wp_query ): string {
 		global $wpdb;
-		if ( empty( $search ) ) {
+		$q      = $wp_query->query_vars;
+		$phrase = $q['wcpos_search_phrase'] ?? null;
+		if ( empty( $search ) && null === $phrase ) {
 			return $search;
 		}
-		$q                 = $wp_query->query_vars;
+		$terms             = null !== $phrase ? array( $phrase ) : (array) $q['search_terms'];
 		$n                 = ! empty( $q['exact'] ) ? '' : '%';
 		$meta_fields       = Barcode_Field::search_keys();
 		$meta_placeholders = implode( ', ', array_fill( 0, \count( $meta_fields ), '%s' ) );
 		$search_conditions = array();
-		foreach ( (array) $q['search_terms'] as $term ) {
+		foreach ( $terms as $term ) {
 			$term                = $n . $wpdb->esc_like( $term ) . $n;
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $meta_placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
 			$search_conditions[] = $wpdb->prepare(
@@ -96,7 +98,7 @@ final class Product_Search {
 		$keys = Barcode_Field::search_keys();
 		return $wpdb->prepare(
 			'MIN(CASE WHEN pm1.meta_key IN (' . implode( ', ', array_fill( 0, count( $keys ), '%s' ) ) . ') AND pm1.meta_value = %s THEN 0 ELSE 1 END) ASC',
-			array_merge( $keys, array( trim( (string) $query->query_vars['s'] ) ) )
+			array_merge( $keys, array( trim( (string) ( $query->query_vars['wcpos_search_phrase'] ?? $query->query_vars['s'] ) ) ) )
 		) . ', ' . ( '' === trim( $orderby ) ? "{$wpdb->posts}.ID DESC" : $orderby );
 	}
 
@@ -107,6 +109,6 @@ final class Product_Search {
 	 * @return bool
 	 */
 	private static function is_searching( WP_Query $query ): bool {
-		return isset( $query->query_vars['s'] ) && '' !== (string) $query->query_vars['s'];
+		return '' !== (string) ( $query->query_vars['wcpos_search_phrase'] ?? $query->query_vars['s'] ?? '' );
 	}
 }
