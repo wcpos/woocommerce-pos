@@ -126,7 +126,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_action( 'woocommerce_pos_payment_refused', $listener, 10 );
 		}
 		$data = $response->get_data();
-		$this->assertSame( array( sprintf( 'WCPOS payment %s refused on order #%d: order_already_paid (10.00 USD tendered, 0.00 owed)', $payment['id'], $order->get_id() ) ), $this->payment_logs() );
+		$this->assertSame( array( sprintf( 'WCPOS payment %s refused on order #%d: order_already_paid (10.00 USD against 0.00 owed)', $payment['id'], $order->get_id() ) ), $this->payment_logs() );
 		$this->assertCount( 1, $calls );
 		$this->assertInstanceOf( \WC_Order::class, $calls[0][0] );
 		$this->assertSame( $order->get_id(), $calls[0][0]->get_id() );

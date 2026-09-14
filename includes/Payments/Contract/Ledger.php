@@ -272,7 +272,7 @@ class Ledger {
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
-			Logger::warning( sprintf( 'WCPOS payment %s refused on order #%d: %s (%s %s tendered, %s owed)', $row['id'], $order->get_id(), $row['failure_reason'], $amount, $currency, Money::format( $balance ) ) );
+			Logger::warning( sprintf( 'WCPOS payment %s refused on order #%d: %s (%s %s against %s owed)', $row['id'], $order->get_id(), $row['failure_reason'], $amount, $currency, Money::format( $balance ) ) );
 			/**
 			 * Fires after a new payment row is saved as refused.
 			 *
