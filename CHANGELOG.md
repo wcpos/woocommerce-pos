@@ -4,9 +4,7 @@
 
 ## Unreleased
 
-- Changed: v2 product search requires the complete phrase within one title, SKU or configured barcode field; variations search SKU and barcode fields only.
-  Reversed, separated or cross-field words no longer match. Punctuation and internal spacing are literal.
-  Exact and partial identifier matches remain supported, so a result's visible title need not contain the phrase.
+- Changed: v2 product search requires every typed word to match in any order across title, SKU and barcode; variations search SKU and barcode only. This change pairs with the client release.
 
 - Fixed: removing a **variation** from a cart that had already been saved to the server did not stick — the next save brought the variation back, with the store's totals jumping to match. A 1.10.0 regression: the `wcpos/v2` order forward drops the product identity from a variation line whose binding has not changed, so WooCommerce does not duplicate its attribute meta on every re-save, but the till's remove-this-line marker (`product_id: null` on the full settled line) was mistaken for such an unchanged binding and the marker was stripped along with it. Removed variation lines are now forwarded with their marker intact and WooCommerce removes them. Simple products were never affected.
 - Added: receipt discount rows now expose `discount_type`, the WooCommerce coupon type behind each row (`fixed_cart`, `percent`, `fixed_product`, or a type registered by another plugin), so templates and extensions can tell different kinds of coupon apart. Receipt Data schema version is now 1.2.0. Fiscal snapshots captured before this version do not carry the field.
