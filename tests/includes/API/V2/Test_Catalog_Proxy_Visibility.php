@@ -217,7 +217,12 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$visible = ProductHelper::create_simple_product( array( 'name' => 'Visible Bundle Simple' ) );
 		$this->hide_product( $hidden->get_id() );
 
-		$ids = array_map( 'intval', wp_list_pluck( $this->read_products( array( 'search' => 'Bundle' ) ), 'id' ) );
+		// The current lane the till's on-demand lookup calls.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_query_params( array( 'search' => 'Bundle' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$ids = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
 
 		$this->assertContains( $visible->get_id(), $ids );
 		$this->assertNotContains( $hidden->get_id(), $ids );
