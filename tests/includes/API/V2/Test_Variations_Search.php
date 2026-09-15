@@ -74,6 +74,21 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Malformed UTF-8 must not expose the variation catalogue.
+	 */
+	public function test_malformed_utf8_search_returns_no_rows(): void {
+		// Arrange.
+		$this->create_variation( 'MALFORMED-UTF8-SKU' );
+
+		// Act.
+		$response = $this->variations_request( array( 'search' => "\xC3\x28" ) );
+
+		// Assert: reject invalid input before querying rather than returning catalogue rows.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_variations_search_invalid', $response->get_data()['code'] );
+	}
+
+	/**
 	 * Decimal-enabled catalog reads must not integer-coerce variation stock.
 	 */
 	public function test_decimal_stock_quantity_is_preserved_on_variation_read(): void {

@@ -172,8 +172,12 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		if ( '' !== $search && '' === $sku ) {
 			unset( $args['s'] );
 			$args['wcpos_variation_search'] = true;
+			$terms = preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+			if ( false === $terms ) {
+				$terms = array();
+			}
 			$carriers = array( 'relation' => 'AND' );
-			foreach ( (array) preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY ) as $term ) {
+			foreach ( $terms as $term ) {
 				$term_carriers = array( 'relation' => 'OR' );
 				foreach ( Barcode_Field::search_keys() as $key ) {
 					$term_carriers[] = array(
@@ -439,10 +443,18 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			}
 		} else {
 			$search = (string) $request->get_param( 'search' );
-			if ( self::MAX_SEARCH_LENGTH < mb_strlen( $search ) ) {
+			// Unlike mb_strlen(), PCRE is independent of blog_charset and detects malformed UTF-8.
+			$characters = preg_match_all( '/./us', $search );
+			if ( false === $characters ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_invalid', 'search must be valid UTF-8', array( 'status' => 400 ) );
+			}
+			if ( self::MAX_SEARCH_LENGTH < $characters ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 characters', array( 'status' => 400 ) );
 			}
-			$terms = (array) preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+			$terms = preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+			if ( false === $terms ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_invalid', 'search must be valid UTF-8', array( 'status' => 400 ) );
+			}
 			if ( self::MAX_SEARCH_TERMS < \count( $terms ) ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
 			}
@@ -532,8 +544,12 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		}
 
 		$search = (string) ( $request->get_param( 'search' ) ?? '' );
+		$terms  = preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( false === $terms ) {
+			return false;
+		}
 
-		return array() !== (array) preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+		return array() !== $terms;
 	}
 
 	/**

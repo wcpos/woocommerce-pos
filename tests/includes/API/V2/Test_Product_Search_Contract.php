@@ -252,6 +252,29 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Over-long term lists search as one phrase, not independent reordered words.
+	 */
+	public function test_product_search_collapses_an_over_long_term_list(): void {
+		// Arrange.
+		$phrase  = 'Amber Birch Cedar Dahlia Elm Fern Grove Hazel Iris Juniper Kelp';
+		$product = ProductHelper::create_simple_product(
+			array(
+				'name'   => $phrase,
+				'sku'    => '',
+				'status' => 'publish',
+			)
+		);
+
+		// Act.
+		$ordered   = $this->read( array( 'search' => $phrase ) );
+		$reordered = $this->read( array( 'search' => 'Kelp Juniper Iris Hazel Grove Fern Elm Dahlia Cedar Birch Amber' ) );
+
+		// Assert.
+		$this->assertSame( array( $product->get_id() ), wp_list_pluck( $ordered, 'id' ) );
+		$this->assertSame( array(), $reordered );
+	}
+
+	/**
 	 * Malformed UTF-8 must not turn a constrained search into the whole catalogue.
 	 */
 	public function test_product_search_rejects_malformed_utf8(): void {

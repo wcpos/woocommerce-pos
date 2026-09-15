@@ -14,6 +14,8 @@ use WP_Query;
  * Keeps v1 and v2 product search fields identical.
  */
 final class Product_Search {
+	private const MAX_SEARCH_TERMS = 10;
+
 	/**
 	 * Search product titles, SKUs, and the configured barcode field.
 	 *
@@ -33,6 +35,10 @@ final class Product_Search {
 			: (array) $q['search_terms'];
 		if ( null !== $phrase && ( false === $terms || array() === $terms ) ) {
 			return ' AND 1=0 ';
+		}
+		// Like WP_Query::parse_search() and WooCommerce's search_products(), collapse over-long lists to the phrase.
+		if ( null !== $phrase && self::MAX_SEARCH_TERMS < \count( $terms ) ) {
+			$terms = array( $phrase );
 		}
 		$n                 = ! empty( $q['exact'] ) ? '' : '%';
 		$meta_fields       = Barcode_Field::search_keys();
