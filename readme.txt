@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.14
+Stable tag: 1.10.15
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,16 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.15 - 2026/09/15 =
+
+- **Tills no longer grow to gigabytes of memory over a long shift.** The product search index was keeping up to a hundred complete copies of itself in memory as it updated. Measured on a test store, memory after cleanup grew from 46 MB to 404 MB in an hour before the fix and from 47 MB to 160 MB after it; this is what took one merchant's till to 3.2 GB over an eleven-hour shift.
+- **The Logs screen no longer freezes the app.**
+- **Product search finds a product however you order the words.** Searching "blue shirt" and "shirt blue" now return the same results.
+- **Start-up repair of a damaged local database is safer.** Oversized internal change logs are now bounded and recovered without unbounded reads, and the app no longer rewrites bookkeeping records that have not changed. The web app loads its storage worker from this plugin, so web merchants receive this fix through this update rather than through the app bundle.
+- **A sync refresh that returns the same record twice is rejected** instead of being applied against an incomplete snapshot, which could previously prune records that were still present on the server.
+- **Product search shows every match again.** When a search matched more products than fit on the first page, the Products page stopped at that page and scrolling to the end loaded nothing more.
+- **The product search index repairs itself again.** When the app detected that the index had drifted from the product data, the rebuild silently did nothing, so stale or missing search results stayed that way until the app was reinstalled.
 
 = 1.10.14 - 2026/09/14 =
 
