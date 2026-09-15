@@ -214,7 +214,11 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$hidden = ProductHelper::create_grouped_product();
 		$hidden->set_name( 'Hidden Bundle Grouped' );
 		$hidden->save();
-		$visible = ProductHelper::create_simple_product( array( 'name' => 'Visible Bundle Simple' ) );
+		// A visible grouped control: the exclusion must be by id, never by product type.
+		$visible_grouped = ProductHelper::create_grouped_product();
+		$visible_grouped->set_name( 'Visible Bundle Grouped' );
+		$visible_grouped->save();
+		$visible_simple = ProductHelper::create_simple_product( array( 'name' => 'Visible Bundle Simple' ) );
 		$this->hide_product( $hidden->get_id() );
 
 		// The current lane the till's on-demand lookup calls.
@@ -224,7 +228,8 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		$ids = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
 
-		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertContains( $visible_grouped->get_id(), $ids );
+		$this->assertContains( $visible_simple->get_id(), $ids );
 		$this->assertNotContains( $hidden->get_id(), $ids );
 
 		// The legacy lane older tills still search through must agree.
@@ -234,7 +239,8 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $legacy_response->get_status(), wp_json_encode( $legacy_response->get_data() ) );
 		$legacy_ids = array_map( 'intval', wp_list_pluck( $legacy_response->get_data(), 'id' ) );
 
-		$this->assertContains( $visible->get_id(), $legacy_ids );
+		$this->assertContains( $visible_grouped->get_id(), $legacy_ids );
+		$this->assertContains( $visible_simple->get_id(), $legacy_ids );
 		$this->assertNotContains( $hidden->get_id(), $legacy_ids );
 	}
 
@@ -245,8 +251,9 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 	 * id here would keep a stale copy alive on the till indefinitely.
 	 */
 	public function test_include_pull_excludes_online_only_grouped_product(): void {
-		$hidden  = ProductHelper::create_grouped_product();
-		$visible = ProductHelper::create_simple_product();
+		$hidden          = ProductHelper::create_grouped_product();
+		$visible_grouped = ProductHelper::create_grouped_product();
+		$visible_simple  = ProductHelper::create_simple_product();
 		$this->hide_product( $hidden->get_id() );
 
 		$ids = array_map(
@@ -254,15 +261,16 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 			wp_list_pluck(
 				$this->read_products(
 					array(
-						'include' => array( $hidden->get_id(), $visible->get_id() ),
+						'include' => array( $hidden->get_id(), $visible_grouped->get_id(), $visible_simple->get_id() ),
 						'status'  => 'publish',
 					)
 				),
 				'id'
 			)
 		);
+		sort( $ids );
 
-		$this->assertSame( array( $visible->get_id() ), $ids );
+		$this->assertSame( array( $visible_grouped->get_id(), $visible_simple->get_id() ), $ids );
 	}
 
 	/**
