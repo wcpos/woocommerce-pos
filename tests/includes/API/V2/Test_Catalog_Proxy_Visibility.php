@@ -201,4 +201,76 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 3, $before, 'Baseline total should count every published product.' );
 		$this->assertSame( 2, $after, 'The hidden product must leave the total, not just the rows.' );
 	}
+
+	/**
+	 * A title search must not surface an online-only grouped product.
+	 *
+	 * The POS grid is fed by the sync lane, which excludes hidden ids, so a hidden record can
+	 * only reach a cashier through the on-demand `search=` lookup. A merchant saw exactly that
+	 * (2026-09-15): grouped products set to Online Only were absent from the grid but appeared
+	 * when the title was searched.
+	 */
+	public function test_title_search_excludes_online_only_grouped_product(): void {
+		$hidden = ProductHelper::create_grouped_product();
+		$hidden->set_name( 'Hidden Bundle Grouped' );
+		$hidden->save();
+		$visible = ProductHelper::create_simple_product( array( 'name' => 'Visible Bundle Simple' ) );
+		$this->hide_product( $hidden->get_id() );
+
+		$ids = array_map( 'intval', wp_list_pluck( $this->read_products( array( 'search' => 'Bundle' ) ), 'id' ) );
+
+		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertNotContains( $hidden->get_id(), $ids );
+
+		// The legacy lane older tills still search through must agree.
+		$legacy = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$legacy->set_query_params( array( 'search' => 'Bundle' ) );
+		$legacy_response = $this->server->dispatch( $legacy );
+		$this->assertSame( 200, $legacy_response->get_status(), wp_json_encode( $legacy_response->get_data() ) );
+		$legacy_ids = array_map( 'intval', wp_list_pluck( $legacy_response->get_data(), 'id' ) );
+
+		$this->assertContains( $visible->get_id(), $legacy_ids );
+		$this->assertNotContains( $hidden->get_id(), $legacy_ids );
+	}
+
+	/**
+	 * A targeted `include=` pull of a hidden id must come back without it.
+	 *
+	 * The client prunes a locally held record when a targeted pull omits it, so serving a hidden
+	 * id here would keep a stale copy alive on the till indefinitely.
+	 */
+	public function test_include_pull_excludes_online_only_grouped_product(): void {
+		$hidden  = ProductHelper::create_grouped_product();
+		$visible = ProductHelper::create_simple_product();
+		$this->hide_product( $hidden->get_id() );
+
+		$ids = array_map(
+			'intval',
+			wp_list_pluck(
+				$this->read_products(
+					array(
+						'include' => array( $hidden->get_id(), $visible->get_id() ),
+						'status'  => 'publish',
+					)
+				),
+				'id'
+			)
+		);
+
+		$this->assertSame( array( $visible->get_id() ), $ids );
+	}
+
+	/**
+	 * A title search must not surface an online-only simple product either.
+	 */
+	public function test_title_search_excludes_online_only_simple_product(): void {
+		$visible = ProductHelper::create_simple_product( array( 'name' => 'Visible Widget Simple' ) );
+		$hidden  = ProductHelper::create_simple_product( array( 'name' => 'Hidden Widget Simple' ) );
+		$this->hide_product( $hidden->get_id() );
+
+		$ids = array_map( 'intval', wp_list_pluck( $this->read_products( array( 'search' => 'Widget' ) ), 'id' ) );
+
+		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertNotContains( $hidden->get_id(), $ids );
+	}
 }
