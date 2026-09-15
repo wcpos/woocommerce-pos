@@ -141,5 +141,8 @@
 	"snackbar.display_installed": "Added to your display templates",
 	"snackbar.display_live": "Live on the customer display",
 	"snackbar.gallery_installed": "Gallery template installed",
-	"snackbar.install_failed": "Failed to install template"
+	"snackbar.install_failed": "Failed to install template",
+	"table.update_available": "Update available",
+	"table.update_available_title": "This template is based on v{installed} of \"{name}\"; v{latest} is now bundled. Your edits are kept — installing adds the new version as a separate template.",
+	"table.install_new_version": "Install new version"
 }
