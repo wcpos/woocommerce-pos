@@ -245,6 +245,49 @@ class Test_Catalog_Proxy_Visibility extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Search extensions can set post__in after the REST query-argument exclusion.
+	 * WooCommerce Product Search does this in pre_get_posts when REST optimization is enabled.
+	 */
+	public function test_title_search_with_late_post_in_excludes_online_only_grouped_product(): void {
+		$hidden = ProductHelper::create_grouped_product();
+		$hidden->set_name( 'Hidden Probe Bundle' );
+		$hidden->save();
+		$visible = ProductHelper::create_simple_product( array( 'name' => 'Visible Probe Book' ) );
+		$this->hide_product( $hidden->get_id() );
+
+		$search_extension = static function ( $query ) use ( $hidden, $visible ) {
+			if ( 'product' === $query->get( 'post_type' ) && 'Probe' === $query->get( 's' ) ) {
+				$query->set( 'post__in', array( $hidden->get_id(), $visible->get_id() ) );
+			}
+		};
+		add_action( 'pre_get_posts', $search_extension );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+			$request->set_query_params(
+				array(
+					'search'   => 'Probe',
+					'per_page' => 1,
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $visible->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+			$headers = array_change_key_case( $response->get_headers(), CASE_LOWER );
+			$this->assertSame( 1, (int) $headers['x-wp-total'] );
+
+			// The scoped exclusion must not affect a subsequent ordinary WooCommerce read.
+			$ordinary = $this->wp_rest_get_request( '/wc/v3/products' );
+			$ordinary->set_query_params( array( 'search' => 'Probe' ) );
+			$ordinary_response = $this->server->dispatch( $ordinary );
+			$this->assertSame( 200, $ordinary_response->get_status() );
+			$this->assertContains( $hidden->get_id(), wp_list_pluck( $ordinary_response->get_data(), 'id' ) );
+		} finally {
+			remove_action( 'pre_get_posts', $search_extension );
+		}
+	}
+
+	/**
 	 * A targeted `include=` pull of a hidden id must come back without it.
 	 *
 	 * The client prunes a locally held record when a targeted pull omits it, so serving a hidden

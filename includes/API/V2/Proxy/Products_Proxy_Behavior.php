@@ -159,6 +159,18 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		add_filter( 'woocommerce_rest_product_object_query', $filter );
 		$bindings[] = array( 'woocommerce_rest_product_object_query', $filter, 10 );
 
+		// Search extensions can add post__in in pre_get_posts, after our argument filter.
+		// WordPress then ignores post__not_in, so enforce visibility in SQL as v1 does.
+		$where = static function ( $where, $query ) use ( $visibility ) {
+			global $wpdb;
+
+			return self::is_product_query( $query )
+				? $visibility->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::CATALOG )
+				: $where;
+		};
+		add_filter( 'posts_where', $where, 10, 2 );
+		$bindings[] = array( 'posts_where', $where, 10 );
+
 		return $bindings;
 	}
 
