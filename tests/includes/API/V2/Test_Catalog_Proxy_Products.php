@@ -215,40 +215,113 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The complete search phrase narrows the product result set.
+	 * Every typed word must match, regardless of order or gaps.
 	 */
-	public function test_product_search_matches_complete_phrase(): void {
-		$token  = wp_generate_password( 8, false );
-		$token2 = wp_generate_password( 8, false );
-		$match  = ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.4ohm' ) );
-		ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.6ohm' ) );
-		ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+	public function test_product_search_matches_terms_in_any_order(): void {
+		// Arrange.
+		$token = uniqid( 'terms-' );
+		$match = ProductHelper::create_simple_product( array( 'name' => $token . ' Alpha Vertex' ) );
+		$match->set_sku( '' );
+		$match->set_global_unique_id( '' );
+		$match->save();
+		$other = ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+		$other->set_sku( '' );
+		$other->set_global_unique_id( '' );
+		$other->save();
 
-		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' Coil 0.4' ) ), 'id' ) );
-		$this->assertSame( array(), $this->read( array( 'search' => '0.4 ' . $token ) ) );
-		$this->assertSame( array(), $this->read( array( 'search' => $token . ' zzzz' . $token2 ) ) );
+		// Act / Assert.
+		foreach ( array( 'alpha ' . $token, $token . ' vertex', 'vertex ' . $token ) as $search ) {
+			$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $search ) ), 'id' ) );
+		}
+		$this->assertSame( array(), $this->read( array( 'search' => $token . ' zzzz' ) ) );
 	}
 
 	/**
-	 * A phrase cannot span different product fields.
+	 * Terms may span different product fields, but every term is required.
 	 */
-	public function test_product_search_excludes_cross_field_phrase(): void {
-		$token = wp_generate_password( 8, false );
-		$sku   = wp_generate_password( 8, false );
+	public function test_product_search_ands_terms_across_fields(): void {
+		// Arrange.
+		$token = uniqid( 'title-' );
+		$sku   = 'CROSS-FIELD-SKU';
 		$match = ProductHelper::create_simple_product(
 			array(
 				'name' => $token,
 				'sku'  => $sku,
+				'global_unique_id' => '',
 			)
 		);
 		ProductHelper::create_simple_product(
 			array(
 				'name' => $token,
-				'sku'  => wp_generate_password( 8, false ),
+				'sku'  => '',
+				'global_unique_id' => '',
 			)
 		);
 
-		$this->assertSame( array(), $this->read( array( 'search' => $token . ' ' . $sku ) ) );
+		// Act.
+		$rows = $this->read( array( 'search' => $token . ' ' . $sku ) );
+
+		// Assert.
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $rows, 'id' ) );
+	}
+
+	/**
+	 * Short qualifiers are not discarded as stop words.
+	 */
+	public function test_product_search_short_term_counts(): void {
+		// Arrange.
+		$token = uniqid( 'qualifier-' );
+		$match = ProductHelper::create_simple_product( array( 'name' => 'MY ' . $token ) );
+		$match->set_sku( '' );
+		$match->set_global_unique_id( '' );
+		$match->save();
+		$other = ProductHelper::create_simple_product( array( 'name' => 'M3 ' . $token ) );
+		$other->set_sku( '' );
+		$other->set_global_unique_id( '' );
+		$other->save();
+
+		// Act.
+		$rows = $this->read( array( 'search' => 'MY ' . $token ) );
+
+		// Assert.
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $rows, 'id' ) );
+	}
+
+	/**
+	 * Unicode whitespace separates terms; whitespace alone is not a search.
+	 */
+	public function test_product_search_splits_unicode_whitespace(): void {
+		// Arrange.
+		$token = uniqid( 'whitespace-' );
+		$match = ProductHelper::create_simple_product( array( 'name' => $token . ' Alpha Vertex' ) );
+		$match->set_sku( '' );
+		$match->set_global_unique_id( '' );
+		$match->save();
+		$other = ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+		$other->set_sku( '' );
+		$other->set_global_unique_id( '' );
+		$other->save();
+		$ids   = array( $match->get_id(), $other->get_id() );
+
+		// Act / Assert.
+		foreach ( array( ' ', "\u{00A0}", "\u{3000}" ) as $space ) {
+			$rows = $this->read(
+				array(
+					'search'  => $space . 'vertex' . $space . $token . $space,
+					'include' => $ids,
+				)
+			);
+			$this->assertSame( array( $match->get_id() ), wp_list_pluck( $rows, 'id' ) );
+		}
+		$rows = $this->read(
+			array(
+				'search'  => "\u{3000}",
+				'include' => $ids,
+				'orderby' => 'id',
+				'order'   => 'asc',
+			)
+		);
+		$this->assertSame( $ids, wp_list_pluck( $rows, 'id' ) );
 	}
 
 	/**

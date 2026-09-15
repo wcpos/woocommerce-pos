@@ -28,7 +28,12 @@ final class Product_Search {
 		if ( empty( $search ) && null === $phrase ) {
 			return $search;
 		}
-		$terms             = null !== $phrase ? array( $phrase ) : (array) $q['search_terms'];
+		$terms = null !== $phrase
+			? preg_split( '/[\s\p{Z}\p{C}]+/u', $phrase, -1, PREG_SPLIT_NO_EMPTY )
+			: (array) $q['search_terms'];
+		if ( null !== $phrase && ( false === $terms || array() === $terms ) ) {
+			return ' AND 1=0 ';
+		}
 		$n                 = ! empty( $q['exact'] ) ? '' : '%';
 		$meta_fields       = Barcode_Field::search_keys();
 		$meta_placeholders = implode( ', ', array_fill( 0, \count( $meta_fields ), '%s' ) );

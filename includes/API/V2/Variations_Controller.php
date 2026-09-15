@@ -74,6 +74,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	private const MAX_SKU_LENGTH    = 4096;
 	private const MAX_SKU_TERMS     = 100;
 	private const MAX_SEARCH_LENGTH = 256;
+	private const MAX_SEARCH_TERMS  = 10;
 	private const MAX_PAGE          = 1000;
 
 
@@ -157,7 +158,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		 * WooCommerce maps `search` onto `s`, which searches post_title/content — useless for a
 		 * variation, whose title is a generated attribute string. The POS searches what a cashier
 		 * actually types or scans: the SKU and whichever meta key the store configured as its
-		 * barcode field (`Barcode_Field::search_keys()`). The complete phrase must match one carrier.
+		 * barcode field (`Barcode_Field::search_keys()`). Every term must match at least one carrier.
 		 *
 		 * `sku` is left to WooCommerce: its own exact/comma-list handling is what the
 		 * sku-beats-search precedence rule relies on.
@@ -171,15 +172,21 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		if ( '' !== $search && '' === $sku ) {
 			unset( $args['s'] );
 			$args['wcpos_variation_search'] = true;
-			$carriers = array( 'relation' => 'OR' );
-			foreach ( Barcode_Field::search_keys() as $key ) {
-				$carriers[] = array(
-					'key'     => $key,
-					'value'   => trim( $search ),
-					'compare' => 'LIKE',
-				);
+			$carriers = array( 'relation' => 'AND' );
+			foreach ( (array) preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY ) as $term ) {
+				$term_carriers = array( 'relation' => 'OR' );
+				foreach ( Barcode_Field::search_keys() as $key ) {
+					$term_carriers[] = array(
+						'key'     => $key,
+						'value'   => $term,
+						'compare' => 'LIKE',
+					);
+				}
+				$carriers[] = $term_carriers;
 			}
-			$args['meta_query'] = $this->add_meta_query( $args, $carriers ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			if ( 1 < \count( $carriers ) ) {
+				$args['meta_query'] = $this->add_meta_query( $args, $carriers ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			}
 		}
 
 		/*
@@ -432,8 +439,12 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			}
 		} else {
 			$search = (string) $request->get_param( 'search' );
-			if ( self::MAX_SEARCH_LENGTH < \strlen( $search ) ) {
-				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 bytes', array( 'status' => 400 ) );
+			if ( self::MAX_SEARCH_LENGTH < mb_strlen( $search ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 characters', array( 'status' => 400 ) );
+			}
+			$terms = (array) preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+			if ( self::MAX_SEARCH_TERMS < \count( $terms ) ) {
+				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
 			}
 		}
 
@@ -522,7 +533,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 
 		$search = (string) ( $request->get_param( 'search' ) ?? '' );
 
-		return array() !== (array) preg_split( '/\s+/', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
+		return array() !== (array) preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
 	}
 
 	/**
