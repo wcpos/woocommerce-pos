@@ -119,7 +119,7 @@ class Closures_Controller extends \WP_REST_Controller {
 						$row = $store->record_print( $id );
 					} catch ( \RuntimeException $error ) {
 						Logger::warning( $error->getMessage(), array( 'closure_id' => $id ) );
-						throw $error;
+						return $this->error( 'wcpos_closure_write_failed', 500 );
 					}
 					if ( $row ) {
 						$store->log_printed( $row );
