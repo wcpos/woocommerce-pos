@@ -543,6 +543,37 @@ class Test_Sync_Visibility_Change_Signal extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A seed whose tombstone write fails does not latch, so the next request retries it.
+	 *
+	 * Latching on a failed write would leave every till holding the copies the seed exists
+	 * to remove, with nothing left to retry (Codex review, #1995).
+	 */
+	public function test_a_failed_tombstone_write_does_not_latch_the_seed(): void {
+		// Arrange: a journal whose append fails, and a hidden product so there is something to write.
+		$failing_journal = new class() extends Sync_Journal {
+			/**
+			 * Simulate a write failure.
+			 *
+			 * @param array $ids Ids to tombstone.
+			 */
+			public function append_catalogue_tombstones( array $ids ): bool {
+				return false;
+			}
+		};
+		$observer = new Visibility_Observer( $failing_journal );
+		$hidden   = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $hidden ) );
+		delete_option( Visibility_Observer::SEED_VERSION_OPTION );
+
+		// Act.
+		$observer->maybe_seed_hidden_tombstones();
+
+		// Assert.
+		$this->assertSame( 0, (int) get_option( Visibility_Observer::SEED_VERSION_OPTION, 0 ) );
+	}
+
+	/**
 	 * The policy end to end: hidden once, announced once, then silent.
 	 *
 	 * The client is told to drop the record exactly once, and every later edit

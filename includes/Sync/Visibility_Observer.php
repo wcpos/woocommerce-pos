@@ -141,7 +141,12 @@ final class Visibility_Observer {
 			return;
 		}
 
-		$this->journal->append_catalogue_tombstones( $this->visibility->hidden_ids( Pos_Visibility::CATALOG ) );
+		// Latch only once the rows are in: a transient write failure (missing table, dead
+		// connection) that latched anyway would never be retried, and the copies this seed
+		// exists to remove would stay on every till (Codex review, #1995).
+		if ( ! $this->journal->append_catalogue_tombstones( $this->visibility->hidden_ids( Pos_Visibility::CATALOG ) ) ) {
+			return;
+		}
 
 		// Latched even when the hidden set is empty — otherwise every request on a store that hides
 		// nothing would resolve the set again forever.
