@@ -199,6 +199,27 @@ final class Register_Session_Store {
 		);
 	}
 
+	/** The cashier responsible for the drawer may not sign off its own variance.
+	 *
+	 * The REST layer refuses an approver who is the current requester, but the
+	 * session records its cashier as opened_by, and after a user switch the two
+	 * differ: the opener's credentials would then approve the shortfall on the
+	 * drawer they opened. This is the one place both approval routes pass through.
+	 *
+	 * @param array $session Current row.
+	 * @param int   $user_id Proposed approver.
+	 */
+	private function refuse_own_approval( array $session, int $user_id ): ?\WP_Error {
+		if ( $user_id !== (int) $session['opened_by'] ) {
+			return null;
+		}
+		return new \WP_Error(
+			'wcpos_override_refused',
+			__( 'The cashier who opened this session cannot approve it.', 'woocommerce-pos' ),
+			array( 'status' => 403 )
+		);
+	}
+
 	/** Stamp a manager approval only while the session is counting.
 	 *
 	 * @param array $session Current row.
@@ -208,6 +229,10 @@ final class Register_Session_Store {
 	 */
 	public function approve( array $session, int $user_id ) {
 		global $wpdb;
+		$refused = $this->refuse_own_approval( $session, $user_id );
+		if ( $refused ) {
+			return $refused;
+		}
 		$updated = $wpdb->update(
 			$this->table_name(),
 			array( 'approved_by' => $user_id ),
@@ -257,6 +282,12 @@ final class Register_Session_Store {
 	 */
 	public function transition( array $session, array $fields ) {
 		global $wpdb;
+		if ( isset( $fields['approved_by'] ) ) {
+			$refused = $this->refuse_own_approval( $session, (int) $fields['approved_by'] );
+			if ( $refused ) {
+				return $refused;
+			}
+		}
 		if ( 'counting' === $session['status'] && 'closed' === $fields['status'] ) {
 			$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
 			$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );

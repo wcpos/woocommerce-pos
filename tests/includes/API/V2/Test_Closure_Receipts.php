@@ -481,22 +481,31 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 	/** Copies keep server-snapshotted register and operator labels after renames. */
 	public function test_closure_copy_preserves_labels_and_uncounted_tenders(): void {
 		$session = $this->closure_session();
+		// The opener may not approve their own session, so a second person signs it off.
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'display_name' => 'Approving manager',
+			)
+		);
 		$session = ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->transition(
 			$session,
 			array(
 				'status' => 'counting',
-				'approved_by' => get_current_user_id(),
+				'approved_by' => $manager->ID,
 			)
 		);
+		$this->assertIsArray( $session );
 		$this->closure_ledger( $session );
 		$fields = $this->closure_fields( $session );
 		$fields['breakdowns']['labels'] = array( 'register_name' => 'Untrusted client label' );
 		$row = ( new Closure_Store() )->create( $fields );
 		$this->assertSame( 'Closure fixture', $row['breakdowns']['labels']['register_name'] );
 		$original_name = wp_get_current_user()->display_name;
-		foreach ( array( 'opened_by_name', 'closed_by_name', 'approved_by_name' ) as $key ) {
+		foreach ( array( 'opened_by_name', 'closed_by_name' ) as $key ) {
 			$this->assertSame( $original_name, $row['breakdowns']['labels'][ $key ] );
 		}
+		$this->assertSame( 'Approving manager', $row['breakdowns']['labels']['approved_by_name'] );
 		$this->document( 'closure:' . $row['id'], 'print' );
 		( new \WCPOS\WooCommercePOS\Services\Register_Store() )->update( $session['register_id'], array( 'name' => 'Renamed register' ) );
 		wp_update_user(
