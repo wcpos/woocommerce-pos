@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.16
+Stable tag: 1.10.17
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,14 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.17 - 2026/09/17 =
+
+- **A till no longer gets stuck at login on "Something went wrong: useStoreSession must be called within an active store session".** A damaged range in the till's local database made the login write fail and left the cashier on a red banner. The write is now repaired and retried, and if the saved session still cannot be honoured the till returns to the store list with a message instead of the banner. If the site has to be added again, it opens a fresh local database and does not pick up sales still waiting to sync in the old one. Web merchants receive the storage repair through WooCommerce POS plugin 1.10.17, which serves the storage worker; desktop and phone apps carry it in this release.
+- **A newly connected till no longer misses a stock change made in its first minute.** A product set out of stock on the server shortly after a new device, login or reset stayed "in stock" on the till indefinitely. The till now records the server's position before the first browse, so the change arrives with the next sync.
+- **A variation whose stock is managed at product level shows the right stock in the variation picker.** When the parent product sold out, the picker's badge and Add to Cart button kept saying "in stock" for up to five minutes. They now read the parent's stock, the same way the cart does.
+- **Switching stores no longer carries the previous store into the first requests of the new one.** Requests made while a switch was still completing used the outgoing store, so the first products or barcodes could belong to it until the next sync. Pro multi-store only.
+- **Health > Logs records a screen error the app catches** as "Part of the screen failed to load", and reports it when you have allowed error reporting.
 
 = 1.10.16 - 2026/09/16 =
 
