@@ -508,6 +508,72 @@ class Test_Sync_Visibility_Change_Signal extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * An install latched by the 1.10.1 seed re-announces its hidden set on upgrade.
+	 *
+	 * Seed 1 ran before the 1.10.1–1.10.14 search leak (wcpos/woocommerce-pos#1990)
+	 * re-populated tills with hidden records, and the stream drops every later update
+	 * row for a hidden id — so without a second announcement those records are stranded
+	 * until the client's existence audit reaches them. The latch value the first seed
+	 * wrote must therefore no longer satisfy the seed. Fails if SEED_VERSION is reverted
+	 * to 1.
+	 */
+	public function test_an_install_latched_by_seed_one_reseeds_on_upgrade(): void {
+		// Arrange: hidden, and latched exactly as the 1.10.1 seed left it.
+		$hidden = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $hidden ) );
+		update_option( Visibility_Observer::SEED_VERSION_OPTION, 1, true );
+		$cursor = $this->journal->head_sequence();
+
+		// Act.
+		$this->observer->maybe_seed_hidden_tombstones();
+
+		// Assert.
+		$rows = $this->journal->page( array( 'product', 'variation' ), $cursor, 100 )['rows'];
+		$this->assertSame(
+			array( array( 'product', $hidden, 1 ) ),
+			array_map(
+				static function ( array $row ): array {
+					return array( $row['object_type'], $row['object_id'], $row['deleted'] );
+				},
+				$rows
+			)
+		);
+		$this->assertSame( Visibility_Observer::SEED_VERSION, (int) get_option( Visibility_Observer::SEED_VERSION_OPTION ) );
+	}
+
+	/**
+	 * A seed whose tombstone write fails does not latch, so the next request retries it.
+	 *
+	 * Latching on a failed write would leave every till holding the copies the seed exists
+	 * to remove, with nothing left to retry (Codex review, #1995).
+	 */
+	public function test_a_failed_tombstone_write_does_not_latch_the_seed(): void {
+		// Arrange: a journal whose append fails, and a hidden product so there is something to write.
+		$failing_journal = new class() extends Sync_Journal {
+			/**
+			 * Simulate a write failure.
+			 *
+			 * @param array $ids Ids to tombstone.
+			 */
+			public function append_catalogue_tombstones( array $ids ): bool {
+				return false;
+			}
+		};
+		$observer = new Visibility_Observer( $failing_journal );
+		$hidden   = ProductHelper::create_simple_product()->get_id();
+		$this->enable_pos_only_products();
+		$this->set_online_only( array( $hidden ) );
+		delete_option( Visibility_Observer::SEED_VERSION_OPTION );
+
+		// Act.
+		$observer->maybe_seed_hidden_tombstones();
+
+		// Assert.
+		$this->assertSame( 0, (int) get_option( Visibility_Observer::SEED_VERSION_OPTION, 0 ) );
+	}
+
+	/**
 	 * The policy end to end: hidden once, announced once, then silent.
 	 *
 	 * The client is told to drop the record exactly once, and every later edit
