@@ -230,7 +230,12 @@ export function getReportStarter(
 }
 
 export function getDefaultDoc(config: EditorConfig): string {
-	if (config.type === 'report') return config.postContent || config.reportStarters?.[config.engine] || '';
+	if (config.type === 'report') {
+		return (
+			config.postContent ||
+			getReportStarter(config.reportStarters, config.engine, config.paperWidth ?? '80mm')
+		);
+	}
 	if (config.type === 'display') {
 		return config.postContent || config.displayStarter || DISPLAY_STARTER_SHELL;
 	}
