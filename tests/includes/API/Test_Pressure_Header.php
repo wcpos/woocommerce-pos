@@ -16,11 +16,31 @@ use WP_REST_Request;
  */
 class Test_Pressure_Header extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Reset the request-scoped pressure memo between tests.
+	 * Reset the pressure and CPU count memos between tests.
 	 */
 	public function tearDown(): void {
+		$this->set_host_cpu_count( null, false );
 		$this->set_pressure_bucket( null, false );
 		parent::tearDown();
+	}
+
+	/**
+	 * An unknown CPU count must not produce pressure from a guessed divisor.
+	 */
+	public function test_pressure_bucket_unknown_cpu_count_returns_null(): void {
+		// Arrange.
+		$average = \function_exists( 'sys_getloadavg' ) ? @sys_getloadavg() : false;
+		if ( ! \is_array( $average ) || ! isset( $average[0] ) ) {
+			$this->markTestSkipped( 'A host load average is required to exercise CPU count resolution.' );
+		}
+		$this->set_pressure_bucket( null, false );
+		$this->set_host_cpu_count( null, true );
+
+		// Act.
+		$bucket = Ping::pressure_bucket();
+
+		// Assert.
+		$this->assertNull( $bucket );
 	}
 
 	/**
@@ -93,5 +113,21 @@ class Test_Pressure_Header extends WCPOS_REST_Unit_Test_Case {
 		$checked_property = new ReflectionProperty( Ping::class, 'host_pressure_checked' );
 		$checked_property->setAccessible( true );
 		$checked_property->setValue( null, $checked );
+	}
+
+	/**
+	 * Set the host CPU count memo on the Ping controller.
+	 *
+	 * @param int|null $count    Host CPU count.
+	 * @param bool     $resolved Whether CPU count has already been resolved.
+	 */
+	private function set_host_cpu_count( ?int $count, bool $resolved = true ): void {
+		$count_property = new ReflectionProperty( Ping::class, 'host_cpu_count' );
+		$count_property->setAccessible( true );
+		$count_property->setValue( null, $count );
+
+		$resolved_property = new ReflectionProperty( Ping::class, 'host_cpu_count_resolved' );
+		$resolved_property->setAccessible( true );
+		$resolved_property->setValue( null, $resolved );
 	}
 }

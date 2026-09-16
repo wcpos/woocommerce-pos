@@ -170,6 +170,98 @@ class Starprnt_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Centering padding is counted in printed columns, not characters.
+	 *
+	 * The pad spaces sit inside the magnified run, so each is as wide as each glyph. Counting
+	 * them against the unscaled width laid down twice the margin asked for and wrapped the line:
+	 * a merchant's 48-column receipt printed the store name as "Evans Hobb" / "y and Tech".
+	 *
+	 * Note the line simulator above cannot see this -- it skips the size commands and counts
+	 * every glyph as one cell, so a double-width line looks correctly centered to it.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_scaled_text_pads_in_columns_not_characters(): void {
+		// Arrange.
+		$text = 'Evans Hobby and Tech';
+
+		// Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><align mode="center"><size width="2" height="2"><text>' . $text . '</text></size></align></receipt>'
+		);
+		$pad = $this->longest_space_run( $bytes );
+
+		// Assert: 20 glyphs at double width is 40 of the 48 columns, leaving 8; half of that is
+		// 4 columns of margin, which is 2 double-width spaces. The old count was 14.
+		$this->assertSame( 2, $pad );
+		$this->assertLessThanOrEqual( 48, ( $pad + \strlen( $text ) ) * 2 );
+	}
+
+	/**
+	 * Padding follows the magnification the printer applies, not the one requested.
+	 *
+	 * ESC i carries n1/n2 as 0-5, so 6x is the ceiling, while `<size>` accepts up to 8. Padding a
+	 * width-8 line as though its glyphs were 8 cells wide under-counts the margin and throws the
+	 * line off-centre the other way. Raised by Codex review on wcpos/monorepo#2010.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_padding_uses_capped_star_magnification(): void {
+		// Arrange: 2 glyphs at the applied 6x is 12 of 48 columns, leaving 36; half is 18 columns,
+		// which is 3 spaces of 6 cells. Taking the requested 8 would have counted only 2.
+		$text = 'AB';
+
+		// Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><align mode="center"><size width="8" height="1"><text>' . $text . '</text></size></align></receipt>'
+		);
+
+		// Assert: and the emitted command really is the 6x cap (ESC i n2 = 5).
+		$this->assertSame( 3, $this->longest_space_run( $bytes ) );
+		$this->assertGreaterThan( -1, $this->sequence_index( $bytes, array( 0x1b, 0x69, 0x00, 0x05 ) ) );
+	}
+
+	/**
+	 * Unscaled centering padding is unchanged by the scaled-padding fix.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_unscaled_text_padding_is_unchanged(): void {
+		// Arrange.
+		$text = 'Thank you';
+
+		// Act.
+		$bytes = $this->render(
+			'<receipt paper-width="48"><align mode="center"><text>' . $text . '</text></align></receipt>'
+		);
+
+		// Assert.
+		$this->assertSame( 19, $this->longest_space_run( $bytes ) );
+	}
+
+	/**
+	 * The longest run of spaces in a job -- the alignment padding.
+	 *
+	 * Words inside the text are separated by single spaces, so the padding always wins. Reading
+	 * it off the byte stream avoids depending on where the code-page and size commands fall.
+	 *
+	 * @param string $bytes The emitted byte string.
+	 *
+	 * @return int The longest run of 0x20 bytes.
+	 */
+	private function longest_space_run( string $bytes ): int {
+		$longest = 0;
+		$run     = 0;
+		$length  = \strlen( $bytes );
+		for ( $index = 0; $index < $length; $index++ ) {
+			$run     = 0x20 === \ord( $bytes[ $index ] ) ? $run + 1 : 0;
+			$longest = max( $longest, $run );
+		}
+
+		return $longest;
+	}
+
+	/**
 	 * It sets magnification with ESC i (height, width) and restores it.
 	 */
 	public function test_emit_size_uses_esc_i_height_width(): void {

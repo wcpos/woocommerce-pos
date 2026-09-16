@@ -36,6 +36,13 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	private $searching = false;
 
 	/**
+	 * Literal v2 phrase, captured before WooCommerce sanitizes the inner request.
+	 *
+	 * @var string
+	 */
+	private $phrase = '';
+
+	/**
 	 * The Collection Rules plan for the request in flight.
 	 *
 	 * @var null|Collection_Rules_Plan
@@ -57,7 +64,13 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 */
 	public function forwarded_params( array $params, WP_REST_Request $request ): array {
 		// Not empty(): the literal search term "0" is a search too.
-		$this->searching = isset( $params['search'] ) && '' !== trim( (string) $params['search'] );
+		$this->phrase = '';
+		if ( isset( $params['search'] ) && \is_string( $params['search'] ) ) {
+			// Preserve malformed UTF-8 for Product_Search to reject, rather than clearing the search.
+			$this->phrase     = preg_replace( '/^[\s\p{Z}\p{C}]+|[\s\p{Z}\p{C}]+$/u', '', $params['search'] ) ?? $params['search'];
+			$params['search'] = $this->phrase;
+		}
+		$this->searching = '' !== $this->phrase;
 		$this->plan      = Collection_Rules::for_request( 'products', $request, self::PARAM_MAP );
 
 		return $this->plan->forwarded_params( $params );
@@ -103,6 +116,21 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		}
 
 		if ( $this->searching ) {
+			$phrase  = $this->phrase;
+			$capture = static function ( $args ) use ( $phrase ) {
+				$args['s']                   = $phrase;
+				$args['wcpos_search_phrase'] = $phrase;
+				return $args;
+			};
+			// WooCommerce discards non-whitelisted args after its object-query filter.
+			$query_vars = static function ( $vars ) {
+				$vars[] = 'wcpos_search_phrase';
+				return $vars;
+			};
+			add_filter( 'woocommerce_rest_query_vars', $query_vars );
+			$bindings[] = array( 'woocommerce_rest_query_vars', $query_vars, 10 );
+			add_filter( 'woocommerce_rest_product_object_query', $capture );
+			$bindings[] = array( 'woocommerce_rest_product_object_query', $capture, 10 );
 			$search  = array( Product_Search::class, 'posts_search' );
 			$join    = array( Product_Search::class, 'posts_join' );
 			$groupby = array( Product_Search::class, 'posts_groupby' );
@@ -130,6 +158,18 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		};
 		add_filter( 'woocommerce_rest_product_object_query', $filter );
 		$bindings[] = array( 'woocommerce_rest_product_object_query', $filter, 10 );
+
+		// Search extensions can add post__in in pre_get_posts, after our argument filter.
+		// WordPress then ignores post__not_in, so enforce visibility in SQL as v1 does.
+		$where = static function ( $where, $query ) use ( $visibility ) {
+			global $wpdb;
+
+			return self::is_product_query( $query )
+				? $visibility->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::CATALOG )
+				: $where;
+		};
+		add_filter( 'posts_where', $where, 10, 2 );
+		$bindings[] = array( 'posts_where', $where, 10 );
 
 		return $bindings;
 	}

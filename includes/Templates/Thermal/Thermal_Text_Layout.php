@@ -259,22 +259,31 @@ final class Thermal_Text_Layout {
 	/**
 	 * Compute the leading-space padding that aligns a line of the given width.
 	 *
+	 * The padding is emitted as literal spaces INSIDE the run it indents, so under a `<size>`
+	 * multiplier each one is $scale cells wide -- as is each character of the text. Callers that
+	 * emit bytes to a printer must pass the multiplier in force; a count taken at scale 1 lays
+	 * down $scale times the margin asked for and wraps the line. Callers that place glyphs at
+	 * computed cell positions (the raster emitter) already fold the multiplier into $text_width
+	 * and leave $scale at 1.
+	 *
 	 * @param string $align      The alignment mode (left|center|right).
-	 * @param int    $text_width The display width of the line's plain text.
+	 * @param int    $text_width The display width of the line's plain text, in unscaled cells.
 	 * @param int    $columns    The paper width in character cells.
+	 * @param int    $scale      The text width multiplier in force. Default 1.
 	 *
 	 * @return int The number of leading spaces (clamped at 0).
 	 */
-	public static function alignment_padding( string $align, int $text_width, int $columns ): int {
-		$remaining = $columns - $text_width;
+	public static function alignment_padding( string $align, int $text_width, int $columns, int $scale = 1 ): int {
+		$scale     = max( 1, $scale );
+		$remaining = $columns - ( $text_width * $scale );
 		if ( $remaining <= 0 ) {
 			return 0;
 		}
 		if ( 'center' === $align ) {
-			return (int) floor( $remaining / 2 );
+			return (int) floor( (int) floor( $remaining / 2 ) / $scale );
 		}
 		if ( 'right' === $align ) {
-			return $remaining;
+			return (int) floor( $remaining / $scale );
 		}
 
 		return 0;

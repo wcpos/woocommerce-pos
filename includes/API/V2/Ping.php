@@ -37,6 +37,20 @@ final class Ping {
 	 * @var bool
 	 */
 	private static $host_pressure_checked = false;
+
+	/**
+	 * Host CPU count, or null when unavailable.
+	 *
+	 * @var int|null
+	 */
+	private static $host_cpu_count = null;
+
+	/**
+	 * Whether the host CPU count has been resolved.
+	 *
+	 * @var bool
+	 */
+	private static $host_cpu_count_resolved = false;
 	// phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag, Squiz.Commenting.FunctionComment.Missing -- Typed signatures keep this bootstrap path within its strict size budget.
 	/** Detect an exact raw ping request. */
 	public static function matches_request( string $method, string $request_uri, ?string $rest_route ): bool {
@@ -46,6 +60,32 @@ final class Ping {
 		$path = explode( '?', $request_uri, 2 )[0];
 
 		return self::ROUTE === $rest_route || ( \strlen( $path ) >= \strlen( self::PRETTY_ROUTE ) && self::PRETTY_ROUTE === substr( $path, -\strlen( self::PRETTY_ROUTE ) ) );
+	}
+
+	/**
+	 * Response headers that keep the ping out of proxy and server caches.
+	 *
+	 * The fast path answers before WP REST exists, so Rest_Cors never adds
+	 * its cache-defeating headers here; without these an origin page cache
+	 * served one host's ping (timestamp and pressure bucket) frozen for its
+	 * whole TTL (measured 2026-09-16). Same Cache-Control value as Rest_Cors.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function cache_defeating_headers(): array {
+		return array(
+			'Cache-Control'             => 'private, no-store',
+			'X-LiteSpeed-Cache-Control' => 'no-cache',
+		);
+	}
+
+	/** Belt and braces for drop-in page caches that finalise at shutdown and read constants, not headers. */
+	private static function forbid_page_cache(): void {
+		foreach ( array( 'DONOTCACHEPAGE', 'LSCACHE_NO_CACHE' ) as $constant ) {
+			if ( ! \defined( $constant ) ) {
+				\define( $constant, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.
+			}
+		}
 	}
 
 	/** Serve a matching request before the remaining plugins load. */
@@ -63,8 +103,12 @@ final class Ping {
 			return;
 		}
 		$data = self::payload();
+		self::forbid_page_cache();
 		http_response_code( 200 );
 		header( 'Content-Type: application/json; charset=UTF-8' );
+		foreach ( self::cache_defeating_headers() as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
 		header( 'Access-Control-Allow-Origin: *' );
 		// Deliberately just the one header this fast path can emit, not the
 		// full Rest_Cors::EXPOSE_HEADERS set: this short-circuits before the
@@ -137,20 +181,31 @@ final class Ping {
 		return $load <= 1.8 ? 'elevated' : 'high';
 	}
 
-	/** Read the host load average and convert it to a bucket, or null when unavailable. */
+	/**
+	 * Use only /proc/cpuinfo because sys_getloadavg() reads host-wide /proc/loadavg,
+	 * so its CPU divisor must share the host namespace rather than a container quota.
+	 */
+	public static function cpu_count_from_cpuinfo( ?string $cpuinfo ): ?int {
+		$found = null !== $cpuinfo ? preg_match_all( '/^processor\s*:/m', $cpuinfo ) : false;
+
+		return \is_int( $found ) && $found > 0 ? $found : null;
+	}
+
+	/**
+	 * Normalize host load using the /proc/cpuinfo CPU count.
+	 * Unknown counts yield null (no header), rather than misleading pressure from a guessed divisor.
+	 */
 	private static function read_host_pressure_bucket(): ?string {
 		if ( ! \function_exists( 'sys_getloadavg' ) || ! \is_array( $average = @sys_getloadavg() ) || ! isset( $average[0] ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.FoundInControlStructure -- call only after availability check.
 			return null;
 		}
-		/** @var int|null $cpus */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- local static type.
-		static $cpus = null;
-		if ( null === $cpus ) {
-			$cpuinfo = @file_get_contents( '/proc/cpuinfo' );
-			$found   = \is_string( $cpuinfo ) ? preg_match_all( '/^processor\s*:/m', $cpuinfo ) : false;
-			$cpus    = \is_int( $found ) && $found > 0 ? $found : 1;
+		if ( ! self::$host_cpu_count_resolved ) {
+			$cpuinfo                       = @file_get_contents( '/proc/cpuinfo' );
+			self::$host_cpu_count          = self::cpu_count_from_cpuinfo( false === $cpuinfo ? null : $cpuinfo );
+			self::$host_cpu_count_resolved = true;
 		}
 
-		return self::pressure_bucket( (float) $average[0] / $cpus );
+		return null === self::$host_cpu_count ? null : self::pressure_bucket( (float) $average[0] / self::$host_cpu_count );
 	}
 
 	/** @return array<string, bool|int|string> */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- compact typed payload.

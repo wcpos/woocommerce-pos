@@ -46,9 +46,20 @@ final class Visibility_Observer {
 	/**
 	 * Bump when the seeded set changes shape and every install must re-announce it.
 	 *
+	 * History:
+	 *  - 1 (1.10.1): first announcement, for records hidden before the observer existed.
+	 *  - 2 (1.10.16): re-announcement. Between 1.10.1 and 1.10.14 the catalogue search
+	 *    lane served hidden records when a search carried late `include` ids
+	 *    (wcpos/woocommerce-pos#1990), so tills that searched during that window hold
+	 *    hidden products the seed-1 tombstones predate and the stream never mentions
+	 *    again. Re-seeding drops them through the ordinary changes pull on the next
+	 *    tick; the client's existence audit would otherwise be the only path, and on a
+	 *    host that reports sustained pressure that audit runs at a trickle
+	 *    (wcpos/monorepo#2078).
+	 *
 	 * @var int
 	 */
-	public const SEED_VERSION = 1;
+	public const SEED_VERSION = 2;
 
 	/**
 	 * The one-time seed latch.
@@ -130,7 +141,12 @@ final class Visibility_Observer {
 			return;
 		}
 
-		$this->journal->append_catalogue_tombstones( $this->visibility->hidden_ids( Pos_Visibility::CATALOG ) );
+		// Latch only once the rows are in: a transient write failure (missing table, dead
+		// connection) that latched anyway would never be retried, and the copies this seed
+		// exists to remove would stay on every till (Codex review, #1995).
+		if ( ! $this->journal->append_catalogue_tombstones( $this->visibility->hidden_ids( Pos_Visibility::CATALOG ) ) ) {
+			return;
+		}
 
 		// Latched even when the hidden set is empty — otherwise every request on a store that hides
 		// nothing would resolve the set again forever.

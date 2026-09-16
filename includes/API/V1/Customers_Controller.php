@@ -23,6 +23,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -441,7 +442,18 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$filtered_meta_data = array_filter(
 				$raw_meta_data,
 				function ( $meta ) {
-					return ! is_protected_meta( $meta->key, 'user' );
+					if ( is_protected_meta( $meta->key, 'user' ) ) {
+						return false;
+					}
+					// A single enormous value fatals the response encoder no matter how few
+					// entries the customer has; same budget as the v2 sync lane.
+					if ( Meta_Normalizer::exceeds_value_budget( $meta->value ) ) {
+						Meta_Normalizer::note_oversized_meta( (string) $meta->key, (int) $meta->id );
+
+						return false;
+					}
+
+					return true;
 				}
 			);
 
