@@ -15,7 +15,7 @@
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
  * WC tested up to:   11.1.0
- * WC requires at least: 5.3
+ * WC requires at least: 9.0
  *
  * @see      http://wcpos.com
  * @package WCPOS\WooCommercePOS
@@ -63,7 +63,7 @@ if ( ! \defined( __NAMESPACE__ . '\PLUGIN_URL' ) ) {
 
 // Minimum requirements.
 if ( ! \defined( __NAMESPACE__ . '\WC_MIN_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\WC_MIN_VERSION', '5.3' );
+	\define( __NAMESPACE__ . '\WC_MIN_VERSION', '9.0' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PHP_MIN_VERSION' ) ) {
 	\define( __NAMESPACE__ . '\PHP_MIN_VERSION', '7.4' );

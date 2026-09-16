@@ -102,7 +102,7 @@ tests/                # PHPUnit + Playwright (UI) + Newman/Postman (API)
 | --- | --- |
 | PHP | 7.4 |
 | WordPress | 5.6 |
-| WooCommerce | 5.3 |
+| WooCommerce | 9.0 |
 
 ## 👩‍💻 Development
 
