@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
+// Current-lane consumer signal; these emitter tests do not dispatch REST requests.
+use WCPOS\WooCommercePOS\API\V2\Templates_Controller;
 use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Bounds;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
@@ -489,6 +491,22 @@ PHP;
 
 		// Assert: 8x is the ceiling, so the width nibble is 7 and the height nibble stays 0.
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1d, 0x21, 0x70 ) ) );
+	}
+
+	/**
+	 * Both oversized axes use the ESC/POS 8x ceiling.
+	 */
+	public function test_size_both_axes_above_ceiling_emits_gs_bang_77(): void {
+		// Arrange.
+		$markup = '<receipt><size width="9" height="9">x</size></receipt>';
+
+		// Act.
+		$bytes  = $this->render( $markup );
+		$offset = $this->sequence_index( $bytes, array( 0x1d, 0x21 ) );
+
+		// Assert: ( ( 8 - 1 ) << 4 ) | ( 8 - 1 ) = 0x77.
+		$this->assertGreaterThan( -1, $offset );
+		$this->assertSame( "\x1d\x21\x77", substr( $bytes, $offset, 3 ) );
 	}
 
 	/**

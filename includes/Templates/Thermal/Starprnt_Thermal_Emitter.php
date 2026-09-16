@@ -42,6 +42,13 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
  */
 class Starprnt_Thermal_Emitter {
 
+	use Thermal_Emitter_Support;
+
+	/**
+	 * Largest StarPRNT text multiplier: ESC i n1/n2 accept 0-5 (1-6x).
+	 */
+	private const MAX_MAGNIFICATION = 6;
+
 	/**
 	 * Render options.
 	 *
@@ -57,11 +64,11 @@ class Starprnt_Thermal_Emitter {
 	private $buffer = '';
 
 	/**
-	 * The paper width in character columns.
+	 * Per-job text metrics and applied size stack.
 	 *
-	 * @var int
+	 * @var Thermal_Text_Layout
 	 */
-	private $columns = 48;
+	private $layout;
 
 	/**
 	 * The current alignment mode (left|center|right).
@@ -90,20 +97,6 @@ class Starprnt_Thermal_Emitter {
 	 * @var bool
 	 */
 	private $invert = false;
-
-	/**
-	 * The current text width multiplier.
-	 *
-	 * @var int
-	 */
-	private $width = 1;
-
-	/**
-	 * The current text height multiplier.
-	 *
-	 * @var int
-	 */
-	private $height = 1;
 
 	/**
 	 * Whether unterminated text is sitting in the printer's line buffer.
@@ -140,11 +133,9 @@ class Starprnt_Thermal_Emitter {
 		$this->bold      = false;
 		$this->underline = false;
 		$this->invert    = false;
-		$this->width     = 1;
-		$this->height    = 1;
 		$this->line_open = false;
 
-		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
+		$this->layout = new Thermal_Text_Layout( isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48, self::MAX_MAGNIFICATION );
 
 		// ESC GS ) U — select UTF-8 encoding, then the companion font/width
 		// setting, per Star's reference implementation. No initialize command:
@@ -156,77 +147,6 @@ class Starprnt_Thermal_Emitter {
 		$this->walk_nodes( $this->nodes_with_auto_drawer( $children ) );
 
 		return $this->buffer;
-	}
-
-	/**
-	 * Walk a list of AST nodes.
-	 *
-	 * @param array $nodes The AST nodes.
-	 *
-	 * @return void
-	 */
-	private function walk_nodes( array $nodes ): void {
-		foreach ( $nodes as $node ) {
-			if ( \is_array( $node ) ) {
-				$this->walk_node( $node );
-			}
-		}
-	}
-
-	/**
-	 * Insert an auto drawer node before the first trailing cut when enabled.
-	 *
-	 * @param array $nodes AST nodes.
-	 *
-	 * @return array
-	 */
-	private function nodes_with_auto_drawer( array $nodes ): array {
-		if ( empty( $this->options['auto_open_drawer'] ) || $this->nodes_contain_drawer( $nodes ) ) {
-			return $nodes;
-		}
-
-		$drawer = array(
-			'type'      => 'drawer',
-			'connector' => \WCPOS\WooCommercePOS\Services\Print_Job_Service::normalize_drawer_connector( (string) ( $this->options['drawer_connector'] ?? 'pin2' ) ),
-		);
-
-		for ( $i = count( $nodes ) - 1; $i >= 0; $i-- ) {
-			$type = isset( $nodes[ $i ]['type'] ) ? (string) $nodes[ $i ]['type'] : '';
-			if ( 'cut' === $type ) {
-				array_splice( $nodes, $i, 0, array( $drawer ) );
-				return $nodes;
-			}
-			if ( in_array( $type, array( 'feed' ), true ) ) {
-				continue;
-			}
-			break;
-		}
-
-		$nodes[] = $drawer;
-		return $nodes;
-	}
-
-	/**
-	 * Whether a node list contains an explicit drawer node.
-	 *
-	 * @param array $nodes AST nodes.
-	 *
-	 * @return bool
-	 */
-	private function nodes_contain_drawer( array $nodes ): bool {
-		foreach ( $nodes as $node ) {
-			if ( ! is_array( $node ) ) {
-				continue;
-			}
-			if ( 'drawer' === ( $node['type'] ?? '' ) ) {
-				return true;
-			}
-			if ( ! empty( $node['children'] ) && is_array( $node['children'] ) && $this->nodes_contain_drawer( $node['children'] ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -350,7 +270,7 @@ class Starprnt_Thermal_Emitter {
 	private function emit_text_line( array $children ): void {
 		if ( 'left' !== $this->align ) {
 			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
-			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns, $this->effective_magnification( $this->width ) );
+			$pad   = $this->layout->measure_padding( $this->align, $plain );
 			if ( $pad > 0 ) {
 				$this->raw_string( str_repeat( ' ', $pad ) );
 			}
@@ -415,54 +335,24 @@ class Starprnt_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_size( array $node ): void {
-		$previous_width  = $this->width;
-		$previous_height = $this->height;
-		$width           = Thermal_Bounds::clamp_int( isset( $node['width'] ) ? $node['width'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
-		$height          = Thermal_Bounds::clamp_int( isset( $node['height'] ) ? $node['height'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
-
-		$this->raw( array( 0x1b, 0x69, $this->magnification_byte( $height ), $this->magnification_byte( $width ) ) );
-		$this->width  = $width;
-		$this->height = $height;
-
+		$this->layout->enter_size(
+			is_numeric( $node['width'] ?? null ) ? (int) $node['width'] : 1,
+			is_numeric( $node['height'] ?? null ) ? (int) $node['height'] : 1
+		);
+		$this->emit_applied_size();
 		$this->walk_nodes( isset( $node['children'] ) ? $node['children'] : array() );
-
-		$this->raw( array( 0x1b, 0x69, $this->magnification_byte( $previous_height ), $this->magnification_byte( $previous_width ) ) );
-		$this->width  = $previous_width;
-		$this->height = $previous_height;
+		$this->layout->leave_size();
+		$this->emit_applied_size();
 	}
 
 	/**
-	 * The largest magnification ESC i can express: n1/n2 are 0-5, so 6x.
+	 * Encode the applied scale as ESC i (height, width), zero-based.
 	 *
-	 * `Thermal_Bounds::SIZE_MULTIPLIER_MAX` is 8, so a template may legitimately ask for more
-	 * than the command can carry.
+	 * @return void
 	 */
-	private const MAX_MAGNIFICATION = 6;
-
-	/**
-	 * The magnification the printer will actually apply for a requested multiplier.
-	 *
-	 * Anything that measures the printed line -- alignment padding above -- must use this and
-	 * not the requested value, or a `<size width="8">` line is padded as though its glyphs were
-	 * 8 cells wide when ESC i only made them 6, and the line lands off-centre the other way.
-	 *
-	 * @param int $multiplier The requested width or height multiplier.
-	 *
-	 * @return int The applied magnification (1..6).
-	 */
-	private function effective_magnification( int $multiplier ): int {
-		return max( 1, min( self::MAX_MAGNIFICATION, $multiplier ) );
-	}
-
-	/**
-	 * Compute the ESC i magnification byte for a multiplier (0-based, max 6x).
-	 *
-	 * @param int $multiplier The width or height multiplier.
-	 *
-	 * @return int The ESC i parameter byte.
-	 */
-	private function magnification_byte( int $multiplier ): int {
-		return $this->effective_magnification( $multiplier ) - 1;
+	private function emit_applied_size(): void {
+		$scale = $this->layout->applied_scale();
+		$this->raw( array( 0x1b, 0x69, $scale['height'] - 1, $scale['width'] - 1 ) );
 	}
 
 	/**
@@ -511,7 +401,7 @@ class Starprnt_Thermal_Emitter {
 	 */
 	private function emit_row( array $node ): void {
 		$cols   = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$widths = Thermal_Text_Layout::resolve_row_widths( $cols, $this->columns );
+		$widths = $this->layout->measure_row_widths( $cols );
 
 		$line = '';
 		foreach ( $cols as $index => $col ) {
@@ -543,13 +433,13 @@ class Starprnt_Thermal_Emitter {
 
 		if ( 'dotted' === $style ) {
 			$pattern = '. ';
-			$repeat  = (int) ceil( $this->columns / \strlen( $pattern ) );
-			$text    = substr( str_repeat( $pattern, $repeat ), 0, $this->columns );
+			$repeat  = (int) ceil( $this->layout->columns() / \strlen( $pattern ) );
+			$text    = substr( str_repeat( $pattern, $repeat ), 0, $this->layout->columns() );
 		} elseif ( 'double' === $style ) {
-			$text = str_repeat( '=', $this->columns );
+			$text = str_repeat( '=', $this->layout->columns() );
 		} else {
 			// single and dashed both render as '-' across the width.
-			$text = str_repeat( '-', $this->columns );
+			$text = str_repeat( '-', $this->layout->columns() );
 		}
 
 		$this->raw_string( $text );
@@ -595,7 +485,8 @@ class Starprnt_Thermal_Emitter {
 		$height = max( 8, min( Thermal_Bounds::BARCODE_HEIGHT_MAX, $height ) );
 
 		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_STARPRNT ) ) {
-			$this->emit_centered_text( $value );
+			$this->raw_string( $this->centered_text( $value, $this->layout->columns() ) );
+			$this->newline();
 
 			return;
 		}
@@ -633,7 +524,7 @@ class Starprnt_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_image( array $node ): void {
-		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->columns ) );
+		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->layout->columns() ) );
 		if ( null === $bitmap ) {
 			return;
 		}
@@ -669,45 +560,6 @@ class Starprnt_Thermal_Emitter {
 
 		$this->raw( array( 0x1b, 0x7a, 0x01 ) ); // ESC z 1 — default line spacing.
 		$this->raw( array( 0x1b, 0x1d, 0x61, $this->align_byte( $this->align ) ) );
-	}
-
-	/**
-	 * Print a value as a centered plain-text line.
-	 *
-	 * Mirrors the rescue in Html_Thermal_Emitter::render_barcode_fallback(): when
-	 * the symbol cannot be produced, the value itself is still readable.
-	 *
-	 * Control bytes are folded to spaces first. This is the one path that routes
-	 * a barcode value into the text stream, and a barcode value is exactly where
-	 * a stray tab, LF or CR turns up — Code 128 validation rejects them on the
-	 * ESC/POS lane precisely because code set B cannot encode them, which sends
-	 * them here. Emitted raw they would break the line the rescue is centering.
-	 *
-	 * @param string $value The value to print.
-	 *
-	 * @return void
-	 */
-	private function emit_centered_text( string $value ): void {
-		$text = Thermal_Text_Layout::normalize_text( $this->strip_control_bytes( $value ) );
-		$pad  = (int) floor( max( 0, $this->columns - Thermal_Text_Layout::display_width( $text ) ) / 2 );
-		if ( $pad > 0 ) {
-			$this->raw_string( str_repeat( ' ', $pad ) );
-		}
-		$this->raw_string( $text );
-		$this->newline();
-	}
-
-	/**
-	 * Replace control bytes with spaces so they cannot reach the print stream.
-	 *
-	 * @param string $value The value to clean.
-	 *
-	 * @return string The value with control bytes folded to spaces.
-	 */
-	private function strip_control_bytes( string $value ): string {
-		$cleaned = preg_replace( '/[\x00-\x1f\x7f]/', ' ', $value );
-
-		return null === $cleaned ? $value : $cleaned;
 	}
 
 	/**
