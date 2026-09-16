@@ -163,11 +163,12 @@ final class Pos_Visibility {
 	 * @param string      $collection Collection being queried: `products` or `variations`. Any other
 	 *                                value returns the args untouched.
 	 * @param null|string $scope      Visibility scope: `default` or a store id. Null means default.
+	 * @param null|string $type       Explicit lane type, or null for the collection default.
 	 *
 	 * @return array
 	 */
-	public function apply_to_wp_query_args( array $args, string $collection, ?string $scope = null ): array {
-		$type = self::collection_type( $collection );
+	public function apply_to_wp_query_args( array $args, string $collection, ?string $scope = null, ?string $type = null ): array {
+		$type = $type ?? self::collection_type( $collection );
 		if ( null === $type ) {
 			return $args;
 		}

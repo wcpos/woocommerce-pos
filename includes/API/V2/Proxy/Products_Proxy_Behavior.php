@@ -7,10 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Proxy;
 
-use WCPOS\WooCommercePOS\API\Product_Search;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
-use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_REST_Request;
 
 /**
@@ -26,21 +24,8 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	private const PARAM_MAP = array(
 		'orderby' => 'orderby',
 		'order'   => 'order',
+		'search'  => 'search',
 	);
-
-	/**
-	 * Whether the forwarded request contains a product search.
-	 *
-	 * @var bool
-	 */
-	private $searching = false;
-
-	/**
-	 * Literal v2 phrase, captured before WooCommerce sanitizes the inner request.
-	 *
-	 * @var string
-	 */
-	private $phrase = '';
 
 	/**
 	 * The Collection Rules plan for the request in flight.
@@ -55,7 +40,7 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 * A POS sort (`sku`, `barcode`, `stock_quantity`, `stock_status`) is CLAIMED, not
 	 * forwarded: wc/v3's own `orderby` enum has never heard of them and answers
 	 * `rest_invalid_param` (400). The plan strips the claimed key here and the sort is
-	 * written back onto the inner query in `install()`.
+	 * written back onto the inner query by the plan.
 	 *
 	 * @param array           $params  Query parameters to forward.
 	 * @param WP_REST_Request $request Original proxy request.
@@ -63,15 +48,9 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 * @return array
 	 */
 	public function forwarded_params( array $params, WP_REST_Request $request ): array {
-		// Not empty(): the literal search term "0" is a search too.
-		$this->phrase = '';
-		if ( isset( $params['search'] ) && \is_string( $params['search'] ) ) {
-			// Preserve malformed UTF-8 for Product_Search to reject, rather than clearing the search.
-			$this->phrase     = preg_replace( '/^[\s\p{Z}\p{C}]+|[\s\p{Z}\p{C}]+$/u', '', $params['search'] ) ?? $params['search'];
-			$params['search'] = $this->phrase;
-		}
-		$this->searching = '' !== $this->phrase;
-		$this->plan      = Collection_Rules::for_request( 'products', $request, self::PARAM_MAP );
+		$plan_request = clone $request;
+		$plan_request->set_param( 'search', $params['search'] ?? null );
+		$this->plan = Collection_Rules::for_request( 'products', $plan_request, self::PARAM_MAP );
 
 		return $this->plan->forwarded_params( $params );
 	}
@@ -82,8 +61,6 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 * @return array<int, array{0: string, 1: callable, 2: int}>
 	 */
 	protected function install(): array {
-		$plan = $this->plan;
-
 		// The stable-sort tiebreak is UNCONDITIONAL: the POS grid defaults to a
 		// title sort (mono#1376), and a tied title at a page boundary would
 		// otherwise skip or duplicate across the client's multi-page walk.
@@ -97,97 +74,17 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		add_filter( 'woocommerce_get_catalog_ordering_args', $stable_sort );
 		$bindings = array( array( 'woocommerce_get_catalog_ordering_args', $stable_sort, 10 ) );
 
-		if ( null !== $plan && $plan->needs_meta_sort() ) {
-			/*
-			 * A claimed POS sort is written straight into the SQL clauses rather than into
-			 * the ordering args: the args form can only express `meta_key` + `meta_value`,
-			 * which INNER JOINs postmeta and drops every product that has no value for the
-			 * key (#1779 follow-up). `posts_clauses` fires for EVERY WP_Query, so the
-			 * binding is scoped to this forward AND guarded by post type — no unrelated
-			 * query inside the forward can pick up a product sort.
-			 */
-			$clauses = static function ( $clauses, $query = null ) use ( $plan ) {
-				return self::is_product_query( $query )
-					? $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $query )
-					: $clauses;
-			};
-			add_filter( 'posts_clauses', $clauses, 10, 2 );
-			$bindings[] = array( 'posts_clauses', $clauses, 10 );
-		}
-
-		if ( $this->searching ) {
-			$phrase  = $this->phrase;
-			$capture = static function ( $args ) use ( $phrase ) {
-				$args['s']                   = $phrase;
-				$args['wcpos_search_phrase'] = $phrase;
-				return $args;
-			};
-			// WooCommerce discards non-whitelisted args after its object-query filter.
-			$query_vars = static function ( $vars ) {
-				$vars[] = 'wcpos_search_phrase';
-				return $vars;
-			};
-			add_filter( 'woocommerce_rest_query_vars', $query_vars );
-			$bindings[] = array( 'woocommerce_rest_query_vars', $query_vars, 10 );
-			add_filter( 'woocommerce_rest_product_object_query', $capture );
-			$bindings[] = array( 'woocommerce_rest_product_object_query', $capture, 10 );
-			$search  = array( Product_Search::class, 'posts_search' );
-			$join    = array( Product_Search::class, 'posts_join' );
-			$groupby = array( Product_Search::class, 'posts_groupby' );
-			$orderby = static function ( $clauses, $query ) {
-				$clauses['orderby'] = Product_Search::posts_orderby( (string) ( $clauses['orderby'] ?? '' ), $query );
-				return $clauses;
-			};
-			add_filter( 'posts_search', $search, 10, 2 );
-			add_filter( 'posts_join', $join, 10, 2 );
-			add_filter( 'posts_groupby', $groupby, 10, 2 );
-			add_filter( 'posts_clauses', $orderby, 20, 2 );
-			$bindings[] = array( 'posts_search', $search, 10 );
-			$bindings[] = array( 'posts_join', $join, 10 );
-			$bindings[] = array( 'posts_groupby', $groupby, 10 );
-			$bindings[] = array( 'posts_clauses', $orderby, 20 );
-		}
-
-		$visibility = new Pos_Visibility();
-		if ( array() === $visibility->hidden_ids( Pos_Visibility::CATALOG ) ) {
-			return $bindings;
-		}
-
-		$filter = static function ( $args ) use ( $visibility ) {
-			return $visibility->apply_to_wp_query_args( (array) $args, 'products' );
-		};
-		add_filter( 'woocommerce_rest_product_object_query', $filter );
-		$bindings[] = array( 'woocommerce_rest_product_object_query', $filter, 10 );
-
-		// Search extensions can add post__in in pre_get_posts, after our argument filter.
-		// WordPress then ignores post__not_in, so enforce visibility in SQL as v1 does.
-		$where = static function ( $where, $query ) use ( $visibility ) {
-			global $wpdb;
-
-			return self::is_product_query( $query )
-				? $visibility->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::CATALOG )
-				: $where;
-		};
-		add_filter( 'posts_where', $where, 10, 2 );
-		$bindings[] = array( 'posts_where', $where, 10 );
-
 		return $bindings;
 	}
 
 	/**
-	 * Whether a WP_Query inside the forward is the product query this behavior owns.
+	 * Run the collection rules around the WooCommerce forward.
 	 *
-	 * @param mixed $query The WP_Query instance.
-	 *
-	 * @return bool
+	 * @param callable $forward Forward operation.
+	 * @return mixed
 	 */
-	private static function is_product_query( $query ): bool {
-		$post_type = \is_object( $query ) ? ( $query->query_vars['post_type'] ?? null ) : null;
-
-		if ( 'product' === $post_type ) {
-			return true;
-		}
-
-		return \is_array( $post_type ) && \in_array( 'product', $post_type, true );
+	protected function run( callable $forward ) {
+		$plan = $this->plan ?? Collection_Rules::for_request( 'products', new WP_REST_Request( 'GET', '/wcpos/v2/products' ) );
+		return $plan->around( $forward );
 	}
 }
