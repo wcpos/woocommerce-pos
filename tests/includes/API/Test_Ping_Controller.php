@@ -28,6 +28,19 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The fast path must send the same cache-defeating Cache-Control as the REST lane,
+	 * or an origin page cache freezes the ping (timestamp and pressure) for its TTL.
+	 */
+	public function test_fast_path_cache_defeating_headers_forbid_storing(): void {
+		// Arrange / Act.
+		$headers = \WCPOS\WooCommercePOS\API\V2\Ping::cache_defeating_headers();
+
+		// Assert.
+		$this->assertSame( 'private, no-store', $headers['Cache-Control'] );
+		$this->assertSame( 'no-cache', $headers['X-LiteSpeed-Cache-Control'] );
+	}
+
+	/**
 	 * The response contains only the documented fields and matching pressure header.
 	 */
 	public function test_ping_payload_shape(): void {
