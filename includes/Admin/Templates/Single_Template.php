@@ -585,7 +585,7 @@ class Single_Template {
 			: null;
 
 		// Get sample receipt data from the preview builder.
-		$sample_data = 'closure' === $type ? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( 'closure' ) : self::get_sample_receipt_data();
+		$sample_data = \in_array( $type, array( 'closure', 'report' ), true ) ? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( $type ) : self::get_sample_receipt_data();
 
 		$preview_url = rest_url( 'wcpos/v2/templates/' . $post->ID . '/preview' );
 
@@ -597,6 +597,10 @@ class Single_Template {
 			'displayPreviewUrl' => set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ),
 			'type'              => $type,
 			'displayStarter'    => $display_starter,
+			'reportStarters'    => 'report' === $type ? array(
+				'logicless' => TemplatesManager::get_gallery_template_by_key( 'report-default' )['content'],
+				'thermal' => TemplatesManager::get_gallery_template_by_key( 'report-thermal' )['content'],
+			) : null,
 			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),
 			'sampleData'        => $sample_data,
 			'engine'            => $engine,

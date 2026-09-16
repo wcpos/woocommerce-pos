@@ -66,6 +66,39 @@ function renderPicker(schema: FieldSchema, engine = 'logicless', onInsertField =
 }
 
 describe('FieldPicker', () => {
+	it('exposes report row/cell loops and nested date fields', async () => {
+		const schema: FieldSchema = {
+			report: { label: 'Report', fields: {
+				rows: { type: 'array', is_array: true, label: 'Rows', fields: {
+					cells: { type: 'array', is_array: true, label: 'Cells', fields: {
+						formatted: { type: 'string', label: 'Formatted' },
+					} },
+				} },
+				generated_at: { type: 'object', label: 'Generated At', fields: {
+					datetime: { type: 'string', label: 'Date Time' },
+				} },
+			} },
+		};
+		const { container, root, onInsertField } = renderPicker(schema);
+		await act(async () => {
+			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+		});
+		for (const label of ['Report', 'Rows', 'Cells', 'Generated At']) {
+			await act(async () => getButton(container, label).click());
+		}
+		for (const button of container.querySelectorAll<HTMLButtonElement>('button[aria-label="Insert loop block"]')) {
+			await act(async () => button.click());
+		}
+		await act(async () => getButton(container, 'Formatted').click());
+		await act(async () => getButton(container, 'Date Time').click());
+		expect(onInsertField.mock.calls.map(([value]) => value)).toEqual([
+			'{{#report.rows}}\n\n{{/report.rows}}',
+			'{{#cells}}\n\n{{/cells}}',
+			'{{formatted}}',
+			'{{report.generated_at.datetime}}',
+		]);
+	});
+
 	it('nests dotted schema sections under their parent section', async () => {
 		const schema: FieldSchema = {
 			store: {

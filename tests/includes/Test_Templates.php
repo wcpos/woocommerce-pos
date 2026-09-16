@@ -23,6 +23,22 @@ use WP_UnitTestCase;
  * Class Test_Templates
  */
 class Test_Templates extends WP_UnitTestCase {
+	/** Reports have a usable virtual default and two installable formats. */
+	public function test_report_default_gallery_and_activation(): void {
+		$template = Templates::get_active_template( 'report' );
+		$this->assertTrue( $template['is_virtual'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/report-default.html' ), $template['content'] );
+		$gallery = Templates::get_gallery_templates( 'report' );
+		$this->assertSame( array( 'report-default', 'report-thermal' ), array_column( $gallery, 'key' ) );
+		foreach ( $gallery as $entry ) {
+			$id = Templates::install_gallery_template( $entry['key'] );
+			$this->assertIsInt( $id );
+			Templates::set_active_template_id( $id, 'report' );
+			$this->assertSame( $id, Templates::get_active_template( 'report' )['id'] );
+		}
+	}
+
 	/** Closure defaults are filesystem templates, never editable posts. */
 	public function test_closure_supported_virtual_default(): void {
 		$this->assertContains( 'closure', Templates::SUPPORTED_TYPES );

@@ -591,14 +591,14 @@ class Templates {
 
 		return array(
 			'id'                => $template_id,
-			'title'             => 'closure' === $type ? __( 'Closure', 'woocommerce-pos' ) : ( $metadata[ $template_id ]['title'] ?? $template_id ),
+			'title'             => 'report' === $type ? __( 'Report', 'woocommerce-pos' ) : ( 'closure' === $type ? __( 'Closure', 'woocommerce-pos' ) : ( $metadata[ $template_id ]['title'] ?? $template_id ) ),
 			'description'       => $metadata[ $template_id ]['description'] ?? '',
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
 			'category'          => 'receipt' === $type ? ( $metadata[ $template_id ]['category'] ?? 'receipt' ) : '',
-			'language'          => $is_display ? 'html' : 'php',
+			'language'          => $is_display || 'report' === $type ? 'html' : 'php',
 			'file_path'         => $file_path,
-			'engine'            => $is_display ? 'logicless' : 'legacy-php',
+			'engine'            => $is_display || 'report' === $type ? 'logicless' : 'legacy-php',
 			'output_type'       => 'html',
 			'paper_width'       => null,
 			'is_virtual'        => true,
@@ -633,7 +633,7 @@ class Templates {
 			return null;
 		}
 
-		$file_name = $type . ( 'display' === $type ? '.html' : '.php' );
+		$file_name = $type . ( \in_array( $type, array( 'display', 'report' ), true ) ? '.html' : '.php' );
 		$directory = null;
 		$path      = null;
 
@@ -654,7 +654,8 @@ class Templates {
 
 			case self::TEMPLATE_PLUGIN_CORE:
 				$directory = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/';
-				$path      = $directory . $file_name;
+				// The shipped report default IS the gallery entry: one file, no copy to drift.
+				$path      = 'report' === $type ? $directory . 'gallery/report-default.html' : $directory . $file_name;
 				break;
 
 			case self::TEMPLATE_WP_OVERNIGHT_INVOICE:

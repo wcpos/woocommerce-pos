@@ -33,6 +33,33 @@ use WCPOS\WooCommercePOS\Templates;
  * @coversNothing
  */
 class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
+	/** Both API lanes preview reports without selecting an order. */
+	public function test_report_previews_render_grouped_thermal_and_partial_documents(): void {
+		foreach ( array( 'v1', 'v2' ) as $version ) {
+			foreach ( array( 'report-default', 'report-thermal', 'plugin-core' ) as $key ) {
+				$request = $this->wp_rest_get_request( '/wcpos/' . $version . '/templates/' . $key . '/preview' );
+				$request->set_param( 'type', 'report' );
+				$request->set_param( 'order_id', 999999 );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$html = 'report-thermal' === $key
+					? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] )
+					: $data['preview_html'];
+				$this->assertStringContainsString( 'Sales report', $html );
+				$this->assertStringContainsString( 'Card payments', $html );
+				$request->set_param( 'report', 'cash-movements' );
+				$partial_response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $partial_response->get_status() );
+				$partial = $partial_response->get_data();
+				$html = 'report-thermal' === $key
+					? ( new \Mustache\Engine() )->render( $partial['template_content'], $partial['receipt_data'] )
+					: $partial['preview_html'];
+				$this->assertStringContainsString( 'Offline movements are not included.', $html );
+			}
+		}
+	}
+
 	/**
 	 * The Templates controller instance.
 	 *

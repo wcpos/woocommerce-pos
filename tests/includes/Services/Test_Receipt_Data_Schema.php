@@ -20,6 +20,31 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
+	/** The tabular contract is separate from the unchanged receipt schema. */
+	public function test_report_tree_and_schema_publish_tabular_contract(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'report' );
+		$report_keys = array( 'key', 'title', 'subtitle', 'scope', 'group_by', 'columns', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' );
+		$this->assertEqualsCanonicalizing( $report_keys, array_keys( $tree['report']['fields'] ) );
+		$fields = $tree['report']['fields'];
+		foreach ( array( $fields['columns'], $fields['rows'], $fields['rows']['fields']['cells'], $fields['groups'], $fields['groups']['fields']['rows'], $fields['groups']['fields']['rows']['fields']['cells'], $fields['groups']['fields']['subtotal']['fields']['cells'], $fields['totals']['fields']['cells'] ) as $iterable ) {
+			$this->assertTrue( $iterable['is_array'] );
+			$this->assertNotEmpty( $iterable['fields'] );
+		}
+		$scope = $tree['report']['fields']['scope']['fields'];
+		$this->assertEqualsCanonicalizing( array( 'mode', 'label', 'store_id', 'register_id', 'register_name', 'business_day', 'session_id', 'session_number', 'opened_at', 'closed_at', 'from', 'to' ), array_keys( $scope ) );
+		foreach ( array( 'opened_at', 'closed_at', 'from', 'to' ) as $key ) {
+			$this->assertSame( Receipt_Data_Schema::get_field_tree()['order.printed']['fields'], $scope[ $key ]['fields'] );
+		}
+		$schema = Receipt_Data_Schema::get_json_schema( 'report' );
+		$this->assertSame( array( 'report', 'store', 'register', 'software', 'fiscal', 'i18n' ), $schema['required'] );
+		$fields = $schema['properties']['report']['properties'];
+		$this->assertSame( array( 'session', 'range' ), $fields['scope']['properties']['mode']['enum'] );
+		$this->assertSame( array( 'text', 'number', 'money', 'percent', 'datetime' ), $fields['columns']['items']['properties']['type']['enum'] );
+		$this->assertSame( array( 'left', 'right' ), $fields['columns']['items']['properties']['align']['enum'] );
+		$this->assertSame( 'integer', $fields['count']['type'] );
+		$this->assertSame( Receipt_Data_Schema::get_json_schema(), Receipt_Data_Schema::get_json_schema( 'receipt' ) );
+	}
+
 	/** Schema 1.4 publishes provenance without requiring optional fiscal fields. */
 	public function test_identity_contract_1_4(): void {
 		$schema = Receipt_Data_Schema::get_json_schema();

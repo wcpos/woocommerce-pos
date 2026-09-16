@@ -1,0 +1,34 @@
+{
+  "report": {
+    "key": "sales",
+    "title": "Sales report",
+    "subtitle": "By payment method",
+    "scope": {"mode": "session", "label": "Front till · Session 42 · 15 September 2026", "store_id": 1, "register_id": "front-till", "register_name": "Front till", "business_day": "2026-09-15", "session_id": "session-42", "session_number": 42, "opened_at": {"datetime": "15 Sept 2026 09:00", "date": "15 Sept 2026", "time": "09:00", "datetime_short": "15/09/2026 09:00", "datetime_long": "15 September 2026 09:00", "datetime_full": "Tuesday, 15 September 2026 09:00", "date_short": "15/09/2026", "date_long": "15 September 2026", "date_full": "Tuesday, 15 September 2026", "date_ymd": "2026-09-15", "date_dmy": "15/09/2026", "date_mdy": "09/15/2026", "weekday_short": "Tue", "weekday_long": "Tuesday", "day": "15", "month": "09", "month_short": "Sept", "month_long": "September", "year": "2026"}, "closed_at": {"datetime": "15 Sept 2026 17:00", "date": "15 Sept 2026", "time": "17:00", "datetime_short": "15/09/2026 17:00", "datetime_long": "15 September 2026 17:00", "datetime_full": "Tuesday, 15 September 2026 17:00", "date_short": "15/09/2026", "date_long": "15 September 2026", "date_full": "Tuesday, 15 September 2026", "date_ymd": "2026-09-15", "date_dmy": "15/09/2026", "date_mdy": "09/15/2026", "weekday_short": "Tue", "weekday_long": "Tuesday", "day": "15", "month": "09", "month_short": "Sept", "month_long": "September", "year": "2026"}},
+    "group_by": {"key": "payment_method", "label": "Payment method"},
+    "columns": [
+      {"key": "method", "label": "Method", "type": "text", "align": "left"},
+      {"key": "payments", "label": "Payments", "type": "number", "align": "right"},
+      {"key": "taken", "label": "Taken", "type": "money", "align": "right"},
+      {"key": "refunded", "label": "Refunded", "type": "money", "align": "right"},
+      {"key": "net", "label": "Net", "type": "money", "align": "right"}
+    ],
+    "rows": [],
+    "groups": [
+      {"key": "card", "label": "Card payments", "rows": [{"key": "visa", "label": "Visa", "cells": [{"key": "method", "value": "Visa", "formatted": "Visa"}, {"key": "payments", "value": "3", "formatted": "3"}, {"key": "taken", "value": "60", "formatted": "£60.00"}, {"key": "refunded", "value": "10", "formatted": "£10.00"}, {"key": "net", "value": "50", "formatted": "£50.00"}]}, {"key": "mastercard", "label": "Mastercard", "cells": [{"key": "method", "value": "Mastercard", "formatted": "Mastercard"}, {"key": "payments", "value": "2", "formatted": "2"}, {"key": "taken", "value": "40", "formatted": "£40.00"}, {"key": "refunded", "value": "0", "formatted": "£0.00"}, {"key": "net", "value": "40", "formatted": "£40.00"}]}], "subtotal": {"cells": [{"key": "method", "value": "Card subtotal", "formatted": "Card subtotal"}, {"key": "payments", "value": "5", "formatted": "5"}, {"key": "taken", "value": "100", "formatted": "£100.00"}, {"key": "refunded", "value": "10", "formatted": "£10.00"}, {"key": "net", "value": "90", "formatted": "£90.00"}]}},
+      {"key": "cash", "label": "Cash payments", "rows": [{"key": "morning", "label": "Morning cash", "cells": [{"key": "method", "value": "Morning cash", "formatted": "Morning cash"}, {"key": "payments", "value": "4", "formatted": "4"}, {"key": "taken", "value": "80", "formatted": "£80.00"}, {"key": "refunded", "value": "0", "formatted": "£0.00"}, {"key": "net", "value": "80", "formatted": "£80.00"}]}, {"key": "afternoon", "label": "Afternoon cash", "cells": [{"key": "method", "value": "Afternoon cash", "formatted": "Afternoon cash"}, {"key": "payments", "value": "1", "formatted": "1"}, {"key": "taken", "value": "20", "formatted": "£20.00"}, {"key": "refunded", "value": "5", "formatted": "£5.00"}, {"key": "net", "value": "15", "formatted": "£15.00"}]}], "subtotal": {"cells": [{"key": "method", "value": "Cash subtotal", "formatted": "Cash subtotal"}, {"key": "payments", "value": "5", "formatted": "5"}, {"key": "taken", "value": "100", "formatted": "£100.00"}, {"key": "refunded", "value": "5", "formatted": "£5.00"}, {"key": "net", "value": "95", "formatted": "£95.00"}]}}
+    ],
+    "totals": {"cells": [{"key": "method", "value": "Total", "formatted": "Total"}, {"key": "payments", "value": "10", "formatted": "10"}, {"key": "taken", "value": "200", "formatted": "£200.00"}, {"key": "refunded", "value": "15", "formatted": "£15.00"}, {"key": "net", "value": "185", "formatted": "£185.00"}]},
+    "count": 4,
+    "has_groups": true,
+    "has_rows": true,
+    "generated_at": {"datetime": "15 Sept 2026 17:00", "date": "15 Sept 2026", "time": "17:00", "datetime_short": "15/09/2026 17:00", "datetime_long": "15 September 2026 17:00", "datetime_full": "Tuesday, 15 September 2026 17:00", "date_short": "15/09/2026", "date_long": "15 September 2026", "date_full": "Tuesday, 15 September 2026", "date_ymd": "2026-09-15", "date_dmy": "15/09/2026", "date_mdy": "09/15/2026", "weekday_short": "Tue", "weekday_long": "Tuesday", "day": "15", "month": "09", "month_short": "Sept", "month_long": "September", "year": "2026"},
+    "is_partial": false,
+    "partial_reason": ""
+  },
+  "store": {"id": 1, "name": "Coffee Monster", "address_lines": ["123 Bean Street", "London"], "phone": "", "email": "", "logo": ""},
+  "register": {"id": "front-till", "name": "Front till"},
+  "cashier": {"id": 1, "name": "Alex"},
+  "software": {"name": "WCPOS", "plugin_version": "preview", "app_version": "preview", "app_build": "", "platform": "web"},
+  "fiscal": {"document_type": "report", "is_report_document": true},
+  "i18n": {"subtotal": "Subtotal", "total": "Total"}
+}

@@ -15,8 +15,8 @@ const indexRoute = createRoute({
 	path: '/',
 	validateSearch: (
 		search: Record<string, unknown>
-	): { type: 'receipt' | 'display' | 'closure' } => ({
-		type: search.type === 'closure' ? 'closure' : search.type === 'display' ? 'display' : 'receipt',
+	): { type: 'receipt' | 'display' | 'closure' | 'report' } => ({
+		type: search.type === 'report' ? 'report' : search.type === 'closure' ? 'closure' : search.type === 'display' ? 'display' : 'receipt',
 	}),
 	loaderDeps: ({ search: { type } }) => ({ type }),
 	loader: ({ deps: { type } }) => {

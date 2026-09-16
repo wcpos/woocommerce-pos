@@ -1,0 +1,21 @@
+<receipt paper-width="48">
+  {{#fiscal.is_report_document}}
+  <align mode="center"><bold><text>{{report.title}}</text></bold>
+    {{#report.subtitle}}<text>{{report.subtitle}}</text>{{/report.subtitle}}
+    <text>{{store.name}}</text><text>{{report.scope.label}}</text>
+  </align>
+  {{#report.is_partial}}<bold><text>{{report.partial_reason}}</text></bold>{{/report.is_partial}}
+  <line />
+  <row>{{#report.columns}}<col width="*" align="{{align}}"><bold>{{label}}</bold></col>{{/report.columns}}</row>
+  {{#report.has_groups}}{{#report.groups}}
+  <bold><text>{{label}}</text></bold>
+  {{#rows}}<row>{{#cells}}<col width="*">{{formatted}}</col>{{/cells}}</row>{{/rows}}
+  <line /><row>{{#subtotal.cells}}<col width="*"><bold>{{formatted}}</bold></col>{{/subtotal.cells}}</row>
+  {{/report.groups}}{{/report.has_groups}}
+  {{^report.has_groups}}{{#report.rows}}<row>{{#cells}}<col width="*">{{formatted}}</col>{{/cells}}</row>{{/report.rows}}{{/report.has_groups}}
+  <line /><row>{{#report.totals.cells}}<col width="*"><bold>{{formatted}}</bold></col>{{/report.totals.cells}}</row>
+  <text>{{report.generated_at.datetime}}</text>
+  <align mode="center"><text>{{software.name}} {{software.plugin_version}}</text></align>
+  <feed lines="3" /><cut />
+  {{/fiscal.is_report_document}}
+</receipt>

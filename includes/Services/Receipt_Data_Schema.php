@@ -216,7 +216,9 @@ class Receipt_Data_Schema {
 		$result = array();
 
 		foreach ( $data as $k => $value ) {
-			if ( \is_array( $value ) ) {
+			if ( 'report' === $k ) {
+				$result[ $k ] = $value;
+			} elseif ( \is_array( $value ) ) {
 				$result[ $k ] = self::format_money_fields( $value, $currency, $presentation_hints );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
 				// ──────────────────────────────────────────────────────────
@@ -1386,6 +1388,9 @@ class Receipt_Data_Schema {
 				'fields' => self::get_i18n_field_tree_fields(),
 			),
 		);
+		if ( 'report' === $type ) {
+			return self::get_report_field_tree( $tree );
+		}
 		if ( 'closure' === $type ) {
 			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'register', 'software', 'fiscal', 'i18n' ) ) );
 			$tree['order']['fields'] = array_intersect_key( $tree['order']['fields'], array_flip( array( 'currency' ) ) );
@@ -1674,14 +1679,242 @@ class Receipt_Data_Schema {
 	}
 
 	/**
+	 * Reuse receipt identity/date fields for tabular documents.
+	 *
+	 * @param array $receipt Receipt field tree.
+	 * @return array Report field tree.
+	 */
+	private static function get_report_field_tree( array $receipt ): array {
+		$tree = array_intersect_key( $receipt, array_flip( array( 'store', 'store.address', 'store.tax_ids', 'register', 'cashier', 'software', 'fiscal', 'i18n' ) ) );
+		$identity = array(
+			'key' => array(
+				'type' => 'string',
+				'label' => __( 'Key', 'woocommerce-pos' ),
+			),
+			'label' => array(
+				'type' => 'string',
+				'label' => __( 'Label', 'woocommerce-pos' ),
+			),
+		);
+		$cells = array(
+			'type' => 'array',
+			'is_array' => true,
+			'label' => __( 'Cells', 'woocommerce-pos' ),
+			'fields' => array(
+				'key' => $identity['key'],
+				'value' => array(
+					'type' => 'string',
+					'label' => __( 'Value', 'woocommerce-pos' ),
+				),
+				'formatted' => array(
+					'type' => 'string',
+					'label' => __( 'Formatted', 'woocommerce-pos' ),
+				),
+			),
+		);
+		$rows = array(
+			'type' => 'array',
+			'is_array' => true,
+			'label' => __( 'Rows', 'woocommerce-pos' ),
+			'fields' => $identity + array( 'cells' => $cells ),
+		);
+		$totals = array(
+			'type' => 'object',
+			'label' => __( 'Totals', 'woocommerce-pos' ),
+			'fields' => array( 'cells' => $cells ),
+		);
+		$scope = array(
+			'mode' => array(
+				'type' => 'string',
+				'label' => __( 'Mode', 'woocommerce-pos' ),
+			),
+			'label' => $identity['label'],
+			'store_id' => $receipt['store']['fields']['id'],
+			'register_id' => $receipt['register']['fields']['id'],
+			'register_name' => $receipt['register']['fields']['name'],
+			'business_day' => array(
+				'type' => 'string',
+				'label' => __( 'Business Day', 'woocommerce-pos' ),
+			),
+			'session_id' => array(
+				'type' => 'string',
+				'label' => __( 'Session ID', 'woocommerce-pos' ),
+			),
+			'session_number' => array(
+				'type' => 'number',
+				'label' => __( 'Session Number', 'woocommerce-pos' ),
+			),
+		);
+		foreach ( array(
+			'opened_at' => __( 'Opened At', 'woocommerce-pos' ),
+			'closed_at' => __( 'Closed At', 'woocommerce-pos' ),
+			'from' => __( 'From', 'woocommerce-pos' ),
+			'to' => __( 'To', 'woocommerce-pos' ),
+		) as $key => $label ) {
+			$scope[ $key ] = array(
+				'type' => 'object',
+				'label' => $label,
+				'fields' => self::get_date_field_tree_fields(),
+			);
+		}
+		$tree['report'] = array(
+			'label' => __( 'Report', 'woocommerce-pos' ),
+			'fields' => array(
+				'key' => $identity['key'],
+				'title' => array(
+					'type' => 'string',
+					'label' => __( 'Title', 'woocommerce-pos' ),
+				),
+				'subtitle' => array(
+					'type' => 'string',
+					'label' => __( 'Subtitle', 'woocommerce-pos' ),
+				),
+				'scope' => array(
+					'type' => 'object',
+					'label' => __( 'Scope', 'woocommerce-pos' ),
+					'fields' => $scope,
+				),
+				'group_by' => array(
+					'type' => 'object',
+					'nullable' => true,
+					'label' => __( 'Group By', 'woocommerce-pos' ),
+					'fields' => $identity,
+				),
+				'columns' => array(
+					'type' => 'array',
+					'is_array' => true,
+					'label' => __( 'Columns', 'woocommerce-pos' ),
+					'fields' => $identity + array(
+						'type' => array(
+							'type' => 'string',
+							'label' => __( 'Type', 'woocommerce-pos' ),
+						),
+						'align' => array(
+							'type' => 'string',
+							'label' => __( 'Alignment', 'woocommerce-pos' ),
+						),
+					),
+				),
+				'rows' => $rows,
+				'groups' => array(
+					'type' => 'array',
+					'is_array' => true,
+					'label' => __( 'Groups', 'woocommerce-pos' ),
+					'fields' => $identity + array(
+						'rows' => $rows,
+						'subtotal' => array_merge( $totals, array( 'label' => __( 'Subtotal', 'woocommerce-pos' ) ) ),
+					),
+				),
+				'totals' => $totals,
+				'count' => array(
+					'type' => 'number',
+					'label' => __( 'Count', 'woocommerce-pos' ),
+				),
+				'has_groups' => array(
+					'type' => 'boolean',
+					'label' => __( 'Has Groups', 'woocommerce-pos' ),
+				),
+				'has_rows' => array(
+					'type' => 'boolean',
+					'label' => __( 'Has Rows', 'woocommerce-pos' ),
+				),
+				'generated_at' => array(
+					'type' => 'object',
+					'label' => __( 'Generated At', 'woocommerce-pos' ),
+					'fields' => self::get_date_field_tree_fields(),
+				),
+				'is_partial' => array(
+					'type' => 'boolean',
+					'label' => __( 'Is Partial', 'woocommerce-pos' ),
+				),
+				'partial_reason' => array(
+					'type' => 'string',
+					'label' => __( 'Partial Reason', 'woocommerce-pos' ),
+				),
+			),
+		);
+		$tree['fiscal']['fields']['is_report_document'] = array(
+			'type' => 'boolean',
+			'label' => __( 'Is Report Document', 'woocommerce-pos' ),
+		);
+		return $tree;
+	}
+
+	/**
+	 * Require all fields in the report branch; shared receipt fields stay optional.
+	 *
+	 * @param array $schema Report branch schema.
+	 * @return array Schema with nested required lists.
+	 */
+	private static function require_report_fields( array $schema ): array {
+		if ( isset( $schema['properties'] ) ) {
+			$schema['required'] = array_keys( $schema['properties'] );
+			$schema['properties'] = array_map( array( self::class, 'require_report_fields' ), $schema['properties'] );
+		}
+		if ( isset( $schema['items'] ) ) {
+			$schema['items'] = self::require_report_fields( $schema['items'] );
+		}
+		return $schema;
+	}
+
+	/**
 	 * Get the JSON Schema for canonical receipt_data payloads.
 	 *
 	 * PHP remains the source of truth in this repository. This export is used by
 	 * generated TypeScript artifacts and downstream renderer/studio checks.
 	 *
-	 * @return array<string, mixed> JSON-Schema-compatible receipt data schema.
+	 * @param string $type Document type; receipt remains the default.
+	 * @return array<string, mixed> JSON-Schema-compatible document schema.
 	 */
-	public static function get_json_schema(): array {
+	public static function get_json_schema( string $type = 'receipt' ): array {
+		if ( 'report' === $type ) {
+			$schema = array(
+				'$schema' => 'https://json-schema.org/draft/2020-12/schema',
+				'$id' => 'https://wcpos.com/schemas/report-data.schema.json',
+				'title' => 'ReportDocument',
+				'type' => 'object',
+				'required' => array( 'report', 'store', 'register', 'software', 'fiscal', 'i18n' ),
+				'properties' => array(),
+			);
+			foreach ( self::get_field_tree( 'report' ) as $path => $section ) {
+				self::merge_field_tree_section_schema( $schema, $path, $section );
+			}
+			$schema['properties']['report'] = self::require_report_fields( $schema['properties']['report'] );
+			$report =& $schema['properties']['report']['properties'];
+			$report['count']['type'] = 'integer';
+			$report['scope']['required'] = array( 'mode', 'label', 'store_id', 'register_id', 'register_name', 'business_day' );
+			$report['scope']['properties']['mode']['enum'] = array( 'session', 'range' );
+			$report['scope']['properties']['business_day']['pattern'] = '^\\d{4}-\\d{2}-\\d{2}$';
+			$report['scope']['anyOf'] = array(
+				array(
+					'type' => 'object',
+					'properties' => array(
+						'mode' => array(
+							'type' => 'string',
+							'enum' => array( 'session' ),
+						),
+					),
+					'required' => array( 'session_id', 'session_number', 'opened_at', 'closed_at' ),
+				),
+				array(
+					'type' => 'object',
+					'properties' => array(
+						'mode' => array(
+							'type' => 'string',
+							'enum' => array( 'range' ),
+						),
+					),
+					'required' => array( 'from', 'to' ),
+				),
+			);
+			$report['columns']['items']['properties']['type']['enum'] = array( 'text', 'number', 'money', 'percent', 'datetime' );
+			$report['columns']['items']['properties']['align']['enum'] = array( 'left', 'right' );
+			$schema['properties']['fiscal']['required'] = array( 'document_type', 'is_report_document' );
+			$schema['properties']['fiscal']['properties']['document_type']['enum'] = array( 'report' );
+			$schema['properties']['fiscal']['properties']['document_type']['default'] = 'report';
+			$schema['properties']['fiscal']['properties']['is_report_document']['enum'] = array( true );
+			return $schema;
+		}
 		$schema = array(
 			'$schema'              => 'https://json-schema.org/draft/2020-12/schema',
 			'$id'                  => 'https://wcpos.com/schemas/receipt-data.schema.json',

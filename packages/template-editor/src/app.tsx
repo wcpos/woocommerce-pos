@@ -214,6 +214,7 @@ export const DISPLAY_STARTER_SHELL = `<div style="font-family: sans-serif; paddi
 </div>`;
 
 export function getDefaultDoc(config: EditorConfig): string {
+	if (config.type === 'report') return config.postContent || config.reportStarters?.[config.engine] || '';
 	if (config.type === 'display') {
 		return config.postContent || config.displayStarter || DISPLAY_STARTER_SHELL;
 	}
@@ -295,7 +296,8 @@ export function App({ config }: AppProps) {
 	const preview = usePreviewData(
 		config.sampleData,
 		config.templateId,
-		config.type !== 'display' && config.hasPosOrders
+		config.type === 'receipt' && config.hasPosOrders,
+		config.type
 	);
 
 	// Sync initial content to the hidden WP textarea on mount.
@@ -317,12 +319,12 @@ export function App({ config }: AppProps) {
 
 			const currentContent = contentRef.current;
 			// Resolve the current starter, taking paper width into account for thermal.
-			const currentStarter =
+			const currentStarter = config.type === 'report' ? config.reportStarters?.[engineRef.current] :
 				engineRef.current === 'thermal'
 					? getThermalStarterShell(paperWidthRef.current)
 					: STARTER_SHELLS[engineRef.current];
 			// Resolve the next starter the same way so thermal always respects paperWidthRef.
-			const nextStarter =
+			const nextStarter = config.type === 'report' ? (config.reportStarters?.[newEngine] ?? '') :
 				newEngine === 'thermal'
 					? getThermalStarterShell(paperWidthRef.current)
 					: STARTER_SHELLS[newEngine];
@@ -341,7 +343,7 @@ export function App({ config }: AppProps) {
 
 		window.addEventListener('wcposEngineChange', handler);
 		return () => window.removeEventListener('wcposEngineChange', handler);
-	}, [syncContent, config.type]);
+	}, [syncContent, config.type, config.reportStarters]);
 
 	// Listen for paper width changes dispatched by the PHP metabox select
 	// (see Single_Template.php — dispatches wcposPaperWidthChange on <select> change).
@@ -382,7 +384,7 @@ export function App({ config }: AppProps) {
 
 		window.addEventListener('wcposPaperWidthChange', handler);
 		return () => window.removeEventListener('wcposPaperWidthChange', handler);
-	}, [syncContent, config.type]);
+	}, [syncContent, config.type, config.reportStarters]);
 
 	const handleChange = useCallback(
 		(newContent: string) => {
@@ -401,7 +403,7 @@ export function App({ config }: AppProps) {
 
 	const showFieldPicker = engine === 'logicless' || engine === 'thermal';
 
-	const previewToggle = (
+	const previewToggle = config.type === 'report' ? null : (
 		<PreviewToggle
 			source={preview.source}
 			disabled={!config.hasPosOrders}

@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 
 import apiFetch from '@wordpress/api-fetch';
 
+import type { EditorConfig } from '../types';
+
 interface PreviewDataState {
 	source: 'sample' | 'order';
 	data: Record<string, unknown>;
@@ -11,7 +13,8 @@ interface PreviewDataState {
 export function usePreviewData(
 	sampleData: Record<string, unknown>,
 	templateId: number,
-	hasPosOrders: boolean
+	hasPosOrders: boolean,
+	type: EditorConfig['type'] = 'receipt'
 ) {
 	const defaultSource = hasPosOrders ? 'order' : 'sample';
 	const [state, setState] = useState<PreviewDataState>({
@@ -40,7 +43,7 @@ export function usePreviewData(
 			setState((prev) => ({ ...prev, source: 'order', loading: true }));
 
 			apiFetch<{ receipt_data?: Record<string, unknown> }>({
-				path: `wcpos/v1/templates/${templateId}/preview?order_id=latest&wcpos=1`,
+				path: `wcpos/v1/templates/${templateId}/preview?order_id=latest&wcpos=1&type=${type}`,
 				signal: controller.signal,
 			})
 				.then((response) => {
@@ -54,7 +57,7 @@ export function usePreviewData(
 					setState({ source: 'sample', data: sampleData, loading: false });
 				});
 		},
-		[sampleData, templateId]
+		[sampleData, templateId, type]
 	);
 
 	// Auto-fetch order data on mount when POS orders exist.

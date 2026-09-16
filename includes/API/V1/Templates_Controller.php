@@ -303,6 +303,11 @@ class Templates_Controller extends WP_REST_Controller {
 						'sanitize_callback' => 'sanitize_key',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
+					'report' => array(
+						'type' => 'string',
+						'default' => 'sales',
+						'sanitize_callback' => 'sanitize_key',
+					),
 					'order_id'  => array(
 						'description' => __( 'Order ID or "latest" for most recent POS order. Omit for sample data.', 'woocommerce-pos' ),
 						'type'        => array( 'integer', 'string' ),
@@ -992,7 +997,7 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		// Build receipt data: real order if order_id provided, otherwise sample data.
-		$raw_order_id = 'closure' === ( $template['type'] ?? '' ) ? null : $request->get_param( 'order_id' );
+		$raw_order_id = \in_array( $template['type'] ?? '', array( 'closure', 'report' ), true ) ? null : $request->get_param( 'order_id' );
 		$order        = null;
 		$order_id     = 0;
 
@@ -1036,7 +1041,9 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		if ( $order ) {
+		if ( 'report' === ( $template['type'] ?? '' ) ) {
+			$receipt_data = ( new Receipt_Preview_Fixture_Loader() )->build( 'report', $request->get_param( 'report' ) ?? 'sales' );
+		} elseif ( $order ) {
 			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
 			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
