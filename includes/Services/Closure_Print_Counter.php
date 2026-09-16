@@ -43,7 +43,8 @@ final class Closure_Print_Counter {
 				( new Closure_Store() )->log_printed( $row );
 			}
 			return $result;
-		} catch ( \RuntimeException $error ) {
+		} catch ( \Throwable $error ) {
+			// The renderer may throw anything; every failure rolls back and is recorded.
 			$failure = $error;
 			throw $error;
 		} finally {

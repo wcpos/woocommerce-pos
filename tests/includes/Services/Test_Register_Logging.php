@@ -102,6 +102,17 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$this->assertLessThanOrEqual( $index, min( $this->rollbacks ), $message . ' was logged before the rollback' );
 	}
 
+	/** Decode the single-line JSON context of a captured event.
+	 *
+	 * @param string $formatted Captured formatted message.
+	 */
+	private function context_of( string $formatted ): array {
+		$this->assertStringNotContainsString( "\n", $formatted, 'an event must occupy one log line' );
+		$decoded = json_decode( substr( $formatted, strpos( $formatted, ' | Context: ' ) + 12 ), true );
+		$this->assertIsArray( $decoded, $formatted );
+		return $decoded;
+	}
+
 	/** Assert one event's level and allowlisted context values.
 	 *
 	 * @param string $level Expected level.
@@ -120,8 +131,10 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotEmpty( $matches, $message );
 		$entry = end( $matches );
 		$this->assertSame( $level, $entry[0] );
+		$decoded = $this->context_of( $entry[1] );
 		foreach ( $context as $key => $value ) {
-			$this->assertStringContainsString( '[' . $key . '] => ' . $value, $entry[1] );
+			$this->assertArrayHasKey( $key, $decoded, $message . ' lacks ' . $key );
+			$this->assertEquals( $value, $decoded[ $key ], $message . ' ' . $key );
 		}
 		foreach ( $this->logs as $logged ) {
 			$this->assertContains( $logged[0], array( 'info', 'warning' ) );
@@ -155,15 +168,14 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'register_id' => $session['register_id'],
 				'user_id' => get_current_user_id(),
-				'before' => 'Array',
-				'after' => 'Array',
-				'default_float' => '125.0000',
-				'name' => 'Front till',
 			)
 		);
 		$entry = end( $this->logs )[1];
-		$this->assertStringContainsString( 'Closure fixture', $entry );
-		$this->assertStringContainsString( '[fields] => Array', $entry );
+		$changed = $this->context_of( $entry );
+		$this->assertEqualsCanonicalizing( array( 'default_float', 'name' ), $changed['fields'] );
+		$this->assertSame( 'Closure fixture', $changed['before']['name'] );
+		$this->assertSame( 'Front till', $changed['after']['name'] );
+		$this->assertSame( '125.0000', $changed['after']['default_float'] );
 		$this->assertStringNotContainsString( 'never-log-this', $entry );
 		$this->logs = array();
 		$store->update( $session['register_id'], array( 'default_float' => '125.0000' ) );
@@ -378,9 +390,9 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				'number' => 1,
 				'register_id' => $session['register_id'],
 				'session_id' => $session['id'],
-				'cash' => '1.0000',
 			)
 		);
+		$this->assertSame( '1.0000', $this->context_of( end( $this->logs )[1] )['variance']['cash'] );
 		$this->assertSame( $closure, $store->create( array( 'id' => $closure['id'] ) ) );
 		// An idempotent replay returns the existing row: the success path, not a fault.
 		$this->assert_event(
@@ -395,13 +407,12 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			'Register closure recount recorded',
 			array(
 				'closure_id' => $closure['id'],
-				'old_variance' => 'Array',
-				'new_variance' => 'Array',
 				'reason' => 'Coin recount',
 			)
 		);
-		$this->assertStringContainsString( '[cash] => 2.0000', end( $this->logs )[1] );
-		$this->assertStringContainsString( '[cash] => 1.0000', end( $this->logs )[1] );
+		$recount = $this->context_of( end( $this->logs )[1] );
+		$this->assertSame( '2.0000', $recount['old_variance']['cash'] );
+		$this->assertSame( '1.0000', $recount['new_variance']['cash'] );
 		Logger::reset_dedup_state();
 		$store->recount( $closure, $id, array( 'cash' => '999' ), 'Must not claim new values' );
 		$this->assertStringNotContainsString( 'Must not claim new values', end( $this->logs )[1] );
@@ -579,6 +590,29 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'query', $fail );
 			$wpdb->suppress_errors( $previous );
 		}
+	}
+
+	/** An operator-entered value cannot break an event across log lines or forge one. */
+	public function test_context_stays_on_one_line_and_cannot_forge_an_event(): void {
+		$session = $this->closure_session( null, 'open' );
+		$this->logs = array();
+		$forged = "Window cleaner\n2026-09-16T00:00:00+00:00 ERROR forged event";
+		( new Cash_Movement_Store() )->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session['id'],
+				'type' => 'paid_out',
+				'amount' => '5.0000',
+				'reason' => $forged,
+				'actor' => get_current_user_id(),
+				'voids' => null,
+				'created_at_gmt' => '2026-09-11 10:05:00',
+			)
+		);
+		$entry = end( $this->logs )[1];
+		$this->assertStringNotContainsString( "\n", $entry );
+		$this->assertSame( $forged, $this->context_of( $entry )['reason'] );
+		$this->assertSame( 1, preg_match_all( '/\bERROR\b/', $entry ), 'the forged severity reaches the file only inside the JSON value' );
 	}
 
 	/** Rolled-back closure transitions must not be reported as successful. */
