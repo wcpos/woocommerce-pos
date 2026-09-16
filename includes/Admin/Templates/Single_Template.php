@@ -239,8 +239,13 @@ class Single_Template {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
 		$template    = TemplatesManager::get_template( $post->ID );
-		$is_display  = 'display' === ( $template['type'] ?? 'receipt' );
+		$type        = $template['type'] ?? 'receipt';
+		$is_display  = 'display' === $type;
+		$is_report   = 'report' === $type;
 		$engine      = $is_display ? 'logicless' : self::get_editor_engine( $post );
+		if ( $is_report && 'legacy-php' === $engine ) {
+			$engine = 'logicless';
+		}
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
 		$is_new      = 'auto-draft' === $post->post_status;
@@ -248,6 +253,11 @@ class Single_Template {
 		$disabled = $is_display || ! $is_new ? 'disabled="disabled"' : '';
 
 		$engines = self::get_engine_options();
+		if ( $is_report ) {
+			// A report document is built by the device and rendered from a template; there is
+			// no server-side PHP path for it, so the legacy engine is not offered.
+			unset( $engines['legacy-php'] );
+		}
 
 		$engine_descriptions = array(
 			'logicless'  => __( 'Prints using your browser\'s print dialog. Renders on the device without needing a server connection.', 'woocommerce-pos' ),
@@ -396,6 +406,10 @@ class Single_Template {
 				update_post_meta( $post_id, '_template_language', 'html' );
 			} elseif ( isset( $_POST['wcpos_template_engine'] ) ) {
 				$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
+				if ( ! empty( $terms ) && 'report' === $terms[0]->slug && 'legacy-php' === $engine ) {
+					// Reports have no PHP render path; a posted legacy engine is coerced to logicless.
+					$engine = 'logicless';
+				}
 				if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
 					update_post_meta( $post_id, '_template_engine', $engine );
 
