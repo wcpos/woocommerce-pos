@@ -411,8 +411,8 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$recount = $this->context_of( end( $this->logs )[1] );
-		$this->assertSame( '2.0000', $recount['old_variance']['cash'] );
-		$this->assertSame( '1.0000', $recount['new_variance']['cash'] );
+		$this->assertSame( '1.0000', $recount['old_variance']['cash'] );
+		$this->assertSame( '2.0000', $recount['new_variance']['cash'] );
 		Logger::reset_dedup_state();
 		$store->recount( $closure, $id, array( 'cash' => '999' ), 'Must not claim new values' );
 		$this->assertStringNotContainsString( 'Must not claim new values', end( $this->logs )[1] );

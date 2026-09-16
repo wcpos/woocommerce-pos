@@ -17,6 +17,7 @@ final class Closure_Print_Counter {
 	 * @param callable $render Renderer accepting the marked payload.
 	 * @return mixed Rendered output.
 	 * @throws \RuntimeException When print bookkeeping fails.
+	 * @throws \Throwable Whatever the renderer throws, rethrown after the rollback.
 	 */
 	public function count_after( array $data, callable $render ) {
 		global $wpdb;
