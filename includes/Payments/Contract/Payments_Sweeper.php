@@ -101,6 +101,7 @@ final class Payments_Sweeper {
 							// as captured before it could be asked again.
 							$captured = $handler->capture( $result, array( 'source' => 'sweep' ) );
 							if ( is_wp_error( $captured ) ) {
+								$ledger->record_failure_events( $order, $row['id'], $captured );
 								// An authorize-only provider answers unsupported: authorized is its
 								// settled state (ledger.md, captured_at_gmt) and there is nothing to do.
 								// Any other refusal leaves the authorization standing for the next run.

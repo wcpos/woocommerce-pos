@@ -238,6 +238,10 @@ final class Fiscal_Record_Store {
 	 */
 	public function resolve_document( int $order_id, string $document, ?\WP_REST_Request $request = null ) {
 		if ( preg_match( '/\A(closure|xreport):([0-9a-fA-F-]{36})\z/', $document, $match ) ) {
+			// The X-report and the Z are reports: a cashier counting blind reads neither.
+			if ( ! current_user_can( 'view_woocommerce_pos_reports' ) ) {
+				return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to read register documents.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
+			}
 			$row = 'closure' === $match[1] ? ( new Closure_Store() )->get( strtolower( $match[2] ) ) : ( new Register_Session_Store() )->get( strtolower( $match[2] ) );
 			$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/closures' ) );
 			if ( ! current_user_can( 'access_woocommerce_pos' ) || ! $row || ( array_key_exists( 'store_id', $scope ) && ! in_array( (int) $row['store_id'], array_map( 'intval', (array) $scope['store_id'] ), true ) ) || ( 'xreport' === $match[1] && ! in_array( $row['status'], array( 'open', 'counting' ), true ) ) ) {
