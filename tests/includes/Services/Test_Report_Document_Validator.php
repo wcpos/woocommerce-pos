@@ -81,6 +81,14 @@ class Test_Report_Document_Validator extends WP_UnitTestCase {
 		$this->assertWPError( Report_Document_Validator::validate( $document ) );
 	}
 
+	/** The column count lets a logic-less template span a heading; it must agree with the columns. */
+	public function test_report_column_count_must_match_columns(): void {
+		$document = ( new Receipt_Preview_Fixture_Loader() )->build( 'report' );
+		$this->assertSame( \count( $document['report']['columns'] ), $document['report']['column_count'] );
+		$document['report']['column_count'] = 4;
+		$this->assertWPError( Report_Document_Validator::validate( $document ) );
+	}
+
 	/** A key starting with "_" would be dropped by the renderers' sanitiser, so the schema forbids it. */
 	public function test_report_private_looking_keys_are_rejected(): void {
 		$document = ( new Receipt_Preview_Fixture_Loader() )->build( 'report' );

@@ -1801,6 +1801,10 @@ class Receipt_Data_Schema {
 						),
 					),
 				),
+				'column_count' => array(
+					'type'  => 'number',
+					'label' => __( 'Column Count', 'woocommerce-pos' ),
+				),
 				'rows' => $rows,
 				'groups' => array(
 					'type' => 'array',
@@ -1888,6 +1892,7 @@ class Receipt_Data_Schema {
 			$schema['properties']['report'] = self::require_report_fields( $schema['properties']['report'] );
 			$report =& $schema['properties']['report']['properties'];
 			$report['count']['type'] = 'integer';
+			$report['column_count']['type'] = 'integer';
 			$report['scope']['required'] = array( 'mode', 'label', 'store_id', 'register_id', 'register_name', 'business_day' );
 			$report['scope']['properties']['mode']['enum'] = array( 'session', 'range' );
 			$report['scope']['properties']['business_day']['pattern'] = '^\\d{4}-\\d{2}-\\d{2}$';

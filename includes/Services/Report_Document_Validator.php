@@ -26,7 +26,11 @@ class Report_Document_Validator {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
-		return self::validate_cells( $document['report'], array_column( $document['report']['columns'], 'key' ), 'report' );
+		$columns = array_column( $document['report']['columns'], 'key' );
+		if ( \count( $columns ) !== (int) $document['report']['column_count'] ) {
+			return new WP_Error( 'wcpos_report_invalid_column_count', __( 'report.column_count must equal the number of columns.', 'woocommerce-pos' ) );
+		}
+		return self::validate_cells( $document['report'], $columns, 'report' );
 	}
 
 	/**

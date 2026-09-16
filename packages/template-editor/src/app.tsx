@@ -213,6 +213,22 @@ export const DISPLAY_STARTER_SHELL = `<div style="font-family: sans-serif; paddi
   </section>
 </div>`;
 
+/**
+ * A report starter for an engine, with the thermal one normalised to the paper width the
+ * metabox currently holds, so an engine switch compares the editor's content with the
+ * starter it would actually have been given.
+ */
+export function getReportStarter(
+	starters: EditorConfig['reportStarters'],
+	engine: EditorConfig['engine'],
+	paperWidth: string
+): string {
+	const starter = starters?.[engine] ?? '';
+	if (engine !== 'thermal') return starter;
+	const chars = PAPER_WIDTH_CHARS[paperWidth] ?? 48;
+	return starter.replace(/paper-width\s*=\s*(['"])\d+\1/g, (_match, quote) => `paper-width=${quote}${chars}${quote}`);
+}
+
 export function getDefaultDoc(config: EditorConfig): string {
 	if (config.type === 'report') return config.postContent || config.reportStarters?.[config.engine] || '';
 	if (config.type === 'display') {
@@ -319,12 +335,12 @@ export function App({ config }: AppProps) {
 
 			const currentContent = contentRef.current;
 			// Resolve the current starter, taking paper width into account for thermal.
-			const currentStarter = config.type === 'report' ? config.reportStarters?.[engineRef.current] :
+			const currentStarter = config.type === 'report' ? getReportStarter(config.reportStarters, engineRef.current, paperWidthRef.current) :
 				engineRef.current === 'thermal'
 					? getThermalStarterShell(paperWidthRef.current)
 					: STARTER_SHELLS[engineRef.current];
 			// Resolve the next starter the same way so thermal always respects paperWidthRef.
-			const nextStarter = config.type === 'report' ? (config.reportStarters?.[newEngine] ?? '') :
+			const nextStarter = config.type === 'report' ? getReportStarter(config.reportStarters, newEngine, paperWidthRef.current) :
 				newEngine === 'thermal'
 					? getThermalStarterShell(paperWidthRef.current)
 					: STARTER_SHELLS[newEngine];
