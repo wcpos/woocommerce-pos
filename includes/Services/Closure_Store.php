@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Health;
 
 /** Owns closure documents; only print bookkeeping can change. */
@@ -216,36 +217,82 @@ final class Closure_Store {
 		$created = false;
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
+			$this->log_replay( $existing );
 			return $existing;
 		}
 		$sessions = new Register_Session_Store();
 		$session = $sessions->get( $fields['session_id'] );
-		if ( ! $session || ! ( new Register_Store() )->exists( $session['register_id'] ) || ! in_array( $session['status'], array( 'counting', 'closed' ), true ) ) {
+		$register_exists = $session && ( new Register_Store() )->exists( $session['register_id'] );
+		if ( ! $session || ! $register_exists || ! in_array( $session['status'], array( 'counting', 'closed' ), true ) ) {
+			Logger::warning(
+				'Register closure refused: session or register missing, or status is not counting or closed',
+				array(
+					'closure_id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+					'register_id' => $session['register_id'] ?? null,
+					'status' => $session['status'] ?? null,
+					'field' => ! $session ? 'session_id' : ( ! $register_exists ? 'register_id' : 'status' ),
+				)
+			);
 			return new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		( new Cash_Movement_Store() )->ensure_installed();
 		( new Fiscal_Record_Store() )->ensure_installed();
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			Logger::warning(
+				'Closure transaction failed.',
+				array(
+					'closure_id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+				)
+			);
 			throw new \RuntimeException( 'Closure transaction failed.' );
 		}
 		$rolled_back = false;
+		// Refusal and failure warnings raised inside the transaction are held here and
+		// emitted in the finally block, AFTER the rollback: WooCommerce's database log
+		// handler writes through this same connection, so a warning logged inside the
+		// transaction is erased with it and the merchant loses exactly the record this
+		// audit exists to keep.
+		$deferred = null;
+		// A replay found only under the register lock is logged from finally too: its
+		// transaction is rolled back on the way out and would take the row with it.
+		$replay = null;
 		try {
 			$table = ( new Register_Store() )->table_name();
 			// The row lock lasts through commit; subsequent reads see the preceding closure.
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned register table.
 			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET counters_started_at_gmt = COALESCE(counters_started_at_gmt, %s) WHERE id = %s", $session['opened_at_gmt'], $session['register_id'] ) ) ) {
+				$deferred = array(
+					'Closure counter start failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
 				throw new \RuntimeException( 'Closure counter start failed.' );
 			}
 			$existing = $this->get( $fields['id'] );
 			if ( $existing ) {
+				// Idempotent replay under the counter lock — the success path, not a fault.
+				$replay = $existing;
 				return $existing;
 			}
 			$existing = $this->for_session( $session['id'] );
 			if ( $existing ) {
 				// The recount is written outside the closure transaction: the finally block
-				// must not roll it back with the abandoned closure attempt.
+				// must not roll it back with the abandoned closure attempt. The refusal is
+				// logged after the rollback for the reason given at $deferred above.
 				$wpdb->query( 'ROLLBACK' );
 				$rolled_back = true;
+				Logger::warning(
+					'Register closure refused: session already has a closure',
+					array(
+						'closure_id' => $existing['id'],
+						'session_id' => $session['id'],
+						'requested_closure_id' => $fields['id'],
+					)
+				);
 				$this->recount( $existing, $fields['id'], $fields['counted'], '' );
 				return new \WP_Error(
 					'wcpos_closure_exists',
@@ -258,6 +305,14 @@ final class Closure_Store {
 			}
 			$session = $sessions->get( $session['id'] );
 			if ( ! in_array( $session['status'], array( 'counting', 'closed' ), true ) ) {
+				$deferred = array(
+					'Register closure refused: session status changed',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+						'status' => $session['status'],
+					),
+				);
 				return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
 			$previous = $this->last( $session['register_id'] );
@@ -269,9 +324,21 @@ final class Closure_Store {
 					'number' => $fields['number'],
 				)
 			) ) {
+				// Logged after the commit (from the row's printed_number): until then no
+				// closure has received the next number, and a rollback would leave a file
+				// logger claiming one had.
 				$fields['printed_number'] = $fields['number'];
 				$fields['number'] = $next;
 			} elseif ( $fields['number'] < $next ) {
+				$deferred = array(
+					'Register closure refused: number precedes register sequence',
+					array(
+						'closure_id' => $fields['id'],
+						'register_id' => $session['register_id'],
+						'number' => $fields['number'],
+						'next_number' => $next,
+					),
+				);
 				return new \WP_Error( 'wcpos_closure_number_invalid', __( 'The closure number precedes the register sequence.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
 			$fields['expected'] = $sessions->expected( $session );
@@ -296,6 +363,14 @@ final class Closure_Store {
 				) as $scope => $derived ) {
 					$key = $scope . '_' . $kind . '_total';
 					if ( ! preg_match( '/^\d{1,15}\.\d{4}$/D', $derived ) ) {
+						$deferred = array(
+							'Closure total exceeds storage precision.',
+							array(
+								'closure_id' => $fields['id'],
+								'session_id' => $fields['session_id'],
+								'field' => $key,
+							),
+						);
 						throw new \RuntimeException( 'Closure total exceeds storage precision.' );
 					}
 					if ( '0.0000' !== self::sum( array( $fields[ $key ], '-' . $derived ) ) ) {
@@ -319,39 +394,158 @@ final class Closure_Store {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned fiscal table.
 			$receipts = $wpdb->get_row( $wpdb->prepare( "SELECT MIN(id) AS first_receipt_id, MAX(id) AS last_receipt_id FROM {$table} WHERE session_id = %s AND type = 'sale'", $session['id'] ), ARRAY_A );
 			if ( null === $receipts ) {
+				$deferred = array(
+					'Closure receipt read failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
 				throw new \RuntimeException( 'Closure receipt read failed.' );
 			}
 			$fields += $receipts;
-			$result = $sessions->transition(
-				$session,
-				array(
-					'status' => 'closed',
-					'closure_id' => $fields['id'],
-				) + ( 'counting' === $session['status'] ? array(
-					'closed_at_gmt' => $fields['closed_at_gmt'],
-					'closed_by' => $fields['closed_by'],
-					'counted' => $fields['counted'],
-				) : array() )
-			);
+			try {
+				$result = $sessions->transition(
+					$session,
+					array(
+						'status' => 'closed',
+						'closure_id' => $fields['id'],
+					) + ( 'counting' === $session['status'] ? array(
+						'closed_at_gmt' => $fields['closed_at_gmt'],
+						'closed_by' => $fields['closed_by'],
+						'counted' => $fields['counted'],
+					) : array() )
+				);
+			} catch ( \RuntimeException $error ) {
+				// The session store stays silent on a closure-driven write (see its
+				// transition()); the failure is restated here after the rollback.
+				$deferred = array(
+					'Closure session write failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
+				throw $error;
+			}
 			if ( is_wp_error( $result ) ) {
+				// The session store's own refusal line was written inside this transaction
+				// and is lost under database logging; restate it once the rollback is done.
+				$deferred = array(
+					'Register closure refused: ' . $result->get_error_message(),
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+						'code' => $result->get_error_code(),
+					) + array_diff_key( (array) $result->get_error_data(), array( 'status' => true ) ),
+				);
 				return $result;
 			}
 			foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
 				$fields[ $key ] = null === $fields[ $key ] ? null : wp_json_encode( $fields[ $key ] );
 				if ( false === $fields[ $key ] ) {
+					$deferred = array(
+						'Closure JSON encoding failed.',
+						array(
+							'closure_id' => $fields['id'],
+							'session_id' => $fields['session_id'],
+							'field' => $key,
+						),
+					);
 					throw new \RuntimeException( 'Closure JSON encoding failed.' );
 				}
 			}
 			if ( false === $wpdb->insert( $this->table_name(), $fields ) || false === $wpdb->query( 'COMMIT' ) ) {
+				$deferred = array(
+					'Closure write failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
 				throw new \RuntimeException( 'Closure write failed.' );
 			}
 			$created = true;
+		} catch ( \RuntimeException $error ) {
+			// A calculation or read that throws before any branch above has recorded
+			// the failure still leaves the closure attempt on the log after the rollback.
+			if ( ! $deferred ) {
+				$deferred = array(
+					$error->getMessage(),
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
+			}
+			throw $error;
 		} finally {
 			if ( ! $created && ! $rolled_back ) {
 				$wpdb->query( 'ROLLBACK' );
 			}
+			if ( $deferred ) {
+				Logger::warning( $deferred[0], $deferred[1] );
+			}
+			if ( $replay ) {
+				$this->log_replay( $replay );
+			}
 		}
-		return $this->get( $fields['id'] );
+		$row = $this->get( $fields['id'] );
+		if ( null !== $row['printed_number'] ) {
+			Logger::warning(
+				'Register closure number already exists: assigned next number',
+				array(
+					'closure_id' => $row['id'],
+					'register_id' => $row['register_id'],
+					'number' => $row['printed_number'],
+					'next_number' => $row['number'],
+				)
+			);
+		}
+		// Only the write that stamped this closure onto the session may claim the
+		// state change: a concurrent close that won the conditional update returns
+		// here as the current row, carrying the other closure's id.
+		if ( $session['status'] !== $result['status'] && $result['closure_id'] === $fields['id'] ) {
+			Logger::log(
+				'Register session state changed',
+				array(
+					'session_id' => $session['id'],
+					'from' => $session['status'],
+					'to' => $result['status'],
+					'user_id' => get_current_user_id(),
+					'approved_by' => $result['approved_by'],
+				)
+			);
+		}
+		Logger::log(
+			'Register closure written',
+			array(
+				'closure_id' => $row['id'],
+				'number' => $row['number'],
+				'register_id' => $row['register_id'],
+				'session_id' => $row['session_id'],
+				'variance' => $row['variance'],
+				'user_id' => $row['closed_by'],
+			)
+		);
+		return $row;
+	}
+
+	/** An idempotent replay returned the existing row: the outbox retries a write whose
+	 * response was lost, and returning the existing row IS the success path. A warning
+	 * here would appear in the merchant's log for every recovered network timeout. The
+	 * REST controller answers a replay before create() runs, so it calls this too.
+	 *
+	 * @param array $row Existing closure row.
+	 */
+	public function log_replay( array $row ): void {
+		Logger::log(
+			'Register closure already recorded; returning the existing row',
+			array(
+				'closure_id' => $row['id'],
+				'session_id' => $row['session_id'],
+			)
+		);
 	}
 
 	/** Append a replay-safe recount; never update the document.
@@ -380,8 +574,26 @@ final class Closure_Store {
 			)
 		);
 		if ( null === $row || $row['closure_id'] !== $closure['id'] ) {
+			Logger::warning(
+				'Register closure recount refused: record missing or closure_id mismatch',
+				array(
+					'closure_id' => $closure['id'],
+					'source_id' => $id,
+				)
+			);
 			throw new \RuntimeException( 'Closure recount failed.' );
 		}
+		Logger::warning(
+			'Register closure recount recorded',
+			array(
+				'closure_id' => $closure['id'],
+				'source_id' => $id,
+				'old_variance' => $closure['variance'],
+				'new_variance' => $row['payload']['variance'],
+				'reason' => $row['payload']['reason'],
+				'user_id' => $row['cashier_id'],
+			)
+		);
 		return $row;
 	}
 
@@ -396,9 +608,32 @@ final class Closure_Store {
 		$table = $this->table_name();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
 		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET print_count = print_count + 1, last_printed_at_gmt = %s WHERE id = %s", current_time( 'mysql', true ), $id ) ) ) {
+			// Callers log this: Closure_Print_Counter runs it inside a transaction whose
+			// rollback would erase a warning written here under database logging.
 			throw new \RuntimeException( 'Closure print stamp failed.' );
 		}
-		return $this->get( $id );
+		$row = $this->get( $id );
+		if ( ! $row ) {
+			Logger::warning( 'Register closure reprint refused: closure_id not found', array( 'closure_id' => $id ) );
+		}
+		return $row;
+	}
+
+	/** Record a produced print. Callers emit this only once the print has committed:
+	 * Closure_Print_Counter rolls the count back when rendering fails, and a file
+	 * logger keeps whatever was written before that rollback.
+	 *
+	 * @param array $row Closure row after record_print().
+	 */
+	public function log_printed( array $row ): void {
+		Logger::log(
+			$row['print_count'] > 1 ? 'Register closure reprinted' : 'Register closure printed',
+			array(
+				'closure_id' => $row['id'],
+				'print_count' => $row['print_count'],
+				'user_id' => get_current_user_id(),
+			)
+		);
 	}
 
 	/** List immutable findings and missing number ranges for one register.

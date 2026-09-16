@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Health;
 
 /** Append-only movements, except for the target's one-time void stamp. */
@@ -109,6 +110,11 @@ final class Cash_Movement_Store {
 		global $wpdb;
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
+			// An idempotent replay, not a fault: the outbox retries a movement whose
+			// response was lost, and returning the existing row IS the success path.
+			// Logging it at warning would put a warning in the merchant's log for
+			// every recovered network timeout.
+			$this->log_replay( $existing );
 			return $existing;
 		}
 		$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
@@ -122,6 +128,14 @@ final class Cash_Movement_Store {
 		$void = 'void' === $fields['type'];
 		$transaction = $void || null !== $closure;
 		if ( $transaction && false === $wpdb->query( 'START TRANSACTION' ) ) {
+			Logger::warning(
+				'Movement transaction failed.',
+				array(
+					'movement_id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+					'user_id' => $fields['actor'],
+				)
+			);
 			throw new \RuntimeException( 'Movement transaction failed.' );
 		}
 		try {
@@ -142,7 +156,19 @@ final class Cash_Movement_Store {
 					throw new \RuntimeException( 'Movement void stamp failed.' );
 				}
 				if ( 0 === $updated ) {
+					// Roll back BEFORE logging: WooCommerce's database log handler writes
+					// through this same connection, so a warning emitted inside the
+					// transaction is erased with it.
 					$wpdb->query( 'ROLLBACK' );
+					Logger::warning(
+						'Cash movement refused: voids target already voided or unavailable',
+						array(
+							'movement_id' => $fields['id'],
+							'session_id' => $fields['session_id'],
+							'voids' => $fields['voids'],
+							'user_id' => $fields['actor'],
+						)
+					);
 					return new \WP_Error( 'wcpos_movement_void_refused', __( 'The movement has already been voided or is unavailable.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 				}
 			}
@@ -169,16 +195,70 @@ final class Cash_Movement_Store {
 			if ( $transaction ) {
 				$wpdb->query( 'ROLLBACK' );
 			}
+			// Logged after the rollback: WooCommerce's database log handler writes
+			// through this same connection, so a warning emitted inside the
+			// transaction is erased with it and the merchant loses exactly the
+			// failure record this audit exists to keep.
+			Logger::warning(
+				$error->getMessage(),
+				array(
+					'movement_id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+					'user_id' => $fields['actor'],
+				)
+			);
 			throw $error;
 		}
-		return $this->get( $fields['id'] );
+		$row = $this->get( $fields['id'] );
+		Logger::log(
+			'Cash movement accepted',
+			array(
+				'movement_id' => $row['id'],
+				'session_id' => $row['session_id'],
+				'type' => $row['type'],
+				'amount' => $row['amount'],
+				'reason_given' => '' !== trim( $row['reason'] ),
+				'reason' => $row['reason'],
+				'user_id' => $row['actor'],
+			)
+		);
+		return $row;
 	}
+	/** An idempotent replay returned the existing row: the success path, not a fault.
+	 *
+	 * The REST controller answers a replay before create() runs, so it calls this too.
+	 *
+	 * @param array $row Existing movement row.
+	 */
+	public function log_replay( array $row ): void {
+		Logger::log(
+			'Cash movement already recorded; returning the existing row',
+			array(
+				'movement_id' => $row['id'],
+				'session_id' => $row['session_id'],
+			)
+		);
+	}
+
 	/** Offline movements must predate the counting cutoff, strictly.
 	 *
 	 * @param array  $session Session row.
 	 * @param string $created_at UTC SQL timestamp.
 	 */
 	public function accepts( array $session, string $created_at ): bool {
-		return 'open' === $session['status'] || ( in_array( $session['status'], array( 'counting', 'closed' ), true ) && null !== $session['counting_started_at_gmt'] && $created_at < $session['counting_started_at_gmt'] );
+		$accepted = 'open' === $session['status'] || ( in_array( $session['status'], array( 'counting', 'closed' ), true ) && null !== $session['counting_started_at_gmt'] && $created_at < $session['counting_started_at_gmt'] );
+		if ( ! $accepted ) {
+			Logger::warning(
+				'Cash movement refused: session status or counting cutoff rejects created_at_gmt',
+				array(
+					'session_id' => $session['id'],
+					'status' => $session['status'],
+					'created_at_gmt' => $created_at,
+					'counting_started_at_gmt' => $session['counting_started_at_gmt'],
+					'user_id' => get_current_user_id(),
+				)
+			);
+		}
+		return $accepted;
 	}
 }

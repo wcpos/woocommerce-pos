@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -114,7 +115,15 @@ class Closures_Controller extends \WP_REST_Controller {
 					return $this->error( 'wcpos_closure_not_found', 404 );
 				}
 				if ( '/print' === substr( $route, -6 ) ) {
-					$row = $store->record_print( $id );
+					try {
+						$row = $store->record_print( $id );
+					} catch ( \RuntimeException $error ) {
+						Logger::warning( $error->getMessage(), array( 'closure_id' => $id ) );
+						return $this->error( 'wcpos_closure_write_failed', 500 );
+					}
+					if ( $row ) {
+						$store->log_printed( $row );
+					}
 				} elseif ( '/recount' === substr( $route, -8 ) ) {
 					$counted = $this->tenders( $request['counted'] );
 					if ( ! Pos_Uuid::is_uuid( $request['id'] ) || null === $counted || ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
@@ -151,6 +160,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			$id = strtolower( $request['id'] );
 			$row = $store->get( $id );
 			if ( $row ) {
+				$store->log_replay( $row );
 				return new WP_REST_Response( $this->visible( $row ) );
 			}
 			$fields = $this->fields( $request );

@@ -127,7 +127,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		$this->assertSame( 'error', (string) $event->getLevel() );
 		$this->assertStringContainsString( 'boom', (string) $event->getMessage() );
 		$this->assertStringContainsString( 'Context:', (string) $event->getMessage() );
-		$this->assertStringContainsString( '[k] => v', (string) $event->getMessage() );
+		$this->assertStringContainsString( '"k":"v"', (string) $event->getMessage() );
 		$this->assertSame( $site_uuid, $event->getUser()->getId() );
 		$this->assertSame( 'wcpos-php@' . VERSION, $event->getRelease() );
 
