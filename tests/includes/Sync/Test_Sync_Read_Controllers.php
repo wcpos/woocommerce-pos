@@ -954,7 +954,11 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$fingerprint = new Config_Fingerprint();
 
-		foreach ( array( 'products' => 1, 'tax_rates' => 1, 'variations' => 2 ) as $collection => $contract ) {
+		foreach ( array(
+			'products' => 1,
+			'tax_rates' => 1,
+			'variations' => 2,
+		) as $collection => $contract ) {
 			$this->assertSame(
 				$contract,
 				Config_Fingerprint::payload_contract_version( $collection ),
@@ -988,7 +992,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$fingerprint          = new Config_Fingerprint();
 		$tax_rate_fingerprint = $fingerprint->fingerprint( 'tax_rates' );
 
-		foreach ( array( 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons' ) as $collection ) {
+		foreach ( array( 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons', 'refunds' ) as $collection ) {
 			$this->assertArrayHasKey( $collection, Collections::with( 'fingerprint' ) );
 			$this->assertSame( 1, Config_Fingerprint::payload_contract_version( $collection ) );
 			$this->assertSame( array(), $fingerprint->representation_settings( $collection ) );

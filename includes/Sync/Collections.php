@@ -24,7 +24,7 @@ namespace WCPOS\WooCommercePOS\Sync;
  * something (no empty-string taxonomy on a post collection, no id_type on
  * tax_rates). Groups:
  *
- *  - object_type  — the singular journal vocabulary (always present).
+ *  - object_type  — the singular object vocabulary (always present).
  *  - identity     — the uuid id-space: id_type (post|user|term|order), the
  *                   collection's OWN scalar resolver scope (post_type or
  *                   taxonomy — what resolve_id_by_uuid gets on a push; NOT
@@ -32,12 +32,13 @@ namespace WCPOS\WooCommercePOS\Sync;
  *                   bulk uuid reader (METHOD NAMES on Pos_Uuid — rows stay
  *                   pure data; consumers resolve callables), and the
  *                   load_entity strategy key. null ⇒ no uuid identity
- *                   (tax_rates, ADR 0009).
+ *                   (tax_rates, ADR 0009; refunds).
  *  - proxy        — the namespaced read route + wc/v3 route + resource slug
  *                   (the slug vocabulary trap: tax_rates' slug is `taxes`).
  *  - write        — push support (the write map's route/id_type projection).
  *  - journal      — the singular object_type the journal emits; orders consume
- *                   it through their payload-windowed pull lane.
+ *                   it through their payload-windowed pull lane; null excludes
+ *                   the collection from the journal.
  *  - digest       — leg-3 existence digests, present ONLY on the id-space
  *                   OWNER row (products carries product+variation
  *                   object_types; a copy on variations would double-project).
@@ -276,6 +277,21 @@ final class Collections {
 			'digest'      => null,
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => null, // no meta store to stamp
+		),
+		'refunds' => array(
+			'object_type' => 'refund',
+			'identity'    => null,
+			'proxy'       => array(
+				'route'    => '/refunds',
+				'wc_route' => '/wc/v3/refunds',
+				'slug'     => 'refunds',
+				'behavior' => \WCPOS\WooCommercePOS\API\V2\Proxy\Refunds_Proxy_Behavior::class,
+			),
+			'write'       => null,
+			'journal'     => null,
+			'digest'      => null,
+			'fingerprint' => array( 'barcode' => false ),
+			'backfill'    => null,
 		),
 	);
 
