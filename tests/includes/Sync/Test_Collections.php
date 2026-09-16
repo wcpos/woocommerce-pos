@@ -19,9 +19,9 @@ class Test_Collections extends WP_UnitTestCase {
 	/**
 	 * All canonical collections remain ordered and explicit.
 	 */
-	public function test_names_covers_the_nine_collections(): void {
+	public function test_names_covers_the_ten_collections(): void {
 		$this->assertSame(
-			array( 'products', 'variations', 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons', 'tax_rates' ),
+			array( 'products', 'variations', 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons', 'tax_rates', 'refunds' ),
 			Collections::names()
 		);
 	}
@@ -46,13 +46,29 @@ class Test_Collections extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Every collection declares how it participates in the unified journal.
+	 * Only journaled collections participate in the unified journal.
 	 */
-	public function test_journal_projection_covers_all_collections(): void {
+	public function test_journal_projection_has_the_explicit_journal_set(): void {
 		$journal = Collections::with( 'journal' );
 
-		$this->assertSame( Collections::names(), array_keys( $journal ) );
+		$this->assertSame(
+			array( 'products', 'variations', 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons', 'tax_rates' ),
+			array_keys( $journal )
+		);
 		$this->assertSame( array( 'object_type' => 'order' ), $journal['orders']['journal'] );
+	}
+
+	/**
+	 * Refunds are proxied without identity, journal, digest, write or backfill work.
+	 */
+	public function test_refunds_are_read_only_without_sync_identity(): void {
+		$row = Collections::row( 'refunds' );
+
+		$this->assertNotNull( $row );
+		foreach ( array( 'identity', 'journal', 'digest', 'write', 'backfill' ) as $capability ) {
+			$this->assertArrayHasKey( $capability, $row );
+			$this->assertNull( $row[ $capability ] );
+		}
 	}
 
 	/**
