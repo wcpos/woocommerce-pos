@@ -80,41 +80,35 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * CPU sources resolve in priority order without guessing a count.
+	 * Processor information resolves a CPU count without guessing.
 	 *
-	 * @dataProvider cpu_count_sources
+	 * @dataProvider cpu_count_cpuinfo
 	 *
-	 * @param string|null $v2       Cgroup v2 CPU maximum.
-	 * @param string|null $quota    Cgroup v1 quota.
-	 * @param string|null $period   Cgroup v1 period.
 	 * @param string|null $cpuinfo  Processor information.
 	 * @param int|null    $expected Expected CPU count.
 	 */
-	public function test_cpu_count_from_sources_resolves_expected_count( ?string $v2, ?string $quota, ?string $period, ?string $cpuinfo, ?int $expected ): void {
-		$this->assertSame( $expected, \WCPOS\WooCommercePOS\API\V2\Ping::cpu_count_from_sources( $v2, $quota, $period, $cpuinfo ) );
+	public function test_cpu_count_from_cpuinfo_resolves_expected_count( ?string $cpuinfo, ?int $expected ): void {
+		// Arrange: processor information and expected count come from the provider.
+		// Act.
+		$count = \WCPOS\WooCommercePOS\API\V2\Ping::cpu_count_from_cpuinfo( $cpuinfo );
+
+		// Assert.
+		$this->assertSame( $expected, $count );
 	}
 
 	/**
-	 * Provide CPU source contents, including unavailable and unlimited sources.
+	 * Provide processor information, including unavailable and unrecognized contents.
 	 *
-	 * @return array<string, array{string|null, string|null, string|null, string|null, int|null}>
+	 * @return array<string, array{string|null, int|null}>
 	 */
-	public function cpu_count_sources(): array {
+	public function cpu_count_cpuinfo(): array {
 		return array(
-			'v2 quota'          => array( '200000 100000', null, null, null, 2 ),
-			'v2 ceil'           => array( '150000 100000', null, null, null, 2 ),
-			'v2 unlimited'      => array( 'max 100000', null, null, "processor : 0\nprocessor : 1\nprocessor : 2\n", 3 ),
-			'v1 unlimited'      => array( null, '-1', '100000', "processor\t: 0\n", 1 ),
-			'v1 quota'          => array( null, '400000', '100000', null, 4 ),
-			'empty cpuinfo'     => array( null, null, null, '', null ),
-			'unreadable files'  => array( null, null, null, null, null ),
-			'v2 priority'       => array( "200000 100000\n", '400000', '100000', "processor : 0\n", 2 ),
-			'v1 priority'       => array( 'max 100000', "150000\n", "100000\n", "processor : 0\n", 2 ),
-			'v2 minimum'        => array( '50000 100000', null, null, null, 1 ),
-			'v2 zero period'    => array( '200000 0', '400000', '100000', null, 4 ),
-			'v2 invalid period' => array( '200000 1.5', null, null, null, null ),
-			'v2 invalid quota'  => array( 'invalid 100000', null, null, null, null ),
-			'v1 zero period'    => array( null, '400000', '0', null, null ),
+			'three processors'   => array( "processor : 0\nprocessor : 1\nprocessor : 2\n", 3 ),
+			'tab separator'      => array( "processor\t: 0\n", 1 ),
+			'ARM description'    => array( "Processor : ARMv7 Processor rev 4 (v7l)\nprocessor : 0\n", 1 ),
+			'empty cpuinfo'      => array( '', null ),
+			'unreadable cpuinfo' => array( null, null ),
+			'no processors'      => array( "model name : x\n", null ),
 		);
 	}
 
