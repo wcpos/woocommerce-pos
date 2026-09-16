@@ -550,19 +550,17 @@ final class Integrity_Digest {
 		global $wpdb;
 		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
-		$result = $wpdb->query(
+		$this->query_with_retry(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 				. ' FROM (' . $this->index->order_digest_select_sql( '{id} = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
 				$order_id
-			)
+			),
+			'upsert stored order digest failed: ',
+			$started
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
-		if ( false === $result ) {
-			throw new RuntimeException( 'upsert stored order digest failed: ' . $wpdb->last_error );
-		}
 	}
 
 	/**
