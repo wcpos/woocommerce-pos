@@ -80,6 +80,45 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * CPU sources resolve in priority order without guessing a count.
+	 *
+	 * @dataProvider cpu_count_sources
+	 *
+	 * @param string|null $v2       Cgroup v2 CPU maximum.
+	 * @param string|null $quota    Cgroup v1 quota.
+	 * @param string|null $period   Cgroup v1 period.
+	 * @param string|null $cpuinfo  Processor information.
+	 * @param int|null    $expected Expected CPU count.
+	 */
+	public function test_cpu_count_from_sources_resolves_expected_count( ?string $v2, ?string $quota, ?string $period, ?string $cpuinfo, ?int $expected ): void {
+		$this->assertSame( $expected, \WCPOS\WooCommercePOS\API\V2\Ping::cpu_count_from_sources( $v2, $quota, $period, $cpuinfo ) );
+	}
+
+	/**
+	 * Provide CPU source contents, including unavailable and unlimited sources.
+	 *
+	 * @return array<string, array{string|null, string|null, string|null, string|null, int|null}>
+	 */
+	public function cpu_count_sources(): array {
+		return array(
+			'v2 quota'          => array( '200000 100000', null, null, null, 2 ),
+			'v2 ceil'           => array( '150000 100000', null, null, null, 2 ),
+			'v2 unlimited'      => array( 'max 100000', null, null, "processor : 0\nprocessor : 1\nprocessor : 2\n", 3 ),
+			'v1 unlimited'      => array( null, '-1', '100000', "processor\t: 0\n", 1 ),
+			'v1 quota'          => array( null, '400000', '100000', null, 4 ),
+			'empty cpuinfo'     => array( null, null, null, '', null ),
+			'unreadable files'  => array( null, null, null, null, null ),
+			'v2 priority'       => array( "200000 100000\n", '400000', '100000', "processor : 0\n", 2 ),
+			'v1 priority'       => array( 'max 100000', "150000\n", "100000\n", "processor : 0\n", 2 ),
+			'v2 minimum'        => array( '50000 100000', null, null, null, 1 ),
+			'v2 zero period'    => array( '200000 0', '400000', '100000', null, 4 ),
+			'v2 invalid period' => array( '200000 1.5', null, null, null, null ),
+			'v2 invalid quota'  => array( 'invalid 100000', null, null, null, null ),
+			'v1 zero period'    => array( null, '400000', '0', null, null ),
+		);
+	}
+
+	/**
 	 * Raw request matching accepts only the two exact ping forms.
 	 *
 	 * @dataProvider raw_request_cases
@@ -116,5 +155,4 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 			'marker in unrelated' => array( 'GET', '/products?next=/wcpos/v2/ping', null, false ),
 		);
 	}
-
 }

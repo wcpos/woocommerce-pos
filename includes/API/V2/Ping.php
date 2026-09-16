@@ -37,6 +37,14 @@ final class Ping {
 	 * @var bool
 	 */
 	private static $host_pressure_checked = false;
+
+	/**
+	 * Override CPU count resolution in tests; null uses host files.
+	 *
+	 * @internal
+	 * @var callable|null Callback returning int|null.
+	 */
+	public static $cpu_count_override = null;
 	// phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag, Squiz.Commenting.FunctionComment.Missing -- Typed signatures keep this bootstrap path within its strict size budget.
 	/** Detect an exact raw ping request. */
 	public static function matches_request( string $method, string $request_uri, ?string $rest_route ): bool {
@@ -137,20 +145,46 @@ final class Ping {
 		return $load <= 1.8 ? 'elevated' : 'high';
 	}
 
-	/** Read the host load average and convert it to a bucket, or null when unavailable. */
+	/** Resolve a CPU count from cgroup quotas, then processor information. */
+	public static function cpu_count_from_sources( ?string $cgroup_v2_cpu_max, ?string $cgroup_v1_quota_us, ?string $cgroup_v1_period_us, ?string $cpuinfo ): ?int {
+		if ( preg_match( '/^(\S+)\s+([0-9]+)$/', trim( $cgroup_v2_cpu_max ?? '' ), $parts ) && is_numeric( $parts[1] ) && (float) $parts[2] > 0 ) {
+			return max( 1, (int) ceil( (float) $parts[1] / (float) $parts[2] ) );
+		}
+		$quota  = trim( $cgroup_v1_quota_us ?? '' );
+		$period = trim( $cgroup_v1_period_us ?? '' );
+		if ( is_numeric( $quota ) && is_numeric( $period ) && (float) $quota > 0 && (float) $period > 0 ) {
+			return max( 1, (int) ceil( (float) $quota / (float) $period ) );
+		}
+		$found = null !== $cpuinfo ? preg_match_all( '/^processor\s*:/m', $cpuinfo ) : false;
+
+		return \is_int( $found ) && $found > 0 ? $found : null;
+	}
+
+	/**
+	 * Normalize host load using cgroup v2, cgroup v1, then /proc/cpuinfo CPU counts.
+	 * Unknown counts yield null (no header), rather than misleading pressure from a guessed divisor.
+	 */
 	private static function read_host_pressure_bucket(): ?string {
 		if ( ! \function_exists( 'sys_getloadavg' ) || ! \is_array( $average = @sys_getloadavg() ) || ! isset( $average[0] ) ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.FoundInControlStructure -- call only after availability check.
 			return null;
 		}
 		/** @var int|null $cpus */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- local static type.
 		static $cpus = null;
-		if ( null === $cpus ) {
+		if ( null === self::$cpu_count_override && null === $cpus ) {
+			$v2      = @file_get_contents( '/sys/fs/cgroup/cpu.max' );
+			$quota   = @file_get_contents( '/sys/fs/cgroup/cpu/cpu.cfs_quota_us' );
+			$period  = @file_get_contents( '/sys/fs/cgroup/cpu/cpu.cfs_period_us' );
 			$cpuinfo = @file_get_contents( '/proc/cpuinfo' );
-			$found   = \is_string( $cpuinfo ) ? preg_match_all( '/^processor\s*:/m', $cpuinfo ) : false;
-			$cpus    = \is_int( $found ) && $found > 0 ? $found : 1;
+			$cpus    = self::cpu_count_from_sources(
+				false === $v2 ? null : $v2,
+				false === $quota ? null : $quota,
+				false === $period ? null : $period,
+				false === $cpuinfo ? null : $cpuinfo
+			);
 		}
+		$count = null !== self::$cpu_count_override ? ( self::$cpu_count_override )() : $cpus;
 
-		return self::pressure_bucket( (float) $average[0] / $cpus );
+		return null === $count ? null : self::pressure_bucket( (float) $average[0] / $count );
 	}
 
 	/** @return array<string, bool|int|string> */ // phpcs:ignore Generic.Commenting.DocComment.MissingShort -- compact typed payload.

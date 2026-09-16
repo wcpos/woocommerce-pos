@@ -19,8 +19,25 @@ class Test_Pressure_Header extends WCPOS_REST_Unit_Test_Case {
 	 * Reset the request-scoped pressure memo between tests.
 	 */
 	public function tearDown(): void {
+		Ping::$cpu_count_override = null;
 		$this->set_pressure_bucket( null, false );
 		parent::tearDown();
+	}
+
+	/**
+	 * An unknown CPU count must not produce pressure from a guessed divisor.
+	 */
+	public function test_pressure_bucket_unknown_cpu_count_returns_null(): void {
+		$average = \function_exists( 'sys_getloadavg' ) ? @sys_getloadavg() : false;
+		if ( ! \is_array( $average ) || ! isset( $average[0] ) ) {
+			$this->markTestSkipped( 'A host load average is required to exercise CPU count resolution.' );
+		}
+		$this->set_pressure_bucket( null, false );
+		Ping::$cpu_count_override = static function (): ?int {
+			return null;
+		};
+
+		$this->assertNull( Ping::pressure_bucket() );
 	}
 
 	/**
