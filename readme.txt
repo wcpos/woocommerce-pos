@@ -54,7 +54,7 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 
 = 📋 REQUIREMENTS =
 * WordPress >= 5.6
-* WooCommerce >= 5.3
+* WooCommerce >= 9.0
 * PHP >= 7.4
 
 == Installation ==
