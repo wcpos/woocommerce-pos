@@ -123,6 +123,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			$id = strtolower( $request['id'] );
 			$row = $store->get( $id );
 			if ( $row ) {
+				$store->log_replay( $row );
 				return new WP_REST_Response( $row );
 			}
 			$fields = $this->fields( $request );

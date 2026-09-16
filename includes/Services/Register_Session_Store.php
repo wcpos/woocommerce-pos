@@ -127,13 +127,7 @@ final class Register_Session_Store {
 			// An idempotent replay, not a fault: the outbox retries a write whose response
 			// was lost, and returning the existing row IS the success path. A warning here
 			// would appear in the merchant's log for every recovered network timeout.
-			Logger::log(
-				'Register session already recorded; returning the existing row',
-				array(
-					'session_id' => $existing['id'],
-					'register_id' => $existing['register_id'],
-				)
-			);
+			$this->log_replay( $existing );
 			return $existing;
 		}
 		$open = $this->list(
@@ -186,6 +180,23 @@ final class Register_Session_Store {
 			)
 		);
 		return $row;
+	}
+
+	/** An idempotent replay returned the existing row: the success path, not a fault.
+	 *
+	 * The REST controller answers a replay before create() runs, so it calls this too;
+	 * without it a recovered network timeout leaves no server record at all.
+	 *
+	 * @param array $row Existing session row.
+	 */
+	public function log_replay( array $row ): void {
+		Logger::log(
+			'Register session already recorded; returning the existing row',
+			array(
+				'session_id' => $row['id'],
+				'register_id' => $row['register_id'],
+			)
+		);
 	}
 
 	/** Stamp a manager approval only while the session is counting.

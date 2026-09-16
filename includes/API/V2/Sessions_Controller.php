@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
@@ -90,6 +91,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 				return $row ? $this->approve( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
 			if ( $row ) {
+				$store->log_replay( $row );
 				return new WP_REST_Response( $row );
 			}
 			$fields = $movement ? $this->movement_fields( $request ) : $this->opening_fields( $request );
@@ -273,6 +275,17 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$voids = strtolower( $request['voids'] );
 			$target = ( new Cash_Movement_Store() )->get( $voids );
 			if ( ! $target || $target['session_id'] !== $session['id'] || null !== $target['voided_by'] || 'void' === $target['type'] ) {
+				// The store's own refusal covers only the race after this check; an ordinary
+				// refused reversal is decided here and must be recorded here.
+				Logger::warning(
+					'Cash movement refused: voids target already voided or unavailable',
+					array(
+						'movement_id' => $request['id'],
+						'session_id' => $session['id'],
+						'voids' => $voids,
+						'user_id' => get_current_user_id(),
+					)
+				);
 				return $this->error( 'wcpos_movement_void_refused', 409 );
 			}
 		}

@@ -114,13 +114,7 @@ final class Cash_Movement_Store {
 			// response was lost, and returning the existing row IS the success path.
 			// Logging it at warning would put a warning in the merchant's log for
 			// every recovered network timeout.
-			Logger::log(
-				'Cash movement already recorded; returning the existing row',
-				array(
-					'movement_id' => $existing['id'],
-					'session_id'  => $existing['session_id'],
-				)
-			);
+			$this->log_replay( $existing );
 			return $existing;
 		}
 		$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
@@ -230,6 +224,22 @@ final class Cash_Movement_Store {
 		);
 		return $row;
 	}
+	/** An idempotent replay returned the existing row: the success path, not a fault.
+	 *
+	 * The REST controller answers a replay before create() runs, so it calls this too.
+	 *
+	 * @param array $row Existing movement row.
+	 */
+	public function log_replay( array $row ): void {
+		Logger::log(
+			'Cash movement already recorded; returning the existing row',
+			array(
+				'movement_id' => $row['id'],
+				'session_id' => $row['session_id'],
+			)
+		);
+	}
+
 	/** Offline movements must predate the counting cutoff, strictly.
 	 *
 	 * @param array  $session Session row.

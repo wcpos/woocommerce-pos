@@ -452,6 +452,80 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$this->assert_logged_after_rollback( 'Register closure refused: session already has a closure' );
 	}
 
+	/** Dispatch a v2 write as the current user.
+	 *
+	 * @param string $route Resource path.
+	 * @param array  $fields Request fields.
+	 */
+	private function post( string $route, array $fields ) {
+		$request = $this->wp_rest_post_request( '/wcpos/v2/' . $route );
+		$request->set_body_params( $fields );
+		return $this->server->dispatch( $request );
+	}
+
+	/** REST replays answer before the stores run, and void targets are refused at validation. */
+	public function test_rest_replays_and_void_refusals_are_logged_by_the_controllers(): void {
+		wp_get_current_user()->add_cap( 'access_woocommerce_pos' );
+		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_cash' );
+		$session = $this->closure_session( null, 'open' );
+		$this->logs = array();
+		$this->assertSame( 200, $this->post( 'sessions', array( 'id' => $session['id'] ) )->get_status() );
+		$this->assert_event(
+			'info',
+			'Register session already recorded; returning the existing row',
+			array( 'session_id' => $session['id'] )
+		);
+		$movement = ( new Cash_Movement_Store() )->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session['id'],
+				'type' => 'paid_in',
+				'amount' => '5.0000',
+				'reason' => 'Float top-up',
+				'actor' => get_current_user_id(),
+				'voids' => null,
+				'created_at_gmt' => '2026-09-11 10:05:00',
+			)
+		);
+		$this->logs = array();
+		$this->assertSame( 200, $this->post( 'movements', array( 'id' => $movement['id'] ) )->get_status() );
+		$this->assert_event(
+			'info',
+			'Cash movement already recorded; returning the existing row',
+			array( 'movement_id' => $movement['id'] )
+		);
+		$void = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session['id'],
+			'type' => 'void',
+			'amount' => '0',
+			'reason' => '',
+			'voids' => wp_generate_uuid4(),
+			'created_at' => '2026-09-11T10:06:00Z',
+		);
+		$this->logs = array();
+		$refused = $this->post( 'movements', $void );
+		$this->assertSame( 409, $refused->get_status() );
+		$this->assertSame( 'wcpos_movement_void_refused', $refused->get_data()['code'] );
+		$this->assert_event(
+			'warning',
+			'Cash movement refused: voids target already voided or unavailable',
+			array(
+				'movement_id' => $void['id'],
+				'voids' => $void['voids'],
+			)
+		);
+		$session = ( new Register_Session_Store() )->transition( $session, array( 'status' => 'counting' ) );
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$this->logs = array();
+		$this->assertSame( 200, $this->post( 'closures', array( 'id' => $closure['id'] ) )->get_status() );
+		$this->assert_event(
+			'info',
+			'Register closure already recorded; returning the existing row',
+			array( 'closure_id' => $closure['id'] )
+		);
+	}
+
 	/** Rolled-back closure transitions must not be reported as successful. */
 	public function test_failed_closure_write_does_not_log_a_committed_state_change(): void {
 		global $wpdb;

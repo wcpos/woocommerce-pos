@@ -217,16 +217,7 @@ final class Closure_Store {
 		$created = false;
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
-			// An idempotent replay, not a fault: the outbox retries a write whose response
-			// was lost, and returning the existing row IS the success path. A warning here
-			// would appear in the merchant's log for every recovered network timeout.
-			Logger::log(
-				'Register closure already recorded; returning the existing row',
-				array(
-					'closure_id' => $existing['id'],
-					'session_id' => $existing['session_id'],
-				)
-			);
+			$this->log_replay( $existing );
 			return $existing;
 		}
 		$sessions = new Register_Session_Store();
@@ -281,13 +272,7 @@ final class Closure_Store {
 			$existing = $this->get( $fields['id'] );
 			if ( $existing ) {
 				// Idempotent replay under the counter lock — the success path, not a fault.
-				Logger::log(
-					'Register closure already recorded; returning the existing row',
-					array(
-						'closure_id' => $existing['id'],
-						'session_id' => $existing['session_id'],
-					)
-				);
+				$this->log_replay( $existing );
 				return $existing;
 			}
 			$existing = $this->for_session( $session['id'] );
@@ -336,15 +321,9 @@ final class Closure_Store {
 					'number' => $fields['number'],
 				)
 			) ) {
-				Logger::warning(
-					'Register closure number already exists: assigned next number',
-					array(
-						'closure_id' => $fields['id'],
-						'register_id' => $session['register_id'],
-						'number' => $fields['number'],
-						'next_number' => $next,
-					)
-				);
+				// Logged after the commit (from the row's printed_number): until then no
+				// closure has received the next number, and a rollback would leave a file
+				// logger claiming one had.
 				$fields['printed_number'] = $fields['number'];
 				$fields['number'] = $next;
 			} elseif ( $fields['number'] < $next ) {
@@ -480,6 +459,17 @@ final class Closure_Store {
 			}
 		}
 		$row = $this->get( $fields['id'] );
+		if ( null !== $row['printed_number'] ) {
+			Logger::warning(
+				'Register closure number already exists: assigned next number',
+				array(
+					'closure_id' => $row['id'],
+					'register_id' => $row['register_id'],
+					'number' => $row['printed_number'],
+					'next_number' => $row['number'],
+				)
+			);
+		}
 		if ( $session['status'] !== $result['status'] ) {
 			Logger::log(
 				'Register session state changed',
@@ -504,6 +494,23 @@ final class Closure_Store {
 			)
 		);
 		return $row;
+	}
+
+	/** An idempotent replay returned the existing row: the outbox retries a write whose
+	 * response was lost, and returning the existing row IS the success path. A warning
+	 * here would appear in the merchant's log for every recovered network timeout. The
+	 * REST controller answers a replay before create() runs, so it calls this too.
+	 *
+	 * @param array $row Existing closure row.
+	 */
+	public function log_replay( array $row ): void {
+		Logger::log(
+			'Register closure already recorded; returning the existing row',
+			array(
+				'closure_id' => $row['id'],
+				'session_id' => $row['session_id'],
+			)
+		);
 	}
 
 	/** Append a replay-safe recount; never update the document.
