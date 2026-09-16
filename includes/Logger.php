@@ -98,8 +98,13 @@ class Logger {
 		$message        = self::single_line( $message );
 		$context_string = '';
 		if ( null !== $context ) {
-			$context_string = is_string( $context ) ? $context : (string) wp_json_encode( $context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-			$context_string = self::single_line( $context_string );
+			$encoded = is_string( $context ) ? $context : wp_json_encode( $context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+			if ( false === $encoded ) {
+				// A value JSON cannot carry (invalid UTF-8, INF) is exactly the diagnostic
+				// some callers pass here after their own encoding failed; keep it readable.
+				$encoded = print_r( $context, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+			}
+			$context_string = self::single_line( (string) $encoded );
 		}
 
 		// Build a hash from level + message + context to detect duplicates.

@@ -466,6 +466,19 @@ final class Closure_Store {
 				throw new \RuntimeException( 'Closure write failed.' );
 			}
 			$created = true;
+		} catch ( \RuntimeException $error ) {
+			// A calculation or read that throws before any branch above has recorded
+			// the failure still leaves the closure attempt on the log after the rollback.
+			if ( ! $deferred ) {
+				$deferred = array(
+					$error->getMessage(),
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
+			}
+			throw $error;
 		} finally {
 			if ( ! $created && ! $rolled_back ) {
 				$wpdb->query( 'ROLLBACK' );
@@ -489,7 +502,10 @@ final class Closure_Store {
 				)
 			);
 		}
-		if ( $session['status'] !== $result['status'] ) {
+		// Only the write that stamped this closure onto the session may claim the
+		// state change: a concurrent close that won the conditional update returns
+		// here as the current row, carrying the other closure's id.
+		if ( $session['status'] !== $result['status'] && $result['closure_id'] === $fields['id'] ) {
 			Logger::log(
 				'Register session state changed',
 				array(

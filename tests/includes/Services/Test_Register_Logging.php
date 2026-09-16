@@ -615,6 +615,77 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, preg_match_all( '/\bERROR\b/', $entry ), 'the forged severity reaches the file only inside the JSON value' );
 	}
 
+	/** A print whose transaction cannot even start is still recorded. */
+	public function test_print_transaction_start_failure_is_logged(): void {
+		$session = $this->closure_session();
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$fail = static function ( $sql ) {
+			return 'START TRANSACTION' === $sql ? 'INVALID START' : $sql;
+		};
+		global $wpdb;
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		$this->logs = array();
+		try {
+			( new Closure_Print_Counter() )->count_after(
+				array(
+					'closure' => array( 'id' => $closure['id'] ),
+					'fiscal' => array(),
+				),
+				static function () {
+					return 'document';
+				}
+			);
+			$this->fail( 'Expected transaction failure.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assert_event( 'warning', 'Closure print transaction failed.', array( 'closure_id' => $closure['id'] ) );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+	}
+
+	/** A calculation that throws inside the closure transaction is logged after the rollback. */
+	public function test_closure_calculation_failure_is_logged_after_the_rollback(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$fields = $this->closure_fields( $session );
+		$fail = static function ( $sql ) {
+			return 0 === strpos( $sql, 'SELECT' ) && false !== strpos( $sql, 'DECIMAL(65,4)' ) ? 'INVALID CALC' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		$this->logs = array();
+		$this->rollbacks = array();
+		try {
+			( new Closure_Store() )->create( $fields );
+			$this->fail( 'Expected calculation failure.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assert_event( 'warning', $error->getMessage(), array( 'closure_id' => $fields['id'] ) );
+			$this->assert_logged_after_rollback( $error->getMessage() );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+	}
+
+	/** Context JSON cannot carry is still written, on one line, rather than dropped. */
+	public function test_context_json_cannot_encode_falls_back_to_a_readable_line(): void {
+		$this->logs = array();
+		// INF has no JSON form; wp_json_encode() returns false rather than a document.
+		Logger::warning(
+			'Undecodable context',
+			array(
+				'raw' => INF,
+				'id' => 'keep-me',
+			)
+		);
+		$entry = end( $this->logs )[1];
+		$this->assertStringContainsString( ' | Context: ', $entry );
+		$this->assertStringContainsString( 'keep-me', $entry );
+		$this->assertStringNotContainsString( "\n", $entry );
+	}
+
 	/** Rolled-back closure transitions must not be reported as successful. */
 	public function test_failed_closure_write_does_not_log_a_committed_state_change(): void {
 		global $wpdb;

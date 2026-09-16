@@ -22,6 +22,8 @@ final class Closure_Print_Counter {
 	public function count_after( array $data, callable $render ) {
 		global $wpdb;
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			// No transaction is open yet, so this warning cannot be rolled back.
+			Logger::warning( 'Closure print transaction failed.', array( 'closure_id' => $data['closure']['id'] ) );
 			throw new \RuntimeException( 'Closure print transaction failed.' );
 		}
 		$committed = false;
