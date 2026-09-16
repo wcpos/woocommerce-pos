@@ -526,6 +526,61 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Failures inside the print counter's and the closure's transactions are logged after their rollback. */
+	public function test_nested_write_failures_are_logged_after_the_rollback(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$store = new Closure_Store();
+		$closure = $store->create( $this->closure_fields( $session ) );
+		$previous = $wpdb->suppress_errors();
+		$fail = static function ( $sql ) use ( $store ) {
+			return 0 === strpos( $sql, 'UPDATE ' . $store->table_name() . ' SET print_count' ) ? 'INVALID PRINT STAMP' : $sql;
+		};
+		add_filter( 'query', $fail );
+		$this->logs = array();
+		$this->rollbacks = array();
+		try {
+			( new Closure_Print_Counter() )->count_after(
+				array(
+					'closure' => array( 'id' => $closure['id'] ),
+					'fiscal' => array(),
+				),
+				static function () {
+					return 'document';
+				}
+			);
+			$this->fail( 'Expected print stamp failure.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure print stamp failed.', $error->getMessage() );
+			$this->assert_event( 'warning', 'Closure print stamp failed.', array( 'closure_id' => $closure['id'] ) );
+			$this->assert_logged_after_rollback( 'Closure print stamp failed.' );
+		} finally {
+			remove_filter( 'query', $fail );
+		}
+		$next = $this->closure_session( $session['register_id'] );
+		$sessions = new Register_Session_Store();
+		$fail = static function ( $sql ) use ( $sessions ) {
+			return 0 === strpos( $sql, 'UPDATE `' . $sessions->table_name() . '`' ) ? 'INVALID SESSION WRITE' : $sql;
+		};
+		add_filter( 'query', $fail );
+		$this->logs = array();
+		$this->rollbacks = array();
+		try {
+			$store->create( $this->closure_fields( $next, 2 ) );
+			$this->fail( 'Expected session write failure.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Session write failed.', $error->getMessage() );
+			$this->assert_event( 'warning', 'Closure session write failed.', array( 'session_id' => $next['id'] ) );
+			$this->assert_logged_after_rollback( 'Closure session write failed.' );
+			foreach ( $this->logs as $entry ) {
+				$this->assertStringStartsNotWith( 'Register session write refused', $entry[1] );
+			}
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+	}
+
 	/** Rolled-back closure transitions must not be reported as successful. */
 	public function test_failed_closure_write_does_not_log_a_committed_state_change(): void {
 		global $wpdb;

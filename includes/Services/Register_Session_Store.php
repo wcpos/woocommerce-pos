@@ -310,13 +310,17 @@ final class Register_Session_Store {
 			)
 		);
 		if ( false === $updated ) {
-			Logger::warning(
-				'Register session write refused: storage operation failed',
-				array(
-					'session_id' => $session['id'],
-					'user_id' => get_current_user_id(),
-				)
-			);
+			// Closure_Store runs this inside its transaction and restates the failure
+			// after the rollback, where a warning survives database logging.
+			if ( ! isset( $fields['closure_id'] ) ) {
+				Logger::warning(
+					'Register session write refused: storage operation failed',
+					array(
+						'session_id' => $session['id'],
+						'user_id' => get_current_user_id(),
+					)
+				);
+			}
 			throw new \RuntimeException( 'Session write failed.' );
 		}
 		$row = $this->get( $session['id'] );

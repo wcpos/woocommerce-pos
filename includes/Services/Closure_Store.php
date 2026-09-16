@@ -255,6 +255,9 @@ final class Closure_Store {
 		// transaction is erased with it and the merchant loses exactly the record this
 		// audit exists to keep.
 		$deferred = null;
+		// A replay found only under the register lock is logged from finally too: its
+		// transaction is rolled back on the way out and would take the row with it.
+		$replay = null;
 		try {
 			$table = ( new Register_Store() )->table_name();
 			// The row lock lasts through commit; subsequent reads see the preceding closure.
@@ -272,7 +275,7 @@ final class Closure_Store {
 			$existing = $this->get( $fields['id'] );
 			if ( $existing ) {
 				// Idempotent replay under the counter lock — the success path, not a fault.
-				$this->log_replay( $existing );
+				$replay = $existing;
 				return $existing;
 			}
 			$existing = $this->for_session( $session['id'] );
@@ -401,17 +404,30 @@ final class Closure_Store {
 				throw new \RuntimeException( 'Closure receipt read failed.' );
 			}
 			$fields += $receipts;
-			$result = $sessions->transition(
-				$session,
-				array(
-					'status' => 'closed',
-					'closure_id' => $fields['id'],
-				) + ( 'counting' === $session['status'] ? array(
-					'closed_at_gmt' => $fields['closed_at_gmt'],
-					'closed_by' => $fields['closed_by'],
-					'counted' => $fields['counted'],
-				) : array() )
-			);
+			try {
+				$result = $sessions->transition(
+					$session,
+					array(
+						'status' => 'closed',
+						'closure_id' => $fields['id'],
+					) + ( 'counting' === $session['status'] ? array(
+						'closed_at_gmt' => $fields['closed_at_gmt'],
+						'closed_by' => $fields['closed_by'],
+						'counted' => $fields['counted'],
+					) : array() )
+				);
+			} catch ( \RuntimeException $error ) {
+				// The session store stays silent on a closure-driven write (see its
+				// transition()); the failure is restated here after the rollback.
+				$deferred = array(
+					'Closure session write failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
+				throw $error;
+			}
 			if ( is_wp_error( $result ) ) {
 				// The session store's own refusal line was written inside this transaction
 				// and is lost under database logging; restate it once the rollback is done.
@@ -456,6 +472,9 @@ final class Closure_Store {
 			}
 			if ( $deferred ) {
 				Logger::warning( $deferred[0], $deferred[1] );
+			}
+			if ( $replay ) {
+				$this->log_replay( $replay );
 			}
 		}
 		$row = $this->get( $fields['id'] );
@@ -573,7 +592,8 @@ final class Closure_Store {
 		$table = $this->table_name();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
 		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET print_count = print_count + 1, last_printed_at_gmt = %s WHERE id = %s", current_time( 'mysql', true ), $id ) ) ) {
-			Logger::warning( 'Closure print stamp failed.', array( 'closure_id' => $id ) );
+			// Callers log this: Closure_Print_Counter runs it inside a transaction whose
+			// rollback would erase a warning written here under database logging.
 			throw new \RuntimeException( 'Closure print stamp failed.' );
 		}
 		$row = $this->get( $id );
