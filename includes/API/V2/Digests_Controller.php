@@ -99,8 +99,9 @@ final class Digests_Controller extends WP_REST_Controller {
 			);
 		}
 		$read_ids = $ids;
-		if ( 'products' === $collection && 'publish' === $request->get_param( 'status' ) ) {
-			$read_ids = $this->index->published_product_ids( $ids );
+		$published_ids = Collections::row( $collection )['digest']['published_ids'] ?? null;
+		if ( null !== $published_ids && 'publish' === $request->get_param( 'status' ) ) {
+			$read_ids = $this->index->$published_ids( $ids );
 		}
 		$digests          = $this->index->read_digests( $collection, $read_ids );
 		$explicit_absence = 'explicit' === $request->get_param( 'absence' );

@@ -45,6 +45,7 @@ namespace WCPOS\WooCommercePOS\Sync;
  *                   name on Digest_Index, so the reader, the proxy stamper and
  *                   the authoritative-absence answer all read one id-space fact
  *                   instead of each re-deciding it.
+ *  - repair       — explicit drill_down/self_heal support, with a reason for nulls.
  *  - fingerprint  — UNIVERSAL config-change detection membership; every
  *                   collection carries it (null is invalid), with the barcode
  *                   flag naming recipe membership. The contract-version lever
@@ -83,8 +84,20 @@ final class Collections {
 			'journal'     => array( 'object_type' => 'product' ),
 			'digest'      => array(
 				'id_space' => 'products',
+				'label' => '',
 				'object_types' => array( 'product', 'variation' ),
+				'child_type' => 'variation',
+				'select' => 'row_digest_select_sql',
+				'id_column' => 'p.ID',
+				'live_max' => 'product_live_max_id_sql',
+				'servable' => 'servable_product_ids',
+				'published_ids' => 'published_product_ids',
 				'live_rows' => 'live_row_exists_sql',
+			),
+			'repair'      => array(
+				'drill_down' => true,
+				'self_heal'  => true,
+				'reason'     => 'Products support drill-down and automatic repair, including variations in their shared id-space.',
 			),
 			'fingerprint' => array( 'barcode' => true ),
 			'backfill'    => array(
@@ -112,6 +125,11 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/products' ),
 			'journal'     => array( 'object_type' => 'variation' ),
 			'digest'      => null, // folded into the products id-space (owner row carries it)
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'Variations are repaired through the products id-space.',
+			),
 			'fingerprint' => array( 'barcode' => true ),
 			'backfill'    => array(
 				'kind' => 'post',
@@ -136,8 +154,17 @@ final class Collections {
 			'journal'     => array( 'object_type' => 'order' ), // orders consume the journal via the payload-windowed pull lane, catalogue via the pointer stream
 			'digest'      => array(
 				'id_space' => 'orders',
+				'label' => 'order ',
 				'object_types' => array( 'order' ),
+				'select' => 'order_digest_select_sql',
+				'id_column' => '{id}',
+				'live_max' => 'order_live_max_id_sql',
 				'live_rows' => 'order_live_row_exists_sql',
+			),
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'Detection is available; drill-down and automatic repair are not implemented.',
 			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array( 'kind' => 'order' ),
@@ -160,8 +187,17 @@ final class Collections {
 			'journal'     => array( 'object_type' => 'customer' ),
 			'digest'      => array(
 				'id_space' => 'customers',
+				'label' => 'customer ',
 				'object_types' => array( 'customer' ),
+				'select' => 'customer_digest_select_sql',
+				'id_column' => 'u.ID',
+				'live_max' => 'customer_live_max_id_sql',
 				'live_rows' => 'customer_live_row_exists_sql',
+			),
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'Detection is available; drill-down and automatic repair are not implemented.',
 			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array( 'kind' => 'user' ),
@@ -184,6 +220,11 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/products/categories' ),
 			'journal'     => array( 'object_type' => 'category' ),
 			'digest'      => null,
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'No digest id-space is implemented for this collection.',
+			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'term',
@@ -208,6 +249,11 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/products/brands' ),
 			'journal'     => array( 'object_type' => 'brand' ),
 			'digest'      => null,
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'No digest id-space is implemented for this collection.',
+			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'term',
@@ -232,6 +278,11 @@ final class Collections {
 			'write'       => null, // read-only: no client push path exists
 			'journal'     => array( 'object_type' => 'tag' ),
 			'digest'      => null,
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'No digest id-space is implemented for this collection.',
+			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'term',
@@ -256,6 +307,11 @@ final class Collections {
 			'write'       => array( 'route' => '/wc/v3/coupons' ),
 			'journal'     => array( 'object_type' => 'coupon' ),
 			'digest'      => null,
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'No digest id-space is implemented for this collection.',
+			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => array(
 				'kind' => 'post',
@@ -274,6 +330,11 @@ final class Collections {
 			'write'       => null, // principled read-only
 			'journal'     => array( 'object_type' => 'tax_rate' ),
 			'digest'      => null,
+			'repair'      => array(
+				'drill_down' => null,
+				'self_heal'  => null,
+				'reason'     => 'No digest id-space is implemented for this collection.',
+			),
 			'fingerprint' => array( 'barcode' => false ),
 			'backfill'    => null, // no meta store to stamp
 		),
