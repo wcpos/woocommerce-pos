@@ -387,6 +387,57 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_session_transition_refused', $unchanged->get_data()['code'] );
 	}
 
+	/** The cashier who opened the drawer cannot approve its variance after a user switch. */
+	public function test_approval_refuses_the_cashier_who_opened_the_session(): void {
+		$opener = wp_get_current_user();
+		$opener->add_cap( 'manage_woocommerce_pos_closures' );
+		wp_set_password( 'opener-fixture', $opener->ID );
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$this->assertSame( $opener->ID, ( new Register_Session_Store() )->get( $id )['opened_by'] );
+		// The till switches to a second cashier, who counts the drawer the opener filled.
+		$second = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$second->add_cap( 'access_woocommerce_pos' );
+		$second->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $second->ID );
+		$counting = $this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$this->assertSame( 200, $counting->get_status() );
+		// The opener is not the current user, so the requester check passes; the
+		// session's own cashier must still be refused as its approver.
+		$refused = $this->post(
+			'sessions/' . $id . '/approve',
+			array(
+				'username' => $opener->user_login,
+				'password' => 'opener-fixture',
+			)
+		);
+		$this->assertSame( 403, $refused->get_status() );
+		$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $id )['approved_by'] );
+		$close = array(
+			'status' => 'closed',
+			'at' => '2026-09-11T12:00:00Z',
+			'counted' => array( 'cash' => '100' ),
+			'approver_token' => Auth::instance()->generate_access_token( $opener ),
+		);
+		$refused = $this->post( 'sessions/' . $id . '/status', $close );
+		$this->assertSame( 403, $refused->get_status() );
+		$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+		// A third person with closure management still can.
+		$manager = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$close['approver_token'] = Auth::instance()->generate_access_token( $manager );
+		$response = $this->post( 'sessions/' . $id . '/status', $close );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
+	}
+
 	/** Open and closed sessions cannot receive credential approval. */
 	public function test_approve_non_counting_session_returns_conflict(): void {
 		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
