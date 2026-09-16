@@ -81,6 +81,15 @@ class Test_Report_Document_Validator extends WP_UnitTestCase {
 		$this->assertWPError( Report_Document_Validator::validate( $document ) );
 	}
 
+	/** A key starting with "_" would be dropped by the renderers' sanitiser, so the schema forbids it. */
+	public function test_report_private_looking_keys_are_rejected(): void {
+		$document = ( new Receipt_Preview_Fixture_Loader() )->build( 'report' );
+		$document['report']['groups'][0]['rows'][0]['key'] = '_row1';
+		$error = Report_Document_Validator::validate( $document );
+		$this->assertWPError( $error );
+		$this->assertStringContainsString( 'key', $error->get_error_message() );
+	}
+
 	/**
 	 * Assert populated fixture paths are available in the editor.
 	 *

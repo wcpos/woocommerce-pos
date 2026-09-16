@@ -1915,6 +1915,17 @@ class Receipt_Data_Schema {
 			);
 			$report['columns']['items']['properties']['type']['enum'] = array( 'text', 'number', 'money', 'percent', 'datetime' );
 			$report['columns']['items']['properties']['align']['enum'] = array( 'left', 'right' );
+			// The JS renderers' sanitiser drops array entries whose key starts with "_" (private
+			// metadata), so a row, group or cell key may not, or it would vanish from a preview.
+			$public_key = '^[^_]';
+			foreach ( array( 'columns', 'rows', 'groups' ) as $collection ) {
+				$report[ $collection ]['items']['properties']['key']['pattern'] = $public_key;
+			}
+			$report['rows']['items']['properties']['cells']['items']['properties']['key']['pattern']                          = $public_key;
+			$report['groups']['items']['properties']['rows']['items']['properties']['key']['pattern']                          = $public_key;
+			$report['groups']['items']['properties']['rows']['items']['properties']['cells']['items']['properties']['key']['pattern'] = $public_key;
+			$report['groups']['items']['properties']['subtotal']['properties']['cells']['items']['properties']['key']['pattern']      = $public_key;
+			$report['totals']['properties']['cells']['items']['properties']['key']['pattern']                                   = $public_key;
 			$schema['properties']['fiscal']['required'] = array( 'document_type', 'is_report_document' );
 			$schema['properties']['fiscal']['properties']['document_type']['enum'] = array( 'report' );
 			$schema['properties']['fiscal']['properties']['document_type']['default'] = 'report';
