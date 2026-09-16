@@ -154,7 +154,7 @@ class List_Products {
 				// Count the same rows the view lists: WordPress's "All" statuses, which
 				// exclude trash and auto-draft. A trashed product still sits in the id
 				// list, so counting by id alone showed more than the view opens to.
-				$statuses      = array_keys( get_post_stati( array( 'show_in_admin_all_list' => true ) ) );
+				$statuses      = array_values( get_post_stati( array( 'show_in_admin_all_list' => true ) ) );
 				$status_format = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
 				$sql           = "SELECT count(DISTINCT ID) FROM {$wpdb->posts} WHERE post_type = 'product'";
 				$sql          .= $wpdb->prepare( " AND post_status IN ($status_format)", $statuses ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $status_format is from array_fill with %s.
