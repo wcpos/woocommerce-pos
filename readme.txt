@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.15
+Stable tag: 1.10.16
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,14 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.16 - 2026/09/16 =
+
+- **Tills stop showing products the store has hidden from the POS.** Between 1.10.1 and 1.10.14 the POS product search could return a hidden product (fixed in 1.10.15), and a till that searched during that window kept a copy. Upgrading now writes a fresh removal notice for every hidden product and variation, and every till drops its stale copies on its next ordinary sync, with no reset or manual sync needed.
+- **The POS Only and Online Only counts above the WooCommerce products list are accurate.** They counted trashed and auto-draft products that the view never lists; they now count the same statuses as WordPress's own "All" view.
+- **The server no longer reports high load from a guessed CPU count.** On hosts that hide `/proc/cpuinfo`, the load average was divided by one CPU, so any load above 1.8 read as "high" forever and every till slowed its sync. When the CPU count is unknown, no load is reported.
+- **The connection check can no longer be served from a page cache.** The public ping was answered before the cache-control headers were set, so a cached "ok" could mask an outage for the cache's lifetime. It now sends the same no-store headers as every other POS response.
+- **An idle web POS no longer sits at 30% CPU after the cashier stops.** Local database cleanup compacted storage fifty records at a time and rewrote every index between batches; it now compacts in one batch and rewrites the indexes once. The web app loads its storage worker from this plugin, so web merchants receive this fix through this update rather than through the app bundle.
 
 = 1.10.15 - 2026/09/15 =
 
