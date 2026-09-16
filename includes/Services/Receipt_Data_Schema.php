@@ -1710,6 +1710,12 @@ class Receipt_Data_Schema {
 					'type' => 'string',
 					'label' => __( 'Formatted', 'woocommerce-pos' ),
 				),
+				// The column's alignment, copied onto every cell so a logic-less template
+				// can align a number without knowing which column it is rendering.
+				'align' => array(
+					'type' => 'string',
+					'label' => __( 'Alignment', 'woocommerce-pos' ),
+				),
 			),
 		);
 		$rows = array(

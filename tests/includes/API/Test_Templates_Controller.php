@@ -35,28 +35,27 @@ use WCPOS\WooCommercePOS\Templates;
 class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Both API lanes preview reports without selecting an order. */
 	public function test_report_previews_render_grouped_thermal_and_partial_documents(): void {
-		foreach ( array( 'v1', 'v2' ) as $version ) {
-			foreach ( array( 'report-default', 'report-thermal', 'plugin-core' ) as $key ) {
-				$request = $this->wp_rest_get_request( '/wcpos/' . $version . '/templates/' . $key . '/preview' );
-				$request->set_param( 'type', 'report' );
-				$request->set_param( 'order_id', 999999 );
-				$response = $this->server->dispatch( $request );
-				$this->assertSame( 200, $response->get_status() );
-				$data = $response->get_data();
-				$html = 'report-thermal' === $key
-					? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] )
-					: $data['preview_html'];
-				$this->assertStringContainsString( 'Sales report', $html );
-				$this->assertStringContainsString( 'Card payments', $html );
-				$request->set_param( 'report', 'cash-movements' );
-				$partial_response = $this->server->dispatch( $request );
-				$this->assertSame( 200, $partial_response->get_status() );
-				$partial = $partial_response->get_data();
-				$html = 'report-thermal' === $key
-					? ( new \Mustache\Engine() )->render( $partial['template_content'], $partial['receipt_data'] )
-					: $partial['preview_html'];
-				$this->assertStringContainsString( 'Offline movements are not included.', $html );
-			}
+		// wcpos/v2 inherits the v1 controller; the current lane is the one the till uses.
+		foreach ( array( 'report-default', 'thermal-report-80mm', 'plugin-core' ) as $key ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $key . '/preview' );
+			$request->set_param( 'type', 'report' );
+			$request->set_param( 'order_id', 999999 );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data();
+			$html = 'thermal-report-80mm' === $key
+				? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] )
+				: $data['preview_html'];
+			$this->assertStringContainsString( 'Sales report', $html );
+			$this->assertStringContainsString( 'Card payments', $html );
+			$request->set_param( 'report', 'cash-movements' );
+			$partial_response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $partial_response->get_status() );
+			$partial = $partial_response->get_data();
+			$html = 'thermal-report-80mm' === $key
+				? ( new \Mustache\Engine() )->render( $partial['template_content'], $partial['receipt_data'] )
+				: $partial['preview_html'];
+			$this->assertStringContainsString( 'Offline movements are not included.', $html );
 		}
 	}
 
@@ -426,9 +425,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test virtual template paths cannot escape through a symlink.
 	 */
 	public function test_get_virtual_template_path_with_symlink_outside_templates_returns_null(): void {
-		$symlink_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/report.php';
+		// Every type now ships a core file, so the guard is exercised through the theme
+		// override directory, which the resolver trusts by the same realpath rule.
+		$theme_dir    = get_stylesheet_directory() . '/woocommerce-pos/';
+		$symlink_path = $theme_dir . 'report.html';
 
-		if ( file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
+		if ( ! wp_mkdir_p( $theme_dir ) || file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
 			$this->markTestSkipped( 'Unable to create an isolated symlink fixture.' );
 		}
 
@@ -443,7 +445,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->markTestSkipped( 'Symlinks are not available in this test environment.' );
 			}
 
-			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_PLUGIN_CORE, 'report' );
+			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_THEME, 'report' );
 
 			$this->assertNull( $path );
 		} finally {

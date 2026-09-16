@@ -84,7 +84,7 @@ describe('display tabs and table', () => {
 		act(() => display!.click());
 		expect(navigate).toHaveBeenCalledWith({ to: '/', search: { type: 'display' } });
 		expect(buttons.filter((button) => button.disabled).map((button) => button.textContent)).toEqual(
-			['tabs.reportstabs.soon', 'tabs.emailtabs.soon']
+			['tabs.emailtabs.soon']
 		);
 	});
 

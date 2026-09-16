@@ -30,7 +30,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertSame( 'logicless', $template['engine'] );
 		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/report-default.html' ), $template['content'] );
 		$gallery = Templates::get_gallery_templates( 'report' );
-		$this->assertSame( array( 'report-default', 'report-thermal' ), array_column( $gallery, 'key' ) );
+		$this->assertSame( array( 'report-default', 'thermal-report-80mm' ), array_column( $gallery, 'key' ) );
 		foreach ( $gallery as $entry ) {
 			$id = Templates::install_gallery_template( $entry['key'] );
 			$this->assertIsInt( $id );

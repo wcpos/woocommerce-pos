@@ -599,7 +599,7 @@ class Single_Template {
 			'displayStarter'    => $display_starter,
 			'reportStarters'    => 'report' === $type ? array(
 				'logicless' => TemplatesManager::get_gallery_template_by_key( 'report-default' )['content'],
-				'thermal' => TemplatesManager::get_gallery_template_by_key( 'report-thermal' )['content'],
+				'thermal' => TemplatesManager::get_gallery_template_by_key( 'thermal-report-80mm' )['content'],
 			) : null,
 			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),
 			'sampleData'        => $sample_data,

@@ -68,7 +68,7 @@ class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'closure', $config['fieldSchema'] );
 		foreach ( array(
 			'logicless' => 'report-default.html',
-			'thermal' => 'report-thermal.xml',
+			'thermal' => 'thermal-report-80mm.xml',
 		) as $engine => $file ) {
 			$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ), $config['reportStarters'][ $engine ] );
 		}
