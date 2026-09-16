@@ -174,3 +174,17 @@ describe('starter shells', () => {
 		expect(shell).not.toContain('$order->');
 	});
 });
+
+
+describe('report editor', () => {
+	it.each(['logicless', 'thermal'] as const)('uses the bootstrapped %s report starter', (engine) => {
+		const report: EditorConfig = {
+			...config,
+			type: 'report',
+			engine,
+			reportStarters: { logicless: '<h1>{{report.title}}</h1>', thermal: '<receipt>{{report.title}}</receipt>' },
+		};
+		expect(getDefaultDoc(report)).toBe(report.reportStarters?.[engine]);
+		expect(getDefaultDoc({ ...report, postContent: 'Saved report' })).toBe('Saved report');
+	});
+});

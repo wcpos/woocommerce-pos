@@ -17,6 +17,7 @@ export type FieldSchema = Record<string, SectionInfo>;
 export interface EditorConfig {
 	type: 'receipt' | 'display' | 'report';
 	displayStarter: string | null;
+	reportStarters?: Partial<Record<EditorConfig['engine'], string>> | null;
 	isProActive: boolean;
 	displayPreviewUrl: string;
 	fieldSchema: FieldSchema;

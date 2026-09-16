@@ -565,6 +565,28 @@ class Gallery_Registry {
 				'version'       => 1,
 				'preview_data'  => 'standard-receipt-rtl',
 			),
+			'report-default' => array(
+				'title' => __( 'Report', 'woocommerce-pos' ),
+				'description' => __( 'A tabular report with groups, subtotals and totals.', 'woocommerce-pos' ),
+				'type' => 'report',
+				'category' => 'general',
+				'engine' => 'logicless',
+				'output_type' => 'html',
+				'paper_width' => null,
+				'version' => 1,
+				'preview_data' => 'report-sales',
+			),
+			'thermal-report-80mm' => array(
+				'title' => __( 'Thermal Report', 'woocommerce-pos' ),
+				'description' => __( 'A tabular report with groups, subtotals and totals.', 'woocommerce-pos' ),
+				'type' => 'report',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '80mm',
+				'version' => 1,
+				'preview_data' => 'report-sales',
+			),
 		);
 	}
 }

@@ -254,6 +254,40 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Reports have no PHP render path: the legacy engine is not offered and a posted one is coerced.
+	 */
+	public function test_report_templates_never_take_the_legacy_php_engine(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'auto-draft',
+			)
+		);
+		wp_set_object_terms( $post_id, 'report', 'wcpos_template_type' );
+		$handler = new Single_Template();
+
+		ob_start();
+		$handler->render_settings_metabox( get_post( $post_id ) );
+		$html = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'value="legacy-php"', $html );
+		$this->assertMatchesRegularExpression( '/<option value="logicless"\s+selected=/', $html );
+		$this->assertStringContainsString( 'value="thermal"', $html );
+
+		wp_update_post(
+			array(
+				'ID' => $post_id,
+				'post_status' => 'draft',
+			)
+		);
+		$this->simulate_admin_save( $post_id, $this->sample_html, 'legacy-php' );
+		$this->cleanup_post_globals();
+
+		$this->assertSame( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
+		$this->assertSame( 'html', get_post_meta( $post_id, '_template_output_type', true ) );
+	}
+
+	/**
 	 * Display settings lock the engine and hide paper size even on an auto-draft.
 	 */
 	public function test_display_metabox_locks_logicless_engine(): void {

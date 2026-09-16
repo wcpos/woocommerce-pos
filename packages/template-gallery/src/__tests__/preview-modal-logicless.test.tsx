@@ -92,7 +92,7 @@ describe('PreviewModal logicless previews', () => {
 		expect(buildPreviewModalSrcDoc(preview)).toBe(fullHtml);
 	});
 
-	it.each(['receipt', 'closure'] as const)(
+	it.each(['receipt', 'closure', 'report'] as const)(
 		'wraps legacy %s preview_html in the modal iframe fallback',
 		async (type) => {
 			(window as any).wcpos = { templateGallery: { hasPosOrders: true } };
@@ -127,10 +127,10 @@ describe('PreviewModal logicless previews', () => {
 
 			expect(usePreviewMock).toHaveBeenCalledWith(
 				'legacy',
-				type === 'closure' ? undefined : 'latest',
+				type === 'receipt' ? 'latest' : undefined,
 				type
 			);
-			expect(container.querySelector('[role="radiogroup"]') === null).toBe(type === 'closure');
+			expect(container.querySelector('[role="radiogroup"]') === null).toBe(type !== 'receipt');
 			const iframe = container.querySelector('iframe');
 			expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 			expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');

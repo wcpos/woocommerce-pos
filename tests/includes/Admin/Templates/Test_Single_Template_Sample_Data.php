@@ -49,4 +49,28 @@ class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
 		$this->assertIsString( $first_line['line_total_display'] );
 		$this->assertIsNumeric( $first_line['line_total'] );
 	}
+	/** Report bootstrap supplies its own fields, data and generic starters. */
+	public function test_report_editor_bootstrap_uses_report_assets(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_content' => '',
+			)
+		);
+		wp_set_object_terms( $post_id, 'report', 'wcpos_template_type' );
+		$method = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+		$method->setAccessible( true );
+		$script = $method->invoke( new Single_Template(), get_post( $post_id ) );
+		$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+		$this->assertSame( 'report', $config['type'] );
+		$this->assertSame( 'Sales report', $config['sampleData']['report']['title'] );
+		$this->assertArrayHasKey( 'report', $config['fieldSchema'] );
+		$this->assertArrayNotHasKey( 'closure', $config['fieldSchema'] );
+		foreach ( array(
+			'logicless' => 'report-default.html',
+			'thermal' => 'thermal-report-80mm.xml',
+		) as $engine => $file ) {
+			$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ), $config['reportStarters'][ $engine ] );
+		}
+	}
 }
