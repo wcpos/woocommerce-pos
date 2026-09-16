@@ -23,7 +23,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	/** The tabular contract is separate from the unchanged receipt schema. */
 	public function test_report_tree_and_schema_publish_tabular_contract(): void {
 		$tree = Receipt_Data_Schema::get_field_tree( 'report' );
-		$report_keys = array( 'key', 'title', 'subtitle', 'scope', 'group_by', 'columns', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' );
+		$report_keys = array( 'key', 'title', 'subtitle', 'scope', 'group_by', 'columns', 'column_count', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' );
 		$this->assertEqualsCanonicalizing( $report_keys, array_keys( $tree['report']['fields'] ) );
 		$fields = $tree['report']['fields'];
 		foreach ( array( $fields['columns'], $fields['rows'], $fields['rows']['fields']['cells'], $fields['groups'], $fields['groups']['fields']['rows'], $fields['groups']['fields']['rows']['fields']['cells'], $fields['groups']['fields']['subtotal']['fields']['cells'], $fields['totals']['fields']['cells'] ) as $iterable ) {
