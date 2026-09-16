@@ -62,6 +62,32 @@ final class Ping {
 		return self::ROUTE === $rest_route || ( \strlen( $path ) >= \strlen( self::PRETTY_ROUTE ) && self::PRETTY_ROUTE === substr( $path, -\strlen( self::PRETTY_ROUTE ) ) );
 	}
 
+	/**
+	 * Response headers that keep the ping out of proxy and server caches.
+	 *
+	 * The fast path answers before WP REST exists, so Rest_Cors never adds
+	 * its cache-defeating headers here; without these an origin page cache
+	 * served one host's ping (timestamp and pressure bucket) frozen for its
+	 * whole TTL (measured 2026-09-16). Same Cache-Control value as Rest_Cors.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function cache_defeating_headers(): array {
+		return array(
+			'Cache-Control'             => 'private, no-store',
+			'X-LiteSpeed-Cache-Control' => 'no-cache',
+		);
+	}
+
+	/** Belt and braces for drop-in page caches that finalise at shutdown and read constants, not headers. */
+	private static function forbid_page_cache(): void {
+		foreach ( array( 'DONOTCACHEPAGE', 'LSCACHE_NO_CACHE' ) as $constant ) {
+			if ( ! \defined( $constant ) ) {
+				\define( $constant, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.
+			}
+		}
+	}
+
 	/** Serve a matching request before the remaining plugins load. */
 	public static function maybe_serve(): void {
 		$method = isset( $_SERVER['REQUEST_METHOD'] ) && \is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '';
@@ -77,8 +103,12 @@ final class Ping {
 			return;
 		}
 		$data = self::payload();
+		self::forbid_page_cache();
 		http_response_code( 200 );
 		header( 'Content-Type: application/json; charset=UTF-8' );
+		foreach ( self::cache_defeating_headers() as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
 		header( 'Access-Control-Allow-Origin: *' );
 		// Deliberately just the one header this fast path can emit, not the
 		// full Rest_Cors::EXPOSE_HEADERS set: this short-circuits before the
