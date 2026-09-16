@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Services\Closure_Print_Counter;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
@@ -34,6 +35,14 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private $previous_level;
 
+	/**
+	 * Log counts observed at each ROLLBACK, so a warning's position proves it was
+	 * emitted after the rollback that would otherwise erase it under database logging.
+	 *
+	 * @var int[]
+	 */
+	private $rollbacks = array();
+
 	/** Capture only this test's audit events. */
 	public function setUp(): void {
 		parent::setUp();
@@ -41,10 +50,12 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		Logger::set_log_level( 'info' );
 		Logger::reset_dedup_state();
 		add_filter( 'woocommerce_pos_logging', array( $this, 'capture_log' ), 10, 2 );
+		add_filter( 'query', array( $this, 'record_rollback' ) );
 	}
 
 	/** Restore logging and remove committed fixtures. */
 	public function tearDown(): void {
+		remove_filter( 'query', array( $this, 'record_rollback' ) );
 		remove_filter( 'woocommerce_pos_logging', array( $this, 'capture_log' ), 10 );
 		Logger::reset_dedup_state();
 		Logger::$log_level = $this->previous_level;
@@ -59,6 +70,36 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 	public function capture_log( $enabled, $message ): bool {
 		$this->logs[] = array( Logger::$log_level, $message );
 		return false;
+	}
+
+	/** Note how many events had been captured when a transaction rolled back.
+	 *
+	 * @param string $sql Query about to run.
+	 */
+	public function record_rollback( $sql ) {
+		if ( 'ROLLBACK' === $sql ) {
+			$this->rollbacks[] = count( $this->logs );
+		}
+		return $sql;
+	}
+
+	/** Assert an event was emitted only after a ROLLBACK had run.
+	 *
+	 * WooCommerce's database log handler writes through the same connection as the
+	 * store, so a warning logged before the rollback is erased with it.
+	 *
+	 * @param string $message Event message.
+	 */
+	private function assert_logged_after_rollback( string $message ): void {
+		$index = null;
+		foreach ( $this->logs as $position => $entry ) {
+			if ( 0 === strpos( $entry[1], $message . ' | Context: ' ) ) {
+				$index = $position;
+			}
+		}
+		$this->assertNotNull( $index, $message );
+		$this->assertNotEmpty( $this->rollbacks, 'No ROLLBACK ran before: ' . $message );
+		$this->assertLessThanOrEqual( $index, min( $this->rollbacks ), $message . ' was logged before the rollback' );
 	}
 
 	/** Assert one event's level and allowlisted context values.
@@ -304,6 +345,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				'voids' => $fields['voids'],
 			)
 		);
+		$this->assert_logged_after_rollback( 'Cash movement refused: voids target already voided or unavailable' );
 		foreach ( array( 'counting', 'closed' ) as $status ) {
 			$session['status'] = $status;
 			$session['counting_started_at_gmt'] = '2026-09-11 11:00:00';
@@ -313,7 +355,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			$this->assertFalse( $store->accepts( $session, '2026-09-11 11:00:00' ) );
 			$this->assert_event(
 				'warning',
-				'Cash movement refused: created_at_gmt is past the counting cutoff',
+				'Cash movement refused: session status or counting cutoff rejects created_at_gmt',
 				array(
 					'session_id' => $session['id'],
 					'status' => $status,
@@ -363,17 +405,41 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		Logger::reset_dedup_state();
 		$store->recount( $closure, $id, array( 'cash' => '999' ), 'Must not claim new values' );
 		$this->assertStringNotContainsString( 'Must not claim new values', end( $this->logs )[1] );
-		for ( $count = 1; $count <= 2; ++$count ) {
-			$this->assertSame( $count, $store->record_print( $closure['id'] )['print_count'] );
+		$counter = new Closure_Print_Counter();
+		$document = array(
+			'closure' => array( 'id' => $closure['id'] ),
+			'fiscal' => array(),
+		);
+		$render = static function () {
+			return 'document';
+		};
+		foreach ( array(
+			1 => 'Register closure printed',
+			2 => 'Register closure reprinted',
+		) as $count => $message ) {
+			$this->assertSame( 'document', $counter->count_after( $document, $render ) );
 			$this->assert_event(
 				'info',
-				'Register closure reprinted',
+				$message,
 				array(
 					'closure_id' => $closure['id'],
 					'print_count' => $count,
 				)
 			);
 		}
+		// A print whose rendering produces nothing is rolled back and must leave no record.
+		$this->logs = array();
+		$this->assertSame(
+			'',
+			$counter->count_after(
+				$document,
+				static function () {
+					return '';
+				}
+			)
+		);
+		$this->assertSame( array(), $this->logs );
+		$this->assertSame( 2, $store->get( $closure['id'] )['print_count'] );
 		$this->assertWPError( $store->create( $this->closure_fields( $session ) ) );
 		$this->assert_event(
 			'warning',
@@ -383,6 +449,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				'session_id' => $session['id'],
 			)
 		);
+		$this->assert_logged_after_rollback( 'Register closure refused: session already has a closure' );
 	}
 
 	/** Rolled-back closure transitions must not be reported as successful. */
@@ -404,6 +471,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			} catch ( \RuntimeException $error ) {
 				$this->assertSame( 'Closure write failed.', $error->getMessage() );
 				$this->assert_event( 'warning', 'Closure write failed.', array( 'closure_id' => $fields['id'] ) );
+				$this->assert_logged_after_rollback( 'Closure write failed.' );
 				foreach ( $this->logs as $entry ) {
 					$this->assertSame( 'warning', $entry[0] );
 				}
@@ -440,6 +508,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				'next_number' => 6,
 			)
 		);
+		$this->assert_logged_after_rollback( 'Register closure refused: number precedes register sequence' );
 		$store->create( $this->closure_fields( $next, 5 ) );
 		$this->assert_event(
 			'warning',

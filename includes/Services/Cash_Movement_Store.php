@@ -146,14 +146,6 @@ final class Cash_Movement_Store {
 		}
 		try {
 			if ( false === $wpdb->insert( $this->table_name(), $fields ) ) {
-				Logger::warning(
-					'Movement write failed.',
-					array(
-						'movement_id' => $fields['id'],
-						'session_id' => $fields['session_id'],
-						'user_id' => $fields['actor'],
-					)
-				);
 				throw new \RuntimeException( 'Movement write failed.' );
 			}
 			if ( $void ) {
@@ -167,17 +159,13 @@ final class Cash_Movement_Store {
 					)
 				);
 				if ( false === $updated ) {
-					Logger::warning(
-						'Movement void stamp failed.',
-						array(
-							'movement_id' => $fields['id'],
-							'session_id' => $fields['session_id'],
-							'user_id' => $fields['actor'],
-						)
-					);
 					throw new \RuntimeException( 'Movement void stamp failed.' );
 				}
 				if ( 0 === $updated ) {
+					// Roll back BEFORE logging: WooCommerce's database log handler writes
+					// through this same connection, so a warning emitted inside the
+					// transaction is erased with it.
+					$wpdb->query( 'ROLLBACK' );
 					Logger::warning(
 						'Cash movement refused: voids target already voided or unavailable',
 						array(
@@ -187,7 +175,6 @@ final class Cash_Movement_Store {
 							'user_id' => $fields['actor'],
 						)
 					);
-					$wpdb->query( 'ROLLBACK' );
 					return new \WP_Error( 'wcpos_movement_void_refused', __( 'The movement has already been voided or is unavailable.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 				}
 			}
@@ -203,26 +190,10 @@ final class Cash_Movement_Store {
 					'payload' => $fields,
 				)
 			) ) {
-				Logger::warning(
-					'Late movement write failed.',
-					array(
-						'movement_id' => $fields['id'],
-						'session_id' => $fields['session_id'],
-						'user_id' => $fields['actor'],
-					)
-				);
 				throw new \RuntimeException( 'Late movement write failed.' );
 			}
 			if ( $transaction ) {
 				if ( false === $wpdb->query( 'COMMIT' ) ) {
-					Logger::warning(
-						'Movement commit failed.',
-						array(
-							'movement_id' => $fields['id'],
-							'session_id' => $fields['session_id'],
-							'user_id' => $fields['actor'],
-						)
-					);
 					throw new \RuntimeException( 'Movement commit failed.' );
 				}
 			}
@@ -230,6 +201,18 @@ final class Cash_Movement_Store {
 			if ( $transaction ) {
 				$wpdb->query( 'ROLLBACK' );
 			}
+			// Logged after the rollback: WooCommerce's database log handler writes
+			// through this same connection, so a warning emitted inside the
+			// transaction is erased with it and the merchant loses exactly the
+			// failure record this audit exists to keep.
+			Logger::warning(
+				$error->getMessage(),
+				array(
+					'movement_id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+					'user_id' => $fields['actor'],
+				)
+			);
 			throw $error;
 		}
 		$row = $this->get( $fields['id'] );
@@ -256,7 +239,7 @@ final class Cash_Movement_Store {
 		$accepted = 'open' === $session['status'] || ( in_array( $session['status'], array( 'counting', 'closed' ), true ) && null !== $session['counting_started_at_gmt'] && $created_at < $session['counting_started_at_gmt'] );
 		if ( ! $accepted ) {
 			Logger::warning(
-				'Cash movement refused: created_at_gmt is past the counting cutoff',
+				'Cash movement refused: session status or counting cutoff rejects created_at_gmt',
 				array(
 					'session_id' => $session['id'],
 					'status' => $session['status'],

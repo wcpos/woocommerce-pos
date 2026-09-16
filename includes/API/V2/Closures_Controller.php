@@ -84,6 +84,9 @@ class Closures_Controller extends \WP_REST_Controller {
 				}
 				if ( '/print' === substr( $route, -6 ) ) {
 					$row = $store->record_print( $id );
+					if ( $row ) {
+						$store->log_printed( $row );
+					}
 				} elseif ( '/recount' === substr( $route, -8 ) ) {
 					$counted = $this->tenders( $request['counted'] );
 					if ( ! Pos_Uuid::is_uuid( $request['id'] ) || null === $counted || ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {

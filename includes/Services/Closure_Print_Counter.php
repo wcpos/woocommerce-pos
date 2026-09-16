@@ -37,6 +37,7 @@ final class Closure_Print_Counter {
 					throw new \RuntimeException( 'Closure print commit failed.' );
 				}
 				$committed = true;
+				( new Closure_Store() )->log_printed( $row );
 			}
 			return $result;
 		} finally {
