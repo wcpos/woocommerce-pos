@@ -80,6 +80,39 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Processor information resolves a CPU count without guessing.
+	 *
+	 * @dataProvider cpu_count_cpuinfo
+	 *
+	 * @param string|null $cpuinfo  Processor information.
+	 * @param int|null    $expected Expected CPU count.
+	 */
+	public function test_cpu_count_from_cpuinfo_resolves_expected_count( ?string $cpuinfo, ?int $expected ): void {
+		// Arrange: processor information and expected count come from the provider.
+		// Act.
+		$count = \WCPOS\WooCommercePOS\API\V2\Ping::cpu_count_from_cpuinfo( $cpuinfo );
+
+		// Assert.
+		$this->assertSame( $expected, $count );
+	}
+
+	/**
+	 * Provide processor information, including unavailable and unrecognized contents.
+	 *
+	 * @return array<string, array{string|null, int|null}>
+	 */
+	public function cpu_count_cpuinfo(): array {
+		return array(
+			'three processors'   => array( "processor : 0\nprocessor : 1\nprocessor : 2\n", 3 ),
+			'tab separator'      => array( "processor\t: 0\n", 1 ),
+			'ARM description'    => array( "Processor : ARMv7 Processor rev 4 (v7l)\nprocessor : 0\n", 1 ),
+			'empty cpuinfo'      => array( '', null ),
+			'unreadable cpuinfo' => array( null, null ),
+			'no processors'      => array( "model name : x\n", null ),
+		);
+	}
+
+	/**
 	 * Raw request matching accepts only the two exact ping forms.
 	 *
 	 * @dataProvider raw_request_cases
@@ -116,5 +149,4 @@ class Test_Ping_Controller extends WCPOS_REST_Unit_Test_Case {
 			'marker in unrelated' => array( 'GET', '/products?next=/wcpos/v2/ping', null, false ),
 		);
 	}
-
 }
