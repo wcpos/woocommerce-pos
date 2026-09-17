@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
@@ -32,13 +33,13 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
-	/** Render with the actual filesystem default.
+	/** Render with the retained legacy PHP template.
 	 *
 	 * @param array $data Payload.
 	 */
 	private function html( array $data ): string {
 		ob_start();
-		( new Legacy_Php_Renderer() )->render( Templates::get_virtual_template( 'plugin-core', 'closure' ), null, $data );
+		( new Legacy_Php_Renderer() )->render( array( 'file_path' => \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/closure.php' ), null, $data );
 		return ob_get_clean();
 	}
 
@@ -69,6 +70,351 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( 'COPY 1', $html );
 	}
 
+	/** Closure formatting preserves recorded amounts and uses the store-local date shape. */
+	public function test_closure_document_formats_money_dates_and_movement_labels(): void {
+		$timezone = get_option( 'timezone_string' );
+		update_option( 'timezone_string', 'Europe/Madrid' );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fields['breakdowns'] = array(
+				'payment_methods' => array(
+					'cash' => array(
+						'name' => 'Cash drawer',
+						'sales' => '10.0000',
+						'refunds' => '0.0000',
+					),
+				),
+				'tax_rates' => array(
+					'VAT' => array(
+						'net' => '8.0000',
+						'tax' => '2.0000',
+						'gross' => '10.0000',
+					),
+				),
+				'movements' => array(
+					array(
+						'type' => 'paid_out',
+						'amount' => '5.0000',
+						'created_at_gmt' => '2026-09-11 10:00:00',
+						'voided_by' => 'void-id',
+					),
+				),
+			);
+			$row = ( new Closure_Store() )->create( $fields );
+			$data = $this->document( 'closure:' . $row['id'] )->get_data()['data']['closure'];
+			$this->assertSame( '0.0000', $data['period_sales_total'] );
+			$this->assertNotEmpty( $data['period_sales_total_display'] );
+			$this->assertNotEmpty( $data['tenders'][0]['counted_display'] );
+			$this->assertSame( 'Over', $data['tenders'][0]['variance_label'] );
+			$this->assertSame( 'Cash drawer', $data['tenders'][0]['label'] );
+			$this->assertTrue( $data['tenders'][0]['has_variance'] );
+			$this->assertSame( $data['tenders'][0]['variance_display'], $data['tenders'][0]['variance_absolute_display'] );
+			$this->assertSame( '2026-09-11 08:00:00', $data['opened_at_gmt'] );
+			$this->assertSame( '2026-09-11', $data['opened_at']['date_ymd'] );
+			$this->assertStringContainsString( '10:00', $data['opened_at']['time'] );
+			$this->assertNotEmpty( $data['closed_at']['datetime'] );
+			$this->assertSame( 'Cash drawer', $data['breakdowns']['payment_methods'][0]['name'] );
+			$this->assertNotEmpty( $data['breakdowns']['payment_methods'][0]['refunds_display'] );
+			$this->assertSame( 'VAT', $data['breakdowns']['tax_rates'][0]['name'] );
+			$this->assertNotEmpty( $data['breakdowns']['tax_rates'][0]['net_display'] );
+			$movement = $data['breakdowns']['movements'][0];
+			$this->assertSame( 'Paid out', $movement['type_label'] );
+			$this->assertTrue( $movement['voided'] );
+			$this->assertSame( '5.0000', $movement['amount'] );
+			$this->assertNotEmpty( $movement['amount_display'] );
+			$this->assertStringContainsString( '12:00', $movement['created_at']['time'] );
+		} finally {
+			update_option( 'timezone_string', $timezone );
+		}
+	}
+
+	/** A frozen currency and list-form tender label survive store changes. */
+	public function test_closure_currency_snapshot_and_list_labels_survive_store_changes(): void {
+		// Closure writes commit transactions; option writes here would escape test isolation.
+		$currency = 'EUR';
+		$currency_filter = static function () use ( &$currency ) {
+			return $currency;
+		};
+		add_filter( 'pre_option_woocommerce_currency', $currency_filter );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fixture = json_decode( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/preview-data/closure.json' ), true );
+			$fields['breakdowns'] = $fixture['closure']['breakdowns'];
+			$fields['breakdowns']['payment_methods'][0]['name'] = 'Cash drawer';
+			$row = ( new Closure_Store() )->create( $fields );
+			$this->assertSame( 'EUR', $row['breakdowns']['currency'] );
+			$currency = 'USD';
+			$data = $this->document( 'closure:' . $row['id'] )->get_data()['data'];
+			$this->assertSame( 'EUR', $data['order']['currency'] );
+			$this->assertStringContainsString( '€', $data['closure']['tenders'][0]['counted_display'] );
+			$this->assertSame( 'Cash drawer', $data['closure']['tenders'][0]['label'] );
+			$this->assertSame( 'Closure', $data['i18n']['closure'] );
+			$this->assertTrue( $data['closure']['has_tax_rates'] );
+		} finally {
+			remove_filter( 'pre_option_woocommerce_currency', $currency_filter );
+		}
+	}
+
+	/** The field schema exposes the recorded formatting object and its numeric precision. */
+	public function test_closure_schema_exposes_money_format_snapshot(): void {
+		$tree = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( 'closure' );
+		$format = $tree['closure']['fields']['breakdowns.money_format'];
+		$this->assertSame( 'object', $format['type'] );
+		$this->assertSame( 'number', $format['fields']['price_num_decimals']['type'] );
+		foreach ( array( 'currency_position', 'currency_symbol', 'price_decimal_separator', 'price_thousand_separator' ) as $field ) {
+			$this->assertSame( 'string', $format['fields'][ $field ]['type'] );
+		}
+	}
+
+	/** Money formatting is frozen for stored closures, but live for X-reports and legacy rows. */
+	public function test_closure_money_format_snapshot_survives_store_changes(): void {
+		$options = array(
+			'woocommerce_currency' => 'EUR',
+			'woocommerce_price_num_decimals' => 4,
+			'woocommerce_price_decimal_sep' => ',',
+			'woocommerce_price_thousand_sep' => '.',
+			'woocommerce_currency_pos' => 'right_space',
+		);
+		$filters = array();
+		foreach ( $options as $key => $value ) {
+			$filters[ $key ] = static function () use ( &$options, $key ) {
+				return $options[ $key ];
+			};
+			add_filter( 'pre_option_' . $key, $filters[ $key ] );
+		}
+		try {
+			$session = $this->closure_session();
+			$fields = $this->closure_fields( $session );
+			$fields['counted']['cash'] = '1101.5678';
+			$fields['breakdowns']['movements'] = array(
+				array(
+					'type' => 'paid_in',
+					'amount' => '1234.5678',
+				),
+			);
+			// Untrusted client hints must be replaced by the resolver snapshot.
+			$fields['breakdowns']['money_format'] = array( 'price_num_decimals' => 1 );
+			$store = new Closure_Store();
+			$row = $store->create( $fields );
+			$row = $store->get( $row['id'] );
+			$this->assertSame( 'EUR', $row['breakdowns']['currency'] );
+			$snapshot = array(
+				'currency_position' => 'right_space',
+				'currency_symbol' => get_woocommerce_currency_symbol( 'EUR' ),
+				'price_thousand_separator' => '.',
+				'price_decimal_separator' => ',',
+				'price_num_decimals' => 4,
+			);
+			$this->assertSame( $snapshot, $row['breakdowns']['money_format'] );
+			$options['woocommerce_price_num_decimals'] = 2;
+			$options['woocommerce_price_decimal_sep'] = '.';
+			$options['woocommerce_price_thousand_sep'] = ',';
+			$options['woocommerce_currency_pos'] = 'left';
+			$builder = new Receipt_Data_Builder();
+			$data = $builder->build_closure_document( $row );
+			$this->assertSame( $snapshot, array_intersect_key( $data['presentation_hints'], $snapshot ) );
+			$this->assertSame( '1.101,5678 €', $data['closure']['tenders'][0]['counted_display'] );
+			$this->assertSame( '1.234,5678 €', $data['closure']['breakdowns']['movements'][0]['amount_display'] );
+			$this->assertSame( '0,0000 €', $data['closure']['period_sales_total_display'] );
+			// Even an input session carrying a snapshot must remain live in X-report mode.
+			$session['breakdowns']['money_format'] = $snapshot;
+			$live = $builder->build_closure_document( $session, true );
+			$this->assertSame( 2, $live['presentation_hints']['price_num_decimals'] );
+			$this->assertSame( '€100.00', $live['closure']['breakdowns']['opening_float']['counted_display'] );
+			unset( $row['breakdowns']['money_format'] );
+			$legacy = $builder->build_closure_document( $row );
+			$this->assertSame( '€1,101.57', $legacy['closure']['tenders'][0]['counted_display'] );
+			$this->assertSame( 2, $legacy['presentation_hints']['price_num_decimals'] );
+			$row['breakdowns']['money_format'] = $snapshot;
+			unset( $row['id'] );
+			$preview = $builder->build_closure_document( $row );
+			$this->assertSame( '€1,101.57', $preview['closure']['tenders'][0]['counted_display'] );
+		} finally {
+			foreach ( $filters as $key => $filter ) {
+				remove_filter( 'pre_option_' . $key, $filter );
+			}
+		}
+	}
+
+	/** Reprints use the timezone recorded at closure; older rows use the live timezone. */
+	public function test_closure_timezone_snapshot_survives_store_timezone_change(): void {
+		$timezone = 'Europe/Madrid';
+		$timezone_filter = static function () use ( &$timezone ) {
+			return $timezone;
+		};
+		add_filter( 'woocommerce_store_get_timezone', $timezone_filter );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fields['breakdowns']['timezone'] = 'UTC'; // Client values do not override the store snapshot.
+			$fields['breakdowns']['movements'] = array(
+				array(
+					'type' => 'paid_in',
+					'amount' => '5.0000',
+					'created_at_gmt' => $fields['opened_at_gmt'],
+				),
+			);
+			$row = ( new Closure_Store() )->create( $fields );
+			$this->assertSame( 'Europe/Madrid', $row['breakdowns']['timezone'] );
+			$original = $this->document( 'closure:' . $row['id'], 'print' )->get_data()['data']['closure'];
+			$this->assertStringContainsString( '10:00', $original['opened_at']['time'] );
+			$timezone = 'America/New_York';
+
+			$reprint = $this->document( 'closure:' . $row['id'], 'print' )->get_data()['data']['closure'];
+
+			$this->assertSame( $original['opened_at'], $reprint['opened_at'] );
+			$this->assertSame( $original['closed_at'], $reprint['closed_at'] );
+			$this->assertSame( $original['breakdowns']['movements'][0]['created_at'], $reprint['breakdowns']['movements'][0]['created_at'] );
+			unset( $row['breakdowns']['timezone'] );
+			$legacy = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+			$this->assertNotSame( $original['opened_at']['time'], $legacy['closure']['opened_at']['time'] );
+		} finally {
+			remove_filter( 'woocommerce_store_get_timezone', $timezone_filter );
+		}
+	}
+
+	/** Malformed breakdown entries cannot reach the typed money formatter. */
+	public function test_closure_document_non_array_breakdown_rows_are_skipped(): void {
+		$fields = $this->closure_fields( $this->closure_session() );
+		$fields['breakdowns'] = array(
+			'payment_methods' => array( 'cash' ),
+			'tax_rates' => array( null, 42 ),
+			'movements' => array(
+				false,
+				'paid_out',
+				array(
+					'type' => 'paid_in',
+					'amount' => '5.0000',
+				),
+			),
+		);
+		$row = ( new Closure_Store() )->create( $fields );
+
+		$response = $this->document( 'closure:' . $row['id'] );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data()['data']['closure'];
+		$this->assertSame( array(), $data['breakdowns']['payment_methods'] );
+		$this->assertSame( array(), $data['breakdowns']['tax_rates'] );
+		$this->assertFalse( $data['has_payment_methods'] );
+		$this->assertFalse( $data['has_tax_rates'] );
+		$this->assertTrue( $data['has_movements'] );
+		$this->assertCount( 1, $data['breakdowns']['movements'] );
+		$this->assertSame( '5.0000', $data['breakdowns']['movements'][0]['amount'] );
+		$this->assertNotEmpty( $data['breakdowns']['movements'][0]['amount_display'] );
+	}
+
+	/** Scalar sections never reach array-only breakdown operations. */
+	public function test_closure_document_scalar_sections_are_skipped(): void {
+		$row = $this->closure_fields( $this->closure_session() );
+		foreach ( array(
+			'payment_methods' => 'cash',
+			'tax_rates' => 42,
+			'movements' => false,
+			'opening_float' => 5,
+		) as $section => $value ) {
+			$row['breakdowns'] = array( $section => $value );
+			$data = ( new Receipt_Data_Builder() )->build_closure_document( $row )['closure'];
+			$this->assertSame( array(), $data['breakdowns'][ $section ] );
+		}
+	}
+
+	/** Presentation hints expose the same clock convention as server dates. */
+	public function test_closure_document_time_format_controls_hour12_hint(): void {
+		$row = $this->closure_fields( $this->closure_session() );
+		$original = get_option( 'time_format' );
+		try {
+			foreach ( array(
+				'H:i' => false,
+				'g:i a' => true,
+			) as $format => $hour12 ) {
+				update_option( 'time_format', $format );
+				$data = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+				$this->assertSame( $hour12, $data['presentation_hints']['hour12'] );
+			}
+		} finally {
+			update_option( 'time_format', $original );
+		}
+	}
+
+	/** Decimal strings retain cents and round with carry without a float conversion. */
+	public function test_closure_document_decimal_strings_format_exactly(): void {
+		$row = $this->closure_fields( $this->closure_session() );
+		$row['breakdowns'] = array( 'currency' => 'USD' );
+		$options = array(
+			'woocommerce_price_num_decimals' => 2,
+			'woocommerce_price_thousand_sep' => ',',
+			'woocommerce_price_decimal_sep' => '.',
+			'woocommerce_currency_pos' => 'left',
+		);
+		$original = array();
+		foreach ( $options as $key => $value ) {
+			$original[ $key ] = get_option( $key );
+			update_option( $key, $value );
+		}
+		try {
+			foreach ( array(
+				'999999999999999.9900' => '$999,999,999,999,999.99',
+				'999999999999999.9950' => '$1,000,000,000,000,000.00',
+				'-999999999999999.9950' => '-$1,000,000,000,000,000.00',
+				'1.0050' => '$1.01',
+			) as $value => $expected ) {
+				$row['period_sales_total'] = $value;
+				$data = ( new Receipt_Data_Builder() )->build_closure_document( $row )['closure'];
+				$this->assertSame( $value, $data['period_sales_total'] );
+				$this->assertSame( $expected, $data['period_sales_total_display'] );
+			}
+		} finally {
+			foreach ( $original as $key => $value ) {
+				update_option( $key, $value );
+			}
+		}
+	}
+
+	/** Reprints retain the recorded store identity; older documents use the live store. */
+	public function test_closure_store_snapshot_survives_store_rename(): void {
+		$name = 'Recorded shop';
+		$address = '1 Recorded Street';
+		$name_filter = static function () use ( &$name ) {
+			return $name;
+		};
+		$address_filter = static function () use ( &$address ) {
+			return $address;
+		};
+		add_filter( 'woocommerce_store_get_name', $name_filter );
+		add_filter( 'woocommerce_store_get_store_address', $address_filter );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fields['breakdowns']['store'] = array(
+				'name' => 'Client supplied name',
+				'address_lines' => array(),
+			);
+			$row = ( new Closure_Store() )->create( $fields );
+			$this->assertSame( 'Recorded shop', $row['breakdowns']['store']['name'] );
+			$this->assertContains( '1 Recorded Street', $row['breakdowns']['store']['address_lines'] );
+			$name = 'Renamed shop';
+			$address = '2 New Street';
+
+			$data = $this->document( 'closure:' . $row['id'], 'print' )->get_data()['data'];
+
+			$this->assertSame( 'Recorded shop', $data['store']['name'] );
+			$this->assertSame( $row['breakdowns']['store']['address_lines'], $data['store']['address_lines'] );
+			unset( $row['breakdowns']['store'] );
+			$legacy = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+			$this->assertSame( 'Renamed shop', $legacy['store']['name'] );
+			$this->assertContains( '2 New Street', $legacy['store']['address_lines'] );
+			$row['breakdowns']['store'] = array(
+				'name' => '',
+				'address_lines' => array(),
+			);
+			$empty = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+			$this->assertSame( '', $empty['store']['name'] );
+			$this->assertSame( array(), $empty['store']['address_lines'] );
+		} finally {
+			remove_filter( 'woocommerce_store_get_name', $name_filter );
+			remove_filter( 'woocommerce_store_get_store_address', $address_filter );
+		}
+	}
+
 	/** A thin X-report needs no closure, number or count. */
 	public function test_xreport_live_session_and_missing_or_scoped_documents(): void {
 		$session = $this->closure_session();
@@ -77,10 +423,15 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data()['data'];
 		$this->assertSame( 'xreport', $data['fiscal']['document_type'] );
+		$this->assertTrue( $data['closure']['has_sales'] );
+		$this->assertFalse( $data['closure']['has_tax_rates'] );
+		$this->assertFalse( $data['closure']['has_perpetual'] );
+		$this->assertFalse( $data['closure']['has_payment_methods'] );
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );
 		$this->assertTrue( $data['fiscal']['is_x_report'] );
 		$this->assertSame( '', $data['fiscal']['receipt_number'] );
 		$this->assertSame( '140.0000', $data['closure']['expected']['cash'] );
+		$this->assertSame( 'Cash', $data['closure']['tenders'][0]['label'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['transaction_count'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['refund_count'] );
 		$this->assertStringContainsString( 'X-report · Closure fixture', $this->html( $data ) );
@@ -231,7 +582,11 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
-		$this->assertStringContainsString( 'Closure 42 · Main register', $data['preview_html'] );
+		$text = wp_strip_all_tags( $data['preview_html'] );
+		$this->assertStringContainsString( 'Closure 42', $text );
+		$this->assertStringContainsString( 'Main register', $text );
+		$this->assertMatchesRegularExpression( '/\b178\.00\b/', $text );
+		$this->assertStringNotContainsString( 'COPY', $text );
 		$this->assertArrayNotHasKey( 'requires_order', $data );
 		$this->assertSame( 'closure', $data['receipt_data']['fiscal']['document_type'] );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
@@ -304,6 +659,10 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			$reads
 		);
 		$this->assertSame( '147.0000', $data['closure']['expected']['cash'] );
+		$this->assertNotEmpty( $data['closure']['tenders'][0]['expected_display'] );
+		$this->assertNotEmpty( $data['closure']['opened_at']['datetime'] );
+		$this->assertSame( 'Paid in', $data['closure']['breakdowns']['movements'][0]['type_label'] );
+		$this->assertFalse( $data['closure']['breakdowns']['movements'][0]['voided'] );
 		$this->assertSame( 'Ledger cashier', $data['closure']['breakdowns']['cashiers'][0]['name'] );
 		$this->assertStringContainsString( 'Live movement', $this->html( $data ) );
 		// The fixture's register is named "Closure fixture"; only the heading must not say Closure.
@@ -415,7 +774,11 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		) as $document => $heading ) {
 			$page = $this->render_receipt_page( 0, array( 'document' => $document ) );
 			$this->assertNull( $page['error'] );
-			$this->assertStringContainsString( '<h1>' . $heading, $page['output'] );
+			$this->assertStringContainsString( $heading, wp_strip_all_tags( $page['output'] ) );
+			$this->assertStringNotContainsString( 'COPY', $page['output'] );
+			if ( 'closure:' . $row['id'] === $document ) {
+				$this->assertMatchesRegularExpression( '/\b101\.00\b/', wp_strip_all_tags( $page['output'] ) );
+			}
 		}
 		foreach ( array( 'closure:', 'xreport:' ) as $prefix ) {
 			$page = $this->render_receipt_page( 0, array( 'document' => $prefix . wp_generate_uuid4() ) );

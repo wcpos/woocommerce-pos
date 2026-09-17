@@ -37,6 +37,8 @@ const previewKeys = new Set([
 	'narrow-receipt',
 	'report-default',
 	'thermal-report-80mm',
+	'closure-default',
+	'thermal-closure-80mm',
 ]);
 
 function getPreviewBaseUrl(): string | undefined {

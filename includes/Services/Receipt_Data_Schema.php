@@ -1392,7 +1392,7 @@ class Receipt_Data_Schema {
 			return self::get_report_field_tree( $tree );
 		}
 		if ( 'closure' === $type ) {
-			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'register', 'software', 'fiscal', 'i18n' ) ) );
+			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'store', 'register', 'software', 'fiscal', 'i18n' ) ) );
 			$tree['order']['fields'] = array_intersect_key( $tree['order']['fields'], array_flip( array( 'currency' ) ) );
 			$tree['register']['fields']['store_id'] = array(
 				'type'  => 'number',
@@ -1403,6 +1403,18 @@ class Receipt_Data_Schema {
 				'label' => __( 'Closure', 'woocommerce-pos' ),
 				'fields' => array(),
 			);
+			foreach ( array(
+				'sales' => 'sales',
+				'payment_methods' => 'payment_method',
+				'tax_rates' => 'tax_rates',
+				'perpetual' => 'perpetual_totals',
+				'movements' => 'cash_movements',
+			) as $section => $label_key ) {
+				$tree['closure']['fields'][ 'has_' . $section ] = array(
+					'type' => 'boolean',
+					'label' => $tree['i18n']['fields'][ $label_key ]['label'],
+				);
+			}
 			$field_types = array_fill_keys( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ), 'money' );
 			$field_types += array_fill_keys( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ), 'number' );
 			foreach ( array(
@@ -1414,6 +1426,8 @@ class Receipt_Data_Schema {
 				'business_day' => __( 'Business Day', 'woocommerce-pos' ),
 				'opened_at_gmt' => __( 'Opened (UTC)', 'woocommerce-pos' ),
 				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
+				'breakdowns.currency' => __( 'Currency recorded at closure (older documents use current store currency)', 'woocommerce-pos' ),
+				'breakdowns.timezone' => __( 'Timezone recorded at closure (older documents use current store timezone)', 'woocommerce-pos' ),
 				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
 				'breakdowns.labels.opened_by_name' => __( 'Opened By', 'woocommerce-pos' ),
 				'breakdowns.labels.closed_by_name' => __( 'Closed By', 'woocommerce-pos' ),
@@ -1445,6 +1459,45 @@ class Receipt_Data_Schema {
 					'label' => $label,
 				);
 			}
+			$tree['closure']['fields']['breakdowns.money_format'] = array(
+				'type' => 'object',
+				'label' => __( 'Money format recorded at closure', 'woocommerce-pos' ),
+				'fields' => array(),
+			);
+			foreach ( array(
+				'currency_position' => __( 'Currency Position', 'woocommerce-pos' ),
+				'currency_symbol' => __( 'Currency Symbol', 'woocommerce-pos' ),
+				'price_decimal_separator' => __( 'Decimal Separator', 'woocommerce-pos' ),
+				'price_thousand_separator' => __( 'Thousand Separator', 'woocommerce-pos' ),
+				'price_num_decimals' => __( 'Number of Decimals', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields']['breakdowns.money_format']['fields'][ $field ] = array(
+					'type' => 'price_num_decimals' === $field ? 'number' : 'string',
+					'label' => $label,
+				);
+			}
+			$tree['closure.tenders'] = array(
+				'label' => __( 'Tenders', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields' => array(
+					'name' => array(
+						'type' => 'string',
+						'label' => __( 'Tender', 'woocommerce-pos' ),
+					),
+					'expected' => array(
+						'type' => 'money',
+						'label' => __( 'Expected', 'woocommerce-pos' ),
+					),
+					'counted' => array(
+						'type' => 'money',
+						'label' => __( 'Counted', 'woocommerce-pos' ),
+					),
+					'variance' => array(
+						'type' => 'money',
+						'label' => __( 'Variance', 'woocommerce-pos' ),
+					),
+				),
+			);
 			foreach ( array(
 				'counted' => __( 'Counted by Tender', 'woocommerce-pos' ),
 				'expected' => __( 'Expected by Tender', 'woocommerce-pos' ),
@@ -1530,6 +1583,106 @@ class Receipt_Data_Schema {
 				),
 			);
 
+			foreach ( array(
+				'opened_at' => __( 'Opened', 'woocommerce-pos' ),
+				'closed_at' => __( 'Closed', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree[ 'closure.' . $field ] = array(
+					'label' => $label,
+					'fields' => self::get_date_field_tree_fields(),
+				);
+			}
+			$tree['closure.tenders']['fields']['variance_label'] = array(
+				'type' => 'string',
+				'label' => __( 'Variance Label (Over / Short / Exact)', 'woocommerce-pos' ),
+			);
+			$tree['closure.tenders']['fields']['label'] = array(
+				'type' => 'string',
+				'label' => __( 'Tender Title', 'woocommerce-pos' ),
+			);
+			$tree['closure.tenders']['fields']['has_variance'] = array(
+				'type' => 'boolean',
+				'label' => __( 'Non-zero Variance', 'woocommerce-pos' ),
+			);
+			$tree['closure.tenders']['fields']['variance_absolute_display'] = array(
+				'type' => 'string',
+				'label' => __( 'Absolute Variance (Formatted)', 'woocommerce-pos' ),
+			);
+			foreach ( array(
+				'payment_methods' => array(
+					'method' => __( 'Tender Key', 'woocommerce-pos' ),
+					'name' => __( 'Payment Method', 'woocommerce-pos' ),
+					'sales' => __( 'Sales', 'woocommerce-pos' ),
+					'refunds' => __( 'Refunds', 'woocommerce-pos' ),
+				),
+				'tax_rates' => array(
+					'name' => __( 'Tax Rate', 'woocommerce-pos' ),
+					'net' => __( 'Net', 'woocommerce-pos' ),
+					'tax' => __( 'Tax', 'woocommerce-pos' ),
+					'gross' => __( 'Gross', 'woocommerce-pos' ),
+				),
+				'movements' => array( 'amount' => __( 'Amount', 'woocommerce-pos' ) ),
+			) as $section => $fields ) {
+				$key = 'closure.breakdowns.' . $section;
+				$tree[ $key ] = array(
+					'label' => $tree['closure']['fields'][ 'breakdowns.' . $section ]['label'],
+					'is_array' => true,
+					'fields' => array(),
+				);
+				foreach ( $fields as $field => $label ) {
+					$tree[ $key ]['fields'][ $field ] = array(
+						'type' => in_array( $field, array( 'name', 'method' ), true ) ? 'string' : 'money',
+						'label' => $label,
+					);
+				}
+			}
+			$tree['closure.breakdowns.cashiers'] = array(
+				'label'    => __( 'Cashiers', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'id'   => array(
+						'type'  => 'number',
+						'label' => __( 'Cashier ID', 'woocommerce-pos' ),
+					),
+					'name' => array(
+						'type'  => 'string',
+						'label' => __( 'Cashier Name', 'woocommerce-pos' ),
+					),
+				),
+			);
+			unset( $tree['closure']['fields']['breakdowns.cashiers'] );
+			$movement_fields = &$tree['closure.breakdowns.movements']['fields'];
+			foreach ( array(
+				'type' => __( 'Type', 'woocommerce-pos' ),
+				'type_label' => __( 'Movement Label', 'woocommerce-pos' ),
+				'reason' => __( 'Reason', 'woocommerce-pos' ),
+				'created_at_gmt' => __( 'Created (UTC)', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$movement_fields[ $field ] = array(
+					'type' => 'string',
+					'label' => $label,
+				);
+			}
+			$movement_fields['voided'] = array(
+				'type' => 'boolean',
+				'label' => __( 'Voided', 'woocommerce-pos' ),
+			);
+			$movement_fields['created_at'] = array(
+				'type' => 'object',
+				'label' => __( 'Created', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
+			);
+			unset( $movement_fields );
+			foreach ( array( 'closure', 'closure.tenders', 'closure.breakdowns.payment_methods', 'closure.breakdowns.tax_rates', 'closure.breakdowns.movements' ) as $section ) {
+				foreach ( $tree[ $section ]['fields'] as $field => $definition ) {
+					if ( 'money' === $definition['type'] && ( 'closure' !== $section || ! preg_match( '/^(counted|expected|variance)\./', $field ) ) ) {
+						$tree[ $section ]['fields'][ $field . '_display' ] = array(
+							'type' => 'string',
+							'label' => $definition['label'] . ' (' . __( 'Formatted', 'woocommerce-pos' ) . ')',
+						);
+					}
+				}
+			}
 		}
 		if ( 'display' === $type ) {
 			$tree['ledger'] = array(

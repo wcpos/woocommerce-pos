@@ -73,4 +73,28 @@ class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
 			$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ), $config['reportStarters'][ $engine ] );
 		}
 	}
+	/** Closure bootstrap supplies its own fields, data and generic starters. */
+	public function test_closure_editor_bootstrap_uses_closure_assets(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_content' => '',
+			)
+		);
+		wp_set_object_terms( $post_id, 'closure', 'wcpos_template_type' );
+		$method = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+		$method->setAccessible( true );
+		$script = $method->invoke( new Single_Template(), get_post( $post_id ) );
+		$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+		$this->assertSame( 'closure', $config['type'] );
+		$this->assertSame( 42, $config['sampleData']['closure']['number'] );
+		$this->assertArrayHasKey( 'closure', $config['fieldSchema'] );
+		$this->assertArrayNotHasKey( 'report', $config['fieldSchema'] );
+		foreach ( array(
+			'logicless' => 'closure-default.html',
+			'thermal' => 'thermal-closure-80mm.xml',
+		) as $engine => $file ) {
+			$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ), $config['closureStarters'][ $engine ] );
+		}
+	}
 }

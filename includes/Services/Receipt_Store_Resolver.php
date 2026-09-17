@@ -264,6 +264,8 @@ class Receipt_Store_Resolver {
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
 			'locale'                   => $this->resolve_locale(),
+			'hour12'                   => Receipt_Date_Formatter::hour12(),
+			'hour_token'               => Receipt_Date_Formatter::hour_token(),
 			'timezone'                 => $this->resolve_store_timezone()->getName(),
 			'currency_position'        => $this->resolve_store_option_string(
 				'get_currency_position',

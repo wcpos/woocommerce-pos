@@ -45,7 +45,11 @@ class Test_Templates extends WP_UnitTestCase {
 		$template = Templates::get_virtual_template( 'plugin-core', 'closure' );
 		$this->assertTrue( $template['is_virtual'] );
 		$this->assertSame( 'closure', $template['type'] );
-		$this->assertStringEndsWith( '/templates/closure.php', $template['file_path'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( 'html', $template['language'] );
+		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/closure-default.html' ), $template['content'] );
+		$this->assertSame( array( 'closure-default', 'thermal-closure-80mm' ), array_column( Templates::get_gallery_templates( 'closure' ), 'key' ) );
+		$this->assertStringEndsWith( '/templates/gallery/closure-default.html', $template['file_path'] );
 		$this->assertContains( 'plugin-core', array_column( Templates::detect_filesystem_templates( 'closure' ), 'id' ) );
 		$this->assertFalse( is_numeric( $template['id'] ) );
 	}

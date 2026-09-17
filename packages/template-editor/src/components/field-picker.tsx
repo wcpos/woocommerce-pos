@@ -24,13 +24,16 @@ export interface FieldTreeEntry {
 
 function expandNestedFields(entry: FieldTreeEntry): FieldTreeEntry {
 	const fields = { ...entry.section.fields };
-	const children = [...entry.children];
+	const children = entry.children.map(expandNestedFields);
 	for (const [key, field] of Object.entries(fields)) {
 		if (!field.fields) continue;
-		children.push(expandNestedFields({
-			sectionKey: entry.section.is_array ? key : `${entry.sectionKey}.${key}`,
-			section: { ...field, fields: field.fields }, children: [],
-		}));
+		children.push(
+			expandNestedFields({
+				sectionKey: entry.section.is_array ? key : `${entry.sectionKey}.${key}`,
+				section: { ...field, fields: field.fields },
+				children: [],
+			})
+		);
 		delete fields[key];
 	}
 	return { ...entry, section: { ...entry.section, fields }, children };

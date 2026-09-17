@@ -561,6 +561,7 @@ class Templates {
 		}
 
 		$is_display = 'display' === $type;
+		$is_logicless = $is_display || 'report' === $type || ( 'closure' === $type && self::TEMPLATE_PLUGIN_CORE === $template_id );
 		$metadata   = array(
 			self::TEMPLATE_THEME                     => array(
 				'title'       => $is_display ? __( 'Theme Display', 'woocommerce-pos' ) : /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
@@ -596,9 +597,9 @@ class Templates {
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
 			'category'          => 'receipt' === $type ? ( $metadata[ $template_id ]['category'] ?? 'receipt' ) : '',
-			'language'          => $is_display || 'report' === $type ? 'html' : 'php',
+			'language'          => $is_logicless ? 'html' : 'php',
 			'file_path'         => $file_path,
-			'engine'            => $is_display || 'report' === $type ? 'logicless' : 'legacy-php',
+			'engine'            => $is_logicless ? 'logicless' : 'legacy-php',
 			'output_type'       => 'html',
 			'paper_width'       => null,
 			'is_virtual'        => true,
@@ -654,8 +655,8 @@ class Templates {
 
 			case self::TEMPLATE_PLUGIN_CORE:
 				$directory = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/';
-				// The shipped report default IS the gallery entry: one file, no copy to drift.
-				$path      = 'report' === $type ? $directory . 'gallery/report-default.html' : $directory . $file_name;
+				// Shipped document defaults ARE gallery entries: one file, no copy to drift.
+				$path      = \in_array( $type, array( 'report', 'closure' ), true ) ? $directory . 'gallery/' . $type . '-default.html' : $directory . $file_name;
 				break;
 
 			case self::TEMPLATE_WP_OVERNIGHT_INVOICE:

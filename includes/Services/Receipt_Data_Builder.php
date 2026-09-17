@@ -62,7 +62,8 @@ class Receipt_Data_Builder {
 		$row['corrections'] = $xreport || empty( $row['id'] ) || ! is_string( $row['id'] ) ? array() : ( new Closure_Store() )->corrections_for( $row['id'] );
 		// Old closures and live X-reports have no label snapshot.
 		$labels = $row['breakdowns']['labels'] ?? array();
-		$register = ( new Register_Store() )->get( $row['register_id'] ) ?? array();
+		$register_id = $row['register_id'] ?? null;
+		$register = is_string( $register_id ) && '' !== $register_id ? ( ( new Register_Store() )->get( $register_id ) ?? array() ) : array();
 		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
 		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
@@ -70,6 +71,90 @@ class Receipt_Data_Builder {
 		$row['breakdowns']['labels'] = $labels;
 		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
 		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
+		$i18n = Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() );
+		$row['has_sales'] = isset( $row['period_sales_total'] ) || isset( $row['period_refunds_total'] ) || isset( $row['breakdowns']['transaction_count'] ) || isset( $row['breakdowns']['refund_count'] );
+		$row['has_perpetual'] = isset( $row['perpetual_sales_total'] ) || isset( $row['perpetual_refunds_total'] );
+		foreach ( array( 'payment_methods', 'tax_rates', 'movements' ) as $section ) {
+			$values = $row['breakdowns'][ $section ] ?? array();
+			$row['breakdowns'][ $section ] = array_filter( is_array( $values ) ? $values : array(), 'is_array' );
+			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
+		}
+		$tender_labels = array();
+		foreach ( $row['breakdowns']['payment_methods'] ?? array() as $key => $payment_method ) {
+			$tender_labels[ $payment_method['method'] ?? $key ] = $payment_method['name'] ?? '';
+		}
+		// Mustache iterates rows, not tender-keyed maps. Keep the stored figures unchanged.
+		$row['tenders'] = array();
+		foreach ( ( $row['counted'] ?? array() ) + ( $row['expected'] ?? array() ) as $method => $amount ) {
+			$row['tenders'][] = array(
+				'name' => (string) $method,
+				'label' => ! empty( $tender_labels[ $method ] ) ? $tender_labels[ $method ] : ucwords( str_replace( array( '_', '-' ), ' ', (string) $method ) ),
+				'expected' => $row['expected'][ $method ] ?? '',
+				'counted' => $row['counted'][ $method ] ?? '',
+				'variance' => $row['variance'][ $method ] ?? '',
+				'has_variance' => 0.0 !== (float) ( $row['variance'][ $method ] ?? 0 ),
+				'variance_label' => ! isset( $row['variance'][ $method ] ) ? '' : ( (float) $row['variance'][ $method ] > 0 ? $i18n['over'] : ( (float) $row['variance'][ $method ] < 0 ? $i18n['short'] : $i18n['exact'] ) ),
+			);
+		}
+		$currency = $row['breakdowns']['currency'] ?? $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
+		$hints = $resolver->build_presentation_hints( $currency );
+		if ( ! $xreport && ! empty( $row['id'] ) ) {
+			$hints = array_replace( $hints, $row['breakdowns']['money_format'] ?? array() );
+		}
+		// Format recorded decimal strings without a float round-trip.
+		$with_money = static function ( array $values, array $fields ) use ( $hints ): array {
+			foreach ( $fields as $field ) {
+				$values[ $field . '_display' ] = self::format_closure_money( (string) ( $values[ $field ] ?? '' ), $hints );
+			}
+			return $values;
+		};
+		$timezone = isset( $row['breakdowns']['timezone'] ) ? new DateTimeZone( $row['breakdowns']['timezone'] ) : $resolver->resolve_store_timezone();
+		$date = static function ( $gmt ) use ( $resolver, $timezone ): array {
+			$timestamp = $gmt ? strtotime( $gmt . ' UTC' ) : false;
+			return false === $timestamp ? Receipt_Date_Formatter::empty() : Receipt_Date_Formatter::from_timestamp( $timestamp, $timezone, $resolver->resolve_locale() );
+		};
+		$row = $with_money( $row, array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total' ) );
+		foreach ( array( 'opened_at', 'closed_at' ) as $field ) {
+			$row[ $field ] = $date( $row[ $field . '_gmt' ] ?? null );
+		}
+		foreach ( $row['tenders'] as &$tender ) {
+			$tender = $with_money( $tender, array( 'expected', 'counted', 'variance' ) );
+			$absolute = $with_money( array( 'amount' => ltrim( $tender['variance'], '-' ) ), array( 'amount' ) );
+			$tender['variance_absolute_display'] = $absolute['amount_display'];
+		}
+		unset( $tender );
+		if ( isset( $row['breakdowns']['opening_float'] ) && ! is_array( $row['breakdowns']['opening_float'] ) ) {
+			$row['breakdowns']['opening_float'] = array();
+		}
+		if ( ! empty( $row['breakdowns']['opening_float'] ) ) {
+			$row['breakdowns']['opening_float'] = $with_money( $row['breakdowns']['opening_float'], array( 'expected', 'counted', 'variance' ) );
+		}
+		foreach ( array(
+			'payment_methods' => array( 'sales', 'refunds' ),
+			'tax_rates' => array( 'net', 'tax', 'gross' ),
+		) as $section => $fields ) {
+			$rows = array();
+			foreach ( $row['breakdowns'][ $section ] ?? array() as $key => $values ) {
+				if ( 'payment_methods' === $section ) {
+					$values['method'] = $values['method'] ?? (string) $key;
+				}
+				$values['name'] = $values['name'] ?? $values['method'] ?? $values['rate'] ?? (string) $key;
+				$rows[] = $with_money( $values, $fields );
+			}
+			$row['breakdowns'][ $section ] = $rows;
+		}
+		foreach ( $row['breakdowns']['movements'] ?? array() as $key => $movement ) {
+			$movement = $with_money( $movement, array( 'amount' ) );
+			$movement['created_at'] = $date( $movement['created_at_gmt'] ?? null );
+			$movement['type_label'] = $i18n[ $movement['type'] ] ?? $movement['type'];
+			$movement['voided'] = ! empty( $movement['voided_by'] );
+			$row['breakdowns']['movements'][ $key ] = $movement;
+		}
+		$row['breakdowns']['movements'] = array_values( $row['breakdowns']['movements'] );
+		$store_section = $resolver->build_store_section();
+		foreach ( array( 'name', 'address_lines' ) as $field ) {
+			$store_section[ $field ] = $row['breakdowns']['store'][ $field ] ?? $store_section[ $field ];
+		}
 		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
 		$fiscal += array(
 			'sequence' => null,
@@ -82,18 +167,64 @@ class Receipt_Data_Builder {
 		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
 		return array(
 			'closure' => $row,
+			'store' => $store_section,
+			'presentation_hints' => $hints,
 			'register' => $register,
 			'software' => array(
 				'name' => 'WCPOS',
 				'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,
 			),
 			'order' => array(
-				'currency' => get_woocommerce_currency(),
+				'currency' => $currency,
 				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
 			),
 			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),
-			'i18n' => Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() ),
+			'i18n' => $i18n,
 		);
+	}
+
+	/**
+	 * Format closure decimals directly, rounding half up on their magnitude.
+	 *
+	 * @param string $value Recorded decimal amount.
+	 * @param array  $hints Store presentation hints.
+	 * @return string
+	 */
+	private static function format_closure_money( string $value, array $hints ): string {
+		if ( '' === $value ) {
+			return '';
+		}
+		$negative = '-' === $value[0];
+		$parts = explode( '.', ltrim( $value, '+-' ), 2 );
+		$decimals = (int) $hints['price_num_decimals'];
+		$fraction = str_pad( $parts[1] ?? '', $decimals + 1, '0' );
+		$digits = $parts[0] . substr( $fraction, 0, $decimals );
+		if ( $fraction[ $decimals ] >= '5' ) {
+			for ( $index = strlen( $digits ) - 1; $index >= 0 && '9' === $digits[ $index ]; --$index ) {
+				$digits[ $index ] = '0';
+			}
+			if ( $index < 0 ) {
+				$digits = '1' . $digits;
+			} else {
+				$digits[ $index ] = (string) ( (int) $digits[ $index ] + 1 );
+			}
+		}
+		$integer = ltrim( $decimals ? substr( $digits, 0, -$decimals ) : $digits, '0' );
+		$integer = '' === $integer ? '0' : $integer;
+		$amount = preg_replace_callback(
+			'/\B(?=(\d{3})+(?!\d))/',
+			static function () use ( $hints ) {
+				return $hints['price_thousand_separator'];
+			},
+			$integer
+		);
+		if ( $decimals ) {
+			$amount .= $hints['price_decimal_separator'] . substr( $digits, -$decimals );
+		}
+		$symbol = html_entity_decode( wp_strip_all_tags( $hints['currency_symbol'] ), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
+		$position = $hints['currency_position'];
+		$space = false !== strpos( $position, '_space' ) ? ' ' : '';
+		return ( $negative ? '-' : '' ) . ( 0 === strpos( $position, 'right' ) ? $amount . $space . $symbol : $symbol . $space . $amount );
 	}
 
 	/**

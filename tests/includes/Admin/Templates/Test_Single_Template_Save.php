@@ -288,6 +288,69 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * New closure templates use offline engines, not legacy PHP.
+	 */
+	public function test_closure_templates_never_take_the_legacy_php_engine(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'auto-draft',
+			)
+		);
+		wp_set_object_terms( $post_id, 'closure', 'wcpos_template_type' );
+		$handler = new Single_Template();
+
+		ob_start();
+		$handler->render_settings_metabox( get_post( $post_id ) );
+		$html = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'value="legacy-php"', $html );
+		$this->assertMatchesRegularExpression( '/<option value="logicless"\s+selected=/', $html );
+		$this->assertStringContainsString( 'value="thermal"', $html );
+
+		wp_update_post(
+			array(
+				'ID' => $post_id,
+				'post_status' => 'draft',
+			)
+		);
+		$this->simulate_admin_save( $post_id, $this->sample_html, 'legacy-php' );
+		$this->cleanup_post_globals();
+
+		$this->assertSame( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
+		$this->assertSame( 'html', get_post_meta( $post_id, '_template_output_type', true ) );
+	}
+
+	/** Existing closure settings must agree with their stored or inferred engine. */
+	public function test_existing_closure_metabox_preserves_legacy_and_offline_engines(): void {
+		$handler = new Single_Template();
+		foreach ( array( 'legacy-php', '', 'logicless', 'thermal' ) as $engine ) {
+			$post_id = $this->factory->post->create(
+				array(
+					'post_type' => 'wcpos_template',
+					'post_status' => 'publish',
+				)
+			);
+			wp_set_object_terms( $post_id, 'closure', 'wcpos_template_type' );
+			if ( $engine ) {
+				update_post_meta( $post_id, '_template_engine', $engine );
+			}
+			ob_start();
+			$handler->render_settings_metabox( get_post( $post_id ) );
+			$html = ob_get_clean();
+			$selected = $engine ? $engine : 'legacy-php';
+			$this->assertMatchesRegularExpression( '/<option value="' . $selected . '"\s+selected=/', $html );
+			$this->assertMatchesRegularExpression( '/<select name="wcpos_template_engine"[^>]+disabled="disabled"/', $html );
+			if ( 'legacy-php' === $selected ) {
+				$this->assertStringContainsString( 'Requires a server connection', $html );
+			} else {
+				$this->assertStringNotContainsString( 'value="legacy-php"', $html );
+				$this->assertStringNotContainsString( 'Requires a server connection', $html );
+			}
+		}
+	}
+
+	/**
 	 * Display settings lock the engine and hide paper size even on an auto-draft.
 	 */
 	public function test_display_metabox_locks_logicless_engine(): void {
