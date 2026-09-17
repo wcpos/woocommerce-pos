@@ -10,6 +10,7 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Services\Order_Notes;
+use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
@@ -119,7 +120,19 @@ class Order_Writer extends Null_Writer {
 
 	/** Forward within the named order hook lifecycle. */
 	public function forward( array $prepared, callable $forward ) {
-		return $this->forward_with_reserved_stock( $prepared, $forward );
+		$declared = $prepared['context'];
+		if ( ! in_array( $declared['operation'] ?? '', array( 'create', 'update' ), true ) ) {
+			return $this->forward_with_reserved_stock( $prepared, $forward );
+		}
+		$payload = $prepared['payload'];
+		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
+		$declared['set_paid'] = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
+		return Order_Write_Intent::open(
+			$declared,
+			function () use ( $prepared, $forward ) {
+				return $this->forward_with_reserved_stock( $prepared, $forward );
+			}
+		);
 	}
 
 	/**
@@ -237,42 +250,19 @@ class Order_Writer extends Null_Writer {
 
 	/** Apply create/update hook policies around one exact forwarded order. */
 	private function forward_with_order_lifecycle( array $prepared, callable $forward ) {
-		$context         = $prepared['context'];
-		$forwarded_order = null;
-		$pre_insert      = static function ( $order, $request, $creating ) use ( $context, &$forwarded_order ) {
-			$is_create = 'create' === $context['operation'];
-			if ( $is_create && $creating && $order instanceof \WC_Order && null === $forwarded_order ) {
-				$forwarded_order = $order;
-			}
-			$target = $is_create ? ( $creating && $order === $forwarded_order ) : ( $order instanceof \WC_Order && $context['id'] === $order->get_id() );
-			if ( $target ) {
-				foreach ( $context['fill_meta'] as $key => $value ) {
-					$order->update_meta_data( $key, $value );
-				}
-			}
-			if ( $is_create && $creating && null !== $context['created_gmt'] && $order instanceof \WC_Order ) {
-				$order->set_date_created( $context['created_gmt'] );
-			}
-			return $order;
-		};
-		$created_via = static function ( $order ) use ( &$forwarded_order ) {
-			if ( $order instanceof \WC_Order && $order === $forwarded_order && 'woocommerce-pos' !== $order->get_created_via() ) {
+		$context = $prepared['context'];
+		$created_via = static function ( $order ) {
+			$intent = Order_Write_Intent::current();
+			if ( $order instanceof \WC_Order && null !== $intent && $intent->is_subject( $order ) && 'woocommerce-pos' !== $order->get_created_via() ) {
 				$order->set_created_via( 'woocommerce-pos' );
 			}
 		};
-		$use_filter = 'create' === $context['operation'] || array() !== $context['fill_meta'];
-		if ( $use_filter ) {
-			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
-		}
 		if ( 'create' === $context['operation'] ) {
 			add_action( 'woocommerce_before_order_object_save', $created_via );
 		}
 		try {
 			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
 		} finally {
-			if ( $use_filter ) {
-				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10 );
-			}
 			if ( 'create' === $context['operation'] ) {
 				remove_action( 'woocommerce_before_order_object_save', $created_via );
 			}

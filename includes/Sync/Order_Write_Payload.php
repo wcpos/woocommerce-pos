@@ -38,6 +38,7 @@ use WP_Error;
  * - Tax IDs: v1 coerces, v2 rejects incomplete entries; V1 refreshes its response after persist_tax_ids; V2::persist uses the same snapshot (absent snapshots on create only; [] clears).
  * - Audit: V1::wcpos_before_order_object_save/create_item/update_item vs V2 audit phases: v2 also handles reassignment, offline payment assertions, and unpaid provenance updates.
  * - Reserved stock: V1::save_object uses request params (absent values null); V2::forward_with_reserved_stock uses payload defaults (status/transaction '', paid false); both use around_paid_create.
+ * - Write intent: both lanes declare through Services\Order_Write_Intent (v1 at create_item, v2 at Order_Writer::forward); v1 update and direct wc/v3 rely on the ad-hoc intent from the request.
  * - HPOS caps: V1 permission overrides retry broad edit/delete order caps; V2 Write_Controller::wcpos_check_permissions remaps read/create and ownership-sensitive edit/delete caps; no payload rule.
  */
 final class Order_Write_Payload {

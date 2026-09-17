@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Integrations;
 
 use WC_Abstract_Order;
 use WC_Order;
-use WP_REST_Request;
+use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 
 /**
  * Keep WooCommerce Tax from restoring stale tax lines onto open POS orders.
@@ -90,47 +90,15 @@ class WooCommerce_Tax {
 	private $suspended = array();
 
 	/**
-	 * The order a WCPOS REST write is about to save, and the status it asked for.
-	 *
-	 * WooCommerce's REST controller recalculates totals before it applies the
-	 * requested status, so a request that reopens a paid order and changes its
-	 * lines recalculates while the persisted status is still paid.
-	 *
-	 * @var array{order: WC_Abstract_Order, status: string}|null
-	 */
-	private $requested = null;
-
-	/**
 	 * Constructor.
 	 *
-	 * Suspend at priority 9, before the plugin's snapshot callback at 10; resume
+	 * Prime at 8, suspend at 9 before the plugin's snapshot at 10, then resume
 	 * from the last priority so nothing re-added runs in the same pass.
 	 */
 	public function __construct() {
-		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'note_requested_status' ), 10, 2 );
 		add_action( self::BEFORE_HOOK, array( $this, 'prime_tax_rates' ), 8, 2 );
 		add_action( self::BEFORE_HOOK, array( $this, 'suspend_tax_preservation' ), 9, 2 );
 		add_action( self::AFTER_HOOK, array( $this, 'resume_tax_preservation' ), self::RESUME_PRIORITY );
-	}
-
-	/**
-	 * Remember the status a REST write asked for, for the recalculation it triggers.
-	 *
-	 * @param mixed                $order   The order about to be saved.
-	 * @param WP_REST_Request|null $request The request.
-	 *
-	 * @return mixed The order, unchanged.
-	 */
-	public function note_requested_status( $order, $request = null ) {
-		$this->requested = null;
-		if ( $order instanceof WC_Abstract_Order && $request instanceof WP_REST_Request ) {
-			$this->requested = array(
-				'order'  => $order,
-				'status' => (string) $request->get_param( 'status' ),
-			);
-		}
-
-		return $order;
 	}
 
 	/**
@@ -329,6 +297,9 @@ class WooCommerce_Tax {
 	/**
 	 * Whether the order is, or is being put back to, still being built up at the till.
 	 *
+	 * WooCommerce recalculates totals before applying the requested status, so
+	 * reopening a paid order recalculates while its persisted status is still paid.
+	 *
 	 * @param WC_Abstract_Order $order The order.
 	 *
 	 * @return bool
@@ -338,9 +309,9 @@ class WooCommerce_Tax {
 			return true;
 		}
 
-		return null !== $this->requested
-			&& $this->requested['order'] === $order
-			&& \in_array( $this->requested['status'], self::OPEN_STATUSES, true );
+		$intent = Order_Write_Intent::current();
+		return null !== $intent && $intent->is_subject( $order )
+			&& \in_array( $intent->requested_status(), self::OPEN_STATUSES, true );
 	}
 
 	/**

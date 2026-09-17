@@ -26,6 +26,7 @@ use WC_Order_Item_Product;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
@@ -83,13 +84,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @var WP_REST_Request|null
 	 */
 	protected $wcpos_request;
-
-	/**
-	 * The order object being created by the current request.
-	 *
-	 * @var WC_Abstract_Order|null
-	 */
-	private $creating_order;
 
 	/**
 	 * Whether High Performance Orders is enabled.
@@ -420,40 +414,26 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$request->set_param( 'meta_data', Pos_Order_Audit::sanitize_create_meta( $request['meta_data'] ) );
 		}
 
-		$this->creating_order = null;
-
-		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9, 3 );
-		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
-
-		try {
-			// Proceed with the parent method to handle the creation.
-			$response = parent::create_item( $request );
-		} finally {
-			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
-			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9 );
-			$this->creating_order = null;
-		}
+		$response = Order_Write_Intent::open(
+			array(
+				'operation'        => 'create',
+				'requested_status' => (string) $request->get_param( 'status' ),
+				'set_paid'         => $request->has_param( 'set_paid' ) && rest_sanitize_boolean( $request->get_param( 'set_paid' ) ),
+			),
+			function () use ( $request ) {
+				add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
+				try {
+					// Proceed with the parent method to handle the creation.
+					return parent::create_item( $request );
+				} finally {
+					remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+				}
+			}
+		);
 
 		$this->wcpos_refresh_tax_ids_response( $response, $request, true );
 
 		return $response;
-	}
-
-	/**
-	 * Record the exact order object prepared for this create request.
-	 *
-	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
-	 * @param WP_REST_Request  $request  Request object.
-	 * @param bool             $creating Whether a new order is being created.
-	 *
-	 * @return WC_Data|WP_Error
-	 */
-	public function wcpos_track_creating_order( $order, WP_REST_Request $request, bool $creating ) {
-		if ( $creating && $order instanceof WC_Abstract_Order ) {
-			$this->creating_order = $order;
-		}
-
-		return $order;
 	}
 
 	/**
@@ -468,7 +448,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
 			return $order;
 		}
-		$this->creating_order = $order;
 		$body = $request->get_json_params();
 		$timestamp = $this->order_payload->validate_client_created_gmt( is_array( $body ) ? $body : array() );
 		if ( is_wp_error( $timestamp ) || null === $timestamp ) {
@@ -1034,7 +1013,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws \WC_Data_Exception If order data is invalid.
 	 */
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
-		$is_creating_order = $order === $this->creating_order;
+		$intent            = Order_Write_Intent::current();
+		$is_creating_order = null !== $intent && $intent->is_create() && $intent->is_subject( $order );
 
 		if ( $is_creating_order && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
