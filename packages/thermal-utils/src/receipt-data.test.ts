@@ -3,6 +3,94 @@ import { describe, expect, it, vi } from 'vitest';
 import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 describe('offline closure presentation', () => {
+	it('overlays the recorded store identity without replacing current presentation settings', () => {
+		const input = {
+			store: { name: 'Current shop', address_lines: ['New address'], locale: 'en_US' },
+			closure: {
+				breakdowns: { store: { name: 'Recorded shop', address_lines: ['Old address'] } },
+			},
+		};
+		expect(sanitizeReceiptDataForRendering(input).store).toEqual({
+			name: 'Recorded shop',
+			address_lines: ['Old address'],
+			locale: 'en_US',
+		});
+		expect(input.store.name).toBe('Current shop');
+	});
+
+	it.each([
+		[undefined, 'Current shop', ['New address']],
+		[{}, 'Current shop', ['New address']],
+		[{ name: 'Recorded shop' }, 'Recorded shop', ['New address']],
+		[{ address_lines: [] }, 'Current shop', []],
+	])(
+		'keeps current store fields missing from the snapshot %j',
+		(recordedStore, name, address_lines) => {
+			const data = sanitizeReceiptDataForRendering({
+				store: { name: 'Current shop', address_lines: ['New address'] },
+				closure: { breakdowns: { store: recordedStore } },
+			});
+			expect(data.store).toEqual({
+				name,
+				address_lines,
+			});
+		}
+	);
+
+	it.each([
+		['USD', '&#36;', '€12.00'],
+		['EUR', 'EUR&nbsp;', 'EUR\u00a012.00'],
+	])(
+		'formats recorded EUR using the %s store hint only when currencies match',
+		(currency, symbol, expected) => {
+			const data = sanitizeReceiptDataForRendering({
+				order: { currency },
+				presentation_hints: {
+					locale: 'en_US',
+					currency_symbol: symbol,
+					currency_position: 'left',
+				},
+				closure: { period_sales_total: '12.0000', breakdowns: { currency: 'EUR' } },
+			});
+			expect(data.closure).toMatchObject({ period_sales_total_display: expected });
+		}
+	);
+
+	it.each(['10.0000', 10, 0, true, false, null, []].map((opening_float) => ({ opening_float })))(
+		'treats malformed opening float $opening_float as absent',
+		({ opening_float }) => {
+			const data = sanitizeReceiptDataForRendering({
+				closure: { period_sales_total: '12.0000', breakdowns: { opening_float } },
+			});
+			expect(data.closure).toMatchObject({ period_sales_total_display: '$12.00' });
+			expect((data.closure as { breakdowns: object }).breakdowns).not.toHaveProperty(
+				'opening_float'
+			);
+		}
+	);
+
+	it('formats an object opening float without changing its recorded amounts', () => {
+		const data = sanitizeReceiptDataForRendering({
+			closure: {
+				breakdowns: {
+					opening_float: { expected: '10.0000', counted: '9.0000', variance: '-1.0000' },
+				},
+			},
+		});
+		expect(data.closure).toMatchObject({
+			breakdowns: {
+				opening_float: {
+					expected: '10.0000',
+					expected_display: '$10.00',
+					counted: '9.0000',
+					counted_display: '$9.00',
+					variance: '-1.0000',
+					variance_display: '-$1.00',
+				},
+			},
+		});
+	});
+
 	it.each([
 		['en_US', 'h', '14', '2:00 PM'],
 		['en_US', 'hh', '14', '02:00 PM'],

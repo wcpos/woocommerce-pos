@@ -66,6 +66,40 @@ function renderPicker(schema: FieldSchema, engine = 'logicless', onInsertField =
 }
 
 describe('FieldPicker', () => {
+	it('offers the closure cashiers loop and item-relative id and name fields', async () => {
+		const schema: FieldSchema = {
+			closure: { label: 'Closure', fields: {} },
+			'closure.breakdowns.cashiers': {
+				label: 'Cashiers',
+				is_array: true,
+				fields: {
+					id: { type: 'number', label: 'Cashier ID' },
+					name: { type: 'string', label: 'Cashier Name' },
+				},
+			},
+		};
+		const { container, root, onInsertField } = renderPicker(schema);
+		await act(async () => {
+			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+		});
+		for (const label of ['Closure', 'Cashiers']) {
+			await act(async () => getButton(container, label).click());
+		}
+		const loop = container.querySelector<HTMLButtonElement>(
+			'button[aria-label="Insert loop block"]'
+		);
+		expect(loop).not.toBeNull();
+		await act(async () => loop!.click());
+		for (const label of ['Cashier ID', 'Cashier Name']) {
+			await act(async () => getButton(container, label).click());
+		}
+		expect(onInsertField.mock.calls.map(([value]) => value)).toEqual([
+			'{{#closure.breakdowns.cashiers}}\n\n{{/closure.breakdowns.cashiers}}',
+			'{{id}}',
+			'{{name}}',
+		]);
+	});
+
 	it('offers closure.breakdowns.movements[].created_at.time and closure date fields', async () => {
 		const dateFields = { time: { type: 'string' as const, label: 'Time' } };
 		const schema: FieldSchema = {

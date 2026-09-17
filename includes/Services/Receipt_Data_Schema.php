@@ -1619,10 +1619,26 @@ class Receipt_Data_Schema {
 					);
 				}
 			}
+			$tree['closure.breakdowns.cashiers'] = array(
+				'label'    => __( 'Cashiers', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'id'   => array(
+						'type'  => 'number',
+						'label' => __( 'Cashier ID', 'woocommerce-pos' ),
+					),
+					'name' => array(
+						'type'  => 'string',
+						'label' => __( 'Cashier Name', 'woocommerce-pos' ),
+					),
+				),
+			);
+			unset( $tree['closure']['fields']['breakdowns.cashiers'] );
 			$movement_fields = &$tree['closure.breakdowns.movements']['fields'];
 			foreach ( array(
 				'type' => __( 'Type', 'woocommerce-pos' ),
 				'type_label' => __( 'Movement Label', 'woocommerce-pos' ),
+				'reason' => __( 'Reason', 'woocommerce-pos' ),
 				'created_at_gmt' => __( 'Created (UTC)', 'woocommerce-pos' ),
 			) as $field => $label ) {
 				$movement_fields[ $field ] = array(

@@ -37,6 +37,14 @@ export function sanitizeReceiptDataForRendering(
 	const order = sanitized.order as { currency?: string } | undefined;
 	const store = (sanitized.store ?? {}) as Record<string, unknown>;
 	const hints = (sanitized.presentation_hints ?? {}) as Record<string, unknown>;
+	const recordedStore = breakdowns.store as Record<string, unknown> | undefined;
+	if (recordedStore) {
+		sanitized.store = {
+			...store,
+			name: recordedStore.name ?? store.name,
+			address_lines: recordedStore.address_lines ?? store.address_lines,
+		};
+	}
 
 	// Translate WordPress script modifiers before canonicalising BCP 47 subtags.
 	const [baseLocale, modifier] = String(hints.locale || store.locale || 'en-US').split('@');
@@ -56,12 +64,16 @@ export function sanitizeReceiptDataForRendering(
 			locale = suffix > 0 ? locale.slice(0, suffix) : 'en';
 		}
 	}
-	const currency = String(breakdowns.currency ?? order?.currency ?? 'USD');
+	const storeCurrency = String(order?.currency ?? 'USD');
+	const currency = String(breakdowns.currency ?? storeCurrency);
 	const decimals = hints.price_num_decimals ?? store.price_decimals;
 	// WooCommerce presentation hints contain HTML-encoded currency symbols.
 	const symbolElement = document.createElement('textarea');
 	symbolElement.innerHTML = String(hints.currency_symbol ?? '');
-	const currencySymbol = hints.currency_symbol == null ? undefined : symbolElement.value;
+	const currencySymbol =
+		currency === storeCurrency && hints.currency_symbol != null
+			? symbolElement.value
+			: undefined;
 	const moneyOptions: Intl.NumberFormatOptions = {
 		style: 'currency',
 		currency,
@@ -239,7 +251,13 @@ export function sanitizeReceiptDataForRendering(
 	]);
 	for (const field of ['opened_at', 'closed_at'])
 		closure[field] ??= date(closure[`${field}_gmt`]);
-	if (breakdowns.opening_float)
+	if (
+		!breakdowns.opening_float ||
+		typeof breakdowns.opening_float !== 'object' ||
+		Array.isArray(breakdowns.opening_float)
+	)
+		delete breakdowns.opening_float;
+	else
 		withMoney(breakdowns.opening_float as Record<string, unknown>, [
 			'expected',
 			'counted',
