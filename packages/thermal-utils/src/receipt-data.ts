@@ -35,13 +35,86 @@ export function sanitizeReceiptDataForRendering(
 	const breakdowns = (closure.breakdowns ?? {}) as Record<string, unknown>;
 	const i18n = (sanitized.i18n ?? {}) as Record<string, string>;
 	const order = sanitized.order as { currency?: string } | undefined;
+	const store = (sanitized.store ?? {}) as Record<string, unknown>;
+	const hints = (sanitized.presentation_hints ?? {}) as Record<string, unknown>;
+	const locale = String(hints.locale || store.locale || 'en-US').replace(/_/g, '-');
 	const currency = String(breakdowns.currency ?? order?.currency ?? 'USD');
-	const formatter = new Intl.NumberFormat('en-US', {
+	const decimals = hints.price_num_decimals ?? store.price_decimals;
+	// WooCommerce presentation hints contain HTML-encoded currency symbols.
+	const symbolElement = document.createElement('textarea');
+	symbolElement.innerHTML = String(hints.currency_symbol ?? '');
+	const currencySymbol = hints.currency_symbol == null ? undefined : symbolElement.value;
+	const formatter = new Intl.NumberFormat(locale, {
 		style: 'currency',
 		currency,
+		currencyDisplay: 'narrowSymbol',
+		...(decimals == null
+			? {}
+			: {
+					minimumFractionDigits: Number(decimals),
+					maximumFractionDigits: Number(decimals),
+				}),
 	});
-	const money = (value: unknown) =>
-		value == null || value === '' ? '' : formatter.format(Number(value));
+	const money = (value: unknown) => {
+		if (value == null || value === '') return '';
+		const parts = formatter.formatToParts(Number(value)).map((part) => ({
+			...part,
+			value: String(
+				(
+					{
+						group: hints.price_thousand_separator,
+						decimal: hints.price_decimal_separator,
+						currency: currencySymbol,
+					} as Record<string, unknown>
+				)[part.type] ?? part.value
+			),
+		}));
+		if (!hints.currency_position) return parts.map((part) => part.value).join('');
+		const symbol = parts.find((part) => part.type === 'currency')?.value ?? currency;
+		const amount = parts
+			.filter((part) => ['integer', 'group', 'decimal', 'fraction'].includes(part.type))
+			.map((part) => part.value)
+			.join('');
+		const position = String(hints.currency_position);
+		const space = position.endsWith('_space') ? ' ' : '';
+		return (
+			(Number(value) < 0 ? '-' : '') +
+			(position.startsWith('right') ? amount + space + symbol : symbol + space + amount)
+		);
+	};
+	const date = (gmt: unknown) => {
+		const instant = new Date(gmt ? String(gmt).replace(' ', 'T') + 'Z' : NaN);
+		const format = (options: Intl.DateTimeFormatOptions, language = locale) =>
+			Number.isNaN(instant.getTime())
+				? ''
+				: new Intl.DateTimeFormat(language, {
+						timeZone: String(hints.timezone || store.timezone || 'UTC'),
+						...options,
+					}).format(instant);
+		const result: Record<string, string> = {
+			datetime: format({ dateStyle: 'medium', timeStyle: 'short' }),
+			date: format({ dateStyle: 'medium' }),
+			time: format({ timeStyle: 'short' }),
+			date_ymd: format({ year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-CA'),
+			date_dmy: format({ year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-GB'),
+			date_mdy: format({ year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-US'),
+		};
+		for (const style of ['short', 'long', 'full'] as const) {
+			result[`datetime_${style}`] = format({
+				dateStyle: style,
+				timeStyle: 'short',
+			});
+			result[`date_${style}`] = format({ dateStyle: style });
+		}
+		for (const field of ['weekday', 'month'] as const)
+			for (const style of ['short', 'long'] as const)
+				result[`${field}_${style}`] = format({ [field]: style });
+		for (const field of ['day', 'month', 'year'] as const)
+			result[field] = format({
+				[field]: field === 'year' ? 'numeric' : '2-digit',
+			});
+		return result;
+	};
 	const withMoney = (row: Record<string, unknown>, fields: string[]) => {
 		for (const field of fields) row[`${field}_display`] ??= money(row[field]);
 		return row;
@@ -109,6 +182,7 @@ export function sanitizeReceiptDataForRendering(
 			if (section === 'payment_methods') row.method ??= key;
 			if (section !== 'movements') row.name ??= row.method ?? row.rate ?? key;
 			else {
+				row.created_at ??= date(row.created_at_gmt);
 				row.type_label ??= i18n[String(row.type)] ?? title(String(row.type));
 				row.voided ??= Boolean(row.voided_by);
 			}

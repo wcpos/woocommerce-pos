@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
@@ -129,16 +130,20 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 
 	/** A frozen currency and list-form tender label survive store changes. */
 	public function test_closure_currency_snapshot_and_list_labels_survive_store_changes(): void {
-		$currency = get_option( 'woocommerce_currency' );
+		// Closure writes commit transactions; option writes here would escape test isolation.
+		$currency = 'EUR';
+		$currency_filter = static function () use ( &$currency ) {
+			return $currency;
+		};
+		add_filter( 'pre_option_woocommerce_currency', $currency_filter );
 		try {
-			update_option( 'woocommerce_currency', 'EUR' );
 			$fields = $this->closure_fields( $this->closure_session() );
 			$fixture = json_decode( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/preview-data/closure.json' ), true );
 			$fields['breakdowns'] = $fixture['closure']['breakdowns'];
 			$fields['breakdowns']['payment_methods'][0]['name'] = 'Cash drawer';
 			$row = ( new Closure_Store() )->create( $fields );
 			$this->assertSame( 'EUR', $row['breakdowns']['currency'] );
-			update_option( 'woocommerce_currency', 'USD' );
+			$currency = 'USD';
 			$data = $this->document( 'closure:' . $row['id'] )->get_data()['data'];
 			$this->assertSame( 'EUR', $data['order']['currency'] );
 			$this->assertStringContainsString( '€', $data['closure']['tenders'][0]['counted_display'] );
@@ -146,7 +151,83 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'Closure', $data['i18n']['closure'] );
 			$this->assertTrue( $data['closure']['has_tax_rates'] );
 		} finally {
-			update_option( 'woocommerce_currency', $currency );
+			remove_filter( 'pre_option_woocommerce_currency', $currency_filter );
+		}
+	}
+
+	/** Malformed breakdown entries cannot reach the typed money formatter. */
+	public function test_closure_document_non_array_breakdown_rows_are_skipped(): void {
+		$fields = $this->closure_fields( $this->closure_session() );
+		$fields['breakdowns'] = array(
+			'payment_methods' => array( 'cash' ),
+			'tax_rates' => array( null, 42 ),
+			'movements' => array(
+				false,
+				'paid_out',
+				array(
+					'type' => 'paid_in',
+					'amount' => '5.0000',
+				),
+			),
+		);
+		$row = ( new Closure_Store() )->create( $fields );
+
+		$response = $this->document( 'closure:' . $row['id'] );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data()['data']['closure'];
+		$this->assertSame( array(), $data['breakdowns']['payment_methods'] );
+		$this->assertSame( array(), $data['breakdowns']['tax_rates'] );
+		$this->assertFalse( $data['has_payment_methods'] );
+		$this->assertFalse( $data['has_tax_rates'] );
+		$this->assertTrue( $data['has_movements'] );
+		$this->assertCount( 1, $data['breakdowns']['movements'] );
+		$this->assertSame( '5.0000', $data['breakdowns']['movements'][0]['amount'] );
+		$this->assertNotEmpty( $data['breakdowns']['movements'][0]['amount_display'] );
+	}
+
+	/** Reprints retain the recorded store identity; older documents use the live store. */
+	public function test_closure_store_snapshot_survives_store_rename(): void {
+		$name = 'Recorded shop';
+		$address = '1 Recorded Street';
+		$name_filter = static function () use ( &$name ) {
+			return $name;
+		};
+		$address_filter = static function () use ( &$address ) {
+			return $address;
+		};
+		add_filter( 'woocommerce_store_get_name', $name_filter );
+		add_filter( 'woocommerce_store_get_store_address', $address_filter );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fields['breakdowns']['store'] = array(
+				'name' => 'Client supplied name',
+				'address_lines' => array(),
+			);
+			$row = ( new Closure_Store() )->create( $fields );
+			$this->assertSame( 'Recorded shop', $row['breakdowns']['store']['name'] );
+			$this->assertContains( '1 Recorded Street', $row['breakdowns']['store']['address_lines'] );
+			$name = 'Renamed shop';
+			$address = '2 New Street';
+
+			$data = $this->document( 'closure:' . $row['id'], 'print' )->get_data()['data'];
+
+			$this->assertSame( 'Recorded shop', $data['store']['name'] );
+			$this->assertSame( $row['breakdowns']['store']['address_lines'], $data['store']['address_lines'] );
+			unset( $row['breakdowns']['store'] );
+			$legacy = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+			$this->assertSame( 'Renamed shop', $legacy['store']['name'] );
+			$this->assertContains( '2 New Street', $legacy['store']['address_lines'] );
+			$row['breakdowns']['store'] = array(
+				'name' => '',
+				'address_lines' => array(),
+			);
+			$empty = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+			$this->assertSame( '', $empty['store']['name'] );
+			$this->assertSame( array(), $empty['store']['address_lines'] );
+		} finally {
+			remove_filter( 'woocommerce_store_get_name', $name_filter );
+			remove_filter( 'woocommerce_store_get_store_address', $address_filter );
 		}
 	}
 

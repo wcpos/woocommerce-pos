@@ -74,6 +74,7 @@ class Receipt_Data_Builder {
 		$row['has_sales'] = isset( $row['period_sales_total'] ) || isset( $row['period_refunds_total'] ) || isset( $row['breakdowns']['transaction_count'] ) || isset( $row['breakdowns']['refund_count'] );
 		$row['has_perpetual'] = isset( $row['perpetual_sales_total'] ) || isset( $row['perpetual_refunds_total'] );
 		foreach ( array( 'payment_methods', 'tax_rates', 'movements' ) as $section ) {
+			$row['breakdowns'][ $section ] = array_filter( $row['breakdowns'][ $section ] ?? array(), 'is_array' );
 			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
 		}
 		$tender_labels = array();
@@ -141,6 +142,11 @@ class Receipt_Data_Builder {
 			$movement['voided'] = ! empty( $movement['voided_by'] );
 			$row['breakdowns']['movements'][ $key ] = $movement;
 		}
+		$row['breakdowns']['movements'] = array_values( $row['breakdowns']['movements'] );
+		$store_section = $resolver->build_store_section();
+		foreach ( array( 'name', 'address_lines' ) as $field ) {
+			$store_section[ $field ] = $row['breakdowns']['store'][ $field ] ?? $store_section[ $field ];
+		}
 		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
 		$fiscal += array(
 			'sequence' => null,
@@ -153,7 +159,8 @@ class Receipt_Data_Builder {
 		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
 		return array(
 			'closure' => $row,
-			'store' => $resolver->build_store_section(),
+			'store' => $store_section,
+			'presentation_hints' => $hints,
 			'register' => $register,
 			'software' => array(
 				'name' => 'WCPOS',
