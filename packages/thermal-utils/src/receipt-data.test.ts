@@ -3,6 +3,55 @@ import { describe, expect, it, vi } from 'vitest';
 import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 describe('offline closure presentation', () => {
+	it.each([
+		['en_US', false, '14:00'],
+		['en_GB', true, '02:00 pm'],
+	])('uses the store clock convention in %s', (locale, hour12, time) => {
+		const data = sanitizeReceiptDataForRendering({
+			presentation_hints: { locale, hour12, timezone: 'UTC' },
+			closure: {
+				opened_at_gmt: '2026-09-11 14:00:00',
+				breakdowns: {
+					movements: [
+						{
+							type: 'paid_in',
+							created_at_gmt: '2026-09-11 14:00:00',
+						},
+					],
+				},
+			},
+		});
+		expect(data.closure).toMatchObject({
+			opened_at: { time, datetime: expect.stringContaining(time) },
+			breakdowns: { movements: [{ created_at: { time } }] },
+		});
+	});
+
+	it.each([
+		['999999999999999.9900', 2, '$999,999,999,999,999.99'],
+		['999999999999999.9950', 2, '$1,000,000,000,000,000.00'],
+		['-999999999999999.9950', 2, '-$1,000,000,000,000,000.00'],
+		['1.0050', 2, '$1.01'],
+		['9.5000', 0, '$10'],
+		['0.0000', 3, '$0.000'],
+	])('formats decimal %s exactly at %i places', (value, decimals, expected) => {
+		const data = sanitizeReceiptDataForRendering({
+			presentation_hints: {
+				locale: 'en_US',
+				currency_symbol: '&#36;',
+				currency_position: 'left',
+				price_num_decimals: decimals,
+				price_thousand_separator: ',',
+				price_decimal_separator: '.',
+			},
+			closure: { period_sales_total: value },
+		});
+		expect(data.closure).toMatchObject({
+			period_sales_total: value,
+			period_sales_total_display: expected,
+		});
+	});
+
 	it('creates closure date objects from raw GMT timestamps and preserves supplied dates', () => {
 		const raw = {
 			opened_at_gmt: '2026-09-11 08:00:00',

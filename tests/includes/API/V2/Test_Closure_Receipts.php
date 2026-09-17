@@ -222,6 +222,73 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotEmpty( $data['breakdowns']['movements'][0]['amount_display'] );
 	}
 
+	/** Scalar sections never reach array-only breakdown operations. */
+	public function test_closure_document_scalar_sections_are_skipped(): void {
+		$row = $this->closure_fields( $this->closure_session() );
+		foreach ( array(
+			'payment_methods' => 'cash',
+			'tax_rates' => 42,
+			'movements' => false,
+			'opening_float' => 5,
+		) as $section => $value ) {
+			$row['breakdowns'] = array( $section => $value );
+			$data = ( new Receipt_Data_Builder() )->build_closure_document( $row )['closure'];
+			$this->assertSame( array(), $data['breakdowns'][ $section ] );
+		}
+	}
+
+	/** Presentation hints expose the same clock convention as server dates. */
+	public function test_closure_document_time_format_controls_hour12_hint(): void {
+		$row = $this->closure_fields( $this->closure_session() );
+		$original = get_option( 'time_format' );
+		try {
+			foreach ( array(
+				'H:i' => false,
+				'g:i a' => true,
+			) as $format => $hour12 ) {
+				update_option( 'time_format', $format );
+				$data = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+				$this->assertSame( $hour12, $data['presentation_hints']['hour12'] );
+			}
+		} finally {
+			update_option( 'time_format', $original );
+		}
+	}
+
+	/** Decimal strings retain cents and round with carry without a float conversion. */
+	public function test_closure_document_decimal_strings_format_exactly(): void {
+		$row = $this->closure_fields( $this->closure_session() );
+		$row['breakdowns'] = array( 'currency' => 'USD' );
+		$options = array(
+			'woocommerce_price_num_decimals' => 2,
+			'woocommerce_price_thousand_sep' => ',',
+			'woocommerce_price_decimal_sep' => '.',
+			'woocommerce_currency_pos' => 'left',
+		);
+		$original = array();
+		foreach ( $options as $key => $value ) {
+			$original[ $key ] = get_option( $key );
+			update_option( $key, $value );
+		}
+		try {
+			foreach ( array(
+				'999999999999999.9900' => '$999,999,999,999,999.99',
+				'999999999999999.9950' => '$1,000,000,000,000,000.00',
+				'-999999999999999.9950' => '-$1,000,000,000,000,000.00',
+				'1.0050' => '$1.01',
+			) as $value => $expected ) {
+				$row['period_sales_total'] = $value;
+				$data = ( new Receipt_Data_Builder() )->build_closure_document( $row )['closure'];
+				$this->assertSame( $value, $data['period_sales_total'] );
+				$this->assertSame( $expected, $data['period_sales_total_display'] );
+			}
+		} finally {
+			foreach ( $original as $key => $value ) {
+				update_option( $key, $value );
+			}
+		}
+	}
+
 	/** Reprints retain the recorded store identity; older documents use the live store. */
 	public function test_closure_store_snapshot_survives_store_rename(): void {
 		$name = 'Recorded shop';

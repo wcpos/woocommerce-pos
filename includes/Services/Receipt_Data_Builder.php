@@ -74,7 +74,8 @@ class Receipt_Data_Builder {
 		$row['has_sales'] = isset( $row['period_sales_total'] ) || isset( $row['period_refunds_total'] ) || isset( $row['breakdowns']['transaction_count'] ) || isset( $row['breakdowns']['refund_count'] );
 		$row['has_perpetual'] = isset( $row['perpetual_sales_total'] ) || isset( $row['perpetual_refunds_total'] );
 		foreach ( array( 'payment_methods', 'tax_rates', 'movements' ) as $section ) {
-			$row['breakdowns'][ $section ] = array_filter( $row['breakdowns'][ $section ] ?? array(), 'is_array' );
+			$values = $row['breakdowns'][ $section ] ?? array();
+			$row['breakdowns'][ $section ] = array_filter( is_array( $values ) ? $values : array(), 'is_array' );
 			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
 		}
 		$tender_labels = array();
@@ -96,11 +97,10 @@ class Receipt_Data_Builder {
 		}
 		$currency = $row['breakdowns']['currency'] ?? $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
 		$hints = $resolver->build_presentation_hints( $currency );
-		// Reuse receipt currency companions without converting recorded decimal strings to floats.
-		$with_money = static function ( array $values, array $fields ) use ( $currency, $hints ): array {
+		// Format recorded decimal strings without a float round-trip.
+		$with_money = static function ( array $values, array $fields ) use ( $hints ): array {
 			foreach ( $fields as $field ) {
-				$formatted = Receipt_Data_Schema::format_money_fields( array( 'amount' => $values[ $field ] ?? '' ), $currency, $hints );
-				$values[ $field . '_display' ] = $formatted['amount_display'] ?? '';
+				$values[ $field . '_display' ] = self::format_closure_money( (string) ( $values[ $field ] ?? '' ), $hints );
 			}
 			return $values;
 		};
@@ -119,7 +119,10 @@ class Receipt_Data_Builder {
 			$tender['variance_absolute_display'] = $absolute['amount_display'];
 		}
 		unset( $tender );
-		if ( isset( $row['breakdowns']['opening_float'] ) ) {
+		if ( isset( $row['breakdowns']['opening_float'] ) && ! is_array( $row['breakdowns']['opening_float'] ) ) {
+			$row['breakdowns']['opening_float'] = array();
+		}
+		if ( ! empty( $row['breakdowns']['opening_float'] ) ) {
 			$row['breakdowns']['opening_float'] = $with_money( $row['breakdowns']['opening_float'], array( 'expected', 'counted', 'variance' ) );
 		}
 		foreach ( array(
@@ -174,6 +177,50 @@ class Receipt_Data_Builder {
 			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),
 			'i18n' => $i18n,
 		);
+	}
+
+	/**
+	 * Format closure decimals directly, rounding half up on their magnitude.
+	 *
+	 * @param string $value Recorded decimal amount.
+	 * @param array  $hints Store presentation hints.
+	 * @return string
+	 */
+	private static function format_closure_money( string $value, array $hints ): string {
+		if ( '' === $value ) {
+			return '';
+		}
+		$negative = '-' === $value[0];
+		$parts = explode( '.', ltrim( $value, '+-' ), 2 );
+		$decimals = (int) $hints['price_num_decimals'];
+		$fraction = str_pad( $parts[1] ?? '', $decimals + 1, '0' );
+		$digits = $parts[0] . substr( $fraction, 0, $decimals );
+		if ( $fraction[ $decimals ] >= '5' ) {
+			for ( $index = strlen( $digits ) - 1; $index >= 0 && '9' === $digits[ $index ]; --$index ) {
+				$digits[ $index ] = '0';
+			}
+			if ( $index < 0 ) {
+				$digits = '1' . $digits;
+			} else {
+				$digits[ $index ] = (string) ( (int) $digits[ $index ] + 1 );
+			}
+		}
+		$integer = ltrim( $decimals ? substr( $digits, 0, -$decimals ) : $digits, '0' );
+		$integer = '' === $integer ? '0' : $integer;
+		$amount = preg_replace_callback(
+			'/\B(?=(\d{3})+(?!\d))/',
+			static function () use ( $hints ) {
+				return $hints['price_thousand_separator'];
+			},
+			$integer
+		);
+		if ( $decimals ) {
+			$amount .= $hints['price_decimal_separator'] . substr( $digits, -$decimals );
+		}
+		$symbol = html_entity_decode( wp_strip_all_tags( $hints['currency_symbol'] ), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
+		$position = $hints['currency_position'];
+		$space = false !== strpos( $position, '_space' ) ? ' ' : '';
+		return ( $negative ? '-' : '' ) . ( 0 === strpos( $position, 'right' ) ? $amount . $space . $symbol : $symbol . $space . $amount );
 	}
 
 	/**

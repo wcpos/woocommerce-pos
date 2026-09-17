@@ -78,18 +78,42 @@ export function sanitizeReceiptDataForRendering(
 				formatter = new Intl.NumberFormat(locale, moneyOptions);
 			}
 		}
-		const parts = formatter.formatToParts(Number(value)).map((part) => ({
-			...part,
-			value: String(
-				(
-					{
-						group: hints.price_thousand_separator,
-						decimal: hints.price_decimal_separator,
-						currency: currencySymbol,
-					} as Record<string, unknown>
-				)[part.type] ?? part.value
-			),
-		}));
+		// Round the decimal magnitude as an integer; Intl only receives exact BigInts.
+		const negative = String(value).startsWith('-');
+		const [integer, fraction = ''] = String(value).replace(/^[+-]/, '').split('.');
+		// Currency formatting always resolves a fraction-digit count.
+		const places = formatter.resolvedOptions().maximumFractionDigits!;
+		const padded = fraction.padEnd(places + 1, '0');
+		const rounded = (
+			BigInt(integer + padded.slice(0, places)) + (padded[places] >= '5' ? 1n : 0n)
+		)
+			.toString()
+			.padStart(places + 1, '0');
+		const whole = BigInt(places ? rounded.slice(0, -places) : rounded);
+		// Format fractional digits separately to preserve locale numbering systems.
+		const localizedFraction = places
+			? formatter
+					.formatToParts(BigInt('1' + rounded.slice(-places)))
+					.filter((part) => part.type === 'integer')
+					.map((part) => part.value)
+					.join('')
+					.slice(1)
+			: '';
+		const parts = formatter
+			.formatToParts(negative ? (whole === 0n ? -0 : -whole) : whole)
+			.map((part) => ({
+				...part,
+				value: String(
+					(
+						{
+							fraction: localizedFraction,
+							group: hints.price_thousand_separator,
+							decimal: hints.price_decimal_separator,
+							currency: currencySymbol,
+						} as Record<string, unknown>
+					)[part.type] ?? part.value
+				),
+			}));
 		if (!hints.currency_position) return parts.map((part) => part.value).join('');
 		const symbol = parts.find((part) => part.type === 'currency')?.value ?? currency;
 		const amount = parts
@@ -99,7 +123,7 @@ export function sanitizeReceiptDataForRendering(
 		const position = String(hints.currency_position);
 		const space = position.endsWith('_space') ? ' ' : '';
 		return (
-			(Number(value) < 0 ? '-' : '') +
+			(negative ? '-' : '') +
 			(position.startsWith('right') ? amount + space + symbol : symbol + space + amount)
 		);
 	};
@@ -112,6 +136,9 @@ export function sanitizeReceiptDataForRendering(
 						timeZone: String(
 							breakdowns.timezone || hints.timezone || store.timezone || 'UTC'
 						),
+						...(typeof hints.hour12 === 'boolean'
+							? { hourCycle: hints.hour12 ? 'h12' : 'h23' }
+							: {}),
 						...options,
 					}).format(instant);
 		const result: Record<string, string> = {

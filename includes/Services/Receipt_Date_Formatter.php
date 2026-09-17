@@ -345,6 +345,16 @@ class Receipt_Date_Formatter {
 	}
 
 	/**
+	 * Clock convention for offline renderers, or null to use locale defaults.
+	 *
+	 * @return bool|null
+	 */
+	public static function hour12(): ?bool {
+		$token = self::get_icu_hour_token( self::get_time_format_option() );
+		return null === $token ? null : 'h' === $token[0];
+	}
+
+	/**
 	 * Map the configured WordPress time format to an ICU hour token.
 	 *
 	 * The token carries both the clock convention and the zero-padding intent:
