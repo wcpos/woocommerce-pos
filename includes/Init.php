@@ -588,6 +588,7 @@ class Init {
 		// deferred order services.
 		Payments\Contract\Webview_Passthrough::register_hooks();
 		Services\Stock_Validator::instance();
+		Services\Order_Write_Intent::register();
 
 		if ( Services\Request_Lane::is_storefront() ) {
 			// Order-event services arrive on the first order write, if any.
