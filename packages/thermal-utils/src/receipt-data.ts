@@ -1,3 +1,5 @@
+import { decodeHtmlEntities } from './html-entities';
+
 function isPrivateMetaEntry(value: unknown): boolean {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		return false;
@@ -80,29 +82,7 @@ export function sanitizeReceiptDataForRendering(
 	const currency = String(breakdowns.currency ?? storeCurrency);
 	const decimals = hints.price_num_decimals ?? store.price_decimals;
 	// WooCommerce presentation hints contain HTML-encoded currency symbols.
-	let decodedSymbol = String(hints.currency_symbol ?? '');
-	if (typeof document !== 'undefined') {
-		const symbolElement = document.createElement('textarea');
-		symbolElement.innerHTML = decodedSymbol;
-		decodedSymbol = symbolElement.value;
-	} else {
-		const entities: Record<string, string> = {
-			amp: '&',
-			lt: '<',
-			gt: '>',
-			quot: '"',
-			'#39': "'",
-			nbsp: '\u00a0',
-		};
-		decodedSymbol = decodedSymbol.replace(
-			/&(amp|lt|gt|quot|#39|nbsp|#\d+|#[xX][\da-fA-F]+);/g,
-			(entity, key: string) => {
-				if (entities[key] != null) return entities[key];
-				const point = /^#x/i.test(key) ? parseInt(key.slice(2), 16) : Number(key.slice(1));
-				return point <= 0x10ffff ? String.fromCodePoint(point) : entity;
-			}
-		);
-	}
+	const decodedSymbol = decodeHtmlEntities(String(hints.currency_symbol ?? ''));
 	const currencySymbol =
 		(recordedMoney?.currency_symbol != null || currency === storeCurrency) &&
 		hints.currency_symbol != null
