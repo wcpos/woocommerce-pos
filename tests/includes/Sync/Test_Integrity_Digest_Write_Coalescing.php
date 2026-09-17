@@ -202,17 +202,17 @@ class Test_Integrity_Digest_Write_Coalescing extends Sync_Store_Test_Case {
 
 	public function test_the_queue_flushes_itself_at_the_threshold(): void {
 		// A bulk import touches many DISTINCT records; nothing coalesces, so the
-		// queue must not grow with the import. Ids need not exist: the
+		// queue holds the threshold; the next distinct record flushes it. Ids need not exist: the
 		// INSERT…SELECT simply matches no row, but the statement still runs.
 		$threshold = Integrity_Digest::PENDING_DIGEST_FLUSH_THRESHOLD;
-		for ( $id = 1; $id < $threshold; $id++ ) {
+		for ( $id = 1; $id <= $threshold; $id++ ) {
 			$this->digest->record_customer_saved( 1000000 + $id );
 		}
-		$this->assertSame( array(), $this->digest_inserts, 'Below the threshold nothing is written.' );
+		$this->assertSame( array(), $this->digest_inserts, 'At the threshold nothing is written.' );
 
-		$this->digest->record_customer_saved( 1000000 + $threshold );
+		$this->digest->record_customer_saved( 1000001 + $threshold );
 
-		$this->assertCount( $threshold, $this->digest_inserts, 'Reaching the threshold flushes the whole queue.' );
+		$this->assertCount( $threshold, $this->digest_inserts, 'The next distinct record flushes the threshold entries.' );
 	}
 
 	public function test_register_hooks_flushes_last_on_shutdown(): void {
