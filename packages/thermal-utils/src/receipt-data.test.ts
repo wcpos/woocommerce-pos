@@ -4,6 +4,45 @@ import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 describe('offline closure presentation', () => {
 	it.each([
+		['en_US', 'h', '14', '2:00 PM'],
+		['en_US', 'hh', '14', '02:00 PM'],
+		['en_GB', 'h', '14', '2:00 pm'],
+		['en_GB', 'hh', '14', '02:00 pm'],
+		['en_US', 'H', '02', '2:00'],
+		['en_US', 'HH', '02', '02:00'],
+	])('preserves %s ICU hour token %s padding', (locale, hour_token, hour, time) => {
+		const data = sanitizeReceiptDataForRendering({
+			presentation_hints: { locale, hour_token, timezone: 'UTC' },
+			closure: {
+				opened_at_gmt: `2026-09-11 ${hour}:00:00`,
+				breakdowns: {
+					movements: [{ created_at_gmt: `2026-09-11 ${hour}:00:00` }],
+				},
+			},
+		});
+		expect(data.closure).toMatchObject({
+			opened_at: {
+				time,
+				datetime: expect.stringContaining(time),
+				datetime_short: expect.stringContaining(time),
+				datetime_long: expect.stringContaining(time),
+				datetime_full: expect.stringContaining(time),
+			},
+			breakdowns: { movements: [{ created_at: { time } }] },
+		});
+	});
+
+	it('preserves Serbian Latin month and weekday names', () => {
+		const data = sanitizeReceiptDataForRendering({
+			presentation_hints: { locale: 'sr_RS@latin', timezone: 'UTC' },
+			closure: { opened_at_gmt: '2026-09-11 14:00:00' },
+		});
+		expect(data.closure).toMatchObject({
+			opened_at: { month_long: 'septembar', weekday_long: 'petak' },
+		});
+	});
+
+	it.each([
 		['en_US', false, '14:00'],
 		['en_GB', true, '02:00 pm'],
 	])('uses the store clock convention in %s', (locale, hour12, time) => {
@@ -126,7 +165,8 @@ describe('offline closure presentation', () => {
 
 	it.each([
 		['pt_PT_ao90', 'pt-PT'],
-		['sr_RS@latin', 'sr-RS'],
+		['sr_RS@latin', 'sr-Latn-RS'],
+		['sr_RS@cyrillic', 'sr-Cyrl-RS'],
 		['en-US-u-nu-arab', 'en-US-u-nu-arab'],
 		['!invalid', 'en'],
 	])('normalizes the WordPress locale %s before formatting', (locale, canonical) => {

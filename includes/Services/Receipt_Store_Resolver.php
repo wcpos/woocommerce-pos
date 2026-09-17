@@ -265,6 +265,7 @@ class Receipt_Store_Resolver {
 			),
 			'locale'                   => $this->resolve_locale(),
 			'hour12'                   => Receipt_Date_Formatter::hour12(),
+			'hour_token'               => Receipt_Date_Formatter::hour_token(),
 			'timezone'                 => $this->resolve_store_timezone()->getName(),
 			'currency_position'        => $this->resolve_store_option_string(
 				'get_currency_position',

@@ -37,10 +37,16 @@ export function sanitizeReceiptDataForRendering(
 	const order = sanitized.order as { currency?: string } | undefined;
 	const store = (sanitized.store ?? {}) as Record<string, unknown>;
 	const hints = (sanitized.presentation_hints ?? {}) as Record<string, unknown>;
-	// Drop WordPress modifiers and invalid trailing subtags, retaining valid BCP 47 variants.
-	let locale = String(hints.locale || store.locale || 'en-US')
-		.split('@')[0]
-		.replace(/_/g, '-');
+
+	// Translate WordPress script modifiers before canonicalising BCP 47 subtags.
+	const [baseLocale, modifier] = String(hints.locale || store.locale || 'en-US').split('@');
+	const subtags = baseLocale.replace(/_/g, '-').split('-');
+	const script = { latin: 'Latn', cyrillic: 'Cyrl' }[modifier as 'latin' | 'cyrillic'];
+	if (script) {
+		if (/^[A-Za-z]{4}$/.test(subtags[1] ?? '')) subtags[1] = script;
+		else subtags.splice(1, 0, script);
+	}
+	let locale = subtags.join('-');
 	for (;;) {
 		try {
 			locale = Intl.getCanonicalLocales(locale)[0];
@@ -129,18 +135,33 @@ export function sanitizeReceiptDataForRendering(
 	};
 	const date = (gmt: unknown) => {
 		const instant = new Date(gmt ? String(gmt).replace(' ', 'T') + 'Z' : NaN);
-		const format = (options: Intl.DateTimeFormatOptions, language = locale) =>
-			Number.isNaN(instant.getTime())
-				? ''
-				: new Intl.DateTimeFormat(language, {
-						timeZone: String(
-							breakdowns.timezone || hints.timezone || store.timezone || 'UTC'
-						),
-						...(typeof hints.hour12 === 'boolean'
-							? { hourCycle: hints.hour12 ? 'h12' : 'h23' }
-							: {}),
-						...options,
-					}).format(instant);
+
+		const hourToken = typeof hints.hour_token === 'string' ? hints.hour_token : '';
+		const hour12 = hourToken ? hourToken[0] === 'h' : hints.hour12;
+		const format = (options: Intl.DateTimeFormatOptions, language = locale) => {
+			if (Number.isNaN(instant.getTime())) return '';
+			const formatter = new Intl.DateTimeFormat(language, {
+				timeZone: String(breakdowns.timezone || hints.timezone || store.timezone || 'UTC'),
+				...(typeof hour12 === 'boolean' ? { hourCycle: hour12 ? 'h12' : 'h23' } : {}),
+				...options,
+			});
+			if (!hourToken || !options.timeStyle) return formatter.format(instant);
+			const zero = new Intl.NumberFormat(language, {
+				useGrouping: false,
+			}).format(0);
+			return formatter
+				.formatToParts(instant)
+				.map((part) => {
+					if (part.type !== 'hour') return part.value;
+					const hour =
+						part.value.length > 1 && part.value.startsWith(zero)
+							? part.value.slice(zero.length)
+							: part.value;
+					return hourToken.length === 2 ? hour.padStart(2, zero) : hour;
+				})
+				.join('')
+				.replace(/ /g, ' ');
+		};
 		const result: Record<string, string> = {
 			datetime: format({ dateStyle: 'medium', timeStyle: 'short' }),
 			date: format({ dateStyle: 'medium' }),

@@ -121,6 +121,22 @@ describe.each([
 		expect(html).toContain('Credit card');
 	});
 
+	it('keeps corrections out of the frozen closure printout', () => {
+		const data = structuredClone(fixture);
+		data.closure.corrections = [
+			{
+				id: 1,
+				type: 'late_movement',
+				actor: { id: 1, name: 'Alex' },
+				approver: null,
+				reason: 'Supplemental movement',
+				created_at: '2026-09-12 08:00:00',
+				figures: { cash_delta: '5.0000' },
+			},
+		];
+		expect(render(template, data)).toBe(render(template, fixture));
+	});
+
 	it('renders an X-report copy and omits corrections', () => {
 		const data = structuredClone(fixture);
 		data.fiscal.is_x_report = true;

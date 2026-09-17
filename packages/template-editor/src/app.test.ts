@@ -31,9 +31,13 @@ const config: EditorConfig = {
 
 describe('display editor', () => {
 	it('uses saved content before the active display starter', () => {
-		expect(getDefaultDoc({ ...config, postContent: 'Saved', displayStarter: 'Active' })).toBe(
-			'Saved'
-		);
+		expect(
+			getDefaultDoc({
+				...config,
+				postContent: 'Saved',
+				displayStarter: 'Active',
+			})
+		).toBe('Saved');
 	});
 
 	it('uses the active display starter before the shell', () => {
@@ -91,10 +95,14 @@ describe('display editor', () => {
 			expect(editorContent).toContain('data-wcpos-state');
 			await act(async () => {
 				window.dispatchEvent(
-					new CustomEvent('wcposEngineChange', { detail: { engine: 'thermal' } })
+					new CustomEvent('wcposEngineChange', {
+						detail: { engine: 'thermal' },
+					})
 				);
 				window.dispatchEvent(
-					new CustomEvent('wcposPaperWidthChange', { detail: { paperWidth: '58mm' } })
+					new CustomEvent('wcposPaperWidthChange', {
+						detail: { paperWidth: '58mm' },
+					})
 				);
 			});
 			expect(container.querySelector('.cm-content')?.textContent).toBe(editorContent);
@@ -175,16 +183,47 @@ describe('starter shells', () => {
 	});
 });
 
-
 describe('report editor', () => {
-	it.each(['logicless', 'thermal'] as const)('uses the bootstrapped %s report starter', (engine) => {
-		const report: EditorConfig = {
-			...config,
-			type: 'report',
-			engine,
-			reportStarters: { logicless: '<h1>{{report.title}}</h1>', thermal: '<receipt>{{report.title}}</receipt>' },
-		};
-		expect(getDefaultDoc(report)).toBe(report.reportStarters?.[engine]);
-		expect(getDefaultDoc({ ...report, postContent: 'Saved report' })).toBe('Saved report');
-	});
+	it.each(['logicless', 'thermal'] as const)(
+		'uses the bootstrapped %s report starter',
+		(engine) => {
+			const report: EditorConfig = {
+				...config,
+				type: 'report',
+				engine,
+				reportStarters: {
+					logicless: '<h1>{{report.title}}</h1>',
+					thermal: '<receipt>{{report.title}}</receipt>',
+				},
+			};
+			expect(getDefaultDoc(report)).toBe(report.reportStarters?.[engine]);
+			expect(getDefaultDoc({ ...report, postContent: 'Saved report' })).toBe('Saved report');
+		}
+	);
+});
+
+describe('closure editor', () => {
+	it.each(['logicless', 'thermal'] as const)(
+		'uses the bootstrapped %s closure starter',
+		(engine) => {
+			const closure: EditorConfig = {
+				...config,
+				type: 'closure',
+				engine,
+				closureStarters: {
+					logicless: '<h1>{{closure.number}}</h1>',
+					thermal: '<receipt paper-width="48">{{closure.number}}</receipt>',
+				},
+			};
+			expect(getDefaultDoc(closure)).toBe(closure.closureStarters?.[engine]);
+			expect(getDefaultDoc({ ...closure, postContent: 'Saved closure' })).toBe(
+				'Saved closure'
+			);
+			if (engine === 'thermal') {
+				expect(getDefaultDoc({ ...closure, paperWidth: '58mm' })).toBe(
+					'<receipt paper-width="32">{{closure.number}}</receipt>'
+				);
+			}
+		}
+	);
 });

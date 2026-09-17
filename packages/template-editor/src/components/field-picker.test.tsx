@@ -66,6 +66,41 @@ function renderPicker(schema: FieldSchema, engine = 'logicless', onInsertField =
 }
 
 describe('FieldPicker', () => {
+	it('offers closure.breakdowns.movements[].created_at.time and closure date fields', async () => {
+		const dateFields = { time: { type: 'string' as const, label: 'Time' } };
+		const schema: FieldSchema = {
+			closure: { label: 'Closure', fields: {} },
+			'closure.opened_at': { label: 'Opened', fields: dateFields },
+			'closure.closed_at': { label: 'Closed', fields: dateFields },
+			'closure.breakdowns.movements': {
+				label: 'Cash Movements',
+				is_array: true,
+				fields: {
+					created_at: { type: 'object', label: 'Created', fields: dateFields },
+				},
+			},
+		};
+		const { container, root, onInsertField } = renderPicker(schema);
+		await act(async () => {
+			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+		});
+		for (const label of ['Closure', 'Cash Movements', 'Created']) {
+			await act(async () => getButton(container, label).click());
+		}
+		await act(async () => getButton(container, 'Time').click());
+		await act(async () => getButton(container, 'Cash Movements').click());
+		for (const label of ['Opened', 'Closed']) {
+			await act(async () => getButton(container, label).click());
+			await act(async () => getButton(container, 'Time').click());
+			await act(async () => getButton(container, label).click());
+		}
+		expect(onInsertField.mock.calls.map(([value]) => value)).toEqual([
+			'{{created_at.time}}',
+			'{{closure.opened_at.time}}',
+			'{{closure.closed_at.time}}',
+		]);
+	});
+
 	it('exposes closure corrections as a loop with item-relative fields', async () => {
 		const schema: FieldSchema = {
 			closure: {
@@ -124,16 +159,33 @@ describe('FieldPicker', () => {
 
 	it('exposes report row/cell loops and nested date fields', async () => {
 		const schema: FieldSchema = {
-			report: { label: 'Report', fields: {
-				rows: { type: 'array', is_array: true, label: 'Rows', fields: {
-					cells: { type: 'array', is_array: true, label: 'Cells', fields: {
-						formatted: { type: 'string', label: 'Formatted' },
-					} },
-				} },
-				generated_at: { type: 'object', label: 'Generated At', fields: {
-					datetime: { type: 'string', label: 'Date Time' },
-				} },
-			} },
+			report: {
+				label: 'Report',
+				fields: {
+					rows: {
+						type: 'array',
+						is_array: true,
+						label: 'Rows',
+						fields: {
+							cells: {
+								type: 'array',
+								is_array: true,
+								label: 'Cells',
+								fields: {
+									formatted: { type: 'string', label: 'Formatted' },
+								},
+							},
+						},
+					},
+					generated_at: {
+						type: 'object',
+						label: 'Generated At',
+						fields: {
+							datetime: { type: 'string', label: 'Date Time' },
+						},
+					},
+				},
+			},
 		};
 		const { container, root, onInsertField } = renderPicker(schema);
 		await act(async () => {
@@ -142,7 +194,9 @@ describe('FieldPicker', () => {
 		for (const label of ['Report', 'Rows', 'Cells', 'Generated At']) {
 			await act(async () => getButton(container, label).click());
 		}
-		for (const button of container.querySelectorAll<HTMLButtonElement>('button[aria-label="Insert loop block"]')) {
+		for (const button of container.querySelectorAll<HTMLButtonElement>(
+			'button[aria-label="Insert loop block"]'
+		)) {
 			await act(async () => button.click());
 		}
 		await act(async () => getButton(container, 'Formatted').click());
@@ -462,12 +516,20 @@ describe('FieldPicker', () => {
 			const handle = getHandle(container);
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, buttons: 1 })
+					new MouseEvent('pointerdown', {
+						bubbles: true,
+						clientX: 280,
+						buttons: 1,
+					})
 				);
 			});
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 340, buttons: 1 })
+					new MouseEvent('pointermove', {
+						bubbles: true,
+						clientX: 340,
+						buttons: 1,
+					})
 				);
 			});
 			await act(async () => {
@@ -481,7 +543,11 @@ describe('FieldPicker', () => {
 			// After the drag ends, further moves must not resize the panel.
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 1 })
+					new MouseEvent('pointermove', {
+						bubbles: true,
+						clientX: 400,
+						buttons: 1,
+					})
 				);
 			});
 			expect(panel.style.width).toBe('340px');
@@ -513,14 +579,22 @@ describe('FieldPicker', () => {
 			// Grab 6px beyond the panel edge (inside the straddling hit zone).
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointerdown', { bubbles: true, clientX: 286, buttons: 1 })
+					new MouseEvent('pointerdown', {
+						bubbles: true,
+						clientX: 286,
+						buttons: 1,
+					})
 				);
 			});
 			// A 20px move must grow the panel by exactly 20px, not snap the
 			// edge to the pointer first (280 + 20, not 306).
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 306, buttons: 1 })
+					new MouseEvent('pointermove', {
+						bubbles: true,
+						clientX: 306,
+						buttons: 1,
+					})
 				);
 			});
 
@@ -539,12 +613,21 @@ describe('FieldPicker', () => {
 			const handle = getHandle(container);
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, button: 2, buttons: 2 })
+					new MouseEvent('pointerdown', {
+						bubbles: true,
+						clientX: 280,
+						button: 2,
+						buttons: 2,
+					})
 				);
 			});
 			await act(async () => {
 				handle.dispatchEvent(
-					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 2 })
+					new MouseEvent('pointermove', {
+						bubbles: true,
+						clientX: 400,
+						buttons: 2,
+					})
 				);
 			});
 

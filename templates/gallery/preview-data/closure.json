@@ -1,6 +1,7 @@
 {
   "closure": {
     "number": 42,
+    "corrections": [],
     "has_sales": true,
     "has_payment_methods": true,
     "has_tax_rates": true,

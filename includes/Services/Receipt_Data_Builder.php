@@ -62,7 +62,8 @@ class Receipt_Data_Builder {
 		$row['corrections'] = $xreport || empty( $row['id'] ) || ! is_string( $row['id'] ) ? array() : ( new Closure_Store() )->corrections_for( $row['id'] );
 		// Old closures and live X-reports have no label snapshot.
 		$labels = $row['breakdowns']['labels'] ?? array();
-		$register = ( new Register_Store() )->get( $row['register_id'] ) ?? array();
+		$register_id = $row['register_id'] ?? null;
+		$register = is_string( $register_id ) && '' !== $register_id ? ( ( new Register_Store() )->get( $register_id ) ?? array() ) : array();
 		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
 		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';

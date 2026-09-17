@@ -350,8 +350,17 @@ class Receipt_Date_Formatter {
 	 * @return bool|null
 	 */
 	public static function hour12(): ?bool {
-		$token = self::get_icu_hour_token( self::get_time_format_option() );
+		$token = self::hour_token();
 		return null === $token ? null : 'h' === $token[0];
+	}
+
+	/**
+	 * ICU hour token for offline renderers, including zero-padding intent.
+	 *
+	 * @return string|null
+	 */
+	public static function hour_token(): ?string {
+		return self::get_icu_hour_token( self::get_time_format_option() );
 	}
 
 	/**
