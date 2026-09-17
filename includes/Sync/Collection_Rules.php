@@ -238,7 +238,7 @@ final class Collection_Rules {
 	 *
 	 * @param string $collection Collection slug.
 	 *
-	 * @return array{sorts?: array<string, array>, filters?: array<string, array>}
+	 * @return array{sorts?: array<string, array>, filters?: array<string, array>, search?: array<string, mixed>, visibility?: array<string, mixed>}
 	 */
 	public static function rules( string $collection ): array {
 		$rules = array(

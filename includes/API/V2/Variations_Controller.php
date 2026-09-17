@@ -564,7 +564,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			);
 		}
 
-			$results = $this->get_objects( $query_args );
+		$results = $this->get_objects( $query_args );
 
 		$ids = array();
 		foreach ( $results['objects'] as $object ) {
