@@ -153,7 +153,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function update_item_permissions_check( $request ) {
 		return Permission_Rules::verdict( 'orders', 'edit', (int) $request['id'], 0, 'v1', $request->get_params() );
-		}
+	}
 
 	/** Delegate the delete decision, preserving WooCommerce's request-dependent checks.
 	 *

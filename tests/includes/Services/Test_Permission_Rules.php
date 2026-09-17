@@ -107,7 +107,6 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 			'v2 own delete' => array( 'orders', 'delete', 'subscriber', array( 'delete_shop_orders' ), 'self', 'v2', 200, 200 ),
 			'coupon read' => array( 'coupons', 'read', 'subscriber', array(), '', 'v2', 200, 200 ),
 			'tax read' => array( 'tax_rates', 'read', 'subscriber', array(), '', 'v2', 200, 200 ),
-			'refund read' => array( 'refunds', 'read', 'subscriber', array(), '', 'v2', 200, 200 ),
 		);
 	}
 
@@ -130,9 +129,9 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 
 		// Act.
 		$legacy = $this->server->dispatch( $request );
-		$current = $this->push( 'orders', 'edit', $order->get_id(), array( 'customer_note' => 'Denied' ) );
+		$current = $this->push( 'orders', 'edit', $order->get_id(), array( 'customer_note' => 'Denied' ), '/wcpos/v2/push/orders' );
 
-		// Assert: push() uses /wcpos/v2/push/orders.
+		// Assert: the current lane is the route literal above; the legacy lane is the v1 PATCH.
 		$this->assertSame( 403, $legacy->get_status() );
 		$this->assertSame( 403, $current->get_status() );
 	}
@@ -334,7 +333,7 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $original->get_error_data(), $result->get_error_data() );
 	}
 
-	private function push( string $collection, string $context, int $id, array $payload ) {
+	private function push( string $collection, string $context, int $id, array $payload, string $route = '' ) {
 		$revision = null;
 		$uuid = wp_generate_uuid4();
 		if ( $id ) {
@@ -349,7 +348,7 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 			$revision = $rows[0]['_rxdb_revision'];
 		}
 		$mutation = wp_generate_uuid4();
-		$request = $this->wp_rest_post_request( '/wcpos/v2/push/' . $collection );
+		$request = $this->wp_rest_post_request( '' !== $route ? $route : '/wcpos/v2/push/' . $collection );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_header( 'Idempotency-Key', $mutation );
 		if ( null !== $revision ) {

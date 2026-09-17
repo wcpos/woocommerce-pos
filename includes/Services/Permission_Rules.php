@@ -22,7 +22,6 @@ class Permission_Rules {
 		'tax_rates'        => array( 'Taxes', 'settings', true ),
 		'tax_classes'      => array( 'Tax_Classes', 'settings', true ),
 		'shipping_methods' => array( 'Shipping_Methods', 'shipping_methods', true ),
-		'refunds'          => array( 'Refunds', 'shop_order_refund', true ),
 	);
 
 	/**
@@ -124,8 +123,8 @@ class Permission_Rules {
 			);
 			$request      = new \WP_REST_Request( $http_methods[ $context ] );
 			$request->set_query_params( $params );
-			$request['id'] = $object_id;
-			$permission    = ( new $class() )->{$methods[ $context ]}( $request );
+			$request->set_param( 'id', $object_id );
+			$permission = ( new $class() )->{$methods[ $context ]}( $request );
 			if ( 'v1' === $lane && 'customers' === $collection && 'create' === $context && is_wp_error( $permission ) ) {
 				$cap = version_compare( WC()->version, '9.9', '>=' ) ? 'create_customers' : 'promote_users';
 				if ( current_user_can( $cap ) ) {
