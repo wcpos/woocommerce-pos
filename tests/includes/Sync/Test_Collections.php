@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WP_UnitTestCase;
 
@@ -16,6 +17,35 @@ use WP_UnitTestCase;
  * @covers \WCPOS\WooCommercePOS\Sync\Collections
  */
 class Test_Collections extends WP_UnitTestCase {
+	/**
+	 * Every digest owner explicitly records repair support and explains absences.
+	 *
+	 * @see Integrity_Controller
+	 */
+	public function test_digest_registry_repair_capabilities_have_explicit_reasons(): void {
+		// Arrange: these id-spaces back /wcpos/v2/integrity/scan.
+		$rows = Collections::with( 'digest' );
+		$this->assertTrue( $rows['products']['repair']['drill_down'] );
+		$this->assertTrue( $rows['products']['repair']['self_heal'] );
+
+		foreach ( $rows as $collection => $row ) {
+			// Act: read the capability declaration used by the v2 repair lane.
+			$this->assertArrayHasKey( 'repair', $row, $collection );
+			$repair = $row['repair'];
+
+			// Assert: null is deliberate, never an unmodeled absence.
+			foreach ( array( 'drill_down', 'self_heal' ) as $capability ) {
+				$this->assertArrayHasKey( $capability, $repair, $collection );
+				$this->assertContains( $repair[ $capability ], array( true, null ) );
+				if ( null === $repair[ $capability ] ) {
+					$this->assertArrayHasKey( 'reason', $repair, $collection );
+					$this->assertIsString( $repair['reason'] );
+					$this->assertNotSame( '', trim( $repair['reason'] ), $collection );
+				}
+			}
+		}
+	}
+
 	/**
 	 * All canonical collections remain ordered and explicit.
 	 */

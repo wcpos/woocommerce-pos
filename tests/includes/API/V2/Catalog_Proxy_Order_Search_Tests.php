@@ -107,6 +107,36 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->assert_order_search_finds_target( "QuillonProbe\u{00A0}AureliaProbe" );
 	}
 
+	/** Control characters separate terms on both order storage engines. */
+	public function test_order_search_control_separator_returns_same_rows(): void {
+		// Arrange.
+		$expected = $this->order_ids_for_query( array( 'search' => 'QuillonProbe AureliaProbe' ) );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params( array( 'search' => "QuillonProbe\u{200B}AureliaProbe" ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( array( $this->target_order->get_id() ), $expected );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $expected, wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	/** Malformed UTF-8 matches no orders on both posts storage and HPOS. */
+	public function test_order_search_malformed_utf8_returns_zero_rows(): void {
+		// Arrange: both consuming classes create matching and non-matching orders.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params( array( 'search' => "AureliaProbe\xC3\x28" ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data() );
+	}
+
 	/** A non-string search stays on the forward, so wc/v3 rejects it as before. */
 	public function test_order_search_rejects_an_array_search_param(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );

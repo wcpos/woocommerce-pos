@@ -35,12 +35,28 @@ class Test_Activator extends WP_UnitTestCase {
 	private const ROLE_CAPS_FINGERPRINT_OPTION = 'woocommerce_pos_role_caps_fingerprint';
 
 	/**
+	 * Last synced role capability names.
+	 */
+	private const ROLE_CAPS_SYNCED_OPTION = 'woocommerce_pos_role_caps_synced';
+
+	/**
 	 * Reset options and hooks before each test.
 	 */
 	public function setUp(): void {
 		parent::setUp();
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		// Steady state: fingerprint current and a snapshot present. A missing
+		// snapshot is itself a reason to sync, so tests that want that delete it.
+		update_option(
+			self::ROLE_CAPS_SYNCED_OPTION,
+			array(
+				'cashier'       => array(),
+				'administrator' => array(),
+				'shop_manager'  => array(),
+			),
+			false
+		);
 		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint(), false );
 		// These tests pin the PLUGIN-version upgrade mechanics. Latch the sync
 		// schema so an unlatched sync store does not co-trigger version_check —
@@ -57,6 +73,7 @@ class Test_Activator extends WP_UnitTestCase {
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
 		delete_option( self::ROLE_CAPS_FINGERPRINT_OPTION );
+		delete_option( self::ROLE_CAPS_SYNCED_OPTION );
 		remove_all_actions( 'init' );
 		remove_all_actions( 'woocommerce_init' );
 		remove_all_actions( 'shutdown' );
@@ -169,6 +186,7 @@ class Test_Activator extends WP_UnitTestCase {
 		remove_all_actions( 'init' );
 		$activator = new Activator();
 		$activator->single_activate( false );
+		delete_option( self::ROLE_CAPS_SYNCED_OPTION );
 		$cashier = get_role( 'cashier' );
 		$this->assertNotNull( $cashier );
 		$cashier->remove_cap( 'manage_product_terms' );
@@ -200,6 +218,171 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->role_caps_fingerprint(),
 			get_option( self::ROLE_CAPS_FINGERPRINT_OPTION )
 		);
+	}
+
+	/**
+	 * Upgrades preserve capability removals made by the merchant.
+	 *
+	 * @covers ::version_check
+	 */
+	public function test_version_upgrade_does_not_regrant_capability_removed_from_cashier_role(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		get_role( 'cashier' )->remove_cap( 'edit_products' );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint() );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+		$definition = $reflection->getMethod( 'role_capability_definition' );
+		$definition->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert.
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
+		$this->assertSame( $this->role_caps_fingerprint(), get_option( self::ROLE_CAPS_FINGERPRINT_OPTION ) );
+		$this->assertSame(
+			array_merge( array( 'access_woocommerce_pos' ), array_keys( $definition->invoke( null )['cashier'] ) ),
+			get_option( self::ROLE_CAPS_SYNCED_OPTION )['cashier']
+		);
+	}
+
+	/**
+	 * Upgrades grant new defaults without repairing merchant-removed defaults.
+	 *
+	 * @covers ::version_check
+	 */
+	public function test_version_upgrade_grants_capability_new_to_the_definition(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		$synced            = get_option( self::ROLE_CAPS_SYNCED_OPTION );
+		$synced['cashier'] = array_values( array_diff( $synced['cashier'], array( 'manage_product_terms' ) ) );
+		update_option( self::ROLE_CAPS_SYNCED_OPTION, $synced );
+		get_role( 'cashier' )->remove_cap( 'manage_product_terms' );
+		get_role( 'cashier' )->remove_cap( 'edit_products' );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint() );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert.
+		$this->assertTrue( get_role( 'cashier' )->has_cap( 'manage_product_terms' ) );
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
+	}
+
+	/**
+	 * A matching legacy fingerprint seeds the snapshot without granting capabilities.
+	 *
+	 * @covers ::version_check
+	 */
+	public function test_version_upgrade_without_synced_option_and_matching_fingerprint_grants_nothing(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		delete_option( self::ROLE_CAPS_SYNCED_OPTION );
+		get_role( 'cashier' )->remove_cap( 'edit_products' );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint() );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert.
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
+		$this->assertArrayHasKey( 'cashier', get_option( self::ROLE_CAPS_SYNCED_OPTION ) );
+	}
+
+	/**
+	 * A cashier role deleted before an upgrade is recreated whole, access gate included.
+	 *
+	 * @covers ::create_pos_roles
+	 */
+	public function test_version_upgrade_recreates_missing_cashier_role_with_access_capability(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		remove_role( 'cashier' );
+		$this->assertNull( get_role( 'cashier' ) );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint() );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert.
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier );
+		$this->assertTrue( $cashier->has_cap( 'access_woocommerce_pos' ) );
+		$this->assertTrue( $cashier->has_cap( 'edit_products' ) );
+	}
+
+	/**
+	 * A missing snapshot schedules the sync on its own and is seeded without granting.
+	 *
+	 * @covers ::version_check
+	 */
+	public function test_version_check_with_missing_synced_option_schedules_sync_and_seeds_it(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		delete_option( self::ROLE_CAPS_SYNCED_OPTION );
+		get_role( 'cashier' )->remove_cap( 'edit_products' );
+		update_option( self::DB_VERSION_OPTION, \WCPOS\WooCommercePOS\VERSION );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, $this->role_caps_fingerprint() );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		// Act.
+		$version_check->invoke( $activator );
+		$scheduled = has_action( 'init' );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert.
+		$this->assertNotFalse( $scheduled );
+		$this->assertArrayHasKey( 'cashier', get_option( self::ROLE_CAPS_SYNCED_OPTION ) );
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
+	}
+
+	/**
+	 * Explicit activation remains the full capability repair path.
+	 *
+	 * @covers ::single_activate
+	 */
+	public function test_activation_regrants_capability_removed_from_cashier_role(): void {
+		// Arrange.
+		$activator = new Activator();
+		$activator->single_activate( false );
+		get_role( 'cashier' )->remove_cap( 'edit_products' );
+
+		// Act.
+		$activator->single_activate( false );
+
+		// Assert.
+		$this->assertTrue( get_role( 'cashier' )->has_cap( 'edit_products' ) );
 	}
 
 	/**

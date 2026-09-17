@@ -9,6 +9,9 @@ namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_Order_Item_Product;
 use WCPOS\WooCommercePOS\Services\Quick_Discount;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WP_Error;
 
 /**
  * Shapes a POS order document into the body forwarded to the STOCK wc/v3 orders
@@ -19,7 +22,24 @@ use WCPOS\WooCommercePOS\Services\Quick_Discount;
  * POS order document survive wc/v3's strict schema and its remove-and-reapply
  * line semantics. This class is the second half, extracted verbatim from
  * API\V2\Write_Controller so the protocol half stays legible; the shaping rules
- * themselves are unchanged.
+ * themselves are unchanged. Client-date validation and tax-ID persistence are
+ * shared with the v1 lane; the remaining shaping rules are not.
+ *
+ * Lane differences still to be reconciled (V1 = API\V1\Orders_Controller; V2 = API\V2\Writers\Order_Writer):
+ * - Coupons: V1::calculate_coupons vs reconcile_order_coupon_lines: v1 skips empty codes; v2 forwards malformed lines for rejection; v2 reconciles updates only.
+ * - Product identity: V1::get_product_id vs normalize_line_item_product_identity: v1 uses loose zero comparison; v2 requires numeric zero and supplies a misc SKU sentinel.
+ * - Misc SKU: V1::maybe_set_item_meta_data vs normalize_line_item_product_identity: v1 uses isset and the stored product ID; v2 requires posted zero, a string SKU, and trims it.
+ * - Any attributes: V1::maybe_set_item_meta_data vs recover_any_variation_attributes: v1 uses stored identity and updates by meta ID (default ''); v2 uses posted IDs (product default 0) and appends only missing keys.
+ * - Variation dedupe: V1::prepare_line_items vs drop_unchanged_variation_line_identity: v1 prunes duplicate rows after preparation; v2 drops unchanged binding IDs before forwarding.
+ * - Tombstones/omissions: V1 uses WC item deletion; v2 preserves explicit product_id null before identity dedupe and adds deletion markers for omitted items; v1 has no omission pass.
+ * - Item UUIDs: V1 uses WC posted item IDs; reconcile_order_item_ids restores missing IDs from unique UUID matches on v2.
+ * - Billing email: V1::wcpos_validate_billing_email/get_item_schema allow empty values; without_empty_billing_email drops ''/null on v2, whose writer explicitly clears '' on update.
+ * - Display fields: V1::get_item_schema relaxes parent_name; sanitize_order_wc_payload drops null parent_name, image, and display meta fields on v2.
+ * - Client date: V1 create filter reads raw JSON; V2::prepare_create reads the document; both now use validate_client_created_gmt (absent/null/empty means no override).
+ * - Tax IDs: v1 coerces, v2 rejects incomplete entries; V1 refreshes its response after persist_tax_ids; V2::persist uses the same snapshot (absent snapshots on create only; [] clears).
+ * - Audit: V1::wcpos_before_order_object_save/create_item/update_item vs V2 audit phases: v2 also handles reassignment, offline payment assertions, and unpaid provenance updates.
+ * - Reserved stock: V1::save_object uses request params (absent values null); V2::forward_with_reserved_stock uses payload defaults (status/transaction '', paid false); both use around_paid_create.
+ * - HPOS caps: V1 permission overrides retry broad edit/delete order caps; V2 Write_Controller::wcpos_check_permissions remaps read/create and ownership-sensitive edit/delete caps; no payload rule.
  */
 final class Order_Write_Payload {
 	/**
@@ -58,6 +78,61 @@ final class Order_Write_Payload {
 		// Runs last: it reads the FORWARDED line shape, after normalize_line_item_product_identity
 		// has already resolved the posted sku (which outranks the ids in wc/v3's get_product_id).
 		return $this->drop_unchanged_variation_line_identity( $order, $payload );
+	}
+
+	/**
+	 * Validate the client creation time; bare GMT values are UTC, not store time.
+	 *
+	 * @param array $payload Original order document (raw JSON on v1).
+	 * @return int|null|WP_Error UTC timestamp, null when absent/empty, or a 400 error.
+	 */
+	public function validate_client_created_gmt( array $payload ) {
+		if ( ! isset( $payload['date_created_gmt'] ) ) {
+			return null;
+		}
+		if ( ! is_scalar( $payload['date_created_gmt'] ) ) {
+			return $this->invalid_created_gmt();
+		}
+		$value = wc_clean( wp_unslash( (string) $payload['date_created_gmt'] ) );
+		if ( '' === $value ) {
+			return null;
+		}
+		$timestamp = 1 === preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/i', $value )
+			? rest_parse_date( 'Z' === strtoupper( substr( $value, -1 ) ) ? $value : $value . 'Z', true ) : false;
+		if ( false === $timestamp ) {
+			return $this->invalid_created_gmt();
+		}
+		return $timestamp > time() + DAY_IN_SECONDS
+			? new WP_Error( 'woocommerce_pos_rest_future_date_created_gmt', __( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ), array( 'status' => 400 ) )
+			: $timestamp;
+	}
+
+	/** Build the stable invalid create timestamp error. */
+	private function invalid_created_gmt(): WP_Error {
+		return new WP_Error( 'woocommerce_pos_rest_invalid_date_created_gmt', __( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+	}
+
+	/**
+	 * Persist explicit tax IDs, or snapshot the customer only on create.
+	 *
+	 * The v1 controller uses the read-back to refresh its already-built response.
+	 *
+	 * @param int   $id        Saved order ID.
+	 * @param array $payload   Original order document; an empty tax_ids array clears IDs.
+	 * @param bool  $is_create Whether to snapshot when tax_ids is absent.
+	 * @return array|null Stored tax IDs, or null when the order does not exist.
+	 */
+	public function persist_tax_ids( int $id, array $payload, bool $is_create ): ?array {
+		$order = wc_get_order( $id );
+		if ( ! $order ) {
+			return null;
+		}
+		if ( is_array( $payload['tax_ids'] ?? null ) ) {
+			( new Tax_Id_Writer() )->write_for_order( $order, $payload['tax_ids'] );
+		} elseif ( $is_create && $order->get_customer_id() > 0 ) {
+			( new Tax_Id_Writer() )->snapshot_from_user_to_order( $order, $order->get_customer_id() );
+		}
+		return ( new Tax_Id_Reader() )->read_for_order( $order );
 	}
 
 	/**

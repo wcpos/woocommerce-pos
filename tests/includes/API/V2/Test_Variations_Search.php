@@ -74,6 +74,21 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Malformed UTF-8 must not expose the variation catalogue.
+	 */
+	public function test_malformed_utf8_search_returns_no_rows(): void {
+		// Arrange.
+		$this->create_variation( 'MALFORMED-UTF8-SKU' );
+
+		// Act.
+		$response = $this->variations_request( array( 'search' => "\xC3\x28" ) );
+
+		// Assert: reject invalid input before querying rather than returning catalogue rows.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_variations_search_invalid', $response->get_data()['code'] );
+	}
+
+	/**
 	 * Decimal-enabled catalog reads must not integer-coerce variation stock.
 	 */
 	public function test_decimal_stock_quantity_is_preserved_on_variation_read(): void {
@@ -351,6 +366,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'empty sku'      => array( array( 'sku' => '' ) ),
 			'comma only'     => array( array( 'sku' => ', ' ) ),
 			'blank search'   => array( array( 'search' => '   ' ) ),
+			'unicode blank'  => array( array( 'search' => "\u{3000}" ) ),
 		);
 	}
 
@@ -449,21 +465,87 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Every variation search term must match a searchable carrier.
+	 * Every term must match a carrier on the same variation, in any order.
 	 */
 	public function test_variation_search_matches_every_term(): void {
+		// Arrange.
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
-		$sku     = wp_generate_password( 8, false );
-		$barcode = wp_generate_password( 8, false );
+		$sku     = 'TERM-SKU';
+		$barcode = 'TERM-BARCODE';
 		$match   = $this->create_variation( $sku );
 		$match->update_meta_data( '_barcode', $barcode );
 		$match->save_meta_data();
 		$other = $this->create_variation( wp_generate_password( 8, false ) );
 		update_post_meta( $other->get_id(), '_sku', $sku );
-		update_post_meta( $other->get_id(), '_barcode', wp_generate_password( 8, false ) );
+		update_post_meta( $other->get_id(), '_barcode', '' );
 
-		$this->assertSame( array( $match->get_id() ), $this->variation_ids( array( 'search' => $sku . ' ' . $barcode ) ) );
+		// Act / Assert.
+		foreach ( array( $sku . ' ' . $barcode, $barcode . ' ' . $sku, $sku . "\u{00A0}" . $barcode, $barcode . "\u{3000}" . $sku ) as $search ) {
+			$this->assertSame( array( $match->get_id() ), $this->variation_ids( array( 'search' => $search ) ) );
+		}
 		$this->assertSame( array(), $this->variation_ids( array( 'search' => $sku . ' zzzz' ) ) );
+	}
+
+	/**
+	 * Both identifier carriers preserve literal punctuation and short terms.
+	 *
+	 * @dataProvider variation_phrases
+	 * @param string $phrase Search phrase.
+	 * @param string $decoy  Nonmatching carrier value.
+	 */
+	public function test_variation_phrase_matches_one_literal_carrier( string $phrase, string $decoy ): void {
+		// Arrange.
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
+		$sku     = $this->create_variation( 'PHRASE-SKU' );
+		$barcode = $this->create_variation( 'PHRASE-BARCODE' );
+		$other   = $this->create_variation( 'PHRASE-DECOY' );
+		update_post_meta( $sku->get_id(), '_sku', wp_slash( 'xx' . $phrase . 'xx' ) );
+		update_post_meta( $barcode->get_id(), '_barcode', wp_slash( $phrase ) );
+		update_post_meta( $other->get_id(), '_sku', wp_slash( $decoy ) );
+		update_post_meta( $other->get_id(), '_barcode', '' );
+
+		// Act.
+		$ids = $this->variation_ids(
+			array(
+				'search' => $phrase,
+				'include' => array( $sku->get_id(), $barcode->get_id(), $other->get_id() ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $barcode->get_id(), $sku->get_id() ), $ids );
+	}
+
+	/**
+	 * Punctuation within terms must not be normalized or truncated.
+	 *
+	 * @return array
+	 */
+	public function variation_phrases(): array {
+		return array(
+			array( 'MY საბარგული', 'M3 საბარგული' ),
+			array( 'A საბარგული', 'B საბარგული' ),
+			array( '0', 'BBB' ),
+			array( '0.4', '0 4' ),
+			array( '%30', '30' ),
+			array( '100%', '1000' ),
+			array( 'MY_code', 'MYXcode' ),
+			array( 'MY\\code', 'MYcode' ),
+			array( 'MY"code', 'MYcode' ),
+			array( "MY'code", 'MYcode' ),
+			array( 'MY  საბარგული', 'M3 საბარგული' ),
+			array( 'MY+საბარგული', 'MY საბარგული' ),
+		);
+	}
+
+	/**
+	 * Literal-preserving sanitation does not accept array search values.
+	 */
+	public function test_variation_search_array_retains_validation_error(): void {
+		$response = $this->variations_request( array( 'search' => array( 'MY' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
 	}
 
 	/**
@@ -539,24 +621,29 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 * Pagination returns a stable descending page and the unpaged total.
 	 */
 	public function test_search_paginates_with_total(): void {
-		$first = $this->create_variation( 'PAGE-MATCH-1' );
-		$this->create_variation( 'PAGE-MATCH-2' );
-		$this->create_variation( 'PAGE-MATCH-3' );
+		// Arrange.
+		$this->create_variation( 'PAGE MATCH-1' );
+		$second = $this->create_variation( 'PAGE MATCH-2' );
+		$third  = $this->create_variation( 'PAGE MATCH-3' );
+		$this->create_variation( 'PAGE Other MATCH' );
+		$this->create_variation( 'MATCH PAGE' );
 
+		// Act.
 		$response = $this->variations_request(
 			array(
-				'search'   => 'PAGE-MATCH',
+				'search'   => 'PAGE MATCH',
 				'per_page' => 2,
 				'page'     => 2,
 			)
 		);
 		$data = $response->get_data();
 
+		// Assert.
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( $first->get_id() ), array_column( $data, 'id' ) );
-		$this->assertSame( 3, (int) $response->get_headers()['X-WP-Total'] );
-		$this->assertCount( 1, $data );
-		$this->assertSame( '2', $response->get_headers()['X-WP-TotalPages'] );
+		$this->assertSame( array( $third->get_id(), $second->get_id() ), array_column( $data, 'id' ) );
+		$this->assertSame( 5, (int) $response->get_headers()['X-WP-Total'] );
+		$this->assertCount( 2, $data );
+		$this->assertSame( '3', $response->get_headers()['X-WP-TotalPages'] );
 	}
 
 	/**
@@ -602,6 +689,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4096 ) ) ),
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 100, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
+			'search characters' => array( array( 'search' => str_repeat( 'ს', 256 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 10, 'term' ) ) ) ),
 			'page'              => array(
 				array(
@@ -623,17 +711,13 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4097 ) ) ),
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
 			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
+			'search characters' => array( array( 'search' => str_repeat( 'ს', 257 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
+			'unicode terms'     => array( array( 'search' => implode( "\u{3000}", array_fill( 0, 11, 'term' ) ) ) ),
 			'empty sku search length' => array(
 				array(
 					'sku'    => ', ',
 					'search' => str_repeat( 'S', 257 ),
-				),
-			),
-			'empty sku search terms'  => array(
-				array(
-					'sku'    => ', ',
-					'search' => implode( ' ', array_fill( 0, 11, 'term' ) ),
 				),
 			),
 			'page'              => array(

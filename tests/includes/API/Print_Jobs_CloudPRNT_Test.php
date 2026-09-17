@@ -68,6 +68,7 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		$this->uninstall_sync_read_lane();
 		remove_all_filters( 'woocommerce_pos_logging' );
 		Logger::reset_dedup_state();
 		parent::tearDown();
@@ -379,24 +380,41 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It logs when a claimed job renders no printable bytes.
+	 * Empty CloudPRNT renders fail without changing the negotiated GET response.
 	 */
-	public function test_empty_rendered_payload_logs_error(): void {
-		$id = $this->jobs->create(
-			array(
-				'printer_id'   => 'p1',
-				'content_type' => 'application/octet-stream',
-				'payload'      => 'not-valid-base64',
-			)
-		);
+	public function test_empty_rendered_payload_fails_job_and_records_reason(): void {
+		$this->install_sync_read_lane();
+		foreach ( array( '/wcpos/v2', '/wcpos/v1' ) as $namespace ) {
+			// Arrange.
+			$this->logged_messages = array();
+			$id = $this->jobs->create(
+				array(
+					'printer_id'   => 'p1',
+					'content_type' => 'application/octet-stream',
+					'payload'      => 'not-valid-base64',
+				)
+			);
+			$request = $this->wp_rest_get_request( $namespace . '/print-jobs/cloudprnt' );
+			$request->set_query_params( array( 'printer_id' => 'p1', 'pt' => 'tok', 'token' => $id ) );
 
-		$response = $this->poll( 'GET', array( 'token' => $id ) );
+			// Act.
+			$response = rest_do_request( $request );
 
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals(
-			array( sprintf( '/wcpos/v1/print-jobs/cloudprnt: print job %d rendered an empty payload for printer "p1".', $id ) ),
-			$this->logged_messages
-		);
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$headers = $response->get_headers();
+			$this->assertSame( 'application/octet-stream', $headers['Content-Type'] );
+			$this->assertArrayNotHasKey( 'X-Star-Cut', $headers );
+			$this->assertArrayNotHasKey( 'X-Star-CashDrawer', $headers );
+			$this->assertArrayNotHasKey( 'X-Star-ImageDitherPattern', $headers );
+			$this->assertSame( '', $response->get_raw_body() );
+			$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $id )['status'] );
+			$this->assertSame( 'empty_rendered_payload', $this->jobs->get( $id )['error'] );
+			$this->assertSame(
+				array( sprintf( '%s/print-jobs/cloudprnt: print job %d rendered an empty payload for printer "p1"; nothing was sent to the printer.', $namespace, $id ) ),
+				$this->logged_messages
+			);
+		}
 	}
 
 	/**

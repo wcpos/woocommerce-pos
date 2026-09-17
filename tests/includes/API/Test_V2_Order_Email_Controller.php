@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 
 /**
- * wcpos/v2 order-email registration and route-boundary tests.
+ * The wcpos/v2 order-email registration and route-boundary tests.
  */
 class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
@@ -59,6 +59,34 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $v1_response->get_status(), $v2_response->get_status() );
 		$this->assertTrue( $v1_attempted );
 		$this->assertTrue( $v2_attempted );
+	}
+
+	/**
+	 * The email routes declare a callable route schema, so the `help` index renders.
+	 *
+	 * WordPress calls `call_user_func( $options['schema'] )` for every registered
+	 * route whenever a namespace index is requested with `context=help`. A route
+	 * registered with `'schema' => array()` passes `isset()` and then fatals with a
+	 * TypeError, taking the whole `/wcpos/v2` (and `/wcpos/v1`) index down.
+	 */
+	public function test_order_email_routes_render_help_index_with_route_schema(): void {
+		// The help index is keyed by the raw registered pattern, not the `{order_id}` form.
+		$route_pattern = '/orders/(?P<order_id>[\d]+)/email';
+
+		foreach ( array( 'wcpos/v2', 'wcpos/v1' ) as $namespace ) {
+			$request = $this->wp_rest_get_request( '/' . $namespace );
+			$request->set_query_params( array( 'context' => 'help' ) );
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertSame( 200, $response->get_status(), $namespace . ' help index' );
+			$this->assertArrayHasKey( '/' . $namespace . $route_pattern, $data['routes'], $namespace . ' email route' );
+
+			$schema = $data['routes'][ '/' . $namespace . $route_pattern ]['schema'];
+			$this->assertSame( 'object', $schema['type'], $namespace . ' schema type' );
+			$this->assertSame( 'boolean', $schema['properties']['success']['type'], $namespace . ' success property' );
+		}
 	}
 
 	/**

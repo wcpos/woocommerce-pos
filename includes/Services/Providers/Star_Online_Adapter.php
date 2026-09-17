@@ -8,6 +8,9 @@
 namespace WCPOS\WooCommercePOS\Services\Providers;
 
 use WCPOS\WooCommercePOS\Interfaces\Push_Provider_Adapter_Interface;
+use WCPOS\WooCommercePOS\Services\Print_Job_Service;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
+use WP_Error;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
 
 /**
@@ -152,5 +155,40 @@ class Star_Online_Adapter implements Push_Provider_Adapter_Interface {
 			'external_job_id' => '',
 			'drawer_error' => '',
 		);
+	}
+
+	/**
+	 * Queue a Star Markup test receipt and submit it through the push pipeline.
+	 *
+	 * @param array $printer Registered star-online printer.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function test_print( array $printer ) {
+		$jobs = new Print_Job_Service();
+		$diag = $this->diagnostic( (string) $printer['name'] );
+
+		$id = $jobs->create(
+			array(
+				'printer_id'   => $printer['id'],
+				'content_type' => 'text/vnd.star.markup',
+				'payload'      => $diag['payload'],
+			)
+		);
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_create_failed',
+				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		wp_schedule_single_event( time(), Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $id ) );
+		( new \WCPOS\WooCommercePOS\Services\Cloud_Print_Submit_Service() )->submit( $id );
+
+		$response = rest_ensure_response( $jobs->get( $id ) );
+		$response->set_status( 201 );
+
+		return $response;
 	}
 }

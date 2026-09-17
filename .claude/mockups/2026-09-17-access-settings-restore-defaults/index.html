@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access settings mockups</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; font-size: 13px; color: #1d2327; background: #dcdcde; }
+  a { color: #2271b1; } a:hover { color: #135e96; }
+  .page { max-width: 1160px; margin: 0 auto; padding: 32px 20px 64px; display: flex; flex-direction: column; gap: 48px; }
+  .page > header h1 { font-size: 22px; margin: 0 0 6px; }
+  .page > header p { margin: 0; color: #3c434a; }
+  section > h2 { font-size: 15px; margin: 0 0 10px; color: #1d2327; }
+  section > p.note { margin: 0 0 12px; color: #3c434a; max-width: 820px; line-height: 1.5; }
+  .frame { width: 1120px; height: 720px; box-sizing: border-box; display: flex; flex-direction: column; background: #f0f0f1; border: 1px solid #a7aaad; position: relative; overflow: hidden; }
+  .bar { height: 32px; background: #1d2327; color: #f0f0f1; display: flex; align-items: center; padding: 0 16px; gap: 16px; flex: none; }
+  .bar b { font-weight: 600; } .bar span { color: #a7aaad; }
+  .body { flex-grow: 1; display: flex; padding: 20px; gap: 20px; min-height: 0; }
+  .nav { width: 160px; flex: none; display: flex; flex-direction: column; gap: 2px; }
+  .nav a { display: block; padding: 8px 12px; border-radius: 4px; text-decoration: none; color: #1d2327; }
+  .nav a.on { background: #2271b1; color: #fff; }
+  .card { flex-grow: 1; background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; display: flex; flex-direction: column; min-height: 0; }
+  .notice { margin: 16px 16px 0; border-left: 4px solid #72aee6; box-shadow: 0 1px 1px rgba(0,0,0,.04); padding: 10px 12px; line-height: 1.5; }
+  .cols { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; padding: 16px; }
+  .roles { margin: 0; padding: 0; list-style: none; }
+  .roles li { padding: 12px 16px; margin: 0 0 4px; border-radius: 4px; font-weight: 500; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .roles li.on { background: #e5f0f8; }
+  .roles li:hover:not(.on) { background: #f6f7f7; }
+  h3.title { margin: 0; font-size: 15px; font-weight: 500; }
+  .cb { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 1px solid #8c8f94; border-radius: 4px; background: #fff; margin: 0; position: relative; flex: none; cursor: pointer; }
+  .cb:checked { border-color: #2271b1; }
+  .cb:checked::before { content: ""; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px; border: solid #2271b1; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .cb:indeterminate, .cb.mixed { border-color: #2271b1; }
+  .cb:indeterminate::before, .cb.mixed::before { content: ""; position: absolute; left: 3px; top: 6px; width: 8px; height: 2px; background: #2271b1; border-radius: 1px; transform: none; border: 0; }
+  .cb:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
+  .row label { cursor: pointer; line-height: 16px; }
+  .hint { color: #646970; line-height: 1.4; }
+  .btn { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 3px; font-size: 13px; border: 1px solid #2271b1; background: #f6f7f7; color: #2271b1; cursor: pointer; font-family: inherit; }
+  .btn.primary { background: #2271b1; color: #fff; }
+  .btn:hover { background: #f0f0f1; } .btn.primary:hover { background: #135e96; }
+  .adv { margin-top: 16px; border: 1px solid #dcdcde; border-radius: 4px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .sub { font-size: 11px; color: #757575; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #dba617; flex: none; }
+  .status { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: #646970; }
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; }
+  .dialog { width: 520px; background: #fff; border-radius: 4px; box-shadow: 0 8px 32px rgba(0,0,0,.25); }
+  .dialog h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+  .dialog p { margin: 0; line-height: 1.5; color: #3c434a; }
+  .change { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #f0f0f1; }
+  .tag { flex: none; width: 64px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; padding-top: 2px; }
+  .sheet { background: #fff; border: 1px solid #a7aaad; padding: 32px; display: flex; flex-direction: column; gap: 24px; width: 1120px; box-sizing: border-box; }
+  .cap { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #646970; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .tile { border: 1px solid #dcdcde; border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #fcf9e8; color: #8a6d00; border: 1px solid #f0e6b8; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>WP Admin › POS › Settings › Access — Cashier role</h1>
+    <p>Four views: today, the proposed screen, the restore confirmation, and the checkbox states with copy options. Mixed checkboxes on this page are real: tick one to see the native change.</p>
+  </header>
+
+  <section id="today">
+    <h2>1 · Today</h2>
+    <p class="note">"Create &amp; edit products" is partly granted, but the box looks plain unchecked. The only signal is the small grey "partly granted".</p>
+    <div class="frame">
+      <div class="bar"><b>WordPress</b><span>My Store</span><span>POS › Settings</span></div>
+      <div class="body">
+        <nav class="nav"><a href="#">General</a><a href="#">Checkout</a><a href="#" class="on">Access</a><a href="#">Receipts</a><a href="#">Cloud Print</a><a href="#">Tools</a><a href="#">License</a></nav>
+        <div class="card">
+          <div class="notice">By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles. It is recommended that you <strong>do not change</strong> the default settings unless you are fully aware of the consequences. For more information please visit the <a href="#">documentation</a>.</div>
+          <div class="cols">
+            <ul class="roles"><li>Administrator</li><li>Shop Manager</li><li class="on">Cashier</li><li>Editor</li><li>Author</li><li>Subscriber</li><li>Customer</li></ul>
+            <div>
+              <h3 class="title" style="margin-bottom: 8px;">What this role can do</h3>
+              <div class="row"><input class="cb" type="checkbox" id="a1" checked><label for="a1">Use the POS</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a2"><label for="a2">Manage POS settings</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a3"><label for="a3">Create &amp; edit products</label><span class="sub">partly granted</span></div>
+              <div class="row"><input class="cb" type="checkbox" id="a4"><label for="a4">Delete products</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a5" checked><label for="a5">Create &amp; edit coupons</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a6"><label for="a6">Delete coupons</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a7" checked><label for="a7">Manage orders</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a8" checked><label for="a8">Manage customers</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="a9" checked><label for="a9">Manage categories &amp; tags</label></div>
+              <div class="adv"><span><strong>Advanced</strong> <span class="sub">individual capabilities</span></span><span class="sub">▸</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="proposed">
+    <h2>2 · Proposed: Restore defaults + mixed state</h2>
+    <p class="note">A "Restore defaults" button beside the heading. An amber dot marks a role changed from the WCPOS defaults, in the list and under the heading, so the button only draws attention when there is something to restore. The mixed checkbox shows a dash and the hint says what is wrong and what each click does.</p>
+    <div class="frame">
+      <div class="bar"><b>WordPress</b><span>My Store</span><span>POS › Settings</span></div>
+      <div class="body">
+        <nav class="nav"><a href="#">General</a><a href="#">Checkout</a><a href="#" class="on">Access</a><a href="#">Receipts</a><a href="#">Cloud Print</a><a href="#">Tools</a><a href="#">License</a></nav>
+        <div class="card">
+          <div class="notice">By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles. It is recommended that you <strong>do not change</strong> the default settings unless you are fully aware of the consequences. For more information please visit the <a href="#">documentation</a>.</div>
+          <div class="cols">
+            <ul class="roles"><li>Administrator</li><li>Shop Manager</li><li class="on"><span>Cashier</span><span class="dot" title="Changed from the WCPOS defaults"></span></li><li>Editor</li><li>Author</li><li>Subscriber</li><li>Customer</li></ul>
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px;">
+                <div>
+                  <h3 class="title">What a Cashier can do</h3>
+                  <div class="status"><span class="dot"></span>Changed from the WCPOS defaults</div>
+                </div>
+                <button class="btn" type="button">Restore defaults</button>
+              </div>
+              <div class="row"><input class="cb" type="checkbox" id="b1" checked><label for="b1">Use the POS</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="b2"><label for="b2">Manage POS settings</label></div>
+              <div class="row">
+                <input class="cb" type="checkbox" id="b3" data-mixed>
+                <div style="display: flex; flex-direction: column; gap: 3px;">
+                  <label for="b3">Create &amp; edit products</label>
+                  <span class="hint">Some permissions are missing (3 of 7 granted), so the POS may refuse product edits. Tick to grant the rest, or <a href="#">review them under Advanced</a>.</span>
+                </div>
+              </div>
+              <div class="row"><input class="cb" type="checkbox" id="b4"><label for="b4">Delete products</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="b5" checked><label for="b5">Create &amp; edit coupons</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="b6"><label for="b6">Delete coupons</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="b7" checked><label for="b7">Manage orders</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="b8" checked><label for="b8">Manage customers</label></div>
+              <div class="row"><input class="cb" type="checkbox" id="b9" checked><label for="b9">Manage categories &amp; tags</label></div>
+              <div class="adv"><span><strong>Advanced</strong> <span class="sub">individual capabilities</span></span><span class="sub">▸</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="confirm">
+    <h2>3 · Confirm restore</h2>
+    <p class="note">Restoring can take privileges away as well as give them back, and the defaults changed in 1.10.0, so the dialog lists what will change before anything is written.</p>
+    <div class="frame">
+      <div class="bar"><b>WordPress</b><span>My Store</span><span>POS › Settings</span></div>
+      <div class="body">
+        <nav class="nav"><a href="#">General</a><a href="#">Checkout</a><a href="#" class="on">Access</a><a href="#">Receipts</a><a href="#">Cloud Print</a><a href="#">Tools</a><a href="#">License</a></nav>
+        <div class="card">
+          <div class="cols" style="align-content: start;">
+            <ul class="roles"><li>Administrator</li><li>Shop Manager</li><li class="on">Cashier</li><li>Editor</li><li>Author</li><li>Subscriber</li><li>Customer</li></ul>
+            <div>
+              <h3 class="title" style="margin-bottom: 8px;">What a Cashier can do</h3>
+              <div class="row"><input class="cb" type="checkbox" checked disabled><span>Use the POS</span></div>
+              <div class="row"><input class="cb" type="checkbox" disabled><span>Manage POS settings</span></div>
+              <div class="row"><input class="cb" type="checkbox" disabled data-mixed><span>Create &amp; edit products</span></div>
+              <div class="row"><input class="cb" type="checkbox" checked disabled><span>Delete products</span></div>
+              <div class="row"><input class="cb" type="checkbox" checked disabled><span>Create &amp; edit coupons</span></div>
+              <div class="row"><input class="cb" type="checkbox" disabled><span>Delete coupons</span></div>
+              <div class="row"><input class="cb" type="checkbox" checked disabled><span>Manage orders</span></div>
+              <div class="row"><input class="cb" type="checkbox" checked disabled><span>Manage customers</span></div>
+              <div class="row"><input class="cb" type="checkbox" checked disabled><span>Manage categories &amp; tags</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="overlay">
+        <div class="dialog" role="dialog" aria-labelledby="restore-title">
+          <div style="padding: 20px 24px 12px;">
+            <h3 id="restore-title">Restore the default privileges for Cashier?</h3>
+            <p>This puts the Cashier role back to what WCPOS grants on a fresh install. Permissions added by other plugins are left alone.</p>
+          </div>
+          <div style="padding: 0 24px 8px;">
+            <div style="font-weight: 600; margin-bottom: 4px;">What will change</div>
+            <div class="change"><span class="tag" style="color: #00753a;">Grant</span><span>Create &amp; edit products <span class="hint">(the 4 missing permissions)</span></span></div>
+            <div class="change"><span class="tag" style="color: #b32d2e;">Remove</span><span>Delete products</span></div>
+            <div class="change" style="border-bottom: 1px solid #f0f0f1;"><span class="tag" style="color: #646970;">Keep</span><span class="hint">Use the POS, Create &amp; edit coupons, Manage orders, Manage customers, Manage categories &amp; tags</span></div>
+          </div>
+          <div style="padding: 12px 24px 20px; display: flex; justify-content: flex-end; gap: 8px;">
+            <button class="btn" type="button">Cancel</button>
+            <button class="btn primary" type="button">Restore defaults</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="variants">
+    <h2>4 · Checkbox states and copy options</h2>
+    <p class="note">Option A is my recommendation: it says what is wrong, what it does to the till, and how to fix it.</p>
+    <div class="sheet">
+      <div>
+        <div class="cap" style="margin-bottom: 12px;">Checkbox states</div>
+        <div class="grid3">
+          <div class="tile"><div class="row" style="padding: 0;"><input class="cb" type="checkbox" id="s1"><label for="s1">Delete products</label></div><div class="hint">Not granted. Nothing behind this task is on the role.</div></div>
+          <div class="tile"><div class="row" style="padding: 0;"><input class="cb" type="checkbox" id="s2" data-mixed><label for="s2">Create &amp; edit products</label></div><div class="hint">Mixed. Only some of the permissions behind this task are on the role. Ticking grants the rest; unticking removes them all.</div></div>
+          <div class="tile"><div class="row" style="padding: 0;"><input class="cb" type="checkbox" id="s3" checked><label for="s3">Manage orders</label></div><div class="hint">Granted. Every permission behind this task is on the role.</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="cap" style="margin-bottom: 12px;">Copy for the mixed state, three options</div>
+        <div class="grid3">
+          <div class="tile">
+            <div class="cap" style="color: #2271b1;">A · Count and consequence</div>
+            <div class="row" style="padding: 0;"><input class="cb" type="checkbox" id="c1" data-mixed><div style="display: flex; flex-direction: column; gap: 3px;"><label for="c1">Create &amp; edit products</label><span class="hint">Some permissions are missing (3 of 7 granted), so the POS may refuse product edits. Tick to grant the rest, or <a href="#">review them under Advanced</a>.</span></div></div>
+          </div>
+          <div class="tile">
+            <div class="cap" style="color: #2271b1;">B · Short badge</div>
+            <div class="row" style="padding: 0; align-items: center;"><input class="cb" type="checkbox" id="c2" data-mixed><label for="c2">Create &amp; edit products</label><span class="pill">3 of 7</span><a href="#" style="font-size: 12px;">Review</a></div>
+            <div class="hint">Lightest. Relies on the mixed glyph and a tooltip on the badge to explain itself.</div>
+          </div>
+          <div class="tile">
+            <div class="cap" style="color: #2271b1;">C · Plain language, no numbers</div>
+            <div class="row" style="padding: 0;"><input class="cb" type="checkbox" id="c3" data-mixed><div style="display: flex; flex-direction: column; gap: 3px;"><label for="c3">Create &amp; edit products</label><span class="hint">Incomplete: this role can do part of this task but not all of it. Tick to allow the whole task.</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+  document.querySelectorAll('input[data-mixed]').forEach(function (el) { el.indeterminate = true; });
+</script>
+</body>
+</html>

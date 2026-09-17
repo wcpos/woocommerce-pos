@@ -13,6 +13,7 @@ if ( ! class_exists( 'WC_REST_Taxes_Controller' ) ) {
 	return;
 }
 
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use Exception;
 use WC_REST_Taxes_Controller;
 use WCPOS\WooCommercePOS\Logger;
@@ -67,30 +68,20 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		return $dispatch_result;
 	}
 
-	/**
-	 * Check whether a given request has permission to read taxes.
+	/** Delegate the read decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * @param  \WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|boolean
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function get_items_permissions_check( $request ) {
-		if ( current_user_can( 'access_woocommerce_pos' ) ) {
-			return true;
-		}
-		return parent::get_items_permissions_check( $request );
+		return Permission_Rules::verdict( 'tax_rates', 'read', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
-	/**
-	 * Check if a given request has access to read a tax.
+	/** Delegate the read decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * @param  \WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|boolean
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function get_item_permissions_check( $request ) {
-		if ( current_user_can( 'access_woocommerce_pos' ) ) {
-			return true;
-		}
-		return parent::get_item_permissions_check( $request );
+		return Permission_Rules::verdict( 'tax_rates', 'read', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
 	/**

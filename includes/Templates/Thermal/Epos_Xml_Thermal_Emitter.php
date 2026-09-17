@@ -39,6 +39,8 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
  */
 class Epos_Xml_Thermal_Emitter {
 
+	use Thermal_Emitter_Support;
+
 	/**
 	 * Render options.
 	 *
@@ -158,77 +160,6 @@ class Epos_Xml_Thermal_Emitter {
 		$this->buffer .= '</epos-print>';
 
 		return $this->buffer;
-	}
-
-	/**
-	 * Walk a list of AST nodes.
-	 *
-	 * @param array $nodes The AST nodes.
-	 *
-	 * @return void
-	 */
-	private function walk_nodes( array $nodes ): void {
-		foreach ( $nodes as $node ) {
-			if ( \is_array( $node ) ) {
-				$this->walk_node( $node );
-			}
-		}
-	}
-
-	/**
-	 * Insert an auto drawer node before the first trailing cut when enabled.
-	 *
-	 * @param array $nodes AST nodes.
-	 *
-	 * @return array
-	 */
-	private function nodes_with_auto_drawer( array $nodes ): array {
-		if ( empty( $this->options['auto_open_drawer'] ) || $this->nodes_contain_drawer( $nodes ) ) {
-			return $nodes;
-		}
-
-		$drawer = array(
-			'type'      => 'drawer',
-			'connector' => \WCPOS\WooCommercePOS\Services\Print_Job_Service::normalize_drawer_connector( (string) ( $this->options['drawer_connector'] ?? 'pin2' ) ),
-		);
-
-		for ( $i = count( $nodes ) - 1; $i >= 0; $i-- ) {
-			$type = isset( $nodes[ $i ]['type'] ) ? (string) $nodes[ $i ]['type'] : '';
-			if ( 'cut' === $type ) {
-				array_splice( $nodes, $i, 0, array( $drawer ) );
-				return $nodes;
-			}
-			if ( in_array( $type, array( 'feed' ), true ) ) {
-				continue;
-			}
-			break;
-		}
-
-		$nodes[] = $drawer;
-		return $nodes;
-	}
-
-	/**
-	 * Whether a node list contains an explicit drawer node.
-	 *
-	 * @param array $nodes AST nodes.
-	 *
-	 * @return bool
-	 */
-	private function nodes_contain_drawer( array $nodes ): bool {
-		foreach ( $nodes as $node ) {
-			if ( ! is_array( $node ) ) {
-				continue;
-			}
-			if ( 'drawer' === ( $node['type'] ?? '' ) ) {
-				return true;
-			}
-			if ( ! empty( $node['children'] ) && is_array( $node['children'] ) && $this->nodes_contain_drawer( $node['children'] ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**

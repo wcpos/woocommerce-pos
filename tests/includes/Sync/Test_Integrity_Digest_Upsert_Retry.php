@@ -29,16 +29,20 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 	}
 
 	/** @dataProvider upsert_failures */
-	public function test_upsert_contention_retries_only_once( string $type, array $errors, int $calls, ?string $expected_error ): void {
+	public function test_upsert_contention_retries_only_once( string $type, array $errors, int $calls, ?string $expected_error, string $method ): void {
 		// Arrange: create the source row before injecting failures.
-		$id = 'product' === $type
-			? $this->factory->post->create(
+		if ( 'customer' === $type ) {
+			$id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		} elseif ( 'order' === $type ) {
+			$id = wc_create_order()->get_id();
+		} else {
+			$id = $this->factory->post->create(
 				array(
 					'post_type' => 'product',
 					'post_status' => 'publish',
 				)
-			)
-			: $this->factory->user->create( array( 'role' => 'customer' ) );
+			);
+		}
 		$digest = new Integrity_Digest();
 		$table  = $digest->table_name();
 		$GLOBALS['wpdb'] = new class( $this->original_wpdb, $table, $errors ) extends \wpdb {
@@ -90,17 +94,13 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 		// Act: exercise each public upsert, not the private retry helper.
 		$error = null;
 		try {
-			if ( 'product' === $type ) {
-				$digest->upsert_digest( $id );
-			} else {
-				$digest->upsert_customer_digest( $id );
-			}
+			$digest->$method( $id );
 		} catch ( RuntimeException $exception ) {
 			$error = $exception->getMessage();
 		}
 
 		// Assert: count only the upsert, excluding session setup and verification queries.
-		$prefix = 'product' === $type ? 'upsert stored digest failed: ' : 'upsert stored customer digest failed: ';
+		$prefix = 'product' === $type ? 'upsert stored digest failed: ' : "upsert stored {$type} digest failed: ";
 		$this->assertSame( $calls, $GLOBALS['wpdb']->upsert_calls );
 		$this->assertSame( null === $expected_error ? null : $prefix . $expected_error, $error );
 		if ( null === $expected_error ) {
@@ -111,13 +111,13 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 	public static function upsert_failures(): array {
 		$changed = "Record has changed since last read in table 'wp_wcpos_sync_stored_digest'; try restarting transaction";
 		$cases   = array();
-		foreach ( array( 'product', 'customer' ) as $type ) {
+		foreach ( array( 'product' => 'upsert_digest', 'customer' => 'upsert_customer_digest', 'order' => 'upsert_order_digest' ) as $type => $method ) {
 			foreach ( array( $changed, 'Deadlock found', 'Lock wait timeout' ) as $error ) {
-				$cases[] = array( $type, array( $error ), 2, null );
+				$cases[ $method . ': ' . $error ] = array( $type, array( $error ), 2, null, $method );
 			}
-			$cases[] = array( $type, array( 'Unknown column' ), 1, 'Unknown column' );
-			$cases[] = array( $type, array( $changed, 'Unknown column' ), 2, 'Unknown column' );
-			$cases[] = array( $type, array( $changed, 'Deadlock found' ), 2, 'Deadlock found' );
+			$cases[ $method . ': permanent error' ] = array( $type, array( 'Unknown column' ), 1, 'Unknown column', $method );
+			$cases[ $method . ': permanent retry error' ] = array( $type, array( $changed, 'Unknown column' ), 2, 'Unknown column', $method );
+			$cases[ $method . ': contention retry error' ] = array( $type, array( $changed, 'Deadlock found' ), 2, 'Deadlock found', $method );
 		}
 		return $cases;
 	}

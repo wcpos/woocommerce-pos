@@ -419,13 +419,13 @@ final class Digest_Index {
 		// Products are the one collection whose servability is NARROWER than a live
 		// row: POS visibility and the readable-catalog scope both apply, so the
 		// richer reader owns them. Every other id-space is exactly its live row.
-		$products = 'products' === $collection;
-		if ( ! $products && ( '' === $live_rows || ! method_exists( $this, $live_rows ) ) ) {
+		$servable = $row['digest']['servable'] ?? null;
+		if ( null === $servable && ( '' === $live_rows || ! method_exists( $this, $live_rows ) ) ) {
 			return $ids;
 		}
 		$wpdb->last_error = '';
-		if ( $products ) {
-			$servable_ids = $this->servable_product_ids( $ids, true );
+		if ( null !== $servable ) {
+			$servable_ids = $this->$servable( $ids, true );
 		} else {
 			$predicate    = (string) \call_user_func( array( $this, $live_rows ), 'requested.id' );
 			$requested    = implode( ' UNION ALL ', array_fill( 0, \count( $ids ), 'SELECT %d AS id' ) );
@@ -537,16 +537,16 @@ final class Digest_Index {
 		$bucket_size  = max( 1, (int) ( $range['bucket_size'] ?? 1 ) );
 		$window_start = max( 0, (int) ( $range['start'] ?? 0 ) );
 		$window_end   = max( 0, (int) ( $range['end'] ?? 0 ) );
-		$publish      = 'products' === $collection && 'publish' === ( $filters['status'] ?? '' );
-		$object_types = self::OBJECT_TYPES_SQL;
-		$current_sql  = $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
-		if ( 'customers' === $collection ) {
-			$object_types = "('customer')";
-			$current_sql  = $this->customer_digest_select_sql( 'u.ID >= %d AND u.ID < %d' );
-		} elseif ( 'orders' === $collection ) {
-			$object_types = "('order')";
-			$current_sql  = $this->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
+		$digest       = Collections::row( $collection )['digest'] ?? null;
+		if ( null === $digest ) {
+			return array(
+				'buckets' => array(),
+				'max_id'  => 0,
+			);
 		}
+		$publish      = isset( Collections::row( $collection )['digest']['published_ids'] ) && 'publish' === ( $filters['status'] ?? '' );
+		$object_types = "('" . implode( "','", $digest['object_types'] ) . "')";
+		$current_sql  = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' );
 		$current_scope = $publish ? $this->product_servable_predicate_sql( 't.id', true ) : array(
 			'sql' => '',
 			'args' => array(),
@@ -656,6 +656,7 @@ final class Digest_Index {
 		global $wpdb;
 		$range_start = max( 0, (int) ( $range['start'] ?? 0 ) );
 		$range_end   = max( 0, (int) ( $range['end'] ?? 0 ) );
+		$digest      = Collections::row( 'products' )['digest'];
 		$table       = $this->table_name();
 
 		// Same-formula invariant: the current side must digest identically to the stored side.
@@ -665,15 +666,15 @@ final class Digest_Index {
 				'SELECT cur.id AS id,'
 				. " CASE WHEN d.digest IS NULL THEN 'missing_stored' ELSE 'changed' END AS status,"
 				. ' d.digest AS stored_digest, cur.crc AS current_digest, cur.object_type AS object_type'
-				. ' FROM (' . $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' ) . ') cur'
+				. ' FROM (' . $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' ) . ') cur'
 				. " LEFT JOIN {$table} d ON d.object_id = cur.id AND d.object_type = cur.object_type"
 				. ' WHERE d.digest IS NULL OR d.digest <> cur.crc'
 				. ' UNION ALL'
 				. " SELECT d.object_id AS id, 'deleted' AS status, d.digest AS stored_digest, NULL AS current_digest, d.object_type AS object_type"
 				. " FROM {$table} d"
-				. ' WHERE d.object_type IN ' . self::OBJECT_TYPES_SQL
+				. ' WHERE d.object_type IN ' . "('" . implode( "','", $digest['object_types'] ) . "')"
 				. ' AND d.object_id >= %d AND d.object_id < %d'
-				. ' AND NOT ' . $this->live_row_exists_sql( 'd.object_id' )
+				. ' AND NOT ' . $this->{$digest['live_rows']}( 'd.object_id' )
 				. ' ORDER BY id ASC',
 				$range_start,
 				$range_end,
@@ -726,13 +727,12 @@ final class Digest_Index {
 		$servable_join   = '';
 		$servable_filter = '';
 		$servable_args   = array();
-		if ( 'customers' === $collection ) {
-			$inner_sql = $this->customer_digest_select_sql( 'u.ID >= %d AND u.ID < %d' );
-		} elseif ( 'orders' === $collection ) {
-			// Orders bucket over their own id-space (HPOS o.id / CPT p.ID) via the {id} placeholder.
-			$inner_sql = $this->order_digest_select_sql( '{id} >= %d AND {id} < %d' );
-		} else {
-			$inner_sql = $this->row_digest_select_sql( 'p.ID >= %d AND p.ID < %d' );
+		$digest          = Collections::row( $collection )['digest'] ?? null;
+		if ( null === $digest ) {
+			return array();
+		}
+		$inner_sql = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' );
+		if ( isset( $digest['servable'] ) ) {
 			$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id";
 			if ( 'publish' === ( $filters['status'] ?? '' ) ) {
 				$servable_join .= " LEFT JOIN {$wpdb->posts} parent_product ON parent_product.ID = catalog_post.post_parent"
@@ -905,26 +905,41 @@ final class Digest_Index {
 	 * @return array{sql: string, args: array<int, int>}
 	 */
 	private function live_max_id_sql( string $collection, bool $publish ): array {
+		$digest = Collections::row( $collection )['digest'] ?? null;
+		if ( null === $digest ) {
+			return array(
+				'sql'  => 'SELECT NULL WHERE 1 = 0',
+				'args' => array(),
+			);
+		}
+		return $this->{$digest['live_max']}( $publish );
+	}
+
+	private function customer_live_max_id_sql(): array {
 		global $wpdb;
-		if ( 'customers' === $collection ) {
+		return array(
+			'sql' => "SELECT MAX(u.ID) FROM {$wpdb->users} u",
+			'args' => array(),
+		);
+	}
+
+	private function order_live_max_id_sql(): array {
+		global $wpdb;
+		if ( $this->orders_are_hpos() ) {
+			$orders_table = $wpdb->prefix . 'wc_orders';
 			return array(
-				'sql' => "SELECT MAX(u.ID) FROM {$wpdb->users} u",
+				'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
 				'args' => array(),
 			);
 		}
-		if ( 'orders' === $collection ) {
-			if ( $this->orders_are_hpos() ) {
-				$orders_table = $wpdb->prefix . 'wc_orders';
-				return array(
-					'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
-					'args' => array(),
-				);
-			}
-			return array(
-				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' ),
-				'args' => array(),
-			);
-		}
+		return array(
+			'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' ),
+			'args' => array(),
+		);
+	}
+
+	private function product_live_max_id_sql( bool $publish ): array {
+		global $wpdb;
 		if ( ! $publish ) {
 			return array(
 				'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_product_predicate_sql( 'p' ),
