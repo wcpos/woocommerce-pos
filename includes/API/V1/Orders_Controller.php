@@ -325,6 +325,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			'description' => __( 'Customer tax IDs snapshotted at sale time.', 'woocommerce-pos' ),
 			'type'        => 'array',
 			'context'     => array( 'view', 'edit' ),
+			'items'       => array( 'type' => 'object' ),
 		);
 
 		// Check and remove email format validation from the billing property.
@@ -422,27 +423,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$this->creating_order = null;
 
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9, 3 );
-		$preserve_created_gmt = function ( $order, $request, $creating ) {
-			if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
-				return $order;
-			}
-			$this->creating_order = $order;
-			$timestamp = $this->order_payload->validate_client_created_gmt( $request->get_json_params() ?? array() );
-			if ( is_wp_error( $timestamp ) ) {
-				return $timestamp;
-			}
-			if ( null !== $timestamp ) {
-				$order->set_date_created( $timestamp );
-			}
-			return $order;
-		};
-		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $preserve_created_gmt, 10, 3 );
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
 
 		try {
 			// Proceed with the parent method to handle the creation.
 			$response = parent::create_item( $request );
 		} finally {
-			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $preserve_created_gmt, 10 );
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_track_creating_order' ), 9 );
 			$this->creating_order = null;
 		}
@@ -466,6 +453,28 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$this->creating_order = $order;
 		}
 
+		return $order;
+	}
+
+	/**
+	 * Preserve the client creation time using the shared payload validator.
+	 *
+	 * @param WC_Data|WP_Error $order    Prepared order.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating Whether this is a create.
+	 * @return WC_Data|WP_Error
+	 */
+	public function wcpos_preserve_client_created_date_gmt( $order, WP_REST_Request $request, bool $creating ) {
+		if ( ! $creating || ! ( $order instanceof WC_Abstract_Order ) ) {
+			return $order;
+		}
+		$this->creating_order = $order;
+		$body = $request->get_json_params();
+		$timestamp = $this->order_payload->validate_client_created_gmt( is_array( $body ) ? $body : array() );
+		if ( is_wp_error( $timestamp ) || null === $timestamp ) {
+			return is_wp_error( $timestamp ) ? $timestamp : $order;
+		}
+		$order->set_date_created( $timestamp );
 		return $order;
 	}
 
@@ -528,8 +537,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$tax_ids = $this->order_payload->persist_tax_ids( $order_id, $request->get_params(), $is_create );
 		if ( null !== $tax_ids ) {
 			$data['tax_ids'] = $tax_ids;
-		$response->set_data( $data );
-	}
+			$response->set_data( $data );
+		}
 	}
 
 	/**

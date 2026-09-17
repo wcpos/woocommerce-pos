@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 
@@ -157,6 +158,102 @@ class Test_Order_Write_Parity extends Sync_REST_Store_Test_Case {
 			'override'      => array( array( 'tax_ids' => array( array( 'type' => 'eu_vat', 'value' => 'DE987654321', 'country' => 'DE' ) ) ), 'DE987654321' ),
 			'empty'         => array( array( 'tax_ids' => array() ), '' ),
 		);
+	}
+
+	/** Reject scalar tax IDs before an update can clear the stored snapshot. */
+	public function test_tax_ids_scalar_entry_rejects_update_without_changing_meta(): void {
+		// Arrange. Seed through the current write lane before exercising v1.
+		$created = $this->server->dispatch( $this->wp_rest_post_request( '/wc/v3/orders' ) );
+		$this->assertSame( 201, $created->get_status() );
+		$order = wc_get_order( $created->get_data()['id'] );
+		( new Tax_Id_Writer() )->write_for_order(
+			$order,
+			array( array( 'type' => 'eu_vat', 'value' => 'DE123456789', 'country' => 'DE', 'verified' => array( 'status' => 'verified' ) ) ),
+			array( 'eu_vat' => '_billing_vat_number' )
+		);
+		$before = array();
+		foreach ( array( Tax_Id_Reader::CANONICAL_META_KEY, Tax_Id_Writer::OWNED_KEYS_META_KEY, Tax_Id_Writer::VERIFIED_META_KEY, '_billing_vat_number' ) as $key ) {
+			$before[ $key ] = $order->get_meta( $key );
+		}
+
+		// Act.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"tax_ids":["DE123"]}' );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		$this->assertArrayHasKey( 'tax_ids', $response->get_data()['data']['params'] );
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		foreach ( $before as $key => $value ) {
+			$this->assertSame( $value, $stored->get_meta( $key ), $key );
+		}
+	}
+
+	/**
+	 * A scalar JSON body never reaches the typed validator: the callback returns the order untouched.
+	 *
+	 * Dispatching such a body is not testable end to end: WordPress core already fails inside
+	 * WooCommerce's create/update handler (`WP_REST_Request::set_param()` on a scalar) before
+	 * this filter runs, on stock `wc/v3` as much as on `wcpos/v1`. The guard protects the
+	 * callback itself, which extension subclasses may invoke directly.
+	 */
+	public function test_client_date_callback_ignores_scalar_json_body(): void {
+		// Arrange.
+		$controller = new Orders_Controller();
+		$order      = new \WC_Order();
+		$created    = $order->get_date_created();
+		$request    = new \WP_REST_Request( 'POST', '/wc/v3/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '123' );
+		$this->assertSame( 123, $request->get_json_params() );
+
+		// Act.
+		$result = $controller->wcpos_preserve_client_created_date_gmt( $order, $request, true );
+
+		// Assert.
+		$this->assertSame( $order, $result );
+		$this->assertEquals( $created, $order->get_date_created() );
+	}
+
+	/** The public extension callback must be registered during create, then removed. */
+	public function test_client_date_public_callback_registered_at_original_priority(): void {
+		// Arrange. Observe the actual route controller and its request-scoped hook.
+		$controller = null;
+		$priority   = null;
+		$capture = static function ( $response, $handler ) use ( &$controller ) {
+			if ( $handler['callback'][0] instanceof Orders_Controller ) {
+				$controller = $handler['callback'][0];
+			}
+			return $response;
+		};
+		$observe = static function ( $order ) use ( &$controller, &$priority ) {
+			if ( null !== $controller ) {
+				$priority = has_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $controller, 'wcpos_preserve_client_created_date_gmt' ) );
+			}
+			return $order;
+		};
+		add_filter( 'rest_request_before_callbacks', $capture, 10, 2 );
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $observe, 8 );
+		try {
+			// Act. Exercise the real v2 and v1 create paths.
+			list( $v2, $v1 ) = $this->create_in_both_lanes( array() );
+
+			// Assert.
+			$this->assertSame( 201, $v2->get_status() );
+			$this->assertSame( 201, $v1->get_status() );
+			$this->assertInstanceOf( Orders_Controller::class, $controller );
+			$this->assertTrue( method_exists( $controller, 'wcpos_preserve_client_created_date_gmt' ) );
+			$this->assertTrue( is_callable( array( $controller, 'wcpos_preserve_client_created_date_gmt' ) ) );
+			$this->assertSame( 10, $priority );
+			$this->assertFalse( has_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $controller, 'wcpos_preserve_client_created_date_gmt' ) ) );
+		} finally {
+			remove_filter( 'rest_request_before_callbacks', $capture, 10 );
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $observe, 8 );
+		}
 	}
 
 	/**
