@@ -462,7 +462,7 @@ final class Collection_Rules_Plan {
 				add_filter( 'woocommerce_rest_product_object_query', $callback );
 				$bindings[] = array( 'woocommerce_rest_product_object_query', $callback, 10 );
 			}
-			if ( 'products' === $this->collection && '' !== $this->search ) {
+			if ( '' !== $this->search ) {
 				$vars = static function ( $vars ) {
 					$vars[] = 'wcpos_search_phrase';
 					return $vars;
@@ -548,15 +548,13 @@ final class Collection_Rules_Plan {
 		$q = $query->query_vars ?? array();
 		if ( self::HOOK_PREPARE_ARGS === $hook && \is_array( $value ) && null !== $this->visibility_type ) {
 			$value = ( new Pos_Visibility() )->apply_to_wp_query_args( $value, $this->collection, null, $this->visibility_type );
-			if ( 'variations' === $this->collection ) {
-				return 'meta_query' === $rule['query'] ? Product_Search::variation_args( $value, $this->search, $this->sku, $rule ) : $value;
+			if ( 'variations' === $this->collection && 'meta_query' === $rule['query'] ) {
+				return Product_Search::variation_args( $value, $this->search, $this->sku, $rule );
 			}
 			if ( '' !== $this->search ) {
 				$value['s'] = $this->search;
-				// The direct lane retains WP_Query's existing parsed-term contract.
-				if ( Pos_Visibility::PRODUCTS !== $this->visibility_type ) {
-					$value['wcpos_search_phrase'] = $this->search;
-				}
+				// Every product/variation lane uses the same literal splitter.
+				$value['wcpos_search_phrase'] = $this->search;
 			}
 		}
 		if ( self::HOOK_POSTS_WHERE === $hook && ! empty( $this->rules['visibility']['where_backstop'] ) ) {

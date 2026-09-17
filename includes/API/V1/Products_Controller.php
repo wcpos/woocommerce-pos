@@ -206,6 +206,12 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$params['per_page']['minimum'] = -1;
 		}
 
+		// Search text is literal on every lane: `sanitize_text_field` would strip `%30`
+		// and blank malformed UTF-8 before the declared search rule ever saw them.
+		if ( isset( $params['search'] ) && \is_array( $params['search'] ) ) {
+			$params['search']['sanitize_callback'] = 'rest_sanitize_request_arg';
+		}
+
 		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
 			$params['brand'] = array(
 				'description'       => /* translators: REST API collection parameter description. */ __( 'Limit result set to products assigned to brand IDs or slugs, separated by commas.', 'woocommerce-pos' ),
