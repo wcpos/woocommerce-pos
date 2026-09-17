@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Added: device-stamped business days on register sessions and closures, with business-day filtering and a site-timezone approximation for older rows.
+- Added: normalised corrections on closure detail reads and receipt documents, plus correction counts on closure lists; shipped templates remain unchanged.
+- Added: manager-credential approval for closure recounts, recording both the cashier and approving manager.
+
 - Sync: new read-only `wcpos/v2/refunds` lane (WooCommerce's store-wide refunds route, with `parent=` honoured) for the POS refunds collection.
 
 - **Breaking: the minimum WooCommerce is now 9.0** (was 5.3). The 2.0 till reads refunds from WooCommerce's own refunds route (`GET /wc/v3/refunds`), which exists from WooCommerce 9.0; there is no per-order fallback for older stores. A store below 9.0 sees the plugin's usual "requires WooCommerce 9.0 or higher" notice and the till does not load until WooCommerce is updated. (wcpos/roadmap#327)

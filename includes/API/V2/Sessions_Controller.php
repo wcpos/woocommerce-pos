@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
@@ -168,8 +169,12 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( null !== $request['expected_float'] && null === $this->decimal( $request['expected_float'] ) ) {
 			return $this->error( 'rest_invalid_param', 400, 'expected_float' );
 		}
+		if ( $request->has_param( 'business_day' ) && ! Closure_Store::is_business_day( $request['business_day'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'business_day' );
+		}
 		$fields = array(
 			'id' => $request['id'],
+			'business_day' => $request['business_day'],
 			'register_id' => strtolower( $request['register_id'] ),
 			'store_id' => $request['store_id'],
 			'opened_at_gmt' => gmdate( 'Y-m-d H:i:s', strtotime( $request['opened_at'] ) ),

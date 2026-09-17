@@ -39,6 +39,7 @@ final class Register_Session_Store {
 			store_id BIGINT NULL,
 			status VARCHAR(16) NOT NULL,
 			opened_at_gmt DATETIME NOT NULL,
+			business_day CHAR(10) NULL,
 			opened_by BIGINT NOT NULL,
 			expected_float DECIMAL(19,4) NULL,
 			counted_float DECIMAL(19,4) NOT NULL,

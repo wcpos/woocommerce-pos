@@ -20,6 +20,18 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
+	/** Corrections expose item fields inside a repeatable Mustache section. */
+	public function test_closure_field_tree_corrections_are_repeatable(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'closure' );
+		$corrections = $tree['closure']['fields']['corrections'];
+		$this->assertTrue( $corrections['is_array'] );
+		$this->assertEqualsCanonicalizing(
+			array( 'id', 'type', 'actor.id', 'actor.name', 'approver.id', 'approver.name', 'reason', 'created_at', 'figures' ),
+			array_keys( $corrections['fields'] )
+		);
+		$this->assertNotEmpty( $corrections['fields']['figures']['fields'] );
+	}
+
 	/** The tabular contract is separate from the unchanged receipt schema. */
 	public function test_report_tree_and_schema_publish_tabular_contract(): void {
 		$tree = Receipt_Data_Schema::get_field_tree( 'report' );

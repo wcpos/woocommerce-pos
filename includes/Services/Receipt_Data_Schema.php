@@ -1411,6 +1411,7 @@ class Receipt_Data_Schema {
 				'printed_number' => __( 'Printed Number', 'woocommerce-pos' ),
 				'register_id' => __( 'Register ID', 'woocommerce-pos' ),
 				'session_id' => __( 'Session ID', 'woocommerce-pos' ),
+				'business_day' => __( 'Business Day', 'woocommerce-pos' ),
 				'opened_at_gmt' => __( 'Opened (UTC)', 'woocommerce-pos' ),
 				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
 				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
@@ -1458,6 +1459,77 @@ class Receipt_Data_Schema {
 					'label' => $label,
 				);
 			}
+			// Corrections supplement the frozen closure; shipped templates do not print them.
+			$tree['closure']['fields']['corrections'] = array(
+				'type' => 'array',
+				'is_array' => true,
+				'label' => __( 'Corrections', 'woocommerce-pos' ),
+				'fields' => array(
+					'id' => array(
+						'type' => 'number',
+						'label' => __( 'Record ID', 'woocommerce-pos' ),
+					),
+					'type' => array(
+						'type' => 'string',
+						'label' => __( 'Correction Type', 'woocommerce-pos' ),
+					),
+					'actor.id' => array(
+						'type' => 'number',
+						'label' => __( 'Actor ID', 'woocommerce-pos' ),
+					),
+					'actor.name' => array(
+						'type' => 'string',
+						'label' => __( 'Actor Name', 'woocommerce-pos' ),
+					),
+					'approver.id' => array(
+						'type' => 'number',
+						'label' => __( 'Approver ID', 'woocommerce-pos' ),
+					),
+					'approver.name' => array(
+						'type' => 'string',
+						'label' => __( 'Approver Name', 'woocommerce-pos' ),
+					),
+					'reason' => array(
+						'type' => 'string',
+						'label' => __( 'Reason', 'woocommerce-pos' ),
+					),
+					'created_at' => array(
+						'type' => 'string',
+						'label' => __( 'Created (UTC)', 'woocommerce-pos' ),
+					),
+					// Type-specific figures; tender maps and scalar amounts are four-place decimal strings.
+					'figures' => array(
+						'label' => __( 'Correction Figures', 'woocommerce-pos' ),
+						'fields' => array(
+							'expected_delta' => array(
+								'type' => 'array',
+								'label' => __( 'Late Sale Expected Delta by Tender', 'woocommerce-pos' ),
+							),
+							'sales_delta' => array(
+								'type' => 'money',
+								'label' => __( 'Late Sale Sales Delta', 'woocommerce-pos' ),
+							),
+							'refunds_delta' => array(
+								'type' => 'money',
+								'label' => __( 'Late Sale Refunds Delta', 'woocommerce-pos' ),
+							),
+							'cash_delta' => array(
+								'type' => 'money',
+								'label' => __( 'Late Movement Cash Delta', 'woocommerce-pos' ),
+							),
+							'counted' => array(
+								'type' => 'array',
+								'label' => __( 'Recount Counted by Tender', 'woocommerce-pos' ),
+							),
+							'variance' => array(
+								'type' => 'array',
+								'label' => __( 'Recount Variance by Tender', 'woocommerce-pos' ),
+							),
+						),
+					),
+				),
+			);
+
 		}
 		if ( 'display' === $type ) {
 			$tree['ledger'] = array(
