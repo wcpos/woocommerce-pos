@@ -241,20 +241,20 @@ class Single_Template {
 		$template    = TemplatesManager::get_template( $post->ID );
 		$type        = $template['type'] ?? 'receipt';
 		$is_display  = 'display' === $type;
-		$is_offline_document = \in_array( $type, array( 'report', 'closure' ), true );
 		$engine      = $is_display ? 'logicless' : self::get_editor_engine( $post );
+		$is_new      = 'auto-draft' === $post->post_status;
+		$is_offline_document = 'report' === $type || ( 'closure' === $type && ( $is_new || 'legacy-php' !== $engine ) );
 		if ( $is_offline_document && 'legacy-php' === $engine ) {
 			$engine = 'logicless';
 		}
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
-		$is_new      = 'auto-draft' === $post->post_status;
 
 		$disabled = $is_display || ! $is_new ? 'disabled="disabled"' : '';
 
 		$engines = self::get_engine_options();
 		if ( $is_offline_document ) {
-			// New report and closure templates must render offline on the device.
+			// Keep legacy available only for existing legacy closure templates.
 			unset( $engines['legacy-php'] );
 		}
 

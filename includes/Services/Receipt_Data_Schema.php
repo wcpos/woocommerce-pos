@@ -1459,6 +1459,23 @@ class Receipt_Data_Schema {
 					'label' => $label,
 				);
 			}
+			$tree['closure']['fields']['breakdowns.money_format'] = array(
+				'type' => 'object',
+				'label' => __( 'Money format recorded at closure', 'woocommerce-pos' ),
+				'fields' => array(),
+			);
+			foreach ( array(
+				'currency_position' => __( 'Currency Position', 'woocommerce-pos' ),
+				'currency_symbol' => __( 'Currency Symbol', 'woocommerce-pos' ),
+				'price_decimal_separator' => __( 'Decimal Separator', 'woocommerce-pos' ),
+				'price_thousand_separator' => __( 'Thousand Separator', 'woocommerce-pos' ),
+				'price_num_decimals' => __( 'Number of Decimals', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields']['breakdowns.money_format']['fields'][ $field ] = array(
+					'type' => 'price_num_decimals' === $field ? 'number' : 'string',
+					'label' => $label,
+				);
+			}
 			$tree['closure.tenders'] = array(
 				'label' => __( 'Tenders', 'woocommerce-pos' ),
 				'is_array' => true,

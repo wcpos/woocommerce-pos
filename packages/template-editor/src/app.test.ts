@@ -227,3 +227,37 @@ describe('closure editor', () => {
 		}
 	);
 });
+
+describe('order preview toggle', () => {
+	it.each([true, false])(
+		'hides closure controls and retains receipt controls with orders=%s',
+		async (hasPosOrders) => {
+			const container = document.createElement('div');
+			document.body.appendChild(container);
+			const root = createRoot(container);
+			try {
+				for (const type of ['closure', 'receipt'] as const) {
+					await act(async () =>
+						root.render(
+							createElement(App, {
+								key: type,
+								config: {
+									...config,
+									type,
+									hasPosOrders,
+									postContent: '<p>Preview</p>',
+								},
+							})
+						)
+					);
+					expect(container.querySelectorAll('[role="radio"]')).toHaveLength(
+						type === 'closure' ? 0 : 2
+					);
+				}
+			} finally {
+				await act(async () => root.unmount());
+				container.remove();
+			}
+		}
+	);
+});

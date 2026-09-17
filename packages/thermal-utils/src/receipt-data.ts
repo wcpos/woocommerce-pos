@@ -36,7 +36,12 @@ export function sanitizeReceiptDataForRendering(
 	const i18n = (sanitized.i18n ?? {}) as Record<string, string>;
 	const order = sanitized.order as { currency?: string } | undefined;
 	const store = (sanitized.store ?? {}) as Record<string, unknown>;
-	const hints = (sanitized.presentation_hints ?? {}) as Record<string, unknown>;
+	const recordedMoney = breakdowns.money_format as Record<string, unknown> | undefined;
+	const hints = {
+		...((sanitized.presentation_hints ?? {}) as Record<string, unknown>),
+		...recordedMoney,
+	};
+	if (recordedMoney) sanitized.presentation_hints = hints;
 	const recordedStore = breakdowns.store as Record<string, unknown> | undefined;
 	const labels = breakdowns.labels as Record<string, unknown> | undefined;
 	if (labels?.register_name != null) {
@@ -99,7 +104,10 @@ export function sanitizeReceiptDataForRendering(
 		);
 	}
 	const currencySymbol =
-		currency === storeCurrency && hints.currency_symbol != null ? decodedSymbol : undefined;
+		(recordedMoney?.currency_symbol != null || currency === storeCurrency) &&
+		hints.currency_symbol != null
+			? decodedSymbol
+			: undefined;
 	const moneyOptions: Intl.NumberFormatOptions = {
 		style: 'currency',
 		currency,

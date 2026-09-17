@@ -444,7 +444,7 @@ export function App({ config }: AppProps) {
 	const showFieldPicker = engine === 'logicless' || engine === 'thermal';
 
 	const previewToggle =
-		config.type === 'report' ? null : (
+		config.type === 'report' || config.type === 'closure' ? null : (
 			<PreviewToggle
 				source={preview.source}
 				disabled={!config.hasPosOrders}

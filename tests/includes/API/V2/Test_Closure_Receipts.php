@@ -155,6 +155,87 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** The field schema exposes the recorded formatting object and its numeric precision. */
+	public function test_closure_schema_exposes_money_format_snapshot(): void {
+		$tree = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( 'closure' );
+		$format = $tree['closure']['fields']['breakdowns.money_format'];
+		$this->assertSame( 'object', $format['type'] );
+		$this->assertSame( 'number', $format['fields']['price_num_decimals']['type'] );
+		foreach ( array( 'currency_position', 'currency_symbol', 'price_decimal_separator', 'price_thousand_separator' ) as $field ) {
+			$this->assertSame( 'string', $format['fields'][ $field ]['type'] );
+		}
+	}
+
+	/** Money formatting is frozen for stored closures, but live for X-reports and legacy rows. */
+	public function test_closure_money_format_snapshot_survives_store_changes(): void {
+		$options = array(
+			'woocommerce_currency' => 'EUR',
+			'woocommerce_price_num_decimals' => 4,
+			'woocommerce_price_decimal_sep' => ',',
+			'woocommerce_price_thousand_sep' => '.',
+			'woocommerce_currency_pos' => 'right_space',
+		);
+		$filters = array();
+		foreach ( $options as $key => $value ) {
+			$filters[ $key ] = static function () use ( &$options, $key ) {
+				return $options[ $key ];
+			};
+			add_filter( 'pre_option_' . $key, $filters[ $key ] );
+		}
+		try {
+			$session = $this->closure_session();
+			$fields = $this->closure_fields( $session );
+			$fields['counted']['cash'] = '1101.5678';
+			$fields['breakdowns']['movements'] = array(
+				array(
+					'type' => 'paid_in',
+					'amount' => '1234.5678',
+				),
+			);
+			// Untrusted client hints must be replaced by the resolver snapshot.
+			$fields['breakdowns']['money_format'] = array( 'price_num_decimals' => 1 );
+			$store = new Closure_Store();
+			$row = $store->create( $fields );
+			$row = $store->get( $row['id'] );
+			$this->assertSame( 'EUR', $row['breakdowns']['currency'] );
+			$snapshot = array(
+				'currency_position' => 'right_space',
+				'currency_symbol' => get_woocommerce_currency_symbol( 'EUR' ),
+				'price_thousand_separator' => '.',
+				'price_decimal_separator' => ',',
+				'price_num_decimals' => 4,
+			);
+			$this->assertSame( $snapshot, $row['breakdowns']['money_format'] );
+			$options['woocommerce_price_num_decimals'] = 2;
+			$options['woocommerce_price_decimal_sep'] = '.';
+			$options['woocommerce_price_thousand_sep'] = ',';
+			$options['woocommerce_currency_pos'] = 'left';
+			$builder = new Receipt_Data_Builder();
+			$data = $builder->build_closure_document( $row );
+			$this->assertSame( $snapshot, array_intersect_key( $data['presentation_hints'], $snapshot ) );
+			$this->assertSame( '1.101,5678 €', $data['closure']['tenders'][0]['counted_display'] );
+			$this->assertSame( '1.234,5678 €', $data['closure']['breakdowns']['movements'][0]['amount_display'] );
+			$this->assertSame( '0,0000 €', $data['closure']['period_sales_total_display'] );
+			// Even an input session carrying a snapshot must remain live in X-report mode.
+			$session['breakdowns']['money_format'] = $snapshot;
+			$live = $builder->build_closure_document( $session, true );
+			$this->assertSame( 2, $live['presentation_hints']['price_num_decimals'] );
+			$this->assertSame( '€100.00', $live['closure']['breakdowns']['opening_float']['counted_display'] );
+			unset( $row['breakdowns']['money_format'] );
+			$legacy = $builder->build_closure_document( $row );
+			$this->assertSame( '€1,101.57', $legacy['closure']['tenders'][0]['counted_display'] );
+			$this->assertSame( 2, $legacy['presentation_hints']['price_num_decimals'] );
+			$row['breakdowns']['money_format'] = $snapshot;
+			unset( $row['id'] );
+			$preview = $builder->build_closure_document( $row );
+			$this->assertSame( '€1,101.57', $preview['closure']['tenders'][0]['counted_display'] );
+		} finally {
+			foreach ( $filters as $key => $filter ) {
+				remove_filter( 'pre_option_' . $key, $filter );
+			}
+		}
+	}
+
 	/** Reprints use the timezone recorded at closure; older rows use the live timezone. */
 	public function test_closure_timezone_snapshot_survives_store_timezone_change(): void {
 		$timezone = 'Europe/Madrid';

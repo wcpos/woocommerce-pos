@@ -3,6 +3,37 @@ import { describe, expect, it, vi } from 'vitest';
 import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 describe('offline closure presentation', () => {
+	it('prefers recorded money hints over live store hints, including the recorded symbol', () => {
+		const moneyFormat = {
+			price_num_decimals: 4,
+			price_decimal_separator: ',',
+			price_thousand_separator: '.',
+			currency_position: 'right_space',
+			currency_symbol: 'EUR&#x20AC;',
+		};
+		const data = sanitizeReceiptDataForRendering({
+			order: { currency: 'USD' },
+			store: { price_decimals: 2 },
+			presentation_hints: {
+				locale: 'en-US',
+				price_num_decimals: 2,
+				price_decimal_separator: '.',
+				price_thousand_separator: ',',
+				currency_position: 'left',
+				currency_symbol: '$',
+			},
+			closure: {
+				period_sales_total: '1234.5678',
+				counted: { cash: '1234.5678' },
+				breakdowns: { currency: 'EUR', money_format: moneyFormat },
+			},
+		});
+		expect(data.closure).toMatchObject({
+			period_sales_total_display: '1.234,5678 EUR€',
+			tenders: [{ counted_display: '1.234,5678 EUR€' }],
+		});
+		expect(data.presentation_hints).toMatchObject(moneyFormat);
+	});
 	it.each(['cash', '1.2.3', '0xFF', '1e3'])(
 		'preserves non-decimal amount %s as raw display',
 		(sales) => {

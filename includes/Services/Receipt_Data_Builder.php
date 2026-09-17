@@ -98,6 +98,9 @@ class Receipt_Data_Builder {
 		}
 		$currency = $row['breakdowns']['currency'] ?? $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
 		$hints = $resolver->build_presentation_hints( $currency );
+		if ( ! $xreport && ! empty( $row['id'] ) ) {
+			$hints = array_replace( $hints, $row['breakdowns']['money_format'] ?? array() );
+		}
 		// Format recorded decimal strings without a float round-trip.
 		$with_money = static function ( array $values, array $fields ) use ( $hints ): array {
 			foreach ( $fields as $field ) {
