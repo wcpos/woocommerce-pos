@@ -66,6 +66,62 @@ function renderPicker(schema: FieldSchema, engine = 'logicless', onInsertField =
 }
 
 describe('FieldPicker', () => {
+	it('exposes closure corrections as a loop with item-relative fields', async () => {
+		const schema: FieldSchema = {
+			closure: {
+				label: 'Closure',
+				fields: {
+					corrections: {
+						type: 'array',
+						is_array: true,
+						label: 'Corrections',
+						fields: {
+							id: { type: 'number', label: 'Record ID' },
+							type: { type: 'string', label: 'Correction Type' },
+							'actor.id': { type: 'number', label: 'Actor ID' },
+							'actor.name': { type: 'string', label: 'Actor Name' },
+							'approver.id': { type: 'number', label: 'Approver ID' },
+							'approver.name': { type: 'string', label: 'Approver Name' },
+							reason: { type: 'string', label: 'Reason' },
+							created_at: { type: 'string', label: 'Created (UTC)' },
+						},
+					},
+				},
+			},
+		};
+		const { container, root, onInsertField } = renderPicker(schema);
+		await act(async () => {
+			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+		});
+		for (const label of ['Closure', 'Corrections']) {
+			await act(async () => getButton(container, label).click());
+		}
+		const loopButton = container.querySelector<HTMLButtonElement>(
+			'button[aria-label="Insert loop block"]'
+		);
+		expect(loopButton).not.toBeNull();
+		await act(async () => loopButton!.click());
+		for (const label of [
+			'Record ID',
+			'Correction Type',
+			'Actor Name',
+			'Approver Name',
+			'Reason',
+			'Created (UTC)',
+		]) {
+			await act(async () => getButton(container, label).click());
+		}
+		expect(onInsertField.mock.calls.map(([value]) => value)).toEqual([
+			'{{#closure.corrections}}\n\n{{/closure.corrections}}',
+			'{{id}}',
+			'{{type}}',
+			'{{actor.name}}',
+			'{{approver.name}}',
+			'{{reason}}',
+			'{{created_at}}',
+		]);
+	});
+
 	it('exposes report row/cell loops and nested date fields', async () => {
 		const schema: FieldSchema = {
 			report: { label: 'Report', fields: {
