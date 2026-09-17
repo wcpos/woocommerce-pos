@@ -162,8 +162,10 @@ class Activator {
 
 		$obsolete_customer_create_cap = isset( $role_capabilities['cashier']['create_customers'] ) ? 'promote_users' : 'create_customers';
 		if ( $roles_are_persisted && empty( $stored_roles['cashier']['capabilities'][ $obsolete_customer_create_cap ] ) ) {
-			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+			// Snapshot first: a fingerprint that advanced past a failed snapshot
+			// write would never retry it.
 			update_option( 'woocommerce_pos_role_caps_synced', $capability_names, true );
+			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
 		}
 
 		// Flag the consent pop-up for the next admin page load. Done here
@@ -332,7 +334,8 @@ class Activator {
 		$sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
 
 		$role_caps_fingerprint = $this->role_caps_fingerprint();
-		$role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $role_caps_fingerprint;
+		$role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $role_caps_fingerprint
+			|| false === get_option( 'woocommerce_pos_role_caps_synced' );
 		if ( ! $plugin_needs_upgrade && ! $sync_needs_upgrade && ! $role_caps_need_sync ) {
 			return;
 		}
@@ -346,7 +349,8 @@ class Activator {
 		$locked_sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
 
 		$locked_role_caps_fingerprint = $this->role_caps_fingerprint();
-		$locked_role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $locked_role_caps_fingerprint;
+		$locked_role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $locked_role_caps_fingerprint
+			|| false === get_option( 'woocommerce_pos_role_caps_synced' );
 		if ( ! $locked_plugin_needs_upgrade && ! $locked_sync_needs_upgrade && ! $locked_role_caps_need_sync ) {
 			$this->release_db_upgrade_lock();
 			return;
@@ -545,7 +549,9 @@ class Activator {
 			'cashier',
 			/* translators: Plugin activation notice label. */
 			__( 'Cashier', 'woocommerce-pos' ),
-			$cashier_capabilities
+			// A missing role is created whole, access gate included, whatever
+			// subset an incremental upgrade asked to sync.
+			array_merge( array( 'access_woocommerce_pos' => true ), $cashier_capabilities )
 		);
 
 		$obsolete_customer_create_cap = isset( $cashier_capabilities['create_customers'] ) ? 'promote_users' : 'create_customers';
