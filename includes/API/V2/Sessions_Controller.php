@@ -168,8 +168,12 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( null !== $request['expected_float'] && null === $this->decimal( $request['expected_float'] ) ) {
 			return $this->error( 'rest_invalid_param', 400, 'expected_float' );
 		}
+		if ( $request->has_param( 'business_day' ) && ( ! is_string( $request['business_day'] ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $request['business_day'] ) ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'business_day' );
+		}
 		$fields = array(
 			'id' => $request['id'],
+			'business_day' => $request['business_day'],
 			'register_id' => strtolower( $request['register_id'] ),
 			'store_id' => $request['store_id'],
 			'opened_at_gmt' => gmdate( 'Y-m-d H:i:s', strtotime( $request['opened_at'] ) ),

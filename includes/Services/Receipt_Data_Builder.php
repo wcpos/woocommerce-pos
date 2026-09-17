@@ -58,6 +58,7 @@ class Receipt_Data_Builder {
 				'cashiers' => array_values( $cashiers ),
 			);
 		}
+		$row['corrections'] = $xreport ? array() : ( new Closure_Store() )->corrections_for( $row['id'] );
 		// Old closures and live X-reports have no label snapshot.
 		$labels = $row['breakdowns']['labels'] ?? array();
 		$register = ( new Register_Store() )->get( $row['register_id'] ) ?? array();

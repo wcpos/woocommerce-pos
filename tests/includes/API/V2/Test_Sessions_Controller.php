@@ -70,6 +70,18 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** The device's business day is optional, but supplied values must be date strings. */
+	public function test_session_business_day_validates_and_preserves_stamp(): void {
+		$fields = $this->fields();
+		foreach ( array( '2026-9-11', 'yesterday', array(), 20260911, null, "2026-09-11\n" ) as $bad ) {
+			$this->assertSame( 400, $this->post( 'sessions', $fields + array( 'business_day' => $bad ) )->get_status() );
+		}
+		$response = $this->post( 'sessions', $fields + array( 'business_day' => '2026-09-10' ) );
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( '2026-09-10', $response->get_data()['business_day'] );
+		$this->assertNull( $this->post( 'sessions', $this->fields() )->get_data()['business_day'] );
+	}
+
 	/** Create preserves identity, computes variance and refuses unknown or busy registers. */
 	public function test_create_replay_conflict_and_unknown_register(): void {
 		$fields = $this->fields();

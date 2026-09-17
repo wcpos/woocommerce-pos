@@ -63,7 +63,10 @@ class Closures_Controller extends \WP_REST_Controller {
 		// WCPOS access is the floor for every method, so no capability grants a route on its own.
 		$required = array( 'access_woocommerce_pos' );
 		if ( '/recount' === substr( $route, -8 ) ) {
-			$required[] = 'manage_woocommerce_pos_closures';
+			// A supplied override is authenticated in dispatch before reading the document.
+			if ( ! $request->has_param( 'approval' ) ) {
+				$required[] = 'manage_woocommerce_pos_closures';
+			}
 		} elseif ( 'POST' === $request->get_method() ) {
 			$required[] = 'manage_woocommerce_pos_cash';
 		} else {
@@ -95,6 +98,8 @@ class Closures_Controller extends \WP_REST_Controller {
 		if ( ! is_array( $row ) || current_user_can( 'view_woocommerce_pos_reports' ) ) {
 			return $row;
 		}
+		// Manager approval permits the recount write, not access to hidden report figures.
+		unset( $row['payload']['variance'] );
 		return array_diff_key( $row, array_flip( array( 'expected', 'till_expected', 'variance' ) ) );
 	}
 
@@ -109,6 +114,22 @@ class Closures_Controller extends \WP_REST_Controller {
 			$url = $request->get_url_params();
 			$id = isset( $url['closure_id'] ) ? strtolower( $url['closure_id'] ) : null;
 			$route = strtolower( rtrim( $request->get_route(), '/' ) );
+			$approver_id = null;
+			if ( '/recount' === substr( $route, -8 ) && ! current_user_can( 'manage_woocommerce_pos_closures' ) ) {
+				$approval = $request['approval'];
+				if ( ! is_array( $approval ) || ! is_string( $approval['username'] ?? null ) || ! is_string( $approval['password'] ?? null ) ) {
+					return $this->error( 'wcpos_recount_approval_invalid', 403 );
+				}
+				$user = wp_authenticate( $approval['username'], $approval['password'] );
+				if ( is_wp_error( $user ) ) {
+					return $this->error( 'wcpos_recount_approval_invalid', 403 );
+				}
+				if ( ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+					return $this->error( 'wcpos_recount_approval_forbidden', 403 );
+				}
+				$approver_id = $user->ID;
+			}
+
 			if ( null !== $id ) {
 				$row = $store->get( $id );
 				if ( ! $row ) {
@@ -129,7 +150,10 @@ class Closures_Controller extends \WP_REST_Controller {
 					if ( ! Pos_Uuid::is_uuid( $request['id'] ) || null === $counted || ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
 						return $this->error( 'rest_invalid_param', 400 );
 					}
-					$row = $store->recount( $row, strtolower( $request['id'] ), $counted, sanitize_textarea_field( $request['reason'] ) );
+					$row = $store->recount( $row, strtolower( $request['id'] ), $counted, sanitize_textarea_field( $request['reason'] ), $approver_id );
+				}
+				if ( 'GET' === $request->get_method() ) {
+					$row['corrections'] = $store->corrections_for( $id );
 				}
 				return new WP_REST_Response( $this->visible( $row ) );
 			}
@@ -152,7 +176,7 @@ class Closures_Controller extends \WP_REST_Controller {
 					);
 					return new WP_REST_Response( $this->visible( $store->list( $args )[0] ?? null ) );
 				}
-				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->list( $args ) ) );
+				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->with_correction_counts( $store->list( $args ) ) ) );
 			}
 			if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
 				return $this->error( 'rest_invalid_param', 400 );
@@ -184,8 +208,12 @@ class Closures_Controller extends \WP_REST_Controller {
 		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) || ! is_string( $request['software_version'] ) || Pos_Order_Audit::char_length( $request['software_version'] ) > 64 || ! is_array( $request['breakdowns'] ) ) {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
+		if ( $request->has_param( 'business_day' ) && ( ! is_string( $request['business_day'] ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $request['business_day'] ) ) ) {
+			return $this->error( 'rest_invalid_param', 400 );
+		}
 		$fields = array(
 			'id' => strtolower( $request['id'] ),
+			'business_day' => $request['business_day'],
 			'session_id' => strtolower( $request['session_id'] ),
 			'software_version' => sanitize_text_field( $request['software_version'] ),
 			'breakdowns' => $request['breakdowns'],
@@ -269,7 +297,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			$value = $request[ $key ];
 			if ( in_array( $key, array( 'after', 'before' ), true ) ) {
-				if ( ! is_string( $value ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) {
+				if ( ! is_string( $value ) || ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $value ) && ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) ) {
 					return $this->error( 'rest_invalid_param', 400 );
 				}
 				$value = gmdate( 'Y-m-d H:i:s', strtotime( $value ) );

@@ -202,6 +202,10 @@ class Activator {
 		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '7', '<' ) ) {
+			$this->upgrade_business_days();
+		}
+
 		if ( ! Sync_Health::is_healthy() ) {
 			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
 				delete_option( Sync_Api::SCHEMA_OPTION );
@@ -250,6 +254,44 @@ class Activator {
 			// would otherwise survive the upgrade and fire a hook with no handler
 			// forever. Literal hook name — the constant was removed with the class.
 			wp_clear_scheduled_hook( 'wcpos_change_log_purge' );
+		}
+	}
+
+	/** Add business-day columns and fill missing stamps before latching schema 7.
+	 *
+	 * This is a backfill approximation using the SITE timezone at upgrade time,
+	 * not the original device/store stamp. Existing stamps are never overwritten.
+	 *
+	 * @throws \RuntimeException On schema, read or write failure; leave the old latch in place.
+	 */
+	private function upgrade_business_days(): void {
+		global $wpdb;
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		foreach ( array( new Register_Session_Store(), new Closure_Store() ) as $store ) {
+			$table = $store->table_name();
+			dbDelta( $store->schema_sql( $table, $wpdb->get_charset_collate() ) );
+			do {
+				// Bounded batches; stamped rows leave the next batch automatically.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
+				$rows = $wpdb->get_results( "SELECT id, opened_at_gmt FROM {$table} WHERE business_day IS NULL ORDER BY id LIMIT 100", ARRAY_A );
+				if ( '' !== $wpdb->last_error ) {
+					throw new \RuntimeException( 'Business day upgrade read failed.' );
+				}
+				foreach ( $rows as $row ) {
+					$day = ( new \DateTimeImmutable( $row['opened_at_gmt'], new \DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' );
+					if ( false === $wpdb->update(
+						$table,
+						array( 'business_day' => $day ),
+						array(
+							'id' => $row['id'],
+							'business_day' => null,
+						)
+					) ) {
+						throw new \RuntimeException( 'Business day upgrade write failed.' );
+					}
+				}
+				$size = count( $rows );
+			} while ( 100 === $size );
 		}
 	}
 

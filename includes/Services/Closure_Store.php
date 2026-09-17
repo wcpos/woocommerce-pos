@@ -39,6 +39,7 @@ final class Closure_Store {
 			number BIGINT NOT NULL,
 			printed_number BIGINT NULL,
 			opened_at_gmt DATETIME NOT NULL,
+			business_day CHAR(10) NULL,
 			closed_at_gmt DATETIME NOT NULL,
 			opened_by BIGINT NOT NULL,
 			closed_by BIGINT NOT NULL,
@@ -128,6 +129,9 @@ final class Closure_Store {
 
 	/** List newest first with allowlisted filters.
 	 *
+	 * The after/before filters compare the business day when stamped, otherwise closed_at_gmt.
+	 * For stamped rows only the date portion of each boundary is used.
+	 *
 	 * @param array $args Filters and paging.
 	 * @throws \RuntimeException On read failure.
 	 */
@@ -151,7 +155,7 @@ final class Closure_Store {
 		) as $key => $operator ) {
 			if ( isset( $args[ $key ] ) ) {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed operator.
-				$where[] = $wpdb->prepare( "closed_at_gmt {$operator} %s", $args[ $key ] );
+				$where[] = $wpdb->prepare( "(business_day {$operator} %s OR (business_day IS NULL AND closed_at_gmt {$operator} %s))", substr( $args[ $key ], 0, 10 ), $args[ $key ] );
 			}
 		}
 		$where = implode( ' AND ', $where );
@@ -170,6 +174,108 @@ final class Closure_Store {
 			foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
 			}
+		}
+		return $rows;
+	}
+
+	/** Add counts to a page with one grouped fiscal query, never one query per closure.
+	 *
+	 * @param array $rows Closure rows.
+	 * @throws \RuntimeException On read failure.
+	 */
+	public function with_correction_counts( array $rows ): array {
+		global $wpdb;
+		if ( ! $rows ) {
+			return $rows;
+		}
+		$store = new Fiscal_Record_Store();
+		$store->ensure_installed();
+		$table = $store->table_name();
+		$placeholders = implode( ',', array_fill( 0, count( $rows ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table and placeholders only.
+		$counts = $wpdb->get_results( $wpdb->prepare( "SELECT closure_id, COUNT(*) AS total FROM {$table} WHERE closure_id IN ({$placeholders}) GROUP BY closure_id", array_column( $rows, 'id' ) ), ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Closure correction count failed.' );
+		}
+		$counts = array_column( $counts, 'total', 'closure_id' );
+		foreach ( $rows as &$row ) {
+			$row['corrections_count'] = (int) ( $counts[ $row['id'] ] ?? 0 );
+		}
+		return $rows;
+	}
+
+	/** Project all linked fiscal corrections, ordered by server creation time then id.
+	 *
+	 * Figures are four-place decimal strings; actor labels resolve current user names.
+	 *
+	 * @param string $closure_uuid Closure UUID.
+	 * @throws \RuntimeException On read or calculation failure.
+	 */
+	public function corrections_for( string $closure_uuid ): array {
+		global $wpdb;
+		$store = new Fiscal_Record_Store();
+		$store->ensure_installed();
+		$table = $store->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; deliberately unpaginated.
+		$records = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE closure_id = %s ORDER BY received_at_gmt, id", $closure_uuid ), ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Closure corrections read failed.' );
+		}
+		$rows = array();
+		foreach ( $records as $record ) {
+			$payload = json_decode( $record['payload'], true );
+			$figures = array();
+			if ( 'late_sale' === $record['type'] ) {
+				$tenders = $payload['tender_rows'];
+				$figures['expected_delta'] = ( new Register_Session_Store() )->expected( array( 'counted_float' => '0' ), array( $tenders ), array() );
+				$sales = array();
+				$refunds = array();
+				foreach ( $tenders as $tender ) {
+					if ( 'refund' === $tender['kind'] || '-' === substr( $tender['amount'], 0, 1 ) ) {
+						$refunds[] = ltrim( $tender['amount'], '-' );
+					} else {
+						$sales[] = $tender['amount'];
+					}
+					$refunds[] = $tender['refunded_amount'] ?? '0';
+				}
+				$figures['sales_delta'] = self::sum( $sales );
+				$figures['refunds_delta'] = self::sum( $refunds );
+			} elseif ( 'late_movement' === $record['type'] ) {
+				$void = 'void' === $payload['type'];
+				$movement = $void ? ( new Cash_Movement_Store() )->get( $payload['voids'] ) : $payload;
+				if ( ! $movement ) {
+					throw new \RuntimeException( 'Closure correction movement missing.' );
+				}
+				$negative = ( 'paid_out' === $movement['type'] ) !== $void;
+				$amount = in_array( $movement['type'], array( 'paid_in', 'paid_out' ), true ) ? $movement['amount'] : '0';
+				$figures['cash_delta'] = self::sum( array( ( $negative ? '-' : '' ) . $amount ) );
+			} elseif ( 'recount' === $record['type'] ) {
+				foreach ( array( 'counted', 'variance' ) as $key ) {
+					$figures[ $key ] = array_map(
+						static function ( $amount ) {
+							return self::sum( array( $amount ) );
+						},
+						$payload[ $key ]
+					);
+				}
+			}
+			$actor_id = (int) $record['cashier_id'];
+			$approver_id = (int) $record['approver_id'];
+			$rows[] = array(
+				'id' => (int) $record['id'],
+				'type' => $record['type'],
+				'actor' => array(
+					'id' => $actor_id,
+					'name' => get_userdata( $actor_id )->display_name ?? '',
+				),
+				'approver' => $approver_id ? array(
+					'id' => $approver_id,
+					'name' => get_userdata( $approver_id )->display_name ?? '',
+				) : null,
+				'reason' => $payload['reason'] ?? '',
+				'created_at' => str_replace( ' ', 'T', $record['received_at_gmt'] ) . 'Z',
+				'figures' => $figures,
+			);
 		}
 		return $rows;
 	}
@@ -384,6 +490,7 @@ final class Closure_Store {
 			}
 			$fields['findings'] = $findings ? $findings : null;
 			$fields += array_intersect_key( $session, array_flip( array( 'register_id', 'store_id', 'opened_by', 'approved_by' ) ) );
+			$fields['business_day'] = $session['business_day'] ?? $fields['business_day'] ?? null;
 			$fields['closed_by'] = 'closed' === $session['status'] ? $session['closed_by'] : get_current_user_id();
 			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->get( $session['register_id'] )['name'] ?? '' );
 			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
@@ -550,13 +657,14 @@ final class Closure_Store {
 
 	/** Append a replay-safe recount; never update the document.
 	 *
-	 * @param array  $closure Frozen document.
-	 * @param string $id Client source UUID.
-	 * @param array  $counted New counts.
-	 * @param string $reason Operator reason.
+	 * @param array    $closure Frozen document.
+	 * @param string   $id Client source UUID.
+	 * @param array    $counted New counts.
+	 * @param string   $reason Operator reason.
+	 * @param int|null $approver_id Credential override approver, if used.
 	 * @throws \RuntimeException On write failure.
 	 */
-	public function recount( array $closure, string $id, array $counted, string $reason ): array {
+	public function recount( array $closure, string $id, array $counted, string $reason, ?int $approver_id = null ): array {
 		$row = ( new Fiscal_Record_Store() )->record(
 			array(
 				'type' => 'recount',
@@ -566,6 +674,7 @@ final class Closure_Store {
 				'session_id' => $closure['session_id'],
 				'store_id' => $closure['store_id'],
 				'cashier_id' => get_current_user_id(),
+				'approver_id' => $approver_id,
 				'payload' => array(
 					'counted' => $counted,
 					'variance' => $this->variance( $counted, $closure['expected'] ),
