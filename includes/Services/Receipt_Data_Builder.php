@@ -16,1463 +16,1481 @@ use WC_Abstract_Order;
 /**
  * Receipt_Data_Builder class.
  */
-class Receipt_Data_Builder {
-	/** Build a stored closure or the explicitly live, unnumbered X-report.
-	 *
-	 * @param array $row Closure or session row.
-	 * @param bool  $xreport Whether to read the live session ledger.
-	 */
-	public function build_closure_document( array $row, bool $xreport = false ): array {
-		if ( $xreport ) {
-			$sessions = new Register_Session_Store();
-			$orders = $sessions->captured_orders( $row );
-			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
-			$row['expected'] = $sessions->expected( $row, $orders, $movements );
-			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
-			$cashiers = array();
-			$refund_count = 0;
-			foreach ( $orders as $payments ) {
-				foreach ( $payments as $payment ) {
-					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
-						++$refund_count;
-					}
-
-					$id = (int) ( $payment['cashier_id'] ?? 0 );
-					if ( $id ) {
-						$cashiers[ $id ] = array(
-							'id' => $id,
-							'name' => get_userdata( $id )->display_name ?? (string) $id,
-						);
-					}
-				}
-			}
-			$row['breakdowns'] = array(
-				'opening_float' => array(
-					'expected' => $row['expected_float'],
-					'counted' => $row['counted_float'],
-					'variance' => $row['opening_variance'],
-				),
-				'movements' => $movements,
-				'transaction_count' => count( $orders ),
-				'refund_count' => $refund_count,
-				'cashiers' => array_values( $cashiers ),
-			);
-		}
-		$row['corrections'] = $xreport ? array() : ( new Closure_Store() )->corrections_for( $row['id'] );
-		// Old closures and live X-reports have no label snapshot.
-		$labels = $row['breakdowns']['labels'] ?? array();
-		$register = ( new Register_Store() )->get( $row['register_id'] ) ?? array();
-		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
-		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
-			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
-		}
-		$row['breakdowns']['labels'] = $labels;
-		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
-		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
-		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
-		$fiscal += array(
-			'sequence' => null,
-			'signed_at' => null,
-			'is_reprint' => false,
-			'reprint_count' => 0,
-			'extra_fields' => array(),
-		);
-		$fiscal['document_type'] = $xreport ? 'xreport' : 'closure';
-		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
-		return array(
-			'closure' => $row,
-			'register' => $register,
-			'software' => array(
-				'name' => 'WCPOS',
-				'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,
-			),
-			'order' => array(
-				'currency' => get_woocommerce_currency(),
-				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
-			),
-			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),
-			'i18n' => Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() ),
-		);
-	}
-
-	/**
-	 * The POS store a receipt for this order is rendered under: the order's own
-	 * `_pos_store` when it still exists, else the current store, else an empty
-	 * store object (a stub when the order's store is gone, so nothing is invented).
-	 *
-	 * @param WC_Abstract_Order $order     Order.
-	 * @param object|null       $pos_store Explicit store override.
-	 *
-	 * @return object
-	 */
-	public static function resolve_pos_store( WC_Abstract_Order $order, $pos_store = null ) {
-		$order_store_id         = (int) $order->get_meta( '_pos_store' );
-		$missing_order_store_id = 0;
-		if ( null === $pos_store ) {
-			$pos_store = $order_store_id > 0 ? wcpos_get_store(
-				$order_store_id,
-				array(
-					'status' => array( 'publish', 'trash' ),
-				)
-			) : wcpos_get_store();
-
-			if ( $order_store_id > 0 && ! \is_object( $pos_store ) ) {
-				$missing_order_store_id = $order_store_id;
-			}
-		}
-		if ( ! \is_object( $pos_store ) && 0 === $missing_order_store_id ) {
-			$pos_store = wcpos_get_store();
-		}
-		if ( ! \is_object( $pos_store ) ) {
-			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
-		}
-
-		return $pos_store;
-	}
-
-	/**
-	 * Build a canonical receipt payload.
-	 *
-	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
-	 *
-	 * @return array
-	 */
-	private function build_data( WC_Abstract_Order $order, $pos_store = null ): array {
-		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
-		$status_label = '';
-		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
-			$status_label = (string) wc_get_order_status_name( $wc_status );
-		}
-
-		$pos_store = self::resolve_pos_store( $order, $pos_store );
-		// A stub store means the order's own store is gone (see resolve_pos_store()).
-		$missing_order_store_id = $pos_store instanceof \stdClass ? (int) $order->get_meta( '_pos_store' ) : 0;
-
-		$store_resolver = new Receipt_Store_Resolver( $pos_store );
-		$date_timezone  = $store_resolver->resolve_store_timezone();
-		$date_locale    = $store_resolver->resolve_locale();
-		$order_data    = array(
-			'id'            => $order->get_id(),
-			'number'        => (string) $order->get_order_number(),
-			'currency'      => (string) $order->get_currency(),
-			'customer_note' => (string) $order->get_customer_note(),
-			'wc_status'     => $wc_status,
-			'status_label'  => $status_label,
-			'created_via'   => method_exists( $order, 'get_created_via' ) ? (string) $order->get_created_via() : '',
-			'created'       => $this->format_wc_datetime_in_timezone( $order->get_date_created(), $date_timezone, $date_locale ),
-			'paid'          => $this->format_wc_datetime_in_timezone( $order->get_date_paid(), $date_timezone, $date_locale ),
-			'completed'     => $this->format_wc_datetime_in_timezone( $order->get_date_completed(), $date_timezone, $date_locale ),
-			// Render-time timestamp: refreshed on every build() call so reprints
-			// show the actual print time, not a value persisted to the database.
-			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone, $date_locale ),
-			// Payment fields — templates can render a "How to pay" section guarded
-			// by {{#order.needs_payment}}…{{/order.needs_payment}}. payment_url is
-			// always populated (WC's order-pay endpoint accepts the key regardless
-			// of status); the boolean controls whether to show it.
-			'needs_payment' => method_exists( $order, 'needs_payment' ) ? (bool) $order->needs_payment() : false,
-			'payment_url'   => method_exists( $order, 'get_checkout_payment_url' ) ? (string) $order->get_checkout_payment_url() : '',
-		);
-
-		$display_incl       = 'incl' === $store_resolver->resolve_store_option_string(
-			'get_tax_display_cart',
-			get_option( 'woocommerce_tax_display_cart', 'excl' )
-		);
-		$presentation_hints = $store_resolver->build_presentation_hints( (string) $order->get_currency() );
-		$tax                = $store_resolver->build_tax_section();
-
-		// $missing_order_store_id > 0 only ever happens alongside the bare \stdClass
-		// assigned above, so no getter resolves and every fallback below is taken.
-		// That is what keeps a deleted store's receipt showing the recorded store ID
-		// rather than silently borrowing the current store's name and address.
-		$store_fallbacks = array();
-		if ( $missing_order_store_id > 0 ) {
-			$store_fallbacks['id'] = $missing_order_store_id;
-			// translators: %d: Historical POS store ID that no longer exists.
-			$store_fallbacks['name'] = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_order_store_id );
-		}
-
-		$store = $store_resolver->build_store_section( $store_fallbacks );
-
-		$cashier = array(
-			'id'   => (int) $order->get_meta( '_pos_user' ),
-			'name' => '',
-		);
-		if ( $cashier['id'] > 0 ) {
-			$user = get_user_by( 'id', $cashier['id'] );
-			if ( $user ) {
-				$cashier['name'] = $user->display_name;
-			}
-		}
-
-		$customer_id   = $order->get_customer_id();
-		$customer_name = trim( $order->get_formatted_billing_full_name() );
-
-		if ( ! $customer_id && '' === $customer_name ) {
-			$customer_name = /* translators: Short WCPOS UI label; keep concise. */ __( 'Guest', 'woocommerce-pos' );
-		}
-
-		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );
-		$tax_ids = self::with_customer_tax_id_labels( $tax_ids, $presentation_hints['locale'] ?? '' );
-
-		$customer = array(
-			'id'               => $customer_id ? $customer_id : null,
-			'name'             => $customer_name,
-			'first_name'       => (string) $order->get_billing_first_name(),
-			'billing_address'  => $order->get_address( 'billing' ),
-			'shipping_address' => $order->get_address( 'shipping' ),
-			// Structured TaxId[] — read fallback across the legacy meta-key inventory.
-			'tax_ids'          => $tax_ids,
-		);
-
-		$lines = array();
-		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
-			if ( ! $item instanceof \WC_Order_Item_Product ) {
-				continue;
-			}
-
-			$line_total_excl = (float) $item->get_total();
-			$line_tax_total  = (float) $item->get_total_tax();
-			$line_total_incl = $line_total_excl + $line_tax_total;
-
-			$line_subtotal_excl = (float) $item->get_subtotal();
-			$line_subtotal_tax  = (float) $item->get_subtotal_tax();
-			$line_subtotal_incl = $line_subtotal_excl + $line_subtotal_tax;
-
-			$qty = (float) $item->get_quantity();
-			if ( $qty <= 0 ) {
-				$qty = 0.0;
-			}
-			$calc_dp            = wc_get_price_decimals();
-			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $calc_dp ) : 0.0;
-			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $calc_dp ) : 0.0;
-			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $calc_dp ) : 0.0;
-			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $calc_dp ) : 0.0;
-
-			$discounts_incl = max( 0, $line_subtotal_incl - $line_total_incl );
-			$discounts_excl = max( 0, $line_subtotal_excl - $line_total_excl );
-
-			$qty_refunded   = method_exists( $order, 'get_qty_refunded_for_item' )
-				? abs( (float) $order->get_qty_refunded_for_item( $item_id ) )
-				: 0.0;
-			$total_refunded = method_exists( $order, 'get_total_refunded_for_item' )
-				? abs( (float) $order->get_total_refunded_for_item( $item_id ) )
-				: 0.0;
-			$price_convenience = $this->get_line_price_convenience_fields(
-				$item,
-				$order,
-				$display_incl,
-				$qty,
-				$unit_subtotal_incl,
-				$unit_subtotal_excl,
-				$line_subtotal_incl,
-				$line_subtotal_excl,
-				$line_total_incl,
-				$line_total_excl
-			);
-
-			$line = array(
-				'key'                => (string) $item_id,
-				'sku'                => $item->get_product() ? $item->get_product()->get_sku() : '',
-				'name'               => $item->get_name(),
-				'qty'                => $qty,
-				'qty_refunded'       => $qty_refunded,
-				'unit_subtotal'      => $display_incl ? $unit_subtotal_incl : $unit_subtotal_excl,
-				'unit_subtotal_incl' => $unit_subtotal_incl,
-				'unit_subtotal_excl' => $unit_subtotal_excl,
-				'unit_price'         => $display_incl ? $unit_price_incl : $unit_price_excl,
-				'unit_price_incl'    => $unit_price_incl,
-				'unit_price_excl'    => $unit_price_excl,
-				'line_subtotal'      => $display_incl ? $line_subtotal_incl : $line_subtotal_excl,
-				'line_subtotal_incl' => $line_subtotal_incl,
-				'line_subtotal_excl' => $line_subtotal_excl,
-				'discounts'          => $display_incl ? $discounts_incl : $discounts_excl,
-				'discounts_incl'     => $discounts_incl,
-				'discounts_excl'     => $discounts_excl,
-				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
-				'line_total_incl'    => $line_total_incl,
-				'line_total_excl'    => $line_total_excl,
-				'total_refunded'     => $total_refunded,
-				'taxes'              => $this->get_line_taxes( $item ),
-				'meta'               => $this->get_item_meta_pairs( $item ),
-				'attributes'         => $this->get_product_attribute_pairs( $item ),
-			);
-			$lines[] = array_merge( $line, $price_convenience );
-		}
-
-		$shipping = array();
-		foreach ( $order->get_items( 'shipping' ) as $shipping_item ) {
-			if ( ! $shipping_item instanceof \WC_Order_Item_Shipping ) {
-				continue;
-			}
-			$ship_total_excl = (float) $shipping_item->get_total();
-			$ship_total_tax  = (float) $shipping_item->get_total_tax();
-			$ship_total_incl = $ship_total_excl + $ship_total_tax;
-			$shipping[]      = array(
-				'label'      => $shipping_item->get_name(),
-				'method_id'  => (string) $shipping_item->get_method_id(),
-				'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
-				'total_incl' => $ship_total_incl,
-				'total_excl' => $ship_total_excl,
-				'taxes'      => $this->get_item_taxes( $shipping_item ),
-				'meta'       => $this->get_item_meta_pairs( $shipping_item ),
-			);
-		}
-
-		$fees = array();
-		foreach ( $order->get_fees() as $fee ) {
-			$fee_total_excl = (float) $fee->get_total();
-			$fee_total_tax  = (float) $fee->get_total_tax();
-			$fee_total_incl = $fee_total_excl + $fee_total_tax;
-			$fees[]         = array(
-				'label'      => $fee->get_name(),
-				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
-				'total_incl' => $fee_total_incl,
-				'total_excl' => $fee_total_excl,
-				'taxes'      => $this->get_item_taxes( $fee ),
-				'meta'       => $this->get_item_meta_pairs( $fee ),
-			);
-		}
-
-		$discounts = array();
-		foreach ( $order->get_items( 'coupon' ) as $coupon_item ) {
-			if ( ! $coupon_item instanceof \WC_Order_Item_Coupon ) {
-				continue;
-			}
-			$intent = Quick_Discount::intent_from_item( $coupon_item );
-			if ( $intent ) {
-				$discount_type = $intent['discount_type'];
-				$label = 'fixed_cart' === $discount_type ? __( 'Discount', 'woocommerce-pos' ) : sprintf(
-					/* translators: %s: Discount percentage. */
-					__( 'Discount (%s%%)', 'woocommerce-pos' ),
-					wc_format_decimal( $intent['amount'], '', true )
-				);
-			} else {
-				$coupon = $this->get_order_coupon( $coupon_item );
-				$discount_type = $coupon ? (string) $coupon->get_discount_type() : '';
-				$label = $this->get_coupon_label( $coupon_item, $coupon );
-			}
-			$coupon_excl = (float) $coupon_item->get_discount();
-			$coupon_tax  = (float) $coupon_item->get_discount_tax();
-			$coupon_incl = $coupon_excl + $coupon_tax;
-			$discounts[] = array(
-				'label'         => $label,
-				'code'          => $coupon_item->get_code(),
-				'discount_type' => $discount_type,
-				'total'         => $display_incl ? $coupon_incl : $coupon_excl,
-				'total_incl'    => $coupon_incl,
-				'total_excl'    => $coupon_excl,
-			);
-		}
-
-		$discount_total_excl = (float) $order->get_discount_total();
-		$discount_total_tax  = (float) $order->get_discount_tax();
-		$discount_total_incl = $discount_total_excl + $discount_total_tax;
-
-		// Legacy POS lines already include regular-to-selling savings in WooCommerce's
-		// discount total. Add only current-shape savings to total_saved to avoid overlap.
-		$sale_savings_totals = array(
-			'incl' => 0.0,
-			'excl' => 0.0,
-		);
-		$additional_savings  = array(
-			'incl' => 0.0,
-			'excl' => 0.0,
-		);
-		$savings_complete    = array(
-			'incl' => true,
-			'excl' => true,
-		);
-		$price_precision = wc_get_price_decimals();
-		foreach ( $lines as $line ) {
-			foreach ( array( 'incl', 'excl' ) as $basis ) {
-				$key = 'line_savings_' . $basis;
-				if ( ! isset( $line[ $key ] ) || ! is_numeric( $line[ $key ] ) ) {
-					$savings_complete[ $basis ] = false;
-					continue;
-				}
-
-				$line_savings = (float) $line[ $key ];
-				$sale_savings_totals[ $basis ] += $line_savings;
-				if ( empty( $line['savings_in_discounts'] ) ) {
-					$subtotal_key = 'line_subtotal_' . $basis;
-					$selling_key  = 'line_selling_total_' . $basis;
-					if (
-						$line_savings > 0.0
-						&& (
-							! isset( $line[ $subtotal_key ], $line[ $selling_key ] )
-							|| round( abs( (float) $line[ $subtotal_key ] - (float) $line[ $selling_key ] ), $price_precision ) > 0.0
-						)
-					) {
-						$savings_complete[ $basis ] = false;
-						continue;
-					}
-					$additional_savings[ $basis ] += $line_savings;
-				}
-			}
-		}
-
-		$total_saved = array(
-			'incl' => $savings_complete['incl'] ? $discount_total_incl + $additional_savings['incl'] : null,
-			'excl' => $savings_complete['excl'] ? $discount_total_excl + $additional_savings['excl'] : null,
-		);
-		foreach ( array( 'incl', 'excl' ) as $basis ) {
-			if ( ! $savings_complete[ $basis ] ) {
-				$sale_savings_totals[ $basis ] = null;
-			}
-		}
-		$display_basis = $display_incl ? 'incl' : 'excl';
-
-		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
-		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
-
-		// Item count summaries — useful for packing slips and kitchen tickets
-		// where Mustache can't sum/count an array at render time.
-		$total_qty  = (float) array_sum( array_column( $lines, 'qty' ) );
-		$line_count = \count( $lines );
-
-		$tax_total = (float) $order->get_total_tax();
-		$total     = (float) $order->get_total();
-
-		$total_excl = $total - $tax_total;
-		$refund_total     = method_exists( $order, 'get_total_refunded' )
-			? abs( (float) $order->get_total_refunded() )
-			: 0.0;
-		// Templates render the customer-facing balance after a partial refund.
-		// Stays at 0 when nothing was refunded so detailed-receipt's section
-		// guard `{{#totals.net_total}}…{{/totals.net_total}}` collapses.
-		$net_total = $refund_total > 0 ? max( 0.0, $total - $refund_total ) : 0.0;
-
-		$totals = array(
-			'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
-			'subtotal_incl'           => $subtotal_incl,
-			'subtotal_excl'           => $subtotal_excl,
-			'discount_total'          => $display_incl ? $discount_total_incl : $discount_total_excl,
-			'discount_total_incl'     => $discount_total_incl,
-			'discount_total_excl'     => $discount_total_excl,
-			'sale_savings_total'      => $sale_savings_totals[ $display_basis ],
-			'sale_savings_total_incl' => $sale_savings_totals['incl'],
-			'sale_savings_total_excl' => $sale_savings_totals['excl'],
-			'total_saved'             => $total_saved[ $display_basis ],
-			'total_saved_incl'        => $total_saved['incl'],
-			'total_saved_excl'        => $total_saved['excl'],
-			'total_saved_complete'    => $savings_complete[ $display_basis ],
-			'tax_total'               => $tax_total,
-			'total'                   => $display_incl ? $total : $total_excl,
-			'total_incl'              => $total,
-			'total_excl'              => $total_excl,
-			'paid_total'              => $total,
-			'change_total'            => (float) $order->get_meta( '_pos_cash_change' ),
-			'refund_total'            => $refund_total,
-			'net_total'               => $net_total,
-			'total_qty'               => $total_qty,
-			'line_count'              => $line_count,
-		);
-
-		$payments = array(
-			array(
-				'method_id'      => $order->get_payment_method(),
-				'method_title'   => $order->get_payment_method_title(),
-				'amount'         => $total,
-				'transaction_id' => (string) $order->get_transaction_id(),
-				'tendered'       => (float) $order->get_meta( '_pos_cash_amount_tendered' ),
-				'change'         => (float) $order->get_meta( '_pos_cash_change' ),
-			),
-		);
-		$ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : array();
-		$counting     = array_values(
-			array_filter(
-				$ledger_rows,
-				static function ( array $row ): bool {
-					return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
-				}
-			)
-		);
-		if ( $ledger_rows ) {
-			$payments   = array();
-			$change_sum = 0.0;
-			foreach ( $counting as $row ) {
-				$method_id = (string) ( $row['method_id'] ?? '' );
-				$descriptor = Descriptor_Builder::instance()->get( $method_id );
-				$refs       = is_array( $row['provider_refs'] ?? null ) ? $row['provider_refs'] : array();
-				$change     = (float) ( $row['change'] ?? 0 );
-				$payments[] = array(
-					'method_id'      => $method_id,
-					'method_title'   => $descriptor ? $descriptor['title'] : $method_id,
-					'amount'         => (float) ( $row['amount'] ?? 0 ),
-					'transaction_id' => (string) ( $refs['payment_intent'] ?? $refs['transaction_id'] ?? '' ),
-					'tendered'       => (float) ( $row['tendered'] ?? 0 ),
-					'change'         => $change,
-				);
-				$change_sum += $change;
-			}
-			$totals['paid_total']   = (float) Ledger::instance()->paid( $ledger_rows );
-			$totals['change_total'] = $change_sum;
-		}
-
-		$tax_summary = $this->get_tax_summary( $order );
-
-		$register_id = (string) $order->get_meta( '_wcpos_register' );
-		$register_row = '' !== $register_id ? ( new Register_Store() )->get( $register_id ) : null;
-		$register = array(
-			'id' => $register_row['id'] ?? '',
-			'name' => $register_row['name'] ?? '',
-		);
-		$software = array(
-			'name'           => 'WCPOS',
-			'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
-			'app_version'    => (string) $order->get_meta( '_wcpos_app_version' ),
-			'app_build'      => (string) $order->get_meta( '_wcpos_app_build' ),
-			'platform'       => $register_row['platform'] ?? '',
-		);
-		$sale_tz = (string) $order->get_meta( '_wcpos_sale_tz' );
-		try {
-			$sale_timezone = '' !== $sale_tz ? new DateTimeZone( $sale_tz ) : $date_timezone;
-		} catch ( \Exception $e ) {
-			$sale_timezone = $date_timezone;
-		}
-		$sale_time = strtotime( (string) $order->get_meta( '_wcpos_sale_time' ) );
-		$received_at = strtotime( (string) $order->get_meta( '_wcpos_sale_received_gmt' ) );
-		$sale_counter = $order->get_meta( '_wcpos_sale_counter' );
-
-		$fiscal = Receipt_Payload_Assembler::fiscal(
-			array(
-				'sale_time'         => false === $sale_time ? null : Receipt_Date_Formatter::from_timestamp( $sale_time, $sale_timezone, $date_locale ),
-				'sale_tz'           => $sale_tz,
-				'sale_counter'      => '' === $sale_counter ? null : (int) $sale_counter,
-				'received_at'       => false === $received_at ? null : Receipt_Date_Formatter::from_timestamp( $received_at, $date_timezone, $date_locale ),
-				'immutable_id'      => '',
-				'receipt_number'    => '',
-				'sequence'          => null,
-				'hash'              => '',
-				'qr_payload'        => '',
-				'tax_agency_code'   => '',
-				'signed_at'         => '',
-				'signature_excerpt' => '',
-				'document_label'    => '',
-				'is_reprint'        => false,
-				'reprint_count'     => 0,
-				'extra_fields'      => array(),
-			)
-		);
-
-		$data = Receipt_Payload_Assembler::assemble(
-			array(
-				'order'              => $order_data,
-				'store'              => $store,
-				'software'           => $software,
-				'register'           => $register,
-				'cashier'            => $cashier,
-				'customer'           => $customer,
-				'lines'              => $lines,
-				'fees'               => $fees,
-				'shipping'           => $shipping,
-				'discounts'          => $discounts,
-				'totals'             => $totals,
-				'tax'                => $tax,
-				'tax_summary'        => $tax_summary,
-				'payments'           => $payments,
-				'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone, $date_locale ),
-				'fiscal'             => $fiscal,
-				'presentation_hints' => $presentation_hints,
-			)
-		);
-
-		return $data;
-	}
-
-	/**
-	 * Build a canonical receipt, retaining frozen identity in live mode.
-	 *
-	 * @param WC_Abstract_Order $order Receipt order.
-	 * @param string            $mode Receipt mode.
-	 * @param object|null       $pos_store POS store override.
-	 */
-	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		$data = $this->build_data( $order, $pos_store );
-
-		/**
-		 * Filters the canonical receipt data before it is rendered or snapshotted.
-		 *
-		 * Runs for every receipt this builder produces: live receipts, fiscal
-		 * snapshots captured at payment time, PDF downloads and legacy PHP
-		 * templates. Extensions can add their own keys to any section (for
-		 * example a flag on a `discounts[]` row) or adjust labels. Keys defined
-		 * by Receipt_Data_Schema should keep their documented types.
-		 *
-		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
-		 * @param WC_Abstract_Order $order Order the receipt is for.
-		 * @param string            $mode  Receipt mode: 'live', 'fiscal' or 'refund'.
-		 *
-		 * @since 1.10.8
-		 *
-		 * @hook woocommerce_pos_receipt_data
-		 */
-		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
-
-		// Frozen identity on live builds (roadmap#243): when a snapshot exists, the
-		// fiscal identity is copied from it, never rebuilt. Applied AFTER the filter
-		// so an extension that recomputes a QR or a label live cannot overwrite what
-		// was captured at the sale; enrichment belongs in the snapshot
-		// (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
-		// stay live. A 1.3 snapshot without a key keeps the live value.
-		if ( 'live' === $mode ) {
-			$snapshot = Receipt_Snapshot_Store::instance()->get_snapshot( $order->get_id() );
-			if ( null !== $snapshot ) {
-				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
-					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
-						$data['fiscal'][ $key ] = $snapshot['fiscal'][ $key ];
-					}
-				}
-				foreach ( array( 'register', 'software' ) as $key ) {
-					if ( array_key_exists( $key, $snapshot ) ) {
-						$data[ $key ] = $snapshot[ $key ];
-					}
-				}
-			}
-		}
-
-		return $data;
-	}
-
-
-	/**
-	 * Build the write-once refund receipt without changing the sale or its money.
-	 *
-	 * @param \WC_Order        $order Parent sale.
-	 * @param \WC_Order_Refund $refund Refund document source.
-	 * @param int              $number Minted refund sequence.
-	 * @param string|null      $corrects Original sale identity.
-	 * @throws \RuntimeException When the refund document cannot be encoded.
-	 */
-	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects ): array {
-		$data = $this->build_data( $order );
-		$display_incl = ! empty( $data['tax']['display_incl'] );
-		$items = $this->get_refund_items( $refund, $display_incl );
-		$data['lines'] = $items['lines'];
-		foreach ( $data['lines'] as &$line ) {
-			foreach ( array( '', '_incl', '_excl' ) as $basis ) {
-				$line[ 'line_total' . $basis ] = $line[ 'total' . $basis ];
-				$line[ 'line_subtotal' . $basis ] = $line[ 'total' . $basis ];
-				$line[ 'unit_price' . $basis ] = $line['qty'] > 0 ? round( $line[ 'total' . $basis ] / $line['qty'], wc_get_price_decimals() ) : 0.0;
-				$line[ 'unit_subtotal' . $basis ] = $line[ 'unit_price' . $basis ];
-				$line[ 'discounts' . $basis ] = 0.0;
-			}
-			$line['qty_refunded'] = 0.0;
-			$line['total_refunded'] = 0.0;
-		}
-		unset( $line );
-		$data['fees'] = $items['fees'];
-		$data['shipping'] = $items['shipping'];
-		$data['discounts'] = array();
-		$data['refunds'] = array();
-		foreach ( $data['totals'] as $key => $value ) {
-			$data['totals'][ $key ] = is_bool( $value ) ? true : 0.0;
-		}
-		$data['totals']['total_incl'] = abs( (float) $refund->get_amount() );
-		$data['totals']['tax_total'] = abs( (float) $refund->get_total_tax() );
-		$data['totals']['total_excl'] = $data['totals']['total_incl'] - $data['totals']['tax_total'];
-		$data['totals']['total'] = $data['totals'][ $display_incl ? 'total_incl' : 'total_excl' ];
-		foreach ( array( '', '_incl', '_excl' ) as $basis ) {
-			$data['totals'][ 'subtotal' . $basis ] = array_sum( array_column( $data['lines'], 'line_subtotal' . $basis ) );
-		}
-		$data['totals']['total_qty'] = array_sum( array_column( $data['lines'], 'qty' ) );
-		$data['totals']['line_count'] = count( $data['lines'] );
-		$data['tax_summary'] = $this->get_tax_summary( $refund );
-		foreach ( $data['tax_summary'] as &$tax ) {
-			foreach ( array( 'taxable_amount_excl', 'tax_amount', 'taxable_amount_incl' ) as $key ) {
-				$tax[ $key ] = null === $tax[ $key ] ? null : abs( $tax[ $key ] );
-			}
-		}
-		unset( $tax );
-		$data['has_tax_summary'] = ! empty( $data['tax_summary'] );
-		$allocations = $refund->get_meta( '_wcpos_refund_allocations', true );
-		if ( ! $refund->meta_exists( '_wcpos_refund_allocations' ) ) {
-			$counting = array_values(
-				array_filter(
-					Ledger::instance()->read( $order ),
-					static function ( array $row ): bool {
-						return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
-					}
-				)
-			);
-			$allocations = 1 === count( $counting ) ? array(
-				array(
-					'payment_id' => $counting[0]['id'],
-					'method_id' => $counting[0]['method_id'],
-					'amount' => wc_format_decimal( $refund->get_amount(), wc_get_price_decimals() ),
-				),
-			) : array();
-		}
-		$data['payments'] = array();
-		foreach ( $allocations as $allocation ) {
-			$method = (string) ( $allocation['method_id'] ?? '' );
-			$descriptor = Descriptor_Builder::instance()->get( $method );
-			$data['payments'][] = array(
-				'payment_id' => $allocation['payment_id'],
-				'method_id' => $method,
-				'method_title' => $descriptor['title'] ?? $method,
-				'amount' => (float) $allocation['amount'],
-				'transaction_id' => '',
-				'tendered' => 0.0,
-				'change' => 0.0,
-			);
-		}
-		$data['totals']['paid_total'] = array_sum( array_column( $data['payments'], 'amount' ) );
-		$cashier_id = (int) $refund->get_refunded_by();
-		$user = $cashier_id ? get_user_by( 'id', $cashier_id ) : false;
-		$data['cashier'] = array(
-			'id' => $cashier_id,
-			'name' => $user ? $user->display_name : '',
-		);
-		$date = $this->format_wc_datetime_in_timezone( $refund->get_date_created(), wp_timezone(), $data['presentation_hints']['locale'] ?? '' );
-		$data['fiscal'] = Receipt_Payload_Assembler::fiscal(
-			array_merge(
-				$data['fiscal'],
-				array(
-					'document_type' => 'refund',
-					'document_label' => $data['i18n']['document_refund'],
-					'receipt_number' => (string) $number,
-					'sequence' => $number,
-					'corrects' => $corrects,
-					'immutable_id' => $refund->get_id() . ':' . $number,
-					'hash' => '',
-					'sale_time' => $date,
-					'sale_tz' => wp_timezone_string(),
-					'received_at' => $date,
-					'sale_counter' => null,
-					'is_reprint' => false,
-					'reprint_count' => 0,
-					// Store health listing of unallocated refunds belongs to a later ticket.
-					'extra_fields' => array(
-						'refund_id' => $refund->get_id(),
-						'allocations' => $allocations,
-						'allocation' => $allocations ? 'allocated' : 'unallocated',
-					),
-				)
-			)
-		);
-		$data['fiscal']['corrects'] = $corrects;
-		$identity = array_intersect_key( $data['fiscal'], array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id', 'corrects' ) ) );
-		$data     = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, 'refund' );
-		// The minted identity is core-owned: an extension unaware of the refund mode
-		// cannot rewrite it after the number and the row are fixed.
-		$data['fiscal']         = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
-		$data['fiscal']['hash'] = '';
-		$json = wp_json_encode( $data );
-		if ( ! is_string( $json ) ) {
-			throw new \RuntimeException( 'Unable to encode refund document.' );
-		}
-		$data['fiscal']['hash'] = Receipt_Snapshot_Store::checksum( $json );
-		return $data;
-	}
-
-	/**
-	 * Shape positive refund items for embedded refunds and standalone documents.
-	 *
-	 * @param \WC_Order_Refund $refund Refund source.
-	 * @param bool             $display_incl Tax display basis.
-	 */
-	private function get_refund_items( \WC_Order_Refund $refund, bool $display_incl ): array {
-		$refund_lines = array();
-		foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
-			if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
-				continue;
-			}
-			$line_total_excl = abs( (float) $refund_item->get_total() );
-			$line_total_tax  = abs( (float) $refund_item->get_total_tax() );
-			$line_total_incl = $line_total_excl + $line_total_tax;
-			$refund_lines[]  = array(
-				'name'       => (string) $refund_item->get_name(),
-				'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
-				'qty'        => abs( (float) $refund_item->get_quantity() ),
-				'total'      => $display_incl ? $line_total_incl : $line_total_excl,
-				'total_incl' => $line_total_incl,
-				'total_excl' => $line_total_excl,
-				'taxes'      => array_map(
-					static function ( array $tax ): array {
-						$tax['amount'] = abs( (float) $tax['amount'] );
-						return $tax;
-					},
-					$this->get_item_taxes( $refund_item )
-				),
-			);
-		}
-
-		$refund_fees = array();
-		foreach ( $refund->get_items( 'fee' ) as $refund_fee ) {
-			if ( ! $refund_fee instanceof \WC_Order_Item_Fee ) {
-				continue;
-			}
-			$fee_total_excl = abs( (float) $refund_fee->get_total() );
-			$fee_total_tax  = abs( (float) $refund_fee->get_total_tax() );
-			$fee_total_incl = $fee_total_excl + $fee_total_tax;
-			$refund_fees[]  = array(
-				'label'      => (string) $refund_fee->get_name(),
-				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
-				'total_incl' => $fee_total_incl,
-				'total_excl' => $fee_total_excl,
-				'taxes'      => array_map(
-					static function ( array $tax ): array {
-						$tax['amount'] = abs( (float) $tax['amount'] );
-						return $tax;
-					},
-					$this->get_item_taxes( $refund_fee )
-				),
-			);
-		}
-
-		$refund_shipping = array();
-		foreach ( $refund->get_items( 'shipping' ) as $refund_ship ) {
-			if ( ! $refund_ship instanceof \WC_Order_Item_Shipping ) {
-				continue;
-			}
-			$ship_total_excl   = abs( (float) $refund_ship->get_total() );
-			$ship_total_tax    = abs( (float) $refund_ship->get_total_tax() );
-			$ship_total_incl   = $ship_total_excl + $ship_total_tax;
-			$refund_shipping[] = array(
-				'label'      => (string) $refund_ship->get_name(),
-				'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
-				'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
-				'total_incl' => $ship_total_incl,
-				'total_excl' => $ship_total_excl,
-				'taxes'      => array_map(
-					static function ( array $tax ): array {
-						$tax['amount'] = abs( (float) $tax['amount'] );
-						return $tax;
-					},
-					$this->get_item_taxes( $refund_ship )
-				),
-			);
-		}
-		return array(
-			'lines' => $refund_lines,
-			'fees' => $refund_fees,
-			'shipping' => $refund_shipping,
-		);
-	}
-
-
-	/**
-	 * Read the recorded POS prices needed for historical receipt savings.
-	 *
-	 * @param \WC_Order_Item_Product $item Order item.
-	 *
-	 * @return array{price:float,regular_price:float,tax_status:string}|null
-	 */
-	private function get_pos_price_data( \WC_Order_Item_Product $item ): ?array {
-		$raw  = $item->get_meta( '_woocommerce_pos_data', true );
-		$data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $raw );
-		if (
-			! \is_array( $data )
-			|| ! isset( $data['price'], $data['regular_price'], $data['tax_status'] )
-			|| ! is_numeric( $data['price'] )
-			|| ! is_numeric( $data['regular_price'] )
-			|| ! \in_array( $data['tax_status'], array( 'none', 'taxable', 'shipping' ), true )
-		) {
-			return null;
-		}
-
-		return array(
-			'price'         => (float) $data['price'],
-			'regular_price' => (float) $data['regular_price'],
-			'tax_status'    => (string) $data['tax_status'],
-		);
-	}
-
-	/**
-	 * Convert a recorded price into tax-inclusive/exclusive historical bases.
-	 *
-	 * @param float  $value              Recorded price in the order's entered-price basis.
-	 * @param string $tax_status         Recorded product tax status.
-	 * @param bool   $prices_include_tax Whether recorded prices include tax.
-	 * @param float  $subtotal_incl      Stored line subtotal including tax.
-	 * @param float  $subtotal_excl      Stored line subtotal excluding tax.
-	 *
-	 * @return array{incl:?float,excl:?float}
-	 */
-	private function convert_recorded_price_bases(
-		float $value,
-		string $tax_status,
-		bool $prices_include_tax,
-		float $subtotal_incl,
-		float $subtotal_excl
-	): array {
-		if ( 'none' === $tax_status || 0.0 === $value ) {
-			return array(
-				'incl' => $value,
-				'excl' => $value,
-			);
-		}
-
-		if ( $prices_include_tax ) {
-			return array(
-				'incl' => $value,
-				'excl' => 0.0 !== $subtotal_incl ? $value * $subtotal_excl / $subtotal_incl : null,
-			);
-		}
-
-		return array(
-			'incl' => 0.0 !== $subtotal_excl ? $value * $subtotal_incl / $subtotal_excl : null,
-			'excl' => $value,
-		);
-	}
-
-	/**
-	 * Derive recorded prices and savings without changing WooCommerce discounts.
-	 *
-	 * @param \WC_Order_Item_Product $item               Order item.
-	 * @param WC_Abstract_Order      $order              Receipt order.
-	 * @param bool                   $display_incl       Whether generic values include tax.
-	 * @param float                  $qty                Item quantity.
-	 * @param float                  $unit_subtotal_incl Stored unit subtotal including tax.
-	 * @param float                  $unit_subtotal_excl Stored unit subtotal excluding tax.
-	 * @param float                  $subtotal_incl      Stored line subtotal including tax.
-	 * @param float                  $subtotal_excl      Stored line subtotal excluding tax.
-	 * @param float                  $total_incl         Stored line total including tax.
-	 * @param float                  $total_excl         Stored line total excluding tax.
-	 *
-	 * @return array<string,float|bool|null>
-	 */
-	private function get_line_price_convenience_fields(
-		\WC_Order_Item_Product $item,
-		WC_Abstract_Order $order,
-		bool $display_incl,
-		float $qty,
-		float $unit_subtotal_incl,
-		float $unit_subtotal_excl,
-		float $subtotal_incl,
-		float $subtotal_excl,
-		float $total_incl,
-		float $total_excl
-	): array {
-		$pos_data           = $this->get_pos_price_data( $item );
-		$prices_include_tax = method_exists( $order, 'get_prices_include_tax' ) && $order->get_prices_include_tax();
-		$selling            = array(
-			'incl' => $unit_subtotal_incl,
-			'excl' => $unit_subtotal_excl,
-		);
-		$regular = array(
-			'incl' => null,
-			'excl' => null,
-		);
-
-		if ( null !== $pos_data ) {
-			$recorded_selling = $this->convert_recorded_price_bases(
-				$pos_data['price'],
-				$pos_data['tax_status'],
-				$prices_include_tax,
-				$subtotal_incl,
-				$subtotal_excl
-			);
-			$regular          = $this->convert_recorded_price_bases(
-				$pos_data['regular_price'],
-				$pos_data['tax_status'],
-				$prices_include_tax,
-				$subtotal_incl,
-				$subtotal_excl
-			);
-
-			foreach ( array( 'incl', 'excl' ) as $basis ) {
-				if ( null !== $recorded_selling[ $basis ] ) {
-					$selling[ $basis ] = $recorded_selling[ $basis ];
-				}
-			}
-		}
-
-		$unit_savings = array(
-			'incl' => null !== $regular['incl'] ? max( 0.0, $regular['incl'] - $selling['incl'] ) : null,
-			'excl' => null !== $regular['excl'] ? max( 0.0, $regular['excl'] - $selling['excl'] ) : null,
-		);
-		$multiply    = static function ( ?float $value ) use ( $qty ): ?float {
-			return null === $value ? null : $value * $qty;
-		};
-		$line_regular = array(
-			'incl' => $multiply( $regular['incl'] ),
-			'excl' => $multiply( $regular['excl'] ),
-		);
-		$line_selling = array(
-			'incl' => $multiply( $selling['incl'] ),
-			'excl' => $multiply( $selling['excl'] ),
-		);
-		$line_savings = array(
-			'incl' => $multiply( $unit_savings['incl'] ),
-			'excl' => $multiply( $unit_savings['excl'] ),
-		);
-
-		$savings_in_discounts = false;
-		$stored               = array(
-			'incl' => array(
-				'subtotal' => $subtotal_incl,
-				'total'    => $total_incl,
-			),
-			'excl' => array(
-				'subtotal' => $subtotal_excl,
-				'total'    => $total_excl,
-			),
-		);
-		// Compare on the recorded-price basis first: the opposite basis is float-derived
-		// from stored line ratios, and WooCommerce's own tax rounding can shift it by a
-		// sub-cent. Price-decimal precision tolerates that noise; rounding precision does not.
-		$precision   = wc_get_price_decimals();
-		$basis_order = $prices_include_tax ? array( 'incl', 'excl' ) : array( 'excl', 'incl' );
-		foreach ( $basis_order as $basis ) {
-			if ( null === $line_savings[ $basis ] || $line_savings[ $basis ] <= 0.0 ) {
-				continue;
-			}
-
-			$distance_to_regular = round( abs( $stored[ $basis ]['subtotal'] - $line_regular[ $basis ] ), $precision );
-			$distance_to_selling = round( abs( $stored[ $basis ]['subtotal'] - $line_selling[ $basis ] ), $precision );
-			$stored_discount     = round( max( 0.0, $stored[ $basis ]['subtotal'] - $stored[ $basis ]['total'] ), $precision );
-			$recorded_savings    = round( $line_savings[ $basis ], $precision );
-
-			$savings_in_discounts = $distance_to_regular < $distance_to_selling
-				&& $stored_discount >= $recorded_savings;
-			break;
-		}
-
-		$select = static function ( array $values ) use ( $display_incl ): ?float {
-			return $display_incl ? $values['incl'] : $values['excl'];
-		};
-
-		return array(
-			'regular_price'           => $select( $regular ),
-			'regular_price_incl'      => $regular['incl'],
-			'regular_price_excl'      => $regular['excl'],
-			'selling_price'           => $select( $selling ),
-			'selling_price_incl'      => $selling['incl'],
-			'selling_price_excl'      => $selling['excl'],
-			'unit_savings'            => $select( $unit_savings ),
-			'unit_savings_incl'       => $unit_savings['incl'],
-			'unit_savings_excl'       => $unit_savings['excl'],
-			'line_regular_total'      => $select( $line_regular ),
-			'line_regular_total_incl' => $line_regular['incl'],
-			'line_regular_total_excl' => $line_regular['excl'],
-			'line_selling_total'      => $select( $line_selling ),
-			'line_selling_total_incl' => $line_selling['incl'],
-			'line_selling_total_excl' => $line_selling['excl'],
-			'line_savings'            => $select( $line_savings ),
-			'line_savings_incl'       => $line_savings['incl'],
-			'line_savings_excl'       => $line_savings['excl'],
-			'savings_in_discounts'    => $savings_in_discounts,
-		);
-	}
-
-	/**
-	 * Load the WooCommerce coupon behind an order coupon line, if it still exists.
-	 *
-	 * Order coupon lines only store the code; the coupon post may have been
-	 * deleted since the order was placed, in which case templates fall back to
-	 * the code alone.
-	 *
-	 * @param \WC_Order_Item_Coupon $coupon_item Coupon order item.
-	 * @return \WC_Coupon|null
-	 */
-	private function get_order_coupon( \WC_Order_Item_Coupon $coupon_item ): ?\WC_Coupon {
-		$code = (string) $coupon_item->get_code();
-		if ( '' === $code ) {
-			return null;
-		}
-
-		try {
-			$coupon = new \WC_Coupon( $code );
-		} catch ( \Exception $exception ) {
-			return null;
-		}
-
-		return $coupon->get_id() ? $coupon : null;
-	}
-
-	/**
-	 * Resolve an optional human-facing coupon label for a receipt discount row.
-	 *
-	 * Coupons are identified by code; the code is already exposed as
-	 * `discounts[].code`. Prefer a distinct, user-authored description, but
-	 * fall back to the code so templates that render `label` always have text.
-	 *
-	 * @param \WC_Order_Item_Coupon $coupon_item Coupon order item.
-	 * @param \WC_Coupon|null       $coupon      Coupon behind the line, when it still exists.
-	 * @return string
-	 */
-	private function get_coupon_label( \WC_Order_Item_Coupon $coupon_item, ?\WC_Coupon $coupon ): string {
-		$code = (string) $coupon_item->get_code();
-		if ( null === $coupon ) {
-			return $code;
-		}
-
-		$label = trim( wp_strip_all_tags( (string) $coupon->get_description() ) );
-
-		return '' !== $label && 0 !== strcasecmp( $label, $code ) ? $label : $code;
-	}
-
-	/**
-	 * Build tax summary.
-	 *
-	 * @param WC_Abstract_Order $order Order object.
-	 *
-	 * @return array
-	 */
-	private function get_tax_summary( WC_Abstract_Order $order ): array {
-		$summary = array();
-
-		$taxable_bases = $this->get_taxable_bases_by_rate_id( $order );
-
-		foreach ( $order->get_items( 'tax' ) as $tax_item ) {
-			$tax_amount   = (float) $tax_item->get_tax_total() + (float) $tax_item->get_shipping_tax_total();
-			$rate         = (float) $tax_item->get_rate_percent();
-			$rate_id      = (string) $tax_item->get_rate_id();
-			$taxable_excl = $taxable_bases[ $rate_id ] ?? null;
-			$taxable_incl = null !== $taxable_excl ? $taxable_excl + $tax_amount : null;
-
-			$summary[] = array(
-				'code'                => $rate_id,
-				'rate'                => $rate > 0 ? $rate : null,
-				'label'               => $tax_item->get_label( $order ),
-				'compound'            => method_exists( $tax_item, 'is_compound' ) ? (bool) $tax_item->is_compound() : false,
-				'taxable_amount_excl' => $taxable_excl,
-				'tax_amount'          => $tax_amount,
-				'taxable_amount_incl' => $taxable_incl,
-			);
-		}
-
-		return $summary;
-	}
-
-
-	/**
-	 * Sum post-discount pre-tax item totals by tax rate id.
-	 *
-	 * A line taxed by multiple rates contributes its full net total to each
-	 * applicable rate. Compound rates intentionally use the pure pre-tax net
-	 * base for the v1 contract.
-	 *
-	 * @param WC_Abstract_Order $order Order object.
-	 *
-	 * @return array<string,float>
-	 */
-	private function get_taxable_bases_by_rate_id( WC_Abstract_Order $order ): array {
-		$bases = array();
-
-		foreach ( array( 'line_item', 'fee', 'shipping' ) as $item_type ) {
-			foreach ( $order->get_items( $item_type ) as $item ) {
-				if ( ! method_exists( $item, 'get_taxes' ) || ! method_exists( $item, 'get_total' ) ) {
-					continue;
-				}
-
-				$raw_taxes = $item->get_taxes();
-				$totals    = isset( $raw_taxes['total'] ) && is_array( $raw_taxes['total'] ) ? $raw_taxes['total'] : array();
-				$base      = (float) $item->get_total();
-
-				foreach ( $totals as $rate_id => $tax_amount ) {
-					if ( '' === (string) $rate_id || '' === (string) $tax_amount ) {
-						continue;
-					}
-
-					$key = (string) $rate_id;
-					if ( ! array_key_exists( $key, $bases ) ) {
-						$bases[ $key ] = 0.0;
-					}
-
-					$bases[ $key ] += $base;
-				}
-			}
-		}
-
-		return $bases;
-	}
-
-
-	/**
-	 * Format a WooCommerce date in a resolved receipt timezone.
-	 *
-	 * @param \WC_DateTime|null $date     WooCommerce date.
-	 * @param DateTimeZone      $timezone Receipt timezone.
-	 * @param string            $locale   Receipt locale.
-	 *
-	 * @return array<string,string>
-	 */
-	private function format_wc_datetime_in_timezone( $date, DateTimeZone $timezone, string $locale = '' ): array {
-		if ( ! $date ) {
-			return Receipt_Date_Formatter::empty();
-		}
-
-		return Receipt_Date_Formatter::from_timestamp( $date->getTimestamp(), $timezone, $locale );
-	}
-
-
-	/**
-	 * Build line tax rows.
-	 *
-	 * @param \WC_Order_Item_Product $item Order line item.
-	 *
-	 * @return array
-	 */
-	private function get_line_taxes( $item ): array {
-		return $this->get_item_taxes( $item );
-	}
-
-	/**
-	 * Build tax rows for any order item that exposes get_taxes().
-	 *
-	 * Resolves human-readable label and percent rate via WC_Tax when possible,
-	 * falling back to the rate id string and null rate.
-	 *
-	 * @param object $item Order item.
-	 *
-	 * @return array
-	 */
-	private function get_item_taxes( $item ): array {
-		$taxes = array();
-
-		if ( ! method_exists( $item, 'get_taxes' ) ) {
-			return $taxes;
-		}
-
-		$raw = $item->get_taxes();
-		if ( ! \is_array( $raw ) ) {
-			return $taxes;
-		}
-
-		$totals = isset( $raw['total'] ) && \is_array( $raw['total'] ) ? $raw['total'] : array();
-
-		foreach ( $totals as $tax_rate_id => $tax_amount ) {
-			if ( ! $tax_amount ) {
-				continue;
-			}
-
-			$rate  = null;
-			$label = (string) $tax_rate_id;
-
-			if ( class_exists( '\WC_Tax' ) ) {
-				// _get_tax_rate() is internal to WooCommerce; keep the fallback label/rate if it changes.
-				try {
-					$rate_data = \WC_Tax::_get_tax_rate( (int) $tax_rate_id, OBJECT );
-					if ( \is_object( $rate_data ) ) {
-						if ( isset( $rate_data->tax_rate ) && '' !== $rate_data->tax_rate ) {
-							$rate = (float) $rate_data->tax_rate;
-						}
-						$resolved_label = \WC_Tax::get_rate_label( $rate_data );
-						if ( \is_string( $resolved_label ) && '' !== $resolved_label ) {
-							$label = $resolved_label;
-						}
-					}
-				} catch ( \Throwable $exception ) {
-					$rate  = null;
-					$label = (string) $tax_rate_id;
-				}
-			}
-
-			$taxes[] = array(
-				'code'   => (string) $tax_rate_id,
-				'rate'   => $rate,
-				'label'  => $label,
-				'amount' => (float) $tax_amount,
-			);
-		}
-
-		return $taxes;
-	}
-
-	/**
-	 * Extract formatted meta pairs from an order item.
-	 *
-	 * @param object $item Order item.
-	 *
-	 * @return array
-	 */
-	private function get_item_meta_pairs( $item ): array {
-		$pairs = array();
-
-		if ( ! method_exists( $item, 'get_formatted_meta_data' ) ) {
-			return $pairs;
-		}
-
-		$formatted_meta = $item->get_formatted_meta_data( '_', true );
-		if ( ! \is_array( $formatted_meta ) ) {
-			return $pairs;
-		}
-
-		foreach ( $formatted_meta as $meta_entry ) {
-			if ( isset( $meta_entry->key ) && '_' === substr( (string) $meta_entry->key, 0, 1 ) ) {
-				continue;
-			}
-
-			$pairs[] = array(
-				'key'   => wp_strip_all_tags( $meta_entry->display_key ),
-				'value' => wp_strip_all_tags( $meta_entry->display_value ),
-			);
-		}
-
-		return $pairs;
-	}
-
-	/**
-	 * Extract product attributes without order-item add-on metadata.
-	 *
-	 * @param \WC_Order_Item_Product $item Order product item.
-	 *
-	 * @return array
-	 */
-	private function get_product_attribute_pairs( \WC_Order_Item_Product $item ): array {
-		$product = $item->get_product();
-		$pairs   = array();
-
-		if ( ! $product instanceof \WC_Product ) {
-			return $pairs;
-		}
-
-		if ( $product instanceof \WC_Product_Variation ) {
-			foreach ( $product->get_variation_attributes() as $attribute_key => $attribute_value ) {
-				if ( '' === (string) $attribute_value ) {
-					continue;
-				}
-
-				$taxonomy = preg_replace( '/^attribute_/', '', (string) $attribute_key );
-				$value    = $product->get_attribute( $taxonomy );
-				$pairs[]  = array(
-					'key'   => wp_strip_all_tags( wc_attribute_label( $taxonomy, $product ) ),
-					'value' => wp_strip_all_tags( '' !== $value ? $value : (string) $attribute_value ),
-				);
-			}
-
-			return $pairs;
-		}
-
-		foreach ( $product->get_attributes() as $attribute ) {
-			if ( ! $attribute instanceof \WC_Product_Attribute || ! $attribute->get_visible() ) {
-				continue;
-			}
-
-			$values = $attribute->is_taxonomy()
-				? wc_get_product_terms( $product->get_id(), $attribute->get_name(), array( 'fields' => 'names' ) )
-				: $attribute->get_options();
-			$values = array_filter( array_map( 'wp_strip_all_tags', array_map( 'strval', $values ) ) );
-
-			if ( empty( $values ) ) {
-				continue;
-			}
-
-			$pairs[] = array(
-				'key'   => wp_strip_all_tags( wc_attribute_label( $attribute->get_name(), $product ) ),
-				'value' => implode( ', ', $values ),
-			);
-		}
-
-		return $pairs;
-	}
-
-	/**
-	 * Build refunds[] block from $order->get_refunds().
-	 *
-	 * @param WC_Abstract_Order $order         Order object.
-	 * @param bool              $display_incl  Whether totals should be tax-inclusive (matches shop tax display).
-	 * @param DateTimeZone      $date_timezone Receipt timezone.
-	 * @param string            $date_locale   Receipt locale.
-	 *
-	 * @return array
-	 */
-	private function get_refunds( WC_Abstract_Order $order, bool $display_incl, DateTimeZone $date_timezone, string $date_locale = '' ): array {
-		$refunds = array();
-
-		if ( ! method_exists( $order, 'get_refunds' ) ) {
-			return $refunds;
-		}
-
-		foreach ( $order->get_refunds() as $refund ) {
-			if ( ! $refund instanceof \WC_Order_Refund ) {
-				continue;
-			}
-
-			$refunded_by_id   = (int) $refund->get_refunded_by();
-			$refunded_by_name = '';
-			if ( $refunded_by_id > 0 ) {
-				$user = get_user_by( 'id', $refunded_by_id );
-				if ( $user ) {
-					$refunded_by_name = (string) $user->display_name;
-				}
-			}
-
-			$items = $this->get_refund_items( $refund, $display_incl );
-
-			$pos_destination = (string) $refund->get_meta( '_pos_refund_destination' );
-			$pos_mode        = (string) $refund->get_meta( '_pos_refund_mode' );
-			$pos_gateway_id  = (string) $refund->get_meta( '_pos_refund_gateway_id' );
-			$pos_gateway_title = (string) $refund->get_meta( '_pos_refund_gateway_title' );
-			if ( '' === $pos_gateway_title && '' !== $pos_gateway_id && function_exists( 'WC' ) ) {
-				// Resolve via the WC()->payment_gateways() method (which returns
-				// WC_Payment_Gateways::instance() lazily) instead of the
-				// WC()->payment_gateways property — the property can legitimately
-				// be null mid-bootstrap or in some test environments.
-				$gateways = WC()->payment_gateways()->payment_gateways();
-				if ( isset( $gateways[ $pos_gateway_id ] ) && method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
-					$pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
-				}
-			}
-
-			$refunds[] = array(
-				'id'               => (int) $refund->get_id(),
-				'date'             => $this->format_wc_datetime_in_timezone( $refund->get_date_created(), $date_timezone, $date_locale ),
-				'amount'           => abs( (float) $refund->get_amount() ),
-				'subtotal'         => method_exists( $refund, 'get_subtotal' ) ? abs( (float) $refund->get_subtotal() ) : 0.0,
-				'tax_total'        => method_exists( $refund, 'get_total_tax' ) ? abs( (float) $refund->get_total_tax() ) : 0.0,
-				'shipping_total'   => method_exists( $refund, 'get_shipping_total' ) ? abs( (float) $refund->get_shipping_total() ) : 0.0,
-				'shipping_tax'     => method_exists( $refund, 'get_shipping_tax' ) ? abs( (float) $refund->get_shipping_tax() ) : 0.0,
-				'reason'           => (string) $refund->get_reason(),
-				'refunded_by_id'   => $refunded_by_id > 0 ? $refunded_by_id : null,
-				'refunded_by_name' => $refunded_by_name,
-				'refunded_payment' => method_exists( $refund, 'get_refunded_payment' ) ? (bool) $refund->get_refunded_payment() : false,
-				'destination'      => $pos_destination,
-				'gateway_id'       => $pos_gateway_id,
-				'gateway_title'    => $pos_gateway_title,
-				'processing_mode'  => $pos_mode,
-				'lines'            => $items['lines'],
-				'fees'             => $items['fees'],
-				'shipping'         => $items['shipping'],
-			);
-		}
-
-		return $refunds;
-	}
-
-
-	/**
-	 * Ensure customer tax IDs include display labels for logicless templates.
-	 *
-	 * @param array<int,array<string,mixed>> $tax_ids Customer tax IDs.
-	 * @param string                         $locale  Receipt locale.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private static function with_customer_tax_id_labels( array $tax_ids, string $locale = '' ): array {
-		return self::with_tax_id_labels( $tax_ids, 'customer', $locale );
-	}
-
-	/**
-	 * Resolve a display label for each tax-ID entry. Precedence: explicit
-	 * `label` → `<scope>_tax_id_label_<type>` i18n key → scope-specific
-	 * `_other` fallback.
-	 *
-	 * @param array<int,array<string,mixed>> $tax_ids Tax IDs.
-	 * @param string                         $scope   "store" or "customer".
-	 * @param string                         $locale  Receipt locale.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private static function with_tax_id_labels( array $tax_ids, string $scope, string $locale = '' ): array {
-		$labels = Receipt_I18n_Labels::get_labels( $locale );
-		$prefix = $scope . '_tax_id_label_';
-
-		return array_map(
-			static function ( array $tax_id ) use ( $labels, $prefix ): array {
-				if ( ! empty( $tax_id['label'] ) ) {
-					return $tax_id;
-				}
-
-				$type            = isset( $tax_id['type'] ) ? (string) $tax_id['type'] : 'other';
-				$key             = $prefix . $type;
-				$tax_id['label'] = $labels[ $key ] ?? $labels[ $prefix . 'other' ];
-
-				return $tax_id;
-			},
-			$tax_ids
-		);
-	}
+class Receipt_Data_Builder
+{
+    /**
+     * Build a stored closure or the explicitly live, unnumbered X-report.
+     *
+     * @param array $row     Closure or session row.
+     * @param bool  $xreport Whether to read the live session ledger.
+     */
+    public function build_closure_document( array $row, bool $xreport = false ): array
+    {
+        if ($xreport ) {
+            $sessions = new Register_Session_Store();
+            $orders = $sessions->captured_orders($row);
+            $movements = ( new Cash_Movement_Store() )->list($row['id']);
+            $row['expected'] = $sessions->expected($row, $orders, $movements);
+            $row['variance'] = ( new Closure_Store() )->variance($row['counted'] ?? array(), $row['expected']);
+            $cashiers = array();
+            $refund_count = 0;
+            foreach ( $orders as $payments ) {
+                foreach ( $payments as $payment ) {
+                    if ('refund' === $payment['kind'] || '-' === substr($payment['amount'], 0, 1) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
+                        ++$refund_count;
+                    }
+
+                    $id = (int) ( $payment['cashier_id'] ?? 0 );
+                    if ($id ) {
+                        $cashiers[ $id ] = array(
+                        'id' => $id,
+                        'name' => get_userdata($id)->display_name ?? (string) $id,
+                        );
+                    }
+                }
+            }
+            $row['breakdowns'] = array(
+            'opening_float' => array(
+            'expected' => $row['expected_float'],
+            'counted' => $row['counted_float'],
+            'variance' => $row['opening_variance'],
+            ),
+            'movements' => $movements,
+            'transaction_count' => count($orders),
+            'refund_count' => $refund_count,
+            'cashiers' => array_values($cashiers),
+            );
+        }
+        // A live X-report and a preview fixture have no stored closure to carry corrections.
+        $row['corrections'] = $xreport || empty($row['id']) || ! is_string($row['id']) ? array() : ( new Closure_Store() )->corrections_for($row['id']);
+        // Old closures and live X-reports have no label snapshot.
+        $labels = $row['breakdowns']['labels'] ?? array();
+        $register = ( new Register_Store() )->get($row['register_id']) ?? array();
+        $register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
+        foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+            $labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata((int) ( $row[ $key ] ?? 0 ))->display_name ?? '';
+        }
+        $row['breakdowns']['labels'] = $labels;
+        $store = wcpos_get_store((int) ( $row['store_id'] ?? 0 ));
+        $resolver = new Receipt_Store_Resolver(is_object($store) ? $store : new Store());
+        $fiscal = array_fill_keys(array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '');
+        $fiscal += array(
+        'sequence' => null,
+        'signed_at' => null,
+        'is_reprint' => false,
+        'reprint_count' => 0,
+        'extra_fields' => array(),
+        );
+        $fiscal['document_type'] = $xreport ? 'xreport' : 'closure';
+        $fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
+        return array(
+        'closure' => $row,
+        'register' => $register,
+        'software' => array(
+        'name' => 'WCPOS',
+        'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,
+        ),
+        'order' => array(
+        'currency' => get_woocommerce_currency(),
+        'printed' => Receipt_Date_Formatter::from_timestamp(time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale()),
+        ),
+        'fiscal' => Receipt_Payload_Assembler::fiscal($fiscal),
+        'i18n' => Receipt_I18n_Labels::get_labels($resolver->resolve_locale()),
+        );
+    }
+
+    /**
+     * The POS store a receipt for this order is rendered under: the order's own
+     * `_pos_store` when it still exists, else the current store, else an empty
+     * store object (a stub when the order's store is gone, so nothing is invented).
+     *
+     * @param WC_Abstract_Order $order     Order.
+     * @param object|null       $pos_store Explicit store override.
+     *
+     * @return object
+     */
+    public static function resolve_pos_store( WC_Abstract_Order $order, $pos_store = null )
+    {
+        $order_store_id         = (int) $order->get_meta('_pos_store');
+        $missing_order_store_id = 0;
+        if (null === $pos_store ) {
+            $pos_store = $order_store_id > 0 ? wcpos_get_store(
+                $order_store_id,
+                array(
+                'status' => array( 'publish', 'trash' ),
+                )
+            ) : wcpos_get_store();
+
+            if ($order_store_id > 0 && ! \is_object($pos_store) ) {
+                   $missing_order_store_id = $order_store_id;
+            }
+        }
+        if (! \is_object($pos_store) && 0 === $missing_order_store_id ) {
+            $pos_store = wcpos_get_store();
+        }
+        if (! \is_object($pos_store) ) {
+            $pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
+        }
+
+        return $pos_store;
+    }
+
+    /**
+     * Build a canonical receipt payload.
+     *
+     * @param WC_Abstract_Order $order     Receipt order.
+     * @param object|null       $pos_store POS store object. Falls back to order meta or default.
+     *
+     * @return array
+     */
+    private function build_data( WC_Abstract_Order $order, $pos_store = null ): array
+    {
+        $wc_status    = method_exists($order, 'get_status') ? (string) $order->get_status() : '';
+        $status_label = '';
+        if ('' !== $wc_status && function_exists('wc_get_order_status_name') ) {
+            $status_label = (string) wc_get_order_status_name($wc_status);
+        }
+
+        $pos_store = self::resolve_pos_store($order, $pos_store);
+        // A stub store means the order's own store is gone (see resolve_pos_store()).
+        $missing_order_store_id = $pos_store instanceof \stdClass ? (int) $order->get_meta('_pos_store') : 0;
+
+        $store_resolver = new Receipt_Store_Resolver($pos_store);
+        $date_timezone  = $store_resolver->resolve_store_timezone();
+        $date_locale    = $store_resolver->resolve_locale();
+        $order_data    = array(
+        'id'            => $order->get_id(),
+        'number'        => (string) $order->get_order_number(),
+        'currency'      => (string) $order->get_currency(),
+        'customer_note' => (string) $order->get_customer_note(),
+        'wc_status'     => $wc_status,
+        'status_label'  => $status_label,
+        'created_via'   => method_exists($order, 'get_created_via') ? (string) $order->get_created_via() : '',
+        'created'       => $this->format_wc_datetime_in_timezone($order->get_date_created(), $date_timezone, $date_locale),
+        'paid'          => $this->format_wc_datetime_in_timezone($order->get_date_paid(), $date_timezone, $date_locale),
+        'completed'     => $this->format_wc_datetime_in_timezone($order->get_date_completed(), $date_timezone, $date_locale),
+        // Render-time timestamp: refreshed on every build() call so reprints
+        // show the actual print time, not a value persisted to the database.
+        'printed'       => Receipt_Date_Formatter::from_timestamp(time(), $date_timezone, $date_locale),
+        // Payment fields — templates can render a "How to pay" section guarded
+        // by {{#order.needs_payment}}…{{/order.needs_payment}}. payment_url is
+        // always populated (WC's order-pay endpoint accepts the key regardless
+        // of status); the boolean controls whether to show it.
+        'needs_payment' => method_exists($order, 'needs_payment') ? (bool) $order->needs_payment() : false,
+        'payment_url'   => method_exists($order, 'get_checkout_payment_url') ? (string) $order->get_checkout_payment_url() : '',
+        );
+
+        $display_incl       = 'incl' === $store_resolver->resolve_store_option_string(
+            'get_tax_display_cart',
+            get_option('woocommerce_tax_display_cart', 'excl')
+        );
+        $presentation_hints = $store_resolver->build_presentation_hints((string) $order->get_currency());
+        $tax                = $store_resolver->build_tax_section();
+
+        // $missing_order_store_id > 0 only ever happens alongside the bare \stdClass
+        // assigned above, so no getter resolves and every fallback below is taken.
+        // That is what keeps a deleted store's receipt showing the recorded store ID
+        // rather than silently borrowing the current store's name and address.
+        $store_fallbacks = array();
+        if ($missing_order_store_id > 0 ) {
+            $store_fallbacks['id'] = $missing_order_store_id;
+            // translators: %d: Historical POS store ID that no longer exists.
+            $store_fallbacks['name'] = sprintf(__('Store #%d', 'woocommerce-pos'), $missing_order_store_id);
+        }
+
+        $store = $store_resolver->build_store_section($store_fallbacks);
+
+        $cashier = array(
+        'id'   => (int) $order->get_meta('_pos_user'),
+        'name' => '',
+        );
+        if ($cashier['id'] > 0 ) {
+            $user = get_user_by('id', $cashier['id']);
+            if ($user ) {
+                $cashier['name'] = $user->display_name;
+            }
+        }
+
+        $customer_id   = $order->get_customer_id();
+        $customer_name = trim($order->get_formatted_billing_full_name());
+
+        if (! $customer_id && '' === $customer_name ) {
+            $customer_name = /* translators: Short WCPOS UI label; keep concise. */ __('Guest', 'woocommerce-pos');
+        }
+
+        $tax_ids = ( new Tax_Id_Reader() )->read_for_order($order);
+        $tax_ids = self::with_customer_tax_id_labels($tax_ids, $presentation_hints['locale'] ?? '');
+
+        $customer = array(
+        'id'               => $customer_id ? $customer_id : null,
+        'name'             => $customer_name,
+        'first_name'       => (string) $order->get_billing_first_name(),
+        'billing_address'  => $order->get_address('billing'),
+        'shipping_address' => $order->get_address('shipping'),
+        // Structured TaxId[] — read fallback across the legacy meta-key inventory.
+        'tax_ids'          => $tax_ids,
+        );
+
+        $lines = array();
+        foreach ( $order->get_items('line_item') as $item_id => $item ) {
+            if (! $item instanceof \WC_Order_Item_Product ) {
+                continue;
+            }
+
+            $line_total_excl = (float) $item->get_total();
+            $line_tax_total  = (float) $item->get_total_tax();
+            $line_total_incl = $line_total_excl + $line_tax_total;
+
+            $line_subtotal_excl = (float) $item->get_subtotal();
+            $line_subtotal_tax  = (float) $item->get_subtotal_tax();
+            $line_subtotal_incl = $line_subtotal_excl + $line_subtotal_tax;
+
+            $qty = (float) $item->get_quantity();
+            if ($qty <= 0 ) {
+                $qty = 0.0;
+            }
+            $calc_dp            = wc_get_price_decimals();
+            $unit_price_incl    = $qty > 0 ? round($line_total_incl / $qty, $calc_dp) : 0.0;
+            $unit_price_excl    = $qty > 0 ? round($line_total_excl / $qty, $calc_dp) : 0.0;
+            $unit_subtotal_incl = $qty > 0 ? round($line_subtotal_incl / $qty, $calc_dp) : 0.0;
+            $unit_subtotal_excl = $qty > 0 ? round($line_subtotal_excl / $qty, $calc_dp) : 0.0;
+
+            $discounts_incl = max(0, $line_subtotal_incl - $line_total_incl);
+            $discounts_excl = max(0, $line_subtotal_excl - $line_total_excl);
+
+            $qty_refunded   = method_exists($order, 'get_qty_refunded_for_item')
+            ? abs((float) $order->get_qty_refunded_for_item($item_id))
+            : 0.0;
+            $total_refunded = method_exists($order, 'get_total_refunded_for_item')
+            ? abs((float) $order->get_total_refunded_for_item($item_id))
+            : 0.0;
+            $price_convenience = $this->get_line_price_convenience_fields(
+                $item,
+                $order,
+                $display_incl,
+                $qty,
+                $unit_subtotal_incl,
+                $unit_subtotal_excl,
+                $line_subtotal_incl,
+                $line_subtotal_excl,
+                $line_total_incl,
+                $line_total_excl
+            );
+
+            $line = array(
+            'key'                => (string) $item_id,
+            'sku'                => $item->get_product() ? $item->get_product()->get_sku() : '',
+            'name'               => $item->get_name(),
+            'qty'                => $qty,
+            'qty_refunded'       => $qty_refunded,
+            'unit_subtotal'      => $display_incl ? $unit_subtotal_incl : $unit_subtotal_excl,
+            'unit_subtotal_incl' => $unit_subtotal_incl,
+            'unit_subtotal_excl' => $unit_subtotal_excl,
+            'unit_price'         => $display_incl ? $unit_price_incl : $unit_price_excl,
+            'unit_price_incl'    => $unit_price_incl,
+            'unit_price_excl'    => $unit_price_excl,
+            'line_subtotal'      => $display_incl ? $line_subtotal_incl : $line_subtotal_excl,
+            'line_subtotal_incl' => $line_subtotal_incl,
+            'line_subtotal_excl' => $line_subtotal_excl,
+            'discounts'          => $display_incl ? $discounts_incl : $discounts_excl,
+            'discounts_incl'     => $discounts_incl,
+            'discounts_excl'     => $discounts_excl,
+            'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
+            'line_total_incl'    => $line_total_incl,
+            'line_total_excl'    => $line_total_excl,
+            'total_refunded'     => $total_refunded,
+            'taxes'              => $this->get_line_taxes($item),
+            'meta'               => $this->get_item_meta_pairs($item),
+            'attributes'         => $this->get_product_attribute_pairs($item),
+            );
+            $lines[] = array_merge($line, $price_convenience);
+        }
+
+        $shipping = array();
+        foreach ( $order->get_items('shipping') as $shipping_item ) {
+            if (! $shipping_item instanceof \WC_Order_Item_Shipping ) {
+                continue;
+            }
+            $ship_total_excl = (float) $shipping_item->get_total();
+            $ship_total_tax  = (float) $shipping_item->get_total_tax();
+            $ship_total_incl = $ship_total_excl + $ship_total_tax;
+            $shipping[]      = array(
+            'label'      => $shipping_item->get_name(),
+            'method_id'  => (string) $shipping_item->get_method_id(),
+            'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
+            'total_incl' => $ship_total_incl,
+            'total_excl' => $ship_total_excl,
+            'taxes'      => $this->get_item_taxes($shipping_item),
+            'meta'       => $this->get_item_meta_pairs($shipping_item),
+            );
+        }
+
+        $fees = array();
+        foreach ( $order->get_fees() as $fee ) {
+            $fee_total_excl = (float) $fee->get_total();
+            $fee_total_tax  = (float) $fee->get_total_tax();
+            $fee_total_incl = $fee_total_excl + $fee_total_tax;
+            $fees[]         = array(
+            'label'      => $fee->get_name(),
+            'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
+            'total_incl' => $fee_total_incl,
+            'total_excl' => $fee_total_excl,
+            'taxes'      => $this->get_item_taxes($fee),
+            'meta'       => $this->get_item_meta_pairs($fee),
+            );
+        }
+
+        $discounts = array();
+        foreach ( $order->get_items('coupon') as $coupon_item ) {
+            if (! $coupon_item instanceof \WC_Order_Item_Coupon ) {
+                continue;
+            }
+            $intent = Quick_Discount::intent_from_item($coupon_item);
+            if ($intent ) {
+                $discount_type = $intent['discount_type'];
+                $label = 'fixed_cart' === $discount_type ? __('Discount', 'woocommerce-pos') : sprintf(
+                /* translators: %s: Discount percentage. */
+                    __('Discount (%s%%)', 'woocommerce-pos'),
+                    wc_format_decimal($intent['amount'], '', true)
+                );
+            } else {
+                $coupon = $this->get_order_coupon($coupon_item);
+                $discount_type = $coupon ? (string) $coupon->get_discount_type() : '';
+                $label = $this->get_coupon_label($coupon_item, $coupon);
+            }
+            $coupon_excl = (float) $coupon_item->get_discount();
+            $coupon_tax  = (float) $coupon_item->get_discount_tax();
+            $coupon_incl = $coupon_excl + $coupon_tax;
+            $discounts[] = array(
+            'label'         => $label,
+            'code'          => $coupon_item->get_code(),
+            'discount_type' => $discount_type,
+            'total'         => $display_incl ? $coupon_incl : $coupon_excl,
+            'total_incl'    => $coupon_incl,
+            'total_excl'    => $coupon_excl,
+            );
+        }
+
+        $discount_total_excl = (float) $order->get_discount_total();
+        $discount_total_tax  = (float) $order->get_discount_tax();
+        $discount_total_incl = $discount_total_excl + $discount_total_tax;
+
+        // Legacy POS lines already include regular-to-selling savings in WooCommerce's
+        // discount total. Add only current-shape savings to total_saved to avoid overlap.
+        $sale_savings_totals = array(
+        'incl' => 0.0,
+        'excl' => 0.0,
+        );
+        $additional_savings  = array(
+        'incl' => 0.0,
+        'excl' => 0.0,
+        );
+        $savings_complete    = array(
+        'incl' => true,
+        'excl' => true,
+        );
+        $price_precision = wc_get_price_decimals();
+        foreach ( $lines as $line ) {
+            foreach ( array( 'incl', 'excl' ) as $basis ) {
+                $key = 'line_savings_' . $basis;
+                if (! isset($line[ $key ]) || ! is_numeric($line[ $key ]) ) {
+                    $savings_complete[ $basis ] = false;
+                    continue;
+                }
+
+                $line_savings = (float) $line[ $key ];
+                $sale_savings_totals[ $basis ] += $line_savings;
+                if (empty($line['savings_in_discounts']) ) {
+                    $subtotal_key = 'line_subtotal_' . $basis;
+                    $selling_key  = 'line_selling_total_' . $basis;
+                    if ($line_savings > 0.0
+                        && (          ! isset($line[ $subtotal_key ], $line[ $selling_key ])
+                        || round(abs((float) $line[ $subtotal_key ] - (float) $line[ $selling_key ]), $price_precision) > 0.0         )
+                    ) {
+                        $savings_complete[ $basis ] = false;
+                        continue;
+                    }
+                    $additional_savings[ $basis ] += $line_savings;
+                }
+            }
+        }
+
+        $total_saved = array(
+        'incl' => $savings_complete['incl'] ? $discount_total_incl + $additional_savings['incl'] : null,
+        'excl' => $savings_complete['excl'] ? $discount_total_excl + $additional_savings['excl'] : null,
+        );
+        foreach ( array( 'incl', 'excl' ) as $basis ) {
+            if (! $savings_complete[ $basis ] ) {
+                $sale_savings_totals[ $basis ] = null;
+            }
+        }
+        $display_basis = $display_incl ? 'incl' : 'excl';
+
+        $subtotal_excl = array_sum(array_column($lines, 'line_subtotal_excl'));
+        $subtotal_incl = array_sum(array_column($lines, 'line_subtotal_incl'));
+
+        // Item count summaries — useful for packing slips and kitchen tickets
+        // where Mustache can't sum/count an array at render time.
+        $total_qty  = (float) array_sum(array_column($lines, 'qty'));
+        $line_count = \count($lines);
+
+        $tax_total = (float) $order->get_total_tax();
+        $total     = (float) $order->get_total();
+
+        $total_excl = $total - $tax_total;
+        $refund_total     = method_exists($order, 'get_total_refunded')
+        ? abs((float) $order->get_total_refunded())
+        : 0.0;
+        // Templates render the customer-facing balance after a partial refund.
+        // Stays at 0 when nothing was refunded so detailed-receipt's section
+        // guard `{{#totals.net_total}}…{{/totals.net_total}}` collapses.
+        $net_total = $refund_total > 0 ? max(0.0, $total - $refund_total) : 0.0;
+
+        $totals = array(
+        'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
+        'subtotal_incl'           => $subtotal_incl,
+        'subtotal_excl'           => $subtotal_excl,
+        'discount_total'          => $display_incl ? $discount_total_incl : $discount_total_excl,
+        'discount_total_incl'     => $discount_total_incl,
+        'discount_total_excl'     => $discount_total_excl,
+        'sale_savings_total'      => $sale_savings_totals[ $display_basis ],
+        'sale_savings_total_incl' => $sale_savings_totals['incl'],
+        'sale_savings_total_excl' => $sale_savings_totals['excl'],
+        'total_saved'             => $total_saved[ $display_basis ],
+        'total_saved_incl'        => $total_saved['incl'],
+        'total_saved_excl'        => $total_saved['excl'],
+        'total_saved_complete'    => $savings_complete[ $display_basis ],
+        'tax_total'               => $tax_total,
+        'total'                   => $display_incl ? $total : $total_excl,
+        'total_incl'              => $total,
+        'total_excl'              => $total_excl,
+        'paid_total'              => $total,
+        'change_total'            => (float) $order->get_meta('_pos_cash_change'),
+        'refund_total'            => $refund_total,
+        'net_total'               => $net_total,
+        'total_qty'               => $total_qty,
+        'line_count'              => $line_count,
+        );
+
+        $payments = array(
+        array(
+        'method_id'      => $order->get_payment_method(),
+        'method_title'   => $order->get_payment_method_title(),
+        'amount'         => $total,
+        'transaction_id' => (string) $order->get_transaction_id(),
+        'tendered'       => (float) $order->get_meta('_pos_cash_amount_tendered'),
+        'change'         => (float) $order->get_meta('_pos_cash_change'),
+        ),
+        );
+        $ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read($order) : array();
+        $counting     = array_values(
+            array_filter(
+                $ledger_rows,
+                static function ( array $row ): bool {
+                    return in_array($row['status'] ?? '', Ledger::COUNTING_STATUSES, true);
+                }
+            )
+        );
+        if ($ledger_rows ) {
+            $payments   = array();
+            $change_sum = 0.0;
+            foreach ( $counting as $row ) {
+                $method_id = (string) ( $row['method_id'] ?? '' );
+                $descriptor = Descriptor_Builder::instance()->get($method_id);
+                $refs       = is_array($row['provider_refs'] ?? null) ? $row['provider_refs'] : array();
+                $change     = (float) ( $row['change'] ?? 0 );
+                $payments[] = array(
+                 'method_id'      => $method_id,
+                 'method_title'   => $descriptor ? $descriptor['title'] : $method_id,
+                 'amount'         => (float) ( $row['amount'] ?? 0 ),
+                 'transaction_id' => (string) ( $refs['payment_intent'] ?? $refs['transaction_id'] ?? '' ),
+                 'tendered'       => (float) ( $row['tendered'] ?? 0 ),
+                 'change'         => $change,
+                );
+                $change_sum += $change;
+            }
+            $totals['paid_total']   = (float) Ledger::instance()->paid($ledger_rows);
+            $totals['change_total'] = $change_sum;
+        }
+
+        $tax_summary = $this->get_tax_summary($order);
+
+        $register_id = (string) $order->get_meta('_wcpos_register');
+        $register_row = '' !== $register_id ? ( new Register_Store() )->get($register_id) : null;
+        $register = array(
+        'id' => $register_row['id'] ?? '',
+        'name' => $register_row['name'] ?? '',
+        );
+        $software = array(
+        'name'           => 'WCPOS',
+        'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+        'app_version'    => (string) $order->get_meta('_wcpos_app_version'),
+        'app_build'      => (string) $order->get_meta('_wcpos_app_build'),
+        'platform'       => $register_row['platform'] ?? '',
+        );
+        $sale_tz = (string) $order->get_meta('_wcpos_sale_tz');
+        try {
+            $sale_timezone = '' !== $sale_tz ? new DateTimeZone($sale_tz) : $date_timezone;
+        } catch ( \Exception $e ) {
+            $sale_timezone = $date_timezone;
+        }
+        $sale_time = strtotime((string) $order->get_meta('_wcpos_sale_time'));
+        $received_at = strtotime((string) $order->get_meta('_wcpos_sale_received_gmt'));
+        $sale_counter = $order->get_meta('_wcpos_sale_counter');
+
+        $fiscal = Receipt_Payload_Assembler::fiscal(
+            array(
+            'sale_time'         => false === $sale_time ? null : Receipt_Date_Formatter::from_timestamp($sale_time, $sale_timezone, $date_locale),
+            'sale_tz'           => $sale_tz,
+            'sale_counter'      => '' === $sale_counter ? null : (int) $sale_counter,
+            'received_at'       => false === $received_at ? null : Receipt_Date_Formatter::from_timestamp($received_at, $date_timezone, $date_locale),
+            'immutable_id'      => '',
+            'receipt_number'    => '',
+            'sequence'          => null,
+            'hash'              => '',
+            'qr_payload'        => '',
+            'tax_agency_code'   => '',
+            'signed_at'         => '',
+            'signature_excerpt' => '',
+            'document_label'    => '',
+            'is_reprint'        => false,
+            'reprint_count'     => 0,
+            'extra_fields'      => array(),
+            )
+        );
+
+        $data = Receipt_Payload_Assembler::assemble(
+            array(
+            'order'              => $order_data,
+            'store'              => $store,
+            'software'           => $software,
+            'register'           => $register,
+            'cashier'            => $cashier,
+            'customer'           => $customer,
+            'lines'              => $lines,
+            'fees'               => $fees,
+            'shipping'           => $shipping,
+            'discounts'          => $discounts,
+            'totals'             => $totals,
+            'tax'                => $tax,
+            'tax_summary'        => $tax_summary,
+            'payments'           => $payments,
+            'refunds'            => $this->get_refunds($order, $display_incl, $date_timezone, $date_locale),
+            'fiscal'             => $fiscal,
+            'presentation_hints' => $presentation_hints,
+            )
+        );
+
+        return $data;
+    }
+
+    /**
+     * Build a canonical receipt, retaining frozen identity in live mode.
+     *
+     * @param WC_Abstract_Order $order     Receipt order.
+     * @param string            $mode      Receipt mode.
+     * @param object|null       $pos_store POS store override.
+     */
+    public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array
+    {
+        $data = $this->build_data($order, $pos_store);
+
+        /**
+         * Filters the canonical receipt data before it is rendered or snapshotted.
+         *
+         * Runs for every receipt this builder produces: live receipts, fiscal
+         * snapshots captured at payment time, PDF downloads and legacy PHP
+         * templates. Extensions can add their own keys to any section (for
+         * example a flag on a `discounts[]` row) or adjust labels. Keys defined
+         * by Receipt_Data_Schema should keep their documented types.
+         *
+         * @param array             $data  Receipt data (see Receipt_Data_Schema).
+         * @param WC_Abstract_Order $order Order the receipt is for.
+         * @param string            $mode  Receipt mode: 'live', 'fiscal' or 'refund'.
+         *
+         * @since 1.10.8
+         *
+         * @hook woocommerce_pos_receipt_data
+         */
+        $data = (array) apply_filters('woocommerce_pos_receipt_data', $data, $order, $mode);
+
+        // Frozen identity on live builds (roadmap#243): when a snapshot exists, the
+        // fiscal identity is copied from it, never rebuilt. Applied AFTER the filter
+        // so an extension that recomputes a QR or a label live cannot overwrite what
+        // was captured at the sale; enrichment belongs in the snapshot
+        // (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
+        // stay live. A 1.3 snapshot without a key keeps the live value.
+        if ('live' === $mode ) {
+            $snapshot = Receipt_Snapshot_Store::instance()->get_snapshot($order->get_id());
+            if (null !== $snapshot ) {
+                foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
+                    if (array_key_exists($key, $snapshot['fiscal'] ?? array()) ) {
+                        $data['fiscal'][ $key ] = $snapshot['fiscal'][ $key ];
+                    }
+                }
+                foreach ( array( 'register', 'software' ) as $key ) {
+                    if (array_key_exists($key, $snapshot) ) {
+                        $data[ $key ] = $snapshot[ $key ];
+                    }
+                }
+            }
+        }
+
+        return $data;
+    }
+
+
+    /**
+     * Build the write-once refund receipt without changing the sale or its money.
+     *
+     * @param  \WC_Order        $order    Parent sale.
+     * @param  \WC_Order_Refund $refund   Refund document source.
+     * @param  int              $number   Minted refund sequence.
+     * @param  string|null      $corrects Original sale identity.
+     * @throws \RuntimeException When the refund document cannot be encoded.
+     */
+    public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects ): array
+    {
+        $data = $this->build_data($order);
+        $display_incl = ! empty($data['tax']['display_incl']);
+        $items = $this->get_refund_items($refund, $display_incl);
+        $data['lines'] = $items['lines'];
+        foreach ( $data['lines'] as &$line ) {
+            foreach ( array( '', '_incl', '_excl' ) as $basis ) {
+                $line[ 'line_total' . $basis ] = $line[ 'total' . $basis ];
+                $line[ 'line_subtotal' . $basis ] = $line[ 'total' . $basis ];
+                $line[ 'unit_price' . $basis ] = $line['qty'] > 0 ? round($line[ 'total' . $basis ] / $line['qty'], wc_get_price_decimals()) : 0.0;
+                $line[ 'unit_subtotal' . $basis ] = $line[ 'unit_price' . $basis ];
+                $line[ 'discounts' . $basis ] = 0.0;
+            }
+            $line['qty_refunded'] = 0.0;
+            $line['total_refunded'] = 0.0;
+        }
+        unset($line);
+        $data['fees'] = $items['fees'];
+        $data['shipping'] = $items['shipping'];
+        $data['discounts'] = array();
+        $data['refunds'] = array();
+        foreach ( $data['totals'] as $key => $value ) {
+            $data['totals'][ $key ] = is_bool($value) ? true : 0.0;
+        }
+        $data['totals']['total_incl'] = abs((float) $refund->get_amount());
+        $data['totals']['tax_total'] = abs((float) $refund->get_total_tax());
+        $data['totals']['total_excl'] = $data['totals']['total_incl'] - $data['totals']['tax_total'];
+        $data['totals']['total'] = $data['totals'][ $display_incl ? 'total_incl' : 'total_excl' ];
+        foreach ( array( '', '_incl', '_excl' ) as $basis ) {
+            $data['totals'][ 'subtotal' . $basis ] = array_sum(array_column($data['lines'], 'line_subtotal' . $basis));
+        }
+        $data['totals']['total_qty'] = array_sum(array_column($data['lines'], 'qty'));
+        $data['totals']['line_count'] = count($data['lines']);
+        $data['tax_summary'] = $this->get_tax_summary($refund);
+        foreach ( $data['tax_summary'] as &$tax ) {
+            foreach ( array( 'taxable_amount_excl', 'tax_amount', 'taxable_amount_incl' ) as $key ) {
+                $tax[ $key ] = null === $tax[ $key ] ? null : abs($tax[ $key ]);
+            }
+        }
+        unset($tax);
+        $data['has_tax_summary'] = ! empty($data['tax_summary']);
+        $allocations = $refund->get_meta('_wcpos_refund_allocations', true);
+        if (! $refund->meta_exists('_wcpos_refund_allocations') ) {
+            $counting = array_values(
+                array_filter(
+                    Ledger::instance()->read($order),
+                    static function ( array $row ): bool {
+                        return in_array($row['status'] ?? '', Ledger::COUNTING_STATUSES, true);
+                    }
+                )
+            );
+            $allocations = 1 === count($counting) ? array(
+            array(
+            'payment_id' => $counting[0]['id'],
+            'method_id' => $counting[0]['method_id'],
+            'amount' => wc_format_decimal($refund->get_amount(), wc_get_price_decimals()),
+            ),
+            ) : array();
+        }
+        $data['payments'] = array();
+        foreach ( $allocations as $allocation ) {
+            $method = (string) ( $allocation['method_id'] ?? '' );
+            $descriptor = Descriptor_Builder::instance()->get($method);
+            $data['payments'][] = array(
+            'payment_id' => $allocation['payment_id'],
+            'method_id' => $method,
+            'method_title' => $descriptor['title'] ?? $method,
+            'amount' => (float) $allocation['amount'],
+            'transaction_id' => '',
+            'tendered' => 0.0,
+            'change' => 0.0,
+            );
+        }
+        $data['totals']['paid_total'] = array_sum(array_column($data['payments'], 'amount'));
+        $cashier_id = (int) $refund->get_refunded_by();
+        $user = $cashier_id ? get_user_by('id', $cashier_id) : false;
+        $data['cashier'] = array(
+        'id' => $cashier_id,
+        'name' => $user ? $user->display_name : '',
+        );
+        $date = $this->format_wc_datetime_in_timezone($refund->get_date_created(), wp_timezone(), $data['presentation_hints']['locale'] ?? '');
+        $data['fiscal'] = Receipt_Payload_Assembler::fiscal(
+            array_merge(
+                $data['fiscal'],
+                array(
+                    'document_type' => 'refund',
+                    'document_label' => $data['i18n']['document_refund'],
+                    'receipt_number' => (string) $number,
+                    'sequence' => $number,
+                    'corrects' => $corrects,
+                    'immutable_id' => $refund->get_id() . ':' . $number,
+                    'hash' => '',
+                    'sale_time' => $date,
+                    'sale_tz' => wp_timezone_string(),
+                    'received_at' => $date,
+                    'sale_counter' => null,
+                    'is_reprint' => false,
+                    'reprint_count' => 0,
+                    // Store health listing of unallocated refunds belongs to a later ticket.
+                    'extra_fields' => array(
+                        'refund_id' => $refund->get_id(),
+                        'allocations' => $allocations,
+                        'allocation' => $allocations ? 'allocated' : 'unallocated',
+                ),
+                )
+            )
+        );
+        $data['fiscal']['corrects'] = $corrects;
+        $identity = array_intersect_key($data['fiscal'], array_flip(array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id', 'corrects' )));
+        $data     = (array) apply_filters('woocommerce_pos_receipt_data', $data, $order, 'refund');
+        // The minted identity is core-owned: an extension unaware of the refund mode
+        // cannot rewrite it after the number and the row are fixed.
+        $data['fiscal']         = array_merge((array) ( $data['fiscal'] ?? array() ), $identity);
+        $data['fiscal']['hash'] = '';
+        $json = wp_json_encode($data);
+        if (! is_string($json) ) {
+            throw new \RuntimeException('Unable to encode refund document.');
+        }
+        $data['fiscal']['hash'] = Receipt_Snapshot_Store::checksum($json);
+        return $data;
+    }
+
+    /**
+     * Shape positive refund items for embedded refunds and standalone documents.
+     *
+     * @param \WC_Order_Refund $refund       Refund source.
+     * @param bool             $display_incl Tax display basis.
+     */
+    private function get_refund_items( \WC_Order_Refund $refund, bool $display_incl ): array
+    {
+        $refund_lines = array();
+        foreach ( $refund->get_items('line_item') as $refund_item ) {
+            if (! $refund_item instanceof \WC_Order_Item_Product ) {
+                continue;
+            }
+            $line_total_excl = abs((float) $refund_item->get_total());
+            $line_total_tax  = abs((float) $refund_item->get_total_tax());
+            $line_total_incl = $line_total_excl + $line_total_tax;
+            $refund_lines[]  = array(
+            'name'       => (string) $refund_item->get_name(),
+            'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
+            'qty'        => abs((float) $refund_item->get_quantity()),
+            'total'      => $display_incl ? $line_total_incl : $line_total_excl,
+            'total_incl' => $line_total_incl,
+            'total_excl' => $line_total_excl,
+            'taxes'      => array_map(
+                static function ( array $tax ): array {
+                    $tax['amount'] = abs((float) $tax['amount']);
+                    return $tax;
+                },
+                $this->get_item_taxes($refund_item)
+            ),
+            );
+        }
+
+        $refund_fees = array();
+        foreach ( $refund->get_items('fee') as $refund_fee ) {
+            if (! $refund_fee instanceof \WC_Order_Item_Fee ) {
+                continue;
+            }
+            $fee_total_excl = abs((float) $refund_fee->get_total());
+            $fee_total_tax  = abs((float) $refund_fee->get_total_tax());
+            $fee_total_incl = $fee_total_excl + $fee_total_tax;
+            $refund_fees[]  = array(
+            'label'      => (string) $refund_fee->get_name(),
+            'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
+            'total_incl' => $fee_total_incl,
+            'total_excl' => $fee_total_excl,
+            'taxes'      => array_map(
+                static function ( array $tax ): array {
+                    $tax['amount'] = abs((float) $tax['amount']);
+                    return $tax;
+                },
+                $this->get_item_taxes($refund_fee)
+            ),
+            );
+        }
+
+        $refund_shipping = array();
+        foreach ( $refund->get_items('shipping') as $refund_ship ) {
+            if (! $refund_ship instanceof \WC_Order_Item_Shipping ) {
+                continue;
+            }
+            $ship_total_excl   = abs((float) $refund_ship->get_total());
+            $ship_total_tax    = abs((float) $refund_ship->get_total_tax());
+            $ship_total_incl   = $ship_total_excl + $ship_total_tax;
+            $refund_shipping[] = array(
+            'label'      => (string) $refund_ship->get_name(),
+            'method_id'  => method_exists($refund_ship, 'get_method_id') ? (string) $refund_ship->get_method_id() : '',
+            'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
+            'total_incl' => $ship_total_incl,
+            'total_excl' => $ship_total_excl,
+            'taxes'      => array_map(
+                static function ( array $tax ): array {
+                    $tax['amount'] = abs((float) $tax['amount']);
+                    return $tax;
+                },
+                $this->get_item_taxes($refund_ship)
+            ),
+            );
+        }
+        return array(
+        'lines' => $refund_lines,
+        'fees' => $refund_fees,
+        'shipping' => $refund_shipping,
+        );
+    }
+
+
+    /**
+     * Read the recorded POS prices needed for historical receipt savings.
+     *
+     * @param \WC_Order_Item_Product $item Order item.
+     *
+     * @return array{price:float,regular_price:float,tax_status:string}|null
+     */
+    private function get_pos_price_data( \WC_Order_Item_Product $item ): ?array
+    {
+        $raw  = $item->get_meta('_woocommerce_pos_data', true);
+        $data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array($raw);
+        if (! \is_array($data)
+            || ! isset($data['price'], $data['regular_price'], $data['tax_status'])
+            || ! is_numeric($data['price'])
+            || ! is_numeric($data['regular_price'])
+            || ! \in_array($data['tax_status'], array( 'none', 'taxable', 'shipping' ), true)
+        ) {
+            return null;
+        }
+
+        return array(
+        'price'         => (float) $data['price'],
+        'regular_price' => (float) $data['regular_price'],
+        'tax_status'    => (string) $data['tax_status'],
+        );
+    }
+
+    /**
+     * Convert a recorded price into tax-inclusive/exclusive historical bases.
+     *
+     * @param float  $value              Recorded price in the order's entered-price basis.
+     * @param string $tax_status         Recorded product tax status.
+     * @param bool   $prices_include_tax Whether recorded prices include tax.
+     * @param float  $subtotal_incl      Stored line subtotal including tax.
+     * @param float  $subtotal_excl      Stored line subtotal excluding tax.
+     *
+     * @return array{incl:?float,excl:?float}
+     */
+    private function convert_recorded_price_bases(
+        float $value,
+        string $tax_status,
+        bool $prices_include_tax,
+        float $subtotal_incl,
+        float $subtotal_excl
+    ): array {
+        if ('none' === $tax_status || 0.0 === $value ) {
+            return array(
+            'incl' => $value,
+            'excl' => $value,
+            );
+        }
+
+        if ($prices_include_tax ) {
+            return array(
+            'incl' => $value,
+            'excl' => 0.0 !== $subtotal_incl ? $value * $subtotal_excl / $subtotal_incl : null,
+            );
+        }
+
+        return array(
+        'incl' => 0.0 !== $subtotal_excl ? $value * $subtotal_incl / $subtotal_excl : null,
+        'excl' => $value,
+        );
+    }
+
+    /**
+     * Derive recorded prices and savings without changing WooCommerce discounts.
+     *
+     * @param \WC_Order_Item_Product $item               Order item.
+     * @param WC_Abstract_Order      $order              Receipt order.
+     * @param bool                   $display_incl       Whether generic values include tax.
+     * @param float                  $qty                Item quantity.
+     * @param float                  $unit_subtotal_incl Stored unit subtotal including tax.
+     * @param float                  $unit_subtotal_excl Stored unit subtotal excluding tax.
+     * @param float                  $subtotal_incl      Stored line subtotal including tax.
+     * @param float                  $subtotal_excl      Stored line subtotal excluding tax.
+     * @param float                  $total_incl         Stored line total including tax.
+     * @param float                  $total_excl         Stored line total excluding tax.
+     *
+     * @return array<string,float|bool|null>
+     */
+    private function get_line_price_convenience_fields(
+        \WC_Order_Item_Product $item,
+        WC_Abstract_Order $order,
+        bool $display_incl,
+        float $qty,
+        float $unit_subtotal_incl,
+        float $unit_subtotal_excl,
+        float $subtotal_incl,
+        float $subtotal_excl,
+        float $total_incl,
+        float $total_excl
+    ): array {
+        $pos_data           = $this->get_pos_price_data($item);
+        $prices_include_tax = method_exists($order, 'get_prices_include_tax') && $order->get_prices_include_tax();
+        $selling            = array(
+        'incl' => $unit_subtotal_incl,
+        'excl' => $unit_subtotal_excl,
+        );
+        $regular = array(
+        'incl' => null,
+        'excl' => null,
+        );
+
+        if (null !== $pos_data ) {
+            $recorded_selling = $this->convert_recorded_price_bases(
+                $pos_data['price'],
+                $pos_data['tax_status'],
+                $prices_include_tax,
+                $subtotal_incl,
+                $subtotal_excl
+            );
+            $regular          = $this->convert_recorded_price_bases(
+                $pos_data['regular_price'],
+                $pos_data['tax_status'],
+                $prices_include_tax,
+                $subtotal_incl,
+                $subtotal_excl
+            );
+
+            foreach ( array( 'incl', 'excl' ) as $basis ) {
+                if (null !== $recorded_selling[ $basis ] ) {
+                    $selling[ $basis ] = $recorded_selling[ $basis ];
+                }
+            }
+        }
+
+        $unit_savings = array(
+        'incl' => null !== $regular['incl'] ? max(0.0, $regular['incl'] - $selling['incl']) : null,
+        'excl' => null !== $regular['excl'] ? max(0.0, $regular['excl'] - $selling['excl']) : null,
+        );
+        $multiply    = static function ( ?float $value ) use ( $qty ): ?float {
+            return null === $value ? null : $value * $qty;
+        };
+        $line_regular = array(
+        'incl' => $multiply($regular['incl']),
+        'excl' => $multiply($regular['excl']),
+        );
+        $line_selling = array(
+        'incl' => $multiply($selling['incl']),
+        'excl' => $multiply($selling['excl']),
+        );
+        $line_savings = array(
+        'incl' => $multiply($unit_savings['incl']),
+        'excl' => $multiply($unit_savings['excl']),
+        );
+
+        $savings_in_discounts = false;
+        $stored               = array(
+        'incl' => array(
+        'subtotal' => $subtotal_incl,
+        'total'    => $total_incl,
+        ),
+        'excl' => array(
+        'subtotal' => $subtotal_excl,
+        'total'    => $total_excl,
+        ),
+        );
+        // Compare on the recorded-price basis first: the opposite basis is float-derived
+        // from stored line ratios, and WooCommerce's own tax rounding can shift it by a
+        // sub-cent. Price-decimal precision tolerates that noise; rounding precision does not.
+        $precision   = wc_get_price_decimals();
+        $basis_order = $prices_include_tax ? array( 'incl', 'excl' ) : array( 'excl', 'incl' );
+        foreach ( $basis_order as $basis ) {
+            if (null === $line_savings[ $basis ] || $line_savings[ $basis ] <= 0.0 ) {
+                continue;
+            }
+
+            $distance_to_regular = round(abs($stored[ $basis ]['subtotal'] - $line_regular[ $basis ]), $precision);
+            $distance_to_selling = round(abs($stored[ $basis ]['subtotal'] - $line_selling[ $basis ]), $precision);
+            $stored_discount     = round(max(0.0, $stored[ $basis ]['subtotal'] - $stored[ $basis ]['total']), $precision);
+            $recorded_savings    = round($line_savings[ $basis ], $precision);
+
+            $savings_in_discounts = $distance_to_regular < $distance_to_selling
+            && $stored_discount >= $recorded_savings;
+            break;
+        }
+
+        $select = static function ( array $values ) use ( $display_incl ): ?float {
+            return $display_incl ? $values['incl'] : $values['excl'];
+        };
+
+        return array(
+        'regular_price'           => $select($regular),
+        'regular_price_incl'      => $regular['incl'],
+        'regular_price_excl'      => $regular['excl'],
+        'selling_price'           => $select($selling),
+        'selling_price_incl'      => $selling['incl'],
+        'selling_price_excl'      => $selling['excl'],
+        'unit_savings'            => $select($unit_savings),
+        'unit_savings_incl'       => $unit_savings['incl'],
+        'unit_savings_excl'       => $unit_savings['excl'],
+        'line_regular_total'      => $select($line_regular),
+        'line_regular_total_incl' => $line_regular['incl'],
+        'line_regular_total_excl' => $line_regular['excl'],
+        'line_selling_total'      => $select($line_selling),
+        'line_selling_total_incl' => $line_selling['incl'],
+        'line_selling_total_excl' => $line_selling['excl'],
+        'line_savings'            => $select($line_savings),
+        'line_savings_incl'       => $line_savings['incl'],
+        'line_savings_excl'       => $line_savings['excl'],
+        'savings_in_discounts'    => $savings_in_discounts,
+        );
+    }
+
+    /**
+     * Load the WooCommerce coupon behind an order coupon line, if it still exists.
+     *
+     * Order coupon lines only store the code; the coupon post may have been
+     * deleted since the order was placed, in which case templates fall back to
+     * the code alone.
+     *
+     * @param  \WC_Order_Item_Coupon $coupon_item Coupon order item.
+     * @return \WC_Coupon|null
+     */
+    private function get_order_coupon( \WC_Order_Item_Coupon $coupon_item ): ?\WC_Coupon
+    {
+        $code = (string) $coupon_item->get_code();
+        if ('' === $code ) {
+            return null;
+        }
+
+        try {
+            $coupon = new \WC_Coupon($code);
+        } catch ( \Exception $exception ) {
+            return null;
+        }
+
+        return $coupon->get_id() ? $coupon : null;
+    }
+
+    /**
+     * Resolve an optional human-facing coupon label for a receipt discount row.
+     *
+     * Coupons are identified by code; the code is already exposed as
+     * `discounts[].code`. Prefer a distinct, user-authored description, but
+     * fall back to the code so templates that render `label` always have text.
+     *
+     * @param  \WC_Order_Item_Coupon $coupon_item Coupon order item.
+     * @param  \WC_Coupon|null       $coupon      Coupon behind the line, when it still exists.
+     * @return string
+     */
+    private function get_coupon_label( \WC_Order_Item_Coupon $coupon_item, ?\WC_Coupon $coupon ): string
+    {
+        $code = (string) $coupon_item->get_code();
+        if (null === $coupon ) {
+            return $code;
+        }
+
+        $label = trim(wp_strip_all_tags((string) $coupon->get_description()));
+
+        return '' !== $label && 0 !== strcasecmp($label, $code) ? $label : $code;
+    }
+
+    /**
+     * Build tax summary.
+     *
+     * @param WC_Abstract_Order $order Order object.
+     *
+     * @return array
+     */
+    private function get_tax_summary( WC_Abstract_Order $order ): array
+    {
+        $summary = array();
+
+        $taxable_bases = $this->get_taxable_bases_by_rate_id($order);
+
+        foreach ( $order->get_items('tax') as $tax_item ) {
+            $tax_amount   = (float) $tax_item->get_tax_total() + (float) $tax_item->get_shipping_tax_total();
+            $rate         = (float) $tax_item->get_rate_percent();
+            $rate_id      = (string) $tax_item->get_rate_id();
+            $taxable_excl = $taxable_bases[ $rate_id ] ?? null;
+            $taxable_incl = null !== $taxable_excl ? $taxable_excl + $tax_amount : null;
+
+            $summary[] = array(
+            'code'                => $rate_id,
+            'rate'                => $rate > 0 ? $rate : null,
+            'label'               => $tax_item->get_label($order),
+            'compound'            => method_exists($tax_item, 'is_compound') ? (bool) $tax_item->is_compound() : false,
+            'taxable_amount_excl' => $taxable_excl,
+            'tax_amount'          => $tax_amount,
+            'taxable_amount_incl' => $taxable_incl,
+            );
+        }
+
+        return $summary;
+    }
+
+
+    /**
+     * Sum post-discount pre-tax item totals by tax rate id.
+     *
+     * A line taxed by multiple rates contributes its full net total to each
+     * applicable rate. Compound rates intentionally use the pure pre-tax net
+     * base for the v1 contract.
+     *
+     * @param WC_Abstract_Order $order Order object.
+     *
+     * @return array<string,float>
+     */
+    private function get_taxable_bases_by_rate_id( WC_Abstract_Order $order ): array
+    {
+        $bases = array();
+
+        foreach ( array( 'line_item', 'fee', 'shipping' ) as $item_type ) {
+            foreach ( $order->get_items($item_type) as $item ) {
+                if (! method_exists($item, 'get_taxes') || ! method_exists($item, 'get_total') ) {
+                    continue;
+                }
+
+                $raw_taxes = $item->get_taxes();
+                $totals    = isset($raw_taxes['total']) && is_array($raw_taxes['total']) ? $raw_taxes['total'] : array();
+                $base      = (float) $item->get_total();
+
+                foreach ( $totals as $rate_id => $tax_amount ) {
+                    if ('' === (string) $rate_id || '' === (string) $tax_amount ) {
+                        continue;
+                    }
+
+                    $key = (string) $rate_id;
+                    if (! array_key_exists($key, $bases) ) {
+                        $bases[ $key ] = 0.0;
+                    }
+
+                    $bases[ $key ] += $base;
+                }
+            }
+        }
+
+        return $bases;
+    }
+
+
+    /**
+     * Format a WooCommerce date in a resolved receipt timezone.
+     *
+     * @param \WC_DateTime|null $date     WooCommerce date.
+     * @param DateTimeZone      $timezone Receipt timezone.
+     * @param string            $locale   Receipt locale.
+     *
+     * @return array<string,string>
+     */
+    private function format_wc_datetime_in_timezone( $date, DateTimeZone $timezone, string $locale = '' ): array
+    {
+        if (! $date ) {
+            return Receipt_Date_Formatter::empty();
+        }
+
+        return Receipt_Date_Formatter::from_timestamp($date->getTimestamp(), $timezone, $locale);
+    }
+
+
+    /**
+     * Build line tax rows.
+     *
+     * @param \WC_Order_Item_Product $item Order line item.
+     *
+     * @return array
+     */
+    private function get_line_taxes( $item ): array
+    {
+        return $this->get_item_taxes($item);
+    }
+
+    /**
+     * Build tax rows for any order item that exposes get_taxes().
+     *
+     * Resolves human-readable label and percent rate via WC_Tax when possible,
+     * falling back to the rate id string and null rate.
+     *
+     * @param object $item Order item.
+     *
+     * @return array
+     */
+    private function get_item_taxes( $item ): array
+    {
+        $taxes = array();
+
+        if (! method_exists($item, 'get_taxes') ) {
+            return $taxes;
+        }
+
+        $raw = $item->get_taxes();
+        if (! \is_array($raw) ) {
+            return $taxes;
+        }
+
+        $totals = isset($raw['total']) && \is_array($raw['total']) ? $raw['total'] : array();
+
+        foreach ( $totals as $tax_rate_id => $tax_amount ) {
+            if (! $tax_amount ) {
+                continue;
+            }
+
+            $rate  = null;
+            $label = (string) $tax_rate_id;
+
+            if (class_exists('\WC_Tax') ) {
+                // _get_tax_rate() is internal to WooCommerce; keep the fallback label/rate if it changes.
+                try {
+                    $rate_data = \WC_Tax::_get_tax_rate((int) $tax_rate_id, OBJECT);
+                    if (\is_object($rate_data) ) {
+                        if (isset($rate_data->tax_rate) && '' !== $rate_data->tax_rate ) {
+                            $rate = (float) $rate_data->tax_rate;
+                        }
+                        $resolved_label = \WC_Tax::get_rate_label($rate_data);
+                        if (\is_string($resolved_label) && '' !== $resolved_label ) {
+                            $label = $resolved_label;
+                        }
+                    }
+                } catch ( \Throwable $exception ) {
+                    $rate  = null;
+                    $label = (string) $tax_rate_id;
+                }
+            }
+
+            $taxes[] = array(
+            'code'   => (string) $tax_rate_id,
+            'rate'   => $rate,
+            'label'  => $label,
+            'amount' => (float) $tax_amount,
+            );
+        }
+
+        return $taxes;
+    }
+
+    /**
+     * Extract formatted meta pairs from an order item.
+     *
+     * @param object $item Order item.
+     *
+     * @return array
+     */
+    private function get_item_meta_pairs( $item ): array
+    {
+        $pairs = array();
+
+        if (! method_exists($item, 'get_formatted_meta_data') ) {
+            return $pairs;
+        }
+
+        $formatted_meta = $item->get_formatted_meta_data('_', true);
+        if (! \is_array($formatted_meta) ) {
+            return $pairs;
+        }
+
+        foreach ( $formatted_meta as $meta_entry ) {
+            if (isset($meta_entry->key) && '_' === substr((string) $meta_entry->key, 0, 1) ) {
+                continue;
+            }
+
+            $pairs[] = array(
+            'key'   => wp_strip_all_tags($meta_entry->display_key),
+            'value' => wp_strip_all_tags($meta_entry->display_value),
+            );
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Extract product attributes without order-item add-on metadata.
+     *
+     * @param \WC_Order_Item_Product $item Order product item.
+     *
+     * @return array
+     */
+    private function get_product_attribute_pairs( \WC_Order_Item_Product $item ): array
+    {
+        $product = $item->get_product();
+        $pairs   = array();
+
+        if (! $product instanceof \WC_Product ) {
+            return $pairs;
+        }
+
+        if ($product instanceof \WC_Product_Variation ) {
+            foreach ( $product->get_variation_attributes() as $attribute_key => $attribute_value ) {
+                if ('' === (string) $attribute_value ) {
+                    continue;
+                }
+
+                $taxonomy = preg_replace('/^attribute_/', '', (string) $attribute_key);
+                $value    = $product->get_attribute($taxonomy);
+                $pairs[]  = array(
+                'key'   => wp_strip_all_tags(wc_attribute_label($taxonomy, $product)),
+                'value' => wp_strip_all_tags('' !== $value ? $value : (string) $attribute_value),
+                );
+            }
+
+            return $pairs;
+        }
+
+        foreach ( $product->get_attributes() as $attribute ) {
+            if (! $attribute instanceof \WC_Product_Attribute || ! $attribute->get_visible() ) {
+                continue;
+            }
+
+            $values = $attribute->is_taxonomy()
+            ? wc_get_product_terms($product->get_id(), $attribute->get_name(), array( 'fields' => 'names' ))
+            : $attribute->get_options();
+            $values = array_filter(array_map('wp_strip_all_tags', array_map('strval', $values)));
+
+            if (empty($values) ) {
+                continue;
+            }
+
+            $pairs[] = array(
+            'key'   => wp_strip_all_tags(wc_attribute_label($attribute->get_name(), $product)),
+            'value' => implode(', ', $values),
+            );
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Build refunds[] block from $order->get_refunds().
+     *
+     * @param WC_Abstract_Order $order         Order object.
+     * @param bool              $display_incl  Whether totals should be tax-inclusive (matches shop tax display).
+     * @param DateTimeZone      $date_timezone Receipt timezone.
+     * @param string            $date_locale   Receipt locale.
+     *
+     * @return array
+     */
+    private function get_refunds( WC_Abstract_Order $order, bool $display_incl, DateTimeZone $date_timezone, string $date_locale = '' ): array
+    {
+        $refunds = array();
+
+        if (! method_exists($order, 'get_refunds') ) {
+            return $refunds;
+        }
+
+        foreach ( $order->get_refunds() as $refund ) {
+            if (! $refund instanceof \WC_Order_Refund ) {
+                continue;
+            }
+
+            $refunded_by_id   = (int) $refund->get_refunded_by();
+            $refunded_by_name = '';
+            if ($refunded_by_id > 0 ) {
+                $user = get_user_by('id', $refunded_by_id);
+                if ($user ) {
+                    $refunded_by_name = (string) $user->display_name;
+                }
+            }
+
+            $items = $this->get_refund_items($refund, $display_incl);
+
+            $pos_destination = (string) $refund->get_meta('_pos_refund_destination');
+            $pos_mode        = (string) $refund->get_meta('_pos_refund_mode');
+            $pos_gateway_id  = (string) $refund->get_meta('_pos_refund_gateway_id');
+            $pos_gateway_title = (string) $refund->get_meta('_pos_refund_gateway_title');
+            if ('' === $pos_gateway_title && '' !== $pos_gateway_id && function_exists('WC') ) {
+                // Resolve via the WC()->payment_gateways() method (which returns
+                // WC_Payment_Gateways::instance() lazily) instead of the
+                // WC()->payment_gateways property — the property can legitimately
+                // be null mid-bootstrap or in some test environments.
+                $gateways = WC()->payment_gateways()->payment_gateways();
+                if (isset($gateways[ $pos_gateway_id ]) && method_exists($gateways[ $pos_gateway_id ], 'get_title') ) {
+                    $pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
+                }
+            }
+
+            $refunds[] = array(
+            'id'               => (int) $refund->get_id(),
+            'date'             => $this->format_wc_datetime_in_timezone($refund->get_date_created(), $date_timezone, $date_locale),
+            'amount'           => abs((float) $refund->get_amount()),
+            'subtotal'         => method_exists($refund, 'get_subtotal') ? abs((float) $refund->get_subtotal()) : 0.0,
+            'tax_total'        => method_exists($refund, 'get_total_tax') ? abs((float) $refund->get_total_tax()) : 0.0,
+            'shipping_total'   => method_exists($refund, 'get_shipping_total') ? abs((float) $refund->get_shipping_total()) : 0.0,
+            'shipping_tax'     => method_exists($refund, 'get_shipping_tax') ? abs((float) $refund->get_shipping_tax()) : 0.0,
+            'reason'           => (string) $refund->get_reason(),
+            'refunded_by_id'   => $refunded_by_id > 0 ? $refunded_by_id : null,
+            'refunded_by_name' => $refunded_by_name,
+            'refunded_payment' => method_exists($refund, 'get_refunded_payment') ? (bool) $refund->get_refunded_payment() : false,
+            'destination'      => $pos_destination,
+            'gateway_id'       => $pos_gateway_id,
+            'gateway_title'    => $pos_gateway_title,
+            'processing_mode'  => $pos_mode,
+            'lines'            => $items['lines'],
+            'fees'             => $items['fees'],
+            'shipping'         => $items['shipping'],
+            );
+        }
+
+        return $refunds;
+    }
+
+
+    /**
+     * Ensure customer tax IDs include display labels for logicless templates.
+     *
+     * @param  array<int,array<string,mixed>> $tax_ids Customer tax IDs.
+     * @param  string                         $locale  Receipt locale.
+     * @return array<int,array<string,mixed>>
+     */
+    private static function with_customer_tax_id_labels( array $tax_ids, string $locale = '' ): array
+    {
+        return self::with_tax_id_labels($tax_ids, 'customer', $locale);
+    }
+
+    /**
+     * Resolve a display label for each tax-ID entry. Precedence: explicit
+     * `label` → `<scope>_tax_id_label_<type>` i18n key → scope-specific
+     * `_other` fallback.
+     *
+     * @param  array<int,array<string,mixed>> $tax_ids Tax IDs.
+     * @param  string                         $scope   "store" or "customer".
+     * @param  string                         $locale  Receipt locale.
+     * @return array<int,array<string,mixed>>
+     */
+    private static function with_tax_id_labels( array $tax_ids, string $scope, string $locale = '' ): array
+    {
+        $labels = Receipt_I18n_Labels::get_labels($locale);
+        $prefix = $scope . '_tax_id_label_';
+
+        return array_map(
+            static function ( array $tax_id ) use ( $labels, $prefix ): array {
+                if (! empty($tax_id['label']) ) {
+                    return $tax_id;
+                }
+
+                $type            = isset($tax_id['type']) ? (string) $tax_id['type'] : 'other';
+                $key             = $prefix . $type;
+                $tax_id['label'] = $labels[ $key ] ?? $labels[ $prefix . 'other' ];
+
+                return $tax_id;
+            },
+            $tax_ids
+        );
+    }
 }
