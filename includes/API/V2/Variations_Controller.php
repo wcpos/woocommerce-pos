@@ -9,13 +9,12 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product_Variation;
 use WC_REST_Product_Variations_Controller;
-use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
-use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
 use WP_Query;
@@ -60,10 +59,11 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	private const WCPOS_SORT_PARAM_MAP = array(
 		'orderby' => 'orderby',
 		'order'   => 'order',
+		'search'  => 'search',
 	);
 
 	/**
-	 * The request whose declared sort `wcpos_posts_clauses()` applies.
+	 * The request whose declared rules wrap the collection query.
 	 *
 	 * @var null|WP_REST_Request
 	 */
@@ -74,7 +74,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	private const MAX_SKU_LENGTH    = 4096;
 	private const MAX_SKU_TERMS     = 100;
 	private const MAX_SEARCH_LENGTH = 256;
-	private const MAX_SEARCH_TERMS  = 10;
 	private const MAX_PAGE          = 1000;
 
 
@@ -153,47 +152,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		$args['post_type'] = $this->post_type;
 
 		/*
-		 * `search` means the barcode CARRIERS here, not the post title.
-		 *
-		 * WooCommerce maps `search` onto `s`, which searches post_title/content — useless for a
-		 * variation, whose title is a generated attribute string. The POS searches what a cashier
-		 * actually types or scans: the SKU and whichever meta key the store configured as its
-		 * barcode field (`Barcode_Field::search_keys()`). Every term must match at least one carrier.
-		 *
-		 * `sku` is left to WooCommerce: its own exact/comma-list handling is what the
-		 * sku-beats-search precedence rule relies on.
-		 */
-		$search = (string) ( $request->get_param( 'search' ) ?? '' );
-		if ( '' !== $sku ) {
-			// SKU is an exact lookup and outranks a fuzzy one; leaving WooCommerce's post-title
-			// `s` in place would AND the two and return nothing.
-			unset( $args['s'] );
-		}
-		if ( '' !== $search && '' === $sku ) {
-			unset( $args['s'] );
-			$args['wcpos_variation_search'] = true;
-			$terms = preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
-			if ( false === $terms ) {
-				$terms = array();
-			}
-			$carriers = array( 'relation' => 'AND' );
-			foreach ( $terms as $term ) {
-				$term_carriers = array( 'relation' => 'OR' );
-				foreach ( Barcode_Field::search_keys() as $key ) {
-					$term_carriers[] = array(
-						'key'     => $key,
-						'value'   => $term,
-						'compare' => 'LIKE',
-					);
-				}
-				$carriers[] = $term_carriers;
-			}
-			if ( 1 < \count( $carriers ) ) {
-				$args['meta_query'] = $this->add_meta_query( $args, $carriers ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-			}
-		}
-
-		/*
 		 * This route only ever offers what the store owner has for sale — on EVERY lane, including
 		 * `include`.
 		 *
@@ -214,34 +172,21 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		 */
 		$args['post_status'] = 'publish';
 
-		/*
-		 * Leg-3 (ADR 0014 WP-M5): POS-hidden (`online_only`) variations are never served. As a
-		 * query exclusion rather than a post-hoc filter of the result, so paging and totals count
-		 * the same set the client is allowed to see.
-		 *
-		 * Through the helper, NOT a raw `post__not_in` merge: `parent::prepare_objects_query()`
-		 * maps `include` to `post__in`, and WP_Query IGNORES `post__not_in` when `post__in` is
-		 * present — so `?search=X&include=<hidden id>` would have served a hidden variation.
-		 * `apply_to_wp_query_args()` already owns that trap: it intersects `post__in` with the
-		 * hidden set and pins an empty intersection to `array( 0 )`.
-		 */
-		$args = ( new Pos_Visibility() )->apply_to_wp_query_args( $args, Pos_Visibility::VARIATIONS );
-
-		/*
-		 * The POS sorts on fields WooCommerce does not offer as orderby values. They are
-		 * declared in Sync\Collection_Rules and projected into get_collection_params()
-		 * below — without that, `orderby=sku` is rejected by REST argument validation
-		 * before anything here runs.
-		 *
-		 * They are applied as SQL clauses, NOT as `meta_key` + `orderby => meta_value`:
-		 * that pair INNER JOINs postmeta and drops every variation with no value for the
-		 * key, so the sort silently filtered. `wcpos_posts_clauses()` LEFT JOINs instead
-		 * and orders the meta-less rows last.
-		 */
 		$this->wcpos_sort_request = $request;
-		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
+		$plan = Collection_Rules::for_request( 'variations', $request, self::WCPOS_SORT_PARAM_MAP );
+		$args = $plan->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
 
 		return $args;
+	}
+
+	/** Apply the same rule topology to discovery, collection pages, and named includes. */
+	protected function get_objects( $query_args ) {
+		$plan = Collection_Rules::for_request( 'variations', $this->wcpos_sort_request, self::WCPOS_SORT_PARAM_MAP );
+		return $plan->around(
+			function () use ( $query_args ) {
+				return parent::get_objects( $query_args );
+			}
+		);
 	}
 
 	/**
@@ -451,11 +396,8 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			if ( self::MAX_SEARCH_LENGTH < $characters ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 characters', array( 'status' => 400 ) );
 			}
-			$terms = preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
-			if ( false === $terms ) {
-				return new WP_Error( 'woocommerce_pos_variations_search_invalid', 'search must be valid UTF-8', array( 'status' => 400 ) );
-			}
-			if ( self::MAX_SEARCH_TERMS < \count( $terms ) ) {
+			$terms = Collection_Rules::search_terms( trim( $search ) );
+			if ( Collection_Rules::rules( 'variations' )['search']['term_cap'] < \count( $terms ) ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
 			}
 		}
@@ -477,6 +419,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 * @param array    $clauses  Associative array of the clauses for the query.
 	 * @param WP_Query $wp_query The WP_Query instance.
 	 *
+	 * @deprecated Collection Rules now installs this behavior; retained for Pro callers.
 	 * @return array
 	 */
 	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
@@ -524,11 +467,11 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 *
 	 * @param string   $groupby Existing GROUP BY clause.
 	 * @param WP_Query $query   Query being filtered.
+	 *
+	 * @deprecated Collection Rules owns variation grouping.
 	 */
 	public function group_search_results( string $groupby, WP_Query $query ): string {
-		global $wpdb;
-
-		return ! empty( $query->query_vars['wcpos_variation_search'] ) ? "{$wpdb->posts}.ID" : $groupby;
+		return Product_Search::variation_groupby( $groupby, $query->query_vars );
 	}
 
 	/**
@@ -544,10 +487,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		}
 
 		$search = (string) ( $request->get_param( 'search' ) ?? '' );
-		$terms  = preg_split( '/[\s\p{Z}\p{C}]+/u', trim( $search ), -1, PREG_SPLIT_NO_EMPTY );
-		if ( false === $terms ) {
-			return false;
-		}
+		$terms  = Collection_Rules::search_terms( trim( $search ) );
 
 		return array() !== $terms;
 	}
@@ -624,12 +564,7 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			);
 		}
 
-		add_filter( 'posts_groupby', array( $this, 'group_search_results' ), 10, 2 );
-		try {
-			$results = $this->get_objects( $query_args );
-		} finally {
-			remove_filter( 'posts_groupby', array( $this, 'group_search_results' ), 10 );
-		}
+		$results = $this->get_objects( $query_args );
 
 		$ids = array();
 		foreach ( $results['objects'] as $object ) {

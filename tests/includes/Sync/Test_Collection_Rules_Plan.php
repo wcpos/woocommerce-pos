@@ -270,6 +270,26 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		);
 	}
 
+	/** Reusing a request with new search params must not reuse its old claims. */
+	public function test_search_mutated_request_uses_current_phrase(): void {
+		foreach ( array( 'products', 'variations' ) as $collection ) {
+			foreach ( array( 'wcpos/v1', 'wcpos/v2' ) as $lane ) {
+				// Arrange.
+				$request = new WP_REST_Request( 'GET', '/' . $lane . '/' . $collection );
+				$map     = array( 'search' => 'search' );
+				$request->set_query_params( array( 'search' => '' ) );
+				Collection_Rules::for_request( $collection, $request, $map );
+
+				// Act / Assert.
+				foreach ( array( 'first-sku', 'second-barcode' ) as $phrase ) {
+					$request->set_query_params( array( 'search' => $phrase ) );
+					$plan = Collection_Rules::for_request( $collection, $request, $map );
+					$this->assertSame( $phrase, $plan->claims()['search'] );
+				}
+			}
+		}
+	}
+
 	/**
 	 * A signature of the global filter table, used to detect leaked callbacks.
 	 *
@@ -286,5 +306,39 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		}
 
 		return $signature;
+	}
+
+	/** An unrelated array SKU is forwarded without casting it to a string. */
+	public function test_search_array_sku_on_products_and_orders_is_untouched(): void {
+		foreach ( array( 'products', 'orders' ) as $collection ) {
+			// Arrange.
+			$request = new WP_REST_Request( 'GET', '/wcpos/v2/' . $collection );
+			$params  = array( 'sku' => array( 'probe' ) );
+			$request->set_query_params( $params );
+
+			// Act: PHPUnit converts the old array-to-string notice into a failure.
+			$plan = Collection_Rules::for_request( $collection, $request );
+
+			// Assert.
+			$this->assertSame( $params, $plan->forwarded_params( $params ) );
+		}
+	}
+
+	/** Invalid bytes must not become a false term and then a LIKE-empty meta query. */
+	public function test_search_malformed_utf8_adds_no_meta_query(): void {
+		foreach ( array( 'products', 'variations' ) as $collection ) {
+			// Arrange.
+			$request = new WP_REST_Request( 'GET', '/wcpos/v2/' . $collection );
+			$request->set_param( 'search', "probe\xC3\x28" );
+			$plan = Collection_Rules::for_request( $collection, $request, array( 'search' => 'search' ) );
+
+			// Act.
+			$args = $plan->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, array() );
+
+			// Assert.
+			$this->assertArrayNotHasKey( 'meta_query', $args );
+			$this->assertSame( array(), Collection_Rules::search_terms( "probe\xC3\x28" ) );
+			$this->assertSame( array(), Collection_Rules::search_terms( "probe\xC3\x28", PREG_SPLIT_NO_EMPTY | PREG_SPLIT_OFFSET_CAPTURE ) );
+		}
 	}
 }
