@@ -39,6 +39,7 @@ class Init {
 		wp_cache_add_global_groups( 'wc_pos_user_uuid_locks' );
 
 		$rows = $this->hook_rows( true );
+		Hook_Manifest::validate( $rows );
 		Hook_Manifest::install( wp_list_filter( $rows, array( 'phase' => 'pre-latch' ) ) );
 		$sync_latched = Sync\Api::SCHEMA_VERSION === get_option( Sync\Api::SCHEMA_OPTION, null );
 		foreach ( $rows as $row ) {

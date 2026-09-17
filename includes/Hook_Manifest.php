@@ -34,10 +34,13 @@ final class Hook_Manifest {
 	 */
 	public static function validate( array $rows ): void {
 		foreach ( $rows as $index => $row ) {
-			foreach ( array( 'hook', 'callback', 'priority', 'args', 'reason' ) as $field ) {
+			foreach ( array( 'hook', 'callback', 'priority', 'args', 'reason', 'phase' ) as $field ) {
 				if ( ! array_key_exists( $field, $row ) ) {
 					throw new \InvalidArgumentException( esc_html( 'Hook manifest row ' . $index . ' is missing ' . $field . '.' ) );
 				}
+			}
+			if ( ! \in_array( $row['phase'], array( 'pre-latch', 'sync-latched', 'post-latch' ), true ) ) {
+				throw new \InvalidArgumentException( esc_html( 'Hook manifest row ' . $index . ' requires a valid phase.' ) );
 			}
 			foreach ( array( 'priority', 'args' ) as $field ) {
 				if ( ! \is_int( $row[ $field ] ) ) {

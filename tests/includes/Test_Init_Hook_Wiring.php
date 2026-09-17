@@ -429,6 +429,52 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A missing phase rejects the whole manifest before any registrar can run.
+	 */
+	public function test_hook_manifest_missing_phase_rejects_rows_before_installation(): void {
+		// Arrange.
+		$init   = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows   = $init->hook_rows( false );
+		$called = false;
+		$rows[0]['callback'] = static function () use ( &$called ): void {
+			$called = true;
+		};
+		unset( $rows[ \count( $rows ) - 1 ]['phase'] );
+
+		// Act / Assert.
+		try {
+			Hook_Manifest::install( $rows );
+			$this->fail( 'Missing phase was accepted.' );
+		} catch ( \InvalidArgumentException $exception ) {
+			$this->assertStringContainsString( 'phase', $exception->getMessage() );
+		}
+		$this->assertFalse( $called );
+	}
+
+	/**
+	 * A misspelled phase rejects the whole manifest before any registrar can run.
+	 */
+	public function test_hook_manifest_misspelled_phase_rejects_rows_before_installation(): void {
+		// Arrange.
+		$init   = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows   = $init->hook_rows( false );
+		$called = false;
+		$rows[0]['callback'] = static function () use ( &$called ): void {
+			$called = true;
+		};
+		$rows[ \count( $rows ) - 1 ]['phase'] = 'post_latch';
+
+		// Act / Assert.
+		try {
+			Hook_Manifest::install( $rows );
+			$this->fail( 'Misspelled phase was accepted.' );
+		} catch ( \InvalidArgumentException $exception ) {
+			$this->assertStringContainsString( 'phase', $exception->getMessage() );
+		}
+		$this->assertFalse( $called );
+	}
+
+	/**
 	 * Invalid metadata is rejected before any registrar can run.
 	 *
 	 * @dataProvider invalid_manifest_fields
