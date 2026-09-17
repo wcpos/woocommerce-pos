@@ -152,6 +152,7 @@
 	"access.change_grant": "Grant",
 	"access.change_remove": "Remove",
 	"access.change_keep": "Keep",
+	"access.restore_individual": "Individual capabilities (Advanced):",
 	"access.task_partial_count": "{granted} of {total}",
 	"access.task_partial_tooltip": "{granted} of the {total} permissions behind this task are granted. Tick the box to grant the rest.",
 	"access.task_review": "Review",

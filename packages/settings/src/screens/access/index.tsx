@@ -71,6 +71,16 @@ function Access() {
 			changes.keep.push(t(task.labelKey));
 		}
 	});
+	// Capabilities the restore touches that no task covers, so the dialog never
+	// promises "what will change" while silently flipping an Advanced-only one.
+	const covered = new Set(taskGroups.flatMap(({ members }) => members.map(({ name }) => name)));
+	const individual: Record<'grant' | 'remove', string[]> = { grant: [], remove: [] };
+	Object.entries(defaults ?? {}).forEach(([group, caps]) => {
+		Object.entries(caps).forEach(([name, granted]) => {
+			if (covered.has(name) || capabilities?.[group]?.[name] === granted) return;
+			individual[granted ? 'grant' : 'remove'].push(name);
+		});
+	});
 
 	/**
 	 * Grant or revoke every capability behind a task in a single write, so the
@@ -215,6 +225,26 @@ function Access() {
 												{t(`access.change_${action}`)}
 											</span>
 											{changes[action].join(', ')}
+										</p>
+									)
+							)}
+							{(['grant', 'remove'] as const).map(
+								(action) =>
+									individual[action].length > 0 && (
+										<p
+											key={`individual-${action}`}
+											className="wcpos:my-2 wcpos:text-sm"
+											data-testid={`access-restore-individual-${action}`}
+										>
+											<span
+												className={classNames(
+													'wcpos:text-xs wcpos:uppercase wcpos:font-semibold wcpos:mr-2',
+													action === 'grant' ? 'wcpos:text-green-700' : 'wcpos:text-red-700'
+												)}
+											>
+												{t(`access.change_${action}`)}
+											</span>
+											{t('access.restore_individual')} <code>{individual[action].join(', ')}</code>
 										</p>
 									)
 							)}

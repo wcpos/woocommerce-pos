@@ -338,6 +338,28 @@ describe('Access screen defaults and mixed tasks', () => {
 		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 	});
 
+	it('lists capabilities outside every task that the restore will change', () => {
+		const defaults = makeCapabilities([...PRODUCT_EDIT_CAPS, 'access_woocommerce_pos']);
+		defaults.wcpos.manage_woocommerce_pos_cash = true;
+		defaults.wcpos.view_woocommerce_pos_reports = false;
+		const capabilities = makeCapabilities([...PRODUCT_EDIT_CAPS, 'access_woocommerce_pos']);
+		capabilities.wcpos.manage_woocommerce_pos_cash = false;
+		capabilities.wcpos.view_woocommerce_pos_reports = true;
+		seed(makeCapabilities(), 'administrator');
+		settingsData.current.cashier = { name: 'Cashier', defaults, capabilities };
+		render(<Access />);
+		fireEvent.click(screen.getByTestId('access-role-cashier'));
+		fireEvent.click(screen.getByTestId('access-restore-defaults'));
+
+		expect(screen.getByTestId('access-restore-individual-grant')).toHaveTextContent(
+			'manage_woocommerce_pos_cash'
+		);
+		expect(screen.getByTestId('access-restore-individual-remove')).toHaveTextContent(
+			'view_woocommerce_pos_reports'
+		);
+		expect(screen.queryByText('Grant')).not.toBeInTheDocument;
+	});
+
 	it('uses removal copy and excludes tasks not wholly covered by defaults', () => {
 		seed(makeCapabilities(['access_woocommerce_pos']), 'administrator', {
 			wcpos: { access_woocommerce_pos: false },
