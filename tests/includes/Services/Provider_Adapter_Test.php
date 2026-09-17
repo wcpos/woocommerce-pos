@@ -26,7 +26,10 @@ class Provider_Adapter_Test extends WP_UnitTestCase {
 		$adapter = new Star_Cloudprnt_Adapter();
 		$poll    = $adapter->parse(
 			array(
-				'params' => array( 'token' => '42', 'code' => '200 OK' ),
+				'params' => array(
+					'token' => '42',
+					'code'  => '200 OK',
+				),
 				'method' => 'DELETE',
 				'route'  => '/wcpos/v2/print-jobs/cloudprnt',
 			)
@@ -36,7 +39,14 @@ class Provider_Adapter_Test extends WP_UnitTestCase {
 		$response = $adapter->advertise( array( 'id' => 'p1' ), $poll, null );
 
 		// Assert.
-		$this->assertSame( array( 'status' => 200, 'headers' => array(), 'body' => array( 'ok' => true ) ), $response );
+		$this->assertSame(
+			array(
+				'status'  => 200,
+				'headers' => array(),
+				'body'    => array( 'ok' => true ),
+			),
+			$response
+		);
 	}
 
 	/**
@@ -233,5 +243,110 @@ class Provider_Adapter_Test extends WP_UnitTestCase {
 		$this->assertSame( 'Cloud print: Star Online job produced no printable content.', $result['error'] );
 
 		delete_transient( 'wcpos_cloud_print_star_status_' . md5( $printer['id'] ) );
+	}
+
+	/**
+	 * It builds a Star diagnostic as native StarPRNT bytes.
+	 *
+	 * StarPRNT-native printers (the whole TSP100 line) cannot decode ESC/POS,
+	 * so the diagnostic must carry StarPRNT commands under the vnd.star type.
+	 */
+	public function test_build_star_diagnostic_is_starprnt_bytes(): void {
+		// Act.
+		$diag = Provider::adapter( 'star-cloudprnt' )->diagnostic( 'Kitchen' );
+
+		// Assert.
+		$this->assertEquals( 'application/vnd.star.starprnt', $diag['content_type'] );
+		$bytes = base64_decode( $diag['payload'], true );
+		$this->assertStringContainsString( 'WCPOS', $bytes );
+		$this->assertStringContainsString( 'Kitchen', $bytes );
+		$this->assertStringNotContainsString( "\x1B@", $bytes ); // No ESC/POS init.
+		$this->assertStringNotContainsString( "\x1DV", $bytes ); // No ESC/POS cut.
+		$this->assertStringContainsString( "\x1B\x1D\x61\x01", $bytes ); // StarPRNT center align.
+		$this->assertStringContainsString( "\x1B\x64\x03", $bytes ); // StarPRNT partial cut.
+	}
+
+	/**
+	 * It strips control bytes from the printer name before emitting commands.
+	 */
+	public function test_build_strips_control_bytes_from_printer_name(): void {
+		// Act.
+		$diag  = Provider::adapter( 'star-cloudprnt' )->diagnostic( "Kit\x1b\x64\x02chen" );
+		$bytes = base64_decode( $diag['payload'], true );
+
+		// Assert.
+		$this->assertStringContainsString( 'Kitd', $bytes ); // ESC + STX stripped, printable 'd' kept.
+		$this->assertStringNotContainsString( "\x1b\x64\x02", $bytes ); // No injected full cut.
+	}
+
+	/**
+	 * It builds an Epson diagnostic as ePOS-Print XML.
+	 */
+	public function test_build_epson_diagnostic_is_epos_xml(): void {
+		// Act.
+		$diag = Provider::adapter( 'epson-sdp' )->diagnostic( 'Counter' );
+
+		// Assert.
+		$this->assertEquals( 'application/xml', $diag['content_type'] );
+		$xml = base64_decode( $diag['payload'], true );
+		$this->assertStringContainsString( '<epos-print', $xml );
+		$this->assertStringContainsString( 'WCPOS', $xml );
+	}
+
+	/**
+	 * It reports PrintNode as having no server-side diagnostic.
+	 */
+	public function test_printnode_does_not_support_server_diagnostic(): void {
+		// Act / Assert.
+		$this->assertFalse( Provider::supports_server_diagnostic( 'printnode' ) );
+	}
+
+	/**
+	 * It builds a PrintNode diagnostic as PDF bytes.
+	 */
+	public function test_build_pdf_returns_pdf_bytes(): void {
+		// Act.
+		$pdf = base64_decode( Provider::adapter( 'printnode' )->diagnostic( 'Bar' )['payload'], true );
+
+		// Assert.
+		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
+	}
+
+	/**
+	 * It builds the Star Online diagnostic as Star Document Markup.
+	 */
+	public function test_star_markup_returns_star_document_markup(): void {
+		// Arrange: the payload stamps gmdate('Y-m-d H:i'), so accept either side
+		// of a minute boundary crossed during the call.
+		$before = gmdate( 'Y-m-d H:i' );
+
+		// Act.
+		$markup = base64_decode( Provider::adapter( 'star-online' )->diagnostic( 'Counter' )['payload'], true );
+
+		// Assert.
+		$after    = gmdate( 'Y-m-d H:i' );
+		$template = static function ( string $date ): string {
+			$expected  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
+			$expected .= 'Cloud Print Test' . "\n" . '[align: left]';
+			$expected .= 'Printer: Counter' . "\n";
+			$expected .= 'Date: ' . $date . "\n";
+			$expected .= 'If you can read this, printing works!' . "\n";
+			// Three feeds before the cut: the same bottom margin as receipts.
+			$expected .= '[feed][feed][feed][cut]';
+
+			return $expected;
+		};
+		$this->assertContains( $markup, array( $template( $before ), $template( $after ) ) );
+	}
+
+	/**
+	 * It escapes markup brackets in the printer name.
+	 */
+	public function test_star_markup_escapes_brackets_in_printer_name(): void {
+		// Act.
+		$markup = base64_decode( Provider::adapter( 'star-online' )->diagnostic( 'Till [cut]' )['payload'], true );
+
+		// Assert.
+		$this->assertStringContainsString( 'Printer: Till [[cut]]', $markup );
 	}
 }
