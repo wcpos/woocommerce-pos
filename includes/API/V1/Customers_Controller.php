@@ -17,7 +17,7 @@ use Exception;
 use WC_Customer;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Services\Customer_Account_Guard;
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -130,100 +130,28 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		return $schema;
 	}
 
-	/**
-	 * Check if a given request has access to create a customer.
+	/** Delegate the create decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * WC checks promote_users (< 9.9) or create_customers (9.9+). The POS
-	 * fallback checks only the version-appropriate capability so it matches
-	 * the toggle shown on the Access settings page.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return WP_Error|bool
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function create_item_permissions_check( $request ) {
-		$permission = parent::create_item_permissions_check( $request );
-
-		if ( is_wp_error( $permission ) ) {
-			$customer_create_cap = version_compare( WC()->version, '9.9', '>=' )
-				? 'create_customers'
-				: 'promote_users';
-
-			if ( current_user_can( $customer_create_cap ) ) {
-				return true;
-			}
-		}
-
-		return $permission;
+		return Permission_Rules::verdict( 'customers', 'create', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
-	/**
-	 * Check if a given request has access to update a customer.
+	/** Delegate the edit decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * WCPOS never widens WooCommerce's credential fence, which refuses
-	 * email/password changes on non-customer roles. The guard additionally
-	 * keeps non-admins off staff accounts, testing capabilities rather than
-	 * WooCommerce's first-role-only test.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return WP_Error|bool
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function update_item_permissions_check( $request ) {
-		return $this->wcpos_guarded_permissions_check(
-			(int) $request['id'],
-			function () use ( $request ) {
-				return parent::update_item_permissions_check( $request );
-			}
-		);
+		return Permission_Rules::verdict( 'customers', 'edit', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
-	/**
-	 * Check if a given request has access to delete a customer.
+	/** Delegate the delete decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * WooCommerce refuses deleting a user whose role is outside its allowed
-	 * list, but it reads only the FIRST role, so an administrator who also
-	 * holds the customer role is deleted by any POS user with delete_users.
-	 * The guard closes that by capability.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return WP_Error|bool
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function delete_item_permissions_check( $request ) {
-		return $this->wcpos_guarded_permissions_check(
-			(int) $request['id'],
-			function () use ( $request ) {
-				return parent::delete_item_permissions_check( $request );
-			}
-		);
-	}
-
-	/**
-	 * Run WooCommerce's own check behind the staff account guard.
-	 *
-	 * The guard runs first and can only refuse. When it clears the target,
-	 * that target's roles are allowed through WooCommerce's shop_manager
-	 * role-name restriction for the duration of the check, so a cleared
-	 * subscriber or membership-plugin role is judged by capability.
-	 *
-	 * @param int      $target_id Target user ID.
-	 * @param callable $check     Returns WooCommerce's verdict.
-	 *
-	 * @return WP_Error|bool
-	 */
-	private function wcpos_guarded_permissions_check( int $target_id, callable $check ) {
-		if ( ! Customer_Account_Guard::can_modify( get_current_user_id(), $target_id ) ) {
-			return Customer_Account_Guard::denial();
-		}
-
-		$restore = Customer_Account_Guard::allow_target_roles( $target_id );
-
-		try {
-			return $check();
-		} finally {
-			$restore();
-		}
+		return Permission_Rules::verdict( 'customers', 'delete', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
 	/**

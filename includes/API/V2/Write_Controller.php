@@ -8,7 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\API\V2\Writers\Collection_Writer_Resolver;
-use WCPOS\WooCommercePOS\Services\Customer_Account_Guard;
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -45,12 +45,6 @@ use WP_REST_Server;
  * fake store + a stubbed `rest_do_request`.
  */
 class Write_Controller extends WP_REST_Controller {
-	/**
-	 * True while wc_rest_check_user_permissions() is re-run for a cleared target.
-	 *
-	 * @var bool
-	 */
-	private $rejudging_user_target = false;
 
 	// Our gate (capability + F13 health); forwarded writes scope the client-tier grant below.
 	use Endpoint_Permissions;
@@ -600,11 +594,11 @@ class Write_Controller extends WP_REST_Controller {
 	 * @param int $id The order id.
 	 */
 	private function can_forward_delete( int $id ): bool {
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		Permission_Rules::install_wc_filter();
 		try {
 			return (bool) wc_rest_check_post_permissions( 'shop_order', 'delete', $id );
 		} finally {
-			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+			Permission_Rules::uninstall_wc_filter();
 		}
 	}
 
@@ -752,7 +746,7 @@ class Write_Controller extends WP_REST_Controller {
 	private function dispatch_write( WP_REST_Request $request ) {
 		// Stamp here so direct callers (notably deletes) carry the scope too.
 		Store_Scope::stamp( $request );
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		Permission_Rules::install_wc_filter();
 		try {
 			// Marked as OUR traffic for the duration of the forward, so a consumer
 			// keyed on store scope can act on a till write without also claiming
@@ -763,102 +757,13 @@ class Write_Controller extends WP_REST_Controller {
 				}
 			);
 		} finally {
-			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+			Permission_Rules::uninstall_wc_filter();
 		}
 	}
 
-	/**
-	 * Judge a customer edit or delete the way V1\Customers_Controller does.
-	 *
-	 * The staff guard runs first and is final. A target it has cleared is then
-	 * re-judged by WooCommerce with the target's own roles allowed through the
-	 * shop_manager role-name restriction, so a shop manager can edit a subscriber
-	 * from a current app exactly as from the legacy route. WooCommerce's
-	 * credential fence is untouched: it runs in the controller, not here.
-	 *
-	 * @param bool   $permission WooCommerce's verdict so far.
-	 * @param string $context    'edit' or 'delete'.
-	 * @param int    $target_id  Target user ID.
-	 */
-	private function check_user_permission( bool $permission, string $context, int $target_id ): bool {
-		if ( $this->rejudging_user_target ) {
-			return $permission;
-		}
-		if ( ! Customer_Account_Guard::can_modify( get_current_user_id(), $target_id ) ) {
-			return false;
-		}
-		if ( $permission ) {
-			return true;
-		}
-		$this->rejudging_user_target = true;
-		$restore                     = Customer_Account_Guard::allow_target_roles( $target_id );
-		try {
-			return (bool) wc_rest_check_user_permissions( $context, $target_id );
-		} finally {
-			$restore();
-			$this->rejudging_user_target = false;
-		}
-	}
-
-	/**
-	 * Authorize proxied mutations for POS users while protecting staff accounts.
-	 *
-	 * This filter is attached only while a sync push is forwarded to wc/v3, so
-	 * direct WooCommerce requests keep their normal permission checks.
-	 *
-	 * @param bool   $permission The current permission.
-	 * @param string $context    The request context.
-	 * @param int    $object_id  The object ID.
-	 * @param string $post_type  The object type passed by WooCommerce.
-	 *
-	 * @return bool
-	 */
+	/** @deprecated Use Permission_Rules::wc_filter(). */
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		// Customer edits/deletes: the staff guard is final, then a cleared target
-		// is judged by WooCommerce the same way the v1 controller judges it.
-		if ( 'user' === $post_type && (int) $object_id > 0 && \in_array( $context, array( 'edit', 'delete' ), true ) ) {
-			return $this->check_user_permission( (bool) $permission, $context, (int) $object_id );
-		}
-
-		// Catalog and coupon WRITES require the user's real WooCommerce
-		// capabilities — no POS-tier widening. The cashier role is deliberately
-		// read-only on catalog (Activator), and a blanket grant here handed
-		// every POS user product deletion and coupon minting. Product decision
-		// 2026-08-06: strict wc/v3 parity for catalog mutations; only the
-		// HPOS placeholder remap below (orders) adjusts anything, and it never
-		// grants beyond the user's own role caps.
-
-		// Orders: with HPOS enabled (sync off), get_post() yields shop_order_placehold
-		// (map_meta_cap = false, no capability_type), so WooCommerce's REST check maps
-		// to the generic edit_post/delete_post caps that cashier-tier roles lack —
-		// even though they hold the real shop_orders caps. Re-check the capability the
-		// mapping SHOULD have produced, mirroring V1\Orders_Controller's
-		// update_item_permissions_check fix. No grant beyond the user's own role caps.
-		if ( ! $permission && 'shop_order' === $post_type ) {
-			$order_caps = array(
-				'read'   => 'read_private_shop_orders',
-				'create' => 'publish_shop_orders',
-				'delete' => 'delete_shop_orders',
-			);
-			$order_cap = $order_caps[ $context ] ?? null;
-			// edit and delete are ownership-sensitive: the base *_shop_orders cap only
-			// authorizes acting on the user's OWN orders. Touching another user's order
-			// additionally requires the *_others_shop_orders cap, mirroring WooCommerce's
-			// own meta-cap map. Without this, a cashier with delete_shop_orders (but not
-			// delete_others_shop_orders) could delete/void orders they do not own.
-			if ( \in_array( $context, array( 'edit', 'delete' ), true ) ) {
-				$order_post = get_post( $object_id );
-				if ( $order_post ) {
-					$owns_order = get_current_user_id() === (int) $order_post->post_author;
-					$order_cap  = $owns_order ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
-				}
-			}
-			if ( $order_cap && current_user_can( $order_cap ) ) {
-				$permission = true;
-			}
-		}
-
-		return $permission;
+		return Permission_Rules::wc_filter( $permission, $context, $object_id, $post_type, 'writes' );
 	}
 
 	/**
