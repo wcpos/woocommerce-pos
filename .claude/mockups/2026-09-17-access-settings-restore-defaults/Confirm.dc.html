@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; font-size: 13px; color: #1d2327; background: #f0f0f1; }
+    a { color: #2271b1; } a:hover { color: #135e96; }
+    .cb { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 1px solid #8c8f94; border-radius: 4px; background: #fff; margin: 0; position: relative; flex: none; }
+    .cb:checked { border-color: #2271b1; }
+    .cb:checked::before { content: ""; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px; border: solid #2271b1; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    .cb.mixed { border-color: #2271b1; }
+    .cb.mixed::before { content: ""; position: absolute; left: 3px; top: 6px; width: 8px; height: 2px; background: #2271b1; border-radius: 1px; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+    .btn { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 3px; font-size: 13px; border: 1px solid #2271b1; background: #f6f7f7; color: #2271b1; cursor: pointer; font-family: inherit; }
+    .btn.primary { background: #2271b1; color: #fff; }
+    .nav a { display: block; padding: 8px 12px; border-radius: 4px; text-decoration: none; color: #1d2327; }
+    .nav a.on { background: #2271b1; color: #fff; }
+    .roles li { list-style: none; padding: 12px 16px; margin: 0 0 4px; border-radius: 4px; font-weight: 500; }
+    .roles li.on { background: #e5f0f8; }
+    .change { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #f0f0f1; }
+    .tag { flex: none; width: 64px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; padding-top: 2px; }
+  </style>
+</helmet>
+<div style="width: 1120px; height: 720px; box-sizing: border-box; display: flex; flex-direction: column; position: relative;">
+  <div style="height: 32px; background: #1d2327; color: #f0f0f1; display: flex; align-items: center; padding: 0 16px; gap: 16px; font-size: 13px; flex: none;">
+    <span style="font-weight: 600;">WordPress</span><span style="color: #a7aaad;">My Store</span><span style="color: #a7aaad;">POS › Settings</span>
+  </div>
+  <div style="flex-grow: 1; display: flex; padding: 20px; gap: 20px; min-height: 0;">
+    <nav class="nav" style="width: 160px; flex: none; display: flex; flex-direction: column; gap: 2px;">
+      <a href="#general">General</a>
+      <a href="#checkout">Checkout</a>
+      <a href="#access" class="on">Access</a>
+      <a href="#receipts">Receipts</a>
+      <a href="#cloud-print">Cloud Print</a>
+      <a href="#tools">Tools</a>
+      <a href="#license">License</a>
+    </nav>
+    <div style="flex-grow: 1; background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; padding: 16px; align-content: start;">
+      <ul class="roles" style="margin: 0; padding: 0;">
+        <li>Administrator</li>
+        <li>Shop Manager</li>
+        <li class="on">Cashier</li>
+        <li>Editor</li>
+        <li>Author</li>
+        <li>Subscriber</li>
+        <li>Customer</li>
+      </ul>
+      <div>
+        <h2 style="margin: 0 0 8px; font-size: 15px; font-weight: 500;">What a Cashier can do</h2>
+        <div class="row"><input class="cb" type="checkbox" checked disabled><span>Use the POS</span></div>
+        <div class="row"><input class="cb" type="checkbox" disabled><span>Manage POS settings</span></div>
+        <div class="row"><input class="cb mixed" type="checkbox" disabled><span>Create &amp; edit products</span></div>
+        <div class="row"><input class="cb" type="checkbox" checked disabled><span>Delete products</span></div>
+        <div class="row"><input class="cb" type="checkbox" checked disabled><span>Create &amp; edit coupons</span></div>
+        <div class="row"><input class="cb" type="checkbox" disabled><span>Delete coupons</span></div>
+        <div class="row"><input class="cb" type="checkbox" checked disabled><span>Manage orders</span></div>
+        <div class="row"><input class="cb" type="checkbox" checked disabled><span>Manage customers</span></div>
+        <div class="row"><input class="cb" type="checkbox" checked disabled><span>Manage categories &amp; tags</span></div>
+      </div>
+    </div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center;">
+    <div role="dialog" aria-labelledby="restore-title" style="width: 520px; background: #fff; border-radius: 4px; box-shadow: 0 8px 32px rgba(0,0,0,.25); display: flex; flex-direction: column;">
+      <div style="padding: 20px 24px 12px;">
+        <h2 id="restore-title" style="margin: 0 0 8px; font-size: 16px; font-weight: 600;">Restore the default privileges for Cashier?</h2>
+        <p style="margin: 0; line-height: 1.5; color: #3c434a;">This puts the Cashier role back to what WCPOS grants on a fresh install. Permissions added by other plugins are left alone.</p>
+      </div>
+      <div style="padding: 0 24px 8px;">
+        <div style="font-weight: 600; margin-bottom: 4px;">What will change</div>
+        <div class="change"><span class="tag" style="color: #00753a;">Grant</span><span>Create &amp; edit products <span style="color: #646970;">(the 4 missing permissions)</span></span></div>
+        <div class="change"><span class="tag" style="color: #b32d2e;">Remove</span><span>Delete products</span></div>
+        <div class="change" style="border-bottom: 1px solid #f0f0f1;"><span class="tag" style="color: #646970;">Keep</span><span style="color: #646970;">Use the POS, Create &amp; edit coupons, Manage orders, Manage customers, Manage categories &amp; tags</span></div>
+      </div>
+      <div style="padding: 12px 24px 20px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn" type="button">Cancel</button>
+        <button class="btn primary" type="button">Restore defaults</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1120,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
