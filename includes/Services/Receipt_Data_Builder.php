@@ -68,18 +68,76 @@ class Receipt_Data_Builder {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
 		}
 		$row['breakdowns']['labels'] = $labels;
+		$tender_labels = array();
+		foreach ( $row['breakdowns']['payment_methods'] ?? array() as $key => $payment_method ) {
+			$tender_labels[ $payment_method['method'] ?? $key ] = $payment_method['name'] ?? '';
+		}
 		// Mustache iterates rows, not tender-keyed maps. Keep the stored figures unchanged.
 		$row['tenders'] = array();
 		foreach ( ( $row['counted'] ?? array() ) + ( $row['expected'] ?? array() ) as $method => $amount ) {
 			$row['tenders'][] = array(
 				'name' => (string) $method,
+				'label' => ! empty( $tender_labels[ $method ] ) ? $tender_labels[ $method ] : ucfirst( (string) $method ),
 				'expected' => $row['expected'][ $method ] ?? '',
 				'counted' => $row['counted'][ $method ] ?? '',
 				'variance' => $row['variance'][ $method ] ?? '',
+				'has_variance' => 0.0 !== (float) ( $row['variance'][ $method ] ?? 0 ),
+				'variance_label' => ! isset( $row['variance'][ $method ] ) ? '' : ( (float) $row['variance'][ $method ] > 0 ? __( 'Over', 'woocommerce-pos' ) : ( (float) $row['variance'][ $method ] < 0 ? __( 'Short', 'woocommerce-pos' ) : __( 'Exact', 'woocommerce-pos' ) ) ),
 			);
 		}
 		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
 		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
+		$currency = $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
+		$hints = $resolver->build_presentation_hints( $currency );
+		// Reuse receipt currency companions without converting recorded decimal strings to floats.
+		$with_money = static function ( array $values, array $fields ) use ( $currency, $hints ): array {
+			foreach ( $fields as $field ) {
+				$formatted = Receipt_Data_Schema::format_money_fields( array( 'amount' => $values[ $field ] ?? '' ), $currency, $hints );
+				$values[ $field . '_display' ] = $formatted['amount_display'] ?? '';
+			}
+			return $values;
+		};
+		$date = static function ( $gmt ) use ( $resolver ): array {
+			$timestamp = $gmt ? strtotime( $gmt . ' UTC' ) : false;
+			return false === $timestamp ? Receipt_Date_Formatter::empty() : Receipt_Date_Formatter::from_timestamp( $timestamp, $resolver->resolve_store_timezone(), $resolver->resolve_locale() );
+		};
+		$row = $with_money( $row, array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total' ) );
+		foreach ( array( 'opened_at', 'closed_at' ) as $field ) {
+			$row[ $field ] = $date( $row[ $field . '_gmt' ] ?? null );
+		}
+		foreach ( $row['tenders'] as &$tender ) {
+			$tender = $with_money( $tender, array( 'expected', 'counted', 'variance' ) );
+			$absolute = $with_money( array( 'amount' => ltrim( $tender['variance'], '-' ) ), array( 'amount' ) );
+			$tender['variance_absolute_display'] = $absolute['amount_display'];
+		}
+		unset( $tender );
+		if ( isset( $row['breakdowns']['opening_float'] ) ) {
+			$row['breakdowns']['opening_float'] = $with_money( $row['breakdowns']['opening_float'], array( 'expected', 'counted', 'variance' ) );
+		}
+		foreach ( array(
+			'payment_methods' => array( 'sales', 'refunds' ),
+			'tax_rates' => array( 'net', 'tax', 'gross' ),
+		) as $section => $fields ) {
+			$rows = array();
+			foreach ( $row['breakdowns'][ $section ] ?? array() as $key => $values ) {
+				$values['name'] = $values['name'] ?? $values['method'] ?? $values['rate'] ?? (string) $key;
+				$rows[] = $with_money( $values, $fields );
+			}
+			$row['breakdowns'][ $section ] = $rows;
+		}
+		$type_labels = array(
+			'paid_in' => __( 'Paid in', 'woocommerce-pos' ),
+			'paid_out' => __( 'Paid out', 'woocommerce-pos' ),
+			'no_sale' => __( 'No sale', 'woocommerce-pos' ),
+			'void' => __( 'Void', 'woocommerce-pos' ),
+		);
+		foreach ( $row['breakdowns']['movements'] ?? array() as $key => $movement ) {
+			$movement = $with_money( $movement, array( 'amount' ) );
+			$movement['created_at'] = $date( $movement['created_at_gmt'] ?? null );
+			$movement['type_label'] = $type_labels[ $movement['type'] ] ?? $movement['type'];
+			$movement['voided'] = ! empty( $movement['voided_by'] );
+			$row['breakdowns']['movements'][ $key ] = $movement;
+		}
 		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
 		$fiscal += array(
 			'sequence' => null,
@@ -99,7 +157,7 @@ class Receipt_Data_Builder {
 				'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,
 			),
 			'order' => array(
-				'currency' => get_woocommerce_currency(),
+				'currency' => $currency,
 				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
 			),
 			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),

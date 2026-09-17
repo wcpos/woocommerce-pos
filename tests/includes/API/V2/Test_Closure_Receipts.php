@@ -69,6 +69,64 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( 'COPY 1', $html );
 	}
 
+	/** Closure formatting preserves recorded amounts and uses the store-local date shape. */
+	public function test_closure_document_formats_money_dates_and_movement_labels(): void {
+		$timezone = get_option( 'timezone_string' );
+		update_option( 'timezone_string', 'Europe/Madrid' );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fields['breakdowns'] = array(
+				'payment_methods' => array(
+					'cash' => array(
+						'name' => 'Cash drawer',
+						'sales' => '10.0000',
+						'refunds' => '0.0000',
+					),
+				),
+				'tax_rates' => array(
+					'VAT' => array(
+						'net' => '8.0000',
+						'tax' => '2.0000',
+						'gross' => '10.0000',
+					),
+				),
+				'movements' => array(
+					array(
+						'type' => 'paid_out',
+						'amount' => '5.0000',
+						'created_at_gmt' => '2026-09-11 10:00:00',
+						'voided_by' => 'void-id',
+					),
+				),
+			);
+			$row = ( new Closure_Store() )->create( $fields );
+			$data = $this->document( 'closure:' . $row['id'] )->get_data()['data']['closure'];
+			$this->assertSame( '0.0000', $data['period_sales_total'] );
+			$this->assertNotEmpty( $data['period_sales_total_display'] );
+			$this->assertNotEmpty( $data['tenders'][0]['counted_display'] );
+			$this->assertSame( 'Over', $data['tenders'][0]['variance_label'] );
+			$this->assertSame( 'Cash drawer', $data['tenders'][0]['label'] );
+			$this->assertTrue( $data['tenders'][0]['has_variance'] );
+			$this->assertSame( $data['tenders'][0]['variance_display'], $data['tenders'][0]['variance_absolute_display'] );
+			$this->assertSame( '2026-09-11 08:00:00', $data['opened_at_gmt'] );
+			$this->assertSame( '2026-09-11', $data['opened_at']['date_ymd'] );
+			$this->assertStringContainsString( '10:00', $data['opened_at']['time'] );
+			$this->assertNotEmpty( $data['closed_at']['datetime'] );
+			$this->assertSame( 'Cash drawer', $data['breakdowns']['payment_methods'][0]['name'] );
+			$this->assertNotEmpty( $data['breakdowns']['payment_methods'][0]['refunds_display'] );
+			$this->assertSame( 'VAT', $data['breakdowns']['tax_rates'][0]['name'] );
+			$this->assertNotEmpty( $data['breakdowns']['tax_rates'][0]['net_display'] );
+			$movement = $data['breakdowns']['movements'][0];
+			$this->assertSame( 'Paid out', $movement['type_label'] );
+			$this->assertTrue( $movement['voided'] );
+			$this->assertSame( '5.0000', $movement['amount'] );
+			$this->assertNotEmpty( $movement['amount_display'] );
+			$this->assertStringContainsString( '12:00', $movement['created_at']['time'] );
+		} finally {
+			update_option( 'timezone_string', $timezone );
+		}
+	}
+
 	/** A thin X-report needs no closure, number or count. */
 	public function test_xreport_live_session_and_missing_or_scoped_documents(): void {
 		$session = $this->closure_session();
@@ -81,6 +139,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['fiscal']['is_x_report'] );
 		$this->assertSame( '', $data['fiscal']['receipt_number'] );
 		$this->assertSame( '140.0000', $data['closure']['expected']['cash'] );
+		$this->assertSame( 'Cash', $data['closure']['tenders'][0]['label'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['transaction_count'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['refund_count'] );
 		$this->assertStringContainsString( 'X-report · Closure fixture', $this->html( $data ) );
@@ -231,7 +290,11 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
-		$this->assertStringContainsString( 'Closure 42 · Main register', $data['preview_html'] );
+		$text = wp_strip_all_tags( $data['preview_html'] );
+		$this->assertStringContainsString( 'Closure 42', $text );
+		$this->assertStringContainsString( 'Main register', $text );
+		$this->assertMatchesRegularExpression( '/\b178\.00\b/', $text );
+		$this->assertStringNotContainsString( 'COPY', $text );
 		$this->assertArrayNotHasKey( 'requires_order', $data );
 		$this->assertSame( 'closure', $data['receipt_data']['fiscal']['document_type'] );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
@@ -304,6 +367,10 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			$reads
 		);
 		$this->assertSame( '147.0000', $data['closure']['expected']['cash'] );
+		$this->assertNotEmpty( $data['closure']['tenders'][0]['expected_display'] );
+		$this->assertNotEmpty( $data['closure']['opened_at']['datetime'] );
+		$this->assertSame( 'Paid in', $data['closure']['breakdowns']['movements'][0]['type_label'] );
+		$this->assertFalse( $data['closure']['breakdowns']['movements'][0]['voided'] );
 		$this->assertSame( 'Ledger cashier', $data['closure']['breakdowns']['cashiers'][0]['name'] );
 		$this->assertStringContainsString( 'Live movement', $this->html( $data ) );
 		// The fixture's register is named "Closure fixture"; only the heading must not say Closure.
@@ -415,7 +482,11 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		) as $document => $heading ) {
 			$page = $this->render_receipt_page( 0, array( 'document' => $document ) );
 			$this->assertNull( $page['error'] );
-			$this->assertStringContainsString( '<h1>' . $heading, $page['output'] );
+			$this->assertStringContainsString( $heading, wp_strip_all_tags( $page['output'] ) );
+			$this->assertStringNotContainsString( 'COPY', $page['output'] );
+			if ( 'closure:' . $row['id'] === $document ) {
+				$this->assertMatchesRegularExpression( '/\b101\.00\b/', wp_strip_all_tags( $page['output'] ) );
+			}
 		}
 		foreach ( array( 'closure:', 'xreport:' ) as $prefix ) {
 			$page = $this->render_receipt_page( 0, array( 'document' => $prefix . wp_generate_uuid4() ) );
