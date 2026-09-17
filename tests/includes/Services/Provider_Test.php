@@ -244,4 +244,209 @@ class Provider_Test extends WP_UnitTestCase {
 			$this->assertContains( Provider::normalize( $input ), Provider::valid() );
 		}
 	}
+
+	/**
+	 * It resolves printnode non-thermal templates to PDF.
+	 */
+	public function test_printnode_non_thermal_resolves_to_pdf(): void {
+		// Act.
+		$actual = Provider::format(
+			array( 'provider' => 'printnode' ),
+			array( 'engine' => 'logicless' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => 'pdf',
+				'content_type' => 'application/pdf',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It resolves printnode thermal raw to ESC/POS.
+	 */
+	public function test_printnode_thermal_raw_resolves_to_escpos(): void {
+		// Act.
+		$actual = Provider::format(
+			array(
+				'provider' => 'printnode',
+				'printnode_format' => 'raw',
+			),
+			array( 'engine' => 'thermal' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => 'escpos',
+				'content_type' => 'application/octet-stream',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It resolves printnode thermal with explicit pdf format to PDF.
+	 */
+	public function test_printnode_thermal_pdf_resolves_to_pdf(): void {
+		// Act.
+		$actual = Provider::format(
+			array(
+				'provider' => 'printnode',
+				'printnode_format' => 'pdf',
+			),
+			array( 'engine' => 'thermal' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => 'pdf',
+				'content_type' => 'application/pdf',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It defaults printnode thermal with no format to PDF.
+	 */
+	public function test_printnode_thermal_missing_format_defaults_to_pdf(): void {
+		// Act.
+		$actual = Provider::format(
+			array( 'provider' => 'printnode' ),
+			array( 'engine' => 'thermal' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => 'pdf',
+				'content_type' => 'application/pdf',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It delegates star thermal to the provider wire format.
+	 */
+	public function test_star_thermal_delegates_to_provider_starprnt(): void {
+		// Act.
+		$actual = Provider::format(
+			array( 'provider' => 'star-cloudprnt' ),
+			array( 'engine' => 'thermal' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => 'starprnt',
+				'content_type' => 'application/vnd.star.starprnt',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It delegates epson thermal to the provider wire format.
+	 */
+	public function test_epson_thermal_delegates_to_provider_epos_xml(): void {
+		// Act.
+		$actual = Provider::format(
+			array( 'provider' => 'epson-sdp' ),
+			array( 'engine' => 'thermal' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => 'epos-xml',
+				'content_type' => 'application/xml',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It marks a non-printnode non-thermal template as not printable.
+	 */
+	public function test_star_non_thermal_is_not_printable(): void {
+		// Act.
+		$actual = Provider::format(
+			array( 'provider' => 'star-cloudprnt' ),
+			array( 'engine' => 'logicless' )
+		);
+
+		// Assert.
+		$this->assertEquals(
+			array(
+				'kind' => '',
+				'content_type' => '',
+			),
+			$actual
+		);
+	}
+
+	/**
+	 * It returns each provider's declared content type when no template is in hand.
+	 */
+	public function test_printer_content_type_matches_provider_declaration(): void {
+		// Arrange.
+		$expected = array(
+			'star-cloudprnt' => 'application/vnd.star.starprnt',
+			'epson-sdp'      => 'application/xml',
+			'printnode'      => 'application/pdf',
+			'star-online'    => 'text/vnd.star.markup',
+		);
+
+		foreach ( $expected as $provider => $content_type ) {
+			// Act / Assert.
+			$this->assertEquals(
+				$content_type,
+				Provider::printer_content_type( array( 'provider' => $provider ) ),
+				$provider
+			);
+		}
+	}
+
+	/**
+	 * A printer with a missing or unusable provider is normalized to the default
+	 * provider before format selection — legacy rows saved before the provider
+	 * field existed must keep printing as Star CloudPRNT, not fall back to
+	 * octet-stream (the 510 Incompatible Media Type failure mode).
+	 */
+	public function test_printer_content_type_unknown_provider_normalizes_to_default(): void {
+		// Act / Assert.
+		$this->assertEquals( 'application/vnd.star.starprnt', Provider::printer_content_type( array() ) );
+		$this->assertEquals(
+			'application/vnd.star.starprnt',
+			Provider::printer_content_type( array( 'provider' => 'brother-ql' ) )
+		);
+	}
+
+	/**
+	 * It deliberately ignores the PrintNode raw format without a template.
+	 *
+	 * The template-aware path answers octet-stream for the same printer; the
+	 * template-agnostic path keeps the provider default. Locking both in keeps
+	 * the divergence visible if either side is changed (see issue #1351).
+	 */
+	public function test_printer_content_type_printnode_raw_keeps_pdf_default(): void {
+		// Arrange.
+		$printer = array(
+			'provider' => 'printnode',
+			'printnode_format' => 'raw',
+		);
+
+		// Act / Assert.
+		$this->assertEquals( 'application/pdf', Provider::printer_content_type( $printer ) );
+		$this->assertEquals(
+			'application/octet-stream',
+			Provider::format( $printer, array( 'engine' => 'thermal' ) )['content_type']
+		);
+	}
 }
