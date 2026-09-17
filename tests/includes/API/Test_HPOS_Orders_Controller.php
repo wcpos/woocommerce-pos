@@ -10,7 +10,12 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use Ramsey\Uuid\Uuid;
 use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Mutation_Store;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -35,6 +40,18 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	 * @var bool
 	 */
 	private $cot_state;
+
+	/**
+	 * Provision HPOS and sync write tables before test transactions begin.
+	 *
+	 * @param mixed $factory WordPress test factory.
+	 */
+	public static function wpSetUpBeforeClass( $factory ) {
+		self::provision_cot_tables();
+		( new Sync_Journal() )->install();
+		( new Integrity_Digest() )->install();
+		( new Mutation_Store() )->install();
+	}
 
 	public function setup(): void {
 		parent::setUp();
@@ -1132,6 +1149,89 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 			200,
 			$response->get_status(),
 			'Cashier should be able to update an order with HPOS enabled. Response: ' . wp_json_encode( $response->get_data() )
+		);
+	}
+
+	/**
+	 * Both update lanes require edit_others_shop_orders for another author's order.
+	 *
+	 * @dataProvider other_author_update_permissions
+	 */
+	public function test_hpos_update_other_authors_order_capability_controls_both_lanes( $can_edit_others, $expected_status ): void {
+		// Arrange: force the placeholder-post fallback, without changing role definitions.
+		$this->disable_cot_sync();
+		$this->assertTrue( OrderUtil::custom_orders_table_usage_is_enabled() );
+		$order = OrderHelper::create_order();
+		$uuid  = wp_generate_uuid4();
+		$order->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$order->save_meta_data();
+		$this->assertSame( 'shop_order_placehold', get_post_type( $order->get_id() ) );
+
+		$user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'read_private_shop_orders' );
+		$user->add_cap( 'edit_shop_orders' );
+		$this->assertNotSame( $user->ID, (int) get_post( $order->get_id() )->post_author );
+		$this->assertFalse( user_can( $user, 'edit_posts' ) );
+		$user->add_cap( 'edit_others_shop_orders', $can_edit_others );
+		$this->assertSame( $can_edit_others, user_can( $user, 'edit_others_shop_orders' ) );
+
+		// Compute the same canonical revision as the v2 writer, before switching users.
+		$read = $this->wp_rest_get_request( '/wc/v3/orders/' . $order->get_id() );
+		$read->set_param( 'dp', '6' );
+		$current = $this->server->dispatch( $read );
+		$this->assertSame( 200, $current->get_status() );
+		$document = Meta_Normalizer::normalize( $current->get_data() );
+		$document = Order_Serializer::add_pos_links( $document, $order );
+		$revision = Order_Serializer::canonical_revision( $document );
+		wp_set_current_user( $user->ID );
+
+		// Act: dispatch v2 first so v1's request hooks cannot influence its result.
+		$v2_request = $this->wp_rest_post_request( '/wcpos/v2/push/orders' );
+		$v2_request->set_header( 'Content-Type', 'application/json' );
+		$v2_request->set_body(
+			wp_json_encode(
+				array(
+					'mutationId'   => wp_generate_uuid4(),
+					'operation'    => 'update',
+					'collection'   => 'orders',
+					'recordId'     => $uuid,
+					'baseRevision' => $revision,
+					'payload'      => array( 'customer_note' => 'v2 ownership check' ),
+				)
+			)
+		);
+		$v2_response = $this->server->dispatch( $v2_request );
+
+		// Assert: the current lane must enforce the same capability boundary.
+		$this->assertSame( $expected_status, $v2_response->get_status(), wp_json_encode( $v2_response->get_data() ) );
+		$this->assertSame(
+			200 === $expected_status ? 'v2 ownership check' : '',
+			wc_get_order( $order->get_id() )->get_customer_note()
+		);
+
+		// Act: update the same order as the same user through the legacy lane.
+		$v1_request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$v1_request->set_body_params( array( 'customer_note' => 'v1 ownership check' ) );
+		$v1_response = $this->server->dispatch( $v1_request );
+
+		// Assert: the pre-fix fallback grants 200 in the case that requires 403.
+		$this->assertSame( $expected_status, $v1_response->get_status(), wp_json_encode( $v1_response->get_data() ) );
+		$this->assertSame(
+			200 === $expected_status ? 'v1 ownership check' : '',
+			wc_get_order( $order->get_id() )->get_customer_note()
+		);
+	}
+
+	/**
+	 * Capability variants for both update lanes.
+	 *
+	 * @return array
+	 */
+	public function other_author_update_permissions(): array {
+		return array(
+			'without edit others' => array( false, 403 ),
+			'with edit others'    => array( true, 200 ),
 		);
 	}
 
