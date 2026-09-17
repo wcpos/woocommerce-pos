@@ -1,8 +1,8 @@
 # Access settings: Restore defaults + mixed-state checkbox (mockups, 2026-09-17)
 
-Preview canvas (Paul only, not durable): https://claude.ai/artifact/K2UczQkek3U4eSRPKvgade
+**Open `index.html` in a browser.** It is standalone and holds all four views on one page.
 
-Artboards (open any `.dc.html` in a browser; they are self-contained apart from the canvas runtime):
+The `.dc.html` files are the same views as Design-canvas artboards (needs the canvas runtime):
 
 1. `Main.dc.html` — the Access screen as it renders today for the Cashier role.
 2. `Proposed.dc.html` — "Restore defaults" button beside the role heading, amber dot on roles changed from the WCPOS defaults, mixed-state checkbox with an explanatory hint.
