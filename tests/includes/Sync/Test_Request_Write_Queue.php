@@ -179,6 +179,16 @@ class Test_Request_Write_Queue extends WP_UnitTestCase {
 		$this->assertSame( array( 1, null ), $writes[3] );
 		$this->assertSame( array( 2, 'from-writer' ), $writes[4] );
 		$this->assertCount( 5, $writes );
+
+		// Act. The same key arrives with a payload captured BEFORE the flush.
+		$queue->owe( 'order', 1 );
+		$queue->owe( 'order', 2, 'from-outer' );
+
+		// Assert. The writer's payload is newer than the outer call's and wins.
+		$queue->flush();
+		$this->assertSame( array( 1, null ), $writes[5] );
+		$this->assertSame( array( 2, 'from-writer' ), $writes[6] );
+		$this->assertCount( 7, $writes );
 	}
 
 	/** Reentrant writes start a fresh queue rather than getting lost. */

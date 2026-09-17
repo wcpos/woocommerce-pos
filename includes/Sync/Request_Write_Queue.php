@@ -82,7 +82,9 @@ final class Request_Write_Queue {
 		// flush is then allowed a bounded overflow rather than an endless loop.
 		for ( $attempt = 0; $attempt < 2; $attempt++ ) {
 			if ( isset( $this->entries[ $key ] ) ) {
-				if ( null !== $payload ) {
+				// After a flush the pending payload came from a re-entered writer and
+				// is newer than this call's; only fill a gap then.
+				if ( null !== $payload && ( 0 === $attempt || null === $this->entries[ $key ][3] ) ) {
 					$this->entries[ $key ][3] = $payload;
 				}
 				return;
