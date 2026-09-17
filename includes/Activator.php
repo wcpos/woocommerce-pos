@@ -99,9 +99,26 @@ class Activator {
 	 * Fired when the plugin is activated.
 	 *
 	 * @param bool $install_sync_schema Whether to install the sync schema.
+	 * @param bool $full_role_sync      Whether to repair all default role capabilities.
 	 */
-	public function single_activate( bool $install_sync_schema = true ): void {
-		$role_capabilities = self::role_capability_definition();
+	public function single_activate( bool $install_sync_schema = true, bool $full_role_sync = true ): void {
+		$role_capabilities          = self::role_capability_definition();
+		$capability_names           = $role_capabilities;
+		$capability_names['cashier'] = array_merge( array( 'access_woocommerce_pos' ), array_keys( $role_capabilities['cashier'] ) );
+		$synced                     = get_option( 'woocommerce_pos_role_caps_synced', false );
+		if ( ! $full_role_sync && false === $synced && get_option( 'woocommerce_pos_role_caps_fingerprint' ) === $this->role_caps_fingerprint() ) {
+			$synced = $capability_names;
+		}
+		// An upgrade grants only capabilities new to the definition since the
+		// last sync, so a capability the merchant removed on the Access screen
+		// stays removed. Explicit activation still repairs every default.
+		$granted = $capability_names;
+		if ( ! $full_role_sync && \is_array( $synced ) ) {
+			foreach ( $granted as $slug => $capabilities ) {
+				$already = isset( $synced[ $slug ] ) && \is_array( $synced[ $slug ] ) ? $synced[ $slug ] : array();
+				$granted[ $slug ] = array_values( array_diff( $capabilities, $already ) );
+			}
+		}
 
 		// Reseed the default template terms on the next request: (re)activation
 		// is the repair a merchant reaches for after deleting a term by hand.
@@ -116,24 +133,25 @@ class Activator {
 		Admin\Permalink::ensure_default();
 
 		// create POS specific roles.
-		$this->create_pos_roles();
+		$this->create_pos_roles( $granted['cashier'] );
 
 		// add pos capabilities to non POS roles.
 		$this->add_pos_capability(
 			array(
-				'administrator' => $role_capabilities['administrator'],
-				'shop_manager'  => $role_capabilities['shop_manager'],
+				'administrator' => $granted['administrator'],
+				'shop_manager'  => $granted['shop_manager'],
 			)
 		);
 
 		$stored_roles        = get_option( wp_roles()->role_key, array() );
 		$roles_are_persisted = is_array( $stored_roles );
 		if ( $roles_are_persisted ) {
-			foreach ( $role_capabilities as $slug => $capabilities ) {
-				$required_capabilities = 'cashier' === $slug
-					? array_merge( array( 'access_woocommerce_pos' ), array_keys( $capabilities ) )
-					: $capabilities;
-				foreach ( $required_capabilities as $capability ) {
+			foreach ( $granted as $slug => $capabilities ) {
+				if ( ! isset( $stored_roles[ $slug ] ) ) {
+					$roles_are_persisted = false;
+					break;
+				}
+				foreach ( $capabilities as $capability ) {
 					if ( empty( $stored_roles[ $slug ]['capabilities'][ $capability ] ) ) {
 						$roles_are_persisted = false;
 						break 2;
@@ -144,6 +162,9 @@ class Activator {
 
 		$obsolete_customer_create_cap = isset( $role_capabilities['cashier']['create_customers'] ) ? 'promote_users' : 'create_customers';
 		if ( $roles_are_persisted && empty( $stored_roles['cashier']['capabilities'][ $obsolete_customer_create_cap ] ) ) {
+			// Snapshot first: a fingerprint that advanced past a failed snapshot
+			// write would never retry it.
+			update_option( 'woocommerce_pos_role_caps_synced', $capability_names, true );
 			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
 		}
 
@@ -313,7 +334,8 @@ class Activator {
 		$sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
 
 		$role_caps_fingerprint = $this->role_caps_fingerprint();
-		$role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $role_caps_fingerprint;
+		$role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $role_caps_fingerprint
+			|| false === get_option( 'woocommerce_pos_role_caps_synced' );
 		if ( ! $plugin_needs_upgrade && ! $sync_needs_upgrade && ! $role_caps_need_sync ) {
 			return;
 		}
@@ -327,7 +349,8 @@ class Activator {
 		$locked_sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
 
 		$locked_role_caps_fingerprint = $this->role_caps_fingerprint();
-		$locked_role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $locked_role_caps_fingerprint;
+		$locked_role_caps_need_sync   = get_option( 'woocommerce_pos_role_caps_fingerprint' ) !== $locked_role_caps_fingerprint
+			|| false === get_option( 'woocommerce_pos_role_caps_synced' );
 		if ( ! $locked_plugin_needs_upgrade && ! $locked_sync_needs_upgrade && ! $locked_role_caps_need_sync ) {
 			$this->release_db_upgrade_lock();
 			return;
@@ -347,7 +370,7 @@ class Activator {
 			add_action(
 				'init',
 				function () {
-					$this->single_activate( false );
+					$this->single_activate( false, false );
 				}
 			);
 		}
@@ -514,8 +537,11 @@ class Activator {
 
 	/**
 	 * Add POS specific roles.
+	 *
+	 * @param string[]|null $capabilities Capability names to sync onto an existing role, or null for
+	 *                                    every default. A missing role is always created with the full set.
 	 */
-	private function create_pos_roles(): void {
+	private function create_pos_roles( ?array $capabilities = null ): void {
 		$role_capabilities    = self::role_capability_definition();
 		$cashier_capabilities = $role_capabilities['cashier'];
 
@@ -523,7 +549,9 @@ class Activator {
 			'cashier',
 			/* translators: Plugin activation notice label. */
 			__( 'Cashier', 'woocommerce-pos' ),
-			$cashier_capabilities
+			// A missing role is created whole, access gate included, whatever
+			// subset an incremental upgrade asked to sync.
+			array_merge( array( 'access_woocommerce_pos' => true ), $cashier_capabilities )
 		);
 
 		$obsolete_customer_create_cap = isset( $cashier_capabilities['create_customers'] ) ? 'promote_users' : 'create_customers';
@@ -532,12 +560,12 @@ class Activator {
 			$cashier->remove_cap( $obsolete_customer_create_cap );
 		}
 
-		// Sync all capabilities to the existing role. add_role() is a no-op when
+		// Sync the requested capabilities to the role. add_role() is a no-op when
 		// the role already exists, so capabilities added in newer versions would
 		// never reach existing installs without this.
 		$this->add_pos_capability(
 			array(
-				'cashier' => array_merge(
+				'cashier' => $capabilities ?? array_merge(
 					array( 'access_woocommerce_pos' ),
 					array_keys( $cashier_capabilities )
 				),
