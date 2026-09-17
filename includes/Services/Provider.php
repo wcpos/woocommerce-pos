@@ -12,6 +12,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Interfaces\Provider_Adapter_Interface;
+use WCPOS\WooCommercePOS\Interfaces\Poll_Provider_Adapter_Interface;
 use WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter;
 use WCPOS\WooCommercePOS\Services\Providers\Printnode_Adapter;
 use WCPOS\WooCommercePOS\Services\Providers\Star_Cloudprnt_Adapter;
@@ -133,6 +134,17 @@ class Provider {
 			default:
 				return null;
 		}
+	}
+
+	/**
+	 * Resolve only polling adapters without widening the base provider contract.
+	 *
+	 * @param string $key Provider key.
+	 * @return Poll_Provider_Adapter_Interface|null
+	 */
+	public static function poll_adapter( string $key ): ?Poll_Provider_Adapter_Interface {
+		$adapter = self::adapter( $key );
+		return $adapter instanceof Poll_Provider_Adapter_Interface ? $adapter : null;
 	}
 
 	/**

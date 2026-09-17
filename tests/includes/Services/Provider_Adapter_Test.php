@@ -19,6 +19,50 @@ use WP_UnitTestCase;
  */
 class Provider_Adapter_Test extends WP_UnitTestCase {
 	/**
+	 * A completed CloudPRNT result acknowledges the token, not another job offer.
+	 */
+	public function test_cloudprnt_result_returns_exact_acknowledgement(): void {
+		// Arrange.
+		$adapter = new Star_Cloudprnt_Adapter();
+		$poll    = $adapter->parse(
+			array(
+				'params' => array( 'token' => '42', 'code' => '200 OK' ),
+				'method' => 'DELETE',
+				'route'  => '/wcpos/v2/print-jobs/cloudprnt',
+			)
+		);
+
+		// Act.
+		$response = $adapter->advertise( array( 'id' => 'p1' ), $poll, null );
+
+		// Assert.
+		$this->assertSame( array( 'status' => 200, 'headers' => array(), 'body' => array( 'ok' => true ) ), $response );
+	}
+
+	/**
+	 * Both SDP responses retain the XML media type and UTF-8 charset.
+	 */
+	public function test_epson_poll_and_delivery_keep_xml_content_type(): void {
+		// Arrange.
+		$adapter = new Epson_Sdp_Adapter();
+		$poll    = $adapter->parse(
+			array(
+				'params' => array( 'ConnectionType' => 'GetRequest' ),
+				'body'   => '',
+				'route'  => '/wcpos/v2/print-jobs/epson-sdp',
+			)
+		);
+
+		// Act.
+		$idle     = $adapter->advertise( array( 'id' => 'p1' ), $poll, null );
+		$delivery = $adapter->deliver( array(), array( 'body' => '<epos-print/>' ), $poll );
+
+		// Assert: the controller tests separately pin the SDP envelope bytes.
+		$this->assertSame( array( 'Content-Type' => 'text/xml; charset=utf-8' ), $idle['headers'] );
+		$this->assertSame( array( 'Content-Type' => 'text/xml; charset=utf-8' ), $delivery['headers'] );
+	}
+
+	/**
 	 * It resolves every canonical provider to its adapter.
 	 */
 	public function test_adapter_resolves_all_provider_keys(): void {
