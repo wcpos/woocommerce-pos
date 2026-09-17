@@ -253,8 +253,14 @@ jobs:
       - name: Get latest stable versions
         id: versions
         run: |
-          # Get latest WordPress version
-          WP_VERSION=$(curl -s https://api.wordpress.org/core/version-check/1.7/ | jq -r '.offers[0].version')
+          # Get latest WordPress version. The value becomes a release-zip URL in
+          # the wp-env config below, so an empty or "null" answer from the API
+          # must fail here with a readable reason, not as a malformed download.
+          WP_VERSION=$(curl -sf https://api.wordpress.org/core/version-check/1.7/ | jq -r '.offers[0].version // empty')
+          if [[ ! "$WP_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Could not resolve the latest stable WordPress version from api.wordpress.org (got '${WP_VERSION}')"
+            exit 1
+          fi
           echo "wp=$WP_VERSION" >> $GITHUB_OUTPUT
           echo "Latest WordPress: $WP_VERSION"
 
