@@ -141,7 +141,8 @@ final class Closure_Store {
 	/** List newest first with allowlisted filters.
 	 *
 	 * The after/before filters compare the business day when stamped, otherwise closed_at_gmt.
-	 * For stamped rows only the date portion of each boundary is used.
+	 * For stamped rows use after_business_day/before_business_day (the original local date),
+	 * or the boundary's date portion when no separate date is supplied.
 	 * Date-only boundaries include the whole day for unstamped rows too.
 	 *
 	 * @param array $args Filters and paging.
@@ -176,7 +177,7 @@ final class Closure_Store {
 					}
 				}
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed operator.
-				$where[] = $wpdb->prepare( "(business_day {$operator} %s OR (business_day IS NULL AND closed_at_gmt {$closed_operator} %s))", substr( $args[ $key ], 0, 10 ), $boundary );
+				$where[] = $wpdb->prepare( "(business_day {$operator} %s OR (business_day IS NULL AND closed_at_gmt {$closed_operator} %s))", $args[ $key . '_business_day' ] ?? substr( $args[ $key ], 0, 10 ), $boundary );
 			}
 		}
 		$where = implode( ' AND ', $where );
@@ -269,12 +270,12 @@ final class Closure_Store {
 				}
 				$negative = ( 'paid_out' === $movement['type'] ) !== $void;
 				$amount = in_array( $movement['type'], array( 'paid_in', 'paid_out' ), true ) ? $movement['amount'] : '0';
-				$figures['cash_delta'] = self::sum( array( ( $negative ? '-' : '' ) . $amount ) );
+				$figures['cash_delta'] = self::normalize_amount( ( $negative ? '-' : '' ) . $amount );
 			} elseif ( 'recount' === $record['type'] ) {
 				foreach ( array( 'counted', 'variance' ) as $key ) {
 					$figures[ $key ] = array_map(
 						static function ( $amount ) {
-							return self::sum( array( $amount ) );
+							return self::normalize_amount( $amount );
 						},
 						$payload[ $key ]
 					);
@@ -299,6 +300,19 @@ final class Closure_Store {
 			);
 		}
 		return $rows;
+	}
+
+	/** Normalize a validated scalar without SQL, floats or integer overflow.
+	 *
+	 * @param string $amount Signed decimal string with at most four fractional places.
+	 */
+	private static function normalize_amount( string $amount ): string {
+		$negative = '-' === substr( $amount, 0, 1 );
+		$parts = explode( '.', ltrim( $amount, '-' ), 2 );
+		$whole = ltrim( $parts[0], '0' );
+		$fraction = str_pad( $parts[1] ?? '', 4, '0' );
+		$normalized = ( '' === $whole ? '0' : $whole ) . '.' . $fraction;
+		return $negative && '0.0000' !== $normalized ? '-' . $normalized : $normalized;
 	}
 
 	/** Exact decimal addition shared by totals and correction deltas.

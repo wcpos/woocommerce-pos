@@ -86,6 +86,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$first = $this->post( 'closures/' . $row['id'] . '/recount', $recount );
 		$this->assertSame( 200, $first->get_status() );
+		$this->assertArrayHasKey( 'checksum', $first->get_data() );
 		$this->assertSame( $first->get_data(), $this->post( 'closures/' . $row['id'] . '/ReCoUnT', $recount )->get_data() );
 		$this->assertSame( $recount['id'], $first->get_data()['source_id'] );
 		$this->assertSame( $row['id'], $first->get_data()['closure_id'] );
@@ -192,6 +193,43 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Offset timestamps use their local date for stamps and their GMT instant otherwise. */
+	public function test_closure_date_filters_offsets_preserve_local_business_day(): void {
+		global $wpdb;
+		$register_id = null;
+		$ids = array();
+		foreach ( array(
+			array( '2026-09-11', '2026-09-11T22:30:00Z' ),
+			array( '2026-09-12', '2026-09-11T22:30:00Z' ),
+			array( null, '2026-09-11T22:29:59Z' ),
+			array( null, '2026-09-11T22:30:00Z' ),
+		) as $index => $case ) {
+			$session = $this->closure_session( $register_id );
+			$register_id = $session['register_id'];
+			$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $case[0] ), array( 'id' => $session['id'] ) );
+			$body = $this->body( $session, $index + 1 );
+			$body['closed_at'] = $case[1];
+			$response = $this->post( 'closures', $body );
+			$this->assertSame( 201, $response->get_status() );
+			$ids[] = $response->get_data()['id'];
+		}
+		foreach ( array(
+			array( 'after', '2026-09-12T00:30:00+02:00', array( $ids[1], $ids[3] ) ),
+			array( 'before', '2026-09-11T23:30:00-02:00', array( $ids[0], $ids[2], $ids[3] ) ),
+			array( 'before', '2026-09-12T00:29:59+02:00', array( $ids[0], $ids[1], $ids[2] ) ),
+		) as $case ) {
+			$response = $this->get(
+				'closures',
+				array(
+					'register_id' => $register_id,
+					$case[0] => $case[1],
+				)
+			);
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertEqualsCanonicalizing( $case[2], array_column( $response->get_data(), 'id' ) );
+		}
+	}
+
 	/** A closure request cannot supply a stamp missing from its session. */
 	public function test_closure_business_day_unstamped_session_ignores_request_stamp(): void {
 		$session = $this->closure_session();
@@ -268,6 +306,10 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$record = $response->get_data();
 		$this->assertArrayNotHasKey( 'variance', $record['payload'] );
+		$this->assertArrayNotHasKey( 'checksum', $record );
+		$stored = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->get( $record['id'] );
+		$this->assertSame( array( 'cash' => '-2.0000' ), $stored['payload']['variance'] );
+		$this->assertSame( 64, strlen( $stored['checksum'] ) );
 		$this->assertSame( $cashier->ID, $record['cashier_id'] );
 		$this->assertSame( $manager->ID, $record['approver_id'] );
 		$this->assertSame( $cashier->ID, get_current_user_id() );

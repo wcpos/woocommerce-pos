@@ -99,7 +99,8 @@ class Closures_Controller extends \WP_REST_Controller {
 			return $row;
 		}
 		// Manager approval permits the recount write, not access to hidden report figures.
-		unset( $row['payload']['variance'] );
+		// The unsalted payload checksum would allow guessing the hidden variance.
+		unset( $row['payload']['variance'], $row['checksum'] );
 		return array_diff_key( $row, array_flip( array( 'expected', 'till_expected', 'variance' ) ) );
 	}
 
@@ -300,6 +301,7 @@ class Closures_Controller extends \WP_REST_Controller {
 				if ( ! is_string( $value ) || ( ! Closure_Store::is_business_day( $value ) && ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) ) {
 					return $this->error( 'rest_invalid_param', 400 );
 				}
+				$args[ $key . '_business_day' ] = substr( $value, 0, 10 );
 				$value = Closure_Store::is_business_day( $value ) ? $value : gmdate( 'Y-m-d H:i:s', strtotime( $value ) );
 			} elseif ( 'register_id' === $key ) {
 				if ( ! Pos_Uuid::is_uuid( $value ) ) {

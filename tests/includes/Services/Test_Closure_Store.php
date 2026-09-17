@@ -68,8 +68,14 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		for ( $i = 1; $i <= 205; ++$i ) {
 			$payload = wp_json_encode(
 				array(
-					'counted' => array( 'cash' => '999999999999999.9999' ),
-					'variance' => array( 'cash' => '-0.0001' ),
+					'counted' => array(
+						'cash' => '999999999999999.9999',
+						'card' => '00012.3',
+					),
+					'variance' => array(
+						'cash' => '-0.0001',
+						'card' => '-000.0',
+					),
 					'reason' => 'Bulk recount',
 				)
 			);
@@ -92,8 +98,16 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
+		$queries = $wpdb->num_queries;
 		$rows = $store->corrections_for( $closure['id'] );
+		$this->assertLessThanOrEqual( 3, $wpdb->num_queries - $queries );
 		$this->assertCount( 205, $rows );
+		$this->assertSame( '12.3000', $rows[204]['figures']['counted']['card'] );
+		$this->assertSame( '0.0000', $rows[204]['figures']['variance']['card'] );
+		$queries = $wpdb->num_queries;
+		$counted = $store->with_correction_counts( array( $closure ) );
+		$this->assertSame( 1, $wpdb->num_queries - $queries );
+		$this->assertSame( 205, $counted[0]['corrections_count'] );
 		$this->assertSame( '999999999999999.9999', $rows[204]['figures']['counted']['cash'] );
 		$this->assertSame( '-0.0001', $rows[204]['figures']['variance']['cash'] );
 	}
