@@ -38,6 +38,8 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Symbology;
  */
 class Escpos_Thermal_Emitter {
 
+	use Thermal_Emitter_Support;
+
 	/**
 	 * Render options.
 	 *
@@ -53,11 +55,11 @@ class Escpos_Thermal_Emitter {
 	private $buffer = '';
 
 	/**
-	 * The paper width in character columns.
+	 * Per-job text metrics and applied size stack.
 	 *
-	 * @var int
+	 * @var Thermal_Text_Layout
 	 */
-	private $columns = 48;
+	private $layout;
 
 	/**
 	 * The current alignment mode (left|center|right).
@@ -86,20 +88,6 @@ class Escpos_Thermal_Emitter {
 	 * @var bool
 	 */
 	private $invert = false;
-
-	/**
-	 * The current text width multiplier.
-	 *
-	 * @var int
-	 */
-	private $width = 1;
-
-	/**
-	 * The current text height multiplier.
-	 *
-	 * @var int
-	 */
-	private $height = 1;
 
 	/**
 	 * The active scaled line-spacing height, or 0 when none is active.
@@ -143,12 +131,10 @@ class Escpos_Thermal_Emitter {
 		$this->bold                  = false;
 		$this->underline             = false;
 		$this->invert                = false;
-		$this->width                 = 1;
-		$this->height                = 1;
 		$this->active_scaled_spacing = 0;
 		$this->line_open             = false;
 
-		$this->columns = isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48;
+		$this->layout = new Thermal_Text_Layout( isset( $ast['paper_width'] ) ? (int) $ast['paper_width'] : 48, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
 
 		// ESC @ — initialize the printer (once, at the very start).
 		$this->raw( array( 0x1b, 0x40 ) );
@@ -157,77 +143,6 @@ class Escpos_Thermal_Emitter {
 		$this->walk_nodes( $this->nodes_with_auto_drawer( $children ) );
 
 		return $this->buffer;
-	}
-
-	/**
-	 * Walk a list of AST nodes.
-	 *
-	 * @param array $nodes The AST nodes.
-	 *
-	 * @return void
-	 */
-	private function walk_nodes( array $nodes ): void {
-		foreach ( $nodes as $node ) {
-			if ( \is_array( $node ) ) {
-				$this->walk_node( $node );
-			}
-		}
-	}
-
-	/**
-	 * Insert an auto drawer node before the first trailing cut when enabled.
-	 *
-	 * @param array $nodes AST nodes.
-	 *
-	 * @return array
-	 */
-	private function nodes_with_auto_drawer( array $nodes ): array {
-		if ( empty( $this->options['auto_open_drawer'] ) || $this->nodes_contain_drawer( $nodes ) ) {
-			return $nodes;
-		}
-
-		$drawer = array(
-			'type'      => 'drawer',
-			'connector' => \WCPOS\WooCommercePOS\Services\Print_Job_Service::normalize_drawer_connector( (string) ( $this->options['drawer_connector'] ?? 'pin2' ) ),
-		);
-
-		for ( $i = count( $nodes ) - 1; $i >= 0; $i-- ) {
-			$type = isset( $nodes[ $i ]['type'] ) ? (string) $nodes[ $i ]['type'] : '';
-			if ( 'cut' === $type ) {
-				array_splice( $nodes, $i, 0, array( $drawer ) );
-				return $nodes;
-			}
-			if ( in_array( $type, array( 'feed' ), true ) ) {
-				continue;
-			}
-			break;
-		}
-
-		$nodes[] = $drawer;
-		return $nodes;
-	}
-
-	/**
-	 * Whether a node list contains an explicit drawer node.
-	 *
-	 * @param array $nodes AST nodes.
-	 *
-	 * @return bool
-	 */
-	private function nodes_contain_drawer( array $nodes ): bool {
-		foreach ( $nodes as $node ) {
-			if ( ! is_array( $node ) ) {
-				continue;
-			}
-			if ( 'drawer' === ( $node['type'] ?? '' ) ) {
-				return true;
-			}
-			if ( ! empty( $node['children'] ) && is_array( $node['children'] ) && $this->nodes_contain_drawer( $node['children'] ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -347,7 +262,7 @@ class Escpos_Thermal_Emitter {
 	private function emit_text_line( array $children ): void {
 		if ( 'left' !== $this->align ) {
 			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
-			$pad   = Thermal_Text_Layout::alignment_padding( $this->align, Thermal_Text_Layout::display_width( $plain ), $this->columns, $this->width );
+			$pad   = $this->layout->measure_padding( $this->align, $plain );
 			if ( $pad > 0 ) {
 				$this->raw_string( str_repeat( ' ', $pad ) );
 			}
@@ -412,57 +327,34 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_size( array $node ): void {
-		$previous_width  = $this->width;
-		$previous_height = $this->height;
-		$width           = Thermal_Bounds::clamp_int( isset( $node['width'] ) ? $node['width'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
-		$height          = Thermal_Bounds::clamp_int( isset( $node['height'] ) ? $node['height'] : null, 1, Thermal_Bounds::SIZE_MULTIPLIER_MIN, Thermal_Bounds::SIZE_MULTIPLIER_MAX );
-
+		$this->layout->enter_size(
+			is_numeric( $node['width'] ?? null ) ? (int) $node['width'] : 1,
+			is_numeric( $node['height'] ?? null ) ? (int) $node['height'] : 1
+		);
+		$height = $this->layout->applied_scale()['height'];
 		if ( $height > 1 ) {
 			$this->active_scaled_spacing = max( $this->active_scaled_spacing, $height );
 			$this->raw( array( 0x1b, 0x33, min( 255, $height * 30 ) ) );
 		}
 
-		$this->raw( array( 0x1d, 0x21, $this->size_byte( $width, $height ) ) );
-		$this->width  = $width;
-		$this->height = $height;
-
+		$this->raw( array( 0x1d, 0x21, $this->size_byte() ) );
 		$this->walk_nodes( isset( $node['children'] ) ? $node['children'] : array() );
-
-		$this->raw( array( 0x1d, 0x21, $this->size_byte( $previous_width, $previous_height ) ) );
-		$this->width  = $previous_width;
-		$this->height = $previous_height;
+		$this->layout->leave_size();
+		$this->raw( array( 0x1d, 0x21, $this->size_byte() ) );
 	}
 
 	/**
-	 * Compute the GS ! size byte for a width/height multiplier.
+	 * Encode the applied scale as GS ! (width in the high nibble).
 	 *
-	 * `GS ! n` puts the WIDTH magnification in bits 4-7 and the HEIGHT in bits 0-3, each as
-	 * multiplier - 1 over 1x-8x: `n = (width - 1) << 4 | (height - 1)`. These were the wrong way
-	 * round, so every non-square `<size>` printed transposed -- a heading asked to be double-wide
-	 * came out double-high. Square sizes are bit-symmetric, which is why the 2x2 case everything
-	 * uses looked right and hid it.
-	 *
-	 * @param int $width  The width multiplier.
-	 * @param int $height The height multiplier.
+	 * GS ! accepts 0-7 per nibble (1-8x); Thermal_Bounds::SIZE_MULTIPLIER_MAX
+	 * keeps both applied axes within that command range.
 	 *
 	 * @return int The GS ! parameter byte.
 	 */
-	private function size_byte( int $width, int $height ): int {
-		return ( self::size_nibble( $width ) << 4 ) | self::size_nibble( $height );
-	}
+	private function size_byte(): int {
+		$scale = $this->layout->applied_scale();
 
-	/**
-	 * One magnification nibble: multiplier - 1, bounded to the 1x-8x the command can express.
-	 *
-	 * Nothing bounds `<size>` on the way in, and a multiplier of 9 unbounded would carry into the
-	 * neighbouring field and silently resize the other axis.
-	 *
-	 * @param int $multiplier The width or height multiplier.
-	 *
-	 * @return int The nibble value (0-7).
-	 */
-	private static function size_nibble( int $multiplier ): int {
-		return max( 1, min( 8, $multiplier ) ) - 1;
+		return ( ( $scale['width'] - 1 ) << 4 ) | ( $scale['height'] - 1 );
 	}
 
 	/**
@@ -511,7 +403,7 @@ class Escpos_Thermal_Emitter {
 	 */
 	private function emit_row( array $node ): void {
 		$cols   = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$widths = Thermal_Text_Layout::resolve_row_widths( $cols, $this->columns );
+		$widths = $this->layout->measure_row_widths( $cols );
 
 		$line = '';
 		foreach ( $cols as $index => $col ) {
@@ -543,13 +435,13 @@ class Escpos_Thermal_Emitter {
 
 		if ( 'dotted' === $style ) {
 			$pattern = '. ';
-			$repeat  = (int) ceil( $this->columns / \strlen( $pattern ) );
-			$text    = substr( str_repeat( $pattern, $repeat ), 0, $this->columns );
+			$repeat  = (int) ceil( $this->layout->columns() / \strlen( $pattern ) );
+			$text    = substr( str_repeat( $pattern, $repeat ), 0, $this->layout->columns() );
 		} elseif ( 'double' === $style ) {
-			$text = str_repeat( '=', $this->columns );
+			$text = str_repeat( '=', $this->layout->columns() );
 		} else {
 			// single and dashed both render as '-' across the width.
-			$text = str_repeat( '-', $this->columns );
+			$text = str_repeat( '-', $this->layout->columns() );
 		}
 
 		$this->raw_string( $text );
@@ -585,7 +477,8 @@ class Escpos_Thermal_Emitter {
 		$height = max( Thermal_Bounds::BARCODE_HEIGHT_MIN, min( Thermal_Bounds::BARCODE_HEIGHT_MAX, $height ) );
 
 		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_ESCPOS ) ) {
-			$this->emit_centered_text( $value );
+			$this->raw_string( $this->centered_text( $value, $this->layout->columns() ) );
+			$this->newline();
 
 			return;
 		}
@@ -630,7 +523,7 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_image( array $node ): void {
-		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->columns ) );
+		$bitmap = Thermal_Bitmap::from_node( $node, Thermal_Bounds::paper_dots( $this->layout->columns() ) );
 		if ( null === $bitmap ) {
 			return;
 		}
@@ -656,45 +549,6 @@ class Escpos_Thermal_Emitter {
 		);
 		$this->raw_string( $bitmap->raster() );
 		$this->raw( array( 0x1b, 0x61, $this->align_byte( $this->align ) ) );
-	}
-
-	/**
-	 * Print a value as a centered plain-text line.
-	 *
-	 * Mirrors the rescue in Html_Thermal_Emitter::render_barcode_fallback(): when
-	 * the symbol cannot be produced, the value itself is still readable.
-	 *
-	 * Control bytes are folded to spaces first. This is the one path that routes
-	 * a barcode value into the text stream, and a barcode value is exactly where
-	 * a stray tab, LF or CR turns up — Code 128 validation rejects them on the
-	 * ESC/POS lane precisely because code set B cannot encode them, which sends
-	 * them here. Emitted raw they would break the line the rescue is centering.
-	 *
-	 * @param string $value The value to print.
-	 *
-	 * @return void
-	 */
-	private function emit_centered_text( string $value ): void {
-		$text = Thermal_Text_Layout::normalize_text( $this->strip_control_bytes( $value ) );
-		$pad  = (int) floor( max( 0, $this->columns - Thermal_Text_Layout::display_width( $text ) ) / 2 );
-		if ( $pad > 0 ) {
-			$this->raw_string( str_repeat( ' ', $pad ) );
-		}
-		$this->raw_string( $text );
-		$this->newline();
-	}
-
-	/**
-	 * Replace control bytes with spaces so they cannot reach the print stream.
-	 *
-	 * @param string $value The value to clean.
-	 *
-	 * @return string The value with control bytes folded to spaces.
-	 */
-	private function strip_control_bytes( string $value ): string {
-		$cleaned = preg_replace( '/[\x00-\x1f\x7f]/', ' ', $value );
-
-		return null === $cleaned ? $value : $cleaned;
 	}
 
 	/**

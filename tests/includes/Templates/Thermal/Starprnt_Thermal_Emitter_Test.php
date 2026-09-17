@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
+// Current-lane consumer signal; these emitter tests do not dispatch REST requests.
+use WCPOS\WooCommercePOS\API\V2\Templates_Controller;
 use WCPOS\WooCommercePOS\Templates\Thermal\Starprnt_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
@@ -280,6 +282,22 @@ class Starprnt_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$bytes = $this->render( '<receipt><size width="9" height="9"><text>S</text></size></receipt>' );
 
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x69, 0x05, 0x05 ) ) );
+	}
+
+	/**
+	 * Both oversized axes use the StarPRNT 6x ceiling for bare text.
+	 */
+	public function test_size_both_axes_above_ceiling_emits_esc_i_05_05(): void {
+		// Arrange.
+		$markup = '<receipt><size width="9" height="9">x</size></receipt>';
+
+		// Act.
+		$bytes  = $this->render( $markup );
+		$offset = $this->sequence_index( $bytes, array( 0x1b, 0x69 ) );
+
+		// Assert: ESC i stores height - 1, width - 1; both are 6 - 1 = 0x05.
+		$this->assertGreaterThan( -1, $offset );
+		$this->assertSame( "\x1b\x69\x05\x05", substr( $bytes, $offset, 4 ) );
 	}
 
 	/**

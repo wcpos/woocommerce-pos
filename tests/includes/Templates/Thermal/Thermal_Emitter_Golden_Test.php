@@ -35,7 +35,7 @@ class Thermal_Emitter_Golden_Test extends WP_UnitTestCase {
 	public function lane_case_provider(): array {
 		$rows = array();
 		foreach ( Thermal_Golden_Corpus::lanes() as $lane ) {
-			foreach ( array_keys( Thermal_Golden_Corpus::cases() ) as $case_name ) {
+			foreach ( Thermal_Golden_Corpus::case_names( $lane ) as $case_name ) {
 				$rows[ $lane . ' / ' . $case_name ] = array( $lane, $case_name );
 			}
 		}
