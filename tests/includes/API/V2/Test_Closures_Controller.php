@@ -151,6 +151,62 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $row['id'] ), array_column( $this->get( 'closures', $args )->get_data(), 'id' ) );
 	}
 
+	/** Date-only bounds include the whole day; timestamp bounds retain their precision. */
+	public function test_closure_date_filters_date_only_and_timestamp_boundaries(): void {
+		global $wpdb;
+		$register_id = null;
+		$ids = array();
+		foreach ( array(
+			array( null, '2026-09-12T00:00:00Z' ),
+			array( null, '2026-09-12T15:00:00Z' ),
+			array( '2026-09-12', '2026-09-12T15:00:00Z' ),
+			array( null, '2026-09-13T00:00:00Z' ),
+			array( '2026-09-13', '2026-09-13T00:00:00Z' ),
+		) as $index => $case ) {
+			$session = $this->closure_session( $register_id );
+			$register_id = $session['register_id'];
+			$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $case[0] ), array( 'id' => $session['id'] ) );
+			$body = $this->body( $session, $index + 1 );
+			$body['closed_at'] = $case[1];
+			$response = $this->post( 'closures', $body );
+			$this->assertSame( 201, $response->get_status() );
+			$ids[] = $response->get_data()['id'];
+		}
+
+		foreach ( array(
+			array( '2026-09-12', '2026-09-12', array( $ids[2], $ids[1], $ids[0] ) ),
+			array( '2026-09-13', '2026-09-13', array( $ids[4], $ids[3] ) ),
+			array( '2026-09-11', '2026-09-11', array() ),
+			array( '2026-09-12T00:00:00Z', '2026-09-12T14:59:59Z', array( $ids[2], $ids[0] ) ),
+			array( '2026-09-12T15:00:00Z', '2026-09-12T15:00:00Z', array( $ids[2], $ids[1] ) ),
+			array( '2026-09-12T15:00:01Z', '2026-09-12T23:59:59Z', array( $ids[2] ) ),
+		) as $case ) {
+			$args = array(
+				'register_id' => $register_id,
+				'after' => $case[0],
+				'before' => $case[1],
+			);
+			$response = $this->get( 'closures', $args );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( $case[2], array_column( $response->get_data(), 'id' ) );
+		}
+	}
+
+	/** A closure request cannot supply a stamp missing from its session. */
+	public function test_closure_business_day_unstamped_session_ignores_request_stamp(): void {
+		$session = $this->closure_session();
+		$this->assertNull( $session['business_day'] );
+		$body = $this->body( $session );
+		$body['business_day'] = '2026-09-11';
+
+		$response = $this->post( 'closures', $body );
+
+		$this->assertSame( 201, $response->get_status() );
+		$row = $response->get_data();
+		$this->assertNull( $row['business_day'] );
+		$this->assertNull( ( new Closure_Store() )->get( $row['id'] )['business_day'] );
+	}
+
 	/** A credential override must authenticate a capable manager without changing the actor. */
 	public function test_recount_manager_approval_refusals_and_actor_stamps(): void {
 		$row = $this->post( 'closures', $this->body( $this->closure_session() ) )->get_data();

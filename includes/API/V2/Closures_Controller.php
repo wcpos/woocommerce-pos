@@ -300,7 +300,7 @@ class Closures_Controller extends \WP_REST_Controller {
 				if ( ! is_string( $value ) || ( ! Closure_Store::is_business_day( $value ) && ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) ) {
 					return $this->error( 'rest_invalid_param', 400 );
 				}
-				$value = gmdate( 'Y-m-d H:i:s', strtotime( $value ) );
+				$value = Closure_Store::is_business_day( $value ) ? $value : gmdate( 'Y-m-d H:i:s', strtotime( $value ) );
 			} elseif ( 'register_id' === $key ) {
 				if ( ! Pos_Uuid::is_uuid( $value ) ) {
 					return $this->error( 'rest_invalid_param', 400 );

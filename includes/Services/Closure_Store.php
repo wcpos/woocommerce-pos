@@ -142,6 +142,7 @@ final class Closure_Store {
 	 *
 	 * The after/before filters compare the business day when stamped, otherwise closed_at_gmt.
 	 * For stamped rows only the date portion of each boundary is used.
+	 * Date-only boundaries include the whole day for unstamped rows too.
 	 *
 	 * @param array $args Filters and paging.
 	 * @throws \RuntimeException On read failure.
@@ -165,8 +166,17 @@ final class Closure_Store {
 			'before' => '<=',
 		) as $key => $operator ) {
 			if ( isset( $args[ $key ] ) ) {
+				$boundary = $args[ $key ];
+				$closed_operator = $operator;
+				if ( self::is_business_day( $boundary ) ) {
+					$boundary .= ' 00:00:00';
+					if ( 'before' === $key ) {
+						$boundary = gmdate( 'Y-m-d H:i:s', strtotime( $boundary . ' UTC +1 day' ) );
+						$closed_operator = '<';
+					}
+				}
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed operator.
-				$where[] = $wpdb->prepare( "(business_day {$operator} %s OR (business_day IS NULL AND closed_at_gmt {$operator} %s))", substr( $args[ $key ], 0, 10 ), $args[ $key ] );
+				$where[] = $wpdb->prepare( "(business_day {$operator} %s OR (business_day IS NULL AND closed_at_gmt {$closed_operator} %s))", substr( $args[ $key ], 0, 10 ), $boundary );
 			}
 		}
 		$where = implode( ' AND ', $where );
@@ -501,7 +511,7 @@ final class Closure_Store {
 			}
 			$fields['findings'] = $findings ? $findings : null;
 			$fields += array_intersect_key( $session, array_flip( array( 'register_id', 'store_id', 'opened_by', 'approved_by' ) ) );
-			$fields['business_day'] = $session['business_day'] ?? $fields['business_day'] ?? null;
+			$fields['business_day'] = $session['business_day'] ?? null;
 			$fields['closed_by'] = 'closed' === $session['status'] ? $session['closed_by'] : get_current_user_id();
 			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->get( $session['register_id'] )['name'] ?? '' );
 			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
