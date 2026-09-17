@@ -175,7 +175,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $result;
 		}
 
-		if ( ! current_user_can( 'edit_shop_orders' ) ) {
+		$order_post = get_post( $id );
+		if ( ! $order_post ) {
+			return $result;
+		}
+
+		$owns_order = get_current_user_id() === (int) $order_post->post_author;
+		$capability = $owns_order ? 'edit_shop_orders' : 'edit_others_shop_orders';
+
+		if ( ! current_user_can( $capability ) ) {
 			return $result;
 		}
 
