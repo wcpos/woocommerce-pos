@@ -524,7 +524,7 @@ class Activator {
 	 *
 	 * @return array<string, array<string, bool>|array<int, string>> Role capabilities keyed by role.
 	 */
-	private static function role_capability_definition(): array {
+	public static function role_capability_definition(): array {
 		// WC 9.9 replaced promote_users with create_customers for customer creation.
 		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
 			? 'create_customers'

@@ -59,9 +59,9 @@ function makeCapabilities(granted: string[] = []): CapabilityGroups {
 	};
 }
 
-function seed(capabilities: CapabilityGroups, roleId = 'administrator') {
+function seed(capabilities: CapabilityGroups, roleId = 'administrator', defaults = capabilities) {
 	settingsData.current = {
-		[roleId]: { name: 'Administrator', capabilities },
+		[roleId]: { name: 'Administrator', capabilities, defaults },
 	};
 }
 
@@ -260,7 +260,11 @@ describe('Access screen advanced disclosure', () => {
 
 	it('leaves the WordPress read capability editable for other roles', () => {
 		settingsData.current = {
-			cashier: { name: 'Cashier', capabilities: makeCapabilities(['read']) },
+			cashier: {
+				name: 'Cashier',
+				capabilities: makeCapabilities(['read']),
+				defaults: makeCapabilities(),
+			},
 		};
 
 		render(<Access />);
@@ -268,5 +272,109 @@ describe('Access screen advanced disclosure', () => {
 		openAdvanced();
 
 		expect(screen.getByLabelText('read')).not.toBeDisabled();
+	});
+});
+
+describe('Access screen defaults and mixed tasks', () => {
+	it('shows the granted count and lets Review open advanced permissions', () => {
+		seed(makeCapabilities(PRODUCT_EDIT_CAPS.slice(0, 3)));
+		render(<Access />);
+
+		expect(screen.getByText('3 of 7')).toHaveAttribute(
+			'title',
+			'3 of the 7 permissions behind this task are granted. Tick the box to grant the rest.'
+		);
+		expect(screen.queryByText('partly granted')).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+		expect(screen.getByTestId('access-advanced')).toHaveAttribute('open');
+		expect(screen.getByLabelText('edit_products')).toBeInTheDocument();
+	});
+
+	it('disables restore at defaults and ignores permissions WCPOS does not own', () => {
+		seed(makeCapabilities(PRODUCT_EDIT_CAPS), 'administrator', {
+			wcpos: { access_woocommerce_pos: false, manage_woocommerce_pos: false },
+		});
+		render(<Access />);
+
+		expect(screen.getByTestId('access-restore-defaults')).toBeDisabled();
+		expect(screen.getByText('Using the WCPOS defaults')).toBeInTheDocument();
+		expect(
+			screen.getByRole('heading', { name: 'What a Administrator can do' })
+		).toBeInTheDocument();
+		expect(screen.getByTestId('access-role-administrator').querySelector('[title]')).toBeNull();
+	});
+
+	it('previews grants, removals and kept tasks and restores only the selected defaults', () => {
+		const defaults = makeCapabilities([...PRODUCT_EDIT_CAPS, 'access_woocommerce_pos']);
+		seed(makeCapabilities(), 'administrator');
+		settingsData.current.cashier = {
+			name: 'Cashier',
+			defaults,
+			capabilities: makeCapabilities(['delete_products', 'access_woocommerce_pos']),
+		};
+		render(<Access />);
+		fireEvent.click(screen.getByTestId('access-role-cashier'));
+
+		expect(screen.getByTestId('access-restore-defaults')).toBeEnabled();
+		expect(screen.getByText('Changed from the WCPOS defaults')).toBeInTheDocument();
+		expect(screen.getByTestId('access-role-cashier').querySelector('[title]')).toHaveAttribute(
+			'title',
+			'Changed from the WCPOS defaults'
+		);
+		fireEvent.click(screen.getByTestId('access-restore-defaults'));
+		expect(screen.getByRole('dialog')).toHaveAccessibleName(
+			'Restore the default privileges for Cashier?'
+		);
+		expect(screen.getByText('Grant').parentElement).toHaveTextContent('Create & edit products');
+		expect(screen.getByText('Remove').parentElement).toHaveTextContent('Delete products');
+		expect(screen.getByText('Keep').parentElement).toHaveTextContent('Use the POS');
+		// A task that is off today and stays off is not "kept" access.
+		expect(screen.getByText('Keep').parentElement).not.toHaveTextContent('Delete coupons');
+		expect(mutateMock).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByTestId('access-restore-confirm'));
+		expect(mutateMock).toHaveBeenCalledTimes(1);
+		expect(mutateMock).toHaveBeenCalledWith({ cashier: { capabilities: defaults } });
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+	});
+
+	it('lists capabilities outside every task that the restore will change', () => {
+		const defaults = makeCapabilities([...PRODUCT_EDIT_CAPS, 'access_woocommerce_pos']);
+		defaults.wcpos.manage_woocommerce_pos_cash = true;
+		defaults.wcpos.view_woocommerce_pos_reports = false;
+		const capabilities = makeCapabilities([...PRODUCT_EDIT_CAPS, 'access_woocommerce_pos']);
+		capabilities.wcpos.manage_woocommerce_pos_cash = false;
+		capabilities.wcpos.view_woocommerce_pos_reports = true;
+		seed(makeCapabilities(), 'administrator');
+		settingsData.current.cashier = { name: 'Cashier', defaults, capabilities };
+		render(<Access />);
+		fireEvent.click(screen.getByTestId('access-role-cashier'));
+		fireEvent.click(screen.getByTestId('access-restore-defaults'));
+
+		expect(screen.getByTestId('access-restore-individual-grant')).toHaveTextContent(
+			'manage_woocommerce_pos_cash'
+		);
+		expect(screen.getByTestId('access-restore-individual-remove')).toHaveTextContent(
+			'view_woocommerce_pos_reports'
+		);
+	});
+
+	it('uses removal copy and excludes tasks not wholly covered by defaults', () => {
+		seed(makeCapabilities(['access_woocommerce_pos']), 'administrator', {
+			wcpos: { access_woocommerce_pos: false },
+			wc: { edit_products: false },
+		});
+		render(<Access />);
+		fireEvent.click(screen.getByTestId('access-restore-defaults'));
+
+		expect(screen.getByRole('dialog')).toHaveAccessibleName(
+			'Remove POS privileges from Administrator?'
+		);
+		expect(screen.getByRole('dialog')).not.toHaveTextContent('Create & edit products');
+		expect(screen.queryByText('Grant')).not.toBeInTheDocument();
+		expect(screen.queryByText('Keep')).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(mutateMock).not.toHaveBeenCalled();
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 	});
 });
