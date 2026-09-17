@@ -17,6 +17,8 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use ReflectionProperty;
+use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+use WCPOS\WooCommercePOS\Hook_Manifest;
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Services\Core_Order_Audit_Guard;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
@@ -356,6 +358,246 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array( Meta_Normalizer::class . '::normalize' ), $lanes['product'] );
 		$this->assertSame( array( Meta_Normalizer::class . '::normalize' ), $lanes['order'] );
+	}
+
+	/**
+	 * The declared rows retain callback identity, arity and the authentication pair's order.
+	 */
+	public function test_hook_manifest_both_latches_register_declared_callbacks_and_reasons(): void {
+		// Arrange: inspect rows without running the constructor's non-hook setup.
+		global $wp_filter;
+		$init = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+
+		foreach ( array( false, true ) as $latched ) {
+			$wp_filter = array();
+			$rows      = $init->hook_rows( $latched );
+			$auth_rows = array( Core_Order_Audit_Guard::class . '::record_prior_authentication' );
+
+			// Act.
+			Hook_Manifest::install( $rows );
+
+			// Assert: registrar rows run immediately; only named hooks enter WP_Hook.
+			foreach ( $rows as $row ) {
+				$this->assertNotSame( '', trim( $row['reason'] ) );
+				if ( null === $row['hook'] ) {
+					$this->assertSame( 0, $row['args'] );
+					continue;
+				}
+				$id         = _wp_filter_build_unique_id( $row['hook'], $row['callback'], $row['priority'] );
+				$registered = $wp_filter[ $row['hook'] ]->callbacks[ $row['priority'] ][ $id ];
+				$this->assertSame( $row['callback'], $registered['function'] );
+				$this->assertSame( $row['args'], $registered['accepted_args'] );
+				if ( 'determine_current_user' === $row['hook'] ) {
+					$this->assertSame( 20, $row['priority'] );
+					// Position of the guard row on this lane (four next-only rows are absent on main).
+					$this->assertSame( $latched ? 20 : 13, array_search( $row, $rows, true ) );
+					$auth_rows[] = self::label_for( $row['callback'] );
+				}
+			}
+			$this->assertSame(
+				array( Core_Order_Audit_Guard::class . '::record_prior_authentication', Init::class . '::determine_current_user_early' ),
+				$auth_rows
+			);
+			$this->assertSame( $auth_rows, $this->callback_labels( 'determine_current_user', 20 ) );
+		}
+	}
+
+	/**
+	 * Missing metadata fails before any part of the manifest is installed.
+	 */
+	public function test_hook_manifest_missing_required_field_rejects_rows_before_installation(): void {
+		// Arrange.
+		$init = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows = $init->hook_rows( false );
+		foreach ( array( 'hook', 'callback', 'priority', 'args', 'reason' ) as $field ) {
+			$called                 = false;
+			$invalid                = $rows;
+			$invalid[0]['callback'] = static function () use ( &$called ): void {
+				$called = true;
+			};
+			unset( $invalid[ \count( $invalid ) - 1 ][ $field ] );
+
+			// Act / Assert.
+			try {
+				Hook_Manifest::install( $invalid );
+				$this->fail( 'Missing ' . $field . ' was accepted.' );
+			} catch ( \InvalidArgumentException $exception ) {
+				$this->assertStringContainsString( $field, $exception->getMessage() );
+			}
+			$this->assertFalse( $called );
+		}
+	}
+
+	/**
+	 * A missing phase rejects the whole manifest before any registrar can run.
+	 */
+	public function test_hook_manifest_missing_phase_rejects_rows_before_installation(): void {
+		// Arrange.
+		$init   = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows   = $init->hook_rows( false );
+		$called = false;
+		$rows[0]['callback'] = static function () use ( &$called ): void {
+			$called = true;
+		};
+		unset( $rows[ \count( $rows ) - 1 ]['phase'] );
+
+		// Act / Assert.
+		try {
+			Hook_Manifest::install( $rows );
+			$this->fail( 'Missing phase was accepted.' );
+		} catch ( \InvalidArgumentException $exception ) {
+			$this->assertStringContainsString( 'phase', $exception->getMessage() );
+		}
+		$this->assertFalse( $called );
+	}
+
+	/**
+	 * A misspelled phase rejects the whole manifest before any registrar can run.
+	 */
+	public function test_hook_manifest_misspelled_phase_rejects_rows_before_installation(): void {
+		// Arrange.
+		$init   = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows   = $init->hook_rows( false );
+		$called = false;
+		$rows[0]['callback'] = static function () use ( &$called ): void {
+			$called = true;
+		};
+		$rows[ \count( $rows ) - 1 ]['phase'] = 'post_latch';
+
+		// Act / Assert.
+		try {
+			Hook_Manifest::install( $rows );
+			$this->fail( 'Misspelled phase was accepted.' );
+		} catch ( \InvalidArgumentException $exception ) {
+			$this->assertStringContainsString( 'phase', $exception->getMessage() );
+		}
+		$this->assertFalse( $called );
+	}
+
+	/**
+	 * Invalid metadata is rejected before any registrar can run.
+	 *
+	 * @dataProvider invalid_manifest_fields
+	 * @param string $field Invalid field.
+	 * @param mixed  $value Invalid value.
+	 */
+	public function test_hook_manifest_invalid_field_rejects_rows_before_installation( string $field, $value ): void {
+		// Arrange.
+		$init   = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows   = $init->hook_rows( false );
+		$called = false;
+		$rows[0]['callback'] = static function () use ( &$called ): void {
+			$called = true;
+		};
+		$rows[ \count( $rows ) - 1 ][ $field ] = $value;
+
+		// Act / Assert.
+		try {
+			Hook_Manifest::install( $rows );
+			$this->fail( 'Invalid ' . $field . ' was accepted.' );
+		} catch ( \InvalidArgumentException $exception ) {
+			$this->assertStringContainsString( $field, $exception->getMessage() );
+		}
+		$this->assertFalse( $called );
+	}
+
+	/**
+	 * Values that must not reach WordPress hook registration.
+	 *
+	 * @return array
+	 */
+	public static function invalid_manifest_fields(): array {
+		return array(
+			array( 'reason', '' ),
+			array( 'reason', '   ' ),
+			array( 'callback', null ),
+			array( 'callback', array( Init::class, 'missing_method' ) ),
+			array( 'priority', '10' ),
+			array( 'priority', 10.0 ),
+			array( 'args', '1' ),
+			array( 'args', false ),
+		);
+	}
+
+	/**
+	 * Reading the latch observes all pre-latch hooks and no post-latch hooks.
+	 */
+	public function test_hook_manifest_schema_read_preserves_phase_boundary_and_declares_once(): void {
+		// Arrange.
+		global $wp_filter;
+		$wp_filter = array(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Isolate bootstrap hooks; tearDown restores the registry.
+		$reads     = 0;
+		add_filter(
+			'pre_option_' . Sync_Api::SCHEMA_OPTION,
+			function () use ( &$reads ) {
+				++$reads;
+				$this->assertSame( 10, has_filter( 'woocommerce_pos_rest_api_controllers', array( Sync_Api::class, 'register_controllers' ) ) );
+				$this->assertSame( 10, has_filter( 'wcpos_manifest_pre_latch_probe', '__return_null' ) );
+				$this->assertFalse( has_filter( 'init' ) );
+				$this->assertFalse( has_filter( 'determine_current_user' ) );
+				return 'unlatched';
+			}
+		);
+
+		// Act: inserting a pre-latch row must not move the option-read boundary.
+		$init = new class() extends Init {
+			/**
+			 * Number of manifest declarations during construction.
+			 *
+			 * @var int
+			 */
+			public $declarations = 0;
+
+			/**
+			 * Insert a row ahead of the normal pre-latch hooks.
+			 *
+			 * @param bool $sync_latched Whether sync rows are included.
+			 * @return array
+			 */
+			public function hook_rows( bool $sync_latched ): array {
+				++$this->declarations;
+				$rows = parent::hook_rows( $sync_latched );
+				array_unshift(
+					$rows,
+					array(
+						'hook'     => 'wcpos_manifest_pre_latch_probe',
+						'callback' => '__return_null',
+						'priority' => 10,
+						'args'     => 0,
+						'reason'   => 'Pin insertion-safe latch ordering.',
+						'phase'    => 'pre-latch',
+					)
+				);
+				return $rows;
+			}
+		};
+
+		// Assert.
+		$this->assertSame( 1, $reads );
+		$this->assertSame( 1, $init->declarations );
+		$this->assertSame( 10, has_filter( 'init', array( $init, 'init' ) ) );
+		$this->assertFalse( has_filter( 'woocommerce_pos_sync_serialized_order' ) );
+	}
+
+	/**
+	 * Response registrars must remain dormant until the controllers filter runs.
+	 */
+	public function test_hook_manifest_rest_registrars_keep_controller_filter_timing(): void {
+		// Arrange.
+		$this->with_isolated_init(
+			function (): void {
+				$this->assertFalse( has_filter( 'rest_post_dispatch' ) );
+
+				// Act.
+				$controllers = apply_filters( 'woocommerce_pos_rest_api_controllers', array() );
+
+				// Assert.
+				$this->assertSame( Write_Controller::class, $controllers['sync-write'] );
+				$this->assertSame( PHP_INT_MAX, has_filter( 'rest_post_dispatch', array( \WCPOS\WooCommercePOS\Sync\Response_Telemetry::class, 'ensure_contextual_headers' ) ) );
+				$this->assertSame( PHP_INT_MAX - 2, has_filter( 'rest_post_dispatch', array( \WCPOS\WooCommercePOS\Sync\Retry_After_Mirror::class, 'filter_response' ) ) );
+				$this->assertSame( PHP_INT_MAX - 1, has_filter( 'rest_post_dispatch', array( \WCPOS\WooCommercePOS\Sync\Response_Envelope::class, 'filter_response' ) ) );
+			}
+		);
 	}
 
 	/**

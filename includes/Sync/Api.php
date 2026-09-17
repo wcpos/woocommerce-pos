@@ -55,6 +55,9 @@ final class Api {
 	 * @return array REST API controllers.
 	 */
 	public static function register_controllers( array $controllers ): array {
+		// Reason: Init::hook_rows() retains these registrars here, not at plugins_loaded.
+		// Moving them earlier changes hook visibility and same-priority extension ordering
+		// before woocommerce_pos_rest_api_controllers runs (including unmarked requests).
 		Response_Telemetry::register_hooks();
 		Retry_After_Mirror::register_hooks();
 		Response_Envelope::register_hooks();
