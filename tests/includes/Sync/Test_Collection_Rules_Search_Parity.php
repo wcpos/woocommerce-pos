@@ -159,7 +159,10 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			// Assert.
 			$this->assertSame( 200, $response->get_status() );
-			$this->assertSame( array(), $response->get_data() );
+			// The flat variations route answers with the documents/meta envelope on this lane.
+			$data = $response->get_data();
+			$this->assertSame( array(), $data['documents'] );
+			$this->assertSame( 0, $data['meta']['returned'] );
 		} finally {
 			remove_action( 'pre_get_posts', $late_include, 99 );
 		}
