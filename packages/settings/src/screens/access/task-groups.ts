@@ -37,6 +37,7 @@ export interface TaskGroupMember {
 export interface ResolvedTaskGroup {
 	task: TaskGroup;
 	members: TaskGroupMember[];
+	grantedCount: number;
 	/** Every member is granted. */
 	allGranted: boolean;
 	/** At least one, but not every, member is granted. */
@@ -177,6 +178,7 @@ export function resolveTaskGroups(capabilities: CapabilityGroups): ResolvedTaskG
 			return {
 				task,
 				members,
+				grantedCount,
 				allGranted: members.length > 0 && grantedCount === members.length,
 				partiallyGranted: grantedCount > 0 && grantedCount < members.length,
 			};
