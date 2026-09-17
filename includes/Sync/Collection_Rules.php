@@ -88,7 +88,7 @@ final class Collection_Rules {
 	 * Existing defaults: product phrase null uses WP_Query terms; orders use the supplied
 	 * string; variation args/discovery default to '', and validation casts null to ''.
 	 * Product phrases collapse over-cap terms; orders slice; v2 variations reject.
-	 * Direct product/variation lanes retain WP core parsing and its over-cap policy.
+	 * Every product/variation lane uses this splitter; v1 collapses over-cap, v2 flat variations reject.
 	 * Malformed UTF-8 yields an empty array, including offset-capture callers.
 	 *
 	 * @param string $search Search text.
@@ -358,7 +358,7 @@ final class Collection_Rules {
 			'products' => array(
 				'search' => array(
 					'param'      => 'search',
-					// The cap binds the v2 phrase path only; v1 is bounded by WP core's parser.
+					// Both product lanes use the literal splitter and collapse over-cap terms to the phrase.
 					'term_cap'   => self::SEARCH_TERM_CAP,
 					'rank_exact' => true,
 					'carriers'   => array_merge( array( 'post_title' ), Barcode_Field::search_keys() ),
@@ -384,7 +384,7 @@ final class Collection_Rules {
 					'hpos'            => null,
 					'query'           => 'meta_query',
 					'exact_sku_param' => 'sku',
-					// v1 keeps WP-parsed terms/over-cap collapse and EXISTS SQL, not v2 meta_query/rejection.
+					// Both lanes split literal terms; v1 keeps over-cap collapse/EXISTS, v2 rejects/meta_query.
 					'lanes'           => array(
 						'direct' => array(
 							'query'           => 'wp_terms',
