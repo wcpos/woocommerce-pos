@@ -353,10 +353,12 @@ jobs:
 
       - name: Configure wp-env with latest versions
         run: |
-          # Use latest stable versions (null = latest WordPress)
+          # The release zip for the version the API just offered. Never null or a
+          # GitHub ref: wp-env would then fetch a WordPress/WordPress tag, and the
+          # mirror lags the API by hours after a release (2026-09-17: 7.1.1).
           cat > .wp-env.json << EOF
           {
-            "core": null,
+            "core": "https://downloads.wordpress.org/release/wordpress-${{ steps.versions.outputs.wp }}.zip",
             "phpVersion": "8.2",
             "plugins": [
               "/tmp/wc-plugin/woocommerce",
@@ -641,9 +643,10 @@ jobs:
 
       - name: Configure wp-env with latest versions
         run: |
+          # Same release zip the smoke test ran on (see its wp-env step).
           cat > .wp-env.json << 'EOF'
           {
-            "core": null,
+            "core": "https://downloads.wordpress.org/release/wordpress-${{ needs.smoke-test.outputs.wp_version }}.zip",
             "phpVersion": "8.2",
             "plugins": [
               "/tmp/wc-plugin/woocommerce",
