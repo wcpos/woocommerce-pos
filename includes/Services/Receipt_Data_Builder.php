@@ -68,6 +68,14 @@ class Receipt_Data_Builder {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
 		}
 		$row['breakdowns']['labels'] = $labels;
+		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
+		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
+		$i18n = Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() );
+		$row['has_sales'] = isset( $row['period_sales_total'] ) || isset( $row['period_refunds_total'] ) || isset( $row['breakdowns']['transaction_count'] ) || isset( $row['breakdowns']['refund_count'] );
+		$row['has_perpetual'] = isset( $row['perpetual_sales_total'] ) || isset( $row['perpetual_refunds_total'] );
+		foreach ( array( 'payment_methods', 'tax_rates', 'movements' ) as $section ) {
+			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
+		}
 		$tender_labels = array();
 		foreach ( $row['breakdowns']['payment_methods'] ?? array() as $key => $payment_method ) {
 			$tender_labels[ $payment_method['method'] ?? $key ] = $payment_method['name'] ?? '';
@@ -77,17 +85,15 @@ class Receipt_Data_Builder {
 		foreach ( ( $row['counted'] ?? array() ) + ( $row['expected'] ?? array() ) as $method => $amount ) {
 			$row['tenders'][] = array(
 				'name' => (string) $method,
-				'label' => ! empty( $tender_labels[ $method ] ) ? $tender_labels[ $method ] : ucfirst( (string) $method ),
+				'label' => ! empty( $tender_labels[ $method ] ) ? $tender_labels[ $method ] : ucwords( str_replace( array( '_', '-' ), ' ', (string) $method ) ),
 				'expected' => $row['expected'][ $method ] ?? '',
 				'counted' => $row['counted'][ $method ] ?? '',
 				'variance' => $row['variance'][ $method ] ?? '',
 				'has_variance' => 0.0 !== (float) ( $row['variance'][ $method ] ?? 0 ),
-				'variance_label' => ! isset( $row['variance'][ $method ] ) ? '' : ( (float) $row['variance'][ $method ] > 0 ? __( 'Over', 'woocommerce-pos' ) : ( (float) $row['variance'][ $method ] < 0 ? __( 'Short', 'woocommerce-pos' ) : __( 'Exact', 'woocommerce-pos' ) ) ),
+				'variance_label' => ! isset( $row['variance'][ $method ] ) ? '' : ( (float) $row['variance'][ $method ] > 0 ? $i18n['over'] : ( (float) $row['variance'][ $method ] < 0 ? $i18n['short'] : $i18n['exact'] ) ),
 			);
 		}
-		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
-		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
-		$currency = $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
+		$currency = $row['breakdowns']['currency'] ?? $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
 		$hints = $resolver->build_presentation_hints( $currency );
 		// Reuse receipt currency companions without converting recorded decimal strings to floats.
 		$with_money = static function ( array $values, array $fields ) use ( $currency, $hints ): array {
@@ -120,21 +126,18 @@ class Receipt_Data_Builder {
 		) as $section => $fields ) {
 			$rows = array();
 			foreach ( $row['breakdowns'][ $section ] ?? array() as $key => $values ) {
+				if ( 'payment_methods' === $section ) {
+					$values['method'] = $values['method'] ?? (string) $key;
+				}
 				$values['name'] = $values['name'] ?? $values['method'] ?? $values['rate'] ?? (string) $key;
 				$rows[] = $with_money( $values, $fields );
 			}
 			$row['breakdowns'][ $section ] = $rows;
 		}
-		$type_labels = array(
-			'paid_in' => __( 'Paid in', 'woocommerce-pos' ),
-			'paid_out' => __( 'Paid out', 'woocommerce-pos' ),
-			'no_sale' => __( 'No sale', 'woocommerce-pos' ),
-			'void' => __( 'Void', 'woocommerce-pos' ),
-		);
 		foreach ( $row['breakdowns']['movements'] ?? array() as $key => $movement ) {
 			$movement = $with_money( $movement, array( 'amount' ) );
 			$movement['created_at'] = $date( $movement['created_at_gmt'] ?? null );
-			$movement['type_label'] = $type_labels[ $movement['type'] ] ?? $movement['type'];
+			$movement['type_label'] = $i18n[ $movement['type'] ] ?? $movement['type'];
 			$movement['voided'] = ! empty( $movement['voided_by'] );
 			$row['breakdowns']['movements'][ $key ] = $movement;
 		}
@@ -161,7 +164,7 @@ class Receipt_Data_Builder {
 				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
 			),
 			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),
-			'i18n' => Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() ),
+			'i18n' => $i18n,
 		);
 	}
 

@@ -1,6 +1,12 @@
 {
   "closure": {
     "number": 42,
+    "has_sales": true,
+    "has_payment_methods": true,
+    "has_tax_rates": true,
+    "has_perpetual": true,
+    "has_movements": true,
+
     "store_id": 1,
     "opened_at_gmt": "2026-09-11 08:00:00",
     "closed_at_gmt": "2026-09-11 17:00:00",
@@ -26,8 +32,10 @@
     "unsynced_count": 2,
     "unsynced_total": "12.0000",
     "breakdowns": {
+      "currency": "USD",
       "payment_methods": [
         {
+          "method": "cash",
           "name": "Cash",
           "sales": "130.0000",
           "refunds": "50.0000",
@@ -35,6 +43,7 @@
           "refunds_display": "$50.00"
         },
         {
+          "method": "card",
           "name": "Card",
           "sales": "120.0000",
           "refunds": "0.0000",
@@ -123,6 +132,50 @@
     "unsynced_total_display": "$12.00",
     "opened_at": {"datetime": "Sep 11, 2026, 10:00", "date": "Sep 11, 2026", "time": "10:00", "datetime_short": "9/11/26, 10:00", "datetime_long": "September 11, 2026 at 10:00 GMT+2", "datetime_full": "Friday, September 11, 2026 at 10:00 Central European Summer Time", "date_short": "9/11/26", "date_long": "September 11, 2026", "date_full": "Friday, September 11, 2026", "date_ymd": "2026-09-11", "date_dmy": "11/09/2026", "date_mdy": "09/11/2026", "weekday_short": "Fri", "weekday_long": "Friday", "day": "11", "month": "09", "month_short": "Sep", "month_long": "September", "year": "2026"},
     "closed_at": {"datetime": "Sep 11, 2026, 19:00", "date": "Sep 11, 2026", "time": "19:00", "datetime_short": "9/11/26, 19:00", "datetime_long": "September 11, 2026 at 19:00 GMT+2", "datetime_full": "Friday, September 11, 2026 at 19:00 Central European Summer Time", "date_short": "9/11/26", "date_long": "September 11, 2026", "date_full": "Friday, September 11, 2026", "date_ymd": "2026-09-11", "date_dmy": "11/09/2026", "date_mdy": "09/11/2026", "weekday_short": "Fri", "weekday_long": "Friday", "day": "11", "month": "09", "month_short": "Sep", "month_long": "September", "year": "2026"}
+  },
+  "order": { "currency": "USD" },
+  "i18n": {
+    "x_report": "X-report",
+    "closure": "Closure",
+    "opened": "Opened",
+    "closed": "Closed",
+    "approver": "Approver",
+    "opening_float": "Opening float",
+    "expected": "Expected",
+    "counted": "Counted",
+    "variance": "Variance",
+    "tenders": "Tenders",
+    "tender": "Tender",
+    "cash_movements": "Cash movements",
+    "time": "Time",
+    "type": "Type",
+    "amount": "Amount",
+    "reason": "Reason",
+    "sales": "Sales",
+    "period_sales": "Period sales",
+    "period_refunds": "Period refunds",
+    "transactions": "Transactions",
+    "refunds": "Refunds",
+    "payment_method": "Payment method",
+    "cashiers": "Cashiers",
+    "tax_rates": "Tax rates",
+    "tax_rate": "Tax rate",
+    "net": "Net",
+    "tax": "Tax",
+    "gross": "Gross",
+    "perpetual_totals": "Perpetual totals",
+    "perpetual_sales": "Perpetual sales",
+    "perpetual_refunds": "Perpetual refunds",
+    "unsynced_sales": "sales not yet on the server",
+    "short": "Short",
+    "over": "Over",
+    "exact": "Exact",
+    "voided": "Voided",
+    "paid_in": "Paid in",
+    "paid_out": "Paid out",
+    "no_sale": "No sale",
+    "void": "Void",
+    "copy": "COPY"
   },
   "register": {
     "name": "Main register"

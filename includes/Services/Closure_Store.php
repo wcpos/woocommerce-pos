@@ -527,6 +527,9 @@ final class Closure_Store {
 			$fields += array_intersect_key( $session, array_flip( array( 'register_id', 'store_id', 'opened_by', 'approved_by' ) ) );
 			$fields['business_day'] = $session['business_day'] ?? null;
 			$fields['closed_by'] = 'closed' === $session['status'] ? $session['closed_by'] : get_current_user_id();
+			$store = wcpos_get_store( (int) $fields['store_id'] );
+			$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new \WCPOS\WooCommercePOS\Abstracts\Store() );
+			$fields['breakdowns']['currency'] = $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
 			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->get( $session['register_id'] )['name'] ?? '' );
 			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$fields['breakdowns']['labels'][ $key . '_name' ] = get_userdata( (int) ( $fields[ $key ] ?? 0 ) )->display_name ?? '';

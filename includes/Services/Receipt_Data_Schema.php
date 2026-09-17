@@ -1403,6 +1403,18 @@ class Receipt_Data_Schema {
 				'label' => __( 'Closure', 'woocommerce-pos' ),
 				'fields' => array(),
 			);
+			foreach ( array(
+				'sales' => 'sales',
+				'payment_methods' => 'payment_method',
+				'tax_rates' => 'tax_rates',
+				'perpetual' => 'perpetual_totals',
+				'movements' => 'cash_movements',
+			) as $section => $label_key ) {
+				$tree['closure']['fields'][ 'has_' . $section ] = array(
+					'type' => 'boolean',
+					'label' => $tree['i18n']['fields'][ $label_key ]['label'],
+				);
+			}
 			$field_types = array_fill_keys( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ), 'money' );
 			$field_types += array_fill_keys( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ), 'number' );
 			foreach ( array(
@@ -1414,6 +1426,7 @@ class Receipt_Data_Schema {
 				'business_day' => __( 'Business Day', 'woocommerce-pos' ),
 				'opened_at_gmt' => __( 'Opened (UTC)', 'woocommerce-pos' ),
 				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
+				'breakdowns.currency' => __( 'Currency recorded at closure (older documents use current store currency)', 'woocommerce-pos' ),
 				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
 				'breakdowns.labels.opened_by_name' => __( 'Opened By', 'woocommerce-pos' ),
 				'breakdowns.labels.closed_by_name' => __( 'Closed By', 'woocommerce-pos' ),
@@ -1579,6 +1592,7 @@ class Receipt_Data_Schema {
 			);
 			foreach ( array(
 				'payment_methods' => array(
+					'method' => __( 'Tender Key', 'woocommerce-pos' ),
 					'name' => __( 'Payment Method', 'woocommerce-pos' ),
 					'sales' => __( 'Sales', 'woocommerce-pos' ),
 					'refunds' => __( 'Refunds', 'woocommerce-pos' ),
@@ -1599,7 +1613,7 @@ class Receipt_Data_Schema {
 				);
 				foreach ( $fields as $field => $label ) {
 					$tree[ $key ]['fields'][ $field ] = array(
-						'type' => 'name' === $field ? 'string' : 'money',
+						'type' => in_array( $field, array( 'name', 'method' ), true ) ? 'string' : 'money',
 						'label' => $label,
 					);
 				}

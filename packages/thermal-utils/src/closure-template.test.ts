@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { renderLogiclessPreview } from './logicless-renderer';
+import { sanitizeReceiptDataForRendering } from './receipt-data';
 import { renderThermalPreview } from './thermal-renderer';
 
 const gallery = path.resolve(__dirname, '../../../templates/gallery');
@@ -44,6 +45,73 @@ describe.each([
 		}
 	});
 
+	it('renders all fixture cells from raw offline money maps and breakdowns', () => {
+		const data = structuredClone(fixture);
+		delete data.closure.tenders;
+		const stripDisplays = (value: Record<string, unknown>) => {
+			for (const key of Object.keys(value)) {
+				if (key.endsWith('_display')) delete value[key];
+				else if (value[key] && typeof value[key] === 'object')
+					stripDisplays(value[key] as Record<string, unknown>);
+			}
+		};
+		stripDisplays(data.closure);
+		data.order = { currency: 'USD' };
+		expect(render(template, data)).toBe(render(template, fixture));
+	});
+
+	it('omits absent sections including the tax-rate heading on a live X-report', () => {
+		const data = structuredClone(fixture);
+		data.fiscal.is_x_report = true;
+		for (const key of ['tax_rates', 'payment_methods', 'movements']) {
+			delete data.closure.breakdowns[key];
+			data.closure[`has_${key}`] = false;
+		}
+		data.closure.has_sales = false;
+		data.closure.has_perpetual = false;
+		const html = render(template, data);
+		for (const text of [
+			'Tax rates',
+			'Payment method',
+			'Cash movements',
+			'Period sales',
+			'Perpetual totals',
+		]) {
+			expect(html).not.toContain(text);
+		}
+	});
+
+	it('keeps available live transaction counts without printing absent period totals', () => {
+		const data = structuredClone(fixture);
+		data.fiscal.is_x_report = true;
+		delete data.closure.has_sales;
+		for (const key of ['period_sales_total', 'period_refunds_total']) {
+			delete data.closure[key];
+			delete data.closure[`${key}_display`];
+		}
+		const html = render(template, data);
+		expect(html).toContain('Transactions');
+		expect(html).toContain('Alex');
+		expect(html).not.toContain('Period sales');
+		expect(html).not.toContain('Period refunds');
+	});
+
+	it('uses translated headings rather than English literals', () => {
+		const data = structuredClone(fixture);
+		data.i18n = {
+			...data.i18n,
+			closure: 'Cierre',
+			tenders: 'Pagos',
+			tax_rates: 'Impuestos',
+			voided: 'Anulado',
+		};
+		const html = render(template, data);
+		for (const text of ['Cierre', 'Pagos', 'Impuestos', 'Anulado'])
+			expect(html).toContain(text);
+		for (const text of ['Closure 42', 'Tenders', 'Tax rates', 'Voided'])
+			expect(html).not.toContain(text);
+	});
+
 	it('prints tender labels instead of slugs', () => {
 		const data = structuredClone(fixture);
 		data.closure.tenders[0].label = 'Cash drawer';
@@ -73,14 +141,24 @@ it('keeps thermal variance cells separate from translated non-exact details at 4
 	const template = fs.readFileSync(path.join(gallery, 'thermal-closure-80mm.xml'), 'utf8');
 	const data = structuredClone(fixture);
 	data.closure.tenders.push({
-		name: 'voucher', label: 'Voucher', expected_display: '$9.00', counted_display: '$10.00',
-		variance_display: '$1.00', variance_label: 'Over', has_variance: true,
+		name: 'voucher',
+		label: 'Voucher',
+		expected_display: '$9.00',
+		counted_display: '$10.00',
+		variance_display: '$1.00',
+		variance_label: 'Over',
+		has_variance: true,
 		variance_absolute_display: '$1.00',
 	});
 	data.closure.tenders[0].variance_label = 'Faltante';
 	const root = document.createElement('div');
-	root.innerHTML = renderThermalPreview(template.replace('paper-width="48"', 'paper-width="42"'), data);
-	const rows = Array.from(root.querySelectorAll('div')).filter((el) => el.style.display === 'flex');
+	root.innerHTML = renderThermalPreview(
+		template.replace('paper-width="48"', 'paper-width="42"'),
+		data
+	);
+	const rows = Array.from(root.querySelectorAll('div')).filter(
+		(el) => el.style.display === 'flex'
+	);
 	const cash = rows.find((row) => row.firstElementChild?.textContent === 'Cash')!;
 	expect(cash).toBeDefined();
 	expect(cash.lastElementChild?.textContent).toBe('-$2.00');
@@ -90,4 +168,41 @@ it('keeps thermal variance cells separate from translated non-exact details at 4
 	expect(root.textContent).toContain('Cash Faltante $2.00');
 	expect(root.textContent).toContain('Voucher Over $1.00');
 	expect(root.textContent).not.toContain('Exact');
+});
+
+it('normalizes offline labels and amounts using the currency snapshot without inventing missing counts', () => {
+	const data = sanitizeReceiptDataForRendering({
+		order: { currency: 'USD' },
+		i18n: { short: 'Faltante' },
+		closure: {
+			expected: { cash: '10.0000', credit_card: '2.0000' },
+			counted: { cash: '9.0000' },
+			variance: { cash: '-1.0000' },
+			breakdowns: {
+				currency: 'EUR',
+				payment_methods: [{ method: 'cash', name: 'Cash drawer' }],
+			},
+		},
+	});
+	expect(data.closure).toMatchObject({
+		tenders: [
+			{
+				label: 'Cash drawer',
+				expected_display: '€10.00',
+				counted_display: '€9.00',
+				variance_display: '-€1.00',
+				has_variance: true,
+				variance_absolute_display: '€1.00',
+				variance_label: 'Faltante',
+			},
+			{
+				label: 'Credit Card',
+				expected_display: '€2.00',
+				counted_display: '',
+				variance_display: '',
+				has_variance: false,
+				variance_label: '',
+			},
+		],
+	});
 });

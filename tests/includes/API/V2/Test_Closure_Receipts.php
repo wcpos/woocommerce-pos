@@ -127,6 +127,29 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A frozen currency and list-form tender label survive store changes. */
+	public function test_closure_currency_snapshot_and_list_labels_survive_store_changes(): void {
+		$currency = get_option( 'woocommerce_currency' );
+		try {
+			update_option( 'woocommerce_currency', 'EUR' );
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fixture = json_decode( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/preview-data/closure.json' ), true );
+			$fields['breakdowns'] = $fixture['closure']['breakdowns'];
+			$fields['breakdowns']['payment_methods'][0]['name'] = 'Cash drawer';
+			$row = ( new Closure_Store() )->create( $fields );
+			$this->assertSame( 'EUR', $row['breakdowns']['currency'] );
+			update_option( 'woocommerce_currency', 'USD' );
+			$data = $this->document( 'closure:' . $row['id'] )->get_data()['data'];
+			$this->assertSame( 'EUR', $data['order']['currency'] );
+			$this->assertStringContainsString( '€', $data['closure']['tenders'][0]['counted_display'] );
+			$this->assertSame( 'Cash drawer', $data['closure']['tenders'][0]['label'] );
+			$this->assertSame( 'Closure', $data['i18n']['closure'] );
+			$this->assertTrue( $data['closure']['has_tax_rates'] );
+		} finally {
+			update_option( 'woocommerce_currency', $currency );
+		}
+	}
+
 	/** A thin X-report needs no closure, number or count. */
 	public function test_xreport_live_session_and_missing_or_scoped_documents(): void {
 		$session = $this->closure_session();
@@ -135,6 +158,10 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data()['data'];
 		$this->assertSame( 'xreport', $data['fiscal']['document_type'] );
+		$this->assertTrue( $data['closure']['has_sales'] );
+		$this->assertFalse( $data['closure']['has_tax_rates'] );
+		$this->assertFalse( $data['closure']['has_perpetual'] );
+		$this->assertFalse( $data['closure']['has_payment_methods'] );
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );
 		$this->assertTrue( $data['fiscal']['is_x_report'] );
 		$this->assertSame( '', $data['fiscal']['receipt_number'] );
