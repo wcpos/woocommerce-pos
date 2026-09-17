@@ -1462,6 +1462,7 @@ class Receipt_Data_Schema {
 			// Corrections supplement the frozen closure; shipped templates do not print them.
 			$tree['closure']['fields']['corrections'] = array(
 				'type' => 'array',
+				'is_array' => true,
 				'label' => __( 'Corrections', 'woocommerce-pos' ),
 				'fields' => array(
 					'id' => array(

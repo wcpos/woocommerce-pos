@@ -19,6 +19,17 @@ final class Closure_Store {
 	 */
 	private static $installed = array();
 
+	/** Validate a business day without normalizing impossible calendar dates.
+	 *
+	 * @param mixed $value Client-supplied business day.
+	 */
+	public static function is_business_day( $value ): bool {
+		if ( ! is_string( $value ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $value ) ) {
+			return false;
+		}
+		return checkdate( (int) substr( $value, 5, 2 ), (int) substr( $value, 8, 2 ), (int) substr( $value, 0, 4 ) );
+	}
+
 	/** Resolve the site table. */
 	public function table_name(): string {
 		global $wpdb;

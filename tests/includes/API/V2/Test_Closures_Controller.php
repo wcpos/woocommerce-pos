@@ -106,6 +106,29 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $this->post( 'closures', $body )->get_status() );
 	}
 
+	/** Calendar-invalid business days are rejected before writing a closure. */
+	public function test_closure_business_day_invalid_calendar_date_returns_400(): void {
+		$body = $this->body( $this->closure_session() );
+		foreach ( array( '2026-02-31', '0000-00-00', '2026-02-29' ) as $bad ) {
+			$body['business_day'] = $bad;
+			$response = $this->post( 'closures', $body );
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		}
+	}
+
+	/** Both date filters reject calendar-invalid days rather than normalizing them. */
+	public function test_closure_date_filters_invalid_calendar_date_returns_400(): void {
+		foreach ( array( 'after', 'before' ) as $key ) {
+			foreach ( array( '2026-02-31', '0000-00-00', '2026-02-29' ) as $bad ) {
+				$response = $this->get( 'closures', array( $key => $bad ) );
+				$this->assertSame( 400, $response->get_status() );
+				$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+			}
+		}
+		$this->assertSame( 200, $this->get( 'closures', array( 'after' => '2024-02-29' ) )->get_status() );
+	}
+
 	/** The session stamp wins, and filtering uses it rather than the closing instant. */
 	public function test_closure_business_day_copies_session_and_filters_dates(): void {
 		global $wpdb;

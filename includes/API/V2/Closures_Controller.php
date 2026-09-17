@@ -208,7 +208,7 @@ class Closures_Controller extends \WP_REST_Controller {
 		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) || ! is_string( $request['software_version'] ) || Pos_Order_Audit::char_length( $request['software_version'] ) > 64 || ! is_array( $request['breakdowns'] ) ) {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
-		if ( $request->has_param( 'business_day' ) && ( ! is_string( $request['business_day'] ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $request['business_day'] ) ) ) {
+		if ( $request->has_param( 'business_day' ) && ! Closure_Store::is_business_day( $request['business_day'] ) ) {
 			return $this->error( 'rest_invalid_param', 400 );
 		}
 		$fields = array(
@@ -297,7 +297,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			$value = $request[ $key ];
 			if ( in_array( $key, array( 'after', 'before' ), true ) ) {
-				if ( ! is_string( $value ) || ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $value ) && ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) ) {
+				if ( ! is_string( $value ) || ( ! Closure_Store::is_business_day( $value ) && ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) ) {
 					return $this->error( 'rest_invalid_param', 400 );
 				}
 				$value = gmdate( 'Y-m-d H:i:s', strtotime( $value ) );
