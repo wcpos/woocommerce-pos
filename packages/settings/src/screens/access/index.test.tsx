@@ -357,7 +357,6 @@ describe('Access screen defaults and mixed tasks', () => {
 		expect(screen.getByTestId('access-restore-individual-remove')).toHaveTextContent(
 			'view_woocommerce_pos_reports'
 		);
-		expect(screen.queryByText('Grant')).not.toBeInTheDocument;
 	});
 
 	it('uses removal copy and excludes tasks not wholly covered by defaults', () => {
