@@ -201,6 +201,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$params['per_page']['minimum'] = -1;
 		}
 
+		// Search text is literal on every lane: `sanitize_text_field` would strip `%30`
+		// and blank malformed UTF-8 before the declared search rule ever saw them.
+		if ( isset( $params['search'] ) && \is_array( $params['search'] ) ) {
+			$params['search']['sanitize_callback'] = 'rest_sanitize_request_arg';
+		}
+
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// DECLARED once, in Sync\Collection_Rules, and projected here — so a sort cannot

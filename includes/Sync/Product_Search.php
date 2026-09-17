@@ -112,7 +112,7 @@ final class Product_Search {
 	}
 
 	/**
-	 * Direct variations retain WordPress-parsed terms and the existing EXISTS SQL.
+	 * Direct variations use literal terms with over-cap collapse and the existing EXISTS SQL.
 	 *
 	 * @param string $search Search SQL.
 	 * @param array  $q      Query variables.
@@ -122,12 +122,21 @@ final class Product_Search {
 	public static function variation_posts_search( string $search, array $q, array $rule ) {
 		global $wpdb;
 
-		if ( empty( $search ) ) {
+		$phrase = $q['wcpos_search_phrase'] ?? null;
+		if ( empty( $search ) && null === $phrase ) {
 			return $search; // skip processing - no search term in query.
 		}
+		$search_terms = null !== $phrase
+			? Collection_Rules::search_terms( $phrase )
+			: (array) $q['search_terms'];
+		if ( null !== $phrase && array() === $search_terms ) {
+			return ' AND 1=0 ';
+		}
+		if ( null !== $phrase && $rule['term_cap'] < \count( $search_terms ) ) {
+			$search_terms = array( $phrase );
+		}
 
-		$n            = ! empty( $q['exact'] ) ? '' : '%';
-		$search_terms = (array) $q['search_terms'];
+		$n = ! empty( $q['exact'] ) ? '' : '%';
 
 		// Meta fields to search.
 		$meta_fields = $rule['posts']['meta'];
