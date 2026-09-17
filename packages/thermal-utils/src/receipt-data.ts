@@ -38,6 +38,13 @@ export function sanitizeReceiptDataForRendering(
 	const store = (sanitized.store ?? {}) as Record<string, unknown>;
 	const hints = (sanitized.presentation_hints ?? {}) as Record<string, unknown>;
 	const recordedStore = breakdowns.store as Record<string, unknown> | undefined;
+	const labels = breakdowns.labels as Record<string, unknown> | undefined;
+	if (labels?.register_name != null) {
+		sanitized.register = {
+			...((sanitized.register ?? {}) as Record<string, unknown>),
+			name: labels.register_name,
+		};
+	}
 	if (recordedStore) {
 		sanitized.store = {
 			...store,
@@ -68,12 +75,31 @@ export function sanitizeReceiptDataForRendering(
 	const currency = String(breakdowns.currency ?? storeCurrency);
 	const decimals = hints.price_num_decimals ?? store.price_decimals;
 	// WooCommerce presentation hints contain HTML-encoded currency symbols.
-	const symbolElement = document.createElement('textarea');
-	symbolElement.innerHTML = String(hints.currency_symbol ?? '');
+	let decodedSymbol = String(hints.currency_symbol ?? '');
+	if (typeof document !== 'undefined') {
+		const symbolElement = document.createElement('textarea');
+		symbolElement.innerHTML = decodedSymbol;
+		decodedSymbol = symbolElement.value;
+	} else {
+		const entities: Record<string, string> = {
+			amp: '&',
+			lt: '<',
+			gt: '>',
+			quot: '"',
+			'#39': "'",
+			nbsp: '\u00a0',
+		};
+		decodedSymbol = decodedSymbol.replace(
+			/&(amp|lt|gt|quot|#39|nbsp|#\d+|#[xX][\da-fA-F]+);/g,
+			(entity, key: string) => {
+				if (entities[key] != null) return entities[key];
+				const point = /^#x/i.test(key) ? parseInt(key.slice(2), 16) : Number(key.slice(1));
+				return point <= 0x10ffff ? String.fromCodePoint(point) : entity;
+			}
+		);
+	}
 	const currencySymbol =
-		currency === storeCurrency && hints.currency_symbol != null
-			? symbolElement.value
-			: undefined;
+		currency === storeCurrency && hints.currency_symbol != null ? decodedSymbol : undefined;
 	const moneyOptions: Intl.NumberFormatOptions = {
 		style: 'currency',
 		currency,
@@ -86,14 +112,20 @@ export function sanitizeReceiptDataForRendering(
 				}),
 	};
 	let formatter: Intl.NumberFormat | undefined;
+	let decimalFallback = false;
 	const money = (value: unknown) => {
 		if (value == null || value === '') return '';
+		if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(String(value))) return String(value);
 		if (!formatter) {
 			try {
 				formatter = new Intl.NumberFormat(locale, moneyOptions);
 			} catch {
-				locale = 'en';
-				formatter = new Intl.NumberFormat(locale, moneyOptions);
+				decimalFallback = true;
+				formatter = new Intl.NumberFormat(locale, {
+					style: 'decimal',
+					minimumFractionDigits: Number(decimals ?? 2),
+					maximumFractionDigits: Number(decimals ?? 2),
+				});
 			}
 		}
 		// Round the decimal magnitude as an integer; Intl only receives exact BigInts.
@@ -132,8 +164,10 @@ export function sanitizeReceiptDataForRendering(
 					)[part.type] ?? part.value
 				),
 			}));
-		if (!hints.currency_position) return parts.map((part) => part.value).join('');
-		const symbol = parts.find((part) => part.type === 'currency')?.value ?? currency;
+		if (!hints.currency_position && !decimalFallback)
+			return parts.map((part) => part.value).join('');
+		const symbol =
+			currencySymbol ?? parts.find((part) => part.type === 'currency')?.value ?? currency;
 		const amount = parts
 			.filter((part) => ['integer', 'group', 'decimal', 'fraction'].includes(part.type))
 			.map((part) => part.value)

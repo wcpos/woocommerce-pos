@@ -3,6 +3,62 @@ import { describe, expect, it, vi } from 'vitest';
 import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 describe('offline closure presentation', () => {
+	it.each(['cash', '1.2.3', '0xFF', '1e3'])(
+		'preserves non-decimal amount %s as raw display',
+		(sales) => {
+			const data = sanitizeReceiptDataForRendering({
+				closure: { breakdowns: { payment_methods: { cash: { sales } } } },
+			});
+			expect(data.closure).toMatchObject({
+				breakdowns: { payment_methods: [{ sales, sales_display: sales }] },
+			});
+		}
+	);
+
+	it.each([
+		['left', '₮1.234,50'],
+		['left_space', '₮ 1.234,50'],
+		['right', '1.234,50₮'],
+		['right_space', '1.234,50 ₮'],
+		[undefined, '₮1.234,50'],
+	])('formats a rejected currency code with store hints at %s', (position, expected) => {
+		const data = sanitizeReceiptDataForRendering({
+			order: { currency: 'USDT' },
+			presentation_hints: {
+				locale: 'de_DE',
+				currency_symbol: '&#x20AE;',
+				currency_position: position,
+				price_num_decimals: 2,
+				price_thousand_separator: '.',
+				price_decimal_separator: ',',
+			},
+			closure: {
+				period_sales_total: '1234.5000',
+				period_refunds_total: '-1234.5000',
+				breakdowns: { currency: 'USDT' },
+			},
+		});
+		expect(data.closure).toMatchObject({
+			period_sales_total_display: expected,
+			period_refunds_total_display: `-${expected}`,
+		});
+	});
+
+	it.each(['Recorded register', '', undefined])(
+		'overlays recorded register name %j without changing other fields',
+		(register_name) => {
+			const input = {
+				register: { id: 7, name: 'Current register' },
+				closure: { breakdowns: { labels: { register_name } } },
+			};
+			expect(sanitizeReceiptDataForRendering(input).register).toEqual({
+				id: 7,
+				name: register_name ?? 'Current register',
+			});
+			expect(input.register.name).toBe('Current register');
+		}
+	);
+
 	it('overlays the recorded store identity without replacing current presentation settings', () => {
 		const input = {
 			store: { name: 'Current shop', address_lines: ['New address'], locale: 'en_US' },
