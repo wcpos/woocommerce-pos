@@ -155,6 +155,42 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Reprints use the timezone recorded at closure; older rows use the live timezone. */
+	public function test_closure_timezone_snapshot_survives_store_timezone_change(): void {
+		$timezone = 'Europe/Madrid';
+		$timezone_filter = static function () use ( &$timezone ) {
+			return $timezone;
+		};
+		add_filter( 'woocommerce_store_get_timezone', $timezone_filter );
+		try {
+			$fields = $this->closure_fields( $this->closure_session() );
+			$fields['breakdowns']['timezone'] = 'UTC'; // Client values do not override the store snapshot.
+			$fields['breakdowns']['movements'] = array(
+				array(
+					'type' => 'paid_in',
+					'amount' => '5.0000',
+					'created_at_gmt' => $fields['opened_at_gmt'],
+				),
+			);
+			$row = ( new Closure_Store() )->create( $fields );
+			$this->assertSame( 'Europe/Madrid', $row['breakdowns']['timezone'] );
+			$original = $this->document( 'closure:' . $row['id'], 'print' )->get_data()['data']['closure'];
+			$this->assertStringContainsString( '10:00', $original['opened_at']['time'] );
+			$timezone = 'America/New_York';
+
+			$reprint = $this->document( 'closure:' . $row['id'], 'print' )->get_data()['data']['closure'];
+
+			$this->assertSame( $original['opened_at'], $reprint['opened_at'] );
+			$this->assertSame( $original['closed_at'], $reprint['closed_at'] );
+			$this->assertSame( $original['breakdowns']['movements'][0]['created_at'], $reprint['breakdowns']['movements'][0]['created_at'] );
+			unset( $row['breakdowns']['timezone'] );
+			$legacy = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+			$this->assertNotSame( $original['opened_at']['time'], $legacy['closure']['opened_at']['time'] );
+		} finally {
+			remove_filter( 'woocommerce_store_get_timezone', $timezone_filter );
+		}
+	}
+
 	/** Malformed breakdown entries cannot reach the typed money formatter. */
 	public function test_closure_document_non_array_breakdown_rows_are_skipped(): void {
 		$fields = $this->closure_fields( $this->closure_session() );

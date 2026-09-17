@@ -530,6 +530,7 @@ final class Closure_Store {
 			$store = wcpos_get_store( (int) $fields['store_id'] );
 			$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new \WCPOS\WooCommercePOS\Abstracts\Store() );
 			$fields['breakdowns']['currency'] = $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
+			$fields['breakdowns']['timezone'] = $resolver->resolve_store_timezone()->getName();
 			$fields['breakdowns']['store'] = array_intersect_key( $resolver->build_store_section(), array_flip( array( 'name', 'address_lines' ) ) );
 			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->get( $session['register_id'] )['name'] ?? '' );
 			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {

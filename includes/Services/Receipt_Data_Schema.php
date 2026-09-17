@@ -1427,6 +1427,7 @@ class Receipt_Data_Schema {
 				'opened_at_gmt' => __( 'Opened (UTC)', 'woocommerce-pos' ),
 				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
 				'breakdowns.currency' => __( 'Currency recorded at closure (older documents use current store currency)', 'woocommerce-pos' ),
+				'breakdowns.timezone' => __( 'Timezone recorded at closure (older documents use current store timezone)', 'woocommerce-pos' ),
 				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
 				'breakdowns.labels.opened_by_name' => __( 'Opened By', 'woocommerce-pos' ),
 				'breakdowns.labels.closed_by_name' => __( 'Closed By', 'woocommerce-pos' ),

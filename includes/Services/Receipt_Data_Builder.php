@@ -104,9 +104,10 @@ class Receipt_Data_Builder {
 			}
 			return $values;
 		};
-		$date = static function ( $gmt ) use ( $resolver ): array {
+		$timezone = isset( $row['breakdowns']['timezone'] ) ? new DateTimeZone( $row['breakdowns']['timezone'] ) : $resolver->resolve_store_timezone();
+		$date = static function ( $gmt ) use ( $resolver, $timezone ): array {
 			$timestamp = $gmt ? strtotime( $gmt . ' UTC' ) : false;
-			return false === $timestamp ? Receipt_Date_Formatter::empty() : Receipt_Date_Formatter::from_timestamp( $timestamp, $resolver->resolve_store_timezone(), $resolver->resolve_locale() );
+			return false === $timestamp ? Receipt_Date_Formatter::empty() : Receipt_Date_Formatter::from_timestamp( $timestamp, $timezone, $resolver->resolve_locale() );
 		};
 		$row = $with_money( $row, array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total' ) );
 		foreach ( array( 'opened_at', 'closed_at' ) as $field ) {

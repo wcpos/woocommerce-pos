@@ -37,14 +37,26 @@ export function sanitizeReceiptDataForRendering(
 	const order = sanitized.order as { currency?: string } | undefined;
 	const store = (sanitized.store ?? {}) as Record<string, unknown>;
 	const hints = (sanitized.presentation_hints ?? {}) as Record<string, unknown>;
-	const locale = String(hints.locale || store.locale || 'en-US').replace(/_/g, '-');
+	// Drop WordPress modifiers and invalid trailing subtags, retaining valid BCP 47 variants.
+	let locale = String(hints.locale || store.locale || 'en-US')
+		.split('@')[0]
+		.replace(/_/g, '-');
+	for (;;) {
+		try {
+			locale = Intl.getCanonicalLocales(locale)[0];
+			break;
+		} catch {
+			const suffix = locale.lastIndexOf('-');
+			locale = suffix > 0 ? locale.slice(0, suffix) : 'en';
+		}
+	}
 	const currency = String(breakdowns.currency ?? order?.currency ?? 'USD');
 	const decimals = hints.price_num_decimals ?? store.price_decimals;
 	// WooCommerce presentation hints contain HTML-encoded currency symbols.
 	const symbolElement = document.createElement('textarea');
 	symbolElement.innerHTML = String(hints.currency_symbol ?? '');
 	const currencySymbol = hints.currency_symbol == null ? undefined : symbolElement.value;
-	const formatter = new Intl.NumberFormat(locale, {
+	const moneyOptions: Intl.NumberFormatOptions = {
 		style: 'currency',
 		currency,
 		currencyDisplay: 'narrowSymbol',
@@ -54,9 +66,18 @@ export function sanitizeReceiptDataForRendering(
 					minimumFractionDigits: Number(decimals),
 					maximumFractionDigits: Number(decimals),
 				}),
-	});
+	};
+	let formatter: Intl.NumberFormat | undefined;
 	const money = (value: unknown) => {
 		if (value == null || value === '') return '';
+		if (!formatter) {
+			try {
+				formatter = new Intl.NumberFormat(locale, moneyOptions);
+			} catch {
+				locale = 'en';
+				formatter = new Intl.NumberFormat(locale, moneyOptions);
+			}
+		}
 		const parts = formatter.formatToParts(Number(value)).map((part) => ({
 			...part,
 			value: String(
@@ -88,7 +109,9 @@ export function sanitizeReceiptDataForRendering(
 			Number.isNaN(instant.getTime())
 				? ''
 				: new Intl.DateTimeFormat(language, {
-						timeZone: String(hints.timezone || store.timezone || 'UTC'),
+						timeZone: String(
+							breakdowns.timezone || hints.timezone || store.timezone || 'UTC'
+						),
 						...options,
 					}).format(instant);
 		const result: Record<string, string> = {
@@ -121,9 +144,12 @@ export function sanitizeReceiptDataForRendering(
 	};
 	const title = (method: string) =>
 		method.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-	const payments = Object.entries(
-		(breakdowns.payment_methods ?? {}) as Record<string, Record<string, unknown>>
-	);
+	const recordEntries = (value: unknown) =>
+		Object.entries((value ?? {}) as Record<string, unknown>).filter(
+			(entry): entry is [string, Record<string, unknown>] =>
+				entry[1] !== null && typeof entry[1] === 'object' && !Array.isArray(entry[1])
+		);
+	const payments = recordEntries(breakdowns.payment_methods);
 	const tenderLabels = Object.fromEntries(
 		payments.map(([key, row]) => [row.method ?? key, row.name])
 	);
@@ -163,6 +189,8 @@ export function sanitizeReceiptDataForRendering(
 		'perpetual_refunds_total',
 		'unsynced_total',
 	]);
+	for (const field of ['opened_at', 'closed_at'])
+		closure[field] ??= date(closure[`${field}_gmt`]);
 	if (breakdowns.opening_float)
 		withMoney(breakdowns.opening_float as Record<string, unknown>, [
 			'expected',
@@ -174,9 +202,7 @@ export function sanitizeReceiptDataForRendering(
 		tax_rates: ['net', 'tax', 'gross'],
 		movements: ['amount'],
 	})) {
-		const rows = Object.entries(
-			(breakdowns[section] ?? {}) as Record<string, Record<string, unknown>>
-		);
+		const rows = recordEntries(breakdowns[section]);
 		closure[`has_${section}`] ??= rows.length > 0;
 		breakdowns[section] = rows.map(([key, row]) => {
 			if (section === 'payment_methods') row.method ??= key;
