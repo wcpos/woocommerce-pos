@@ -145,6 +145,42 @@ class Test_Request_Write_Queue extends WP_UnitTestCase {
 		$this->assertFalse( $queue->owes( 'order', 2 ) );
 	}
 
+	/** A writer that re-enters during a capacity flush still obeys capacity and coalescing. */
+	public function test_reentrant_owe_during_capacity_flush_is_re_evaluated(): void {
+		// Arrange. Capacity 1: writing order 1 owes order 2 with a payload.
+		$writes = array();
+		$queue  = new Request_Write_Queue(
+			1,
+			static function ( $type, $id, $payload ) use ( &$writes, &$queue ): void {
+				$writes[] = array( $id, $payload );
+				if ( 1 === $id ) {
+					$queue->owe( 'order', 2, 'from-writer' );
+				}
+			}
+		);
+		$queue->owe( 'order', 1 );
+
+		// Act. A third order arrives while the queue is full.
+		$queue->owe( 'order', 3 );
+
+		// Assert. The re-entered order 2 was flushed too, so capacity still holds.
+		$this->assertSame( array( array( 1, null ), array( 2, 'from-writer' ) ), $writes );
+		$this->assertTrue( $queue->owes( 'order', 3 ) );
+		$this->assertFalse( $queue->owes( 'order', 2 ) );
+
+		// Act. The same key the writer re-entered arrives with no payload.
+		$queue->flush();
+		$queue->owe( 'order', 1 );
+		$queue->owe( 'order', 2 );
+
+		// Assert. The writer's payload for order 2 survives the outer null payload.
+		$queue->flush();
+		$this->assertSame( array( 3, null ), $writes[2] );
+		$this->assertSame( array( 1, null ), $writes[3] );
+		$this->assertSame( array( 2, 'from-writer' ), $writes[4] );
+		$this->assertCount( 5, $writes );
+	}
+
 	/** Reentrant writes start a fresh queue rather than getting lost. */
 	public function test_reentrant_owe_remains_pending_after_flush(): void {
 		// Arrange.

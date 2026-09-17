@@ -75,13 +75,21 @@ final class Request_Write_Queue {
 			return;
 		}
 		$key = $this->key( $type, $id );
-		if ( isset( $this->entries[ $key ] ) ) {
-			if ( null !== $payload ) {
-				$this->entries[ $key ][3] = $payload;
+		// A capacity flush runs writers that may re-enter owe(), so the pending
+		// state is re-read after each flush: the key may now be pending (keep it,
+		// merge the payload) or the queue full again. One re-check is enough for
+		// any real writer; a pathological one that refills the queue on every
+		// flush is then allowed a bounded overflow rather than an endless loop.
+		for ( $attempt = 0; $attempt < 2; $attempt++ ) {
+			if ( isset( $this->entries[ $key ] ) ) {
+				if ( null !== $payload ) {
+					$this->entries[ $key ][3] = $payload;
+				}
+				return;
 			}
-			return;
-		}
-		if ( count( $this->entries ) >= $this->capacity ) {
+			if ( count( $this->entries ) < $this->capacity ) {
+				break;
+			}
 			$this->flush();
 		}
 		$this->entries[ $key ] = array( get_current_blog_id(), $type, $id, $payload );
