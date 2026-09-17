@@ -22,10 +22,34 @@ function sanitizeValue(value: unknown): unknown {
 		Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
 			key,
 			sanitizeValue(nested),
-		]),
+		])
 	);
 }
 
-export function sanitizeReceiptDataForRendering(data: Record<string, unknown>): Record<string, unknown> {
-	return sanitizeValue(data) as Record<string, unknown>;
+export function sanitizeReceiptDataForRendering(
+	data: Record<string, unknown>
+): Record<string, unknown> {
+	const sanitized = sanitizeValue(data) as Record<string, unknown>;
+	const closure = sanitized.closure as
+		| {
+				counted?: Record<string, unknown>;
+				expected?: Record<string, unknown>;
+				variance?: Record<string, unknown>;
+				tenders?: unknown[];
+		  }
+		| undefined;
+	if (closure && !closure.tenders) {
+		// Offline closure rows carry maps; Mustache needs the same row list as PHP.
+		const methods = new Set([
+			...Object.keys(closure.counted ?? {}),
+			...Object.keys(closure.expected ?? {}),
+		]);
+		closure.tenders = [...methods].map((name) => ({
+			name,
+			expected: closure.expected?.[name] ?? '',
+			counted: closure.counted?.[name] ?? '',
+			variance: closure.variance?.[name] ?? '',
+		}));
+	}
+	return sanitized;
 }

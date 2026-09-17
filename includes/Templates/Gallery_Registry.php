@@ -587,6 +587,28 @@ class Gallery_Registry {
 				'version' => 1,
 				'preview_data' => 'report-sales',
 			),
+			'closure-default' => array(
+				'title' => __( 'Closure', 'woocommerce-pos' ),
+				'description' => __( 'Closure and X-report with tender counts, cash movements and totals.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'logicless',
+				'output_type' => 'html',
+				'paper_width' => null,
+				'version' => 1,
+				'preview_data' => 'closure',
+			),
+			'thermal-closure-80mm' => array(
+				'title' => __( 'Thermal Closure', 'woocommerce-pos' ),
+				'description' => __( 'Closure and X-report with tender counts, cash movements and totals.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '80mm',
+				'version' => 1,
+				'preview_data' => 'closure',
+			),
 		);
 	}
 }

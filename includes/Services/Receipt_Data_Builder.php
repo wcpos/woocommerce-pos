@@ -68,6 +68,16 @@ class Receipt_Data_Builder {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
 		}
 		$row['breakdowns']['labels'] = $labels;
+		// Mustache iterates rows, not tender-keyed maps. Keep the stored figures unchanged.
+		$row['tenders'] = array();
+		foreach ( ( $row['counted'] ?? array() ) + ( $row['expected'] ?? array() ) as $method => $amount ) {
+			$row['tenders'][] = array(
+				'name' => (string) $method,
+				'expected' => $row['expected'][ $method ] ?? '',
+				'counted' => $row['counted'][ $method ] ?? '',
+				'variance' => $row['variance'][ $method ] ?? '',
+			);
+		}
 		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
 		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
 		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
@@ -82,6 +92,7 @@ class Receipt_Data_Builder {
 		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
 		return array(
 			'closure' => $row,
+			'store' => $resolver->build_store_section(),
 			'register' => $register,
 			'software' => array(
 				'name' => 'WCPOS',

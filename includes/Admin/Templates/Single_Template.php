@@ -241,9 +241,9 @@ class Single_Template {
 		$template    = TemplatesManager::get_template( $post->ID );
 		$type        = $template['type'] ?? 'receipt';
 		$is_display  = 'display' === $type;
-		$is_report   = 'report' === $type;
+		$is_offline_document = \in_array( $type, array( 'report', 'closure' ), true );
 		$engine      = $is_display ? 'logicless' : self::get_editor_engine( $post );
-		if ( $is_report && 'legacy-php' === $engine ) {
+		if ( $is_offline_document && 'legacy-php' === $engine ) {
 			$engine = 'logicless';
 		}
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
@@ -253,9 +253,8 @@ class Single_Template {
 		$disabled = $is_display || ! $is_new ? 'disabled="disabled"' : '';
 
 		$engines = self::get_engine_options();
-		if ( $is_report ) {
-			// A report document is built by the device and rendered from a template; there is
-			// no server-side PHP path for it, so the legacy engine is not offered.
+		if ( $is_offline_document ) {
+			// New report and closure templates must render offline on the device.
 			unset( $engines['legacy-php'] );
 		}
 
@@ -406,8 +405,8 @@ class Single_Template {
 				update_post_meta( $post_id, '_template_language', 'html' );
 			} elseif ( isset( $_POST['wcpos_template_engine'] ) ) {
 				$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
-				if ( ! empty( $terms ) && 'report' === $terms[0]->slug && 'legacy-php' === $engine ) {
-					// Reports have no PHP render path; a posted legacy engine is coerced to logicless.
+				if ( ! empty( $terms ) && \in_array( $terms[0]->slug, array( 'report', 'closure' ), true ) && 'legacy-php' === $engine ) {
+					// New offline documents cannot select the server-only PHP engine.
 					$engine = 'logicless';
 				}
 				if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {

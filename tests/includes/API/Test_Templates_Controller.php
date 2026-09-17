@@ -1346,6 +1346,53 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Closure defaults render the fixture without an order in both preview lanes. */
+	public function test_closure_defaults_preview_fixture_and_x_report_copy(): void {
+		foreach ( array( 'v1', 'v2' ) as $lane ) {
+			foreach ( array( 'plugin-core', 'closure-default', 'thermal-closure-80mm' ) as $key ) {
+				$request = $this->wp_rest_get_request( '/wcpos/' . $lane . '/templates/' . $key . '/preview' );
+				$request->set_param( 'type', 'closure' );
+				$request->set_param( 'order_id', 999999999 );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( 0, $data['order_id'] );
+				$this->assertNotEmpty( $data['receipt_data']['store']['name'] );
+				$this->assertSame(
+					array(
+						array(
+							'name' => 'cash',
+							'expected' => '180.0000',
+							'counted' => '178.0000',
+							'variance' => '-2.0000',
+						),
+						array(
+							'name' => 'card',
+							'expected' => '120.0000',
+							'counted' => '120.0000',
+							'variance' => '0.0000',
+						),
+					),
+					$data['receipt_data']['closure']['tenders']
+				);
+				$html = $data['preview_html'] ?? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] );
+				foreach ( array( 'Closure 42', 'Main register', 'Alex', 'Opening float', '178.0000', '-2.0000', 'Petty cash', 'Voided', 'VAT 20%', '5250.0000', 'WCPOS' ) as $text ) {
+					$this->assertStringContainsString( $text, $html );
+				}
+				$copy = $data['receipt_data'];
+				$copy['fiscal']['is_x_report'] = true;
+				$copy['fiscal']['is_reprint'] = true;
+				$copy['fiscal']['reprint_count'] = 2;
+				$copy['closure']['corrections'] = array( array( 'reason' => 'CORRECTION MUST NOT PRINT' ) );
+				$html = ( new \Mustache\Engine() )->render( $data['template_content'], $copy );
+				$this->assertStringContainsString( 'X-report', $html );
+				$this->assertStringContainsString( 'COPY 2', $html );
+				$this->assertStringNotContainsString( 'Closure 42', $html );
+				$this->assertStringNotContainsString( 'CORRECTION MUST NOT PRINT', $html );
+			}
+		}
+	}
+
 	// ---- Task 9: Preview tests ----
 
 	/**

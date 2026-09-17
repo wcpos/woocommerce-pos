@@ -1392,7 +1392,7 @@ class Receipt_Data_Schema {
 			return self::get_report_field_tree( $tree );
 		}
 		if ( 'closure' === $type ) {
-			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'register', 'software', 'fiscal', 'i18n' ) ) );
+			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'store', 'register', 'software', 'fiscal', 'i18n' ) ) );
 			$tree['order']['fields'] = array_intersect_key( $tree['order']['fields'], array_flip( array( 'currency' ) ) );
 			$tree['register']['fields']['store_id'] = array(
 				'type'  => 'number',
@@ -1445,6 +1445,28 @@ class Receipt_Data_Schema {
 					'label' => $label,
 				);
 			}
+			$tree['closure.tenders'] = array(
+				'label' => __( 'Tenders', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields' => array(
+					'name' => array(
+						'type' => 'string',
+						'label' => __( 'Tender', 'woocommerce-pos' ),
+					),
+					'expected' => array(
+						'type' => 'money',
+						'label' => __( 'Expected', 'woocommerce-pos' ),
+					),
+					'counted' => array(
+						'type' => 'money',
+						'label' => __( 'Counted', 'woocommerce-pos' ),
+					),
+					'variance' => array(
+						'type' => 'money',
+						'label' => __( 'Variance', 'woocommerce-pos' ),
+					),
+				),
+			);
 			foreach ( array(
 				'counted' => __( 'Counted by Tender', 'woocommerce-pos' ),
 				'expected' => __( 'Expected by Tender', 'woocommerce-pos' ),

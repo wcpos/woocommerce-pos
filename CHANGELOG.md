@@ -7,6 +7,7 @@
 - Added: device-stamped business days on register sessions and closures, with business-day filtering and a site-timezone approximation for older rows.
 - Added: normalised corrections on closure detail reads and receipt documents, plus correction counts on closure lists; shipped templates remain unchanged.
 - Added: manager-credential approval for closure recounts, recording both the cashier and approving manager.
+- Added: offline-capable closure and X-report templates in browser-print and thermal 80 mm formats.
 
 - Sync: new read-only `wcpos/v2/refunds` lane (WooCommerce's store-wide refunds route, with `parent=` honoured) for the POS refunds collection.
 

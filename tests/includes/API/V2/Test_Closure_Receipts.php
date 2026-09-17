@@ -32,13 +32,13 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
-	/** Render with the actual filesystem default.
+	/** Render with the retained legacy PHP template.
 	 *
 	 * @param array $data Payload.
 	 */
 	private function html( array $data ): string {
 		ob_start();
-		( new Legacy_Php_Renderer() )->render( Templates::get_virtual_template( 'plugin-core', 'closure' ), null, $data );
+		( new Legacy_Php_Renderer() )->render( array( 'file_path' => \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/closure.php' ), null, $data );
 		return ob_get_clean();
 	}
 
