@@ -13,6 +13,7 @@ if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 	return;
 }
 
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Abstract_Order;
@@ -146,78 +147,20 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 	}
 
-	/**
-	 * Check if the current user can update an order.
+	/** Delegate the edit decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * Overrides the parent to fix HPOS compatibility. When HPOS is enabled with
-	 * sync disabled, get_post() returns a shop_order_placehold post type that has
-	 * map_meta_cap = false and no capability_type, causing WordPress to check the
-	 * generic 'edit_post' capability instead of 'edit_shop_order'. Non-admin roles
-	 * like cashier have 'edit_shop_orders' but not the generic 'edit_posts', so the
-	 * permission check fails.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return bool|WP_Error
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function update_item_permissions_check( $request ) {
-		$result = parent::update_item_permissions_check( $request );
-
-		if ( ! is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		// Parent check failed - try direct capability check for HPOS compatibility.
-		$id    = (int) $request['id'];
-		$order = wc_get_order( $id );
-
-		if ( ! $order ) {
-			return $result;
-		}
-
-		$order_post = get_post( $id );
-		if ( ! $order_post ) {
-			return $result;
-		}
-
-		$owns_order = get_current_user_id() === (int) $order_post->post_author;
-		$capability = $owns_order ? 'edit_shop_orders' : 'edit_others_shop_orders';
-
-		if ( ! current_user_can( $capability ) ) {
-			return $result;
-		}
-
-		return true;
+		return Permission_Rules::verdict( 'orders', 'edit', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
-	/**
-	 * Check if the current user can delete an order.
+	/** Delegate the delete decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * Same HPOS fix as update_item_permissions_check.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return bool|WP_Error
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function delete_item_permissions_check( $request ) {
-		$result = parent::delete_item_permissions_check( $request );
-
-		if ( ! is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		$id    = (int) $request['id'];
-		$order = wc_get_order( $id );
-
-		if ( ! $order ) {
-			return $result;
-		}
-
-		if ( ! current_user_can( 'delete_shop_orders' ) ) {
-			return $result;
-		}
-
-		return true;
+		return Permission_Rules::verdict( 'orders', 'delete', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
 	/**

@@ -7,12 +7,19 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Proxy;
 
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WP_REST_Request;
 
 /**
  * Gives every resource the same install/run/finally/unwind discipline.
  */
 abstract class Scoped_Proxy_Behavior implements Proxy_Behavior {
+	/** Permission collection, when this resource has a POS-tier read grant.
+	 *
+	 * @var string|null
+	 */
+	protected $permission_collection;
+
 	/**
 	 * Forward every param untouched.
 	 *
@@ -34,10 +41,16 @@ abstract class Scoped_Proxy_Behavior implements Proxy_Behavior {
 	 */
 	public function around( callable $forward ) {
 		$bindings = $this->install();
+		if ( $this->permission_collection ) {
+			Permission_Rules::install_wc_filter( $this->permission_collection );
+		}
 
 		try {
 			return $this->run( $forward );
 		} finally {
+			if ( $this->permission_collection ) {
+				Permission_Rules::uninstall_wc_filter();
+			}
 			foreach ( array_reverse( $bindings ) as $binding ) {
 				remove_filter( $binding[0], $binding[1], $binding[2] );
 			}
