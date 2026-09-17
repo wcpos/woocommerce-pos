@@ -447,16 +447,10 @@ class Auth extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_all_users_sessions( WP_REST_Request $request ): WP_REST_Response {
-		global $wpdb;
-
 		$auth_service = AuthService::instance();
 
 		// Get all users who have refresh tokens.
-		$user_ids = $wpdb->get_col(
-			"SELECT DISTINCT user_id 
-			FROM {$wpdb->usermeta} 
-			WHERE meta_key = '_woocommerce_pos_refresh_tokens'"
-		);
+		$user_ids = $auth_service->sessions()->users_with_sessions();
 
 		$users_data = array();
 
