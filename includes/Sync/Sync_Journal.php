@@ -38,26 +38,13 @@ final class Sync_Journal {
 	 * A journal row is a change POINTER (ADR 0033), so one row per order per
 	 * request carries the same information.
 	 *
-	 * Single slot, not a map: a save for a DIFFERENT order flushes the pending
-	 * one first (so a bulk loop never holds rows until process end), which
-	 * means at most one order is ever pending. Static, not per instance: the
-	 * "update row lands before any other-origin row" guarantee must hold for
-	 * whichever `Sync_Journal` instance writes the other row. The slot keeps the
-	 * blog id so a multisite `switch_to_blog()` between save and flush still
-	 * writes to the originating site's table, and the order object the hook
-	 * handed us so the flush never refetches.
-	 *
-	 * Rows land on {@see flush_pending_order_updates()}: at `shutdown` (last,
-	 * after WooCommerce's own shutdown saves), before any other-origin row, or
-	 * when a different order is saved. Once the shutdown flush has run, later
-	 * updates write immediately.
-	 *
-	 * @var array{blog: int, id: int, order: \WC_Abstract_Order|null}|null
+	 * Capacity one preserves ordering before a different order or other-origin
+	 * row. Static so that guarantee holds across journal instances. The first
+	 * instance needing the queue binds its writer, including after shutdown;
+	 * all instances write the same table. Retaining the hook's order object
+	 * avoids a refetch. See Request_Write_Queue for the queue mechanics.
 	 */
-	private static ?array $pending_order_update = null;
-
-	/** Set by the shutdown flush; afterwards updates are written immediately. */
-	private static bool $shutdown_flushed = false;
+	private static ?Request_Write_Queue $pending_updates = null;
 
 	/**
 	 * Option-name prefix for the per-object-type lossy-prune watermarks.
@@ -537,7 +524,7 @@ final class Sync_Journal {
 	/**
 	 * Mark an order's `hook:update` row as owed; the row lands on flush.
 	 *
-	 * See {@see $pending_order_updates} for why this is deferred. Direct callers
+	 * See {@see $pending_updates} for why this is deferred. Direct callers
 	 * that need an immediate row use {@see record_order_change()}.
 	 *
 	 * @param int                       $order_id Order id from the hook.
@@ -548,25 +535,7 @@ final class Sync_Journal {
 	 */
 	public function record_order_updated( int $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Abstract_Order ? $order : null;
-		if ( self::$shutdown_flushed ) {
-			// The request boundary has passed (a save triggered by another
-			// shutdown handler): nothing will flush again, so write now.
-			$this->record_order_change( $order_id, 'hook:update', false, $order );
-			return;
-		}
-		$blog = get_current_blog_id();
-		$slot = self::$pending_order_update;
-		if ( null !== $slot && ( $slot['id'] !== $order_id || $slot['blog'] !== $blog ) ) {
-			// A different order began: land what is owed so a bulk loop (WP-CLI
-			// import, Action Scheduler runner) never holds rows until process end.
-			$this->flush_pending_order_updates();
-			$slot = null;
-		}
-		self::$pending_order_update = array(
-			'blog'  => $blog,
-			'id'    => $order_id,
-			'order' => $order ?? ( $slot['order'] ?? null ),
-		);
+		$this->queue()->owe( 'order', $order_id, $order );
 	}
 
 	/**
@@ -577,60 +546,40 @@ final class Sync_Journal {
 	 * longer pending.
 	 */
 	public function flush_pending_order_updates(): void {
-		$slot = self::$pending_order_update;
-		if ( null === $slot ) {
-			return;
+		if ( null !== self::$pending_updates ) {
+			self::$pending_updates->flush();
 		}
-		self::$pending_order_update = null;
-		self::in_blog(
-			$slot['blog'],
-			function () use ( $slot ): void {
-				$this->record_order_change( $slot['id'], 'hook:update', false, $slot['order'] );
-			}
-		);
 	}
 
 	/**
 	 * The `shutdown` callback: flush, then write every later update immediately.
 	 */
 	public function flush_pending_order_updates_at_shutdown(): void {
-		self::$shutdown_flushed = true;
-		$this->flush_pending_order_updates();
+		$this->queue()->flush_at_shutdown();
 	}
 
 	/**
 	 * Discard per-request coalescing state. Tests only: the PHPUnit process
-	 * never reaches `shutdown`, so the static slot and flag would leak between
+	 * never reaches `shutdown`, so the static queue would leak between
 	 * test cases otherwise.
 	 *
 	 * @internal
 	 */
 	public static function reset_request_state(): void {
-		self::$pending_order_update = null;
-		self::$shutdown_flushed     = false;
+		self::$pending_updates = null;
 	}
 
-	/**
-	 * Run a write under the blog it was recorded on.
-	 *
-	 * The journal table is blog-scoped, so a deferred write must not follow a
-	 * `switch_to_blog()` that happened between the save and the flush.
-	 *
-	 * @param int      $blog_id Blog the write belongs to.
-	 * @param callable $write   The write.
-	 */
-	private static function in_blog( int $blog_id, callable $write ): void {
-		$switch = is_multisite() && get_current_blog_id() !== $blog_id;
-		if ( $switch ) {
-			switch_to_blog( $blog_id );
+	/** Bind the first journal instance to the request's shared queue. */
+	private function queue(): Request_Write_Queue {
+		if ( null === self::$pending_updates ) {
+			self::$pending_updates = new Request_Write_Queue(
+				1,
+				function ( $type, $id, $order ): void {
+					$this->record_order_change( $id, 'hook:update', false, $order );
+				}
+			);
 		}
-		try {
-			$write();
-		} finally {
-			if ( $switch ) {
-				restore_current_blog();
-			}
-		}
+		return self::$pending_updates;
 	}
 
 	public function record_order_deleted( int $order_id ): void {
@@ -688,12 +637,11 @@ final class Sync_Journal {
 	public function record_order_change( int $order_id, string $origin, bool $deleted, $order = null ): bool {
 		global $wpdb;
 		if ( 'hook:update' !== $origin ) {
-			$slot = self::$pending_order_update;
-			if ( 'hook:create' === $origin && null !== $slot && $order_id === $slot['id'] && get_current_blog_id() === $slot['blog'] ) {
+			if ( 'hook:create' === $origin && $this->queue()->owes( 'order', $order_id ) ) {
 				// The Store API saves a checkout-draft several times BEFORE
 				// `woocommerce_new_order` fires. Both rows would point at the same
 				// live record, so the create row makes the owed update row redundant.
-				self::$pending_order_update = null;
+				$this->queue()->drop( 'order', $order_id );
 			} else {
 				// Land the owed update row FIRST so the stream never reads as
 				// delete-then-update (a replay would resurrect a trashed order).

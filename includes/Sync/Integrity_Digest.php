@@ -20,7 +20,7 @@ use RuntimeException;
  *
  * STORES a digest of each product/variation's raw DB row, marked dirty by the
  * same save/delete hooks class-change-log.php uses and written at the request
- * boundary (see $pending_digests), so the integrity scan
+ * boundary (see $pending), so the integrity scan
  * can compare — entirely in SQL — the aggregate of CURRENT raw-row digests
  * against the aggregate of STORED digests per id-range bucket. If hooks
  * fired for every write, stored == current (and sequence-log already
@@ -82,47 +82,35 @@ final class Integrity_Digest {
 	private Digest_Index $index;
 
 	/**
-	 * Order and customer digests owed but not yet written, keyed "type:id".
+	 * Digests owed but not yet written, keyed by blog, type and id.
 	 *
 	 * A stored digest is a pure function of the settled record, so only the
 	 * LAST upsert in a request carries information — yet one Store API checkout
 	 * ran the order INSERT…SELECT eleven times (35 ms) and, with account
 	 * creation, the customer one six more times (measured 2026-09-03 on
-	 * dev-next). Upserts land on {@see flush_pending_digests()}: at `shutdown`
-	 * (last, after WooCommerce's own customer save at 10 and session save at 20,
-	 * whose `woocommerce_update_customer` would otherwise queue after the only
-	 * flush), before any {@see Digest_Index::read_digests()} so the pull lane
-	 * never stamps a stale `_rxdb_digest`, and whenever the queue reaches
-	 * {@see PENDING_DIGEST_FLUSH_THRESHOLD} distinct records (a bulk import
-	 * coalesces nothing, so it must not accumulate). Once the shutdown flush
-	 * has run, later saves write immediately. Static so the read path can
-	 * flush without holding the observer instance; each entry keeps its blog id
-	 * so a multisite `switch_to_blog()` between save and flush still writes the
-	 * originating site's table. Product and variation digests ride the same
-	 * queue: WooCommerce saves a product more than once per request too
-	 * (`wc_reduce_stock_levels()` saves the quantity, then the stock status —
-	 * two INSERT…SELECT statements per purchased product at checkout, measured
-	 * 2026-09-03), and the v2 write lane reads digests back through
-	 * {@see Digest_Index::read_digests()}, which flushes first, so the
-	 * serializer still stamps the fresh `_rxdb_digest` in the same request.
+	 * dev-next). Upserts land on {@see flush_pending_digests()}: at shutdown
+	 * and before {@see Digest_Index::read_digests()}, so the pull lane never
+	 * stamps a stale `_rxdb_digest`. Product and variation digests ride the
+	 * same queue: `wc_reduce_stock_levels()` saves the quantity, then the stock
+	 * status — two INSERT…SELECT statements per purchased product at checkout
+	 * (measured 2026-09-03). The v2 write lane reads digests through that same
+	 * read method, so its serializer still stamps a fresh `_rxdb_digest`.
 	 *
-	 * @var array<string, array{0: int, 1: string, 2: int}> "blog:type:id" => [blog, type, id]
+	 * Static so the read path can flush without holding the observer. The first
+	 * queuing instance binds the writer, including after shutdown; all instances
+	 * write the same table. An empty shutdown uses a default instance instead.
+	 * See Request_Write_Queue for the queue mechanics.
 	 */
-	private static array $pending_digests = array();
+	private static ?Request_Write_Queue $pending = null;
 
 	/**
-	 * Flush the queue when it holds this many distinct records. Sized for the
+	 * The most distinct records held; the next distinct record flushes them first.
+	 * Sized for the
 	 * realistic per-request maximum (a checkout touches an order and a customer;
 	 * a REST batch a few dozen records) while keeping a WP-CLI import's deferred
 	 * SQL and memory bounded.
 	 */
 	public const PENDING_DIGEST_FLUSH_THRESHOLD = 50;
-
-	/** The instance that first queued a digest; the flush writes through its Digest_Index. */
-	private static ?Integrity_Digest $flusher = null;
-
-	/** Set by the shutdown flush; afterwards saves are written immediately. */
-	private static bool $shutdown_flushed = false;
 
 	public function __construct( ?Digest_Index $index = null ) {
 		$this->index = $index ?? new Digest_Index();
@@ -209,7 +197,7 @@ final class Integrity_Digest {
 		// deleted forever.
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_order_untrashed' ), 10, 1 );
 		// Request boundary for the coalesced digest upserts (see
-		// $pending_digests). LAST on shutdown: WooCommerce saves the customer at
+		// $pending). LAST on shutdown: WooCommerce saves the customer at
 		// 10 and the session at 20. Zero accepted args: do_action( 'shutdown' )
 		// passes an empty string otherwise.
 		add_action( 'shutdown', array( __CLASS__, 'flush_pending_digests_at_shutdown' ), PHP_INT_MAX, 0 );
@@ -366,7 +354,7 @@ final class Integrity_Digest {
 	 * Customer digest maintenance (ADR 0015, Leg-3 phase 7) — every WordPress
 	 * user is a POS customer, so saves and role changes always upsert.
 	 */
-	/** Owe the customer's digest; it is written once, on flush (see $pending_digests). */
+	/** Owe the customer's digest; it is written once, on flush (see $pending). */
 	public function record_customer_saved( int $user_id ): void {
 		$this->defer( self::pending_type( 'customers' ), $user_id );
 	}
@@ -378,29 +366,26 @@ final class Integrity_Digest {
 	 * @param int    $id   Record id.
 	 */
 	private function defer( string $type, int $id ): void {
-		if ( self::$shutdown_flushed ) {
-			// A save triggered by another shutdown handler (WooCommerce saves the
-			// customer at priority 10): nothing will flush again, so write now.
-			$this->upsert_pending( $type, $id );
-			return;
+		self::queue( $this )->owe( $type, $id );
+	}
+
+	/** Bind the first queuing instance, or a default for an empty shutdown. */
+	private static function queue( ?self $writer = null ): Request_Write_Queue {
+		if ( null === self::$pending ) {
+			$writer        = $writer ?? new self();
+			self::$pending = new Request_Write_Queue(
+				self::PENDING_DIGEST_FLUSH_THRESHOLD,
+				function ( $type, $id ) use ( $writer ): void {
+					$writer->upsert_pending( $type, $id );
+				}
+			);
 		}
-		if ( null === self::$flusher ) {
-			self::$flusher = $this;
-		}
-		$blog = get_current_blog_id();
-		self::$pending_digests[ self::pending_key( $type, $id ) ] = array( $blog, $type, $id );
-		if ( \count( self::$pending_digests ) >= self::PENDING_DIGEST_FLUSH_THRESHOLD ) {
-			self::flush_pending_digests();
-		}
+		return self::$pending;
 	}
 
 	/** One queue discriminator per digest id-space, including shared product/variation ids. */
 	private static function pending_type( string $collection ): string {
 		return implode( ',', Collections::row( $collection )['digest']['object_types'] );
-	}
-
-	private static function pending_key( string $type, int $id ): string {
-		return get_current_blog_id() . ':' . $type . ':' . $id;
 	}
 
 	/** One queued upsert, under the observer's fail-open posture. */
@@ -422,32 +407,15 @@ final class Integrity_Digest {
 	 * Write every owed digest.
 	 *
 	 * Called from the shutdown flush, from {@see Digest_Index::read_digests()}
-	 * before it reads, and when the queue reaches its threshold. Writes go
+	 * before it reads, and before a new record exceeds queue capacity. Writes go
 	 * through the instance that first queued (so an injected Digest_Index is
 	 * honoured) and under the blog each entry was recorded on. Each upsert keeps
 	 * the observer's fail-open posture: a failure is logged and the scan
 	 * self-heals. Safe to call repeatedly — a flushed digest is no longer pending.
 	 */
 	public static function flush_pending_digests(): void {
-		if ( array() === self::$pending_digests ) {
-			return;
-		}
-		$pending               = self::$pending_digests;
-		self::$pending_digests = array();
-		$digest                = self::$flusher ?? new self();
-		foreach ( $pending as $entry ) {
-			list( $blog, $type, $id ) = $entry;
-			$switch                   = is_multisite() && get_current_blog_id() !== (int) $blog;
-			if ( $switch ) {
-				switch_to_blog( (int) $blog );
-			}
-			try {
-				$digest->upsert_pending( (string) $type, (int) $id );
-			} finally {
-				if ( $switch ) {
-					restore_current_blog();
-				}
-			}
+		if ( null !== self::$pending ) {
+			self::$pending->flush();
 		}
 	}
 
@@ -455,21 +423,18 @@ final class Integrity_Digest {
 	 * The `shutdown` callback: flush, then write every later save immediately.
 	 */
 	public static function flush_pending_digests_at_shutdown(): void {
-		self::$shutdown_flushed = true;
-		self::flush_pending_digests();
+		self::queue()->flush_at_shutdown();
 	}
 
 	/**
 	 * Discard per-request coalescing state. Tests only: the PHPUnit process
-	 * never reaches `shutdown`, so the static queue, flusher and flag would
+	 * never reaches `shutdown`, so the static queue would
 	 * leak between test cases otherwise.
 	 *
 	 * @internal
 	 */
 	public static function reset_request_state(): void {
-		self::$pending_digests  = array();
-		self::$flusher          = null;
-		self::$shutdown_flushed = false;
+		self::$pending = null;
 	}
 
 	public function record_customer_deleted( int $user_id ): void {
@@ -498,7 +463,7 @@ final class Integrity_Digest {
 	 * under HPOS AND CPT); the digest SQL's `type='shop_order'` filter makes the upsert a no-op for any
 	 * non-order, so no type re-check is needed here.
 	 */
-	/** Owe the order's digest; it is written once, on flush (see $pending_digests). */
+	/** Owe the order's digest; it is written once, on flush (see $pending). */
 	public function record_order_saved( int $order_id ): void {
 		$this->defer( self::pending_type( 'orders' ), $order_id );
 	}
@@ -518,7 +483,7 @@ final class Integrity_Digest {
 
 	/**
 	 * Owe the product's or variation's digest; it is written once, on flush (see
-	 * $pending_digests). Both share the registry's queue key: the upsert's SQL
+	 * $pending). Both share the registry's queue key: the upsert's SQL
 	 * derives the stored object_type from the row, so nothing here needs to.
 	 */
 	public function record_post_saved( int $post_id ): void {
@@ -546,7 +511,9 @@ final class Integrity_Digest {
 
 	/** Cancel an owed upsert and remove the registry-selected stored row. */
 	private function delete_for( string $collection, int $id, bool $child = false ): void {
-		unset( self::$pending_digests[ self::pending_key( self::pending_type( $collection ), $id ) ] );
+		if ( null !== self::$pending ) {
+			self::$pending->drop( self::pending_type( $collection ), $id );
+		}
 		$this->observe(
 			function () use ( $collection, $id, $child ): void {
 				global $wpdb;
