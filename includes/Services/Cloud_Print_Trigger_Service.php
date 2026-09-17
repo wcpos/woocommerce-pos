@@ -314,9 +314,9 @@ class Cloud_Print_Trigger_Service {
 		$provider       = Provider::normalize( (string) ( $printer['provider'] ?? '' ) );
 		$drawer_options = self::drawer_options_for_provider( $provider, $drawer_options );
 
-		// The resolver owns both halves of the answer for every provider: an
+		// Provider::format() owns both halves of the answer for every provider: an
 		// empty kind means the template cannot be rendered on this printer.
-		$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
+		$fmt = Provider::format( $printer, $template );
 		if ( '' === $fmt['kind'] ) {
 			return 0;
 		}

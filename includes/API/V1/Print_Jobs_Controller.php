@@ -14,7 +14,6 @@ use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
-use WCPOS\WooCommercePOS\Services\Print_Format_Resolver;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
@@ -766,21 +765,20 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			}
 			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
 			if ( null !== $printer ) {
-				// Refresh both halves of the pairing together. A legacy job can
-				// carry a media type from before the provider declared its own,
+				// Provider::format() refreshes both halves together. A legacy job
+				// can carry a media type from before the provider declared its own,
 				// but content_type and pn_kind must keep agreeing: reprinting a
-				// raw (escpos) PrintNode job through the printer-only resolver
+				// raw (escpos) PrintNode job through printer_content_type()
 				// relabels it application/pdf in the queue view, even though
 				// submit still sends raw bytes off the stored pn_kind.
-				$resolver = new Print_Format_Resolver();
-				$fmt = null === $template ? array( 'kind' => '' ) : $resolver->resolve( $printer, $template );
+				$fmt = null === $template ? array( 'kind' => '' ) : Provider::format( $printer, $template );
 				if ( '' === (string) $fmt['kind'] ) {
 					// No loadable template, or one this printer can no longer
 					// render. Refresh from the provider's declared type only
 					// when no stored kind can contradict it; otherwise the
 					// source pairing is the best answer left.
 					if ( '' === $pn_kind ) {
-						$content_type = $resolver->content_type_for_printer( $printer );
+						$content_type = Provider::printer_content_type( $printer );
 					}
 				} else {
 					$content_type = $fmt['content_type'];
