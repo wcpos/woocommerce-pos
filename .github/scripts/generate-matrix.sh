@@ -193,15 +193,17 @@ resolve_wc() {
   esac
 }
 
-# Build the wp_core value for a given WP version string
+# Build the wp_core value for a given WP version string.
+#
+# Always the wordpress.org release zip, never a GitHub ref: the
+# WordPress/WordPress mirror is tagged hours after a release reaches the
+# version API, and in that window a "WordPress/WordPress#7.1.1" ref fails
+# wp-env with "couldn't find remote ref" on every lane that names the new
+# version (seen 2026-09-17). The zip exists the moment the API offers it,
+# for RC/beta builds as much as for stable ones.
 wp_core_ref() {
   local version="$1"
-  # RC/beta versions — use the zip URL (no GitHub tag exists for these)
-  if [[ "$version" =~ -(RC|beta|rc|alpha) ]]; then
-    echo "https://downloads.wordpress.org/release/wordpress-${version}.zip"
-  else
-    echo "WordPress/WordPress#${version}"
-  fi
+  echo "https://downloads.wordpress.org/release/wordpress-${version}.zip"
 }
 
 wc_zip_url() {
@@ -404,10 +406,16 @@ if [[ -n "$WP_LATEST_STABLE" && -n "$WC_LATEST_STABLE" ]] && entry_exists "$PHP_
 else
   log "Latest entry: php=$PHP_EXPERIMENTAL wp=latest wc=latest"
 
-  # wp_core=null means wp-env fetches latest automatically
+  # The release zip for the version the API offered; null only when the API
+  # could not be read (wp-env then resolves latest itself, via the mirror).
+  if [[ -n "$WP_LATEST_STABLE" ]]; then
+    latest_core=$(jq -n --arg c "$(wp_core_ref "$WP_LATEST_STABLE")" '$c')
+  else
+    latest_core="null"
+  fi
   entry=$(jq -n \
     --arg php "$PHP_EXPERIMENTAL" \
-    --argjson wp_core "null" \
+    --argjson wp_core "$latest_core" \
     --argjson experimental false \
     --arg source "latest" \
     '{php: $php, wp: "latest", wc: "latest", wp_core: $wp_core, wc_url: "https://downloads.wordpress.org/plugin/woocommerce.zip", experimental: $experimental, source: $source}')
