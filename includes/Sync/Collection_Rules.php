@@ -35,9 +35,9 @@ use WP_REST_Request;
  *   `around()` merely runs its callable. That is the adoption mechanism: a collection
  *   can be routed through the module before it has any rows, and nothing changes.
  * - `Collection_Rules_Plan::filter()` — the direct lane. Type-preserving clause
- *   bodies; it NEVER touches global filter state, so a v1 controller keeps owning its
- *   own `add_filter` topology (Pro subclasses those callbacks).
- * - `Collection_Rules_Plan::around()` — the proxy lane, and the ONLY install path.
+ *   bodies; it NEVER touches global filter state. Legacy callbacks can still delegate
+ *   to it; collection reads use `around()` for search and visibility.
+ * - `Collection_Rules_Plan::around()` — the scoped read lanes, and the ONLY install path.
  *   Callbacks are installed, the forward runs, and every binding is unwound in reverse
  *   in a `finally`.
  * - `orderby_enum()` / `collection_params()` — schema PROJECTIONS of the same rows, so
@@ -79,6 +79,27 @@ final class Collection_Rules {
 	 */
 	public const STORAGE_HPOS = 'hpos';
 
+	/** Shared search bound; over-limit policies remain collection-specific. */
+	public const SEARCH_TERM_CAP = 10;
+
+	/**
+	 * Split literal terms. Orders now also drop Unicode control characters between terms.
+	 *
+	 * Existing defaults: product phrase null uses WP_Query terms; orders use the supplied
+	 * string; variation args/discovery default to '', and validation casts null to ''.
+	 * Product phrases collapse over-cap terms; orders slice; v2 variations reject.
+	 * Direct product/variation lanes retain WP core parsing and its over-cap policy.
+	 * Malformed UTF-8 yields an empty array, including offset-capture callers.
+	 *
+	 * @param string $search Search text.
+	 * @param int    $flags  Split flags.
+	 * @return array
+	 */
+	public static function search_terms( $search, $flags = PREG_SPLIT_NO_EMPTY ) {
+		$terms = preg_split( '/[\s\p{Z}\p{C}]+/u', $search, -1, $flags );
+		return false === $terms ? array() : $terms;
+	}
+
 	/**
 	 * Legacy storage — `wp_posts` plus `wp_postmeta`.
 	 *
@@ -87,7 +108,7 @@ final class Collection_Rules {
 	public const STORAGE_POSTS = 'posts';
 
 	/**
-	 * Memoized plans, keyed by collection, request identity, storage and param map.
+	 * Memoized plans, keyed by collection, request identity/content, storage and param map.
 	 *
 	 * Each entry is `array( WP_REST_Request, Collection_Rules_Plan )`; the request is
 	 * kept so a recycled `spl_object_id` can never serve another request's plan.
@@ -118,7 +139,7 @@ final class Collection_Rules {
 	 */
 	public static function for_request( string $collection, WP_REST_Request $request, array $param_map = array(), ?string $storage = null ) {
 		$storage = $storage ?? self::detect_storage( $collection );
-		$key     = $collection . '|' . spl_object_id( $request ) . '|' . $storage . '|' . md5( (string) wp_json_encode( $param_map ) );
+		$key     = $collection . '|' . spl_object_id( $request ) . '|' . $storage . '|' . md5( (string) wp_json_encode( array( $param_map, $request->get_route(), $request->get_params() ) ) );
 
 		if ( isset( self::$plans[ $key ] ) && self::$plans[ $key ][0] === $request ) {
 			return self::$plans[ $key ][1];
@@ -222,11 +243,25 @@ final class Collection_Rules {
 	 *
 	 * @param string $collection Collection slug.
 	 *
-	 * @return array{sorts?: array<string, array>, filters?: array<string, array>}
+	 * @return array{sorts?: array<string, array>, filters?: array<string, array>, search?: array<string, mixed>, visibility?: array<string, mixed>}
 	 */
 	public static function rules( string $collection ): array {
 		$rules = array(
 			'orders' => array(
+				'search' => array(
+					'param'      => 'search',
+					'term_cap'   => self::SEARCH_TERM_CAP,
+					'rank_exact' => false,
+					'carriers'   => array( 'id', 'billing_email', 'first_name', 'last_name', 'company', 'email', 'phone' ),
+					'hpos'       => array(
+						'orders'    => array( 'id', 'billing_email' ),
+						'addresses' => array( 'first_name', 'last_name', 'company', 'email', 'phone' ),
+					),
+					'posts'      => array(
+						'id'   => 'ID',
+						'meta' => array( '_billing_first_name', '_billing_last_name', '_billing_company', '_billing_email', '_billing_phone' ),
+					),
+				),
 				'sorts' => array(
 					'status' => array(
 						'hpos'  => array( 'column' => 'status' ),
@@ -321,9 +356,46 @@ final class Collection_Rules {
 			 * no `hpos` half to these rows.
 			 */
 			'products' => array(
+				'search' => array(
+					'param'      => 'search',
+					// The cap binds the v2 phrase path only; v1 is bounded by WP core's parser.
+					'term_cap'   => self::SEARCH_TERM_CAP,
+					'rank_exact' => true,
+					'carriers'   => array_merge( array( 'post_title' ), Barcode_Field::search_keys() ),
+					'posts'      => array( 'meta' => Barcode_Field::search_keys() ),
+					'hpos'       => null,
+				),
+				'visibility' => array(
+					'type'           => array(
+						'direct' => Pos_Visibility::PRODUCTS,
+						'proxy'  => Pos_Visibility::CATALOG,
+					),
+					'where_backstop' => true,
+				),
 				'sorts' => self::catalog_meta_sorts(),
 			),
 			'variations' => array(
+				'search' => array(
+					'param'           => 'search',
+					'term_cap'        => self::SEARCH_TERM_CAP,
+					'rank_exact'      => false,
+					'carriers'        => Barcode_Field::search_keys(),
+					'posts'           => array( 'meta' => Barcode_Field::search_keys() ),
+					'hpos'            => null,
+					'query'           => 'meta_query',
+					'exact_sku_param' => 'sku',
+					// v1 keeps WP-parsed terms/over-cap collapse and EXISTS SQL, not v2 meta_query/rejection.
+					'lanes'           => array(
+						'direct' => array(
+							'query'           => 'wp_terms',
+							'exact_sku_param' => null,
+						),
+					),
+				),
+				'visibility' => array(
+					'type'           => Pos_Visibility::VARIATIONS,
+					'where_backstop' => true,
+				),
 				'sorts' => self::catalog_meta_sorts(),
 			),
 

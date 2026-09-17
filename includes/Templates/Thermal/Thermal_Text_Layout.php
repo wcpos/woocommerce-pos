@@ -16,13 +16,8 @@
  * no-mbstring fallback called mb_convert_encoding() — itself an mbstring
  * function — so a host without the extension took a fatal.
  *
- * Deliberately stateless and static rather than a trait. Four private copies that
- * *looked* locally defined are how the drift happened in the first place;
- * `display_width()` called on `$this` is indistinguishable from a method the
- * emitter owns, whereas `Thermal_Text_Layout::display_width()` names its source
- * at every call.
- * Being static also keeps `columns` an argument instead of an implicit property
- * contract, and lets the layout be exercised on its own.
+ * A per-lane instance owns the paper columns and nested applied magnification.
+ * The existing static primitives remain available to raster and other emitters.
  *
  * Text emission itself stays with each emitter: only the measuring moved.
  *
@@ -40,9 +35,105 @@ namespace WCPOS\WooCommercePOS\Templates\Thermal;
 final class Thermal_Text_Layout {
 
 	/**
-	 * Not instantiable: every member is a pure static function.
+	 * Paper width in character columns.
+	 *
+	 * @var int
 	 */
-	private function __construct() {}
+	private $columns;
+
+	/**
+	 * Command-specific magnification ceiling (8 for ESC/POS, 6 for StarPRNT).
+	 *
+	 * @var int
+	 */
+	private $max_magnification;
+
+	/**
+	 * Applied sizes; the base entry is normal size.
+	 *
+	 * @var array
+	 */
+	private $sizes = array(
+		array(
+			'width'  => 1,
+			'height' => 1,
+		),
+	);
+
+	/**
+	 * Construct per-lane metrics.
+	 *
+	 * @param int $columns           Paper width in character columns.
+	 * @param int $max_magnification Largest multiplier the lane can encode.
+	 */
+	public function __construct( int $columns, int $max_magnification ) {
+		$this->columns           = $columns;
+		$this->max_magnification = $max_magnification;
+	}
+
+	/**
+	 * Return the paper width in character columns.
+	 *
+	 * @return int
+	 */
+	public function columns(): int {
+		return $this->columns;
+	}
+
+	/**
+	 * Enter a size wrapper, replacing (not multiplying) the parent scale.
+	 *
+	 * @param int $width  Requested width multiplier.
+	 * @param int $height Requested height multiplier.
+	 * @return void
+	 */
+	public function enter_size( int $width, int $height ): void {
+		$this->sizes[] = array(
+			'width'  => max( 1, min( $this->max_magnification, $width ) ),
+			'height' => max( 1, min( $this->max_magnification, $height ) ),
+		);
+	}
+
+	/**
+	 * Leave a size wrapper and restore its parent.
+	 *
+	 * @return void
+	 */
+	public function leave_size(): void {
+		if ( count( $this->sizes ) > 1 ) {
+			array_pop( $this->sizes );
+		}
+	}
+
+	/**
+	 * Return the magnification actually encoded by the lane.
+	 *
+	 * @return array{width: int, height: int}
+	 */
+	public function applied_scale(): array {
+		return $this->sizes[ count( $this->sizes ) - 1 ];
+	}
+
+	/**
+	 * Count leading spaces using printed columns and the applied width scale.
+	 *
+	 * @param string $align Alignment mode (left|center|right).
+	 * @param string $text  Normalized plain text.
+	 * @return int Number of literal spaces, each occupying the applied width.
+	 */
+	public function measure_padding( string $align, string $text ): int {
+		return self::alignment_padding( $align, self::display_width( $text ), $this->columns, $this->applied_scale()['width'] );
+	}
+
+	/**
+	 * Resolve row widths using the existing unscaled paper-column contract.
+	 *
+	 * @param array $cols Column AST nodes.
+	 * @return array
+	 */
+	public function measure_row_widths( array $cols ): array {
+		return self::resolve_row_widths( $cols, $this->columns );
+	}
 
 	/**
 	 * Normalize text by replacing non-ASCII typographic characters.
@@ -259,22 +350,31 @@ final class Thermal_Text_Layout {
 	/**
 	 * Compute the leading-space padding that aligns a line of the given width.
 	 *
+	 * The padding is emitted as literal spaces INSIDE the run it indents, so under a `<size>`
+	 * multiplier each one is $scale cells wide -- as is each character of the text. Callers that
+	 * emit bytes to a printer must pass the multiplier in force; a count taken at scale 1 lays
+	 * down $scale times the margin asked for and wraps the line. Callers that place glyphs at
+	 * computed cell positions (the raster emitter) already fold the multiplier into $text_width
+	 * and leave $scale at 1.
+	 *
 	 * @param string $align      The alignment mode (left|center|right).
-	 * @param int    $text_width The display width of the line's plain text.
+	 * @param int    $text_width The display width of the line's plain text, in unscaled cells.
 	 * @param int    $columns    The paper width in character cells.
+	 * @param int    $scale      The text width multiplier in force. Default 1.
 	 *
 	 * @return int The number of leading spaces (clamped at 0).
 	 */
-	public static function alignment_padding( string $align, int $text_width, int $columns ): int {
-		$remaining = $columns - $text_width;
+	public static function alignment_padding( string $align, int $text_width, int $columns, int $scale = 1 ): int {
+		$scale     = max( 1, $scale );
+		$remaining = $columns - ( $text_width * $scale );
 		if ( $remaining <= 0 ) {
 			return 0;
 		}
 		if ( 'center' === $align ) {
-			return (int) floor( $remaining / 2 );
+			return (int) floor( (int) floor( $remaining / 2 ) / $scale );
 		}
 		if ( 'right' === $align ) {
-			return $remaining;
+			return (int) floor( $remaining / $scale );
 		}
 
 		return 0;

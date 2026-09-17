@@ -236,6 +236,46 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A partially populated digest table must self-heal even when every
+	 * mismatch is missing_stored rather than changed (issue #1987).
+	 */
+	public function test_persistent_missing_stored_digest_schedules_and_rebuilds(): void {
+		global $wpdb;
+
+		ProductHelper::create_simple_product();
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$digest     = new Integrity_Digest();
+		$digest->rebuild();
+		$this->assertSame(
+			1,
+			$wpdb->delete(
+				$digest->table_name(),
+				array(
+					'object_type' => 'product',
+					'object_id'   => $product_id,
+				)
+			)
+		);
+
+		for ( $i = 1; $i <= Integrity_Controller::DRIFT_REBUILD_THRESHOLD; $i++ ) {
+			$data = $this->dispatch_drill_down( $product_id, 1 );
+			$this->assertCount( 1, $data['changes'] );
+			$this->assertSame( 'missing_stored', $data['changes'][0]['status'] );
+			$this->assertNull( $data['changes'][0]['stored_digest'] );
+			$this->assertNotNull( $data['changes'][0]['current_digest'] );
+			if ( $i < Integrity_Controller::DRIFT_REBUILD_THRESHOLD ) {
+				$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+			}
+		}
+
+		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+		$this->assertFalse( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+
+		do_action( Integrity_Digest::REBUILD_HOOK );
+		$this->assertSame( array(), $this->dispatch_drill_down( $product_id, 1 )['changes'] );
+	}
+
+	/**
 	 * The scheduled rebuild reconciles the stored side, and the next drill-down
 	 * is clean — the permanent banner clears.
 	 */
@@ -277,12 +317,18 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		$wpdb->update(
 			$digest->table_name(),
 			array( 'digest' => $stale_customer ),
-			array( 'object_type' => 'customer', 'object_id' => $customer_id )
+			array(
+				'object_type' => 'customer',
+				'object_id'   => $customer_id,
+			)
 		);
 		$wpdb->update(
 			$digest->table_name(),
 			array( 'digest' => $stale_order ),
-			array( 'object_type' => 'order', 'object_id' => $order_id )
+			array(
+				'object_type' => 'order',
+				'object_id'   => $order_id,
+			)
 		);
 
 		for ( $i = 0; $i < Integrity_Controller::DRIFT_REBUILD_THRESHOLD; $i++ ) {

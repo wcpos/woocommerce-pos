@@ -13,6 +13,7 @@ if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 	return;
 }
 
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Abstract_Order;
@@ -30,11 +31,10 @@ use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
-use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
-use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 use WP_Error;
@@ -101,9 +101,17 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	private $hpos_enabled = false;
 
 	/**
+	 * Shared date validation and tax-ID persistence for the order write lanes.
+	 *
+	 * @var Order_Write_Payload
+	 */
+	private $order_payload;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
+		$this->order_payload = new Order_Write_Payload();
 		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 
 		if ( method_exists( parent::class, '__construct' ) ) {
@@ -160,70 +168,20 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 	}
 
-	/**
-	 * Check if the current user can update an order.
+	/** Delegate the edit decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * Overrides the parent to fix HPOS compatibility. When HPOS is enabled with
-	 * sync disabled, get_post() returns a shop_order_placehold post type that has
-	 * map_meta_cap = false and no capability_type, causing WordPress to check the
-	 * generic 'edit_post' capability instead of 'edit_shop_order'. Non-admin roles
-	 * like cashier have 'edit_shop_orders' but not the generic 'edit_posts', so the
-	 * permission check fails.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return bool|WP_Error
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function update_item_permissions_check( $request ) {
-		$result = parent::update_item_permissions_check( $request );
-
-		if ( ! is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		// Parent check failed - try direct capability check for HPOS compatibility.
-		$id    = (int) $request['id'];
-		$order = wc_get_order( $id );
-
-		if ( ! $order ) {
-			return $result;
-		}
-
-		if ( ! current_user_can( 'edit_shop_orders' ) ) {
-			return $result;
-		}
-
-		return true;
+		return Permission_Rules::verdict( 'orders', 'edit', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
-	/**
-	 * Check if the current user can delete an order.
+	/** Delegate the delete decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * Same HPOS fix as update_item_permissions_check.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return bool|WP_Error
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function delete_item_permissions_check( $request ) {
-		$result = parent::delete_item_permissions_check( $request );
-
-		if ( ! is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		$id    = (int) $request['id'];
-		$order = wc_get_order( $id );
-
-		if ( ! $order ) {
-			return $result;
-		}
-
-		if ( ! current_user_can( 'delete_shop_orders' ) ) {
-			return $result;
-		}
-
-		return true;
+		return Permission_Rules::verdict( 'orders', 'delete', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
 	/**
@@ -351,7 +309,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 						)
 					),
 				),
-				'schema' => array(),
+				'schema' => array( $this, 'wcpos_get_public_send_email_schema' ),
 			)
 		);
 
@@ -381,28 +339,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			'description' => __( 'Customer tax IDs snapshotted at sale time.', 'woocommerce-pos' ),
 			'type'        => 'array',
 			'context'     => array( 'view', 'edit' ),
-			'items'       => array(
-				'type'       => 'object',
-				'properties' => array(
-					'type'    => array(
-						'type'        => 'string',
-						'enum'        => Tax_Id_Types::all_types(),
-						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID type.', 'woocommerce-pos' ),
-					),
-					'value'   => array(
-						'type'        => 'string',
-						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID value.', 'woocommerce-pos' ),
-					),
-					'country' => array(
-						'type'        => array( 'string', 'null' ),
-						'description' => __( 'ISO 3166-1 alpha-2 country code.', 'woocommerce-pos' ),
-					),
-					'label'   => array(
-						'type'        => array( 'string', 'null' ),
-						'description' => /* translators: REST API schema field label or error message. */ __( 'Optional human-readable label.', 'woocommerce-pos' ),
-					),
-				),
-			),
+			'items'       => array( 'type' => 'object' ),
 		);
 
 		// Check and remove email format validation from the billing property.
@@ -511,7 +448,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$this->creating_order = null;
 		}
 
-		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
+		$this->wcpos_refresh_tax_ids_response( $response, $request, true );
 
 		return $response;
 	}
@@ -534,18 +471,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Preserve client-provided order creation time for offline-created orders.
+	 * Preserve the client creation time using the shared payload validator.
 	 *
-	 * WooCommerce marks date_created/date_created_gmt as read-only in the REST
-	 * schema, so those fields are removed before the parent controller prepares
-	 * the order. WCPOS clients can create orders offline and later sync the full
-	 * local document; read the raw JSON payload here so the server keeps the
-	 * transaction time instead of the sync time.
-	 *
-	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
+	 * @param WC_Data|WP_Error $order    Prepared order.
 	 * @param WP_REST_Request  $request  Request object.
-	 * @param bool             $creating Whether a new order is being created.
-	 *
+	 * @param bool             $creating Whether this is a create.
 	 * @return WC_Data|WP_Error
 	 */
 	public function wcpos_preserve_client_created_date_gmt( $order, WP_REST_Request $request, bool $creating ) {
@@ -553,64 +483,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $order;
 		}
 		$this->creating_order = $order;
-
 		$body = $request->get_json_params();
-
-		if ( ! isset( $body['date_created_gmt'] ) ) {
-			return $order;
+		$timestamp = $this->order_payload->validate_client_created_gmt( is_array( $body ) ? $body : array() );
+		if ( is_wp_error( $timestamp ) || null === $timestamp ) {
+			return is_wp_error( $timestamp ) ? $timestamp : $order;
 		}
-
-		if ( ! is_scalar( $body['date_created_gmt'] ) ) {
-			return new WP_Error(
-				'woocommerce_pos_rest_invalid_date_created_gmt',
-				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$client_date_gmt = wc_clean( wp_unslash( (string) $body['date_created_gmt'] ) );
-
-		if ( '' === $client_date_gmt ) {
-			return $order;
-		}
-
-		if ( 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/i', $client_date_gmt ) ) {
-			return new WP_Error(
-				'woocommerce_pos_rest_invalid_date_created_gmt',
-				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		// WooCommerce serializes *_gmt fields without a timezone suffix; treat bare values as UTC.
-		$parse_date_gmt = 'Z' === strtoupper( substr( $client_date_gmt, -1 ) )
-			? $client_date_gmt
-			: $client_date_gmt . 'Z';
-		$timestamp = rest_parse_date(
-			$parse_date_gmt,
-			true
-		);
-
-		if ( false === $timestamp ) {
-			return new WP_Error(
-				'woocommerce_pos_rest_invalid_date_created_gmt',
-				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$maximum_future_timestamp = time() + DAY_IN_SECONDS;
-
-		if ( $timestamp > $maximum_future_timestamp ) {
-			return new WP_Error(
-				'woocommerce_pos_rest_future_date_created_gmt',
-				__( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
-
 		$order->set_date_created( $timestamp );
-
 		return $order;
 	}
 
@@ -648,26 +526,19 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Proceed with the parent method to handle the update.
 		$response = parent::update_item( $request );
-		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, false );
+		$this->wcpos_refresh_tax_ids_response( $response, $request, false );
 
 		return $response;
 	}
 
 	/**
-	 * Persist tax_ids onto the order.
-	 *
-	 * On create: if the request did not provide `tax_ids`, snapshot from the
-	 * resolved customer record so the order is self-contained. If the request
-	 * provided `tax_ids`, write those (cashier-entered tax IDs override).
-	 *
-	 * On update: only write what the request explicitly provided; never
-	 * re-snapshot, since editing a customer must not mutate historical orders.
+	 * Adapt the parent response to the shared snapshot and refresh its tax_ids.
 	 *
 	 * @param mixed           $response   Response from parent controller.
 	 * @param WP_REST_Request $request    Original request.
 	 * @param bool            $is_create  True for create, false for update.
 	 */
-	protected function wcpos_snapshot_tax_ids_to_order( $response, WP_REST_Request $request, bool $is_create ): void {
+	private function wcpos_refresh_tax_ids_response( $response, WP_REST_Request $request, bool $is_create ): void {
 		if ( ! ( $response instanceof WP_REST_Response ) ) {
 			return;
 		}
@@ -677,25 +548,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( $order_id <= 0 ) {
 			return;
 		}
-		$order = \wc_get_order( $order_id );
-		if ( ! $order ) {
-			return;
+		$tax_ids = $this->order_payload->persist_tax_ids( $order_id, $request->get_params(), $is_create );
+		if ( null !== $tax_ids ) {
+			$data['tax_ids'] = $tax_ids;
+			$response->set_data( $data );
 		}
-
-		$tax_ids = $request->get_param( 'tax_ids' );
-		$writer  = new Tax_Id_Writer();
-
-		if ( \is_array( $tax_ids ) ) {
-			$writer->write_for_order( $order, $tax_ids );
-		} elseif ( $is_create ) {
-			$customer_id = (int) $order->get_customer_id();
-			if ( $customer_id > 0 ) {
-				$writer->snapshot_from_user_to_order( $order, $customer_id );
-			}
-		}
-
-		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
-		$response->set_data( $data );
 	}
 
 	/**
@@ -1026,6 +883,32 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				'name' => array(
 					'description' => __( 'Display name of the order status.', 'woocommerce-pos' ),
 					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+			),
+		);
+	}
+
+	/**
+	 * Get the route schema for the send-email action.
+	 *
+	 * Registered as the route-level `schema` callback. WordPress invokes it with
+	 * `call_user_func()` whenever a namespace index is requested with
+	 * `context=help`, so it must be a real callable — an empty array there
+	 * passes `isset()` and then fatals with a TypeError.
+	 *
+	 * @return array
+	 */
+	public function wcpos_get_public_send_email_schema() {
+		return array(
+			'$schema'    => 'http://json-schema.org/draft-04/schema#',
+			'title'      => 'order_email',
+			'type'       => 'object',
+			'properties' => array(
+				'success' => array(
+					'description' => __( 'Whether the order email was sent.', 'woocommerce-pos' ),
+					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),

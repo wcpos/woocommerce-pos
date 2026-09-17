@@ -23,218 +23,305 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
  */
 class Init {
 	/**
-	 * Constructor — the plugin's entire `plugins_loaded` hook wiring.
+	 * Observer awaiting the constructor's non-hook seed step.
 	 *
-	 * Reached from {@see Activator::init()}, which runs on `plugins_loaded` at the
-	 * default priority 10. Everything that must exist before `init` fires — most
-	 * importantly the `determine_current_user` pair — has to be registered here.
+	 * @var Sync\Visibility_Observer|null
+	 */
+	private $visibility_observer;
+
+	/**
+	 * Install the ordered wiring declared by {@see hook_rows()}.
 	 *
-	 * NOT PURE WIRING. Constructing this class also, in statement order:
-	 * `require_once`s `wcpos-functions.php` and `wcpos-store-functions.php`;
-	 * registers the `wc_pos_user_uuid_locks` global cache group; READS the sync
-	 * schema-latch option; WRITES options through
-	 * `Config_Fingerprint::maybe_cleanup_legacy_options()` (one-time, latched on
-	 * its own version option); and SCHEDULES a daily cron event through
-	 * `Sync_Journal_Purge::register_hooks()`. Anything that constructs `Init` —
-	 * a test included — inherits all of that.
-	 *
-	 * ## How to read the ordering table
-	 *
-	 * A priority number decides ordering on its own, wherever in this method it
-	 * happens to be written. Statement order is load-bearing ONLY when two
-	 * callbacks share a hook AND a priority: WordPress then runs them in
-	 * registration order. Exactly one such pair exists here, and it is marked
-	 * ORDER-CRITICAL (STATEMENT ORDER) below — do not move it.
-	 *
-	 * Priorities that live in the callee (`Meta_Normalizer` at 5, `Revision` at 9,
-	 * the proxy stampers at 10) are listed at the value they actually register,
-	 * not at the position of the call in this method. Reordering those statements
-	 * changes nothing; changing those numbers changes everything.
-	 *
-	 * "Why" is recovered from `git log -S` / `git blame` where a reason was
-	 * recorded. Where none was, the entry says **unknown** rather than guessing.
-	 *
-	 * ## Ordering table
-	 *
-	 * | # | Hook | Callback | Pri | Order | Why that priority |
-	 * |---|------|----------|-----|-------|-------------------|
-	 * | 1 | `activated_plugin`, `upgrader_process_complete`, `admin_enqueue_scripts`, `admin_notices`, `rest_api_init` | `Admin\Consent` (5 callbacks) | 10 | irrelevant | Default. What matters is that `Consent` is built during `plugins_loaded`, so its lifecycle hooks exist before an activation/update request fires them. |
-	 * | 2 | `woocommerce_pos_rest_api_controllers` | `Sync\Api::register_controllers` | 10 | irrelevant | Default; sole callback. |
-	 * | 3 | `wcpos_integrity_digest_rebuild` | `Sync\Integrity_Digest::run_scheduled_rebuild` | 10 | irrelevant | Default; sole callback. Registered OUTSIDE the schema latch, so an already-scheduled rebuild still has a callback while the latch is down. |
-	 * | 3a | `wcpos_install_font_packs` | `Services\Font_Pack_Loader::run_scheduled` | 10 | irrelevant | Default; sole callback. Always registered, including WP-Cron and Action Scheduler requests. |
-	 * | 3b | `woocommerce_pos_order_services_ready` | `Services\Fiscal_Record_Writers::instance` | 10 | irrelevant | Default; sole callback. Arms the write-once fiscal record writers on every order-write lane once the order services are up (#247). Unconditional: a fiscal record is owed whether or not the sync schema is latched. |
-	 * | 4 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product`, `..._serialized_order` | `Sync\Meta_Normalizer::normalize` | **5** | **ORDER-CRITICAL** | Must precede `Revision` at 9 so the stamped revision bytes equal what the write path recomputes from a bare `wc/v3` re-read. See `Sync\Augmentation_Pipeline` class docblock and `Sync\Meta_Normalizer::register_hooks()`. Kept out of the pipeline because it also serves the ORDER lane. |
-	 * | 5 | `woocommerce_pos_sync_serialized_order` | `Sync\Pos_Uuid::stamp_serialized_record` | 10 | order-critical (by number) | After `Meta_Normalizer` at 5, in step with the product lane's stampers. |
-	 * | 6 | `woocommerce_pos_sync_order_pull_payloads` | `Sync\Integrity_Digest::stamp_proxy_order_digests` | 10 | irrelevant | Default; sole callback on that filter. |
-	 * | 7 | `woocommerce_pos_sync_proxy_response` | `Sync\Revision::stamp_proxy_revisions` (via `Augmentation_Pipeline::install()`) | **9** | **ORDER-CRITICAL** | Between `Meta_Normalizer` (5) and the uuid/digest stampers (10). Revision must hash the normalized-but-not-yet-augmented payload. |
-	 * | 8 | `woocommerce_pos_sync_proxy_response`, `..._serialized_product` | `Proxy_Uuid_Stamper`, `Integrity_Digest` digest stampers, pipeline projections | 10 | order-critical (by number) | Preserved verbatim from the hand-wiring the pipeline replaced, so third-party code hooking either public filter still runs where it always did. |
-	 * | 9 | `woocommerce_before_product_object_save`, `woocommerce_before_product_variation_object_save` | `Sync\Pos_Uuid::stamp_on_save` | 10 | irrelevant | Default. The HOOK is the design (before the data store writes, so the uuid lands in the same save); the number is not. Registered unconditionally — identity is core, not an observer. |
-	 * | 9b | `woocommerce_before_product_object_save`, `woocommerce_product_duplicate_before_save`, `delete_option`, and `pre_update_option_*`, `update_option_*`, `add_option_*`, `delete_option_*` for the two `Pos_Visibility::source_options()`; `woocommerce_duplicate_product_exclude_meta` | `Catalog_Visibility` (12 callbacks) | 10 | irrelevant | Default. POS Only ⇒ catalog visibility `hidden` (#1862): the option hooks act on membership transitions (force on entry, restore on exit) and the before-save hook re-asserts on the in-flight object. Shares the option hooks with row 10b and the save hook with row 9 at the same priority; nothing depends on the order. Unconditional like row 9 — a storefront invariant, not a sync observer. |
-	 * | 9a | `untrashed_post`, `woocommerce_untrash_order` | `Sync\Pos_Uuid::recheck_ownership_after_untrash`, `::recheck_order_ownership_after_untrash` | 10 | irrelevant | Default. Re-proves uuid ownership when a record leaves the trash — the one seam a native restore passes through (#1805, ADR 0038). Unconditional for the same reason as row 9; the journal and digest observers (rows 10, 12) share both hooks at the same priority once the latch is set, and nothing depends on the order. |
-	 * | 10 | 32 catalogue/customer/order hooks, plus `shutdown` | `Sync\Sync_Journal` (34 callbacks) | 10 (`shutdown` at `PHP_INT_MAX`) | `shutdown`: order-critical (by number) | Default throughout. `woocommerce_update_order` only MARKS the order dirty; the `hook:update` row lands on `flush_pending_order_updates()` — at `shutdown`, before any other-origin row for that order, or when a different order is saved — so one online checkout writes one update row, not eleven. The shutdown flush runs LAST because WooCommerce saves the customer at 10 and the session at 20; a save those trigger after the flush is written immediately. |
-	 * | 10b | `delete_option` plus `pre_update_option_*`, `update_option_*`, `add_option_*`, `delete_option_*` for the two `Pos_Visibility::source_options()` | `Sync\Visibility_Observer` (9 callbacks) | 10 | irrelevant | Default. Appends the journal row for a record entering or leaving the POS servable set — the transition the sequence-log stream relies on, since it drops a hidden record's update rows. `delete_option` is the generic PRE-delete action (the per-option form fires after) and is gated on the option name inside the callback. Registered after `Sync_Journal` only because it writes through it; the constructor also runs the observer's one-time tombstone seed. |
-	 * | 11 | `wcpos_sync_journal_purge` | `Sync\Sync_Journal_Purge::run_purge` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the daily event. |
-	 * | 12 | 21 catalogue/customer/order hooks (a subset of row 10's), plus `shutdown` | `Sync\Integrity_Digest` | 10 (`shutdown` at `PHP_INT_MAX`) | unknown | Default. Shares every one of its hooks with `Sync_Journal` at the same priority, so the journal always runs first — no code found that depends on that, but nothing pins it either. Every save — product, variation, customer, order — only MARKS the digest dirty; the upsert lands on `flush_pending_digests()` at `shutdown`, before any `Digest_Index::read_digests()`, or when the queue holds 50 records. |
-	 * | 12b | `wcpos_payments_sweep`, `cron_schedules` | `Payments\Contract\Payments_Sweeper::run` / `::schedules` | 10 | irrelevant | Cron callback; sole listener. This call also SCHEDULES the ten-minute event. Outside the schema latch: a live payment leg has to be reconciled even while the sync schema is down. |
-	 * | 13 | `init` | `Init::init` | 10 | **ORDER-CRITICAL, CROSS-PLUGIN** | Default. **Pro registers its own `init` at 20** (`woocommerce-pos-pro/includes/Init.php:32`) so free's services exist first. Raising free's number silently breaks Pro; nothing on either side tests it. |
-	 * | 14 | `rest_api_init` | `Init::init_rest_api` | **20** | **ORDER-CRITICAL, CROSS-PLUGIN** | Free's own reason: unknown — the number dates to the initial commit (8f2b9eac, 2021-03-16). It is load-bearing anyway: **Pro registers `rest_api_init` at 9**, commented "Before the free version" (`woocommerce-pos-pro/includes/Init.php:33`). Untested on both sides. |
-	 * | 15 | `query_vars` | `Init::query_vars` | 10 | irrelevant | Default; appends one var. |
-	 * | 16 | `pre_update_option_woocommerce_pos_pro_settings_license` | `Init::remove_license_transient` | 10 | irrelevant | Default. The reentrancy guard, not the priority, is what makes it safe (f33b8d655). |
-	 * | 17 | ~~`rest_pre_serve_request`~~ | *(removed)* | — | — | Init no longer publishes any part of the REST wire contract. This registration and its handler moved to `Rest_Cors::register_hooks()`, which registers at **20** — after core's `rest_send_cors_headers` at 10 — so WCPOS is the last writer on the lanes it owns. The old `5` had no recorded reason; the new number does. |
-	 * | 18 | `send_headers` | `Init::send_headers` | 99 | unknown | Introduced by 62da70551 ("fix WPSEO integration"). The commit records no reason for the number beyond running late. |
-	 * | 19 | `send_headers` | `Init::remove_x_frame_options` | **9999** | **ORDER-CRITICAL** | Must run AFTER security plugins have set `X-Frame-Options`, because it works by `header_remove()` (80ee545a5). A smaller number lets the plugin set the header again afterwards. |
-	 * | 20 | `determine_current_user` | `Services\Core_Order_Audit_Guard::record_prior_authentication` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
-	 * | 21 | `rest_pre_dispatch` | `Services\Core_Order_Audit_Guard::rest_pre_dispatch` | 10 | irrelevant | Default; reads what row 20 recorded. |
-	 * | 22 | `woocommerce_update_coupon` | `Sync\Coupon_Modified_Date::touch` | 10 | irrelevant | Default. `Sync_Journal::record_coupon_updated` shares the hook and priority (row 10) and is registered first, but the journal timestamps rows with the wall clock, not the coupon's `post_modified`, so neither ordering changes an outcome. |
-	 * | 23 | `determine_current_user` | `Init::determine_current_user_early` | **20** | **ORDER-CRITICAL (STATEMENT ORDER)** | See below. |
-	 * | 24 | `admin_init` | `Services\Lifecycle_Events::flush_pending`, `::maybe_schedule_refresh` | 10 | irrelevant | Default. `admin_init` because both need a fully booted admin request: one sends install/upgrade events recorded before the plugin was loaded enough to send them, the other schedules row 25. Both check consent first and cost nothing on a site that opted out. |
-	 * | 25 | `wcpos_analytics_group_refresh` | `Services\Lifecycle_Events::refresh_group_properties` | 10 | irrelevant | Default; sole listener. Unlike row 11, this call does NOT schedule the event — scheduling lives in row 24 so that withdrawing consent unschedules it. |
-	 * | 26 | `rest_request_after_callbacks` | `Services\Error_Reporter::filter_rest_request_after_callbacks` | **999** | order-critical (by number) | Runs late so the response status it reports is the one the client receives. |
-	 *
-	 * ## The one pair where statement order is the whole mechanism
-	 *
-	 * Rows 20 and 23 share `determine_current_user` AND priority 20, so insertion
-	 * order — and nothing else — decides which runs first. 20 puts both after
-	 * WordPress core's own handlers, which `default-filters.php` registers before
-	 * any plugin loads: `wp_validate_auth_cookie` at 10, then
-	 * `wp_validate_logged_in_cookie` and `wp_validate_application_password`, both
-	 * at 20 and therefore both ahead of these two.
-	 *
-	 * The guard must run FIRST. It records into `pre_wcpos_user_id` whichever user
-	 * some EARLIER filter had already authenticated; a non-zero value means the
-	 * request proved itself with a cookie or application password, so
-	 * `Core_Order_Audit_Guard::is_wcpos_jwt_authenticated()` returns false and the
-	 * request keeps its normal power over order meta.
-	 *
-	 * Swap the two statements and the guard records the user WCPOS's own JWT filter
-	 * just authenticated. `pre_wcpos_user_id` is then non-zero on every
-	 * token-authenticated request, `is_wcpos_jwt_authenticated()` returns false for
-	 * all of them, and forged `_pos_*` audit meta on `/wc/v3/orders` is accepted.
-	 * It fails OPEN, silently, on a route no smoke test touches.
-	 *
-	 * Pinned by `tests/includes/Test_Init_Hook_Wiring.php`, which asserts the two
-	 * callbacks' ARRAY POSITIONS inside `callbacks[20]` — asserting priorities
-	 * would pass on the broken order.
+	 * Non-hook setup stays here, interleaved at its original registration boundaries.
 	 */
 	public function __construct() {
-		// global helper functions.
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
 		require_once PLUGIN_PATH . 'includes/wcpos-store-functions.php';
 		wp_cache_add_global_groups( 'wc_pos_user_uuid_locks' );
 
-		// Tracking consent pop-up + callout. Registered here (during
-		// plugins_loaded) so its lifecycle hooks (activated_plugin,
-		// upgrader_process_complete) are in place before those actions
-		// fire on a plugin activation or update request.
-		new Consent();
-		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
-		add_action( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::REBUILD_HOOK, array( \WCPOS\WooCommercePOS\Sync\Integrity_Digest::class, 'run_scheduled_rebuild' ) );
-		add_action( Font_Pack_Loader::ACTION, array( Font_Pack_Loader::class, 'run_scheduled' ) );
-		add_action(
-			'woocommerce_pos_order_services_ready',
-			static function (): void {
-				Services\Fiscal_Record_Writers::instance();
+		$rows = $this->hook_rows( true );
+		Hook_Manifest::validate( $rows );
+		Hook_Manifest::install( wp_list_filter( $rows, array( 'phase' => 'pre-latch' ) ) );
+		$sync_latched = Sync\Api::SCHEMA_VERSION === get_option( Sync\Api::SCHEMA_OPTION, null );
+		foreach ( $rows as $row ) {
+			if ( 'pre-latch' === $row['phase'] || ( 'sync-latched' === $row['phase'] && ! $sync_latched ) ) {
+				continue;
 			}
+			if ( array( $this, 'init' ) === $row['callback'] ) {
+				( new Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
+			}
+			Hook_Manifest::install( array( $row ) );
+			if ( null !== $this->visibility_observer ) {
+				$this->visibility_observer->maybe_seed_hidden_tombstones();
+				$this->visibility_observer = null;
+			}
+		}
+	}
+
+	/**
+	 * Declare bootstrap wiring in registration order, without installing it.
+	 *
+	 * Null hooks invoke registrars immediately; their internal priorities/arity stay
+	 * in register_hooks(). Phases keep the schema read after pre-latch hooks;
+	 * sync-latched rows are post-read hooks omitted when the latch is down.
+	 * The guard registrar MUST precede the JWT row: both register at priority 20,
+	 * after core cookie/application-password handlers. Reversing them attributes
+	 * JWT identity to prior authentication and fails open on /wc/v3/orders.
+	 *
+	 * @param bool $sync_latched Whether the verified sync schema latch is set.
+	 * @return array Ordered rows consumed by Hook_Manifest::install().
+	 */
+	public function hook_rows( bool $sync_latched ): array {
+		$rows = array(
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					new Consent();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; lifecycle hooks must exist during plugins_loaded, before activation/update actions.',
+				'phase'    => 'pre-latch',
+			),
+			array(
+				'hook'     => 'woocommerce_pos_rest_api_controllers',
+				'callback' => array( Sync\Api::class, 'register_controllers' ),
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default; sole callback. Response registrars stay inside this filter to retain REST activation timing.',
+				'phase'    => 'pre-latch',
+			),
+			array(
+				'hook'     => Sync\Integrity_Digest::REBUILD_HOOK,
+				'callback' => array( Sync\Integrity_Digest::class, 'run_scheduled_rebuild' ),
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default; sole callback. Unlatched so an already-scheduled rebuild still has a listener.',
+				'phase'    => 'pre-latch',
+			),
+			array(
+				'hook'     => Font_Pack_Loader::ACTION,
+				'callback' => array( Font_Pack_Loader::class, 'run_scheduled' ),
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default; sole callback, always registered including WP-Cron and Action Scheduler requests.',
+				'phase'    => 'pre-latch',
+			),
+			array(
+				'hook'     => 'woocommerce_pos_order_services_ready',
+				'callback' => static function (): void {
+					Services\Fiscal_Record_Writers::instance();
+				},
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default; arm fiscal writers on every order-write lane when services are ready, regardless of the sync schema latch (#247).',
+				'phase'    => 'pre-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => array( Sync\Meta_Normalizer::class, 'register_hooks' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Priority 5 before revision 9 and augmentation 10, so revisions match bare wc/v3 rereads; also serves orders.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => 'woocommerce_pos_sync_serialized_order',
+				'callback' => array( Sync\Pos_Uuid::class, 'stamp_serialized_record' ),
+				'priority' => 10,
+				'args'     => 3,
+				'reason'   => 'After normalization at 5, in step with product stampers at 10.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => null,
+				'callback' => array( Sync\Augmentation_Pipeline::class, 'install' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Revision 9 hashes normalized, unaugmented bytes; UUID/digest/projections at 10 preserve extension order, including order-pull digests.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => null,
+				'callback' => array( Sync\Pos_Uuid::class, 'register_hooks' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; identity is unconditional: before-save UUIDs land in the same write and native restores re-prove ownership (ADR 0038).',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Catalog_Visibility() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default; POS Only forces hidden catalog visibility on membership transitions and saves, an unconditional storefront invariant (#1862).',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Sync\Sync_Journal() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; dirty order updates coalesce until shutdown at PHP_INT_MAX, after WooCommerce customer 10/session 20 saves.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => null,
+				'callback' => function (): void {
+					$this->visibility_observer = new Sync\Visibility_Observer();
+					$this->visibility_observer->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10 after journal; records servable-set transitions, using generic pre-delete_option; Init then seeds tombstones.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Sync\Sync_Journal_Purge() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; sole cron listener; the registrar also schedules the daily purge.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Sync\Integrity_Digest() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10, shutdown PHP_INT_MAX; journal registers first on shared hooks (reason unknown); dirty digests coalesce until flush.',
+				'phase'    => 'sync-latched',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Payments\Contract\Payments_Sweeper() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default; schedule the ten-minute sweep outside the schema latch so live payment legs reconcile even while sync is down.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'init',
+				'callback' => array( $this, 'init' ),
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default 10; free services must exist before Pro init at 20.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'rest_api_init',
+				'callback' => array( $this, 'init_rest_api' ),
+				'priority' => 20,
+				'args'     => 1,
+				'reason'   => 'Original reason unknown (8f2b9eac); Pro deliberately registers before free at 9.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'query_vars',
+				'callback' => array( $this, 'query_vars' ),
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default; appends one variable.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'pre_update_option_woocommerce_pos_pro_settings_license',
+				'callback' => array( self::class, 'remove_license_transient' ),
+				'priority' => 10,
+				'args'     => 2,
+				'reason'   => 'Default; the reentrancy guard, not priority, makes legacy Pro license cache invalidation safe (f33b8d655).',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => array( Rest_Cors::class, 'register_hooks' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Unconditional for unmarked preflights/relay; serve at 20 after core CORS at 10 so WCPOS is the last writer.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'send_headers',
+				'callback' => array( $this, 'send_headers' ),
+				'priority' => 99,
+				'args'     => 1,
+				'reason'   => 'Unknown beyond running late for WPSEO integration (62da70551).',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'send_headers',
+				'callback' => array( $this, 'remove_x_frame_options' ),
+				'priority' => 9999,
+				'args'     => 1,
+				'reason'   => 'Must remove X-Frame-Options AFTER security plugins set it (80ee545a5).',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Services\Core_Order_Audit_Guard() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Auth provenance at 20 MUST register before JWT at 20, after core cookie/password auth; rest_pre_dispatch reads it at 10.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => array( Sync\Coupon_Modified_Date::class, 'register_hooks' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; unconditional meta-only coupon edit timestamps for date-based replication; journal uses wall clock, not post_modified.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'determine_current_user',
+				'callback' => array( $this, 'determine_current_user_early' ),
+				'priority' => 20,
+				'args'     => 1,
+				'reason'   => 'At 20 AFTER the audit guard and core cookie/password handlers; register before init, regardless of the request marker.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Services\Lifecycle_Events() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; append after auth pair; admin_init flushes pending events and consent-gates refresh scheduling, not the cron listener.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					Services\Error_Reporter::instance()->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Append after lifecycle; REST priority 999 reports the final response status, gated by consent (#1811).',
+				'phase'    => 'post-latch',
+			),
 		);
-		// Gate on the schema latch, not a live Health probe: the latch is only
-		// set AFTER install verified every table (latch-after-verify), so a
-		// per-request SHOW TABLES sweep buys nothing — and a table lost after
-		// latching is already survivable (observer writes fail open and the
-		// REST health gate 503s the sync endpoints).
-		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
-		if ( $sync_schema_latched ) {
-			// Normalize structured meta at priority 5, before revision stamps at 9
-			// and UUID, digest, and variable-price stamps at priority 10. Kept out
-			// of the augmentation pipeline because it also serves the order lane.
-			\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
-			add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-			// ONE seam for both product read lanes: the batch catalog proxy and the
-			// per-object serializer. Every stamper is declared once inside; both
-			// public filter names stay live as projections of it. The order pull
-			// lane's digest stamper is wired there too — it was hand-added here,
-			// under this same latch, which made the pipeline's single-wiring-site
-			// claim untrue.
-			\WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline::install();
-		}
 
-		// Identity is core, not an observer benchmark variable: every product is
-		// born with a UUID even before the schema latch is healthy. The before-save
-		// hook writes it in the same save.
-		\WCPOS\WooCommercePOS\Sync\Pos_Uuid::register_hooks();
-		// POS Only ⇒ catalog visibility hidden (#1862) — a storefront invariant
-		// every writer must meet, so it is not behind the schema latch either.
-		( new Catalog_Visibility() )->register_hooks();
-
-		if ( $sync_schema_latched ) {
-			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal() )->register_hooks();
-			$visibility_observer = new \WCPOS\WooCommercePOS\Sync\Visibility_Observer();
-			$visibility_observer->register_hooks();
-			$visibility_observer->maybe_seed_hidden_tombstones();
-			( new \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge() )->register_hooks();
-			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
-		}
-
-		( new \WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper() )->register_hooks();
-
-		( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
-
-		// Init hooks.
-		add_action( 'init', array( $this, 'init' ) );
-		add_action( 'rest_api_init', array( $this, 'init_rest_api' ), 20 );
-		add_filter( 'query_vars', array( $this, 'query_vars' ) );
-
-		// Remove this once Pro settings have been moved to the new settings service.
-		add_filter( 'pre_update_option_woocommerce_pos_pro_settings_license', array( self::class, 'remove_license_transient' ), 10, 2 );
-
-		// The REST wire contract — CORS and shared-cache defeat — has a single
-		// owner. Registered unconditionally, from here rather than from the
-		// X-WCPOS-gated API class, because preflights carry no marker and the
-		// relay's consent route is served without constructing API.
-		Rest_Cors::register_hooks();
-
-		// Non-REST API discoverability: the HEAD probe against the homepage.
-		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
-		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
-
-		/*
-		 * Add the global JWT authentication filter and its core-route audit guard.
-		 *
-		 * Hook order: plugins_loaded -> init (determine_current_user) -> rest_api_init
-		 *
-		 * This filter runs at priority 20, after WordPress core's cookie auth handlers.
-		 * It must be registered here (during plugins_loaded) because determine_current_user
-		 * fires during 'init', which is BEFORE rest_api_init where our API class loads.
-		 * Because it authenticates WCPOS Bearer tokens on EVERY
-		 * REST request (marked or not), the audit-meta guard for core routes
-		 * must be registered just as unconditionally — never from the
-		 * X-WCPOS-gated API class, whose marker an attacker simply omits.
-		 * Registering it first lets its priority-20 provenance filter run after
-		 * core's cookie handlers but before WCPOS's JWT filter.
-		 */
-		( new Services\Core_Order_Audit_Guard() )->register_hooks();
-
-		// Coupon post-date touch. Unconditional and lane-agnostic on purpose: a
-		// meta-only coupon edit (amount, discount_type, usage limits) never moves
-		// post_modified, and the client's catalogue replication is date-based
-		// (?modified_after, filtered by WooCommerce on post_modified_gmt), so an
-		// untouched coupon is invisible to every other till. That is true whether
-		// the edit came from the POS, wp-admin, WP-CLI or another plugin — so this
-		// sits outside the schema latch above because it does not use the v2 sync
-		// tables.
-		\WCPOS\WooCommercePOS\Sync\Coupon_Modified_Date::register_hooks();
-
-		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
-
-		// Install lifecycle reporting. Registered last: it adds no filter that
-		// anything else orders against, and appending keeps the ordering table
-		// above in statement order. Deliberately NOT before the pair above —
-		// rows 20 and 23 are decided by insertion order alone.
-		( new Services\Lifecycle_Events() )->register_hooks();
-
-		// Consent-gated Sentry error reporting (issue #1811). Registered last for
-		// the same reason as Lifecycle_Events: nothing orders against it. Its REST
-		// filter runs at 999 so the status it reports is the one the client receives.
-		Services\Error_Reporter::instance()->register_hooks();
+		return array_values(
+			array_filter(
+				$rows,
+				static function ( array $row ) use ( $sync_latched ): bool {
+					return $sync_latched || 'sync-latched' !== $row['phase'];
+				}
+			)
+		);
 	}
 
 	/**

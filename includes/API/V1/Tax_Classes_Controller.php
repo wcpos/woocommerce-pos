@@ -13,6 +13,7 @@ if ( ! class_exists( 'WC_REST_Tax_Classes_Controller' ) ) {
 	return;
 }
 
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WC_REST_Tax_Classes_Controller;
 
 /**
@@ -27,16 +28,11 @@ class Tax_Classes_Controller extends WC_REST_Tax_Classes_Controller {
 	 */
 	protected $namespace = 'wcpos/v1';
 
-	/**
-	 * Check whether a given request has permission to view tax classes.
+	/** Delegate the read decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * @param  \WP_REST_Request $request Full details about the request.
-	 * @return \WP_Error|boolean
+	 * @param \WP_REST_Request $request Full request details.
 	 */
 	public function get_items_permissions_check( $request ) {
-		if ( current_user_can( 'access_woocommerce_pos' ) ) {
-			return true;
-		}
-		return parent::get_items_permissions_check( $request );
+		return Permission_Rules::verdict( 'tax_classes', 'read', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 }

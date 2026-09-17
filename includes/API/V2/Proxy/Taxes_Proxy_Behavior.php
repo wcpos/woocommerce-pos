@@ -13,6 +13,12 @@ use WP_REST_Request;
  * Applies tax ID narrowing and POS read permission without a v1 controller.
  */
 final class Taxes_Proxy_Behavior extends Scoped_Proxy_Behavior {
+	/** POS read grant for this collection only.
+	 *
+	 * @var string
+	 */
+	protected $permission_collection = 'tax_rates';
+
 	/**
 	 * The Collection Rules plan for the request in flight.
 	 *
@@ -54,15 +60,6 @@ final class Taxes_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 */
 	protected function install(): array {
 		$bindings  = array();
-		$permission = static function ( $allowed, $context, $object_id, $post_type ) {
-			if ( ! $allowed && 'settings' === $post_type && 'read' === $context ) {
-				$allowed = current_user_can( 'access_woocommerce_pos' );
-			}
-
-			return $allowed;
-		};
-		add_filter( 'woocommerce_rest_check_permissions', $permission, 10, 4 );
-		$bindings[] = array( 'woocommerce_rest_check_permissions', $permission, 10 );
 
 		if ( array() === $this->include && array() === $this->exclude ) {
 			return $bindings;

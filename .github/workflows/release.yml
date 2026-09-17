@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Existing release whose zip upload failed, e.g. 1.10.13 (checks out tag v<version>, rebuilds, uploads woocommerce-pos.zip). Only for recovering a release the push run already created; it never creates one.'
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,18 +26,46 @@ jobs:
     steps:
       - name: 🏗 Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # On a manual run, build the tag the release points at, not the
+          # branch this workflow definition came from.
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
 
       - name: 🔖 Check if version has changed
         id: check_version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*(-\w+)?(\.\d+)?" woocommerce-pos.php)
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           git fetch --prune --unshallow
           LAST_TAG=$(git describe --tags --abbrev=0)
           echo "LAST_TAG=$LAST_TAG" >> "$GITHUB_ENV"
-          if [[ "v$VERSION" == "$LAST_TAG" ]]; then
+          if [[ -n "$INPUT_VERSION" ]]; then
+            # Manual recovery: the 1.10.13 zip upload got an HTTP 500 from GitHub,
+            # the run could not be retried, and a further push to main skips the
+            # build because the tag already exists. Rebuild the tagged source and
+            # upload the asset to the release that push run already created.
+            if [[ "$VERSION" != "$INPUT_VERSION" ]]; then
+              echo "::error::Tag v$INPUT_VERSION declares plugin version $VERSION; refusing to upload a mismatched zip"
+              exit 1
+            fi
+            if ! ASSETS=$(gh release view "v$VERSION" --json assets --jq '.assets[].name'); then
+              echo "::error::No release v$VERSION exists; a manual run only recovers an upload, it never creates a release"
+              exit 1
+            fi
+            IS_DRAFT=$(gh release view "v$VERSION" --json isDraft --jq '.isDraft')
+            if [[ "$IS_DRAFT" != "true" ]] && grep -qx 'woocommerce-pos.zip' <<< "$ASSETS"; then
+              echo "::error::Release v$VERSION is published and already carries woocommerce-pos.zip; refusing to replace a shipped asset"
+              exit 1
+            fi
+            echo "Recovering the zip upload for existing release v$VERSION..."
+            {
+              echo "release=true"
+              echo "create_release=false"
+            } >> "$GITHUB_OUTPUT"
+          elif [[ "v$VERSION" == "$LAST_TAG" ]]; then
             echo "Version has not changed. Skipping release..."
             {
               echo "release=false"
@@ -63,8 +97,34 @@ jobs:
           draft: true
           prerelease: ${{ contains(env.VERSION, '-beta') }}
 
+      - name: 🧪 Test the release-notes script
+        if: steps.check_version.outputs.release == 'true'
+        run: bash .github/scripts/test-readme-changelog-section.sh
+
+      # The release body is the readme.txt changelog entry for this version, written on EVERY
+      # run (create, reuse, manual recovery) so a release can never go out with empty notes —
+      # 1.10.1, 1.10.7, 1.10.13 and 1.10.15 did, when the notes were a manual step after the
+      # draft was created. The script fails closed when the section is missing or empty, which
+      # fails the build before the zip is uploaded.
+      #
+      # On a push run the draft's target is also moved to this commit: a draft created by an
+      # earlier push keeps that push's target_commitish, so publishing it tags the OLD commit
+      # (and wporg-deploy.yml, which checks out the tag, deploys stale bytes). Seen on 1.10.16.
+      - name: 📝 Release notes from readme.txt
+        if: steps.check_version.outputs.release == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/scripts/readme-changelog-section.sh "$VERSION" readme.txt > "$RUNNER_TEMP/release-notes.md"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            gh release edit "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --target "$GITHUB_SHA"
+          else
+            gh release edit "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          echo "release v$VERSION notes: $(wc -c < "$RUNNER_TEMP/release-notes.md") bytes from readme.txt"
+
       - name: 🏗 Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
 
       - name: 🏗 Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

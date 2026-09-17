@@ -8,6 +8,9 @@
 namespace WCPOS\WooCommercePOS\Services\Providers;
 
 use WCPOS\WooCommercePOS\Interfaces\Push_Provider_Adapter_Interface;
+use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
+use WP_REST_Response;
 use WCPOS\WooCommercePOS\Services\Pdf_Renderer;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
@@ -181,5 +184,63 @@ class Printnode_Adapter implements Push_Provider_Adapter_Interface {
 		$pin = 'pin5' === Print_Job_Service::normalize_drawer_connector( $connector ) ? "\x01" : "\x00";
 
 		return "\x1B\x70" . $pin . "\x19\xFA";
+	}
+
+	/**
+	 * Submit a diagnostic PDF to a PrintNode printer.
+	 *
+	 * @param array $printer Registered PrintNode printer.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function test_print( array $printer ) {
+		$api_key       = (string) ( $printer['printnode_api_key'] ?? '' );
+		$pn_printer_id = (int) ( $printer['printnode_printer_id'] ?? 0 );
+		if ( '' === $api_key || 0 === $pn_printer_id ) {
+			return new WP_Error(
+				'wcpos_print_job_printnode_unconfigured',
+				__( 'This PrintNode printer is missing its API key or printer id.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		try {
+			$pdf = base64_decode( $this->diagnostic( (string) $printer['name'] )['payload'], true );
+		} catch ( \Throwable $e ) {
+			// Defense in depth: a Dompdf/font-cache/temp-dir failure must not
+			// surface as an uncaught 500. Mirror the render_payload() guard.
+			Logger::log( 'Cloud print: PrintNode diagnostic PDF render failed: ' . $e->getMessage() );
+
+			return new WP_Error(
+				'wcpos_print_job_diagnostic_failed',
+				__( 'Could not generate the test print.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$result = ( new PrintNode_Client( $api_key ) )->submit_job(
+			$pn_printer_id,
+			'WCPOS Test Print',
+			'pdf_base64',
+			base64_encode( $pdf )
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return new WP_Error(
+				'wcpos_print_job_printnode_failed',
+				$result->get_error_message(),
+				array( 'status' => 502 )
+			);
+		}
+
+		return new WP_REST_Response(
+			array(
+				'submitted'         => true,
+				'external_provider' => 'printnode',
+				'external_job_id'   => (string) $result['id'],
+				'external_state'    => 'submitted',
+			),
+			201
+		);
 	}
 }

@@ -149,6 +149,68 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'links', $data[0] );
 	}
 
+	/**
+	 * Query-string search wins over a conflicting JSON body during the forward.
+	 */
+	public function test_order_search_with_conflicting_json_body_uses_query_search(): void {
+		// Arrange.
+		$alpha = OrderHelper::create_order();
+		$alpha->set_billing_first_name( 'alpha' );
+		$alpha->save();
+		$beta = OrderHelper::create_order();
+		$beta->set_billing_first_name( 'beta' );
+		$beta->save();
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$request->set_query_params( array( 'search' => 'alpha' ) );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"search":"beta"}' );
+
+		// Act.
+		$forwarded = $behavior->forwarded_params( $request->get_query_params(), $request );
+		$ids       = $behavior->around(
+			static function () use ( $forwarded ): array {
+				return wc_get_orders( $forwarded + array( 'return' => 'ids', 'limit' => -1 ) );
+			}
+		);
+
+		// Assert.
+		$this->assertSame( array( 'dp' => '6' ), $forwarded );
+		$this->assertContains( $alpha->get_id(), $ids );
+		$this->assertNotContains( $beta->get_id(), $ids );
+		$this->assertSame( 'beta', $request->get_param( 'search' ) );
+	}
+
+	/**
+	 * A JSON body alone must not filter the forwarded collection.
+	 */
+	public function test_order_search_with_only_json_body_leaves_query_unfiltered(): void {
+		// Arrange.
+		$alpha = OrderHelper::create_order();
+		$alpha->set_billing_first_name( 'alpha' );
+		$alpha->save();
+		$beta = OrderHelper::create_order();
+		$beta->set_billing_first_name( 'beta' );
+		$beta->save();
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"search":"beta"}' );
+
+		// Act.
+		$forwarded = $behavior->forwarded_params( $request->get_query_params(), $request );
+		$ids       = $behavior->around(
+			static function () use ( $forwarded ): array {
+				return wc_get_orders( $forwarded + array( 'return' => 'ids', 'limit' => -1 ) );
+			}
+		);
+
+		// Assert.
+		$this->assertSame( array( 'dp' => '6' ), $forwarded );
+		$this->assertContains( $alpha->get_id(), $ids );
+		$this->assertContains( $beta->get_id(), $ids );
+	}
+
 	/** Order search falls back to posts storage when OrderUtil is unavailable. */
 	public function test_order_behavior_falls_back_without_order_util(): void {
 		$command = sprintf(

@@ -199,6 +199,8 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		$event = $this->transport->events[0];
 		$this->assertSame( 'fatal', (string) $event->getLevel() );
 		$this->assertSame( 'wcpos-fatal', $event->getFingerprint()[0] );
+		$this->assertSame( 'plugins/woocommerce-pos/includes/Init.php', $event->getTags()['fatal_file'] ?? null );
+		$this->assertSame( (string) $error['line'], $event->getTags()['fatal_line'] ?? null );
 	}
 
 	/**

@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\V1\Customers_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 
 /**
@@ -33,6 +34,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		$this->uninstall_sync_read_lane();
 		parent::tearDown();
 	}
 
@@ -234,6 +236,39 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
 		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
+	}
+
+	/**
+	 * An oversized customer meta value is withheld rather than fatalling the response.
+	 */
+	public function test_oversized_customer_meta_value_is_withheld(): void {
+		Meta_Normalizer::reset_request_state();
+		$this->install_sync_read_lane();
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'wcpos_huge', str_repeat( 'a', Meta_Normalizer::OVERSIZED_META_BYTE_LIMIT + 1 ) );
+		update_user_meta( $customer->get_id(), 'wcpos_small', 'kept' );
+
+		// Current lane: the surface the app reads.
+		$current          = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$current->set_param( 'include', array( $customer->get_id() ) );
+		$current_response = $this->server->dispatch( $current );
+		$this->assertEquals( 200, $current_response->get_status() );
+		$current_rows = $current_response->get_data();
+		$this->assertCount( 1, $current_rows );
+		$current_keys = wp_list_pluck( $current_rows[0]['meta_data'], 'key' );
+		$this->assertNotContains( 'wcpos_huge', $current_keys );
+		$this->assertContains( 'wcpos_small', $current_keys );
+
+		// Legacy lane: same budget.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/customers/' . $customer->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$meta = $response->get_data()['meta_data'];
+		$keys = wp_list_pluck( $meta, 'key' );
+		$this->assertNotContains( 'wcpos_huge', $keys );
+		$this->assertContains( 'wcpos_small', $keys );
+		$this->assertSame( range( 0, \count( $meta ) - 1 ), array_keys( $meta ), 'meta_data must stay a list' );
 	}
 
 	/**

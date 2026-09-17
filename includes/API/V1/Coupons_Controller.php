@@ -13,6 +13,7 @@ if ( ! class_exists( 'WC_REST_Coupons_Controller' ) ) {
 	return;
 }
 
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use Exception;
 use WC_Coupon;
 use WC_REST_Coupons_Controller;
@@ -45,6 +46,36 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	 * @var WP_REST_Request
 	 */
 	protected $wcpos_request;
+
+	/**
+	 * Read coupons with the POS grant scoped to this handler.
+	 *
+	 * @param WP_REST_Request $request Full request details.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_items( $request ) {
+		Permission_Rules::install_wc_filter( 'coupons', 'v1' );
+		try {
+			return parent::get_items( $request );
+		} finally {
+			Permission_Rules::uninstall_wc_filter();
+		}
+	}
+
+	/**
+	 * Read coupons with the POS grant scoped to this handler.
+	 *
+	 * @param WP_REST_Request $request Full request details.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_item( $request ) {
+		Permission_Rules::install_wc_filter( 'coupons', 'v1' );
+		try {
+			return parent::get_item( $request );
+		} finally {
+			Permission_Rules::uninstall_wc_filter();
+		}
+	}
 
 	/**
 	 * Create a single coupon.
@@ -85,12 +116,12 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	 * @param WP_REST_Request $request         Request used to generate the response.
 	 * @param string          $route           Route matched for the request.
 	 * @param array           $handler         Route handler used for the request.
+	 * @return mixed
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
 		$this->wcpos_request = $request;
 
 		add_filter( 'woocommerce_rest_prepare_shop_coupon_object', array( $this, 'wcpos_coupon_response' ), 10, 3 );
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		// The post-date touch that used to be installed here is now registered
 		// unconditionally at plugins_loaded (Sync\Coupon_Modified_Date), so it also
 		// covers wp-admin/WP-CLI/third-party coupon saves this dispatch never saw.
@@ -107,54 +138,37 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	}
 
 	/**
-	 * Check whether a given request has permission to read coupons.
+	 * Delegate the read decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return WP_Error|boolean
+	 * @param WP_REST_Request $request Full request details.
+	 * @return bool|WP_Error
 	 */
 	public function get_items_permissions_check( $request ) {
-		if ( current_user_can( 'access_woocommerce_pos' ) ) {
-			return true;
-		}
-
-		return parent::get_items_permissions_check( $request );
+		return Permission_Rules::verdict( 'coupons', 'read', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
 	/**
-	 * Check if a given request has access to read a coupon.
+	 * Delegate the read decision, preserving WooCommerce's request-dependent checks.
 	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return WP_Error|boolean
+	 * @param WP_REST_Request $request Full request details.
+	 * @return bool|WP_Error
 	 */
 	public function get_item_permissions_check( $request ) {
-		if ( current_user_can( 'access_woocommerce_pos' ) ) {
-			return true;
-		}
-
-		return parent::get_item_permissions_check( $request );
+		return Permission_Rules::verdict( 'coupons', 'read', (int) $request['id'], 0, 'v1', $request->get_params() );
 	}
 
 	/**
 	 * Authorize coupon read access for POS users.
 	 *
-	 * The WC CRUD controller's get_items() calls wc_rest_check_post_permissions()
-	 * per coupon. This filter ensures POS users can read coupons.
-	 *
-	 * @param bool   $permission The current permission.
-	 * @param string $context    The context of the request (read, create, edit, delete).
-	 * @param int    $object_id  The object ID.
-	 * @param string $post_type  The post type.
-	 *
+	 * @deprecated Use Permission_Rules::wc_filter().
+	 * @param bool   $permission Incoming WC permission.
+	 * @param string $context    Permission context.
+	 * @param int    $object_id  Target object ID.
+	 * @param string $post_type  WC object type.
 	 * @return bool
 	 */
 	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		if ( ! $permission && 'shop_coupon' === $post_type && 'read' === $context ) {
-			$permission = current_user_can( 'access_woocommerce_pos' );
-		}
-
-		return $permission;
+		return Permission_Rules::wc_filter( $permission, $context, $object_id, $post_type, 'coupons', 'v1' );
 	}
 
 	/**
