@@ -53,7 +53,9 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 * @return array
 	 */
 	public function forwarded_params( array $params, WP_REST_Request $request ): array {
-		$this->plan = Collection_Rules::for_request( 'orders', $request, self::PARAM_MAP );
+		$plan_request = clone $request;
+		$plan_request->set_param( 'search', $params['search'] ?? null );
+		$this->plan = Collection_Rules::for_request( 'orders', $plan_request, self::PARAM_MAP );
 		$params     = $this->plan->forwarded_params( $params );
 		$params['dp'] = '6';
 
