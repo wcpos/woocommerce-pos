@@ -499,21 +499,42 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		$sku     = $this->create_variation( 'PHRASE-SKU' );
 		$barcode = $this->create_variation( 'PHRASE-BARCODE' );
 		$other   = $this->create_variation( 'PHRASE-DECOY' );
+		foreach ( array( $barcode, $other ) as $variation ) {
+			$variation->set_parent_id( $sku->get_parent_id() );
+			$variation->save();
+		}
 		update_post_meta( $sku->get_id(), '_sku', wp_slash( 'xx' . $phrase . 'xx' ) );
 		update_post_meta( $barcode->get_id(), '_barcode', wp_slash( $phrase ) );
 		update_post_meta( $other->get_id(), '_sku', wp_slash( $decoy ) );
 		update_post_meta( $other->get_id(), '_barcode', '' );
 
-		// Act.
-		$ids = $this->variation_ids(
-			array(
-				'search' => $phrase,
-				'include' => array( $sku->get_id(), $barcode->get_id(), $other->get_id() ),
-			)
-		);
+		foreach ( array( '/wcpos/v2/variations', '/wcpos/v1/products/variations', '/wcpos/v1/products/' . $sku->get_parent_id() . '/variations' ) as $route ) {
+			// Act: isolate v1's persistent hooks, as separate HTTP requests would.
+			$snapshot = array();
+			foreach ( $GLOBALS['wp_filter'] as $hook => $callbacks ) {
+				$snapshot[ $hook ] = clone $callbacks;
+			}
+			try {
+				$request = $this->wp_rest_get_request( $route );
+				$request->set_query_params(
+					array(
+						'search' => $phrase,
+						'include' => array( $sku->get_id(), $barcode->get_id(), $other->get_id() ),
+						'orderby' => 'id',
+						'order' => 'desc',
+					)
+				);
+				$response = $this->server->dispatch( $request );
 
-		// Assert.
-		$this->assertSame( array( $barcode->get_id(), $sku->get_id() ), $ids );
+				// Assert.
+				$this->assertSame( 200, $response->get_status(), $route );
+				// This lane serves the bare list on every variations route.
+				$rows = $response->get_data();
+				$this->assertSame( array( $barcode->get_id(), $sku->get_id() ), wp_list_pluck( $rows, 'id' ), $route );
+			} finally {
+				$GLOBALS['wp_filter'] = $snapshot; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore request-scoped hooks in this test process.
+			}
+		}
 	}
 
 	/**
@@ -527,6 +548,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			array( 'A საბარგული', 'B საბარგული' ),
 			array( '0', 'BBB' ),
 			array( '0.4', '0 4' ),
+			array( '0,4', '0 4' ),
+			array( 'MY+code', 'MY code' ),
 			array( '%30', '30' ),
 			array( '100%', '1000' ),
 			array( 'MY_code', 'MYXcode' ),

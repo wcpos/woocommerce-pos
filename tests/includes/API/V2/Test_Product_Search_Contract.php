@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for the v2 product search contract.
+ * Tests for the shared v2 and v1 product search contract.
  *
  * @package WCPOS\WooCommercePOS\Tests\API\V2
  */
@@ -74,16 +74,35 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Dispatch a product collection request.
 	 *
-	 * @param array $params Query parameters.
+	 * @param array  $params Query parameters.
+	 * @param string $route  Collection route.
 	 */
-	private function read( array $params = array() ): array {
-		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+	private function read( array $params = array(), string $route = '/wcpos/v2/products' ): array {
+		$request = $this->wp_rest_get_request( $route );
 		$request->set_query_params( $params );
 
-		$response = $this->server->dispatch( $request );
+		$response = '/wcpos/v1/products' === $route ? $this->dispatch_direct_request( $request ) : $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 
 		return $response->get_data();
+	}
+
+	/**
+	 * Isolate persistent v1 hooks as separate HTTP requests would.
+	 *
+	 * @param \WP_REST_Request $request Collection request.
+	 * @return \WP_REST_Response
+	 */
+	private function dispatch_direct_request( $request ) {
+		$snapshot = array();
+		foreach ( $GLOBALS['wp_filter'] as $hook => $callbacks ) {
+			$snapshot[ $hook ] = clone $callbacks;
+		}
+		try {
+			return $this->server->dispatch( $request );
+		} finally {
+			$GLOBALS['wp_filter'] = $snapshot; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore request-scoped hooks in this test process.
+		}
 	}
 
 	/**
@@ -144,26 +163,29 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 
-		// Act.
-		$rows = array();
-		foreach ( range( 1, max( 1, (int) ceil( count( $expected_names ) / 100 ) ) ) as $page ) {
-			$rows = array_merge(
-				$rows,
-				$this->read(
-					array(
-						'search' => $query,
-						'orderby' => 'id',
-						'order' => 'desc',
-						'status' => 'publish',
-						'per_page' => 100,
-						'page' => $page,
+		foreach ( array( '/wcpos/v2/products', '/wcpos/v1/products' ) as $route ) {
+			// Act.
+			$rows = array();
+			foreach ( range( 1, max( 1, (int) ceil( count( $expected_names ) / 100 ) ) ) as $page ) {
+				$rows = array_merge(
+					$rows,
+					$this->read(
+						array(
+							'search' => $query,
+							'orderby' => 'id',
+							'order' => 'desc',
+							'status' => 'publish',
+							'per_page' => 100,
+							'page' => $page,
+						),
+						$route
 					)
-				)
-			);
-		}
+				);
+			}
 
-		// Assert.
-		$this->assertSame( $expected_names, wp_list_pluck( $rows, 'name' ), $name );
+			// Assert.
+			$this->assertSame( $expected_names, wp_list_pluck( $rows, 'name' ), $name );
+		}
 	}
 
 	/**
@@ -210,18 +232,21 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			$expected[] = $product->get_id();
 		}
 
-		// Act.
-		$rows = $this->read(
-			array(
-				'search' => '  ' . $phrase . '  ',
-				'include' => $ids,
-				'orderby' => 'id',
-				'order' => 'asc',
-			)
-		);
+		foreach ( array( '/wcpos/v2/products', '/wcpos/v1/products' ) as $route ) {
+			// Act.
+			$rows = $this->read(
+				array(
+					'search' => '  ' . $phrase . '  ',
+					'include' => $ids,
+					'orderby' => 'id',
+					'order' => 'asc',
+				),
+				$route
+			);
 
-		// Assert.
-		$this->assertSame( $expected, wp_list_pluck( $rows, 'id' ) );
+			// Assert.
+			$this->assertSame( $expected, wp_list_pluck( $rows, 'id' ) );
+		}
 	}
 
 	/**
@@ -235,6 +260,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			array( 'A საბარგული', array( 'M3 საბარგული' ), array( 'საბარგული A' ) ),
 			array( 'MY', array( 'M3' ) ),
 			array( 'A', array( 'BBB' ) ),
+			array( 'IT 5012', array( '5012 only' ), array( '5012 IT' ) ),
 			array( 'A B', array( 'A xx', 'B xx' ), array( 'B A', 'A xx B' ) ),
 			array( '0', array( 'BBB' ) ),
 			array( '0.4', array( '0 4', '4.0' ) ),
@@ -265,13 +291,15 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 
-		// Act.
-		$ordered   = $this->read( array( 'search' => $phrase ) );
-		$reordered = $this->read( array( 'search' => 'Kelp Juniper Iris Hazel Grove Fern Elm Dahlia Cedar Birch Amber' ) );
+		foreach ( array( '/wcpos/v2/products', '/wcpos/v1/products' ) as $route ) {
+			// Act.
+			$ordered   = $this->read( array( 'search' => $phrase ), $route );
+			$reordered = $this->read( array( 'search' => 'Kelp Juniper Iris Hazel Grove Fern Elm Dahlia Cedar Birch Amber' ), $route );
 
-		// Assert.
-		$this->assertSame( array( $product->get_id() ), wp_list_pluck( $ordered, 'id' ) );
-		$this->assertSame( array(), $reordered );
+			// Assert.
+			$this->assertSame( array( $product->get_id() ), wp_list_pluck( $ordered, 'id' ) );
+			$this->assertSame( array(), $reordered );
+		}
 	}
 
 	/**
@@ -287,6 +315,11 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( ' AND 1=0 ', $search );
+
+		// Act / Assert: neither REST lane may expose rows for malformed input.
+		foreach ( array( '/wcpos/v2/products', '/wcpos/v1/products' ) as $route ) {
+			$this->assertSame( array(), $this->read( array( 'search' => "bad\xFF" ), $route ), $route );
+		}
 	}
 
 	/**
