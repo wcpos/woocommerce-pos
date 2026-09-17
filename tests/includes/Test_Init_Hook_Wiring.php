@@ -389,7 +389,8 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				$this->assertSame( $row['args'], $registered['accepted_args'] );
 				if ( 'determine_current_user' === $row['hook'] ) {
 					$this->assertSame( 20, $row['priority'] );
-					$this->assertSame( $latched ? 24 : 17, array_search( $row, $rows, true ) );
+					// Position of the guard row on this lane (four next-only rows are absent on main).
+					$this->assertSame( $latched ? 20 : 13, array_search( $row, $rows, true ) );
 					$auth_rows[] = self::label_for( $row['callback'] );
 				}
 			}
