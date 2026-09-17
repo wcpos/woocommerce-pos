@@ -528,8 +528,8 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 				// Assert.
 				$this->assertSame( 200, $response->get_status(), $route );
-				$data = $response->get_data();
-				$rows = '/wcpos/v2/variations' === $route ? $data['documents'] : $data;
+				// This lane serves the bare list on every variations route.
+				$rows = $response->get_data();
 				$this->assertSame( array( $barcode->get_id(), $sku->get_id() ), wp_list_pluck( $rows, 'id' ), $route );
 			} finally {
 				$GLOBALS['wp_filter'] = $snapshot; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore request-scoped hooks in this test process.
