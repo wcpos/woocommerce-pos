@@ -8,6 +8,7 @@ WordPress plugin providing the server-side foundation for WCPOS. This repository
 - `AGENTS.md` is the Codex entrypoint and points back to tracked repo context.
 - `.ai/rules/*.mdc` contains project-specific rules that must ship with the repo.
 - `.claude/skills/*/SKILL.md` contains project-specific skills that must ship with the repo.
+- Agent-written documents (plans, specs, research notes, mockups, handoff briefs) live under `.claude/<kind>/<date>-<slug>/` and may be committed. Never write them to `docs/` (gitignored) or into the project tree, so they are not mistaken for shipped files. Anything another agent must act on still gets a GitHub issue, because a sandboxed agent cannot read this checkout.
 - Global maintainer files under `/Users/kilbot/.claude` are optional personal preferences only; do not rely on them for project rules, and do not move project-specific context there.
 - Do not create duplicate `.codex` rule/skill sets when the same project guidance already exists in this repo.
 

@@ -50,11 +50,9 @@ pnpm-lock.yaml
 languages/*.l10n.php
 languages/*.mo
 docs/
-# Local agent artifacts (repo rules/skills stay tracked)
+# Local agent artifacts. Agent-written docs under .claude/ (research, mockups,
+# handoffs, prompts) are tracked on purpose; see CLAUDE.md, Canonical Agent Context.
 .codex/
-.claude/handoffs/
-.claude/mockups/
-.claude/prompts/
 .superpowers/
 
 # Generated from includes/Services/Receipt_Data_Schema.php
