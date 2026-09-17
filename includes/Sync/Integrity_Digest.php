@@ -368,13 +368,13 @@ final class Integrity_Digest {
 	 */
 	/** Owe the customer's digest; it is written once, on flush (see $pending_digests). */
 	public function record_customer_saved( int $user_id ): void {
-		$this->defer( 'customer', $user_id );
+		$this->defer( self::pending_type( 'customers' ), $user_id );
 	}
 
 	/**
 	 * Queue one digest upsert, or write it now if the boundary has passed.
 	 *
-	 * @param string $type 'order' or 'customer'.
+	 * @param string $type Registry digest object-types key.
 	 * @param int    $id   Record id.
 	 */
 	private function defer( string $type, int $id ): void {
@@ -394,6 +394,11 @@ final class Integrity_Digest {
 		}
 	}
 
+	/** One queue discriminator per digest id-space, including shared product/variation ids. */
+	private static function pending_type( string $collection ): string {
+		return implode( ',', Collections::row( $collection )['digest']['object_types'] );
+	}
+
 	private static function pending_key( string $type, int $id ): string {
 		return get_current_blog_id() . ':' . $type . ':' . $id;
 	}
@@ -402,14 +407,13 @@ final class Integrity_Digest {
 	private function upsert_pending( string $type, int $id ): void {
 		$this->observe(
 			function () use ( $type, $id ): void {
-				if ( 'customer' === $type ) {
-					$this->upsert_customer_digest( $id );
-				} elseif ( 'order' === $type ) {
-					$this->upsert_order_digest( $id );
-				} else {
-					// 'post' (product or variation): the SQL derives the stored type from the row.
-					$this->upsert_digest( $id );
+				foreach ( Collections::with( 'digest' ) as $collection => $row ) {
+					if ( self::pending_type( $collection ) === $type ) {
+						$this->upsert_for( $row['digest']['id_space'], $id );
+						return;
+					}
 				}
+				Logger::warning( 'WCPOS sync: no digest collection matches queued type: ' . $type );
 			}
 		);
 	}
@@ -469,13 +473,7 @@ final class Integrity_Digest {
 	}
 
 	public function record_customer_deleted( int $user_id ): void {
-		// A pending upsert for a record that is leaving must not be written after the fact.
-		unset( self::$pending_digests[ self::pending_key( 'customer', $user_id ) ] );
-		$this->observe(
-			function () use ( $user_id ): void {
-				$this->delete_customer_digest( $user_id );
-			}
-		);
+		$this->delete_for( 'customers', $user_id );
 	}
 
 	/**
@@ -495,21 +493,6 @@ final class Integrity_Digest {
 		}
 	}
 
-	private function delete_customer_digest( int $user_id ): void {
-		global $wpdb;
-		$deleted = $wpdb->delete(
-			$this->table_name(),
-			array(
-				'object_type' => 'customer',
-				'object_id' => $user_id,
-			),
-			array( '%s', '%d' )
-		);
-		if ( false === $deleted ) {
-			throw new RuntimeException( 'delete stored customer digest failed: ' . $wpdb->last_error );
-		}
-	}
-
 	/**
 	 * Order digest maintenance (ADR 0015, Leg-3 phase 7). The WC order hooks are storage-agnostic (fire
 	 * under HPOS AND CPT); the digest SQL's `type='shop_order'` filter makes the upsert a no-op for any
@@ -517,59 +500,29 @@ final class Integrity_Digest {
 	 */
 	/** Owe the order's digest; it is written once, on flush (see $pending_digests). */
 	public function record_order_saved( int $order_id ): void {
-		$this->defer( 'order', $order_id );
+		$this->defer( self::pending_type( 'orders' ), $order_id );
 	}
 
 	public function record_order_deleted( int $order_id ): void {
-		// A pending upsert for a record that is leaving must not be written after the fact.
-		unset( self::$pending_digests[ self::pending_key( 'order', $order_id ) ] );
-		$this->observe(
-			function () use ( $order_id ): void {
-				$this->delete_order_digest( $order_id );
-			}
-		);
+		$this->delete_for( 'orders', $order_id );
 	}
 
-	private function delete_order_digest( int $order_id ): void {
-		global $wpdb;
-		$deleted = $wpdb->delete(
-			$this->table_name(),
-			array(
-				'object_type' => 'order',
-				'object_id' => $order_id,
-			),
-			array( '%s', '%d' )
-		);
-		if ( false === $deleted ) {
-			throw new RuntimeException( 'delete stored order digest failed: ' . $wpdb->last_error );
-		}
-	}
-
-	/** Order analogue of {@see upsert_customer_digest}: compute + store one order's digest (HPOS or CPT). */
+	/**
+	 * Order analogue of {@see upsert_customer_digest} (HPOS or CPT).
+	 *
+	 * @deprecated Use record_order_saved().
+	 */
 	public function upsert_order_digest( int $order_id ): void {
-		global $wpdb;
-		$started = microtime( true );
-		$this->index->raise_group_concat_max_len();
-		$this->query_with_retry(
-			$wpdb->prepare(
-				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
-				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-				. ' FROM (' . $this->index->order_digest_select_sql( '{id} = %d' ) . ') t'
-				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
-				$order_id
-			),
-			'upsert stored order digest failed: ',
-			$started
-		);
+		$this->upsert_for( 'orders', $order_id );
 	}
 
 	/**
 	 * Owe the product's or variation's digest; it is written once, on flush (see
-	 * $pending_digests). The queue type is 'post' for both: the upsert's SQL
+	 * $pending_digests). Both share the registry's queue key: the upsert's SQL
 	 * derives the stored object_type from the row, so nothing here needs to.
 	 */
 	public function record_post_saved( int $post_id ): void {
-		$this->defer( 'post', $post_id );
+		$this->defer( self::pending_type( 'products' ), $post_id );
 	}
 
 	public function record_post_untrashed( int $post_id ): void {
@@ -588,85 +541,73 @@ final class Integrity_Digest {
 		if ( ! in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
 			return;
 		}
-		// A pending upsert for a record that is leaving must not be written after the fact.
-		unset( self::$pending_digests[ self::pending_key( 'post', $post_id ) ] );
-		$this->observe(
-			function () use ( $post_id, $post_type ): void {
-				$this->delete_post_digest( $post_id, $post_type );
-			}
-		);
+		$this->delete_for( 'products', $post_id, 'product_variation' === $post_type );
 	}
 
-	/**
-	 * Remove a product/variation digest row after a hooked delete.
-	 *
-	 * A hooked delete removes the stored row so stored == current again.
-	 * Only a hook-BYPASSING delete leaves an orphan digest behind, which
-	 * the scan reports as a mismatch (stored side carries a row the
-	 * current side lacks) and the drill-down labels status=deleted.
-	 *
-	 * @param int    $post_id   The deleted post id.
-	 * @param string $post_type Its post type (product | product_variation).
-	 */
-	private function delete_post_digest( int $post_id, string $post_type ): void {
-		global $wpdb;
-		$started = microtime( true );
-		$deleted = $wpdb->delete(
-			$this->table_name(),
-			array(
-				'object_type' => 'product_variation' === $post_type ? 'variation' : 'product',
-				'object_id' => $post_id,
-			),
-			array( '%s', '%d' )
+	/** Cancel an owed upsert and remove the registry-selected stored row. */
+	private function delete_for( string $collection, int $id, bool $child = false ): void {
+		unset( self::$pending_digests[ self::pending_key( self::pending_type( $collection ), $id ) ] );
+		$this->observe(
+			function () use ( $collection, $id, $child ): void {
+				global $wpdb;
+				$row     = Collections::row( $collection );
+				$digest  = $row['digest'];
+				$started = microtime( true );
+				$deleted = $wpdb->delete(
+					$this->table_name(),
+					array(
+						'object_type' => $child ? $digest['child_type'] : $row['object_type'],
+						'object_id'   => $id,
+					),
+					array( '%s', '%d' )
+				);
+				if ( 'products' === $digest['id_space'] ) {
+					self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
+				}
+				if ( false === $deleted ) {
+					$label = $digest['label'];
+					throw new RuntimeException( 'delete stored ' . $label . 'digest failed: ' . $wpdb->last_error );
+				}
+			}
 		);
-		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
-		if ( false === $deleted ) {
-			throw new RuntimeException( 'delete stored digest failed: ' . $wpdb->last_error );
-		}
 	}
 
 	/**
 	 * One statement: the digest is computed in SQL from the raw row and
 	 * upserted in the same statement — PHP never materializes the value.
 	 * No-op for rows outside the live predicate (the delete hook owns those).
+	 * @deprecated Use record_post_saved().
 	 */
 	public function upsert_digest( int $post_id ): void {
-		global $wpdb;
-		// Time from BEFORE the session setup so timing.digest_ms covers ALL digest hook work
-		// (the raise runs inside the save hook — codex P3).
-		$started = microtime( true );
-		$this->index->raise_group_concat_max_len();
-		$this->query_with_retry(
-			$wpdb->prepare(
-				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
-				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-				. ' FROM (' . $this->index->row_digest_select_sql( 'p.ID = %d' ) . ') t'
-				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
-				$post_id
-			),
-			'upsert stored digest failed: ',
-			$started
-		);
+		$this->upsert_for( 'products', $post_id );
 	}
 
 	/**
 	 * Customer analogue of {@see upsert_digest} (ADR 0015, Leg-3 phase 7):
 	 * compute and store one WordPress user's customer digest in a single
 	 * INSERT…SELECT. Only the delete hook removes it.
+	 * @deprecated Use record_customer_saved().
 	 */
 	public function upsert_customer_digest( int $user_id ): void {
+		$this->upsert_for( 'customers', $user_id );
+	}
+
+	/** Compute and store one row using its id-space's canonical SELECT and retry policy. */
+	private function upsert_for( string $collection, int $id ): void {
 		global $wpdb;
+		$digest  = Collections::row( $collection )['digest'];
+		$label   = $digest['label'];
 		$started = microtime( true );
 		$this->index->raise_group_concat_max_len();
 		$this->query_with_retry(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 				. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-				. ' FROM (' . $this->index->customer_digest_select_sql( 'u.ID = %d' ) . ') t'
+				. ' FROM (' . $this->index->{$digest['select']}( $digest['id_column'] . ' = %d' ) . ') t'
 				. ' ON DUPLICATE KEY UPDATE digest = VALUES(digest), updated_gmt = VALUES(updated_gmt)',
-				$user_id
+				$id
 			),
-			'upsert stored customer digest failed: ',
+			'upsert stored ' . $label . 'digest failed: ',
 			$started
 		);
 	}

@@ -259,7 +259,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		if ( null !== $bucket_raw && '' !== $bucket_raw ) {
-			if ( 'products' !== $collection ) {
+			if ( null === ( Collections::row( $collection )['repair']['drill_down'] ?? null ) ) {
 				return new WP_Error(
 					'woocommerce_pos_sync_unsupported_scan_drill_down_collection',
 					\sprintf( 'integrity/scan drill-down does not support the "%s" collection', $collection ),
@@ -267,7 +267,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 				);
 			}
 			$bucket = max( 0, (int) $bucket_raw );
-			if ( $this->maybe_schedule_digest_rebuild() ) {
+			if ( true === Collections::row( $collection )['repair']['self_heal'] && $this->maybe_schedule_digest_rebuild() ) {
 				return rest_ensure_response(
 					$this->envelope(
 						array(
@@ -297,7 +297,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$window_start = $first_bucket * $bucket_size;
 		$window_end   = ( $first_bucket + $limit_buckets ) * $bucket_size;
 
-		if ( 'products' === $collection && $this->maybe_schedule_digest_rebuild() ) {
+		if ( true === Collections::row( $collection )['repair']['self_heal'] && $this->maybe_schedule_digest_rebuild() ) {
 			return rest_ensure_response(
 				$this->envelope(
 					array(
