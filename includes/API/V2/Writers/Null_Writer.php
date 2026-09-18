@@ -45,8 +45,20 @@ class Null_Writer implements Collection_Writer_Interface {
 		return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
 	}
 
-	/** No-op for pass-through persistence. */
-	public function persist( string $phase, int $id, array $payload, array $current = array(), array $response_data = array(), array $context = array() ): void {
+	/** No-op after create for pass-through collections. */
+	public function after_create( int $id, array $payload ): void {
+	}
+
+	/** No-op after identity for pass-through collections. */
+	public function after_identity( int $id, array $payload ): void {
+	}
+
+	/** No-op after recovery for pass-through collections. */
+	public function after_recovery( int $id, array $payload ): void {
+	}
+
+	/** No-op after update for pass-through collections. */
+	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void {
 	}
 
 	/** Delete a generic collection record, honouring the envelope's `force` flag. */

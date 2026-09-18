@@ -189,29 +189,36 @@ class Order_Writer extends Null_Writer {
 		return $response;
 	}
 
-	/** Persist the order behavior assigned to a controller-owned protocol phase. */
-	public function persist( string $phase, int $id, array $payload, array $current = array(), array $response_data = array(), array $context = array() ): void {
-		if ( 'create_before_identity' === $phase ) {
-			$this->order_payload->persist_tax_ids( $id, $payload, true );
-		} elseif ( 'create_after_identity' === $phase ) {
-			$this->stamp_order_audit( $id, $payload, true );
+	/** Persist tax IDs before the identity proof. */
+	public function after_create( int $id, array $payload ): void {
+		$this->order_payload->persist_tax_ids( $id, $payload, true );
+	}
+
+	/** Stamp audit metadata and add the creation note after the identity proof. */
+	public function after_identity( int $id, array $payload ): void {
+		$this->stamp_order_audit( $id, $payload, true );
+		$order = wc_get_order( $id );
+		if ( $order ) {
+			Order_Notes::add_creation_note( $order, get_current_user_id(), $order->get_meta( '_pos_store' ) );
+		}
+	}
+
+	/** Restore audit metadata and tax IDs after recovery. */
+	public function after_recovery( int $id, array $payload ): void {
+		$this->stamp_order_audit( $id, $payload, false );
+		$this->order_payload->persist_tax_ids( $id, $payload, true );
+	}
+
+	/** Persist till metadata, tax IDs, reassignment, and email changes after update. */
+	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void {
+		$this->stamp_order_till_meta( $id, $payload );
+		$this->order_payload->persist_tax_ids( $id, $payload, false );
+		$this->persist_cashier_store_reassignment( $id, $current, $response_data, $context );
+		if ( ! empty( $context['clear_email'] ) ) {
 			$order = wc_get_order( $id );
 			if ( $order ) {
-				Order_Notes::add_creation_note( $order, get_current_user_id(), $order->get_meta( '_pos_store' ) );
-			}
-		} elseif ( 'create_recovery' === $phase ) {
-			$this->stamp_order_audit( $id, $payload, false );
-			$this->order_payload->persist_tax_ids( $id, $payload, true );
-		} elseif ( 'update' === $phase ) {
-			$this->stamp_order_till_meta( $id, $payload );
-			$this->order_payload->persist_tax_ids( $id, $payload, false );
-			$this->persist_cashier_store_reassignment( $id, $current, $response_data, $context );
-			if ( ! empty( $context['clear_email'] ) ) {
-				$order = wc_get_order( $id );
-				if ( $order ) {
-					$order->set_billing_email( '' );
-					$order->get_data_store()->update( $order );
-				}
+				$order->set_billing_email( '' );
+				$order->get_data_store()->update( $order );
 			}
 		}
 	}

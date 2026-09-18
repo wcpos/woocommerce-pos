@@ -191,6 +191,7 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/ShippingHelper.php';
 		require_once $this->plugin_dir . '/tests/Helpers/HPOSToggleTrait.php';
 		require_once $this->plugin_dir . '/tests/Helpers/EmailHelper.php';
+		require_once $this->plugin_dir . '/tests/Helpers/FakeMutationStore.php';
 	}
 
 	/**
