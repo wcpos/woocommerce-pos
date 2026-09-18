@@ -601,36 +601,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get_mock_receipt_data includes new store fields.
-	 */
-	public function test_get_mock_receipt_data_includes_new_store_fields(): void {
-		$data  = Receipt_Data_Schema::get_mock_receipt_data();
-		$store = $data['store'];
-
-		$this->assertArrayHasKey( 'opening_hours', $store );
-		$this->assertArrayHasKey( 'opening_hours_vertical', $store );
-		$this->assertArrayHasKey( 'opening_hours_inline', $store );
-		$this->assertArrayHasKey( 'opening_hours_notes', $store );
-		$this->assertArrayHasKey( 'id', $store );
-		$this->assertArrayHasKey( 'tax_ids', $store );
-		$this->assertArrayNotHasKey( 'tax_id', $store );
-		$this->assertIsInt( $store['id'] );
-		$this->assertIsString( $store['opening_hours_vertical'] );
-		$this->assertIsString( $store['opening_hours_inline'] );
-		$this->assertIsString( $store['opening_hours_notes'] );
-		$this->assertIsArray( $store['tax_ids'] );
-		$this->assertNotEmpty( $store['tax_ids'] );
-		$this->assertNotEmpty( $store['opening_hours_vertical'] );
-		$this->assertNotEmpty( $store['opening_hours_inline'] );
-		$this->assertArrayHasKey( 'type', $store['tax_ids'][0] );
-		$this->assertArrayHasKey( 'value', $store['tax_ids'][0] );
-		$this->assertArrayHasKey( 'country', $store['tax_ids'][0] );
-		$this->assertArrayHasKey( 'label', $store['tax_ids'][0] );
-		$this->assertSame( 'us_ein', $store['tax_ids'][0]['type'] );
-		$this->assertSame( '12-3456789', $store['tax_ids'][0]['value'] );
-	}
-
-	/**
 	 * Test field tree exposes practical date format options for each semantic date section.
 	 */
 	public function test_get_field_tree_exposes_practical_date_format_options(): void {

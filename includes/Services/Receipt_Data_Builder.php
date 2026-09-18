@@ -19,8 +19,7 @@ class Receipt_Data_Builder {
 	 * Build a canonical receipt payload.
 	 *
 	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param string            $mode      Reserved for caller compatibility; the receipt mode is
-	 *                                     carried in the request, not the payload.
+	 * @param string            $mode      Receipt mode ('live', 'fiscal', 'preview'), passed unchanged to the receipt data filter.
 	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
 	 *
 	 * @return array
@@ -117,7 +116,7 @@ class Receipt_Data_Builder {
 		}
 
 		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );
-		$tax_ids = self::with_customer_tax_id_labels( $tax_ids, $presentation_hints['locale'] ?? '' );
+		$tax_ids = Receipt_Sections::label_tax_ids( $tax_ids, 'customer', $presentation_hints['locale'] ?? '' );
 
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
@@ -164,7 +163,6 @@ class Receipt_Data_Builder {
 			$price_convenience = $this->get_line_price_convenience_fields(
 				$item,
 				$order,
-				$display_incl,
 				$qty,
 				$unit_subtotal_incl,
 				$unit_subtotal_excl,
@@ -180,27 +178,32 @@ class Receipt_Data_Builder {
 				'name'               => $item->get_name(),
 				'qty'                => $qty,
 				'qty_refunded'       => $qty_refunded,
-				'unit_subtotal'      => $display_incl ? $unit_subtotal_incl : $unit_subtotal_excl,
-				'unit_subtotal_incl' => $unit_subtotal_incl,
-				'unit_subtotal_excl' => $unit_subtotal_excl,
-				'unit_price'         => $display_incl ? $unit_price_incl : $unit_price_excl,
-				'unit_price_incl'    => $unit_price_incl,
-				'unit_price_excl'    => $unit_price_excl,
-				'line_subtotal'      => $display_incl ? $line_subtotal_incl : $line_subtotal_excl,
-				'line_subtotal_incl' => $line_subtotal_incl,
-				'line_subtotal_excl' => $line_subtotal_excl,
-				'discounts'          => $display_incl ? $discounts_incl : $discounts_excl,
-				'discounts_incl'     => $discounts_incl,
-				'discounts_excl'     => $discounts_excl,
-				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
-				'line_total_incl'    => $line_total_incl,
-				'line_total_excl'    => $line_total_excl,
+				'unit_subtotal' => array(
+					'incl' => $unit_subtotal_incl,
+					'excl' => $unit_subtotal_excl,
+				),
+				'unit_price' => array(
+					'incl' => $unit_price_incl,
+					'excl' => $unit_price_excl,
+				),
+				'line_subtotal' => array(
+					'incl' => $line_subtotal_incl,
+					'excl' => $line_subtotal_excl,
+				),
+				'discounts' => array(
+					'incl' => $discounts_incl,
+					'excl' => $discounts_excl,
+				),
+				'line_total' => array(
+					'incl' => $line_total_incl,
+					'excl' => $line_total_excl,
+				),
 				'total_refunded'     => $total_refunded,
 				'taxes'              => $this->get_line_taxes( $item ),
 				'meta'               => $this->get_item_meta_pairs( $item ),
 				'attributes'         => $this->get_product_attribute_pairs( $item ),
 			);
-			$lines[] = array_merge( $line, $price_convenience );
+			$lines[] = Receipt_Sections::line( array_merge( $line, $price_convenience ), $display_incl );
 		}
 
 		$shipping = array();
@@ -211,14 +214,16 @@ class Receipt_Data_Builder {
 			$ship_total_excl = (float) $shipping_item->get_total();
 			$ship_total_tax  = (float) $shipping_item->get_total_tax();
 			$ship_total_incl = $ship_total_excl + $ship_total_tax;
-			$shipping[]      = array(
-				'label'      => $shipping_item->get_name(),
-				'method_id'  => (string) $shipping_item->get_method_id(),
-				'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
-				'total_incl' => $ship_total_incl,
-				'total_excl' => $ship_total_excl,
-				'taxes'      => $this->get_item_taxes( $shipping_item ),
-				'meta'       => $this->get_item_meta_pairs( $shipping_item ),
+			$shipping[] = Receipt_Sections::shipping(
+				$shipping_item->get_name(),
+				(string) $shipping_item->get_method_id(),
+				array(
+					'incl' => $ship_total_incl,
+					'excl' => $ship_total_excl,
+				),
+				$this->get_item_taxes( $shipping_item ),
+				$this->get_item_meta_pairs( $shipping_item ),
+				$display_incl
 			);
 		}
 
@@ -227,13 +232,15 @@ class Receipt_Data_Builder {
 			$fee_total_excl = (float) $fee->get_total();
 			$fee_total_tax  = (float) $fee->get_total_tax();
 			$fee_total_incl = $fee_total_excl + $fee_total_tax;
-			$fees[]         = array(
-				'label'      => $fee->get_name(),
-				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
-				'total_incl' => $fee_total_incl,
-				'total_excl' => $fee_total_excl,
-				'taxes'      => $this->get_item_taxes( $fee ),
-				'meta'       => $this->get_item_meta_pairs( $fee ),
+			$fees[] = Receipt_Sections::fee(
+				$fee->get_name(),
+				array(
+					'incl' => $fee_total_incl,
+					'excl' => $fee_total_excl,
+				),
+				$this->get_item_taxes( $fee ),
+				$this->get_item_meta_pairs( $fee ),
+				$display_incl
 			);
 		}
 
@@ -246,13 +253,15 @@ class Receipt_Data_Builder {
 			$coupon_excl = (float) $coupon_item->get_discount();
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
-			$discounts[] = array(
-				'label'         => $this->get_coupon_label( $coupon_item, $coupon ),
-				'code'          => $coupon_item->get_code(),
-				'discount_type' => $coupon ? (string) $coupon->get_discount_type() : '',
-				'total'         => $display_incl ? $coupon_incl : $coupon_excl,
-				'total_incl'    => $coupon_incl,
-				'total_excl'    => $coupon_excl,
+			$discounts[] = Receipt_Sections::discount(
+				$this->get_coupon_label( $coupon_item, $coupon ),
+				$coupon_item->get_code(),
+				$coupon ? (string) $coupon->get_discount_type() : '',
+				array(
+					'incl' => $coupon_incl,
+					'excl' => $coupon_excl,
+				),
+				$display_incl
 			);
 		}
 
@@ -260,114 +269,35 @@ class Receipt_Data_Builder {
 		$discount_total_tax  = (float) $order->get_discount_tax();
 		$discount_total_incl = $discount_total_excl + $discount_total_tax;
 
-		// Legacy POS lines already include regular-to-selling savings in WooCommerce's
-		// discount total. Add only current-shape savings to total_saved to avoid overlap.
-		$sale_savings_totals = array(
-			'incl' => 0.0,
-			'excl' => 0.0,
-		);
-		$additional_savings  = array(
-			'incl' => 0.0,
-			'excl' => 0.0,
-		);
-		$savings_complete    = array(
-			'incl' => true,
-			'excl' => true,
-		);
-		$price_precision = wc_get_price_decimals();
-		foreach ( $lines as $line ) {
-			foreach ( array( 'incl', 'excl' ) as $basis ) {
-				$key = 'line_savings_' . $basis;
-				if ( ! isset( $line[ $key ] ) || ! is_numeric( $line[ $key ] ) ) {
-					$savings_complete[ $basis ] = false;
-					continue;
-				}
-
-				$line_savings = (float) $line[ $key ];
-				$sale_savings_totals[ $basis ] += $line_savings;
-				if ( empty( $line['savings_in_discounts'] ) ) {
-					$subtotal_key = 'line_subtotal_' . $basis;
-					$selling_key  = 'line_selling_total_' . $basis;
-					if (
-						$line_savings > 0.0
-						&& (
-							! isset( $line[ $subtotal_key ], $line[ $selling_key ] )
-							|| round( abs( (float) $line[ $subtotal_key ] - (float) $line[ $selling_key ] ), $price_precision ) > 0.0
-						)
-					) {
-						$savings_complete[ $basis ] = false;
-						continue;
-					}
-					$additional_savings[ $basis ] += $line_savings;
-				}
-			}
-		}
-
-		$total_saved = array(
-			'incl' => $savings_complete['incl'] ? $discount_total_incl + $additional_savings['incl'] : null,
-			'excl' => $savings_complete['excl'] ? $discount_total_excl + $additional_savings['excl'] : null,
-		);
-		foreach ( array( 'incl', 'excl' ) as $basis ) {
-			if ( ! $savings_complete[ $basis ] ) {
-				$sale_savings_totals[ $basis ] = null;
-			}
-		}
-		$display_basis = $display_incl ? 'incl' : 'excl';
-
-		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
-		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
-
-		// Item count summaries — useful for packing slips and kitchen tickets
-		// where Mustache can't sum/count an array at render time.
-		$total_qty  = (float) array_sum( array_column( $lines, 'qty' ) );
-		$line_count = \count( $lines );
-
 		$tax_total = (float) $order->get_total_tax();
-		$total     = (float) $order->get_total();
-
-		$total_excl = $total - $tax_total;
-		$refund_total     = method_exists( $order, 'get_total_refunded' )
+		$total = (float) $order->get_total();
+		$refund_total = method_exists( $order, 'get_total_refunded' )
 			? abs( (float) $order->get_total_refunded() )
 			: 0.0;
-		// Templates render the customer-facing balance after a partial refund.
-		// Stays at 0 when nothing was refunded so detailed-receipt's section
-		// guard `{{#totals.net_total}}…{{/totals.net_total}}` collapses.
-		$net_total = $refund_total > 0 ? max( 0.0, $total - $refund_total ) : 0.0;
-
-		$totals = array(
-			'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
-			'subtotal_incl'           => $subtotal_incl,
-			'subtotal_excl'           => $subtotal_excl,
-			'discount_total'          => $display_incl ? $discount_total_incl : $discount_total_excl,
-			'discount_total_incl'     => $discount_total_incl,
-			'discount_total_excl'     => $discount_total_excl,
-			'sale_savings_total'      => $sale_savings_totals[ $display_basis ],
-			'sale_savings_total_incl' => $sale_savings_totals['incl'],
-			'sale_savings_total_excl' => $sale_savings_totals['excl'],
-			'total_saved'             => $total_saved[ $display_basis ],
-			'total_saved_incl'        => $total_saved['incl'],
-			'total_saved_excl'        => $total_saved['excl'],
-			'total_saved_complete'    => $savings_complete[ $display_basis ],
-			'tax_total'               => $tax_total,
-			'total'                   => $display_incl ? $total : $total_excl,
-			'total_incl'              => $total,
-			'total_excl'              => $total_excl,
-			'paid_total'              => $total,
-			'change_total'            => (float) $order->get_meta( '_pos_cash_change' ),
-			'refund_total'            => $refund_total,
-			'net_total'               => $net_total,
-			'total_qty'               => $total_qty,
-			'line_count'              => $line_count,
+		$totals = Receipt_Sections::totals(
+			$lines,
+			array(
+				'discount_total' => array(
+					'incl' => $discount_total_incl,
+					'excl' => $discount_total_excl,
+				),
+				'tax_total' => $tax_total,
+				'total' => $total,
+				'paid_total' => $total,
+				'change_total' => (float) $order->get_meta( '_pos_cash_change' ),
+				'refund_total' => $refund_total,
+			),
+			$display_incl
 		);
 
 		$payments = array(
-			array(
-				'method_id'      => $order->get_payment_method(),
-				'method_title'   => $order->get_payment_method_title(),
-				'amount'         => $total,
-				'transaction_id' => (string) $order->get_transaction_id(),
-				'tendered'       => (float) $order->get_meta( '_pos_cash_amount_tendered' ),
-				'change'         => (float) $order->get_meta( '_pos_cash_change' ),
+			Receipt_Sections::payment(
+				$order->get_payment_method(),
+				$order->get_payment_method_title(),
+				$total,
+				(string) $order->get_transaction_id(),
+				(float) $order->get_meta( '_pos_cash_amount_tendered' ),
+				(float) $order->get_meta( '_pos_cash_change' )
 			),
 		);
 
@@ -419,9 +349,13 @@ class Receipt_Data_Builder {
 		 * example a flag on a `discounts[]` row) or adjust labels. Keys defined
 		 * by Receipt_Data_Schema should keep their documented types.
 		 *
+		 * Sample previews for the template editor and gallery also run through this filter,
+		 * with mode `preview` and an unsaved order whose id is 0; a plugin that needs a
+		 * persisted order should return `$data` unchanged when `$order->get_id()` is 0.
+		 *
 		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
 		 * @param WC_Abstract_Order $order Order the receipt is for.
-		 * @param string            $mode  Receipt mode: 'live' or 'fiscal'.
+		 * @param string            $mode  Receipt mode: 'live', 'fiscal' or 'preview', passed unchanged.
 		 *
 		 * @since 1.10.8
 		 *
@@ -501,7 +435,6 @@ class Receipt_Data_Builder {
 	 *
 	 * @param \WC_Order_Item_Product $item               Order item.
 	 * @param WC_Abstract_Order      $order              Receipt order.
-	 * @param bool                   $display_incl       Whether generic values include tax.
 	 * @param float                  $qty                Item quantity.
 	 * @param float                  $unit_subtotal_incl Stored unit subtotal including tax.
 	 * @param float                  $unit_subtotal_excl Stored unit subtotal excluding tax.
@@ -510,12 +443,11 @@ class Receipt_Data_Builder {
 	 * @param float                  $total_incl         Stored line total including tax.
 	 * @param float                  $total_excl         Stored line total excluding tax.
 	 *
-	 * @return array<string,float|bool|null>
+	 * @return array<string,array|bool>
 	 */
 	private function get_line_price_convenience_fields(
 		\WC_Order_Item_Product $item,
 		WC_Abstract_Order $order,
-		bool $display_incl,
 		float $qty,
 		float $unit_subtotal_incl,
 		float $unit_subtotal_excl,
@@ -609,30 +541,14 @@ class Receipt_Data_Builder {
 			break;
 		}
 
-		$select = static function ( array $values ) use ( $display_incl ): ?float {
-			return $display_incl ? $values['incl'] : $values['excl'];
-		};
-
 		return array(
-			'regular_price'           => $select( $regular ),
-			'regular_price_incl'      => $regular['incl'],
-			'regular_price_excl'      => $regular['excl'],
-			'selling_price'           => $select( $selling ),
-			'selling_price_incl'      => $selling['incl'],
-			'selling_price_excl'      => $selling['excl'],
-			'unit_savings'            => $select( $unit_savings ),
-			'unit_savings_incl'       => $unit_savings['incl'],
-			'unit_savings_excl'       => $unit_savings['excl'],
-			'line_regular_total'      => $select( $line_regular ),
-			'line_regular_total_incl' => $line_regular['incl'],
-			'line_regular_total_excl' => $line_regular['excl'],
-			'line_selling_total'      => $select( $line_selling ),
-			'line_selling_total_incl' => $line_selling['incl'],
-			'line_selling_total_excl' => $line_selling['excl'],
-			'line_savings'            => $select( $line_savings ),
-			'line_savings_incl'       => $line_savings['incl'],
-			'line_savings_excl'       => $line_savings['excl'],
-			'savings_in_discounts'    => $savings_in_discounts,
+			'regular_price' => $regular,
+			'selling_price' => $selling,
+			'unit_savings' => $unit_savings,
+			'line_regular_total' => $line_regular,
+			'line_selling_total' => $line_selling,
+			'line_savings' => $line_savings,
+			'savings_in_discounts' => $savings_in_discounts,
 		);
 	}
 
@@ -700,16 +616,14 @@ class Receipt_Data_Builder {
 			$rate         = (float) $tax_item->get_rate_percent();
 			$rate_id      = (string) $tax_item->get_rate_id();
 			$taxable_excl = $taxable_bases[ $rate_id ] ?? null;
-			$taxable_incl = null !== $taxable_excl ? $taxable_excl + $tax_amount : null;
 
-			$summary[] = array(
-				'code'                => $rate_id,
-				'rate'                => $rate > 0 ? $rate : null,
-				'label'               => $tax_item->get_label( $order ),
-				'compound'            => method_exists( $tax_item, 'is_compound' ) ? (bool) $tax_item->is_compound() : false,
-				'taxable_amount_excl' => $taxable_excl,
-				'tax_amount'          => $tax_amount,
-				'taxable_amount_incl' => $taxable_incl,
+			$summary[] = Receipt_Sections::tax_summary_entry(
+				$rate_id,
+				$rate,
+				$tax_item->get_label( $order ),
+				method_exists( $tax_item, 'is_compound' ) ? (bool) $tax_item->is_compound() : false,
+				$taxable_excl,
+				$tax_amount
 			);
 		}
 
@@ -900,20 +814,7 @@ class Receipt_Data_Builder {
 		}
 
 		if ( $product instanceof \WC_Product_Variation ) {
-			foreach ( $product->get_variation_attributes() as $attribute_key => $attribute_value ) {
-				if ( '' === (string) $attribute_value ) {
-					continue;
-				}
-
-				$taxonomy = preg_replace( '/^attribute_/', '', (string) $attribute_key );
-				$value    = $product->get_attribute( $taxonomy );
-				$pairs[]  = array(
-					'key'   => wp_strip_all_tags( wc_attribute_label( $taxonomy, $product ) ),
-					'value' => wp_strip_all_tags( '' !== $value ? $value : (string) $attribute_value ),
-				);
-			}
-
-			return $pairs;
+			return Receipt_Sections::variation_attribute_pairs( $product );
 		}
 
 		foreach ( $product->get_attributes() as $attribute ) {
@@ -1080,47 +981,5 @@ class Receipt_Data_Builder {
 		}
 
 		return $refunds;
-	}
-
-
-	/**
-	 * Ensure customer tax IDs include display labels for logicless templates.
-	 *
-	 * @param array<int,array<string,mixed>> $tax_ids Customer tax IDs.
-	 * @param string                         $locale  Receipt locale.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private static function with_customer_tax_id_labels( array $tax_ids, string $locale = '' ): array {
-		return self::with_tax_id_labels( $tax_ids, 'customer', $locale );
-	}
-
-	/**
-	 * Resolve a display label for each tax-ID entry. Precedence: explicit
-	 * `label` → `<scope>_tax_id_label_<type>` i18n key → scope-specific
-	 * `_other` fallback.
-	 *
-	 * @param array<int,array<string,mixed>> $tax_ids Tax IDs.
-	 * @param string                         $scope   "store" or "customer".
-	 * @param string                         $locale  Receipt locale.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private static function with_tax_id_labels( array $tax_ids, string $scope, string $locale = '' ): array {
-		$labels = Receipt_I18n_Labels::get_labels( $locale );
-		$prefix = $scope . '_tax_id_label_';
-
-		return array_map(
-			static function ( array $tax_id ) use ( $labels, $prefix ): array {
-				if ( ! empty( $tax_id['label'] ) ) {
-					return $tax_id;
-				}
-
-				$type            = isset( $tax_id['type'] ) ? (string) $tax_id['type'] : 'other';
-				$key             = $prefix . $type;
-				$tax_id['label'] = $labels[ $key ] ?? $labels[ $prefix . 'other' ];
-
-				return $tax_id;
-			},
-			$tax_ids
-		);
 	}
 }

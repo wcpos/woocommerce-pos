@@ -333,22 +333,7 @@ class Receipt_Store_Resolver {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public static function with_store_tax_id_labels( array $tax_ids, string $locale = '' ): array {
-		$labels = Receipt_I18n_Labels::get_labels( $locale );
-
-		return array_map(
-			static function ( array $tax_id ) use ( $labels ): array {
-				if ( ! empty( $tax_id['label'] ) ) {
-					return $tax_id;
-				}
-
-				$type            = isset( $tax_id['type'] ) ? (string) $tax_id['type'] : 'other';
-				$key             = 'store_tax_id_label_' . $type;
-				$tax_id['label'] = $labels[ $key ] ?? $labels['store_tax_id_label_other'];
-
-				return $tax_id;
-			},
-			$tax_ids
-		);
+		return Receipt_Sections::label_tax_ids( $tax_ids, 'store', $locale );
 	}
 
 	/**

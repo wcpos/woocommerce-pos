@@ -499,16 +499,46 @@ class Preview_Receipt_Builder {
 	);
 
 	/**
-	 * Build a preview receipt payload.
-	 *
-	 * Returns an array matching the receipt data schema with all sections
-	 * populated using the store's real settings, products, and tax rates.
+	 * Build a preview receipt payload, filtered like a live receipt.
 	 *
 	 * @param object|null $pos_store POS store object. Falls back to default store.
 	 *
 	 * @return array Complete receipt data array.
 	 */
 	public function build( $pos_store = null ): array {
+		return self::apply_receipt_data_filter( $this->sample( $pos_store ) );
+	}
+
+	/**
+	 * Run a sample payload through the receipt data filter.
+	 *
+	 * Same extension point as live receipts, so plugin-added keys show in the
+	 * editor and gallery. The unsaved order (id 0) keeps plugins written against
+	 * WC_Order from fataling and lets them tell a sample apart. Each sample path
+	 * calls this exactly once, after every override has been applied: the gallery
+	 * fixture loader replaces whole row lists, so filtering before it would drop
+	 * keys a plugin put on a row.
+	 *
+	 * @param array $data Assembled sample payload.
+	 *
+	 * @return array Filtered payload.
+	 */
+	public static function apply_receipt_data_filter( array $data ): array {
+		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), 'preview' );
+	}
+
+	/**
+	 * Assemble the unfiltered sample payload.
+	 *
+	 * Returns an array matching the receipt data schema with all sections
+	 * populated using the store's real settings, products, and tax rates. The
+	 * gallery fixture loader layers its overrides on this before filtering.
+	 *
+	 * @param object|null $pos_store POS store object. Falls back to default store.
+	 *
+	 * @return array Complete receipt data array.
+	 */
+	public function sample( $pos_store = null ): array {
 		$resolved_store = null === $pos_store ? wcpos_get_store() : $pos_store;
 		if ( ! \is_object( $resolved_store ) ) {
 			$resolved_store = wcpos_get_store();
@@ -536,7 +566,7 @@ class Preview_Receipt_Builder {
 		$dp                 = $this->store_resolver->resolve_price_num_decimals();
 
 		// Build line items.
-		$lines            = array();
+		$priced_lines     = array();
 		$lines_total_excl = 0.0;
 		$lines_total_incl = 0.0;
 
@@ -570,52 +600,49 @@ class Preview_Receipt_Builder {
 			$line_savings_incl = round( $unit_savings_incl * $qty, $dp );
 			$line_savings_excl = round( $unit_savings_excl * $qty, $dp );
 
-			$unit_price_rounded = $display_incl ? $selling_unit_incl : $selling_unit_excl;
-
-			$lines[] = array(
-				'key'                => (string) ( $index + 1 ),
-				'sku'                => $product['sku'],
-				'name'               => $product['name'],
-				'qty'                => (float) $qty,
-				'qty_refunded'       => 0.0,
-				'regular_price'      => $display_incl ? $regular_unit_incl : $regular_unit_excl,
-				'regular_price_incl' => $regular_unit_incl,
-				'regular_price_excl' => $regular_unit_excl,
-				'selling_price'      => $unit_price_rounded,
-				'selling_price_incl' => $selling_unit_incl,
-				'selling_price_excl' => $selling_unit_excl,
-				'unit_savings'       => $display_incl ? $unit_savings_incl : $unit_savings_excl,
-				'unit_savings_incl'  => $unit_savings_incl,
-				'unit_savings_excl'  => $unit_savings_excl,
-				'line_regular_total' => $display_incl ? $line_regular_incl : $line_regular_excl,
-				'line_regular_total_incl' => $line_regular_incl,
-				'line_regular_total_excl' => $line_regular_excl,
-				'line_selling_total' => $display_incl ? $line_total_incl : $line_total_excl,
-				'line_selling_total_incl' => $line_total_incl,
-				'line_selling_total_excl' => $line_total_excl,
-				'line_savings'       => $display_incl ? $line_savings_incl : $line_savings_excl,
-				'line_savings_incl'  => $line_savings_incl,
-				'line_savings_excl'  => $line_savings_excl,
+			$priced_lines[] = array(
+				'key' => (string) ( $index + 1 ),
+				'sku' => $product['sku'],
+				'name' => $product['name'],
+				'qty' => (float) $qty,
+				'qty_refunded' => 0.0,
+				'regular_price' => array(
+					'incl' => $regular_unit_incl,
+					'excl' => $regular_unit_excl,
+				),
+				'selling_price' => array(
+					'incl' => $selling_unit_incl,
+					'excl' => $selling_unit_excl,
+				),
+				'unit_savings' => array(
+					'incl' => $unit_savings_incl,
+					'excl' => $unit_savings_excl,
+				),
+				'line_regular_total' => array(
+					'incl' => $line_regular_incl,
+					'excl' => $line_regular_excl,
+				),
+				'line_selling_total' => array(
+					'incl' => $line_total_incl,
+					'excl' => $line_total_excl,
+				),
+				'line_savings' => array(
+					'incl' => $line_savings_incl,
+					'excl' => $line_savings_excl,
+				),
+				'unit_subtotal' => array(
+					'incl' => $selling_unit_incl,
+					'excl' => $selling_unit_excl,
+				),
+				'line_subtotal' => array(
+					'incl' => $line_total_incl,
+					'excl' => $line_total_excl,
+				),
 				'savings_in_discounts' => false,
-				'unit_subtotal'      => $unit_price_rounded,
-				'unit_subtotal_incl' => $selling_unit_incl,
-				'unit_subtotal_excl' => $selling_unit_excl,
-				'unit_price'         => $unit_price_rounded,
-				'unit_price_incl'    => $selling_unit_incl,
-				'unit_price_excl'    => $selling_unit_excl,
-				'line_subtotal'      => $display_incl ? $line_total_incl : $line_total_excl,
-				'line_subtotal_incl' => $line_total_incl,
-				'line_subtotal_excl' => $line_total_excl,
-				'discounts'          => 0.0,
-				'discounts_incl'     => 0.0,
-				'discounts_excl'     => 0.0,
-				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
-				'line_total_incl'    => $line_total_incl,
-				'line_total_excl'    => $line_total_excl,
-				'total_refunded'     => 0.0,
-				'taxes'              => array(),
-				'meta'               => $product['meta'] ?? array(),
-				'attributes'         => $product['attributes'] ?? array(),
+				'total_refunded' => 0.0,
+				'taxes' => array(),
+				'meta' => $product['meta'] ?? array(),
+				'attributes' => $product['attributes'] ?? array(),
 			);
 
 			$lines_total_excl += $line_total_excl;
@@ -652,50 +679,45 @@ class Preview_Receipt_Builder {
 		// Distribute discount proportionally across line items with remainder correction.
 		$sum_discount_excl = 0.0;
 		$sum_discount_incl = 0.0;
-		$last_index        = count( $lines ) - 1;
+		$last_index        = count( $priced_lines ) - 1;
 
-		foreach ( $lines as $i => &$line ) {
+		foreach ( $priced_lines as $i => &$line ) {
 			if ( $lines_total_excl > 0 ) {
-				$share = $line['line_subtotal_excl'] / $lines_total_excl;
+				$share = $line['line_subtotal']['excl'] / $lines_total_excl;
 			} else {
-				$share = 1.0 / count( $lines );
+				$share = 1.0 / count( $priced_lines );
 			}
 
 			if ( $i < $last_index ) {
-				$line['discounts_excl'] = round( $discount_excl * $share, $dp );
-				$line['discounts_incl'] = round( $discount_incl * $share, $dp );
-				$sum_discount_excl     += $line['discounts_excl'];
-				$sum_discount_incl     += $line['discounts_incl'];
+				$line['discounts']['excl'] = round( $discount_excl * $share, $dp );
+				$line['discounts']['incl'] = round( $discount_incl * $share, $dp );
+				$sum_discount_excl     += $line['discounts']['excl'];
+				$sum_discount_incl     += $line['discounts']['incl'];
 			} else {
 				// Assign remainder to last item so distributed totals match exactly.
-				$line['discounts_excl'] = round( $discount_excl - $sum_discount_excl, $dp );
-				$line['discounts_incl'] = round( $discount_incl - $sum_discount_incl, $dp );
+				$line['discounts']['excl'] = round( $discount_excl - $sum_discount_excl, $dp );
+				$line['discounts']['incl'] = round( $discount_incl - $sum_discount_incl, $dp );
 			}
 
-			$line['discounts']       = $display_incl ? $line['discounts_incl'] : $line['discounts_excl'];
-			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], $dp );
-			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], $dp );
-			$line['line_total']      = $display_incl ? $line['line_total_incl'] : $line['line_total_excl'];
-			$line['unit_price_incl'] = round( $line['line_total_incl'] / $line['qty'], $dp );
-			$line['unit_price_excl'] = round( $line['line_total_excl'] / $line['qty'], $dp );
-			$line['unit_price']      = $display_incl ? $line['unit_price_incl'] : $line['unit_price_excl'];
+			$line['line_total']['excl'] = round( $line['line_subtotal']['excl'] - $line['discounts']['excl'], $dp );
+			$line['line_total']['incl'] = round( $line['line_subtotal']['incl'] - $line['discounts']['incl'], $dp );
+			$line['unit_price']['incl'] = round( $line['line_total']['incl'] / $line['qty'], $dp );
+			$line['unit_price']['excl'] = round( $line['line_total']['excl'] / $line['qty'], $dp );
 		}
 		unset( $line );
 
-		// Totals.
-		$subtotal_excl = $lines_total_excl;
-		$subtotal_incl = $lines_total_incl;
-
-		// Item count summaries — matches the real builder's totals.total_qty
-		// / totals.line_count so preview mirrors the live receipt schema.
-		$total_qty  = (float) array_sum( array_column( $lines, 'qty' ) );
-		$line_count = \count( $lines );
+		$lines = array_map(
+			static function ( array $line ) use ( $display_incl ): array {
+				return Receipt_Sections::line( $line, $display_incl );
+			},
+			$priced_lines
+		);
 
 		// Taxable base: line items - discount + shipping + fee (all excl).
-		$taxable_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
+		$taxable_excl = $lines_total_excl - $discount_excl + $shipping_excl + $fee_excl;
 		$total_tax    = round( $taxable_excl * $tax_rate / 100, $dp );
 
-		$total_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
+		$total_excl = $lines_total_excl - $discount_excl + $shipping_excl + $fee_excl;
 		$total_incl = $total_excl + $total_tax;
 
 		// Payment: cash rounded up to nearest 5.
@@ -731,96 +753,70 @@ class Preview_Receipt_Builder {
 		$customer = $this->get_customer();
 
 		$fees = array(
-			array(
-				'label'      => $fee_label,
-				'total'      => $display_incl ? $fee_incl : $fee_excl,
-				'total_incl' => $fee_incl,
-				'total_excl' => $fee_excl,
-				'taxes'      => array(),
-				'meta'       => array(),
-			),
-		);
-
-		$shipping = array(
-			array(
-				'label'      => $shipping_label,
-				'method_id'  => 'flat_rate',
-				'total'      => $display_incl ? $shipping_incl : $shipping_excl,
-				'total_incl' => $shipping_incl,
-				'total_excl' => $shipping_excl,
-				'taxes'      => array(),
-				'meta'       => array(),
-			),
-		);
-
-		$discounts = array(
-			array(
-				'label'         => $discount_label,
-				'code'          => 'SUMMER10',
-				'discount_type' => 'fixed_cart',
-				'total'         => $display_incl ? $discount_incl : $discount_excl,
-				'total_incl'    => $discount_incl,
-				'total_excl'    => $discount_excl,
-			),
-		);
-
-		$sale_savings_total_incl = (float) array_sum( array_column( $lines, 'line_savings_incl' ) );
-		$sale_savings_total_excl = (float) array_sum( array_column( $lines, 'line_savings_excl' ) );
-		$total_saved_incl        = $discount_incl + $sale_savings_total_incl;
-		$total_saved_excl        = $discount_excl + $sale_savings_total_excl;
-
-		$totals = array(
-			'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
-			'subtotal_incl'           => $subtotal_incl,
-			'subtotal_excl'           => $subtotal_excl,
-			'discount_total'          => $display_incl ? $discount_incl : $discount_excl,
-			'discount_total_incl'     => $discount_incl,
-			'discount_total_excl'     => $discount_excl,
-			'sale_savings_total'      => $display_incl ? $sale_savings_total_incl : $sale_savings_total_excl,
-			'sale_savings_total_incl' => $sale_savings_total_incl,
-			'sale_savings_total_excl' => $sale_savings_total_excl,
-			'total_saved'             => $display_incl ? $total_saved_incl : $total_saved_excl,
-			'total_saved_incl'        => $total_saved_incl,
-			'total_saved_excl'        => $total_saved_excl,
-			'total_saved_complete'    => true,
-			'tax_total'               => $total_tax,
-			'total'                   => $display_incl ? $total_incl : $total_excl,
-			'total_incl'              => $total_incl,
-			'total_excl'              => $total_excl,
-			'paid_total'              => $total_incl,
-			'change_total'            => $change_total,
-			'refund_total'            => 0.0,
-			'net_total'               => 0.0,
-			'total_qty'               => $total_qty,
-			'line_count'              => $line_count,
-		);
-
-		$taxable_amount_incl = $taxable_excl + $total_tax;
-
-		if ( $tax_rate > 0 ) {
-			$tax_summary = array(
+			Receipt_Sections::fee(
+				$fee_label,
 				array(
-					'code'                => $tax_code,
-					'rate'                => $tax_rate,
-					'label'               => $tax_label,
-					'compound'            => false,
-					'taxable_amount_excl' => $taxable_excl,
-					'tax_amount'          => $total_tax,
-					'taxable_amount_incl' => $taxable_amount_incl,
+					'incl' => $fee_incl,
+					'excl' => $fee_excl,
 				),
-			);
-		} else {
-			$tax_summary = array();
-		}
+				array(),
+				array(),
+				$display_incl
+			),
+		);
+		$shipping = array(
+			Receipt_Sections::shipping(
+				$shipping_label,
+				'flat_rate',
+				array(
+					'incl' => $shipping_incl,
+					'excl' => $shipping_excl,
+				),
+				array(),
+				array(),
+				$display_incl
+			),
+		);
+		$discounts = array(
+			Receipt_Sections::discount(
+				$discount_label,
+				'SUMMER10',
+				'fixed_cart',
+				array(
+					'incl' => $discount_incl,
+					'excl' => $discount_excl,
+				),
+				$display_incl
+			),
+		);
+		$totals = Receipt_Sections::totals(
+			$lines,
+			array(
+				'discount_total' => array(
+					'incl' => $discount_incl,
+					'excl' => $discount_excl,
+				),
+				'tax_total' => $total_tax,
+				'total' => $total_incl,
+				'paid_total' => $total_incl,
+				'change_total' => $change_total,
+				'refund_total' => 0.0,
+			),
+			$display_incl
+		);
+
+		$tax_summary = $tax_rate > 0 ? array(
+			Receipt_Sections::tax_summary_entry( $tax_code, $tax_rate, $tax_label, false, $taxable_excl, $total_tax ),
+		) : array();
 
 		$payments = array(
-			array(
-				'method_id'      => 'pos_cash',
-				'method_title'   => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Cash', 'woocommerce-pos' ),
-				'amount'         => $total_incl,
-				'transaction_id' => '',
-				'tendered'       => $tendered,
-				'change'         => $change_total,
+			Receipt_Sections::payment(
+				'pos_cash',
+				/* translators: Sample receipt label or value used in receipt template previews. */ __( 'Cash', 'woocommerce-pos' ),
+				$total_incl,
+				'',
+				$tendered,
+				$change_total
 			),
 		);
 
@@ -1092,17 +1088,8 @@ class Preview_Receipt_Builder {
 		);
 
 		$tax_ids = $samples[ $country ] ?? array();
-		$labels  = Receipt_I18n_Labels::get_labels( $locale );
 
-		return array_map(
-			static function ( array $tax_id ) use ( $labels ): array {
-				$type            = (string) $tax_id['type'];
-				$tax_id['label'] = $labels[ 'customer_tax_id_label_' . $type ] ?? $labels['customer_tax_id_label_other'];
-
-				return $tax_id;
-			},
-			$tax_ids
-		);
+		return Receipt_Sections::label_tax_ids( $tax_ids, 'customer', $locale );
 	}
 
 	/**
@@ -1137,17 +1124,7 @@ class Preview_Receipt_Builder {
 						$variation = wc_get_product( $children[0] );
 						if ( $variation instanceof \WC_Product_Variation ) {
 							$product = $variation;
-							foreach ( $variation->get_variation_attributes() as $attr_key => $attr_value ) {
-								if ( '' !== $attr_value ) {
-									$taxonomy = str_replace( 'attribute_', '', $attr_key );
-									$label    = wc_attribute_label( $taxonomy, $variation );
-									$value    = $variation->get_attribute( $taxonomy );
-									$meta[]   = array(
-										'key'   => wp_strip_all_tags( $label ),
-										'value' => wp_strip_all_tags( '' !== $value ? $value : $attr_value ),
-									);
-								}
-							}
+							$meta = Receipt_Sections::variation_attribute_pairs( $variation );
 						}
 					}
 				}
