@@ -46,6 +46,10 @@ _Avoid_: v1/v2 API, endpoint version
 The one pass an order document takes through the Order Write Payload module before WooCommerce sees it, named by what an absent line means. The _full-document_ shape (`for_update`, the `wcpos/v2` push lane) treats the document as the whole order: an omitted stored line is deleted and coupon lines are reconciled. The _partial-document_ shape (`for_partial_update`, the `wcpos/v1` lane) keeps WooCommerce's own semantics: an absent line is untouched and coupon lines pass through to the controller. Both shapes share every other rule; a rule that exists in one shape only is a ruling (recorded on the module), not a drift.
 _Avoid_: v1 sanitizer, v2 forward rules, payload filter
 
+**Create Identity**:
+The proof that a record born on the `wcpos/v2` push lane owns its client UUID before the mutation is finalized: poison checkpoint, UUID persisted, resolved back to the same id, checkpoint finalized. Written once in the Create Identity module; a retry against a `poison` checkpoint re-enters the same proof rather than running a second copy. ADR 0038 decides when identity is re-proved; this module decides where the proof lives.
+_Avoid_: poison retry, identity stamp, recovery path
+
 **Replica policy**:
 What a collection's client-side copy aims to hold: `complete` (a full replica, e.g. products,
 variations) or `windowed` (a bounded recent window of an unbounded set, e.g. orders).
