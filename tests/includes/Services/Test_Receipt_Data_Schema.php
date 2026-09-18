@@ -61,7 +61,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_identity_contract_1_4(): void {
 		$schema = Receipt_Data_Schema::get_json_schema();
 		$tree   = Receipt_Data_Schema::get_field_tree();
-		$mock   = Receipt_Data_Schema::get_mock_receipt_data();
+		$mock   = ( new Preview_Receipt_Builder() )->sample();
 		$this->assertSame( '1.4.0', $schema['x-schema-version'] );
 		$this->assertSame( 'COPY', Receipt_I18n_Labels::get_labels()['copy'] );
 		foreach ( array(
