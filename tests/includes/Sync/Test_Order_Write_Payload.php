@@ -311,6 +311,131 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An id-only edit of a SIMPLE line forwards id-only: the hydrated identity is a
+	 * no-op binding and is dropped again, so wc/v3 never enters set_product() and the
+	 * stored line name and tax class survive a quantity-only edit.
+	 */
+	public function test_for_partial_update_with_an_id_only_simple_line_forwards_it_id_only(): void {
+		// Arrange.
+		$product = ProductHelper::create_simple_product();
+		$order   = new WC_Order();
+		$item    = $this->line_item( $product, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'       => $item->get_id(),
+					'quantity' => 4,
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_partial_update( $order->get_id(), $payload );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				'line_items' => array(
+					array(
+						'id'       => $item->get_id(),
+						'quantity' => 4,
+					),
+				),
+			),
+			$forwarded
+		);
+	}
+
+	/**
+	 * A variation line re-bound to a different product by posting only the new
+	 * product_id must NOT be handed its old variation_id: wc/v3 ranks a variation id
+	 * above the product id, so hydrating it would silently keep the old binding.
+	 */
+	public function test_for_partial_update_with_a_rebinding_product_id_does_not_hydrate_the_old_variation(): void {
+		// Arrange.
+		$parent    = ProductHelper::create_variation_product();
+		$variation = wc_get_product( $parent->get_children()[0] );
+		$simple    = ProductHelper::create_simple_product();
+		$order     = new WC_Order();
+		$item      = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'         => $item->get_id(),
+					'product_id' => $simple->get_id(),
+					'quantity'   => 1,
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_partial_update( $order->get_id(), $payload );
+
+		// Assert: the posted rebind is forwarded as posted.
+		$this->assertSame(
+			array(
+				'line_items' => array(
+					array(
+						'id'         => $item->get_id(),
+						'product_id' => $simple->get_id(),
+						'quantity'   => 1,
+					),
+				),
+			),
+			$forwarded
+		);
+	}
+
+	/**
+	 * A line posted with its variation but without the parent still recovers a
+	 * display-only "any" choice: the missing parent is filled from the stored item.
+	 */
+	public function test_for_partial_update_with_a_variation_only_line_fills_the_parent_for_recovery(): void {
+		// Arrange.
+		list( $parent, $variation ) = $this->any_variation_product();
+		$order                      = new WC_Order();
+		$item                       = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'           => $item->get_id(),
+					'variation_id' => $variation->get_id(),
+					'meta_data'    => array(
+						array(
+							'display_key'   => 'Fabric',
+							'display_value' => 'Wool',
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_partial_update( $order->get_id(), $payload );
+
+		// Assert.
+		$line = $forwarded['line_items'][0];
+		$this->assertArrayNotHasKey( 'product_id', $line );
+		$this->assertArrayNotHasKey( 'variation_id', $line );
+		$this->assertSame(
+			array(
+				array(
+					'key'   => 'fabric',
+					'value' => 'Wool',
+				),
+			),
+			array_values( array_filter( $line['meta_data'] ) )
+		);
+		unset( $parent );
+	}
+
+	/**
 	 * Recovered attributes do not prevent display-only fields from being stripped.
 	 */
 	public function test_for_create_with_recovered_attribute_still_strips_display_fields(): void {
@@ -495,19 +620,19 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 		// Act.
 		$forwarded = ( new Order_Write_Payload() )->for_update( $order->get_id(), $payload );
 
-		// Assert.
+		// Assert. The kept line's binding is unchanged, so its identity is dropped
+		// too (set_product() would otherwise copy the catalog name onto it).
 		$expected = array(
 			'line_items' => array(
 				array(
-					'product_id' => $product->get_id(),
-					'quantity'   => 3,
-					'meta_data'  => array(
+					'quantity'  => 3,
+					'meta_data' => array(
 						array(
 							'key'   => '_woocommerce_pos_uuid',
 							'value' => self::KEPT_LINE_UUID,
 						),
 					),
-					'id'         => $kept->get_id(),
+					'id'        => $kept->get_id(),
 				),
 				array(
 					'id'         => $omitted->get_id(),
