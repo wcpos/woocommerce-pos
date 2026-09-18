@@ -821,7 +821,7 @@ class Preview_Receipt_Builder {
 			)
 		);
 
-		return Receipt_Payload_Assembler::assemble(
+		$data = Receipt_Payload_Assembler::assemble(
 			array(
 				'order'              => $order,
 				'store'              => $store,
@@ -841,6 +841,10 @@ class Preview_Receipt_Builder {
 			)
 		);
 
+		// Same extension point as live receipts, so plugin-added keys show in the
+		// editor and gallery. The unsaved order (id 0) keeps plugins written against
+		// WC_Order from fataling and lets them tell a sample apart.
+		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), 'preview' );
 	}
 
 	/**

@@ -349,6 +349,10 @@ class Receipt_Data_Builder {
 		 * example a flag on a `discounts[]` row) or adjust labels. Keys defined
 		 * by Receipt_Data_Schema should keep their documented types.
 		 *
+		 * Sample previews for the template editor and gallery also run through this filter,
+		 * with mode `preview` and an unsaved order whose id is 0; a plugin that needs a
+		 * persisted order should return `$data` unchanged when `$order->get_id()` is 0.
+		 *
 		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
 		 * @param WC_Abstract_Order $order Order the receipt is for.
 		 * @param string            $mode  Receipt mode: 'live', 'fiscal' or 'preview', passed unchanged.
