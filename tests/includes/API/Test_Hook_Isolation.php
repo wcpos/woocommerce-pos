@@ -191,9 +191,9 @@ class Test_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'wcpos/v1', 'wcpos/v2' ), $api->get_route_namespaces() );
 
 		$reflection = new \ReflectionClass( $api );
-		$property   = $reflection->getProperty( 'route_map' );
+		$property   = $reflection->getProperty( 'registry' );
 		$property->setAccessible( true );
-		$route_map = $property->getValue( $api );
+		$route_map = $property->getValue( $api )->routes();
 
 		$prefixes = array_map(
 			static function ( string $ns ): string {

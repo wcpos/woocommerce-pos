@@ -50,6 +50,10 @@ _Avoid_: v1 sanitizer, v2 forward rules, payload filter
 The proof that a record born on the `wcpos/v2` push lane owns its client UUID before the mutation is finalized: poison checkpoint, UUID persisted, resolved back to the same id, checkpoint finalized. Written once in the Create Identity module; a retry against a `poison` checkpoint re-enters the same proof rather than running a second copy. ADR 0038 decides when identity is re-proved; this module decides where the proof lives.
 _Avoid_: poison retry, identity stamp, recovery path
 
+**Promoted Service**:
+A shared POS service (auth, settings, cashier, receipts, print jobs, stores, extensions, logs, gateways, checkout, templates, shipping methods, tax classes, order statuses) that answers identically under `wcpos/v1` and `wcpos/v2`. The Controller Registry derives the v2 map from the v1 map, so promotion is the default and only the nine frozen data controllers (the sync surface replaced them, #544) are excluded.
+_Avoid_: v2 twin, pass-through subclass, v2 controllers map
+
 **Replica policy**:
 What a collection's client-side copy aims to hold: `complete` (a full replica, e.g. products,
 variations) or `windowed` (a bounded recent window of an unbounded set, e.g. orders).

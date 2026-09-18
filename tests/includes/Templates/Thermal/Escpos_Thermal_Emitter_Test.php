@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
 // Current-lane consumer signal; these emitter tests do not dispatch REST requests.
-use WCPOS\WooCommercePOS\API\V2\Templates_Controller;
 use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Bounds;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
