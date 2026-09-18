@@ -56,6 +56,9 @@ snapshots captured at payment time, PDF downloads and legacy PHP
 templates. Extensions can add their own keys to any section (for
 example a flag on a <code>discounts[]</code> row) or adjust labels. Keys defined
 by Receipt_Data_Schema should keep their documented types.</p>
+<p>Sample previews for the template editor and gallery also run through this filter,
+with mode <code>preview</code> and an unsaved order whose id is 0; a plugin that needs a
+persisted order should return <code>$data</code> unchanged when <code>$order-&gt;get_id()</code> is 0.</p>
 </div>
 
 
@@ -136,7 +139,7 @@ by Receipt_Data_Schema should keep their documented types.</p>
 
             
 
-            <td class="description last"><p>$mode  Receipt mode: 'live' or 'fiscal'.</p></td>
+            <td class="description last"><p>$mode  Receipt mode: 'live', 'fiscal' or 'preview', passed unchanged.</p></td>
         </tr>
 
     
@@ -180,7 +183,7 @@ by Receipt_Data_Schema should keep their documented types.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="Services_Receipt_Data_Builder.php.html">Services/Receipt_Data_Builder.php</a>, <a href="Services_Receipt_Data_Builder.php.html#line413">line 413</a>
+        <a href="Services_Receipt_Data_Builder.php.html">Services/Receipt_Data_Builder.php</a>, <a href="Services_Receipt_Data_Builder.php.html#line343">line 343</a>
     </li></ul></dd>
     
 
