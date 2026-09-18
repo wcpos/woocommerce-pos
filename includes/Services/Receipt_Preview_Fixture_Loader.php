@@ -49,7 +49,7 @@ class Receipt_Preview_Fixture_Loader {
 			);
 			return ( new Receipt_Data_Builder() )->build_closure_document( $row );
 		}
-		$data = ( new Preview_Receipt_Builder() )->build( $pos_store );
+		$data = ( new Preview_Receipt_Builder() )->sample( $pos_store );
 
 		$base_overrides = $this->load_overrides( self::BASE_PROFILE );
 		if ( ! empty( $base_overrides ) ) {
@@ -63,7 +63,7 @@ class Receipt_Preview_Fixture_Loader {
 			}
 		}
 
-		return $this->resolve_assets( $data );
+		return Preview_Receipt_Builder::apply_receipt_data_filter( $this->resolve_assets( $data ) );
 	}
 
 	/**
