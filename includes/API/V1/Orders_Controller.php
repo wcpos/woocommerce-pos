@@ -22,7 +22,6 @@ use WC_Email_Customer_Invoice;
 use WC_Order;
 use WC_Order_Item;
 use WC_Order_Item_Fee;
-use WC_Order_Item_Product;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
@@ -309,6 +308,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 	/**
 	 * Add custom fields to the order schema.
+	 *
+	 * Email, nullable parent_name, and decimal quantity relaxations let raw POS documents pass validation before payload shaping.
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
@@ -414,6 +415,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$request->set_param( 'meta_data', Pos_Order_Audit::sanitize_create_meta( $request['meta_data'] ) );
 		}
 
+		$this->wcpos_shape_request_payload( $request, $this->order_payload->for_create( $request->get_params() ) );
+
 		$response = Order_Write_Intent::open(
 			array(
 				'operation'        => 'create',
@@ -489,11 +492,37 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			);
 		}
 
-		// Proceed with the parent method to handle the update.
-		$response = parent::update_item( $request );
+		$this->wcpos_shape_request_payload( $request, $this->order_payload->for_partial_update( (int) $request['id'], $request->get_params() ) );
+
+		$response = Order_Write_Intent::open(
+			array(
+				'operation'        => 'update',
+				'id'               => (int) $request['id'],
+				'requested_status' => (string) $request->get_param( 'status' ),
+				'set_paid'         => $request->has_param( 'set_paid' ) && rest_sanitize_boolean( $request->get_param( 'set_paid' ) ),
+			),
+			function () use ( $request ) {
+				return parent::update_item( $request );
+			}
+		);
 		$this->wcpos_refresh_tax_ids_response( $response, $request, false );
 
 		return $response;
+	}
+
+	/**
+	 * Replace the request fields touched by the shared payload shaper.
+	 *
+	 * @param WP_REST_Request $request Validated request.
+	 * @param array           $shaped  Shaped create or partial-update payload.
+	 */
+	private function wcpos_shape_request_payload( WP_REST_Request $request, array $shaped ): void {
+		// Neither for_create nor for_partial_update removes a top-level key; present-key replacement is sufficient.
+		foreach ( array( 'billing', 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines', 'meta_data' ) as $key ) {
+			if ( array_key_exists( $key, $shaped ) ) {
+				$request->set_param( $key, $shaped[ $key ] );
+			}
+		}
 	}
 
 	/**
@@ -521,137 +550,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Create or update a line item.
-	 *
-	 * @param array  $posted Line item data.
-	 * @param string $action 'create' to add line item or 'update' to update it.
-	 * @param object $item   Passed when updating an item. Null during creation.
-	 *
-	 * @throws \WC_REST_Exception Invalid data, server error.
-	 *
-	 * @return WC_Order_Item_Product
-	 */
-	public function prepare_line_items( $posted, $action = 'create', $item = null ) {
-		$item = parent::prepare_line_items( $posted, $action, $item );
-
-		/**
-		 * If you send a variation with meta_data, the meta_data will be duplicated
-		 * WooCommerce attempts to delete the duped meta_data in $item->set_product( $variation )
-		 * but later it gets added right back in $this->maybe_set_item_meta_data.
-		 *
-		 * To fix this we check for a variation_id and remove the meta_data before setting the product
-		 */
-		if ( 'create' !== $action && $item->get_variation_id() ) {
-			$attributes = wc_get_product_variation_attributes( $item->get_variation_id() );
-
-			// Loop through attributes and remove any duplicates.
-			foreach ( $attributes as $key => $value ) {
-				$attribute = str_replace( 'attribute_', '', $key );
-				$meta_data = $item->get_meta( $attribute, false );
-
-				if ( \is_array( $meta_data ) && \count( $meta_data ) > 1 ) {
-					$meta_to_keep = null;
-
-					// Check each meta to find one with an ID to keep.
-					foreach ( $meta_data as $meta ) {
-						if ( isset( $meta->id ) ) {
-							$meta_to_keep = $meta;
-
-							break;
-						}
-					}
-
-					// If no meta with an ID is found, keep the first one.
-					if ( ! $meta_to_keep ) {
-						$meta_to_keep = $meta_data[0];
-					}
-
-					// Remove all other meta data for this attribute.
-					foreach ( $meta_data as $meta ) {
-						if ( $meta !== $meta_to_keep ) {
-							if ( $meta->id ) {
-								$item->delete_meta_data_by_mid( $meta->id );
-							} else {
-								$meta->value = null;
-							}
-						}
-					}
-				}
-			}
-		}
-
-		return $item;
-	}
-
-	/**
-	 * Maybe set item meta if posted.
-	 *
-	 * @param WC_Order_Item $item   Order item data.
-	 * @param array         $posted Request data.
-	 */
-	public function maybe_set_item_meta_data( $item, $posted ): void {
-		/*
-		 * Call the parent method first to handle standard meta data
-		 * This will populate the attribute key, eg: 'pa_color' or 'logo'
-		 * BUT: if the attribute can be 'any' then we need to handle that
-		 */
-		parent::maybe_set_item_meta_data( $item, $posted );
-
-		// Ensure this is a product line item, not a fee or shipping.
-		if ( ! \is_object( $item ) || 'WC_Order_Item_Product' !== \get_class( $item ) ) {
-			return;
-		}
-
-		// SKU meta is not stored by default, we will add it for 'miscellaneous' products.
-		if ( isset( $posted['sku'] ) && 0 === $item->get_product_id() ) {
-			$item->add_meta_data( '_sku', $posted['sku'], true );
-		}
-
-		// Only proceed if there's a variation ID and we have posted meta.
-		if ( ! $item->get_variation_id() || empty( $posted['meta_data'] ) || ! \is_array( $posted['meta_data'] ) ) {
-			return;
-		}
-
-		$attributes        = wc_get_product_variation_attributes( $item->get_variation_id() );
-		$product_id        = $item->get_product_id();
-		$product           = wc_get_product( $product_id );
-		$parent_attributes = $product->get_attributes();
-
-		foreach ( $attributes as $key => $value ) {
-			if ( '' === $value ) {
-				$slug = str_replace( 'attribute_', '', $key );
-
-				if ( ! isset( $parent_attributes[ $slug ] ) ) {
-					continue;
-				}
-
-				$name = $parent_attributes[ $slug ]['name'] ?? $slug;
-				if ( $name === $slug ) {
-					$name = wc_attribute_label( $slug );
-				}
-
-				// find the value from $posted['meta_data'].
-				foreach ( $posted['meta_data'] as $meta ) {
-					// Match posted attribute label to the $name we just determined.
-					if ( isset( $meta['display_key'], $meta['display_value'] ) && $meta['display_key'] === $name ) {
-						$posted_value = $meta['display_value'];
-						// Only update if the posted value is non-empty.
-						if ( $posted_value ) {
-							$item->update_meta_data(
-								$slug,
-								$posted_value,
-								$meta['id'] ?? ''
-							);
-
-							break; // Stop searching once found.
-						}
-					}
-				}
-			}
-		}
-	}
-
-	/**
 	 * The way WooCommerce handles negative fees is ... weird.
 	 * They by-pass the normal tax calculation, disregard the tax_status and tax_class, and apply the taxes to the fee line.
 	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
@@ -666,29 +564,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
 		\WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes( $fee_item, $calculate_tax_for );
-	}
-
-	/**
-	 * Gets the product ID from posted ID.
-	 *
-	 * @param array  $posted Request data.
-	 * @param string $action 'create' to add line item or 'update' to update it.
-	 *
-	 * @throws WC_REST_Exception When SKU or ID is not valid.
-	 *
-	 * @return int
-	 */
-	public function get_product_id( $posted, $action = 'create' ) {
-		// If id = 0, ie: miscellaneaous product, just return 0.
-		if ( isset( $posted['product_id'] ) && 0 == $posted['product_id'] ) {
-			return 0;
-		}
-
-		// Bypass the sku check. Some users have products with duplicated SKUs, esp. variable/variations.
-		$data = $posted;
-		unset( $data['sku'] );
-
-		return parent::get_product_id( $data, $action );
 	}
 
 	/**

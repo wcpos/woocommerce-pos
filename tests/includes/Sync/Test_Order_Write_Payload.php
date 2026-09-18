@@ -27,6 +27,88 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 
 	private const OMITTED_LINE_UUID = 'a1f1a7c0-7c0e-4f17-9cc9-0f2ee4051002';
 
+	/** Partial updates reconcile identity without deleting omissions, reconciling coupons, or losing email clears. */
+	public function test_for_partial_update_preserves_partial_document_semantics(): void {
+		// Arrange.
+		$parent    = ProductHelper::create_variation_product();
+		$variation = wc_get_product( $parent->get_children()[0] );
+		$order     = new WC_Order();
+		$kept      = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$kept->set_subtotal( 10 );
+		$kept->set_total( 10 );
+		$order->add_item( $kept );
+		$order->add_item( $this->line_item( $variation, self::OMITTED_LINE_UUID ) );
+		$order->save();
+		$coupon = new WC_Coupon();
+		$coupon->set_code( 'partial-save' );
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->set_amount( 1 );
+		$coupon->save();
+		$order->apply_coupon( 'partial-save' );
+		$this->assertSame( 1, count( $order->get_coupons() ) );
+		$payload = array(
+			'billing'      => array( 'email' => '' ),
+			'coupon_lines' => array( array( 'code' => 'partial-save' ) ),
+			'line_items'   => array(
+				array(
+					'product_id'   => $parent->get_id(),
+					'variation_id' => $variation->get_id(),
+					'sku'          => 'ACKED-SKU',
+					'parent_name'  => null,
+					'image'        => array( 'id' => '' ),
+					'quantity'     => 3,
+					'meta_data'    => array(
+						array(
+							'key' => '_woocommerce_pos_uuid',
+							'value' => self::KEPT_LINE_UUID,
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_partial_update( $order->get_id(), $payload );
+
+		// Assert. The literal line shape also pins sanitization before identity dedupe.
+		$this->assertSame(
+			array(
+				'billing'      => array( 'email' => '' ),
+				'coupon_lines' => array( array( 'code' => 'partial-save' ) ),
+				'line_items'   => array(
+					array(
+						'quantity'  => 3,
+						'meta_data' => array(
+							array(
+								'key' => '_woocommerce_pos_uuid',
+								'value' => self::KEPT_LINE_UUID,
+							),
+						),
+						'id'        => $kept->get_id(),
+					),
+				),
+			),
+			$forwarded
+		);
+	}
+
+	/** Moving email tolerance out of the sanitizer must not change create output. */
+	public function test_for_create_still_drops_empty_billing_email(): void {
+		// Arrange.
+		$payload = array(
+			'billing' => array(
+				'email' => '',
+				'first_name' => 'Walk-in',
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_create( $payload );
+
+		// Assert.
+		$this->assertSame( array( 'billing' => array( 'first_name' => 'Walk-in' ) ), $forwarded );
+	}
+
 	/**
 	 * A create payload drops every value the strict wc/v3 order schema rejects.
 	 */
@@ -108,8 +190,18 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 					'product_id'   => $parent->get_id(),
 					'variation_id' => $variation->get_id(),
 					'meta_data'    => array(
-						array( 'key' => 'wrong-case', 'value' => '', 'display_key' => 'Size', 'display_value' => 'small' ),
-						array( 'key' => 'empty-choice', 'value' => '', 'display_key' => 'Fabric', 'display_value' => '' ),
+						array(
+							'key' => 'wrong-case',
+							'value' => '',
+							'display_key' => 'Size',
+							'display_value' => 'small',
+						),
+						array(
+							'key' => 'empty-choice',
+							'value' => '',
+							'display_key' => 'Fabric',
+							'display_value' => '',
+						),
 						array(
 							'key'           => 'size',
 							'value'         => '',
@@ -135,12 +227,30 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 		// key-sorted set, not positionally.
 		$actual   = $forwarded['line_items'][0]['meta_data'];
 		$expected = array(
-			array( 'key' => 'wrong-case', 'value' => '' ),
-			array( 'key' => 'empty-choice', 'value' => '' ),
-			array( 'key' => 'size', 'value' => '' ),
-			array( 'key' => 'Fabric', 'value' => '' ),
-			array( 'key' => 'pa_size', 'value' => 'large' ),
-			array( 'key' => 'fabric', 'value' => 'Cotton' ),
+			array(
+				'key' => 'wrong-case',
+				'value' => '',
+			),
+			array(
+				'key' => 'empty-choice',
+				'value' => '',
+			),
+			array(
+				'key' => 'size',
+				'value' => '',
+			),
+			array(
+				'key' => 'Fabric',
+				'value' => '',
+			),
+			array(
+				'key' => 'pa_size',
+				'value' => 'large',
+			),
+			array(
+				'key' => 'fabric',
+				'value' => 'Cotton',
+			),
 		);
 		$by_key = static function ( array $a, array $b ): int {
 			return strcmp( (string) ( $a['key'] ?? '' ), (string) ( $b['key'] ?? '' ) );
@@ -195,7 +305,10 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 					'product_id'   => $parent->get_id(),
 					'variation_id' => $variation->get_id(),
 					'meta_data'    => array(
-						array( 'key' => 'pa_size', 'value' => 'small' ),
+						array(
+							'key' => 'pa_size',
+							'value' => 'small',
+						),
 						array(
 							'key'           => 'size',
 							'value'         => '',
@@ -250,7 +363,12 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertEquals(
-			array( array( 'key' => 'size', 'value' => '' ) ),
+			array(
+				array(
+					'key' => 'size',
+					'value' => '',
+				),
+			),
 			$forwarded['line_items'][0]['meta_data']
 		);
 	}
