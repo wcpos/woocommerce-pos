@@ -21,6 +21,7 @@ on:
       - "templates/gallery/**"
       - "includes/Templates/Gallery_Registry.php"
       - "scripts/gallery-template-versions.php"
+      - "scripts/tests/test-gallery-template-versions.php"
       - ".github/workflows/gallery-template-versions.yml"
   workflow_dispatch:
     inputs:

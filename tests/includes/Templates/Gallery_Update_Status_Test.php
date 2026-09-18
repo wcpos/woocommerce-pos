@@ -45,6 +45,8 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 				return $catalogue;
 			}
 		);
+		// Refresh the request-local snapshot after changing catalogue versions.
+		wp_cache_delete( 'registry-versions', 'wcpos-gallery' );
 	}
 
 	/**
@@ -57,6 +59,27 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		$this->assertIsInt( $template_id, 'Fixture install failed.' );
 
 		return $template_id;
+	}
+
+	/**
+	 * Repeated lookups build the catalogue once per request.
+	 *
+	 * @return void
+	 */
+	public function test_registry_version_is_memoised_for_the_request(): void {
+		$calls = 0;
+		add_filter(
+			'woocommerce_pos_gallery_templates',
+			static function ( $catalogue ) use ( &$calls ) {
+				++$calls;
+				return $catalogue;
+			}
+		);
+		// Start a fresh request-local version snapshot after changing the filter.
+		wp_cache_delete( 'registry-versions', 'wcpos-gallery' );
+		$this->assertSame( 1, Gallery_Update_Status::registry_version( $this->gallery_key ) );
+		$this->assertSame( 1, Gallery_Update_Status::registry_version( $this->gallery_key ) );
+		$this->assertSame( 1, $calls );
 	}
 
 	/**
@@ -303,6 +326,8 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 				return $catalogue;
 			}
 		);
+		// Refresh the request-local snapshot after changing catalogue versions.
+		wp_cache_delete( 'registry-versions', 'wcpos-gallery' );
 
 		// Act.
 		$updated = Gallery_Update_Status::sync_untouched();
@@ -369,6 +394,8 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 				return $catalogue;
 			}
 		);
+		// Refresh the request-local snapshot after changing catalogue versions.
+		wp_cache_delete( 'registry-versions', 'wcpos-gallery' );
 
 		// Act.
 		Gallery_Update_Status::maintain();
@@ -477,5 +504,49 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( 0, $filled );
 		$this->assertFalse( Gallery_Update_Status::is_unedited( $template_id ) );
+	}
+
+	/**
+	 * A translated match establishes the request locale.
+	 *
+	 * @return void
+	 */
+	public function test_backfill_stamps_the_request_locale_when_the_match_proves_it(): void {
+		add_filter( 'locale', static fn() => 'en_US' );
+		add_filter( 'determine_locale', static fn() => 'fr_FR' );
+		add_filter(
+			'gettext',
+			static function ( $translation, $text, $domain ) {
+				return 'woocommerce-pos' === $domain && 'Phone: %s' === $text ? 'Téléphone: %s' : $translation;
+			},
+			10,
+			3
+		);
+		$template_id = $this->install();
+		$this->assertStringContainsString( 'Téléphone: {{store.phone}}', get_post( $template_id )->post_content );
+		delete_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_HASH );
+		delete_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE );
+
+		$this->assertSame( 1, Gallery_Update_Status::backfill_source_hashes() );
+		$this->assertSame( 'fr_FR', get_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE, true ) );
+	}
+
+	/**
+	 * An invariant match uses the site language, not the admin language.
+	 *
+	 * @return void
+	 */
+	public function test_backfill_stamps_the_site_locale_when_the_match_is_locale_invariant(): void {
+		add_filter( 'locale', static fn() => 'en_US' );
+		add_filter( 'determine_locale', static fn() => 'fr_FR' );
+		add_filter( 'gettext', static fn( $translation, $text ) => $text, 10, 2 );
+		$template_id = $this->install();
+		$bundled     = Templates::get_gallery_template_by_key( $this->gallery_key );
+		$this->assertSame( $bundled['content'], get_post( $template_id )->post_content );
+		delete_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_HASH );
+		delete_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE );
+
+		$this->assertSame( 1, Gallery_Update_Status::backfill_source_hashes() );
+		$this->assertSame( 'en_US', get_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE, true ) );
 	}
 }

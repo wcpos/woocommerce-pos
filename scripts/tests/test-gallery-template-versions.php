@@ -123,6 +123,17 @@ if ( false === $real ) {
 	assert_same( array(), $missing, 'every real registry entry has a usable version' );
 }
 
+// File presence, not parser success, decides whether a change is new or removed.
+assert_same( 'pass', classify_change( 'receipt', false, true, null, null, false, false )['status'], 'new template needs no bump' );
+assert_same( 'pass', classify_change( 'receipt', true, false, null, null, false, false )['status'], 'removed template needs no bump' );
+assert_same( 'fail', classify_change( 'receipt', true, true, null, 2, false, true )['status'], 'existing base file with unparsed entry fails' );
+assert_same( 'fail', classify_change( 'receipt', true, true, 1, null, true, false )['status'], 'existing head file with unparsed entry fails' );
+assert_same( 'fail', classify_change( 'receipt', true, true, 1, null, true, true )['status'], 'unreadable head version fails' );
+assert_same( 'pass', classify_change( 'receipt', true, true, null, 1, true, true )['status'], 'newly readable version passes' );
+assert_same( 'fail', classify_change( 'receipt', true, true, 1, 1, true, true )['status'], 'unchanged version fails' );
+assert_same( 'fail', classify_change( 'receipt', true, true, 2, 1, true, true )['status'], 'decreased version fails' );
+assert_same( 'pass', classify_change( 'receipt', true, true, 1, 2, true, true )['status'], 'increased version passes' );
+
 if ( $failures > 0 ) {
 	fwrite( STDERR, "\n{$failures} failure(s).\n" );
 	exit( 1 );

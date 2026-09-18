@@ -29,6 +29,7 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
+use WCPOS\WooCommercePOS\i18n;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates;
@@ -199,14 +200,27 @@ final class Gallery_Update_Status {
 	 * @return int|null The version, or null when this build does not ship that key.
 	 */
 	public static function registry_version( string $gallery_key ): ?int {
-		$catalogue = Gallery_Registry::all();
-		if ( ! isset( $catalogue[ $gallery_key ] ) ) {
-			return null;
+		return self::registry_versions()[ $gallery_key ] ?? null;
+	}
+
+	/**
+	 * Memoise versions for one request. Catalogue filters must precede the first admin_init
+	 * read; normal plugins_loaded registration satisfies this.
+	 *
+	 * @return array<string, int> Versions keyed by gallery key.
+	 */
+	private static function registry_versions(): array {
+		wp_cache_add_non_persistent_groups( 'wcpos-gallery' );
+		$versions = wp_cache_get( 'registry-versions', 'wcpos-gallery' );
+		if ( false === $versions ) {
+			$versions = array();
+			foreach ( Gallery_Registry::all() as $key => $metadata ) {
+				$versions[ (string) $key ] = max( 1, (int) ( $metadata['version'] ?? 1 ) );
+			}
+			wp_cache_set( 'registry-versions', $versions, 'wcpos-gallery' );
 		}
 
-		$version = $catalogue[ $gallery_key ]['version'] ?? 1;
-
-		return max( 1, (int) $version );
+		return $versions;
 	}
 
 	/**
@@ -262,10 +276,7 @@ final class Gallery_Update_Status {
 	 * @return string The fingerprint.
 	 */
 	private static function registry_signature(): string {
-		$versions = array();
-		foreach ( Gallery_Registry::all() as $key => $metadata ) {
-			$versions[ (string) $key ] = max( 1, (int) ( $metadata['version'] ?? 1 ) );
-		}
+		$versions = self::registry_versions();
 		ksort( $versions );
 
 		return hash( 'sha256', (string) wp_json_encode( $versions ) );
@@ -343,6 +354,7 @@ final class Gallery_Update_Status {
 		);
 
 		$bundled_hashes = array();
+		$locale_proven  = array();
 		$filled         = 0;
 
 		foreach ( $template_ids as $template_id ) {
@@ -355,10 +367,14 @@ final class Gallery_Update_Status {
 
 			// One file read per distinct key, not per template.
 			if ( ! \array_key_exists( $gallery_key, $bundled_hashes ) ) {
-				$bundled                        = Templates::get_gallery_template_by_key( $gallery_key );
-				$bundled_hashes[ $gallery_key ] = \is_array( $bundled ) && isset( $bundled['content'] )
-					? self::content_hash( Receipt_I18n_Labels::translate_interpolated_phrases( (string) $bundled['content'] ) )
-					: null;
+				$bundled                       = Templates::get_gallery_template_by_key( $gallery_key );
+				$bundled_hashes[ $gallery_key ] = null;
+				if ( \is_array( $bundled ) && isset( $bundled['content'] ) ) {
+					$bundled_content              = (string) $bundled['content'];
+					$translated                   = Receipt_I18n_Labels::translate_interpolated_phrases( $bundled_content );
+					$bundled_hashes[ $gallery_key ] = self::content_hash( $translated );
+					$locale_proven[ $gallery_key ]  = $translated !== $bundled_content;
+				}
 			}
 
 			$bundled_hash = $bundled_hashes[ $gallery_key ];
@@ -372,9 +388,10 @@ final class Gallery_Update_Status {
 			}
 
 			update_post_meta( $template_id, self::META_SOURCE_HASH, $bundled_hash );
-			// The content matched the bundled markup as rendered in THIS locale, which is itself
-			// proof the copy was installed in it — so it is safe to state here.
-			update_post_meta( $template_id, self::META_SOURCE_LOCALE, determine_locale() );
+			// Changed markup proves the request locale; an invariant match does not. In that
+			// case record the site language, the best fact for customer-facing receipts in a
+			// single-language store, rather than the requesting admin's language.
+			update_post_meta( $template_id, self::META_SOURCE_LOCALE, $locale_proven[ $gallery_key ] ? determine_locale() : get_locale() );
 			update_post_meta( $template_id, self::META_GALLERY_VERSION, $latest );
 			++$filled;
 		}
@@ -453,6 +470,10 @@ final class Gallery_Update_Status {
 
 		$switched = switch_to_locale( $locale );
 		try {
+			if ( $switched ) {
+				// Reload the textdomain after switching, as Receipt_I18n_Labels::get_labels() does.
+				new i18n();
+			}
 			return Receipt_I18n_Labels::translate_interpolated_phrases( $content );
 		} finally {
 			if ( $switched ) {

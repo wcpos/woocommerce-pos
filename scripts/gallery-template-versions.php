@@ -118,6 +118,47 @@ function registry_versions( string $source ): array {
 }
 
 /**
+ * Classify a content change using tree presence before parsed versions.
+ *
+ * @param string   $key        Gallery key.
+ * @param bool     $in_base    File exists at base.
+ * @param bool     $in_head    File exists at head.
+ * @param int|null $before     Parsed base version.
+ * @param int|null $after      Parsed head version.
+ * @param bool     $had_before Key parsed at base.
+ * @param bool     $had_after  Key parsed at head.
+ * @param string   $base       Base ref for diagnostics.
+ * @param string   $head       Head ref for diagnostics.
+ * @return array{status: string, message: string} Guard result.
+ */
+function classify_change( string $key, bool $in_base, bool $in_head, ?int $before, ?int $after, bool $had_before, bool $had_after, string $base = 'base', string $head = 'head' ): array { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Standalone CLI, not a plugin global.
+	$status = 'pass';
+	if ( ! $in_base && $in_head ) {
+		$message = "{$key}: new template, no bump required";
+	} elseif ( $in_base && ! $in_head ) {
+		$message = "{$key}: removed";
+	} elseif ( ( $in_base && ! $had_before ) || ( $in_head && ! $had_after ) ) {
+		$ref     = $in_base && ! $had_before ? $base : $head;
+		$status  = 'fail';
+		$message = "{$key}: registered in " . REGISTRY_PATH . " at {$ref} but its entry could not be parsed";
+	} elseif ( null === $after ) {
+		$status  = 'fail';
+		$message = "{$key}: changed and its 'version' in " . REGISTRY_PATH . ' is missing or unreadable.';
+	} elseif ( null === $before ) {
+		$message = "{$key}: version now readable ({$after})";
+	} elseif ( $after > $before ) {
+		$message = "{$key}: {$before} -> {$after}";
+	} else {
+		$status  = 'fail';
+		$message = "{$key}: changed but 'version' is still {$after} in " . REGISTRY_PATH . '.';
+	}
+	return array(
+		'status'  => $status,
+		'message' => $message,
+	);
+}
+
+/**
  * Run the guard.
  *
  * Separated from the pure parser above so a test can include this file for `registry_versions()`
@@ -166,50 +207,25 @@ $changed = array_values( gallery_content_files( array_map( 'trim', explode( "\n"
 	$passes   = array();
 
 	foreach ( $changed as $file ) {
-		$key = pathinfo( $file, PATHINFO_FILENAME );
-
-		// A template added in this change has no "before" and needs no bump.
-		if ( ! array_key_exists( $key, $before ) ) {
-			$passes[] = "{$key}: new template, no bump required";
-			continue;
-		}
-
-		// A template deleted in this change has nothing left to version.
-		if ( ! array_key_exists( $key, $after ) ) {
-			$passes[] = "{$key}: removed from the registry";
-			continue;
-		}
-
-		// Still registered, but its version cannot be read. At runtime registry_version() falls
-		// back to 1 for exactly this entry, so every installed copy would report itself current.
-		if ( null === $after[ $key ] ) {
-			$failures[] = sprintf(
-				"%s\n    %s changed and its 'version' in %s is missing or unreadable.",
-				$key,
-				$file,
-				REGISTRY_PATH
-			);
-			continue;
-		}
-
-		// An entry that had no readable version before cannot be compared against; require one now.
-		if ( null === $before[ $key ] ) {
-			$passes[] = "{$key}: version now readable ({$after[$key]})";
-			continue;
-		}
-
-		if ( $after[ $key ] > $before[ $key ] ) {
-			$passes[] = "{$key}: {$before[$key]} -> {$after[$key]}";
-			continue;
-		}
-
-		$failures[] = sprintf(
-			"%s\n    %s changed but 'version' is still %d in %s.",
+		$key     = pathinfo( $file, PATHINFO_FILENAME );
+		$in_base = null !== git( array( 'cat-file', '-e', $base . ':' . $file ) );
+		$in_head = null !== git( array( 'cat-file', '-e', $head . ':' . $file ) );
+		$result  = classify_change(
 			$key,
-			$file,
-			$after[ $key ],
-			REGISTRY_PATH
+			$in_base,
+			$in_head,
+			$before[ $key ] ?? null,
+			$after[ $key ] ?? null,
+			array_key_exists( $key, $before ),
+			array_key_exists( $key, $after ),
+			$base,
+			$head
 		);
+		if ( 'pass' === $result['status'] ) {
+			$passes[] = $result['message'];
+		} else {
+			$failures[] = $result['message'];
+		}
 	}
 
 	foreach ( $passes as $line ) {
