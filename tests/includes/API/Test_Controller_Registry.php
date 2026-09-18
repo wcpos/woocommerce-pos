@@ -241,8 +241,12 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$v2 = Controller_Registry::v2_map( $v1 );
 
-		// Assert.
-		$this->assertSame( array( 'ping', 'echo_probe', 'site', 'order_email', 'auth', 'custom_service' ), array_keys( $v2 ) );
+		// Assert. The v2-native services come first, then the promoted keys in v1
+		// order. Deriving the native list keeps this true on a trunk that has
+		// v2-native services of its own (next carries six more).
+		$natives = array_keys( Controller_Registry::v2_map( array() ) );
+		$this->assertSame( array_merge( $natives, array( 'auth', 'custom_service' ) ), array_keys( $v2 ) );
+		$this->assertContains( 'ping', $natives );
 		$this->assertSame( 'Fake_Auth', $v2['auth'] );
 		$this->assertSame( 'Fake_Custom', $v2['custom_service'] );
 	}
