@@ -67,6 +67,29 @@ class Registry_Legacy_Auth_Test_Double {
 	}
 }
 
+/** A v2-filter replacement that deliberately serves nothing. */
+class Registry_Silent_Settings_Test_Double {
+	/** Register no route at all. */
+	public function register_routes(): void {}
+}
+
+/** A v1 replacement that also registers under a plugin-added WCPOS namespace. */
+class Registry_Namespaced_Stores_Test_Double extends \WCPOS\WooCommercePOS\API\V1\Stores {
+	/** Register the parent routes and a probe under the extension namespace. */
+	public function register_routes(): void {
+		parent::register_routes();
+		register_rest_route(
+			'wcpos-ext/v1',
+			'/probe',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => '__return_true',
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}
+
 /** The registry's map and registration contracts. */
 class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 	/**
@@ -97,6 +120,13 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private $endpoints_filter;
 
+	/**
+	 * Extra WCPOS namespace filter.
+	 *
+	 * @var \Closure|null
+	 */
+	private $namespaces_filter;
+
 	/** Install each integration case's filters before route registration. */
 	public function setUp(): void {
 		if ( 'test_a_v1_replacement_registers_its_routes_under_v2_without_a_v2_entry' === $this->getName() ) {
@@ -109,6 +139,25 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		if ( 'test_a_replacement_that_registers_nothing_under_v2_leaves_the_lane_to_the_core_service' === $this->getName() ) {
 			$this->v1_filter = static function ( array $map ): array {
 				$map['auth'] = Registry_Legacy_Auth_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
+		}
+		if ( 'test_a_v2_filter_replacement_that_serves_nothing_is_not_overridden_by_the_core_service' === $this->getName() ) {
+			$this->v2_filter = static function ( array $map ): array {
+				$map['settings'] = Registry_Silent_Settings_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+		}
+		if ( 'test_routes_under_a_plugin_added_namespace_are_attributed' === $this->getName() ) {
+			$this->namespaces_filter = static function ( array $namespaces ): array {
+				$namespaces[] = 'wcpos-ext/v1';
+				return $namespaces;
+			};
+			add_filter( 'woocommerce_pos_rest_namespaces', $this->namespaces_filter );
+			$this->v1_filter = static function ( array $map ): array {
+				$map['stores'] = Registry_Namespaced_Stores_Test_Double::class;
 				return $map;
 			};
 			add_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
@@ -158,6 +207,9 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		}
 		if ( $this->endpoints_filter ) {
 			remove_filter( 'rest_endpoints', $this->endpoints_filter, 1 );
+		}
+		if ( $this->namespaces_filter ) {
+			remove_filter( 'woocommerce_pos_rest_namespaces', $this->namespaces_filter );
 		}
 		parent::tearDown();
 	}
@@ -292,6 +344,51 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertInstanceOf( Registry_Legacy_Auth_Test_Double::class, $v1_controller );
 		$this->assertInstanceOf( \WCPOS\WooCommercePOS\API\V1\Auth::class, $v2_controller );
 		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/** The sync controllers ride the v1 filter but are wcpos/v2-native: never promoted, never built twice. */
+	public function test_a_v1_entry_that_serves_only_wcpos_v2_is_not_promoted(): void {
+		// Arrange.
+		$registry = $this->registry();
+		$routes   = $this->server->get_routes( 'wcpos/v2' );
+
+		// Act.
+		$promoted_sync_keys = preg_grep( '/^v2-sync-/', array_keys( $registry->controllers() ) );
+		$status_handlers    = array_filter( array_keys( $routes['/wcpos/v2/status'] ), 'is_int' );
+
+		// Assert.
+		$this->assertSame( array(), array_values( $promoted_sync_keys ) );
+		$this->assertCount( 1, $status_handlers );
+		$this->assertSame( 'sync-status', $registry->routes()['/wcpos/v2/status'] );
+	}
+
+	/** An explicit v2-filter choice stands even when it serves nothing; only derived entries fall back. */
+	public function test_a_v2_filter_replacement_that_serves_nothing_is_not_overridden_by_the_core_service(): void {
+		// Arrange.
+		$registry = $this->registry();
+
+		// Act.
+		$v2_routes = $this->server->get_routes( 'wcpos/v2' );
+
+		// Assert.
+		$this->assertArrayNotHasKey( '/wcpos/v2/settings', $v2_routes );
+		$this->assertArrayHasKey( '/wcpos/v1/settings', $this->server->get_routes( 'wcpos/v1' ) );
+		$this->assertInstanceOf( Registry_Silent_Settings_Test_Double::class, $registry->controllers()['v2-settings'] );
+	}
+
+	/** A filtered controller's routes under a namespace added through woocommerce_pos_rest_namespaces are attributed. */
+	public function test_routes_under_a_plugin_added_namespace_are_attributed(): void {
+		// Arrange.
+		$registry = $this->registry();
+
+		// Act.
+		$ext_controller = $registry->controller_for_route( '/wcpos-ext/v1/probe' );
+		$v2_controller  = $registry->controller_for_route( '/wcpos/v2/stores' );
+
+		// Assert.
+		$this->assertInstanceOf( Registry_Namespaced_Stores_Test_Double::class, $ext_controller );
+		$this->assertInstanceOf( Registry_Namespaced_Stores_Test_Double::class, $v2_controller );
+		$this->assertNotSame( $ext_controller, $v2_controller );
 	}
 
 	/** Unrelated WooCommerce routes must never acquire a WCPOS dispatch controller. */

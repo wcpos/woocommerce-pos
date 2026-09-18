@@ -22,6 +22,18 @@ use WP_REST_Request;
  * @coversNothing
  */
 class Test_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
+	/**
+	 * The API instance the harness registered.
+	 *
+	 * @var \WCPOS\WooCommercePOS\API
+	 */
+	private $api;
+
+	/** Keep the registering instance for the route-map case. */
+	public function rest_api_init(): void {
+		$this->api = new \WCPOS\WooCommercePOS\API();
+	}
+
 	public function setUp(): void {
 		parent::setUp();
 	}
@@ -187,7 +199,9 @@ class Test_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	 * WCPOS namespaces, ensuring the dispatch guard works correctly.
 	 */
 	public function test_route_map_only_contains_wcpos_routes(): void {
-		$api = new \WCPOS\WooCommercePOS\API();
+		// The instance the harness registered: a second one would find every route
+		// already in the table and attribute nothing, so the loop below would be empty.
+		$api = $this->api;
 		$this->assertSame( array( 'wcpos/v1', 'wcpos/v2' ), $api->get_route_namespaces() );
 
 		$reflection = new \ReflectionClass( $api );

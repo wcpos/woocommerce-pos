@@ -10,12 +10,13 @@ namespace WCPOS\WooCommercePOS\API;
 /**
  * Owns both controller maps, their instances, route attribution and classification merge.
  *
- * The v2 service map is the v2-native services plus every v1 entry except the nine
- * frozen data controllers (#544); the registry stamps wcpos/v2 on each promoted
- * instance. A promoted replacement that registers nothing under wcpos/v2 leaves the
- * lane to the core service, as the hand-kept map did. Attribution diffs the route
- * table around each registration, so callback wrapping is irrelevant. The 'v2-'
- * registry key prefix is internal, not a route namespace.
+ * The v2 service map is the v2-native services plus every v1 entry that serves
+ * wcpos/v1 except the nine frozen data controllers (#544); the registry stamps
+ * wcpos/v2 on each promoted instance. A derived replacement that registers nothing
+ * under wcpos/v2 leaves the lane to the core service, as the hand-kept map did.
+ * Attribution takes the tail of the server's route table after each registration,
+ * so callback shape and namespace are irrelevant. The 'v2-' registry key prefix is
+ * internal, not a route namespace.
  */
 final class Controller_Registry {
 	/** The v1 data controllers the sync surface replaced. Never promoted to wcpos/v2 (#544). */
@@ -132,7 +133,7 @@ final class Controller_Registry {
 	/**
 	 * Promote shared services, add v2-native services, then apply the v2 filter.
 	 *
-	 * @param array<string, class-string> $v1 The v1 map.
+	 * @param array<string, class-string> $v1 The v1 entries that serve wcpos/v1 (register() passes only those).
 	 * @return array<string, class-string> The v2 map.
 	 */
 	public static function v2_map( array $v1 ): array {
@@ -161,28 +162,33 @@ final class Controller_Registry {
 	}
 
 	/**
-	 * Instantiate, stamp, register and attribute both lanes; merge classifications.
+	 * Instantiate, stamp, register and attribute every controller on both lanes;
+	 * merge each controller's classifications.
 	 *
 	 * @param Route_Classifier $classifier Route permission-gate classifier.
 	 */
 	public function register( Route_Classifier $classifier ): void {
 		$core = self::core_v1_map();
 		$v1   = self::v1_map();
-		$maps = array(
-			self::V1_NAMESPACE => $v1,
-			self::V2_NAMESPACE => self::v2_map( $v1 ),
-		);
 
-		foreach ( $maps as $namespace => $map ) {
-			foreach ( $map as $key => $class ) {
-				$registered = $this->register_one( $namespace, $key, $class, $classifier );
-				if ( $registered || self::V2_NAMESPACE !== $namespace || ! isset( $core[ $key ] ) || $core[ $key ] === $class ) {
-					continue;
-				}
-				// A promoted replacement that registered nothing under wcpos/v2 — a class
-				// that hard-codes wcpos/v1, or a plain object with no namespace to stamp —
-				// leaves the lane to the core service, as the hand-kept map did.
-				$this->register_one( $namespace, $key, $core[ $key ], $classifier );
+		// Only an entry that serves wcpos/v1 is promoted: the v1 filter also carries
+		// the sync controllers, which are wcpos/v2-native and register there already.
+		$serves_v1 = array();
+		foreach ( $v1 as $key => $class ) {
+			if ( self::under( $this->register_one( self::V1_NAMESPACE, $key, $class, $classifier ), self::V1_NAMESPACE ) ) {
+				$serves_v1[ $key ] = $class;
+			}
+		}
+
+		foreach ( self::v2_map( $serves_v1 ) as $key => $class ) {
+			$routes = $this->register_one( self::V2_NAMESPACE, $key, $class, $classifier );
+			// A derived v1 replacement (not a class the v2 filter chose) that registered
+			// nothing under wcpos/v2 — a class that hard-codes wcpos/v1, or a plain object
+			// with no namespace to stamp — leaves the lane to the core service, as the
+			// hand-kept map did.
+			$derived_replacement = isset( $serves_v1[ $key ], $core[ $key ] ) && $serves_v1[ $key ] === $class && $core[ $key ] !== $class;
+			if ( $derived_replacement && ! self::under( $routes, self::V2_NAMESPACE ) ) {
+				$this->register_one( self::V2_NAMESPACE, $key, $core[ $key ], $classifier );
 			}
 		}
 	}
@@ -190,49 +196,90 @@ final class Controller_Registry {
 	/**
 	 * Instantiate, stamp, register and attribute one controller on one lane.
 	 *
-	 * @param string           $namespace  The lane.
+	 * @param string           $lane       The lane the map belongs to.
 	 * @param string           $key        The map key.
 	 * @param string           $class      The controller class.
 	 * @param Route_Classifier $classifier Route permission-gate classifier.
 	 *
-	 * @return bool Whether the controller registered at least one route under the lane.
+	 * @return string[] The route patterns this registration added, in any namespace.
 	 */
-	private function register_one( string $namespace, string $key, string $class, Route_Classifier $classifier ): bool {
+	private function register_one( string $lane, string $key, string $class, Route_Classifier $classifier ): array {
 		if ( ! class_exists( $class ) ) {
-			return false;
+			return array();
 		}
-		$server       = rest_get_server();
 		$controller   = new $class();
 		$registry_key = $key;
-		if ( self::V2_NAMESPACE === $namespace ) {
+		if ( self::V2_NAMESPACE === $lane ) {
 			$registry_key = 'v2-' . $key;
 			if ( $controller instanceof \WP_REST_Controller ) {
-				self::stamp_namespace( $controller, $namespace );
+				self::stamp_namespace( $controller, $lane );
 			}
 		}
 		$this->controllers[ $registry_key ] = $controller;
 
-		// A route this controller added has more handlers after registration than
-		// before (WordPress appends on re-registration), so the last registrant
-		// owns it — what the old callback lookup did, without looking at callbacks.
-		$before = $server->get_routes( $namespace );
+		// WordPress appends a new route pattern to the end of its table, so the
+		// patterns added since the count taken before registration are this
+		// controller's, whatever namespace they are under and whatever shape their
+		// callbacks take. A pattern registered twice keeps its first owner. The
+		// index route WordPress adds for a namespace's first pattern is the
+		// server's, not the controller's.
+		$server = rest_get_server();
+		$from   = \count( self::endpoints( $server ) );
 		$controller->register_routes();
-		$registered = false;
-		foreach ( $server->get_routes( $namespace ) as $route => $handlers ) {
-			if ( \count( $handlers ) === \count( $before[ $route ] ?? array() ) ) {
+		$routes = array();
+		foreach ( \array_slice( self::endpoints( $server ), $from, null, true ) as $route => $entry ) {
+			if ( isset( $entry['namespace'] ) && '/' . $entry['namespace'] === $route ) {
 				continue;
 			}
 			$this->routes[ $route ] = $registry_key;
-			$registered             = true;
+			$routes[]               = $route;
 		}
 
 		if ( method_exists( $controller, 'wcpos_route_classifications' ) ) {
 			$classifier->merge( $controller->wcpos_route_classifications() );
 		} elseif ( isset( self::LEGACY_CLASSIFICATIONS[ $key ] ) ) {
-			$classifier->merge( self::legacy_classifications( $key, $namespace ) );
+			$classifier->merge( self::legacy_classifications( $key, $lane ) );
 		}
 
-		return $registered;
+		return $routes;
+	}
+
+	/**
+	 * The server's raw route table, in registration order.
+	 *
+	 * `WP_REST_Server::$endpoints` is protected and `get_routes()` is its only
+	 * reader, but that applies `rest_endpoints` and parses every handler on each
+	 * call: measured 2026-09-18, one call per controller made API construction
+	 * six times slower. Reading the table itself costs nothing (copy-on-write).
+	 *
+	 * @param \WP_REST_Server $server The REST server.
+	 *
+	 * @return array<string, array>
+	 */
+	private static function endpoints( \WP_REST_Server $server ): array {
+		return \Closure::bind(
+			function (): array {
+				return $this->endpoints;
+			},
+			$server,
+			$server
+		)();
+	}
+
+	/**
+	 * Whether any of the routes is under the lane.
+	 *
+	 * @param string[] $routes Route patterns.
+	 * @param string   $lane   Namespace.
+	 */
+	private static function under( array $routes, string $lane ): bool {
+		foreach ( $routes as $route ) {
+			if ( 0 === strpos( $route, '/' . $lane . '/' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
