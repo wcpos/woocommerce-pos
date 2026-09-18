@@ -111,11 +111,14 @@ final class Order_Write_Payload {
 	 * the misc-sku rule needs to tell a misc line from a catalog one), so without it
 	 * a display-only attribute choice or a retyped misc sku was silently dropped —
 	 * the deleted v1 override read the stored item instead. Each ABSENT key is
-	 * filled on its own; a posted key is the client's statement, and a posted
-	 * `product_id: null` is wc/v3's remove-this-line marker, which leaves the whole
-	 * line alone. drop_unchanged_line_identity removes the filled identity again
-	 * when it matches the stored binding, so an id-only edit forwards id-only, as it
-	 * always did.
+	 * filled on its own, but only while every POSTED key still matches the stored
+	 * binding: a posted id that differs is a re-bind (say, a variation line moved to
+	 * a simple product by posting the new product_id alone), and wc/v3 ranks a
+	 * variation id above a product id, so handing that line its old variation_id
+	 * would silently keep the old binding. A posted `product_id: null` is wc/v3's
+	 * remove-this-line marker, which leaves the whole line alone.
+	 * drop_unchanged_line_identity removes the filled identity again when it matches
+	 * the stored binding, so an id-only edit forwards id-only, as it always did.
 	 *
 	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id does not resolve.
 	 * @param array                    $payload Update payload with ids reconciled.
@@ -139,6 +142,13 @@ final class Order_Write_Payload {
 			}
 			$item = $order->get_item( (int) $line['id'] );
 			if ( ! $item instanceof WC_Order_Item_Product ) {
+				continue;
+			}
+			// A posted key that differs from the stored binding is a re-bind: forward as posted.
+			if ( ! $needs_product && ( ! is_numeric( $line['product_id'] ) || (int) $line['product_id'] !== $item->get_product_id() ) ) {
+				continue;
+			}
+			if ( ! $needs_variation && ( ! is_numeric( $line['variation_id'] ) || (int) $line['variation_id'] !== $item->get_variation_id() ) ) {
 				continue;
 			}
 			if ( $needs_product ) {

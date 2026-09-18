@@ -349,6 +349,48 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A variation line re-bound to a different product by posting only the new
+	 * product_id must NOT be handed its old variation_id: wc/v3 ranks a variation id
+	 * above the product id, so hydrating it would silently keep the old binding.
+	 */
+	public function test_for_partial_update_with_a_rebinding_product_id_does_not_hydrate_the_old_variation(): void {
+		// Arrange.
+		$parent    = ProductHelper::create_variation_product();
+		$variation = wc_get_product( $parent->get_children()[0] );
+		$simple    = ProductHelper::create_simple_product();
+		$order     = new WC_Order();
+		$item      = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'         => $item->get_id(),
+					'product_id' => $simple->get_id(),
+					'quantity'   => 1,
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_partial_update( $order->get_id(), $payload );
+
+		// Assert: the posted rebind is forwarded as posted.
+		$this->assertSame(
+			array(
+				'line_items' => array(
+					array(
+						'id'         => $item->get_id(),
+						'product_id' => $simple->get_id(),
+						'quantity'   => 1,
+					),
+				),
+			),
+			$forwarded
+		);
+	}
+
+	/**
 	 * A line posted with its variation but without the parent still recovers a
 	 * display-only "any" choice: the missing parent is filled from the stored item.
 	 */
