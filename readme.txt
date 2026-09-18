@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.17
+Stable tag: 1.10.18
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,16 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.18 - 2026/09/18 =
+
+- **A web till with the POS open in more than one tab repairs its local database again.** Since the 1.10 storage repairs shipped, every repair on web was refused whenever another tab of the same store could be open, so a damaged record stayed damaged and the same storage errors repeated on every sync. The tab that leads the store now owns the repair and the other tabs follow it. Web merchants receive this through WooCommerce POS plugin 1.10.18, which serves the storage worker; desktop and phone apps carry it in this release.
+- **Voiding an order the server had refused no longer fails silently.** When an order could not be created on the server (for example while the till was signed out) and the cashier then voided it, the void raised an error nothing caught and the order stayed in the cart. The till now removes the order and its failed request locally and confirms the removal; any other failure to void shows an error instead of nothing.
+- **A till opened from WordPress admin no longer sends an invalid sign-in token on its first requests.** A request made before a token was stored carried the word "undefined" as its credential, which the server rejected as an invalid token instead of falling back to the WordPress login session. Such requests now carry no token, and a retry after a token refresh no longer keeps the old token in the request address.
+- **A plugin update no longer restores cashier permissions the merchant had removed.** Every update re-granted every default capability, so a store that had turned off product or coupon editing for cashiers saw it come back after each release. Updates now grant only capabilities that are new since the last update; a deleted cashier role is still recreated whole.
+- **Product search on the older `wcpos/v1` routes splits the typed text the same way as the rest of the POS.** Punctuation stays literal and single letters and common words count, so "IT 5012" no longer searches as "5012" and "0,4" is one term.
+- **An order digest write no longer fails on a busy MariaDB.** The checkout-lane digest write now retries once on lock contention, as the product and customer digests already did.
+- **The older order-update route checks order ownership the same way as the current one under HPOS.** A role that can edit its own orders but not other people's is treated the same on both routes. Cashiers are unaffected.
 
 = 1.10.17 - 2026/09/17 =
 
