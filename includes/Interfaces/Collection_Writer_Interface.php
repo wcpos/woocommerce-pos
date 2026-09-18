@@ -40,8 +40,17 @@ interface Collection_Writer_Interface {
 	/** Forward a prepared write within collection hooks. */
 	public function forward( array $prepared, callable $forward );
 
-	/** Persist collection data at a named create/update lifecycle phase. */
-	public function persist( string $phase, int $id, array $payload, array $current = array(), array $response_data = array(), array $context = array() ): void;
+	/** After the wc/v3 create returned an id, before the client UUID is proven on it. */
+	public function after_create( int $id, array $payload ): void;
+
+	/** After the client UUID is proven on the created record, before the mutation is finalized. */
+	public function after_identity( int $id, array $payload ): void;
+
+	/** On a retry that re-proves a poisoned create's identity, before it is finalized. */
+	public function after_recovery( int $id, array $payload ): void;
+
+	/** After a wc/v3 update succeeded, before the mutation is finalized. */
+	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void;
 
 	/** Execute the collection-specific delete forward. */
 	public function delete( array $meta, int $id, array $mutation, callable $dispatch, callable $can_delete );
