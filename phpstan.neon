@@ -54,6 +54,7 @@ parameters:
         - '#Access to constant .+ on an unknown class WCPOS\\Vendor\\#'
         - '#Call to static method .+ on an unknown class WCPOS\\Vendor\\#'
         - '#Catch with unknown class WCPOS\\Vendor\\.+#'
+        - '#Caught class WCPOS\\Vendor\\.+ not found#'
 
         # WordPress/WooCommerce function parameter mismatches in stubs
         - '#Function rest_ensure_response invoked with#'

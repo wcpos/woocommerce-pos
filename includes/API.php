@@ -50,6 +50,13 @@ class API {
 	protected $is_auth_checked = false;
 
 	/**
+	 * Validation error for a token presented during this request.
+	 *
+	 * @var \WP_Error|null
+	 */
+	private $auth_error = null;
+
+	/**
 	 * Flag to track whether WCPOS successfully authenticated the current request
 	 * via its own Bearer token. Used to suppress errors from third-party JWT
 	 * plugins that inspected the same Authorization header but could not validate
@@ -385,10 +392,25 @@ class API {
 		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route && ! $is_sync_admin_route ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
 				if ( ! is_user_logged_in() ) {
+					$data = array( 'status' => 401 );
+					if ( null !== $this->auth_error ) {
+						$data['reason'] = $this->auth_error->get_error_code();
+						if ( 'woocommerce_pos_auth_token_expired' !== $data['reason'] ) {
+							Logger::warning(
+								'POS request refused: ' . $data['reason'] . ' — ' . $this->auth_error->get_error_message(),
+								array(
+									'route'  => $route,
+									'method' => $request->get_method(),
+									'reason' => $data['reason'],
+								)
+							);
+						}
+					}
+
 					return new \WP_Error(
 						'woocommerce_pos_rest_unauthorized',
 						__( 'Authentication required.', 'woocommerce-pos' ),
-						array( 'status' => 401 )
+						$data
 					);
 				}
 
@@ -546,9 +568,12 @@ class API {
 	 * @return false|int|\WP_Error
 	 */
 	private function authenticate( $user_id ) {
+		// Per-request: never let a previous authentication's verdict describe this one.
+		$this->auth_error = null;
 		$authenticated_user_id = Auth::instance()->authenticate_request();
 
 		if ( is_wp_error( $authenticated_user_id ) ) {
+			$this->auth_error = $authenticated_user_id;
 			return false === $user_id ? $authenticated_user_id : $user_id;
 		}
 
