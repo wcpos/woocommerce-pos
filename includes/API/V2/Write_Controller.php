@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Create_Identity;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
@@ -52,6 +53,9 @@ class Write_Controller extends WP_REST_Controller {
 
 	/** @var mixed Duck-typed mutation store; tests inject an in-memory implementation. */
 	private $store;
+
+	/** @var Create_Identity Shared proof for fresh and poisoned creates. */
+	private Create_Identity $identity;
 
 
 	/**
@@ -100,6 +104,7 @@ class Write_Controller extends WP_REST_Controller {
 
 	public function __construct( $store = null ) {
 		$this->store = $store ? $store : new Mutation_Store();
+		$this->identity = new Create_Identity( $this->store );
 	}
 
 	/** Resolve the collection-specific writer for registry metadata. */
@@ -221,7 +226,12 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
-			return $this->retry_identity_stamp( $meta, $m, $hit );
+			$writer = $this->writer( $meta );
+			$recovered = $this->identity->recover( $meta, $m, $hit, $writer );
+			if ( is_wp_error( $recovered ) ) {
+				return $recovered;
+			}
+			return $this->envelope_document( $this->document_for( $meta, $recovered['id'] ), $m['recordId'], $meta, $recovered['id'], $recovered['status'], $writer );
 		}
 		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'done', 'applied' ), true ) ) {
 			if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
@@ -407,30 +417,9 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_create_no_id', 'Create returned no server id.', array( 'status' => 502 ) );
 		}
 
-		// Poison checkpoint, UUID persistence, and finalization remain shared here.
-		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response->get_status() );
-		$writer->persist( 'create_before_identity', $new_id, $m['payload'] );
-		$identity_error = null;
-		if ( ! $this->store->persist_uuid( $meta['id_type'], $new_id, $m['recordId'] ) ) {
-			$identity_error = new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
-		} else {
-			$resolved = $this->store->resolve_id_by_uuid( $meta['id_type'], $m['recordId'], $meta );
-			if ( is_wp_error( $resolved ) ) {
-				$identity_error = $resolved;
-			} elseif ( $resolved !== $new_id ) {
-				$identity_error = new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
-			}
-		}
-		if ( ! $checkpointed ) {
-			$this->store->mark_indeterminate( $m['mutationId'], $new_id, $response->get_status() );
-			return $this->finalize_error();
-		}
-		if ( $identity_error ) {
-			return $identity_error;
-		}
-		$writer->persist( 'create_after_identity', $new_id, $m['payload'] );
-		if ( ! $this->store->finalize_poison( $m['mutationId'], $new_id ) ) {
-			return $this->finalize_error();
+		$stamped = $this->identity->stamp( $meta, $m, $new_id, $response->get_status(), $writer );
+		if ( is_wp_error( $stamped ) ) {
+			return $stamped;
 		}
 		return $this->envelope_document( $this->document_for( $meta, $new_id ), $m['recordId'], $meta, $new_id, $response->get_status(), $writer );
 	}
@@ -520,7 +509,7 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
 		}
 		$data = $response->get_data();
-		$writer->persist( 'update', $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
+		$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
 
 		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] );
 		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
@@ -640,41 +629,6 @@ class Write_Controller extends WP_REST_Controller {
 			: ( 'create' === ( $hit['operation'] ?? '' ) ? 201 : null );
 		$writer = $this->writer( $meta );
 		return $this->envelope_document( $this->document_for( $meta, $remote_id ), $expected, $meta, $remote_id, $status, $writer );
-	}
-
-	private function retry_identity_stamp( array $meta, array $m, array $hit ) {
-		$remote_id = (int) ( $hit['remote_id'] ?? 0 );
-		$record_uuid = (string) ( $hit['record_uuid'] ?? '' );
-		if ( $record_uuid !== $m['recordId'] ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_conflict', 'recordId disagrees with the stored mutation identity.', array( 'status' => 422 ) );
-		}
-		if ( 'create' !== ( $hit['operation'] ?? '' ) || $remote_id <= 0 ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Created record identity cannot be recovered safely.', array( 'status' => 500 ) );
-		}
-		$resolved = $this->store->resolve_id_by_uuid( $meta['id_type'], $record_uuid, $meta );
-		if ( is_wp_error( $resolved ) ) {
-			return $resolved;
-		}
-		if ( $resolved > 0 && $resolved !== $remote_id ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Stored create identity points at a different record.', array( 'status' => 500 ) );
-		}
-		if ( ! $this->store->persist_uuid( $meta['id_type'], $remote_id, $record_uuid ) ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
-		}
-		$verified = $this->store->resolve_id_by_uuid( $meta['id_type'], $record_uuid, $meta );
-		if ( is_wp_error( $verified ) ) {
-			return $verified;
-		}
-		if ( $verified !== $remote_id ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
-		}
-		$writer = $this->writer( $meta );
-		$writer->persist( 'create_recovery', $remote_id, $m['payload'] );
-		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {
-			return $this->finalize_error();
-		}
-		$status = isset( $hit['response_status'] ) ? (int) $hit['response_status'] : 201;
-		return $this->envelope_document( $this->document_for( $meta, $remote_id ), $record_uuid, $meta, $remote_id, $status, $writer );
 	}
 
 	/**

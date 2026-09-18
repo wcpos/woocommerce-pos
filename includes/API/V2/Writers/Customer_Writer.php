@@ -26,9 +26,24 @@ class Customer_Writer extends Null_Writer {
 		return is_wp_error( $error ) ? $error : parent::prepare_update( $meta, $id, $this->prepare_payload( $payload ), $validate_tax_ids );
 	}
 
-	/** Persist customer tax IDs after successful writes and poison recovery. */
-	public function persist( string $phase, int $id, array $payload, array $current = array(), array $response_data = array(), array $context = array() ): void {
-		if ( ! in_array( $phase, array( 'create_before_identity', 'create_recovery', 'update' ), true ) || $id <= 0 || ! is_array( $payload['tax_ids'] ?? null ) ) {
+	/** Persist customer tax IDs after create. */
+	public function after_create( int $id, array $payload ): void {
+		$this->write_tax_ids( $id, $payload );
+	}
+
+	/** Persist customer tax IDs after recovery. */
+	public function after_recovery( int $id, array $payload ): void {
+		$this->write_tax_ids( $id, $payload );
+	}
+
+	/** Persist customer tax IDs after update. */
+	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void {
+		$this->write_tax_ids( $id, $payload );
+	}
+
+	/** The one tax-ID write every lifecycle phase shares; identity itself never carries tax ids. */
+	private function write_tax_ids( int $id, array $payload ): void {
+		if ( $id <= 0 || ! is_array( $payload['tax_ids'] ?? null ) ) {
 			return;
 		}
 		( new Tax_Id_Writer() )->write_for_user( $id, $payload['tax_ids'] );
