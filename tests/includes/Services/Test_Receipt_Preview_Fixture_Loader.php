@@ -146,4 +146,32 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 		$this->assertSame( 'Coffee Monster', $data['store']['name'] );
 		$this->assertSame( 'POS-1234', $data['order']['number'] );
 	}
+
+	/**
+	 * The receipt data filter runs once, after the fixture overrides, so a key a
+	 * plugin adds to a row survives the fixture replacing that row list.
+	 *
+	 * @covers ::build
+	 */
+	public function test_build_applies_receipt_data_filter_once_after_overrides(): void {
+		$calls  = 0;
+		$filter = static function ( array $data, \WC_Order $order, string $mode ) use ( &$calls ): array {
+			++$calls;
+			$data['discounts'][0]['gift_card'] = true;
+			$data['seen_store']                = $data['store']['name'];
+
+			return $data;
+		};
+
+		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		try {
+			$data = ( new Receipt_Preview_Fixture_Loader() )->build( 'base-receipt' );
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+		}
+
+		$this->assertSame( 1, $calls );
+		$this->assertTrue( $data['discounts'][0]['gift_card'] );
+		$this->assertSame( 'Coffee Monster', $data['seen_store'] );
+	}
 }
