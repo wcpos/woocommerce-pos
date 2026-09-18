@@ -263,6 +263,12 @@ class Auth {
 
 			// Everything looks good return the decoded token.
 			return $decoded_token;
+		} catch ( \WCPOS\Vendor\Firebase\JWT\ExpiredException $e ) {
+			return new WP_Error(
+				'woocommerce_pos_auth_token_expired',
+				'Token expired',
+				array( 'status' => 403 )
+			);
 		} catch ( Exception $e ) {
 			// Something is wrong trying to decode the token, send back the error.
 			return new WP_Error(
