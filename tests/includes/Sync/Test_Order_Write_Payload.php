@@ -261,6 +261,56 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A partial-document line posted by id alone still recovers a display-only "any"
+	 * choice: the stored item supplies the identity the recovery needs, and the
+	 * unchanged identity is dropped again before the forward.
+	 */
+	public function test_for_partial_update_with_a_line_posted_by_id_only_recovers_the_stored_identity(): void {
+		// Arrange.
+		list( $parent, $variation ) = $this->any_variation_product();
+		$order                      = new WC_Order();
+		$item                       = $this->line_item( $variation, self::KEPT_LINE_UUID );
+		$order->add_item( $item );
+		$order->save();
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'        => $item->get_id(),
+					'quantity'  => 2,
+					'meta_data' => array(
+						array(
+							'display_key'   => 'size',
+							'display_value' => 'large',
+						),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forwarded = ( new Order_Write_Payload() )->for_partial_update( $order->get_id(), $payload );
+
+		// Assert.
+		$line = $forwarded['line_items'][0];
+		$this->assertSame( $item->get_id(), $line['id'] );
+		$this->assertSame( 2, $line['quantity'] );
+		$this->assertArrayNotHasKey( 'product_id', $line, 'An unchanged binding is dropped again after hydration.' );
+		$this->assertArrayNotHasKey( 'variation_id', $line );
+		// The display-only entry is stripped to an empty entry wc/v3 ignores (no key);
+		// the recovered real attribute is appended beside it.
+		$this->assertSame(
+			array(
+				array(
+					'key'   => 'pa_size',
+					'value' => 'large',
+				),
+			),
+			array_values( array_filter( $line['meta_data'] ) )
+		);
+		unset( $parent );
+	}
+
+	/**
 	 * Recovered attributes do not prevent display-only fields from being stripped.
 	 */
 	public function test_for_create_with_recovered_attribute_still_strips_display_fields(): void {

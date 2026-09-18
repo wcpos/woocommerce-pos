@@ -25,6 +25,7 @@ use WP_Error;
  * - "Any" attribute recovery: V1 create_item/update_item shaping; V2 create/update shaping; posted keys win.
  * - Variation identity dedupe: V1 update_item shaping; V2 update shaping avoids duplicate attribute rows (#1456).
  * - Item-UUID ID reconciliation: V1 update_item shaping; V2 update shaping restores uniquely matched IDs.
+ * - Stored identity for id-only update lines: both update shapes fill product/variation ids from the stored item before the rules above run.
  * - Display-field and image drops: V1 create_item/update_item shaping; V2 create/update shaping.
  * - Client date: V1 create_item filter and V2 prepare_create use validate_client_created_gmt.
  * - Tax-ID persistence: V1 create_item/update_item response refresh and V2 persist use persist_tax_ids.
@@ -69,6 +70,7 @@ final class Order_Write_Payload {
 			$order = false;
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
+		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->remove_omitted_order_items( $order, $payload );
 		$payload = $this->reconcile_order_coupon_lines( $order, $payload );
 		$payload = $this->without_empty_billing_email( $payload );
@@ -94,9 +96,47 @@ final class Order_Write_Payload {
 			$order = false;
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
+		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->sanitize_order_wc_payload( $payload );
 		// Runs last for the same load-bearing reason as for_update: inspect the forwarded identity.
 		return $this->drop_unchanged_variation_line_identity( $order, $payload );
+	}
+
+	/**
+	 * Fill an update line's product identity from the stored item it names.
+	 *
+	 * A line posted by `id` with neither `product_id` nor `variation_id` is a
+	 * partial-document edit of a stored line. The identity rules below read the
+	 * POSTED identity (the "any" recovery needs the variation; the misc-sku rule
+	 * needs to tell a misc line from a catalog one), so without it a display-only
+	 * attribute choice or a retyped misc sku was silently dropped — the deleted v1
+	 * override read the stored item instead. Only ABSENT keys are filled: a posted
+	 * `product_id: null` is wc/v3's remove-this-line marker, and a posted identity
+	 * is the client's statement. drop_unchanged_variation_line_identity removes the
+	 * filled identity again when it matches, so an unchanged binding forwards exactly
+	 * as before.
+	 *
+	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id does not resolve.
+	 * @param array                    $payload Update payload with ids reconciled.
+	 * @return array Payload whose id-only product lines carry their stored identity.
+	 */
+	private function hydrate_line_identity_from_stored( $order, array $payload ): array {
+		if ( ! $order || ! isset( $payload['line_items'] ) || ! is_array( $payload['line_items'] ) ) {
+			return $payload;
+		}
+		foreach ( $payload['line_items'] as $i => $line ) {
+			if ( ! is_array( $line ) || empty( $line['id'] ) || ! is_numeric( $line['id'] )
+				|| array_key_exists( 'product_id', $line ) || array_key_exists( 'variation_id', $line ) ) {
+				continue;
+			}
+			$item = $order->get_item( (int) $line['id'] );
+			if ( ! $item instanceof WC_Order_Item_Product ) {
+				continue;
+			}
+			$payload['line_items'][ $i ]['product_id']   = $item->get_product_id();
+			$payload['line_items'][ $i ]['variation_id'] = $item->get_variation_id();
+		}
+		return $payload;
 	}
 
 	/**

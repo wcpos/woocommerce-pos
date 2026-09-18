@@ -204,6 +204,63 @@ class Test_Order_Write_Parity extends Sync_REST_Store_Test_Case {
 		}
 	}
 
+	/** A line posted by id alone must still recover a display-only "any" choice on both lanes. */
+	public function test_display_only_choice_by_line_id_both_lanes_store_the_posted_value(): void {
+		// Arrange. Same "any" fixture as the create case, stored with one choice first.
+		$parent    = ProductHelper::create_variation_product();
+		$variation = wc_get_product( $parent->get_children()[0] );
+		$variation->set_attributes( array( 'pa_size' => '' ) );
+		$variation->save();
+		$created = $this->create_in_both_lanes(
+			array(
+				'line_items' => array(
+					array(
+						'product_id'   => $parent->get_id(),
+						'variation_id' => $variation->get_id(),
+						'quantity'     => 1,
+						'meta_data'    => array(
+							array(
+								'display_key'   => wc_attribute_label( 'pa_size' ),
+								'display_value' => 'Large',
+							),
+						),
+					),
+				),
+			)
+		);
+		$ids     = $this->created_order_ids( $created );
+		$line_id = array_keys( wc_get_order( $ids[0] )->get_items() )[0];
+
+		// Act. The edit names the stored line by id only: no product_id, no variation_id.
+		$this->update_in_both_lanes(
+			$created[2],
+			$ids[0],
+			$ids[1],
+			array(
+				'line_items' => array(
+					array(
+						'id'        => $line_id,
+						'quantity'  => 1,
+						'meta_data' => array(
+							array(
+								'display_key'   => wc_attribute_label( 'pa_size' ),
+								'display_value' => 'Small',
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// Assert.
+		foreach ( $ids as $id ) {
+			$items = array_values( wc_get_order( $id )->get_items() );
+			$this->assertSame( 1, count( $items ) );
+			$this->assertSame( 'Small', $items[0]->get_meta( 'pa_size' ) );
+			$this->assertSame( 1, count( $items[0]->get_meta( 'pa_size', false ) ) );
+		}
+	}
+
 	/** Dropping UUID reconciliation would append a duplicate rather than update the line. */
 	public function test_line_without_id_both_lanes_update_the_uuid_matched_item(): void {
 		// Arrange.
