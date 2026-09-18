@@ -22,6 +22,16 @@ _Avoid_: section manager, settings factory
 Machine bookkeeping stored in options but not user intent: site UUID, JWT secret keys, install timestamp, DB version. Owned by the module that uses it (e.g. Auth owns its secret keys), never by the Settings module.
 _Avoid_: settings (for these), internal options
 
+### Receipts
+
+**Receipt Data**:
+The JSON payload a receipt template renders from: `order`, `store`, `cashier`, `customer`, `lines`, `fees`, `shipping`, `discounts`, `totals`, `tax`, `tax_summary`, `payments`, `refunds`, `fiscal`, `presentation_hints`. Built by a source (a live WooCommerce order, or the sample the template editor and gallery use), filtered through `woocommerce_pos_receipt_data`, then rendered identically on the server and offline in the app. Logic-less by ADR 0039: templates branch on data the payload carries.
+_Avoid_: receipt JSON, receipt context, template data
+
+**Receipt Section**:
+One named block of Receipt Data and the shape of its rows. Money keys come in triples (`total`, `total_incl`, `total_excl`) with the bare key filled from the store's tax display basis. Row shapes and the aggregate rules of `totals` (subtotals, item counts, net total after refunds, savings completeness) are declared once in the Receipt Sections module; a source supplies priced values, it never declares keys.
+_Avoid_: receipt block, payload part, builder output
+
 ### Sync
 
 **Collection Rule**:
