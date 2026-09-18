@@ -12,9 +12,8 @@ use WP_REST_Response;
 use WP_REST_Server;
 
 /**
- * Extension-style v2 settings replacement adding a route — the Pro pattern
- * (Pro replaces the v1 'settings' entry and adds a license route; its v2
- * twin must be carried through the v2 controllers filter).
+ * Extension-style v2 settings replacement adding a route.
+ * Extending the permanent V2 alias proves it resolves and the registry stamps subclasses v2.
  */
 class V2_Filtered_Settings_Test_Double extends \WCPOS\WooCommercePOS\API\V2\Settings {
 	/**

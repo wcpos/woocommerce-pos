@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\API\Controller_Registry;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Client_Signal;
 use WCPOS\WooCommercePOS\Services\Protocol_Gate;
@@ -29,19 +30,11 @@ class API {
 	public const ROUTE_NAMESPACES = array( 'wcpos/v1', 'wcpos/v2' );
 
 	/**
-	 * WCPOS REST API namespaces and endpoints.
+	 * Controller instances and route attribution.
 	 *
-	 * @var array
+	 * @var Controller_Registry
 	 */
-	protected $controllers = array();
-
-	/**
-	 * Map of route patterns to controller keys.
-	 * Built during register_routes() for use in rest_dispatch_request().
-	 *
-	 * @var array<string, string>
-	 */
-	protected $route_map = array();
+	protected Controller_Registry $registry;
 
 	/**
 	 * Route permission-gate classifier.
@@ -121,171 +114,11 @@ class API {
 		$route_namespaces       = $this->get_route_namespaces();
 		$this->route_classifier = new API\Route_Classifier( $route_namespaces );
 
-		/**
-		 * Filter the list of controller classes used in the WCPOS REST API.
-		 *
-		 * This filter allows customizing or extending the set of controller classes that handle
-		 * REST API routes for the WCPOS. By filtering these controllers, plugins can
-		 * modify existing endpoints or add new controllers for additional functionality.
-		 * Core legacy controllers use their versioned WCPOS\WooCommercePOS\API\V1 FQCNs.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @param array $controllers Associative array of controller identifiers to their corresponding class names.
-		 *                           - 'auth'                  => Fully qualified name of the class handling authentication.
-		 *                           - 'settings'              => Fully qualified name of the class handling settings.
-		 *                           - 'cashier'               => Fully qualified name of the class handling cashier management.
-		 *                           - 'products'              => Fully qualified name of the class handling products.
-		 *                           - 'product_variations'    => Fully qualified name of the class handling product variations.
-		 *                           - 'orders'                => Fully qualified name of the class handling orders.
-		 *                           - 'customers'             => Fully qualified name of the class handling customers.
-		 *                           - 'product_tags'          => Fully qualified name of the class handling product tags.
-		 *                           - 'product_categories'    => Fully qualified name of the class handling product categories.
-		 *                           - 'taxes'                 => Fully qualified name of the class handling taxes.
-		 *                           - 'shipping_methods'      => Fully qualified name of the class handling shipping methods.
-		 *                           - 'tax_classes'           => Fully qualified name of the class handling tax classes.
-		 *                           - 'order_statuses'        => Fully qualified name of the class handling order statuses.
-		 */
-		$classes = apply_filters(
-			'woocommerce_pos_rest_api_controllers',
-			array(
-				// WCPOS rest api controllers.
-				'auth'                  => API\V1\Auth::class,
-				'settings'              => API\V1\Settings::class,
-				'cashier'               => API\V1\Cashier::class,
-				'templates'             => API\V1\Templates_Controller::class,
-				'receipts'              => API\V1\Receipts_Controller::class,
-				'print_jobs'            => API\V1\Print_Jobs_Controller::class,
-
-				// TODO: remove this?
-				'stores'                => API\V1\Stores::class,
-				'extensions'            => API\V1\Extensions::class,
-				'logs'                  => API\V1\Logs::class,
-				'payment_gateways'      => API\V1\Payment_Gateways::class,
-				'gateway_bootstrap'     => API\V1\Gateway_Bootstrap_Controller::class,
-				'checkout'              => API\V1\Checkout_Controller::class,
-
-				// extend WC REST API controllers.
-				'products'              => API\V1\Products_Controller::class,
-				'product_variations'    => API\V1\Product_Variations_Controller::class,
-				'orders'                => API\V1\Orders_Controller::class,
-				'customers'             => API\V1\Customers_Controller::class,
-				'product_tags'          => API\V1\Product_Tags_Controller::class,
-				'product_categories'    => API\V1\Product_Categories_Controller::class,
-				'product_brands'        => API\V1\Product_Brands_Controller::class,
-				'coupons'               => API\V1\Coupons_Controller::class,
-				'taxes'                 => API\V1\Taxes_Controller::class,
-				'shipping_methods'      => API\V1\Shipping_Methods_Controller::class,
-				'tax_classes'           => API\V1\Tax_Classes_Controller::class,
-				'order_statuses'        => API\V1\Data_Order_Statuses_Controller::class,
-			)
-		);
-
-		/**
-		 * Filter the wcpos/v2 service pass-through controllers (additive to the
-		 * frozen v1 surface — the legacy data controllers stay v1-only).
-		 *
-		 * Extensions that replace a v1 service through
-		 * `woocommerce_pos_rest_api_controllers` must carry their service onto
-		 * the v2 surface here with their own pass-through subclass (override
-		 * `$namespace = 'wcpos/v2'`), exactly as core does — the v2 map is not
-		 * derived from the v1 map, so a v1 replacement alone leaves the v2
-		 * twin serving core behavior.
-		 *
-		 * @since 1.10.0
-		 *
-		 * @param array $controllers Associative array of v2 service controller class names.
-		 */
-		$v2_classes = apply_filters(
-			'woocommerce_pos_rest_api_v2_controllers',
-			array(
-				'ping'              => API\V2\Ping::class,
-				'echo_probe'        => API\V2\Echo_Probe::class,
-				'site'              => API\V2\Site::class,
-				'auth'              => API\V2\Auth::class,
-				'settings'          => API\V2\Settings::class,
-				'cashier'           => API\V2\Cashier::class,
-				'templates'         => API\V2\Templates_Controller::class,
-				'receipts'          => API\V2\Receipts_Controller::class,
-				'print_jobs'        => API\V2\Print_Jobs_Controller::class,
-				'stores'            => API\V2\Stores::class,
-				'extensions'        => API\V2\Extensions::class,
-				'logs'              => API\V2\Logs::class,
-				'payment_gateways'  => API\V2\Payment_Gateways::class,
-				'payment_methods'   => API\V2\Payment_Methods_Controller::class,
-				'payments'          => API\V2\Payments_Controller::class,
-				'registers'         => API\V2\Registers_Controller::class,
-				'sessions'          => API\V2\Sessions_Controller::class,
-				'closures'          => API\V2\Closures_Controller::class,
-				'records'           => API\V2\Records_Controller::class,
-				'gateway_bootstrap' => API\V2\Gateway_Bootstrap_Controller::class,
-				'checkout'          => API\V2\Checkout_Controller::class,
-				'order_email'       => API\V2\Order_Email_Controller::class,
-				'shipping_methods'  => API\V2\Shipping_Methods_Controller::class,
-				'tax_classes'       => API\V2\Tax_Classes_Controller::class,
-				'order_statuses'    => API\V2\Data_Order_Statuses_Controller::class,
-			)
-		);
-		foreach ( $v2_classes as $key => $class ) {
-			$classes[ 'v2-' . $key ] = $class;
-		}
-		$legacy_classifications = array(
-			'auth'       => array( 'public' => array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ) ),
-			'print_jobs' => array( 'printer_token' => array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ) ),
-			'receipts'   => array( 'permission_error_passthrough' => array( '/wcpos/v1/receipts/' ) ),
-		);
-
-		foreach ( $classes as $key => $class ) {
-			if ( class_exists( $class ) ) {
-				$this->controllers[ $key ] = new $class();
-				$this->controllers[ $key ]->register_routes();
-
-				if ( method_exists( $this->controllers[ $key ], 'wcpos_route_classifications' ) ) {
-					$this->route_classifier->merge( $this->controllers[ $key ]->wcpos_route_classifications() );
-				} elseif ( isset( $legacy_classifications[ $key ] ) ) {
-					$this->route_classifier->merge( $legacy_classifications[ $key ] );
-				}
-			}
-		}
+		$this->registry = new Controller_Registry();
+		$this->registry->register( $this->route_classifier );
 
 		// Sync classifications are independent of feature-gated route registration.
 		$this->route_classifier->merge( Sync\Api::route_classifications() );
-
-		// Build route map for use in rest_dispatch_request().
-		$rest_server = rest_get_server();
-
-		foreach ( $route_namespaces as $route_namespace ) {
-			$all_routes = $rest_server->get_routes( $route_namespace );
-
-			foreach ( $all_routes as $route_pattern => $route_handlers ) {
-				foreach ( $route_handlers as $route_handler ) {
-					$callback = $route_handler['callback'] ?? null;
-
-					// Extract the controller object from the callback.
-					$controller_obj = null;
-					if ( \is_array( $callback ) && isset( $callback[0] ) && \is_object( $callback[0] ) ) {
-						$controller_obj = $callback[0];
-					} elseif ( $callback instanceof \Closure ) {
-						// WC 10.5+ RestApiCache wraps callbacks in closures.
-						// Use reflection to extract the bound $this.
-						$ref            = new \ReflectionFunction( $callback );
-						$controller_obj = $ref->getClosureThis();
-					}
-
-					if ( ! $controller_obj ) {
-						continue;
-					}
-
-					// Find which controller key this object belongs to.
-					foreach ( $this->controllers as $key => $registered_controller ) {
-						if ( $controller_obj === $registered_controller ) {
-							$this->route_map[ $route_pattern ] = $key;
-							break;
-						}
-					}
-				}
-			}
-		}
 	}
 
 	/**
@@ -658,7 +491,8 @@ class API {
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
 		// Only process mapped WCPOS routes.
-		if ( ! isset( $this->route_map[ $route ] ) ) {
+		$controller = $this->registry->controller_for_route( $route );
+		if ( null === $controller ) {
 			return $dispatch_result;
 		}
 
@@ -679,10 +513,7 @@ class API {
 		@ini_set( 'precision', '10' );
 		@ini_set( 'serialize_precision', '10' );
 
-		$key        = $this->route_map[ $route ];
-		$controller = $this->controllers[ $key ] ?? null;
-
-		if ( $controller && method_exists( $controller, 'wcpos_dispatch_request' ) ) {
+		if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
 			return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
 		}
 
