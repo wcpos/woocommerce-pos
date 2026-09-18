@@ -17,30 +17,28 @@ use WP_Error;
  * Shapes a POS order document into the body forwarded to the STOCK wc/v3 orders
  * controller.
  *
- * The v2 write surface owns two halves: the generic write protocol (envelope,
- * replay, CAS, checkpoint) and the order-specific payload shaping that makes a
- * POS order document survive wc/v3's strict schema and its remove-and-reapply
- * line semantics. This class is the second half, extracted verbatim from
- * API\V2\Write_Controller so the protocol half stays legible; the shaping rules
- * themselves are unchanged. Client-date validation and tax-ID persistence are
- * shared with the v1 lane; the remaining shaping rules are not.
+ * V1 = API\V1\Orders_Controller; V2 = API\V2\Writers\Order_Writer.
+ * V1 shapes create_item/update_item through for_create/for_partial_update;
+ * V2 shapes prepare_create/prepare_order_update_after_read through for_create/for_update.
  *
- * Lane differences still to be reconciled (V1 = API\V1\Orders_Controller; V2 = API\V2\Writers\Order_Writer):
- * - Coupons: V1::calculate_coupons vs reconcile_order_coupon_lines: v1 skips empty codes; v2 forwards malformed lines for rejection; v2 reconciles updates only.
- * - Product identity: V1::get_product_id vs normalize_line_item_product_identity: v1 uses loose zero comparison; v2 requires numeric zero and supplies a misc SKU sentinel.
- * - Misc SKU: V1::maybe_set_item_meta_data vs normalize_line_item_product_identity: v1 uses isset and the stored product ID; v2 requires posted zero, a string SKU, and trims it.
- * - Any attributes: V1::maybe_set_item_meta_data vs recover_any_variation_attributes: v1 uses stored identity and updates by meta ID (default ''); v2 uses posted IDs (product default 0) and appends only missing keys.
- * - Variation dedupe: V1::prepare_line_items vs drop_unchanged_variation_line_identity: v1 prunes duplicate rows after preparation; v2 drops unchanged binding IDs before forwarding.
- * - Tombstones/omissions: V1 uses WC item deletion; v2 preserves explicit product_id null before identity dedupe and adds deletion markers for omitted items; v1 has no omission pass.
- * - Item UUIDs: V1 uses WC posted item IDs; reconcile_order_item_ids restores missing IDs from unique UUID matches on v2.
- * - Billing email: V1::wcpos_validate_billing_email/get_item_schema allow empty values; without_empty_billing_email drops ''/null on v2, whose writer explicitly clears '' on update.
- * - Display fields: V1::get_item_schema relaxes parent_name; sanitize_order_wc_payload drops null parent_name, image, and display meta fields on v2.
- * - Client date: V1 create filter reads raw JSON; V2::prepare_create reads the document; both now use validate_client_created_gmt (absent/null/empty means no override).
- * - Tax IDs: v1 coerces, v2 rejects incomplete entries; V1 refreshes its response after persist_tax_ids; V2::persist uses the same snapshot (absent snapshots on create only; [] clears).
- * - Audit: V1::wcpos_before_order_object_save/create_item/update_item vs V2 audit phases: v2 also handles reassignment, offline payment assertions, and unpaid provenance updates.
- * - Reserved stock: V1::save_object uses request params (absent values null); V2::forward_with_reserved_stock uses payload defaults (status/transaction '', paid false); both use around_paid_create.
- * - Write intent: both lanes declare through Services\Order_Write_Intent (v1 at create_item, v2 at Order_Writer::forward); v1 update and direct wc/v3 rely on the ad-hoc intent from the request.
- * - HPOS caps: V1 permission overrides retry broad edit/delete order caps; V2 Write_Controller::wcpos_check_permissions remaps read/create and ownership-sensitive edit/delete caps; no payload rule.
+ * Shared through this class (both lanes):
+ * - Product identity and misc SKU: V1 create_item/update_item shaping; V2 create/update shaping.
+ * - "Any" attribute recovery: V1 create_item/update_item shaping; V2 create/update shaping; posted keys win.
+ * - Unchanged identity dedupe: V1 update_item shaping; V2 update shaping skips set_product() for an unchanged binding (#1456 duplicate rows; catalog name/tax_class resets).
+ * - Item-UUID ID reconciliation: V1 update_item shaping; V2 update shaping restores uniquely matched IDs.
+ * - Stored identity for id-only update lines: both update shapes fill product/variation ids from the stored item before the rules above run.
+ * - Display-field and image drops: V1 create_item/update_item shaping; V2 create/update shaping.
+ * - Client date: V1 create_item filter and V2 prepare_create use validate_client_created_gmt.
+ * - Tax-ID persistence: V1 create_item/update_item response refresh and V2 persist use persist_tax_ids.
+ *
+ * Deliberately lane-specific (ruled 2026-09-18):
+ * - Empty coupon code: V1 calculate_coupons skips it so released 1.x clients do not strand orders; V2 forwards for WC's 400.
+ * - Omitted items: V1 retains WC partial-document semantics; V2 adds deletion markers; not all 1.x clients post full documents.
+ * - Incomplete tax IDs: V1 coerces, V2 rejects; parked until Paul's #1724 rework.
+ *
+ * v1's schema relaxations in get_item_schema() are the validation-time half of the
+ * same tolerance this class expresses at the forward seam. V1 updates retain an
+ * explicit empty billing email; V2 drops it here and its writer clears it explicitly.
  */
 final class Order_Write_Payload {
 	/**
@@ -51,7 +49,7 @@ final class Order_Write_Payload {
 	 * @return array The forwardable payload.
 	 */
 	public function for_create( array $payload ): array {
-		return $this->sanitize_order_wc_payload( $payload );
+		return $this->sanitize_order_wc_payload( $this->without_empty_billing_email( $payload ) );
 	}
 
 	/**
@@ -73,12 +71,95 @@ final class Order_Write_Payload {
 			$order = false;
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
+		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->remove_omitted_order_items( $order, $payload );
 		$payload = $this->reconcile_order_coupon_lines( $order, $payload );
+		$payload = $this->without_empty_billing_email( $payload );
 		$payload = $this->sanitize_order_wc_payload( $payload );
 		// Runs last: it reads the FORWARDED line shape, after normalize_line_item_product_identity
 		// has already resolved the posted sku (which outranks the ids in wc/v3's get_product_id).
-		return $this->drop_unchanged_variation_line_identity( $order, $payload );
+		return $this->drop_unchanged_line_identity( $order, $payload );
+	}
+
+	/**
+	 * Shape the v1 lane's partial update; see for_update for the full-document shape.
+	 *
+	 * The 2026-09-18 rulings omit omission markers and coupon reconciliation here.
+	 * Retain billing.email: '' so WooCommerce applies the deliberate clear directly.
+	 *
+	 * @param int   $order_id Resolved order ID.
+	 * @param array $payload  Partial update payload.
+	 * @return array The forwardable payload.
+	 */
+	public function for_partial_update( int $order_id, array $payload ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Abstract_Order ) {
+			$order = false;
+		}
+		$payload = $this->reconcile_order_item_ids( $order, $payload );
+		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
+		$payload = $this->sanitize_order_wc_payload( $payload );
+		// Runs last for the same load-bearing reason as for_update: inspect the forwarded identity.
+		return $this->drop_unchanged_line_identity( $order, $payload );
+	}
+
+	/**
+	 * Fill an update line's product identity from the stored item it names.
+	 *
+	 * A line posted by `id` without `product_id` and/or `variation_id` is a
+	 * partial-document edit of a stored line. The identity rules below read the
+	 * POSTED identity (the "any" recovery needs BOTH the parent and the variation;
+	 * the misc-sku rule needs to tell a misc line from a catalog one), so without it
+	 * a display-only attribute choice or a retyped misc sku was silently dropped —
+	 * the deleted v1 override read the stored item instead. Each ABSENT key is
+	 * filled on its own, but only while every POSTED key still matches the stored
+	 * binding: a posted id that differs is a re-bind (say, a variation line moved to
+	 * a simple product by posting the new product_id alone), and wc/v3 ranks a
+	 * variation id above a product id, so handing that line its old variation_id
+	 * would silently keep the old binding. A posted `product_id: null` is wc/v3's
+	 * remove-this-line marker, which leaves the whole line alone.
+	 * drop_unchanged_line_identity removes the filled identity again when it matches
+	 * the stored binding, so an id-only edit forwards id-only, as it always did.
+	 *
+	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id does not resolve.
+	 * @param array                    $payload Update payload with ids reconciled.
+	 * @return array Payload whose id-only product lines carry their stored identity.
+	 */
+	private function hydrate_line_identity_from_stored( $order, array $payload ): array {
+		if ( ! $order || ! isset( $payload['line_items'] ) || ! is_array( $payload['line_items'] ) ) {
+			return $payload;
+		}
+		foreach ( $payload['line_items'] as $i => $line ) {
+			if ( ! is_array( $line ) || empty( $line['id'] ) || ! is_numeric( $line['id'] ) ) {
+				continue;
+			}
+			if ( array_key_exists( 'product_id', $line ) && null === $line['product_id'] ) {
+				continue;
+			}
+			$needs_product   = ! array_key_exists( 'product_id', $line );
+			$needs_variation = ! array_key_exists( 'variation_id', $line );
+			if ( ! $needs_product && ! $needs_variation ) {
+				continue;
+			}
+			$item = $order->get_item( (int) $line['id'] );
+			if ( ! $item instanceof WC_Order_Item_Product ) {
+				continue;
+			}
+			// A posted key that differs from the stored binding is a re-bind: forward as posted.
+			if ( ! $needs_product && ( ! is_numeric( $line['product_id'] ) || (int) $line['product_id'] !== $item->get_product_id() ) ) {
+				continue;
+			}
+			if ( ! $needs_variation && ( ! is_numeric( $line['variation_id'] ) || (int) $line['variation_id'] !== $item->get_variation_id() ) ) {
+				continue;
+			}
+			if ( $needs_product ) {
+				$payload['line_items'][ $i ]['product_id'] = $item->get_product_id();
+			}
+			if ( $needs_variation ) {
+				$payload['line_items'][ $i ]['variation_id'] = $item->get_variation_id();
+			}
+		}
+		return $payload;
 	}
 
 	/**
@@ -142,17 +223,18 @@ final class Order_Write_Payload {
 	 * The v1 surface relaxed the wc/v3 order schema for POS realities (walk-in
 	 * sales have no email; client line items carry a nullable parent_name that
 	 * WC recomputes anyway) by editing the POS controller's schema — see
-	 * V1\Orders_Controller::wcpos_get_item_schema(). The v2 write surface
+	 * V1\Orders_Controller::get_item_schema(). The v2 write surface
 	 * forwards to the STOCK wc/v3 controller, whose strict schema turns those
 	 * POS-legit values into rest_invalid_param 400s (a rejected CREATE then
 	 * strands the record client-side: every later update 404s). Express the same
 	 * tolerance by dropping the values WC would reject:
-	 * - billing.email '' / null → dropped (absent means "no email"; '' fails the format check)
 	 * - line_items[n].parent_name null → dropped (schema wants string; the server recomputes it)
 	 * - meta_data display fields → dropped (WC derives them and ignores them on write)
 	 * - line_items[].image → dropped (server-derived display data; acks serialize
 	 *   image.id as '' for imageless products, which wc/v3's integer schema rejects
 	 *   when a client re-pushes its full document)
+	 * The billing-email drop is not here: for_create and for_update apply it, the
+	 * partial-update shape keeps '' so WooCommerce applies the deliberate clear.
 	 *
 	 * @param array $payload Order payload about to be forwarded to wc/v3.
 	 *
@@ -160,7 +242,6 @@ final class Order_Write_Payload {
 	 */
 	private function sanitize_order_wc_payload( array $payload ): array {
 		$payload = $this->recover_any_variation_attributes( $payload );
-		$payload = $this->without_empty_billing_email( $payload );
 		if ( isset( $payload['line_items'] ) && is_array( $payload['line_items'] ) ) {
 			foreach ( $payload['line_items'] as $i => $line ) {
 				if ( is_array( $line ) && array_key_exists( 'parent_name', $line ) && null === $line['parent_name'] ) {
@@ -406,13 +487,17 @@ final class Order_Write_Payload {
 	}
 
 	/**
-	 * Drop the redundant product identity from update lines whose variation binding
-	 * is unchanged — the v2 port of V1\Orders_Controller::prepare_line_items' dedupe.
+	 * Drop the redundant product identity from update lines whose product binding
+	 * is unchanged — the port of V1\Orders_Controller::prepare_line_items' dedupe.
 	 *
 	 * Stock `WC_REST_Orders_V2_Controller::prepare_line_items` compares products by
 	 * OBJECT identity (`$product !== $item->get_product()`), which is always true, so
-	 * every posted line re-runs `WC_Order_Item_Product::set_product()`. For a variation
-	 * that calls `set_variation()` → `add_meta_data( 'pa_size', …, true )`, which NULLs
+	 * every posted line re-runs `WC_Order_Item_Product::set_product()`. For EVERY
+	 * product that copies the catalog's current `name` and `tax_class` onto the stored
+	 * item, so an id-only quantity edit of a renamed line would silently reset the
+	 * name the merchant sees on the order (posted `name`/`tax_class` are re-applied
+	 * afterwards, but an id-only edit posts neither). For a variation it further
+	 * calls `set_variation()` → `add_meta_data( 'pa_size', …, true )`, which NULLs
 	 * the stored attribute row (marking it for deletion) and appends a fresh, id-less
 	 * copy. `maybe_set_item_meta_data()` then runs `update_meta_data( 'pa_size', …, <id> )`
 	 * for the posted meta entry, which finds the nulled row BY ID and restores its value —
@@ -420,20 +505,23 @@ final class Order_Write_Payload {
 	 * full-document re-push of an acknowledged variation order grows one duplicate
 	 * `pa_*` meta row per push (#1456).
 	 *
-	 * v1 fixed this after the fact by pruning the duplicates. At the v2 forward seam the
+	 * v1 previously pruned duplicates after the fact. At the shared payload seam the
 	 * cause is cheaper to remove: when the posted line already resolves to the SAME
-	 * variation the stored item is bound to, the product binding is a no-op, so drop
-	 * `product_id`/`variation_id` from the forwarded line. `get_product_id()` then returns
-	 * 0 on update, `wc_get_product( 0 )` is false and the whole `set_product()` branch is
-	 * skipped — the stored attribute rows are updated in place, ids and all, so the
-	 * acknowledgement is byte-stable across re-pushes. Lines that genuinely re-bind to a
-	 * different variation still forward their identity and take WC's normal path.
+	 * product and variation the stored item is bound to, the product binding is a
+	 * no-op, so drop `product_id`/`variation_id` from the forwarded line.
+	 * `get_product_id()` then returns 0 on update, `wc_get_product( 0 )` is false and
+	 * the whole `set_product()` branch is skipped — the stored name, tax class and
+	 * attribute rows are updated in place, ids and all, so the acknowledgement is
+	 * byte-stable across re-pushes. Lines that genuinely re-bind to a different
+	 * product or variation still forward their identity and take WC's normal path.
+	 * A simple line's binding is (product_id, 0); a hydrated id-only line always
+	 * carries both keys, so it always qualifies.
 	 *
 	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id does not resolve.
 	 * @param array                    $payload Reconciled update payload.
-	 * @return array Payload with no-op variation identity removed from unchanged lines.
+	 * @return array Payload with no-op product identity removed from unchanged lines.
 	 */
-	private function drop_unchanged_variation_line_identity( $order, array $payload ): array {
+	private function drop_unchanged_line_identity( $order, array $payload ): array {
 		if ( ! isset( $payload['line_items'] ) || ! is_array( $payload['line_items'] ) ) {
 			return $payload;
 		}
@@ -445,7 +533,7 @@ final class Order_Write_Payload {
 				continue;
 			}
 			$item = $order->get_item( (int) $line['id'] );
-			if ( ! $item instanceof WC_Order_Item_Product || $item->get_variation_id() <= 0 ) {
+			if ( ! $item instanceof WC_Order_Item_Product ) {
 				continue;
 			}
 			// A posted sku wins over the ids in wc/v3's get_product_id(), so a line

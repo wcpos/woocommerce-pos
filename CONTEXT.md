@@ -42,6 +42,10 @@ _Avoid_: query filter, orderby mapping, proxy mirror
 One of the two paths a collection read reaches the client by — the direct lane (`wcpos/v1` controllers, plus the flat `wcpos/v2` routes with no `wc/v3` proxy backing, e.g. `/variations`) and the proxy lane (`wcpos/v2` → `wc/v3`). Behaviour that exists on one lane only is a parity bug, not a design. (Code comments also say "lane" for the request shapes *within* one route — include lane, discovery lane; that narrower sense is not this term.)
 _Avoid_: v1/v2 API, endpoint version
 
+**Write Payload shape**:
+The one pass an order document takes through the Order Write Payload module before WooCommerce sees it, named by what an absent line means. The _full-document_ shape (`for_update`, the `wcpos/v2` push lane) treats the document as the whole order: an omitted stored line is deleted and coupon lines are reconciled. The _partial-document_ shape (`for_partial_update`, the `wcpos/v1` lane) keeps WooCommerce's own semantics: an absent line is untouched and coupon lines pass through to the controller. Both shapes share every other rule; a rule that exists in one shape only is a ruling (recorded on the module), not a drift.
+_Avoid_: v1 sanitizer, v2 forward rules, payload filter
+
 **Replica policy**:
 What a collection's client-side copy aims to hold: `complete` (a full replica, e.g. products,
 variations) or `windowed` (a bounded recent window of an unbounded set, e.g. orders).
