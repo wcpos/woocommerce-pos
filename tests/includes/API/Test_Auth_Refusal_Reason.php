@@ -122,7 +122,7 @@ class Test_Auth_Refusal_Reason extends WCPOS_REST_Unit_Test_Case {
 			'POS request refused: woocommerce_pos_auth_session_revoked — Session has been revoked',
 			$this->rows[0]['message']
 		);
-		$this->assertStringContainsString( '[route] => /wcpos/v1/orders', $this->rows[0]['message'] );
+		$this->assertStringContainsString( '[route] => /wcpos/v2/push/orders', $this->rows[0]['message'] );
 		$this->assertStringContainsString( '[method] => POST', $this->rows[0]['message'] );
 		$this->assertStringContainsString( '[reason] => woocommerce_pos_auth_session_revoked', $this->rows[0]['message'] );
 		$this->assertStringNotContainsString( $tokens['access_token'], $this->rows[0]['message'] );
@@ -154,6 +154,6 @@ class Test_Auth_Refusal_Reason extends WCPOS_REST_Unit_Test_Case {
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		wp_get_current_user();
 
-		return $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v1/orders' ) );
+		return $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/push/orders' ) );
 	}
 }
