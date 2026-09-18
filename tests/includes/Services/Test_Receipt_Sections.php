@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Sections;
 use WP_UnitTestCase;
 
@@ -277,25 +278,18 @@ class Test_Receipt_Sections extends WP_UnitTestCase {
 
 	/** Real variations resolve taxonomy terms and custom attributes, skipping blanks. */
 	public function test_variation_attribute_pairs_resolve_taxonomy_and_custom_values(): void {
-		$attribute_id = wc_create_attribute(
-			array(
-				'name' => 'Receipt color',
-				'slug' => 'receipt_color',
-				'type' => 'select',
-			)
-		);
-		register_taxonomy( 'pa_receipt_color', 'product', array( 'label' => 'Receipt color' ) );
-		$term = wp_insert_term( 'Ocean Blue', 'pa_receipt_color', array( 'slug' => 'ocean-blue' ) );
-		$parent = new \WC_Product_Variable();
+		$attribute = ProductHelper::create_attribute( 'Receipt color', array( 'Ocean Blue' ) );
+		$taxonomy  = $attribute['attribute_taxonomy'];
+		$parent    = new \WC_Product_Variable();
 		$parent->set_name( 'Variable widget' );
 		$parent->save();
 		$variation = new \WC_Product_Variation();
 		$variation->set_parent_id( $parent->get_id() );
 		$variation->set_attributes(
 			array(
-				'pa_receipt_color' => 'ocean-blue',
-				'size' => 'Large',
-				'empty' => '',
+				$taxonomy => 'ocean-blue',
+				'size'    => 'Large',
+				'empty'   => '',
 			)
 		);
 		$variation->save();
@@ -303,11 +297,11 @@ class Test_Receipt_Sections extends WP_UnitTestCase {
 			$this->assertSame(
 				array(
 					array(
-						'key' => 'Receipt color',
+						'key'   => 'Receipt color',
 						'value' => 'Ocean Blue',
 					),
 					array(
-						'key' => 'size',
+						'key'   => 'size',
 						'value' => 'Large',
 					),
 				),
@@ -316,11 +310,6 @@ class Test_Receipt_Sections extends WP_UnitTestCase {
 		} finally {
 			$variation->delete( true );
 			$parent->delete( true );
-			wp_delete_term( $term['term_id'], 'pa_receipt_color' );
-			if ( taxonomy_exists( 'pa_receipt_color' ) ) {
-				unregister_taxonomy( 'pa_receipt_color' );
-			}
-			wc_delete_attribute( (int) $attribute_id );
 		}
 	}
 }
