@@ -122,9 +122,12 @@ class Test_Auth_Refusal_Reason extends WCPOS_REST_Unit_Test_Case {
 			'POS request refused: woocommerce_pos_auth_session_revoked — Session has been revoked',
 			$this->rows[0]['message']
 		);
-		$this->assertStringContainsString( '[route] => /wcpos/v2/push/orders', $this->rows[0]['message'] );
-		$this->assertStringContainsString( '[method] => POST', $this->rows[0]['message'] );
-		$this->assertStringContainsString( '[reason] => woocommerce_pos_auth_session_revoked', $this->rows[0]['message'] );
+		// How the Logger encodes its context is the Logger's own concern, and it is
+		// not the same on both trunks: print_r here, one-line JSON on next so the
+		// log reader can parse a row per line. Assert the values reached the row.
+		$this->assertStringContainsString( '/wcpos/v2/push/orders', $this->rows[0]['message'] );
+		$this->assertStringContainsString( 'POST', $this->rows[0]['message'] );
+		$this->assertStringContainsString( 'woocommerce_pos_auth_session_revoked', $this->rows[0]['message'] );
 		$this->assertStringNotContainsString( $tokens['access_token'], $this->rows[0]['message'] );
 	}
 
