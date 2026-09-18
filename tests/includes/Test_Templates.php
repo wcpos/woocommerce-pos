@@ -23,13 +23,33 @@ use WP_UnitTestCase;
  * Class Test_Templates
  */
 class Test_Templates extends WP_UnitTestCase {
+	/** Reports have a usable virtual default and two installable formats. */
+	public function test_report_default_gallery_and_activation(): void {
+		$template = Templates::get_active_template( 'report' );
+		$this->assertTrue( $template['is_virtual'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/report-default.html' ), $template['content'] );
+		$gallery = Templates::get_gallery_templates( 'report' );
+		$this->assertSame( array( 'report-default', 'thermal-report-80mm' ), array_column( $gallery, 'key' ) );
+		foreach ( $gallery as $entry ) {
+			$id = Templates::install_gallery_template( $entry['key'] );
+			$this->assertIsInt( $id );
+			Templates::set_active_template_id( $id, 'report' );
+			$this->assertSame( $id, Templates::get_active_template( 'report' )['id'] );
+		}
+	}
+
 	/** Closure defaults are filesystem templates, never editable posts. */
 	public function test_closure_supported_virtual_default(): void {
 		$this->assertContains( 'closure', Templates::SUPPORTED_TYPES );
 		$template = Templates::get_virtual_template( 'plugin-core', 'closure' );
 		$this->assertTrue( $template['is_virtual'] );
 		$this->assertSame( 'closure', $template['type'] );
-		$this->assertStringEndsWith( '/templates/closure.php', $template['file_path'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( 'html', $template['language'] );
+		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/closure-default.html' ), $template['content'] );
+		$this->assertSame( array( 'closure-default', 'thermal-closure-80mm' ), array_column( Templates::get_gallery_templates( 'closure' ), 'key' ) );
+		$this->assertStringEndsWith( '/templates/gallery/closure-default.html', $template['file_path'] );
 		$this->assertContains( 'plugin-core', array_column( Templates::detect_filesystem_templates( 'closure' ), 'id' ) );
 		$this->assertFalse( is_numeric( $template['id'] ) );
 	}

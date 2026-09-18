@@ -54,7 +54,7 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 
 = 📋 REQUIREMENTS =
 * WordPress >= 5.6
-* WooCommerce >= 5.3
+* WooCommerce >= 9.0
 * PHP >= 7.4
 
 == Installation ==
@@ -127,6 +127,57 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.17 - 2026/09/17 =
+
+- **A till no longer gets stuck at login on "Something went wrong: useStoreSession must be called within an active store session".** A damaged range in the till's local database made the login write fail and left the cashier on a red banner. The write is now repaired and retried, and if the saved session still cannot be honoured the till returns to the store list with a message instead of the banner. If the site has to be added again, it opens a fresh local database and does not pick up sales still waiting to sync in the old one. Web merchants receive the storage repair through WooCommerce POS plugin 1.10.17, which serves the storage worker; desktop and phone apps carry it in this release.
+- **A newly connected till no longer misses a stock change made in its first minute.** A product set out of stock on the server shortly after a new device, login or reset stayed "in stock" on the till indefinitely. The till now records the server's position before the first browse, so the change arrives with the next sync.
+- **A variation whose stock is managed at product level shows the right stock in the variation picker.** When the parent product sold out, the picker's badge and Add to Cart button kept saying "in stock" for up to five minutes. They now read the parent's stock, the same way the cart does.
+- **Switching stores no longer carries the previous store into the first requests of the new one.** Requests made while a switch was still completing used the outgoing store, so the first products or barcodes could belong to it until the next sync. Pro multi-store only.
+- **Health > Logs records a screen error the app catches** as "Part of the screen failed to load", and reports it when you have allowed error reporting.
+
+= 1.10.16 - 2026/09/16 =
+
+- **Cashiers can sell an out-of-stock variation again when "Avoid overselling" is off.** The variation picker's Add to Cart button disabled on stock alone and ignored the store setting, so an out-of-stock simple product could be sold but an out-of-stock variation could not. The button now follows the same rule as the cart: it disables only while the setting is on and the variation is unsellable.
+- **An idle web POS no longer sits at 30% CPU after the cashier stops.** Local database cleanup compacted storage fifty records at a time and rewrote every index between batches, so a till with a large backlog of deleted records churned for minutes. Cleanup now compacts in one batch and rewrites the indexes once. The web app loads its storage worker from this plugin, so web merchants receive this fix through this update.
+- **Health > Database no longer shows "checking…" forever on a server that reports high load.** A host that stamps every response as under high load while answering in a tenth of a second kept the till backed off, and the backed-off checks always started with the same three record types, so the other six never got a turn. Checks now rotate fairly, all record types are probed on each backed-off tick, and a "high load" header on a fast reply no longer counts against the server.
+- **Health > Performance says what pace the till is keeping with the server, and why.** One line at the top of "Your server, over time" reads Normal pace, Easing off (with the factor and the reason), or Paused until a given time.
+- **Tills stop showing products the store has hidden from the POS.** Between 1.10.1 and 1.10.14 the POS product search could return a hidden product (fixed in 1.10.15), and a till that searched during that window kept a copy. Upgrading now writes a fresh removal notice for every hidden product and variation, and every till drops its stale copies on its next ordinary sync, with no reset or manual sync needed.
+- **The POS Only and Online Only counts above the WooCommerce products list are accurate.** They counted trashed and auto-draft products that the view never lists; they now count the same statuses as WordPress's own "All" view.
+- **The server no longer reports high load from a guessed CPU count.** On hosts that hide `/proc/cpuinfo`, the load average was divided by one CPU, so any load above 1.8 read as "high" forever and every till slowed its sync. When the CPU count is unknown, no load is reported.
+- **The connection check can no longer be served from a page cache.** The public ping was answered before the cache-control headers were set, so a cached "ok" could mask an outage for the cache's lifetime. It now sends the same no-store headers as every other POS response.
+
+= 1.10.15 - 2026/09/15 =
+
+- **Tills no longer grow to gigabytes of memory over a long shift.** The product search index was keeping up to a hundred complete copies of itself in memory as it updated. Measured on a test store, memory after cleanup grew from 46 MB to 404 MB in an hour before the fix and from 47 MB to 160 MB after it; this is what took one merchant's till to 3.2 GB over an eleven-hour shift.
+- **The Logs screen no longer freezes the app.**
+- **Product search finds a product however you order the words.** Searching "blue shirt" and "shirt blue" now return the same results.
+- **Start-up repair of a damaged local database is safer.** Oversized internal change logs are now bounded and recovered without unbounded reads, and the app no longer rewrites bookkeeping records that have not changed. The web app loads its storage worker from this plugin, so web merchants receive this fix through this update rather than through the app bundle.
+- **A sync refresh that returns the same record twice is rejected** instead of being applied against an incomplete snapshot, which could previously prune records that were still present on the server.
+- **Product search shows every match again.** When a search matched more products than fit on the first page, the Products page stopped at that page and scrolling to the end loaded nothing more.
+- **The product search index repairs itself again.** When the app detected that the index had drifted from the product data, the rebuild silently did nothing, so stale or missing search results stayed that way until the app was reinstalled.
+
+= 1.10.14 - 2026/09/14 =
+
+- **Product search matches what you type as one phrase, in the order you typed it.** Searching for two words no longer also returns products with those words reversed, separated, or split between the title and the SKU. Partial and exact SKU and barcode matches work as before, and one- and two-character searches now match anywhere in a word.
+- **The receipt template dropdown now lists templates in the order you set them**, for global templates and Pro per-store templates alike.
+- **Switching the app language repeatedly no longer holds every previous product search index in memory.**
+- **The WCPOS REST API index no longer errors when a client asks it for route help.** Only developers and integrations reading the API index were affected.
+
+= 1.10.13 - 2026/09/13 =
+
+- **Web: start-up repair of a damaged local database now applies each pending change to the row it belongs to**, rather than to that row's position, and refuses a stale change for a row already holding a newer entry. The desktop and mobile apps received this in 1.10.12; the web app loads its storage worker from this plugin, which still carried the previous copy.
+
+= 1.10.12 - 2026/09/13 =
+
+- **Cloud print and template reprints: a heading asked to be double-wide printed double-high.** The size command carried width and height the wrong way round. Square sizes are unaffected, which is why it went unseen for so long.
+- **Cloud print: centred headings no longer overrun the paper.** Padding on a scaled heading was counted in characters rather than printed columns, so a centred double-width title was pushed right and wrapped onto a second line.
+- **A product or order carrying an enormous meta value no longer takes down the request.** One store was losing about 22 requests an hour to a single record whose meta value serialised to roughly 1.25 GB. The value is now withheld rather than re-encoded, so the record loads instead of the till retrying it all day.
+- **Star printers: centred headings print centred, and the time prints correctly.** Centring padding was emitted as spaces inside a magnified run, so each pad space was as wide as each glyph and a centred double-width heading wrapped. The narrow space in a short time no longer prints as a question mark.
+- **Switching stores no longer tells the cashier to sign in again for the store they just opened.** A sign-in retry still in flight from the previous store could raise the message against the new one.
+- **A store whose session has expired no longer records an error every minute.** The same failure was reported on every check because it was filed under a name the de-duplication never matched.
+- **Start-up repair of a damaged local database matches each pending change to the row it belongs to**, rather than to that row's position, and refuses a stale change for a row already holding a newer entry.
+- **Creating a virtual printer no longer fails intermittently with a certificate error.**
 
 = 1.10.11 - 2026/09/11 =
 

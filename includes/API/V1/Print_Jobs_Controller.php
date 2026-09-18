@@ -8,14 +8,12 @@
 namespace WCPOS\WooCommercePOS\API\V1;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
-use WCPOS\WooCommercePOS\Services\Cloud_Print_Media_Types;
-use WCPOS\WooCommercePOS\Services\Cloud_Print_Poll_Request;
+use WCPOS\WooCommercePOS\Interfaces\Push_Provider_Adapter_Interface;
+use WCPOS\WooCommercePOS\Services\Print_Job_Lifecycle;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
-use WCPOS\WooCommercePOS\Services\Print_Format_Resolver;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Star_Online_Client;
@@ -32,17 +30,11 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
  */
 class Print_Jobs_Controller extends WP_REST_Controller {
 	/**
-	 * Milliseconds an Epson Server Direct Print printer waits for the local
-	 * print device to become printable before it gives up and reports
-	 * EX_TIMEOUT.
+	 * Legacy Epson timeout.
 	 *
-	 * Epson allows 5000–300000. The previous 10000 (near the floor) was
-	 * unforgiving for printers that briefly go not-ready — a paper change, a
-	 * sleep/wake, or a momentary network blip — declaring the job failed
-	 * before the printer could recover. 60000 gives those transient states
-	 * room to clear without letting a genuinely offline printer hang for long.
+	 * @deprecated Use Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS.
 	 */
-	const EPSON_SDP_PRINT_TIMEOUT_MS = 60000;
+	const EPSON_SDP_PRINT_TIMEOUT_MS = \WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS;
 
 	/**
 	 * Endpoint namespace.
@@ -782,21 +774,20 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			}
 			$printer = $this->registry->get_printer( (string) $source['printer_id'] );
 			if ( null !== $printer ) {
-				// Refresh both halves of the pairing together. A legacy job can
-				// carry a media type from before the provider declared its own,
+				// Provider::format() refreshes both halves together. A legacy job
+				// can carry a media type from before the provider declared its own,
 				// but content_type and pn_kind must keep agreeing: reprinting a
-				// raw (escpos) PrintNode job through the printer-only resolver
+				// raw (escpos) PrintNode job through printer_content_type()
 				// relabels it application/pdf in the queue view, even though
 				// submit still sends raw bytes off the stored pn_kind.
-				$resolver = new Print_Format_Resolver();
-				$fmt = null === $template ? array( 'kind' => '' ) : $resolver->resolve( $printer, $template );
+				$fmt = null === $template ? array( 'kind' => '' ) : Provider::format( $printer, $template );
 				if ( '' === (string) $fmt['kind'] ) {
 					// No loadable template, or one this printer can no longer
 					// render. Refresh from the provider's declared type only
 					// when no stored kind can contradict it; otherwise the
 					// source pairing is the best answer left.
 					if ( '' === $pn_kind ) {
-						$content_type = $resolver->content_type_for_printer( $printer );
+						$content_type = Provider::printer_content_type( $printer );
 					}
 				} else {
 					$content_type = $fmt['content_type'];
@@ -863,201 +854,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function cloudprnt( $request ) {
-		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
-		$this->registry->record_seen( $printer_id );
-		$this->jobs->release_stale_claims( $printer_id );
-
-		if ( 'POST' === $request->get_method() ) {
-			return $this->cloudprnt_poll( $request, $printer_id );
-		}
-
-		$job = $this->get_cloud_job_for_request( $request, $printer_id );
-		if ( is_wp_error( $job ) ) {
-			return $job;
-		}
-
-		if ( 'DELETE' === $request->get_method() ) {
-			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
-			$status = '' === $code || '000' === $code || 1 === preg_match( '/^2\d{2,3}(?:\s|$)/', $code ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
-			$this->jobs->record_printer_result( (int) $job['id'], Print_Job_Service::STATUS_PRINTED === $status );
-
-			if ( Print_Job_Service::STATUS_FAILED === $status ) {
-				$this->log_printer_failure( $request, $printer_id, $code, (int) $job['id'] );
-			}
-
-			return rest_ensure_response( array( 'ok' => true ) );
-		}
-
-		return $this->cloudprnt_fetch( $request, $printer_id, $job );
-	}
-
-	/**
-	 * Answer a CloudPRNT poll: offer a job, and ask what the printer can decode.
-	 *
-	 * The poll body is the printer's half of the conversation. `printingInProgress`
-	 * says a job is still on the paper, and the spec is explicit that the server
-	 * must not offer another one until it clears — doing so risks the printer
-	 * dropping the second job. `clientAction` carries the printer's answers to
-	 * questions asked in an earlier poll response, which is the only way the
-	 * protocol exposes what formats the hardware can decode.
-	 *
-	 * @param WP_REST_Request $request    Request.
-	 * @param string          $printer_id Printer ID.
-	 *
-	 * @return \WP_REST_Response
-	 */
-	private function cloudprnt_poll( WP_REST_Request $request, string $printer_id ) {
-		$poll = Cloud_Print_Poll_Request::from_body( (string) $request->get_body(), $request->get_json_params() );
-		$this->registry->record_capabilities( $printer_id, $poll->answers(), $poll->status_code() );
-
-		$response = array( 'jobReady' => false );
-
-		if ( ! $poll->printing_in_progress() && ! $this->jobs->find_active_claim( $printer_id ) ) {
-			$job = $this->jobs->next_pending( $printer_id );
-			if ( null !== $job ) {
-				// The offer is a list: the printer picks its preferred decodable
-				// entry and names it in the fetch's `?type`. Nothing decodable in
-				// the list means no GET at all, just a 510 confirmation — so the
-				// list is filtered by what this printer said it can decode.
-				// `mediaType` (singular) is kept for older firmware.
-				$media_types = $this->media_types_for_job( $job, $printer_id );
-				$response    = array(
-					'jobReady'   => true,
-					'jobToken'   => (string) $job['id'],
-					'mediaType'  => $media_types[0],
-					'mediaTypes' => array_values( $media_types ),
-				);
-			}
-		}
-
-		if ( $this->registry->should_request_capabilities( $printer_id ) ) {
-			$response['clientAction'] = array(
-				array( 'request' => 'ClientType' ),
-				array( 'request' => 'Encodings' ),
-			);
-			$this->registry->record_capability_request( $printer_id );
-		}
-
-		return rest_ensure_response( $response );
-	}
-
-	/**
-	 * Serve a CloudPRNT job in the media type the printer asked for.
-	 *
-	 * @param WP_REST_Request $request    Request.
-	 * @param string          $printer_id Printer ID.
-	 * @param array           $job        Job array.
-	 *
-	 * @return \WP_REST_Response|WP_Error
-	 */
-	private function cloudprnt_fetch( WP_REST_Request $request, string $printer_id, array $job ) {
-		// The fetch GET names the printer's chosen media type. A type the server
-		// cannot produce is answered with 415 (per the CloudPRNT spec) and the job
-		// is left unclaimed. What is servable is deliberately wider than what the
-		// poll advertised: the printer naming a type is a stronger signal than our
-		// cached capability answer, so a capability update landing between the two
-		// requests must not reject a format we had just offered. Firmware that
-		// omits the parameter gets our best offer for this printer instead. The
-		// logged value is length-capped: printers poll every few seconds, so a
-		// wedged loop must not flood the log with unbounded input.
-		$servable  = ( new Cloud_Print_Media_Types() )->servable_for_job( $job, $this->registry->get_printer( $printer_id ) );
-		$requested = sanitize_text_field( (string) $request->get_param( 'type' ) );
-		$chosen    = '' === $requested
-			? $this->media_types_for_job( $job, $printer_id )[0]
-			: Cloud_Print_Media_Types::match( $requested, $servable );
-
-		if ( '' === $chosen ) {
-			Logger::warning(
-				sprintf(
-					'%s: printer "%s" requested media type "%s" for print job %d, which the server can only serve as %s.',
-					$request->get_route(),
-					$printer_id,
-					substr( $requested, 0, 100 ),
-					(int) $job['id'],
-					implode( ', ', $servable )
-				)
-			);
-
-			return new WP_Error(
-				'wcpos_print_job_incompatible_media_type',
-				__( 'The print job is not available in the requested media type.', 'woocommerce-pos' ),
-				array( 'status' => 415 )
-			);
-		}
-
-		if ( ! $this->jobs->try_claim( (int) $job['id'] ) ) {
-			return rest_ensure_response( array( 'jobReady' => false ) );
-		}
-
-		$render = $this->jobs->render_job( $job, $chosen );
-		if ( '' === $render['body'] ) {
-			Logger::error(
-				sprintf(
-					'%s: print job %d rendered an empty payload for printer "%s".',
-					$request->get_route(),
-					(int) $job['id'],
-					$printer_id
-				)
-			);
-		}
-
-		return $this->serve_raw( $render['body'], $chosen, self::control_headers( $chosen, $render ) );
-	}
-
-	/**
-	 * The media types a CloudPRNT job can be served in, best first.
-	 *
-	 * @param array  $job        Job array.
-	 * @param string $printer_id Printer ID.
-	 *
-	 * @return array<int, string>
-	 */
-	private function media_types_for_job( array $job, string $printer_id ): array {
-		$capabilities = $this->registry->get_capabilities( $printer_id );
-
-		return ( new Cloud_Print_Media_Types() )->for_job(
-			$job,
-			$this->registry->get_printer( $printer_id ),
-			$capabilities['encodings']
-		);
-	}
-
-	/**
-	 * Peripheral-control headers for a job served in a command-free format.
-	 *
-	 * `text/plain` and images carry no cut or drawer commands, so CloudPRNT reads
-	 * them off the fetch response instead. Command formats express both in-band
-	 * and must not also be told to cut, or the receipt cuts twice.
-	 *
-	 * Both headers are always sent, `none` included. Omitting them leaves the
-	 * decision to the printer's own defaults, which cut plain-text jobs — so a
-	 * template that deliberately does not cut would cut anyway, and would behave
-	 * differently in text than in StarPRNT. Saying `none` out loud keeps the two
-	 * formats rendering the same receipt.
-	 *
-	 * @param string $media_type The media type being served.
-	 * @param array  $render     Render result from Print_Job_Service::render_job().
-	 *
-	 * @return array<string, string>
-	 */
-	private static function control_headers( string $media_type, array $render ): array {
-		if ( ! Cloud_Print_Media_Types::is_header_controlled( $media_type ) ) {
-			return array();
-		}
-
-		$headers = array(
-			'X-Star-Cut'        => null === $render['cut'] ? 'none' : (string) $render['cut'],
-			'X-Star-CashDrawer' => null === $render['drawer'] ? 'none' : (string) $render['drawer'],
-		);
-
-		// The raster is already two-colour, so the printer's Floyd-Steinberg
-		// default would dither an image that has nothing left to dither —
-		// softening crisp black-on-white text into stipple.
-		if ( Cloud_Print_Media_Types::PNG === Cloud_Print_Media_Types::normalize( $media_type ) ) {
-			$headers['X-Star-ImageDitherPattern'] = 'none';
-		}
-
-		return $headers;
+		return $this->handle_provider_poll( $request, 'star-cloudprnt' );
 	}
 
 	/**
@@ -1090,108 +887,38 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		return true;
 	}
 
-	/**
-	 * Resolve and authorize a CloudPRNT job token.
-	 *
-	 * @param WP_REST_Request $request    Request.
-	 * @param string          $printer_id Printer ID.
-	 *
-	 * @return array|WP_Error
-	 */
-	private function get_cloud_job_for_request( WP_REST_Request $request, string $printer_id ) {
-		$job_id = (int) $request->get_param( 'token' );
-		$job    = $this->jobs->get( $job_id );
-		if ( null === $job || $printer_id !== $job['printer_id'] ) {
-			Logger::warning(
-				sprintf(
-					'%s: print job "%d" was not found for printer "%s".',
-					$request->get_route(),
-					$job_id,
-					$printer_id
-				)
-			);
 
-			return new WP_Error(
-				'wcpos_print_job_not_found',
-				__( 'Print job not found.', 'woocommerce-pos' ),
-				array( 'status' => 404 )
-			);
-		}
 
-		return $job;
-	}
 
 	/**
-	 * Log a printer-reported failure without request credentials or payloads.
+	 * Parse the vendor request and serve the lifecycle's plain-data response.
 	 *
 	 * @param WP_REST_Request $request    Request.
-	 * @param string          $printer_id Printer ID.
-	 * @param string          $code       Failure code.
-	 * @param int             $job_id     Print job ID.
-	 * @param int|null        $status     Epson ePOS response status bitmask, when the result carried one.
+	 * @param string          $provider_key Protocol selected by the route.
+	 * @return WP_REST_Response|WP_Error
 	 */
-	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id, ?int $status = null ): void {
-		// One detail string serves both the stored reason and the log line, and it
-		// keeps the raw hex even when no bit decodes, so an unmapped or
-		// model-specific status can still be read back from a screenshot.
-		$flags  = null === $status ? '' : implode( ', ', self::describe_epson_status( $status ) );
-		$detail = null === $status ? '' : sprintf( ' (0x%08X%s)', $status, '' === $flags ? '' : ': ' . $flags );
-		$reason = $code . $detail;
-
-		// Persist it too, not just log it. Push providers already record their
-		// submission error against the job; polling printers report theirs here,
-		// and without this the queue can only ever say "Failed" while the reason
-		// (EX_TIMEOUT, a Star status code) is buried in the log. The decoded
-		// Epson status bits are what turn "EX_TIMEOUT" into "cover open".
-		if ( '' !== $reason ) {
-			update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $reason ) );
+	private function handle_provider_poll( WP_REST_Request $request, string $provider_key ) {
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$printer = $this->registry->get_printer( $printer_id );
+		if ( null === $printer ) {
+			return new WP_Error( 'wcpos_print_job_invalid_token', __( 'Invalid printer token.', 'woocommerce-pos' ), array( 'status' => 401 ) );
 		}
-
-		Logger::error(
-			sprintf(
-				'%s: printer "%s" reported failure code "%s"%s for print job %d.',
-				$request->get_route(),
-				$printer_id,
-				$code,
-				$detail,
-				$job_id
+		$poll = Provider::poll_adapter( $provider_key )->parse(
+			array(
+				'params' => $request->get_params(),
+				'body'   => (string) $request->get_body(),
+				'json'   => 'POST' === $request->get_method() ? $request->get_json_params() : null,
+				'method' => $request->get_method(),
+				'route'  => $request->get_route(),
 			)
 		);
-	}
-
-	/**
-	 * Decode an Epson ePOS-Print response status bitmask.
-	 *
-	 * @param int $status Decimal ASB status bitmask.
-	 *
-	 * @return array<int, string>
-	 */
-	private static function describe_epson_status( int $status ): array {
-		// Epson ePOS-Print XML User's Manual, response `status` table (ASB bits).
-		// Fault bits only: informational ones (print complete, drawer pin, feed
-		// button, panel switch, buzzer) say nothing about why a print failed.
-		$labels = array(
-			0x00000001 => __( 'no response from printer', 'woocommerce-pos' ),
-			0x00000008 => __( 'offline', 'woocommerce-pos' ),
-			0x00000020 => __( 'cover open', 'woocommerce-pos' ),
-			0x00000100 => __( 'waiting for online recovery', 'woocommerce-pos' ),
-			0x00000400 => __( 'mechanical error', 'woocommerce-pos' ),
-			0x00000800 => __( 'autocutter error', 'woocommerce-pos' ),
-			0x00002000 => __( 'unrecoverable error', 'woocommerce-pos' ),
-			0x00004000 => __( 'auto-recoverable error', 'woocommerce-pos' ),
-			0x00020000 => __( 'paper near end', 'woocommerce-pos' ),
-			0x00080000 => __( 'paper end', 'woocommerce-pos' ),
-			0x80000000 => __( 'spooler stopped', 'woocommerce-pos' ),
-		);
-
-		$descriptions = array();
-		foreach ( $labels as $bit => $label ) {
-			if ( 0 !== ( $status & $bit ) ) {
-				$descriptions[] = $label;
-			}
+		$result = ( new Print_Job_Lifecycle( $this->jobs, $this->registry ) )->handle_poll( $provider_key, $printer, $poll );
+		if ( \is_string( $result['body'] ) ) {
+			$response = $this->serve_raw( $result['body'], $result['headers']['Content-Type'], $result['headers'] );
+			$response->set_status( $result['status'] );
+			return $response;
 		}
-
-		return $descriptions;
+		return new WP_REST_Response( $result['body'], $result['status'], $result['headers'] );
 	}
 
 	/**
@@ -1216,153 +943,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function epson_sdp( $request ) {
-		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
-		$this->registry->record_seen( $printer_id );
-		$raw_body   = (string) $request->get_body();
-		$soap       = 'text/xml; charset=utf-8';
-		$ack        = '<response success="true" code="" status=""/>';
-
-		$this->jobs->release_stale_claims( $printer_id );
-
-		// Server Direct Print multiplexes three different request types onto the
-		// one configured URL, as URL-encoded form data distinguished by
-		// ConnectionType (User's Manual Rev.K, ch.3 and the Test_print.php
-		// reference implementation):
-		//
-		// GetRequest  — poll for a job
-		// SetResponse — printing result; the XML rides in the ResponseFile field
-		// SetStatus   — status notification; the XML rides in the Status field
-		//
-		// Answering a status notification with print data hands the job to a
-		// request that discards it, so the printer never prints and the job stays
-		// claimed. Dispatching on ConnectionType is what keeps the job on the
-		// GetRequest that is actually asking for one.
-		$connection_type = (string) $request->get_param( 'ConnectionType' );
-
-		// Result XML is a form field, so in the raw body it is percent-encoded
-		// (`<response` arrives as `%3Cresponse`) and a raw-body substring test can
-		// never match it. The raw-body branch is kept only for a caller that posts
-		// the bare XML, which the printer never does.
-		$result_xml = (string) $request->get_param( 'ResponseFile' );
-		if ( '' === $result_xml && false !== strpos( $raw_body, '<response' ) ) {
-			$result_xml = $raw_body;
-		}
-
-		// A print result is recognised by its ePOS <response> element, whichever
-		// way it arrived — the bare-XML caller sends no ConnectionType, so the
-		// type is deliberately not consulted here. The printer also posts an
-		// empty <PrintResponseInfo/> after every idle poll; reading that as a
-		// result marked the in-flight job failed ("unknown"). It is acked below
-		// and never dispatched on.
-		if ( false !== strpos( $result_xml, '<response' ) ) {
-			$claim = $this->jobs->find_active_claim( $printer_id );
-			if ( null === $claim ) {
-				// A result that arrives after the claim timed out belongs to the job
-				// that was failed as unconfirmed — record it there instead of
-				// dropping it, so a printer that merely reported late shows the truth.
-				$claim = $this->jobs->find_unconfirmed( $printer_id );
-			} else {
-				// A result carries no job token — printjobid is SDP 2.00 only — so it
-				// can only be attributed to the active claim. A printer holding an
-				// unsent result retries that POST before polling for more work, so a
-				// result should not arrive while an earlier job is still awaiting one.
-				// Log it if it ever does: the attribution below would be the wrong job.
-				$unconfirmed = $this->jobs->find_unconfirmed( $printer_id );
-				if ( null !== $unconfirmed ) {
-					Logger::warning(
-						sprintf(
-							'Printer "%s": result recorded against claimed job %d while unconfirmed job %d is still awaiting one.',
-							$printer_id,
-							(int) $claim['id'],
-							(int) $unconfirmed['id']
-						)
-					);
-				}
-			}
-			if ( null !== $claim ) {
-				$ok = false !== strpos( $result_xml, 'success="true"' );
-				$this->jobs->record_printer_result( (int) $claim['id'], $ok );
-
-				if ( ! $ok ) {
-					$code = 'unknown';
-					if ( 1 === preg_match( '/\bcode="([^"]*)"/', $result_xml, $matches ) ) {
-						$code = sanitize_text_field( $matches[1] );
-					}
-
-					$status = null;
-					if ( 1 === preg_match( '/\bstatus="(\d+)"/', $result_xml, $matches ) ) {
-						// The ASB status is unsigned 32-bit; on a 32-bit PHP build a value
-						// with bit 31 set does not fit and (int) would saturate to
-						// 0x7FFFFFFF, decoding every label. Such a value is left undecoded
-						// rather than misdecoded.
-						$status = (float) $matches[1] <= PHP_INT_MAX ? (int) $matches[1] : null;
-					}
-
-					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'], $status );
-				}
-			}
-
-			return $this->serve_raw( $ack, $soap );
-		}
-
-		// A status notification or a result post — typed, or recognisable only by
-		// its ResponseFile — is not asking for work. Only the GetRequest lane below
-		// (and a legacy untyped poll) may be handed a job.
-		if ( 'SetStatus' === $connection_type || 'SetResponse' === $connection_type || '' !== $result_xml ) {
-			return $this->serve_raw( $ack, $soap );
-		}
-
-		if ( null !== $this->jobs->find_active_claim( $printer_id ) ) {
-			return $this->serve_raw( $ack, $soap );
-		}
-
-		$job = $this->jobs->next_pending( $printer_id );
-		if ( null === $job ) {
-			return $this->serve_raw( $ack, $soap );
-		}
-
-		if ( ! $this->jobs->try_claim( (int) $job['id'] ) ) {
-			return $this->serve_raw( $ack, $soap );
-		}
-		$epos = $this->jobs->render_payload( $job );
-
-		// An empty render means the job produced nothing printable — most often
-		// a template whose engine this provider cannot render (Server Direct
-		// Print only speaks the thermal pipeline's ePOS-Print XML). Dispatching
-		// it anyway sends <PrintData></PrintData>: the printer parses that
-		// happily, prints nothing, and posts back success="true", so the job is
-		// recorded as Printed. Fail the job here instead, so the queue shows the
-		// truth and the log names the printer.
-		if ( '' === $epos ) {
-			Logger::error(
-				sprintf(
-					'%s: print job %d rendered an empty payload for printer "%s"; nothing was sent to the printer.',
-					$request->get_route(),
-					(int) $job['id'],
-					$printer_id
-				)
-			);
-			update_post_meta( (int) $job['id'], Print_Job_Service::META_ERROR, 'empty_rendered_payload' );
-			$this->jobs->set_status( (int) $job['id'], Print_Job_Service::STATUS_FAILED );
-
-			return $this->serve_raw( $ack, $soap );
-		}
-
-		// Server Direct Print expects the print data wrapped in
-		// PrintRequestInfo > ePOSPrint > PrintData — NOT the SOAP envelope used
-		// by the direct ePOS-Print web service, which is a different protocol.
-		// A printer that receives an unrecognised wrapper discards it silently:
-		// it neither prints nor posts a result, so the job sits claimed forever.
-		// Version 1.00 is the only version every SDP printer family supports
-		// (Server Direct Print User's Manual Rev.K, "Response (Print request)");
-		// 2.00+ adds printjobid but is limited to TM-i/TM-DT/TM-T88VI.
-		$envelope  = '<?xml version="1.0" encoding="utf-8"?>';
-		$envelope .= '<PrintRequestInfo Version="1.00"><ePOSPrint>';
-		$envelope .= '<Parameter><devid>local_printer</devid><timeout>' . self::EPSON_SDP_PRINT_TIMEOUT_MS . '</timeout></Parameter>';
-		$envelope .= '<PrintData>' . $epos . '</PrintData>';
-		$envelope .= '</ePOSPrint></PrintRequestInfo>';
-
-		return $this->serve_raw( $envelope, $soap );
+		return $this->handle_provider_poll( $request, 'epson-sdp' );
 	}
 
 	/**
@@ -1525,23 +1106,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// as the default provider, not fall through to the no-diagnostic error.
 		$provider = Provider::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
 
-		if ( 'printnode' === $provider ) {
-			return $this->test_print_printnode( $printer );
+		$adapter = Provider::adapter( $provider );
+		if ( $adapter instanceof Push_Provider_Adapter_Interface ) {
+			return $adapter->test_print( $printer );
 		}
-
-		if ( 'star-online' === $provider ) {
-			return $this->test_print_star_online( $printer_id, $printer );
-		}
-
-		try {
-			$diag = ( new Cloud_Print_Diagnostic() )->build( $provider, (string) $printer['name'] );
-		} catch ( \RuntimeException $e ) {
-			return new WP_Error(
-				'wcpos_print_job_no_diagnostic',
-				__( 'Test print is not available for this printer yet.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
+		$diag = $adapter->diagnostic( (string) $printer['name'] );
 
 		$id = $this->jobs->create(
 			array(
@@ -1564,98 +1133,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		return $response;
 	}
 
-	/**
-	 * Queue a Star Markup test receipt and submit it through the push pipeline.
-	 *
-	 * @param string $printer_id Registered printer id.
-	 * @param array  $printer    Registered star-online printer.
-	 *
-	 * @return \WP_REST_Response|WP_Error
-	 */
-	private function test_print_star_online( string $printer_id, array $printer ) {
-		$markup = ( new Cloud_Print_Diagnostic() )->star_markup( (string) $printer['name'] );
 
-		$id = $this->jobs->create(
-			array(
-				'printer_id'   => $printer_id,
-				'content_type' => 'text/vnd.star.markup',
-				'payload'      => base64_encode( $markup ),
-			)
-		);
-		if ( $id <= 0 ) {
-			return new WP_Error(
-				'wcpos_print_job_create_failed',
-				__( 'Print job could not be created.', 'woocommerce-pos' ),
-				array( 'status' => 500 )
-			);
-		}
-
-		wp_schedule_single_event( time(), Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $id ) );
-		( new \WCPOS\WooCommercePOS\Services\Cloud_Print_Submit_Service() )->submit( $id );
-
-		$response = rest_ensure_response( $this->jobs->get( $id ) );
-		$response->set_status( 201 );
-
-		return $response;
-	}
-
-	/**
-	 * Submit a diagnostic PDF to a PrintNode printer.
-	 *
-	 * @param array $printer Registered PrintNode printer.
-	 *
-	 * @return \WP_REST_Response|WP_Error
-	 */
-	private function test_print_printnode( array $printer ) {
-		$api_key       = (string) ( $printer['printnode_api_key'] ?? '' );
-		$pn_printer_id = (int) ( $printer['printnode_printer_id'] ?? 0 );
-		if ( '' === $api_key || 0 === $pn_printer_id ) {
-			return new WP_Error(
-				'wcpos_print_job_printnode_unconfigured',
-				__( 'This PrintNode printer is missing its API key or printer id.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		try {
-			$pdf = ( new Cloud_Print_Diagnostic() )->build_pdf( (string) $printer['name'] );
-		} catch ( \Throwable $e ) {
-			// Defense in depth: a Dompdf/font-cache/temp-dir failure must not
-			// surface as an uncaught 500. Mirror the render_payload() guard.
-			Logger::log( 'Cloud print: PrintNode diagnostic PDF render failed: ' . $e->getMessage() );
-
-			return new WP_Error(
-				'wcpos_print_job_diagnostic_failed',
-				__( 'Could not generate the test print.', 'woocommerce-pos' ),
-				array( 'status' => 500 )
-			);
-		}
-
-		$result = ( new PrintNode_Client( $api_key ) )->submit_job(
-			$pn_printer_id,
-			'WCPOS Test Print',
-			'pdf_base64',
-			base64_encode( $pdf )
-		);
-
-		if ( is_wp_error( $result ) ) {
-			return new WP_Error(
-				'wcpos_print_job_printnode_failed',
-				$result->get_error_message(),
-				array( 'status' => 502 )
-			);
-		}
-
-		return new WP_REST_Response(
-			array(
-				'submitted'         => true,
-				'external_provider' => 'printnode',
-				'external_job_id'   => (string) $result['id'],
-				'external_state'    => 'submitted',
-			),
-			201
-		);
-	}
 
 	/**
 	 * Extract sanitized cash-drawer options from a REST request.

@@ -70,6 +70,18 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** The device's business day is optional, but supplied values must be date strings. */
+	public function test_session_business_day_validates_and_preserves_stamp(): void {
+		$fields = $this->fields();
+		foreach ( array( '2026-9-11', 'yesterday', array(), 20260911, null, "2026-09-11\n", '2026-02-31', '0000-00-00', '2026-02-29' ) as $bad ) {
+			$this->assertSame( 400, $this->post( 'sessions', $fields + array( 'business_day' => $bad ) )->get_status() );
+		}
+		$response = $this->post( 'sessions', $fields + array( 'business_day' => '2026-09-10' ) );
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( '2026-09-10', $response->get_data()['business_day'] );
+		$this->assertNull( $this->post( 'sessions', $this->fields() )->get_data()['business_day'] );
+	}
+
 	/** Create preserves identity, computes variance and refuses unknown or busy registers. */
 	public function test_create_replay_conflict_and_unknown_register(): void {
 		$fields = $this->fields();
@@ -112,6 +124,25 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** The expected figure is a report: a cashier counting blind never receives it. */
+	public function test_blind_cashier_session_read_omits_expected(): void {
+		$fields = $this->fields();
+		$this->post( 'sessions', $fields );
+		$route = '/wcpos/v2/sessions/' . $fields['id'];
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$sighted = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
+		$this->assertArrayHasKey( 'expected', $sighted );
+		$blind = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_user_by( 'id', $blind )->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $blind );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( $route ) );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayNotHasKey( 'expected', $data );
+		$this->assertArrayHasKey( 'sales_count', $data );
+		$this->assertArrayHasKey( 'movements', $data );
+	}
+
 	/** Malformed opening fields are refused and an unknown float has no variance. */
 	public function test_validation_and_null_expected_float(): void {
 		$fields = $this->fields();
@@ -127,6 +158,124 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 		$fields['expected_float'] = null;
 		$this->assertNull( $this->post( 'sessions', $fields )->get_data()['opening_variance'] );
+	}
+
+	/** Name the offending field, so the till can say which one and the log can record it.
+	 *
+	 * Without this the client gets a bare 400 with a status and nothing else, and a refused
+	 * cash movement — money that has physically moved — leaves the cashier no way to tell
+	 * whether the amount, the reason or the timestamp was wrong.
+	 */
+	public function test_invalid_param_names_the_offending_field(): void {
+		$opening = $this->fields();
+		foreach ( array(
+			'register_id' => 'bad',
+			'opened_at' => '2026-02-30T10:00:00Z',
+			'counted_float' => '-1',
+			'expected_float' => '1e2',
+			'store_id' => array(),
+		) as $key => $value ) {
+			$response = $this->post( 'sessions', array_merge( $opening, array( $key => $value ) ) );
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertSame( 'rest_invalid_param', $response->get_data()['code'], $key );
+			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
+		}
+
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $id,
+			'type' => 'paid_in',
+			'amount' => '20',
+			'reason' => 'Change',
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+		foreach ( array(
+			// Every shape the POS used to let through: Number('10.') and Number('.5') are both
+			// positive, so the confirm button was happy and the server was not.
+			'amount' => array( '10.', '.5', '1e2', ' 10', '10,50', '0', '-5' ),
+			'reason' => array( '', '   ', str_repeat( 'x', 501 ) ),
+			'created_at' => array( 'bad' ),
+			'type' => array( 'refund' ),
+			'session_id' => array( 'bad' ),
+		) as $key => $values ) {
+			foreach ( $values as $value ) {
+				$response = $this->post(
+					'movements',
+					array_merge(
+						$movement,
+						array(
+							$key => $value,
+							'id' => wp_generate_uuid4(),
+						)
+					)
+				);
+				$this->assertSame( 400, $response->get_status(), $key . '=' . var_export( $value, true ) );
+				$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key . '=' . var_export( $value, true ) );
+			}
+		}
+
+		// A no sale carries no amount but still needs a reason, and used to 400 every single time.
+		$response = $this->post(
+			'movements',
+			array_merge(
+				$movement,
+				array(
+					'id' => wp_generate_uuid4(),
+					'type' => 'no_sale',
+					'amount' => '0',
+					'reason' => '',
+				)
+			)
+		);
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertArrayHasKey( 'reason', $response->get_data()['data']['params'] );
+
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		foreach ( array(
+			'at' => 'bad',
+			'counted' => array( 'cash' => '10.' ),
+		) as $key => $value ) {
+			$response = $this->post(
+				'sessions/' . $id . '/status',
+				array_merge(
+					array(
+						'status' => 'closed',
+						'at' => '2026-09-11T12:00:00Z',
+						'counted' => array( 'cash' => '100' ),
+					),
+					array( $key => $value )
+				)
+			);
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
+		}
+
+		// A malformed replay id never reaches a field validator, so it names `id` itself.
+		$bad_id = $this->post( 'movements', array_merge( $movement, array( 'id' => 'bad' ) ) );
+		$this->assertSame( 400, $bad_id->get_status() );
+		$this->assertArrayHasKey( 'id', $bad_id->get_data()['data']['params'] );
+
+		// Collection reads name their offending query parameter too.
+		foreach ( array(
+			'status' => 'bad',
+			'page' => '0',
+			'per_page' => '101',
+			'register_id' => 'bad',
+		) as $key => $value ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/sessions' );
+			$request->set_param( $key, $value );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 400, $response->get_status(), $key );
+			$this->assertSame( 'rest_invalid_param', $response->get_data()['code'], $key );
+			$this->assertArrayHasKey( $key, $response->get_data()['data']['params'], $key );
+		}
 	}
 
 	/** Only specified transitions succeed; close requires counted cash. */
@@ -248,6 +397,57 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$unchanged = $this->post( $route, $credentials );
 		$this->assertSame( 409, $unchanged->get_status() );
 		$this->assertSame( 'wcpos_session_transition_refused', $unchanged->get_data()['code'] );
+	}
+
+	/** The cashier who opened the drawer cannot approve its variance after a user switch. */
+	public function test_approval_refuses_the_cashier_who_opened_the_session(): void {
+		$opener = wp_get_current_user();
+		$opener->add_cap( 'manage_woocommerce_pos_closures' );
+		wp_set_password( 'opener-fixture', $opener->ID );
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$this->assertSame( $opener->ID, ( new Register_Session_Store() )->get( $id )['opened_by'] );
+		// The till switches to a second cashier, who counts the drawer the opener filled.
+		$second = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$second->add_cap( 'access_woocommerce_pos' );
+		$second->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $second->ID );
+		$counting = $this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$this->assertSame( 200, $counting->get_status() );
+		// The opener is not the current user, so the requester check passes; the
+		// session's own cashier must still be refused as its approver.
+		$refused = $this->post(
+			'sessions/' . $id . '/approve',
+			array(
+				'username' => $opener->user_login,
+				'password' => 'opener-fixture',
+			)
+		);
+		$this->assertSame( 403, $refused->get_status() );
+		$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $id )['approved_by'] );
+		$close = array(
+			'status' => 'closed',
+			'at' => '2026-09-11T12:00:00Z',
+			'counted' => array( 'cash' => '100' ),
+			'approver_token' => Auth::instance()->generate_access_token( $opener ),
+		);
+		$refused = $this->post( 'sessions/' . $id . '/status', $close );
+		$this->assertSame( 403, $refused->get_status() );
+		$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+		// A third person with closure management still can.
+		$manager = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$close['approver_token'] = Auth::instance()->generate_access_token( $manager );
+		$response = $this->post( 'sessions/' . $id . '/status', $close );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
 	}
 
 	/** Open and closed sessions cannot receive credential approval. */

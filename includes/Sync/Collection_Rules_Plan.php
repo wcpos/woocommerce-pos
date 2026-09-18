@@ -28,11 +28,10 @@ use const WCPOS\WooCommercePOS\VERSION;
  *
  * # Two application modes
  *
- * `filter()` is the direct lane: the v1 controller keeps its own `add_filter` topology
- * (Pro subclasses those callbacks) and each callback body hands its value here. This
- * method never touches global filter state.
+ * `filter()` also serves legacy callbacks (Pro subclasses them). This method never
+ * touches global filter state; search and visibility use the scoped `around()` path.
  *
- * `around()` is the proxy lane and the ONLY path that installs anything. Bindings are
+ * `around()` is the scoped read path and the ONLY path that installs anything. Bindings are
  * captured as closures — never re-derived tuples — installed, and unwound in reverse
  * inside a `finally`, so a throwing forward leaves `$wp_filter` exactly as it found it.
  *
@@ -159,6 +158,27 @@ final class Collection_Rules_Plan {
 	private $request_order;
 
 	/**
+	 * Literal search phrase.
+	 *
+	 * @var string
+	 */
+	private $search = '';
+
+	/**
+	 * Exact SKU lookup, taking precedence over variation search.
+	 *
+	 * @var string
+	 */
+	private $sku = '';
+
+	/**
+	 * The lane's declared visibility type.
+	 *
+	 * @var string|null
+	 */
+	private $visibility_type;
+
+	/**
 	 * Build a plan. Use `Collection_Rules::for_request()`.
 	 *
 	 * @internal
@@ -172,6 +192,8 @@ final class Collection_Rules_Plan {
 	public function __construct( string $collection, array $rules, string $storage, WP_REST_Request $request, array $param_map ) {
 		$this->collection = $collection;
 		$this->rules      = $rules;
+		$lane = 0 === strpos( $request->get_route(), '/wcpos/v1/' ) ? 'direct' : 'proxy';
+		$this->rules['search'] = array_replace( $rules['search'] ?? array(), $rules['search']['lanes'][ $lane ] ?? array() );
 		$this->storage    = $storage;
 
 		$order_key           = $this->request_key( $param_map, 'order' );
@@ -180,6 +202,27 @@ final class Collection_Rules_Plan {
 
 		$this->claim_sort( $request, $param_map );
 		$this->claim_filters( $request, $param_map );
+		$key = $this->request_key( $param_map, $rules['search']['param'] ?? 'search' );
+		$search = null === $key ? null : $request->get_param( $key );
+		if ( isset( $rules['search'] ) && \is_string( $search ) && '' !== $search ) {
+			$terms = Collection_Rules::search_terms( $search );
+			if ( 'orders' !== $collection || array() !== $terms || false === preg_match( '//u', $search ) ) {
+				$this->search = $search;
+				if ( 'products' === $collection && false !== preg_match( '//u', $search ) ) {
+					$parts = Collection_Rules::search_terms( $search, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_OFFSET_CAPTURE );
+					$last = end( $parts );
+					$this->search = array() === $parts ? '' : substr( $search, $parts[0][1], $last[1] + strlen( $last[0] ) - $parts[0][1] );
+				}
+				$this->claims['search'] = $this->search;
+				$this->claimed_keys[] = $key;
+			}
+		}
+		$sku_param = $this->rules['search']['exact_sku_param'] ?? null;
+		if ( null !== $sku_param ) {
+			$this->sku = trim( (string) ( $request->get_param( $sku_param ) ?? '' ), " \t\n\r\0\x0B," );
+		}
+		$type = $rules['visibility']['type'] ?? null;
+		$this->visibility_type = \is_array( $type ) ? $type[ $lane ] : $type;
 	}
 
 	/**
@@ -206,7 +249,7 @@ final class Collection_Rules_Plan {
 	 * @return bool
 	 */
 	public function is_empty(): bool {
-		return null === $this->sort && array() === $this->claims;
+		return null === $this->sort && array() === $this->claims && null === $this->visibility_type;
 	}
 
 	/**
@@ -263,7 +306,13 @@ final class Collection_Rules_Plan {
 	 * @return mixed
 	 */
 	public function filter( string $hook, $value, ...$context ) {
+		$value = $this->apply_read_rule( $hook, $value, $context[0] ?? null );
 		switch ( $hook ) {
+			case 'posts_search':
+			case 'posts_join':
+			case 'posts_groupby':
+			case 'search_orderby':
+				return $value;
 			case self::HOOK_QUERY_ARGS:
 				return \is_array( $value ) ? $this->apply_meta_filters( $value ) : $value;
 
@@ -304,7 +353,7 @@ final class Collection_Rules_Plan {
 	/**
 	 * Install this plan's callbacks, run `$run`, then unwind every binding in reverse.
 	 *
-	 * The proxy lane's ONLY install path. Bindings are closures captured here, so the
+	 * The scoped read lanes' ONLY install path. Bindings are closures captured here, so the
 	 * unwind removes the exact callables that were added — never a re-derived tuple that
 	 * could miss. An exception from `$run` propagates AFTER the unwind.
 	 *
@@ -383,6 +432,47 @@ final class Collection_Rules_Plan {
 			return $bindings;
 		}
 
+		if ( null !== $this->visibility_type ) {
+			$hooks = array(
+				self::HOOK_POSTS_WHERE   => 10,
+				self::HOOK_POSTS_CLAUSES => 10,
+			);
+			if ( '' !== $this->search ) {
+				$hooks += array(
+					'posts_search'   => 10,
+					'posts_join'     => 10,
+					'posts_groupby'  => 10,
+					'search_orderby' => 20,
+				);
+			}
+			foreach ( $hooks as $role => $priority ) {
+				$hook = 'search_orderby' === $role ? 'posts_clauses' : $role;
+				$callback = function ( $value, $query ) use ( $role ) {
+					$type = 'variations' === $this->collection ? 'product_variation' : 'product';
+					return in_array( $type, (array) ( $query->query_vars['post_type'] ?? null ), true )
+						? $this->filter( $role, $value, $query ) : $value;
+				};
+				add_filter( $hook, $callback, $priority, 2 );
+				$bindings[] = array( $hook, $callback, $priority );
+			}
+			if ( 'products' === $this->collection ) {
+				$callback = function ( $args ) {
+					return $this->filter( self::HOOK_PREPARE_ARGS, $args );
+				};
+				add_filter( 'woocommerce_rest_product_object_query', $callback );
+				$bindings[] = array( 'woocommerce_rest_product_object_query', $callback, 10 );
+			}
+			if ( '' !== $this->search ) {
+				$vars = static function ( $vars ) {
+					$vars[] = 'wcpos_search_phrase';
+					return $vars;
+				};
+				add_filter( 'woocommerce_rest_query_vars', $vars );
+				$bindings[] = array( 'woocommerce_rest_query_vars', $vars, 10 );
+			}
+			return $bindings;
+		}
+
 		// `meta_query` rows are storage-neutral (`wc_get_orders()` honours them on both),
 		// and the legacy sort args are a no-op under HPOS, so one binding covers both.
 		if ( array() !== $this->claimed_meta_filters() || $this->has_legacy_meta_sort() ) {
@@ -418,7 +508,7 @@ final class Collection_Rules_Plan {
 			$bindings[] = array( 'posts_orderby', $orderby_callback, 10 );
 		}
 
-		if ( $this->claims_id_sets() ) {
+		if ( $this->claims_id_sets() || '' !== $this->search ) {
 			/*
 			 * `posts_where` fires for EVERY WP_Query, and `wcpos/v1` leaves its callback
 			 * installed for the remainder of the request without a post-type guard (frozen
@@ -442,6 +532,78 @@ final class Collection_Rules_Plan {
 		}
 
 		return $bindings;
+	}
+
+	/**
+	 * Apply the declared search and visibility bodies without installing hooks.
+	 *
+	 * @param string $hook  Clause role.
+	 * @param mixed  $value Value to filter.
+	 * @param mixed  $query Query instance.
+	 * @return mixed
+	 */
+	private function apply_read_rule( string $hook, $value, $query ) {
+		global $wpdb;
+		$rule = $this->rules['search'] ?? array();
+		$q = $query->query_vars ?? array();
+		if ( self::HOOK_PREPARE_ARGS === $hook && \is_array( $value ) && null !== $this->visibility_type ) {
+			$value = ( new Pos_Visibility() )->apply_to_wp_query_args( $value, $this->collection, null, $this->visibility_type );
+			if ( 'variations' === $this->collection && 'meta_query' === $rule['query'] ) {
+				return Product_Search::variation_args( $value, $this->search, $this->sku, $rule );
+			}
+			if ( '' !== $this->search ) {
+				$value['s'] = $this->search;
+				// Every product/variation lane uses the same literal splitter.
+				$value['wcpos_search_phrase'] = $this->search;
+			}
+		}
+		if ( self::HOOK_POSTS_WHERE === $hook && ! empty( $this->rules['visibility']['where_backstop'] ) ) {
+			$value = ( new Pos_Visibility() )->apply_to_sql_where( $value, "{$wpdb->posts}.ID", $this->visibility_type );
+		}
+		if ( '' === $this->search ) {
+			return $value;
+		}
+		if ( 'orders' === $this->collection ) {
+			if ( self::HOOK_HPOS_FILTERS === $hook ) {
+				$value['where'] .= ' AND ' . Order_Search::hpos_where(
+					$this->search,
+					array(
+						'orders'    => $query->get_table_name( 'orders' ),
+						'addresses' => $query->get_table_name( 'addresses' ),
+					),
+					$rule
+				);
+			} elseif ( self::HOOK_POSTS_WHERE === $hook ) {
+				$value .= ' AND ' . Order_Search::posts_where( $this->search, $rule );
+			}
+		} elseif ( 'variations' === $this->collection && 'wp_terms' === $rule['query'] ) {
+			switch ( $hook ) {
+				case 'posts_search':
+					return Product_Search::variation_posts_search( $value, $q, $rule );
+				case 'posts_join':
+					return empty( $q['s'] ) ? $value : Product_Search::posts_join( $value, $q );
+				case 'posts_groupby':
+					return empty( $q['s'] ) ? $value : Product_Search::posts_groupby( $value, $q );
+			}
+		} elseif ( 'variations' === $this->collection ) {
+			if ( 'posts_groupby' === $hook ) {
+				$value = Product_Search::variation_groupby( $value, $q );
+			}
+		} else {
+			switch ( $hook ) {
+				case 'posts_search':
+					return Product_Search::posts_search( $value, $q, $rule );
+				case 'posts_join':
+					return Product_Search::posts_join( $value, $q );
+				case 'posts_groupby':
+					return Product_Search::posts_groupby( $value, $q );
+				case 'search_orderby':
+					if ( $rule['rank_exact'] ) {
+						$value['orderby'] = Product_Search::posts_orderby( (string) ( $value['orderby'] ?? '' ), $q, $rule );
+					}
+			}
+		}
+		return $value;
 	}
 
 	/**

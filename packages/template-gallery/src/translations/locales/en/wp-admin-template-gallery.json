@@ -126,6 +126,8 @@
 	"layout.closure_description": "Print stored closures and live X-reports for your register.",
 	"tabs.display": "Display",
 	"tabs.receipts": "Receipts",
+	"layout.report_title": "Report Templates",
+	"layout.report_description": "Print tabular reports with groups, subtotals and totals.",
 	"tabs.reports": "Reports",
 	"tabs.email": "Email",
 	"tabs.soon": "Soon",

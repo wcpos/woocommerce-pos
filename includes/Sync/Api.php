@@ -27,7 +27,8 @@ final class Api {
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
 	// 5: (status, created_at) index on the mutations table for retention pruning.
 	// 6: order journal rows carry no revision value (#1757); the upgrade blanks pre-#1746 stored hashes and 'deleted' markers.
-	public const SCHEMA_VERSION  = '6';
+	// 7: device business-day stamps on sessions and closures, with a site-timezone backfill.
+	public const SCHEMA_VERSION  = '7';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**
@@ -56,6 +57,9 @@ final class Api {
 	 * @return array REST API controllers.
 	 */
 	public static function register_controllers( array $controllers ): array {
+		// Reason: Init::hook_rows() retains these registrars here, not at plugins_loaded.
+		// Moving them earlier changes hook visibility and same-priority extension ordering
+		// before woocommerce_pos_rest_api_controllers runs (including unmarked requests).
 		Response_Telemetry::register_hooks();
 		Retry_After_Mirror::register_hooks();
 		Response_Envelope::register_hooks();

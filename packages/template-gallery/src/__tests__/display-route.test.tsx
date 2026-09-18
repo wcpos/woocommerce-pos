@@ -41,13 +41,13 @@ describe('gallery search routes', () => {
 					);
 				});
 				const type =
-					entry === '/?type=closure'
+					entry === '/?type=report' ? 'report' : entry === '/?type=closure'
 						? 'closure'
 						: entry === '/?type=display'
 							? 'display'
 							: 'receipt';
 				expect(container.querySelector('h1')?.textContent).toBe(
-					type === 'closure'
+					type === 'report' ? 'layout.report_title' : type === 'closure'
 						? 'layout.closure_title'
 						: type === 'display'
 							? 'layout.display_title'

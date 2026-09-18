@@ -22,4 +22,12 @@ interface Push_Provider_Adapter_Interface extends Provider_Adapter_Interface {
 	 * @return array{success:bool, retryable:bool, error:string, external_job_id:string, drawer_error:string}
 	 */
 	public function submit( array $printer, array $job, string $payload, string $title ): array;
+
+	/**
+	 * Submit a diagnostic using the provider's existing direct or queued path.
+	 *
+	 * @param array $printer Registered printer.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function test_print( array $printer );
 }

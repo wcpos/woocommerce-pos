@@ -18,6 +18,100 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** The aggregate upgrade adds missing columns and backfills only unstamped rows. */
+	public function test_business_day_upgrade_adds_columns_and_preserves_stamps(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$closures = new Closure_Store();
+		$closure = $closures->create( $this->closure_fields( $session ) );
+		$stores = array( new Register_Session_Store(), $closures );
+		$timezone = get_option( 'timezone_string' );
+		$schema = get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION );
+		$activator = new \WCPOS\WooCommercePOS\Activator();
+		try {
+			update_option( 'timezone_string', 'America/New_York' );
+			foreach ( $stores as $store ) {
+				$table = $store->table_name();
+				$wpdb->update( $table, array( 'opened_at_gmt' => '2026-09-11 02:00:00' ), array( 'id' => $store instanceof Closure_Store ? $closure['id'] : $session['id'] ) );
+				$wpdb->query( "ALTER TABLE {$table} DROP COLUMN business_day" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
+			}
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
+			$activator->install_sync_schema();
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			foreach ( $stores as $store ) {
+				$id = $store instanceof Closure_Store ? $closure['id'] : $session['id'];
+				$this->assertSame( '2026-09-10', $store->get( $id )['business_day'] );
+				$wpdb->update( $store->table_name(), array( 'business_day' => '2026-09-09' ), array( 'id' => $id ) );
+			}
+			$other = $this->closure_session();
+			$other_closure = $closures->create( $this->closure_fields( $other ) );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
+			$activator->install_sync_schema();
+			$this->assertSame( '2026-09-09', $closures->get( $closure['id'] )['business_day'] );
+			$this->assertSame( '2026-09-09', $stores[0]->get( $session['id'] )['business_day'] );
+			$this->assertSame( '2026-09-11', $closures->get( $other_closure['id'] )['business_day'] );
+			$this->assertSame( '2026-09-11', $stores[0]->get( $other['id'] )['business_day'] );
+		} finally {
+			update_option( 'timezone_string', $timezone );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
+			$activator->install_sync_schema();
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, $schema );
+		}
+	}
+
+	/** The projection must not inherit either fiscal list page limit. */
+	public function test_corrections_reads_more_than_one_maximum_page(): void {
+		global $wpdb;
+		$store = new Closure_Store();
+		$closure = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$fiscal = new Fiscal_Record_Store();
+		for ( $i = 1; $i <= 205; ++$i ) {
+			$payload = wp_json_encode(
+				array(
+					'counted' => array(
+						'cash' => '999999999999999.9999',
+						'card' => '00012.3',
+					),
+					'variance' => array(
+						'cash' => '-0.0001',
+						'card' => '-000.0',
+					),
+					'reason' => 'Bulk recount',
+				)
+			);
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$fiscal->table_name(),
+					array(
+						'type' => 'recount',
+						'series' => $closure['id'],
+						'number' => $i,
+						'source_id' => wp_generate_uuid4(),
+						'closure_id' => $closure['id'],
+						'register_id' => $closure['register_id'],
+						'cashier_id' => get_current_user_id(),
+						'received_at_gmt' => '2026-09-12 10:00:00',
+						'payload' => $payload,
+						'checksum' => hash( 'sha256', $payload ),
+					)
+				)
+			);
+		}
+		$queries = $wpdb->num_queries;
+		$rows = $store->corrections_for( $closure['id'] );
+		$this->assertLessThanOrEqual( 3, $wpdb->num_queries - $queries );
+		$this->assertCount( 205, $rows );
+		$this->assertSame( '12.3000', $rows[204]['figures']['counted']['card'] );
+		$this->assertSame( '0.0000', $rows[204]['figures']['variance']['card'] );
+		$queries = $wpdb->num_queries;
+		$counted = $store->with_correction_counts( array( $closure ) );
+		$this->assertSame( 1, $wpdb->num_queries - $queries );
+		$this->assertSame( 205, $counted[0]['corrections_count'] );
+		$this->assertSame( '999999999999999.9999', $rows[204]['figures']['counted']['cash'] );
+		$this->assertSame( '-0.0001', $rows[204]['figures']['variance']['cash'] );
+	}
+
 	/** First closure derives totals and replay is immutable. */
 	public function test_first_closure_derives_totals_and_replay_is_immutable(): void {
 		$session = $this->closure_session();

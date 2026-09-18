@@ -10,6 +10,8 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Activator;
+use WCPOS\WooCommercePOS\Hook_Manifest;
+use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Augmentation_Pipeline;
@@ -18,7 +20,6 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Sync\Revision;
-use WCPOS\WooCommercePOS\Sync\Variable_Prices;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WP_REST_Request;
@@ -32,45 +33,71 @@ use WP_REST_Request;
  * @covers \WCPOS\WooCommercePOS\API\V2\Status_Controller
  */
 class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
+	/** @var array Saved registry, including instance callbacks created by registrars. */
+	private $manifest_hooks = array();
+
+	/** @var array Saved pipeline state, paired with the hooks. */
+	private $manifest_statics = array();
+
 	/**
-	 * Install the sync schema and register route hooks.
+	 * Install the sync schema and only the manifest rows used by these read tests.
 	 */
 	public function setUp(): void {
 		( new Activator() )->install_sync_schema();
-		add_filter( 'woocommerce_pos_sync_serialized_product', array( Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-		add_filter( 'woocommerce_pos_sync_serialized_order', array( Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
-		Revision::register_proxy_stamps();
-		Proxy_Uuid_Stamper::register_proxy_stampers();
-		Integrity_Digest::register_proxy_digest_stampers();
-		// The variable-price augmentation is declared ONCE on the pipeline and
-		// projected onto both read lanes, exactly as Init.php wires it.
-		Augmentation_Pipeline::reset();
-		Augmentation_Pipeline::add_record_augmenter( array( Variable_Prices::class, 'augment_record' ), 10 );
-		Augmentation_Pipeline::wire();
-		Pos_Uuid::register_hooks();
-
 		parent::setUp();
+
+		global $wp_filter;
+		$this->manifest_hooks = array();
+		foreach ( $wp_filter as $name => $hook ) {
+			$this->manifest_hooks[ $name ] = clone $hook;
+		}
+		$this->manifest_statics = array();
+		foreach ( array(
+			array( Augmentation_Pipeline::class, 'record_augmenters' ),
+			array( Augmentation_Pipeline::class, 'projections' ),
+			array( Proxy_Uuid_Stamper::class, 'proxy_stampers' ),
+		) as $target ) {
+			$property = new \ReflectionProperty( $target[0], $target[1] );
+			$property->setAccessible( true );
+			$this->manifest_statics[] = array( $property, $property->getValue() );
+		}
+
+		// The old block installed UUID write/order hooks plus the read pipeline, not
+		// the bootstrap's init/REST callbacks, journal observers or cron schedulers.
+		// The read-lane helper owns the pipeline: installing its manifest row too
+		// would register a second set of batch stamper closures.
+		$init = ( new \ReflectionClass( Init::class ) )->newInstanceWithoutConstructor();
+		$rows = array_filter(
+			$init->hook_rows( true ),
+			static function ( array $row ): bool {
+				return \in_array(
+					$row['callback'],
+					array(
+						array( Pos_Uuid::class, 'register_hooks' ),
+						array( Pos_Uuid::class, 'stamp_serialized_record' ),
+					),
+					true
+				);
+			}
+		);
+		Hook_Manifest::install( $rows );
+		$this->install_sync_read_lane();
 	}
 
 	/**
-	 * Restore sync schema and hook state after each test.
+	 * Uninstall the manifest, including opaque registrars, without removing pre-existing hooks.
 	 */
 	public function tearDown(): void {
+		global $wp_filter;
+		$this->uninstall_sync_read_lane();
+		$wp_filter = $this->manifest_hooks;
+		foreach ( $this->manifest_statics as $snapshot ) {
+			$snapshot[0]->setValue( null, $snapshot[1] );
+		}
 		parent::tearDown();
 		// setUp committed the schema latch before the transaction started; delete
 		// it after the rollback or the rollback restores the committed row.
 		delete_option( Api::SCHEMA_OPTION );
-		Augmentation_Pipeline::reset();
-		remove_all_filters( 'woocommerce_pos_sync_proxy_response' );
-		// setUp's digest registrar now also wires the order pull lane, so this
-		// class's hook state stops at its own boundary as it always has.
-		remove_all_filters( 'woocommerce_pos_sync_order_pull_payloads' );
-		remove_all_filters( 'woocommerce_pos_sync_serialized_product' );
-		remove_all_filters( 'woocommerce_pos_sync_serialized_order' );
-		remove_action( 'woocommerce_before_product_object_save', array( Pos_Uuid::class, 'stamp_on_save' ), 10 );
-		remove_action( 'woocommerce_before_product_variation_object_save', array( Pos_Uuid::class, 'stamp_on_save' ), 10 );
-		remove_action( 'untrashed_post', array( Pos_Uuid::class, 'recheck_ownership_after_untrash' ), 10 );
-		remove_action( 'woocommerce_untrash_order', array( Pos_Uuid::class, 'recheck_order_ownership_after_untrash' ), 10 );
 	}
 
 	/**
@@ -453,7 +480,24 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 9, has_filter( 'woocommerce_pos_sync_proxy_response', array( Revision::class, 'stamp_proxy_revisions' ) ) );
 		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
-		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_serialized_product', array( Pos_Uuid::class, 'stamp_serialized_record' ) ) );
+		// Pin the actual priority of the projection containing the UUID augmenter.
+		$projections = new \ReflectionProperty( Augmentation_Pipeline::class, 'projections' );
+		$projections->setAccessible( true );
+		$uuid_priority = false;
+		foreach ( $projections->getValue() as $projection ) {
+			if ( Augmentation_Pipeline::SERIALIZED_FILTER !== $projection[0] ) {
+				continue;
+			}
+			$captured = ( new \ReflectionFunction( $projection[1] ) )->getStaticVariables();
+			foreach ( $captured['entries'] as $entry ) {
+				if ( array( Pos_Uuid::class, 'stamp_serialized_record' ) === $entry['callback'] ) {
+					$uuid_priority = has_filter( $projection[0], $projection[1] );
+				}
+			}
+		}
+		$this->assertSame( 10, $uuid_priority );
+		$serialized = apply_filters( 'woocommerce_pos_sync_serialized_product', $record, $product, null );
+		$this->assertTrue( Pos_Uuid::is_uuid( Pos_Uuid::read_valid_uuid_from_meta( $serialized['meta_data'] ) ) );
 		// The variable-price augmentation reaches this lane as an Augmentation_Pipeline
 		// projection closure, so pin the ordering by effect rather than by callback
 		// identity: the revision hash is of the BARE record, and the augmentation that

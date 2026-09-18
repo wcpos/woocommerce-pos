@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
+use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WP_Error;
 use WP_User;
@@ -167,14 +168,33 @@ class Access_Section implements Settings_Section_Interface {
 	 */
 	public function read(): array {
 		global $wp_roles;
-		$role_caps = array();
-		$caps      = self::get_caps();
+		$role_caps   = array();
+		$caps        = self::get_caps();
+		$definitions = Activator::role_capability_definition();
 
 		$roles = $wp_roles->roles;
 		if ( $roles ) {
 			foreach ( $roles as $slug => $role ) {
+				$grants = $definitions[ $slug ] ?? array();
+				if ( 'cashier' === $slug ) {
+					// Activation grants the access gate beside the definition
+					// (Activator::create_pos_roles()), so the default carries it too.
+					$grants['access_woocommerce_pos'] = true;
+				} else {
+					$grants = array_fill_keys( $grants, true );
+				}
+				$defaults = array();
+				foreach ( $caps as $group => $names ) {
+					if ( 'wcpos' !== $group && 'cashier' !== $slug ) {
+						continue;
+					}
+					foreach ( $names as $name ) {
+						$defaults[ $group ][ $name ] = ! empty( $grants[ $name ] );
+					}
+				}
 				$role_caps[ $slug ] = array(
 					'name'         => $role['name'],
+					'defaults'     => $defaults,
 					'capabilities' => array(
 						'wcpos' => array_intersect_key(
 							array_merge( array_fill_keys( $caps['wcpos'], false ), $role['capabilities'] ),

@@ -272,6 +272,16 @@ class Ledger {
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
+			Logger::warning( sprintf( 'WCPOS payment %s refused on order #%d: %s (%s %s against %s owed)', $row['id'], $order->get_id(), $row['failure_reason'], $amount, $currency, Money::format( $balance ) ) );
+			/**
+			 * Fires after a new payment row is saved as refused.
+			 *
+			 * @param WC_Order $order Order object.
+			 * @param array    $row   Failed payment row.
+			 *
+			 * @hook woocommerce_pos_payment_refused
+			 */
+			do_action( 'woocommerce_pos_payment_refused', $order, $row );
 			return $this->refusal_error( $row, $order );
 		}
 
@@ -286,7 +296,18 @@ class Ledger {
 		}
 		$this->derive( $order, $this->read( $order ) );
 		$order->save();
-		return $this->find( $order, $row['id'] );
+		$row = $this->find( $order, $row['id'] );
+		Logger::log( sprintf( 'WCPOS payment %s recorded on order #%d: %s %s via %s (%s) by cashier #%d', $row['id'], $order->get_id(), $row['amount'], $row['currency'], $row['method_id'], $row['status'], $row['cashier_id'] ) );
+		/**
+		 * Fires after a new payment row is recorded and the order is saved.
+		 *
+		 * @param WC_Order $order Order object.
+		 * @param array    $row   Recorded payment row.
+		 *
+		 * @hook woocommerce_pos_payment_recorded
+		 */
+		do_action( 'woocommerce_pos_payment_recorded', $order, $row );
+		return $row;
 	}
 
 	/**
@@ -361,6 +382,12 @@ class Ledger {
 				'amount' => $amount,
 				'currency' => $currency,
 				'status' => 'pending',
+				// The reader is the one provider ref the till knows before the provider does:
+				// a device-mode leg is minted for a specific reader, and the order must say
+				// which one took the money. Every other ref comes from the handler.
+				'provider_refs' => is_string( $input['provider_refs']['reader'] ?? null ) && '' !== $input['provider_refs']['reader']
+					? array( 'reader' => sanitize_text_field( $input['provider_refs']['reader'] ) )
+					: array(),
 				'register_id' => $input['register_id'] ?? null,
 				'session_id' => $input['session_id'] ?? null,
 				'cashier_id' => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
@@ -421,9 +448,32 @@ class Ledger {
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
 		$new = $handler ? $handler->capture( $row, $context ) : $this->unsupported();
 		if ( is_wp_error( $new ) ) {
+			$this->record_failure_events( $order, $id, $new );
 			return $new;
 		}
 		return $this->apply_result( $order, $id, $new );
+	}
+
+	/**
+	 * Preserve provider diagnostics even when capture returns no payment result.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param string   $id    Payment ID.
+	 * @param WP_Error $error Provider error carrying redacted events.
+	 */
+	public function record_failure_events( WC_Order $order, string $id, WP_Error $error ): void {
+		$events = $error->get_error_data()['events'] ?? null;
+		if ( ! is_array( $events ) || empty( $events ) ) {
+			return;
+		}
+		$rows = $this->read( $order );
+		foreach ( $rows as $index => $row ) {
+			if ( strtolower( $id ) === $row['id'] ) {
+				$rows[ $index ]['events'] = array_merge( $row['events'] ?? array(), $events );
+				$this->save( $order, $rows, false );
+				return;
+			}
+		}
 	}
 
 	/**
@@ -743,6 +793,7 @@ class Ledger {
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
 			$order->save();
+			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}
 		return $applied;
@@ -790,6 +841,11 @@ class Ledger {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
 			}
+		}
+		// The approval time is write-once: a later capture, void or status answer that
+		// carries none (or an invalid one) must not erase the stamp already on the row.
+		if ( $this->valid_time( $new['authorized_at_gmt'] ?? null ) ) {
+			$row['authorized_at_gmt'] = $this->valid_time( $new['authorized_at_gmt'] );
 		}
 		return $row;
 	}
@@ -976,6 +1032,10 @@ class Ledger {
 			// Keep a valid captured_at_gmt across later transitions (a voided authorized leg
 			// keeps the time the reader approved it); default to now only when the row counts.
 			'captured_at_gmt' => $this->valid_time( $row['captured_at_gmt'] ?? null ) ? $this->valid_time( $row['captured_at_gmt'] ?? null ) : ( in_array( $status, self::COUNTING_STATUSES, true ) ? $now : null ),
+			// When the reader approved the hold. captured_at_gmt used to double as this and is
+			// overwritten at capture, so a dispute could not tell approval from settlement.
+			// Stamped once, on the first authorized normalization, and kept afterwards.
+			'authorized_at_gmt' => $this->valid_time( $row['authorized_at_gmt'] ?? null ) ? $this->valid_time( $row['authorized_at_gmt'] ?? null ) : ( 'authorized' === $status ? $now : null ),
 			'updated_at_gmt' => $now,
 		);
 		$row = array_merge( $defaults, $row );
@@ -991,6 +1051,7 @@ class Ledger {
 		$row['status']           = $status;
 		$row['created_at_gmt']   = $defaults['created_at_gmt'];
 		$row['captured_at_gmt']  = $defaults['captured_at_gmt'];
+		$row['authorized_at_gmt'] = $defaults['authorized_at_gmt'];
 		$row['cashier_id']       = (int) $row['cashier_id'];
 		$row['store_id']         = null === $row['store_id'] ? null : (int) $row['store_id'];
 		$row['recorded_offline'] = (bool) $row['recorded_offline'];

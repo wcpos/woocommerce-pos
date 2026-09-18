@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -214,40 +215,185 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Every search term narrows the product result set.
+	 * Every typed word must match, regardless of order or gaps.
 	 */
-	public function test_product_search_matches_every_term(): void {
-		$token  = wp_generate_password( 8, false );
-		$token2 = wp_generate_password( 8, false );
-		$match  = ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.4ohm' ) );
-		ProductHelper::create_simple_product( array( 'name' => $token . ' Coil 0.6ohm' ) );
-		ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+	public function test_product_search_matches_terms_in_any_order(): void {
+		// Arrange.
+		$token = uniqid( 'terms-' );
+		$match = ProductHelper::create_simple_product( array( 'name' => $token . ' Alpha Vertex' ) );
+		$match->set_sku( '' );
+		$match->set_global_unique_id( '' );
+		$match->save();
+		$other = ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+		$other->set_sku( '' );
+		$other->set_global_unique_id( '' );
+		$other->save();
 
-		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' 0.4' ) ), 'id' ) );
-		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => '0.4 ' . $token ) ), 'id' ) );
-		$this->assertSame( array(), $this->read( array( 'search' => $token . ' zzzz' . $token2 ) ) );
+		// Act / Assert.
+		foreach ( array( 'alpha ' . $token, $token . ' vertex', 'vertex ' . $token ) as $search ) {
+			$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $search ) ), 'id' ) );
+		}
+		$this->assertSame( array(), $this->read( array( 'search' => $token . ' zzzz' ) ) );
 	}
 
 	/**
-	 * Different search terms may match different product fields.
+	 * Terms may span different product fields, but every term is required.
 	 */
 	public function test_product_search_ands_terms_across_fields(): void {
-		$token = wp_generate_password( 8, false );
-		$sku   = wp_generate_password( 8, false );
+		// Arrange.
+		$token = uniqid( 'title-' );
+		$sku   = 'CROSS-FIELD-SKU';
 		$match = ProductHelper::create_simple_product(
 			array(
 				'name' => $token,
 				'sku'  => $sku,
+				'global_unique_id' => '',
 			)
 		);
 		ProductHelper::create_simple_product(
 			array(
 				'name' => $token,
-				'sku'  => wp_generate_password( 8, false ),
+				'sku'  => '',
+				'global_unique_id' => '',
 			)
 		);
 
-		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $this->read( array( 'search' => $token . ' ' . $sku ) ), 'id' ) );
+		// Act.
+		$rows = $this->read( array( 'search' => $token . ' ' . $sku ) );
+
+		// Assert.
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $rows, 'id' ) );
+	}
+
+	/**
+	 * Short qualifiers are not discarded as stop words.
+	 */
+	public function test_product_search_short_term_counts(): void {
+		// Arrange.
+		$token = uniqid( 'qualifier-' );
+		$match = ProductHelper::create_simple_product( array( 'name' => 'MY ' . $token ) );
+		$match->set_sku( '' );
+		$match->set_global_unique_id( '' );
+		$match->save();
+		$other = ProductHelper::create_simple_product( array( 'name' => 'M3 ' . $token ) );
+		$other->set_sku( '' );
+		$other->set_global_unique_id( '' );
+		$other->save();
+
+		// Act.
+		$rows = $this->read( array( 'search' => 'MY ' . $token ) );
+
+		// Assert.
+		$this->assertSame( array( $match->get_id() ), wp_list_pluck( $rows, 'id' ) );
+	}
+
+	/**
+	 * Unicode whitespace separates terms; whitespace alone is not a search.
+	 */
+	public function test_product_search_splits_unicode_whitespace(): void {
+		// Arrange.
+		$token = uniqid( 'whitespace-' );
+		$match = ProductHelper::create_simple_product( array( 'name' => $token . ' Alpha Vertex' ) );
+		$match->set_sku( '' );
+		$match->set_global_unique_id( '' );
+		$match->save();
+		$other = ProductHelper::create_simple_product( array( 'name' => 'Other ' . $token ) );
+		$other->set_sku( '' );
+		$other->set_global_unique_id( '' );
+		$other->save();
+		$ids   = array( $match->get_id(), $other->get_id() );
+
+		// Act / Assert.
+		foreach ( array( ' ', "\u{00A0}", "\u{3000}" ) as $space ) {
+			$rows = $this->read(
+				array(
+					'search'  => $space . 'vertex' . $space . $token . $space,
+					'include' => $ids,
+				)
+			);
+			$this->assertSame( array( $match->get_id() ), wp_list_pluck( $rows, 'id' ) );
+		}
+		$rows = $this->read(
+			array(
+				'search'  => "\u{3000}",
+				'include' => $ids,
+				'orderby' => 'id',
+				'order'   => 'asc',
+			)
+		);
+		$this->assertSame( $ids, wp_list_pluck( $rows, 'id' ) );
+	}
+
+	/**
+	 * Invalid search types retain WooCommerce's validation response.
+	 */
+	public function test_product_search_array_retains_validation_error(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_query_params( array( 'search' => array( 'MY' ) ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Phrase capture lives only inside the forward, including failed forwards.
+	 */
+	public function test_product_phrase_hook_unwinds_on_success_and_error(): void {
+		$behavior = new Products_Proxy_Behavior();
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$behavior->forwarded_params( array( 'search' => ' %30 ' ), $request );
+		$args     = array( 's' => 'ordinary' );
+		$original = apply_filters( 'woocommerce_rest_product_object_query', $args, $request );
+		foreach ( array( false, true ) as $fail ) {
+			try {
+				$behavior->around(
+					function () use ( $args, $request, $fail ) {
+						$inside = apply_filters( 'woocommerce_rest_product_object_query', $args, $request );
+						$this->assertSame( '%30', $inside['s'] );
+						$this->assertSame( '%30', $inside['wcpos_search_phrase'] );
+						$this->assertContains( 'wcpos_search_phrase', apply_filters( 'woocommerce_rest_query_vars', array() ) );
+						if ( $fail ) {
+							throw new \LogicException( 'failed forward' );
+						}
+					}
+				);
+			} catch ( \LogicException $error ) {
+				$this->assertSame( 'failed forward', $error->getMessage() );
+			}
+			$this->assertSame( $original, apply_filters( 'woocommerce_rest_product_object_query', $args, $request ) );
+			$this->assertNotContains( 'wcpos_search_phrase', apply_filters( 'woocommerce_rest_query_vars', array() ) );
+		}
+	}
+
+	/**
+	 * An ordinary WooCommerce request retains its own multi-term search semantics.
+	 */
+	public function test_direct_wc_v3_search_keeps_reordered_terms(): void {
+		$product = ProductHelper::create_simple_product( array( 'name' => 'Violet Amber' ) );
+		$request = $this->wp_rest_get_request( '/wc/v3/products' );
+		$request->set_query_params( array( 'search' => 'Amber Violet' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $product->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	/**
+	 * Literal identifier matches keep exact-first ranking and substring matches.
+	 */
+	public function test_product_phrase_ranks_literal_identifiers_first(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
+		$sku     = ProductHelper::create_simple_product( array( 'name' => 'Exact SKU' ) );
+		$barcode = ProductHelper::create_simple_product( array( 'name' => 'Exact barcode' ) );
+		$partial = ProductHelper::create_simple_product( array( 'name' => 'Partial SKU' ) );
+		update_post_meta( $sku->get_id(), '_sku', '%30' );
+		update_post_meta( $barcode->get_id(), '_barcode', '%30' );
+		update_post_meta( $partial->get_id(), '_sku', 'prefix%30suffix' );
+
+		$rows = $this->read( array( 'search' => '%30', 'orderby' => 'id', 'order' => 'desc' ) );
+
+		$this->assertSame( array( $barcode->get_id(), $sku->get_id(), $partial->get_id() ), wp_list_pluck( $rows, 'id' ) );
 	}
 
 	/**

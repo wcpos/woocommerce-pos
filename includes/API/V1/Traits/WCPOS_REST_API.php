@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
 use WP_REST_Request;
@@ -124,19 +125,34 @@ trait WCPOS_REST_API {
 	 */
 	public function wcpos_parse_meta_data( WC_Data $object ): array {
 		$raw_meta  = $object->get_meta_data();
-		$meta_data = array_map(
-			function ( $meta_data ) {
-				$data = $meta_data->get_data();
-				return array_merge(
-					$data,
-					array(
-						'key' => $meta_data->key,
-						'value' => $meta_data->value,
-					)
-				);
-			},
-			$raw_meta
-		);
+		$meta_data = array();
+		$dropped   = false;
+
+		foreach ( $raw_meta as $index => $meta ) {
+			// One monstrous value is what kills the request, and the count monitor below
+			// cannot see it: a record can hold a single meta entry that serializes to a
+			// gigabyte, sail past every threshold on the NUMBER of entries, and then fatal
+			// the response encoder. Measure the value and withhold it, same budget as the
+			// v2 sync lane applies in Meta_Normalizer.
+			if ( Meta_Normalizer::exceeds_value_budget( $meta->value ) ) {
+				Meta_Normalizer::note_oversized_meta( (string) $meta->key, (int) $meta->id );
+				$dropped = true;
+				continue;
+			}
+
+			$meta_data[ $index ] = array_merge(
+				$meta->get_data(),
+				array(
+					'key' => $meta->key,
+					'value' => $meta->value,
+				)
+			);
+		}
+
+		if ( $dropped ) {
+			// A list with a hole JSON-encodes as an object; the wire expects a list.
+			$meta_data = array_values( $meta_data );
+		}
 
 		// Monitor meta count and log if thresholds exceeded.
 		$this->wcpos_monitor_meta_count( $object, $raw_meta );

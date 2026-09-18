@@ -564,6 +564,7 @@ class Templates {
 		}
 
 		$is_display = 'display' === $type;
+		$is_logicless = $is_display || 'report' === $type || ( 'closure' === $type && self::TEMPLATE_PLUGIN_CORE === $template_id );
 		$metadata   = array(
 			self::TEMPLATE_THEME                     => array(
 				'title'       => $is_display ? __( 'Theme Display', 'woocommerce-pos' ) : /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
@@ -594,14 +595,14 @@ class Templates {
 
 		return array(
 			'id'                => $template_id,
-			'title'             => 'closure' === $type ? __( 'Closure', 'woocommerce-pos' ) : ( $metadata[ $template_id ]['title'] ?? $template_id ),
+			'title'             => 'report' === $type ? __( 'Report', 'woocommerce-pos' ) : ( 'closure' === $type ? __( 'Closure', 'woocommerce-pos' ) : ( $metadata[ $template_id ]['title'] ?? $template_id ) ),
 			'description'       => $metadata[ $template_id ]['description'] ?? '',
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
 			'category'          => 'receipt' === $type ? ( $metadata[ $template_id ]['category'] ?? 'receipt' ) : '',
-			'language'          => $is_display ? 'html' : 'php',
+			'language'          => $is_logicless ? 'html' : 'php',
 			'file_path'         => $file_path,
-			'engine'            => $is_display ? 'logicless' : 'legacy-php',
+			'engine'            => $is_logicless ? 'logicless' : 'legacy-php',
 			'output_type'       => 'html',
 			'paper_width'       => null,
 			'is_virtual'        => true,
@@ -636,7 +637,7 @@ class Templates {
 			return null;
 		}
 
-		$file_name = $type . ( 'display' === $type ? '.html' : '.php' );
+		$file_name = $type . ( \in_array( $type, array( 'display', 'report' ), true ) ? '.html' : '.php' );
 		$directory = null;
 		$path      = null;
 
@@ -657,7 +658,8 @@ class Templates {
 
 			case self::TEMPLATE_PLUGIN_CORE:
 				$directory = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/';
-				$path      = $directory . $file_name;
+				// Shipped document defaults ARE gallery entries: one file, no copy to drift.
+				$path      = \in_array( $type, array( 'report', 'closure' ), true ) ? $directory . 'gallery/' . $type . '-default.html' : $directory . $file_name;
 				break;
 
 			case self::TEMPLATE_WP_OVERNIGHT_INVOICE:

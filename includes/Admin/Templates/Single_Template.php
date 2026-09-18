@@ -239,15 +239,24 @@ class Single_Template {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
 		$template    = TemplatesManager::get_template( $post->ID );
-		$is_display  = 'display' === ( $template['type'] ?? 'receipt' );
+		$type        = $template['type'] ?? 'receipt';
+		$is_display  = 'display' === $type;
 		$engine      = $is_display ? 'logicless' : self::get_editor_engine( $post );
+		$is_new      = 'auto-draft' === $post->post_status;
+		$is_offline_document = 'report' === $type || ( 'closure' === $type && ( $is_new || 'legacy-php' !== $engine ) );
+		if ( $is_offline_document && 'legacy-php' === $engine ) {
+			$engine = 'logicless';
+		}
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
-		$is_new      = 'auto-draft' === $post->post_status;
 
 		$disabled = $is_display || ! $is_new ? 'disabled="disabled"' : '';
 
 		$engines = self::get_engine_options();
+		if ( $is_offline_document ) {
+			// Keep legacy available only for existing legacy closure templates.
+			unset( $engines['legacy-php'] );
+		}
 
 		$engine_descriptions = array(
 			'logicless'  => __( 'Prints using your browser\'s print dialog. Renders on the device without needing a server connection.', 'woocommerce-pos' ),
@@ -396,6 +405,10 @@ class Single_Template {
 				update_post_meta( $post_id, '_template_language', 'html' );
 			} elseif ( isset( $_POST['wcpos_template_engine'] ) ) {
 				$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
+				if ( ! empty( $terms ) && \in_array( $terms[0]->slug, array( 'report', 'closure' ), true ) && 'legacy-php' === $engine ) {
+					// New offline documents cannot select the server-only PHP engine.
+					$engine = 'logicless';
+				}
 				if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
 					update_post_meta( $post_id, '_template_engine', $engine );
 
@@ -585,7 +598,7 @@ class Single_Template {
 			: null;
 
 		// Get sample receipt data from the preview builder.
-		$sample_data = 'closure' === $type ? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( 'closure' ) : self::get_sample_receipt_data();
+		$sample_data = \in_array( $type, array( 'closure', 'report' ), true ) ? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( $type ) : self::get_sample_receipt_data();
 
 		$preview_url = rest_url( 'wcpos/v2/templates/' . $post->ID . '/preview' );
 
@@ -597,6 +610,14 @@ class Single_Template {
 			'displayPreviewUrl' => set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ),
 			'type'              => $type,
 			'displayStarter'    => $display_starter,
+			'reportStarters'    => 'report' === $type ? array(
+				'logicless' => TemplatesManager::get_gallery_template_by_key( 'report-default' )['content'],
+				'thermal' => TemplatesManager::get_gallery_template_by_key( 'thermal-report-80mm' )['content'],
+			) : null,
+			'closureStarters'    => 'closure' === $type ? array(
+				'logicless' => TemplatesManager::get_gallery_template_by_key( 'closure-default' )['content'],
+				'thermal' => TemplatesManager::get_gallery_template_by_key( 'thermal-closure-80mm' )['content'],
+			) : null,
 			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),
 			'sampleData'        => $sample_data,
 			'engine'            => $engine,

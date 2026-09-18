@@ -58,6 +58,40 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 
 	/**
+	 * Sample previews expose extension keys with preview mode and an unsaved order.
+	 *
+	 * @covers ::build
+	 */
+	public function test_build_applies_receipt_data_filter_with_preview_mode(): void {
+		$seen   = array();
+		$filter = static function ( array $data, \WC_Order $filtered_order, string $mode ) use ( &$seen ): array {
+			$seen = array(
+				'order_id' => $filtered_order->get_id(),
+				'mode'     => $mode,
+			);
+			$data['discounts'][0]['gift_card'] = true;
+
+			return $data;
+		};
+
+		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		try {
+			$payload = $this->builder->build();
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+		}
+
+		$this->assertSame(
+			array(
+				'order_id' => 0,
+				'mode'     => 'preview',
+			),
+			$seen
+		);
+		$this->assertTrue( $payload['discounts'][0]['gift_card'] );
+	}
+
+	/**
 	 * Preview discounts expose one canonical coupon code field.
 	 *
 	 * @covers ::build

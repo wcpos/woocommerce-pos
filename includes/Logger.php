@@ -91,9 +91,20 @@ class Logger {
 			$message = print_r( $message, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 		}
 
+		// One physical line per event. The WP Admin log reader walks the file with
+		// fgets() and parses each line on its own, so a print_r() context (many lines)
+		// reached it as "Array" with every field dropped, and a newline inside an
+		// operator-entered value could forge a line that read as a separate event.
+		$message        = self::single_line( $message );
 		$context_string = '';
 		if ( null !== $context ) {
-			$context_string = is_string( $context ) ? $context : print_r( $context, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+			$encoded = is_string( $context ) ? $context : wp_json_encode( $context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+			if ( false === $encoded ) {
+				// A value JSON cannot carry (invalid UTF-8, INF) is exactly the diagnostic
+				// some callers pass here after their own encoding failed; keep it readable.
+				$encoded = print_r( $context, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+			}
+			$context_string = self::single_line( (string) $encoded );
 		}
 
 		// Build a hash from level + message + context to detect duplicates.
@@ -130,6 +141,15 @@ class Logger {
 				// Reporting must never break logging.
 			}
 		}
+	}
+
+	/**
+	 * Fold line breaks into a literal "\n" so an event never spans log lines.
+	 *
+	 * @param string $text Message or serialized context.
+	 */
+	private static function single_line( string $text ): string {
+		return str_replace( array( "\r\n", "\r", "\n" ), '\n', $text );
 	}
 
 	/**

@@ -70,6 +70,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	private const WCPOS_SORT_PARAM_MAP = array(
 		'orderby' => 'orderby',
 		'order'   => 'order',
+		'search'  => 'search',
 	);
 
 	/**
@@ -95,8 +96,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
-		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
-		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
 
 		/*
 		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
@@ -107,6 +106,21 @@ class Products_Controller extends WC_REST_Products_Controller {
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 * Apply the collection's declared rules for the duration of a direct read.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return \WP_Error|\WP_REST_Response
+	 */
+	public function get_items( $request ) {
+		$plan = Collection_Rules::for_request( 'products', $request, self::WCPOS_SORT_PARAM_MAP );
+		return $plan->around(
+			function () use ( $request ) {
+				return parent::get_items( $request );
+			}
+		);
 	}
 
 	/**
@@ -190,6 +204,12 @@ class Products_Controller extends WC_REST_Products_Controller {
 		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying.
 		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
+		}
+
+		// Search text is literal on every lane: `sanitize_text_field` would strip `%30`
+		// and blank malformed UTF-8 before the declared search rule ever saw them.
+		if ( isset( $params['search'] ) && \is_array( $params['search'] ) ) {
+			$params['search']['sanitize_callback'] = 'rest_sanitize_request_arg';
 		}
 
 		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
@@ -368,6 +388,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 *
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
 		return Product_Search::posts_search( $search, $wp_query );
@@ -406,17 +428,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return array $args Key value array of query var to query value.
 	 */
 	public function wcpos_product_query( array $args, WP_REST_Request $request ) {
-		if ( ! empty( $request['search'] ) ) {
-			// We need to set the query up for a postmeta join.
-			add_filter( 'posts_join', array( $this, 'wcpos_posts_join_to_products_search' ), 10, 2 );
-			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_product_search' ), 10, 2 );
-		}
-
-		// if POS only products are enabled, exclude online-only products.
-		if ( $this->wcpos_pos_only_products_enabled() ) {
-			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_exclude_online_only' ), 10, 2 );
-		}
-
 		// Check for wcpos_include/wcpos_exclude parameter.
 		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
 			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 20, 2 );
@@ -583,6 +594,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 *
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_join_to_products_search( string $join, WP_Query $query ) {
 		return Product_Search::posts_join( $join, $query );
@@ -595,6 +608,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_Query $query   The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 *
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_groupby_product_search( string $groupby, WP_Query $query ) {
 		return Product_Search::posts_groupby( $groupby, $query );
@@ -610,6 +625,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 *
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_where_product_exclude_online_only( string $where, WP_Query $query ) {
 		global $wpdb;

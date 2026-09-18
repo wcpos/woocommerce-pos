@@ -67,6 +67,72 @@ class Test_Access_Section extends WP_UnitTestCase {
 		$this->assertTrue( $admin['capabilities']['wcpos']['manage_woocommerce_pos'] );
 	}
 
+	/** Verify every exposed cashier group has defaults. */
+	public function test_read_returns_cashier_defaults_for_every_exposed_group(): void {
+		// Arrange.
+		$section = $this->section;
+
+		// Act.
+		$cashier = $section->read()['cashier'];
+
+		// Assert.
+		$this->assertSame( array( 'wcpos', 'wc', 'wp' ), array_keys( $cashier['defaults'] ) );
+		foreach ( $cashier['capabilities'] as $group => $caps ) {
+			$this->assertSame( array_keys( $caps ), array_keys( $cashier['defaults'][ $group ] ) );
+		}
+		$this->assertTrue( $cashier['defaults']['wcpos']['access_woocommerce_pos'] );
+		$this->assertTrue( $cashier['defaults']['wc']['edit_products'] );
+		$this->assertTrue( $cashier['defaults']['wp']['read'] );
+		$this->assertFalse( $cashier['defaults']['wc']['delete_products'] );
+		$this->assertFalse( $cashier['defaults']['wcpos']['manage_woocommerce_pos'] );
+	}
+
+	/** WCPOS does not own the shop manager's WC or WP permissions. */
+	public function test_read_returns_only_wcpos_defaults_for_shop_manager(): void {
+		// Arrange.
+		$section = $this->section;
+
+		// Act.
+		$defaults = $section->read()['shop_manager']['defaults'];
+
+		// Assert.
+		$this->assertSame( array( 'wcpos' ), array_keys( $defaults ) );
+		$this->assertTrue( $defaults['wcpos']['access_woocommerce_pos'] );
+		$this->assertArrayNotHasKey( 'wc', $defaults );
+		$this->assertArrayNotHasKey( 'wp', $defaults );
+	}
+
+	/** Roles without a WCPOS definition default to no POS permissions. */
+	public function test_read_returns_false_wcpos_defaults_for_roles_without_pos_access(): void {
+		// Arrange.
+		$section = $this->section;
+
+		// Act.
+		$defaults = $section->read()['editor']['defaults'];
+
+		// Assert.
+		$this->assertFalse( $defaults['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/** Restoring defaults uses the existing write path. */
+	public function test_write_of_defaults_restores_cashier_role(): void {
+		// Arrange.
+		$role = get_role( 'cashier' );
+		$role->remove_cap( 'edit_products' );
+		$role->add_cap( 'delete_products' );
+		$role->add_cap( 'other_plugin_permission' );
+		$defaults = $this->section->read()['cashier']['defaults'];
+
+		// Act.
+		$result = $this->section->write( array( 'cashier' => array( 'capabilities' => $defaults ) ) );
+
+		// Assert.
+		$this->assertTrue( $role->has_cap( 'edit_products' ) );
+		$this->assertFalse( $role->has_cap( 'delete_products' ) );
+		$this->assertTrue( $role->has_cap( 'other_plugin_permission' ) );
+		$this->assertSame( $defaults, $result['cashier']['capabilities'] );
+	}
+
 	/**
 	 * Catalog mutation capabilities can be granted through Access settings.
 	 */

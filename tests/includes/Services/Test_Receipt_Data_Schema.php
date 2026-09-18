@@ -20,11 +20,48 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
+	/** Corrections expose item fields inside a repeatable Mustache section. */
+	public function test_closure_field_tree_corrections_are_repeatable(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'closure' );
+		$corrections = $tree['closure']['fields']['corrections'];
+		$this->assertTrue( $corrections['is_array'] );
+		$this->assertEqualsCanonicalizing(
+			array( 'id', 'type', 'actor.id', 'actor.name', 'approver.id', 'approver.name', 'reason', 'created_at', 'figures' ),
+			array_keys( $corrections['fields'] )
+		);
+		$this->assertNotEmpty( $corrections['fields']['figures']['fields'] );
+	}
+
+	/** The tabular contract is separate from the unchanged receipt schema. */
+	public function test_report_tree_and_schema_publish_tabular_contract(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'report' );
+		$report_keys = array( 'key', 'title', 'subtitle', 'scope', 'group_by', 'columns', 'column_count', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' );
+		$this->assertEqualsCanonicalizing( $report_keys, array_keys( $tree['report']['fields'] ) );
+		$fields = $tree['report']['fields'];
+		foreach ( array( $fields['columns'], $fields['rows'], $fields['rows']['fields']['cells'], $fields['groups'], $fields['groups']['fields']['rows'], $fields['groups']['fields']['rows']['fields']['cells'], $fields['groups']['fields']['subtotal']['fields']['cells'], $fields['totals']['fields']['cells'] ) as $iterable ) {
+			$this->assertTrue( $iterable['is_array'] );
+			$this->assertNotEmpty( $iterable['fields'] );
+		}
+		$scope = $tree['report']['fields']['scope']['fields'];
+		$this->assertEqualsCanonicalizing( array( 'mode', 'label', 'store_id', 'register_id', 'register_name', 'business_day', 'session_id', 'session_number', 'opened_at', 'closed_at', 'from', 'to' ), array_keys( $scope ) );
+		foreach ( array( 'opened_at', 'closed_at', 'from', 'to' ) as $key ) {
+			$this->assertSame( Receipt_Data_Schema::get_field_tree()['order.printed']['fields'], $scope[ $key ]['fields'] );
+		}
+		$schema = Receipt_Data_Schema::get_json_schema( 'report' );
+		$this->assertSame( array( 'report', 'store', 'register', 'software', 'fiscal', 'i18n' ), $schema['required'] );
+		$fields = $schema['properties']['report']['properties'];
+		$this->assertSame( array( 'session', 'range' ), $fields['scope']['properties']['mode']['enum'] );
+		$this->assertSame( array( 'text', 'number', 'money', 'percent', 'datetime' ), $fields['columns']['items']['properties']['type']['enum'] );
+		$this->assertSame( array( 'left', 'right' ), $fields['columns']['items']['properties']['align']['enum'] );
+		$this->assertSame( 'integer', $fields['count']['type'] );
+		$this->assertSame( Receipt_Data_Schema::get_json_schema(), Receipt_Data_Schema::get_json_schema( 'receipt' ) );
+	}
+
 	/** Schema 1.4 publishes provenance without requiring optional fiscal fields. */
 	public function test_identity_contract_1_4(): void {
 		$schema = Receipt_Data_Schema::get_json_schema();
 		$tree   = Receipt_Data_Schema::get_field_tree();
-		$mock   = Receipt_Data_Schema::get_mock_receipt_data();
+		$mock   = ( new Preview_Receipt_Builder() )->sample();
 		$this->assertSame( '1.4.0', $schema['x-schema-version'] );
 		$this->assertSame( 'COPY', Receipt_I18n_Labels::get_labels()['copy'] );
 		foreach ( array(
@@ -645,36 +682,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 
 		$this->assertArrayNotHasKey( 'tax_id', $tree['store']['fields'] );
 		$this->assertArrayNotHasKey( 'tax_id', $tree['customer']['fields'] );
-	}
-
-	/**
-	 * Test get_mock_receipt_data includes new store fields.
-	 */
-	public function test_get_mock_receipt_data_includes_new_store_fields(): void {
-		$data  = Receipt_Data_Schema::get_mock_receipt_data();
-		$store = $data['store'];
-
-		$this->assertArrayHasKey( 'opening_hours', $store );
-		$this->assertArrayHasKey( 'opening_hours_vertical', $store );
-		$this->assertArrayHasKey( 'opening_hours_inline', $store );
-		$this->assertArrayHasKey( 'opening_hours_notes', $store );
-		$this->assertArrayHasKey( 'id', $store );
-		$this->assertArrayHasKey( 'tax_ids', $store );
-		$this->assertArrayNotHasKey( 'tax_id', $store );
-		$this->assertIsInt( $store['id'] );
-		$this->assertIsString( $store['opening_hours_vertical'] );
-		$this->assertIsString( $store['opening_hours_inline'] );
-		$this->assertIsString( $store['opening_hours_notes'] );
-		$this->assertIsArray( $store['tax_ids'] );
-		$this->assertNotEmpty( $store['tax_ids'] );
-		$this->assertNotEmpty( $store['opening_hours_vertical'] );
-		$this->assertNotEmpty( $store['opening_hours_inline'] );
-		$this->assertArrayHasKey( 'type', $store['tax_ids'][0] );
-		$this->assertArrayHasKey( 'value', $store['tax_ids'][0] );
-		$this->assertArrayHasKey( 'country', $store['tax_ids'][0] );
-		$this->assertArrayHasKey( 'label', $store['tax_ids'][0] );
-		$this->assertSame( 'us_ein', $store['tax_ids'][0]['type'] );
-		$this->assertSame( '12-3456789', $store['tax_ids'][0]['value'] );
 	}
 
 	/**

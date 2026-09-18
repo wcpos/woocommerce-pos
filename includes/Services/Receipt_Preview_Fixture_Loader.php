@@ -25,12 +25,16 @@ class Receipt_Preview_Fixture_Loader {
 	/**
 	 * Build receipt preview data for a fixture profile.
 	 *
-	 * @param string|null $profile   Fixture profile name.
-	 * @param object|null $pos_store POS store object. Falls back to default store.
+	 * @param string|null        $profile   Fixture profile name.
+	 * @param object|string|null $pos_store POS store object, or report fixture key for the report profile.
 	 *
 	 * @return array Receipt data.
 	 */
 	public function build( ?string $profile = null, $pos_store = null ): array {
+		if ( 'report' === $profile ) {
+			$key = \in_array( $pos_store, array( 'sales', 'cash-movements' ), true ) ? $pos_store : 'sales';
+			return $this->load_overrides( 'report-' . $key );
+		}
 		$profile = $this->normalize_profile( $profile );
 		if ( 'closure' === $profile ) {
 			$fixture = $this->load_overrides( $profile );
@@ -45,7 +49,7 @@ class Receipt_Preview_Fixture_Loader {
 			);
 			return ( new Receipt_Data_Builder() )->build_closure_document( $row );
 		}
-		$data = ( new Preview_Receipt_Builder() )->build( $pos_store );
+		$data = ( new Preview_Receipt_Builder() )->sample( $pos_store );
 
 		$base_overrides = $this->load_overrides( self::BASE_PROFILE );
 		if ( ! empty( $base_overrides ) ) {
@@ -59,7 +63,7 @@ class Receipt_Preview_Fixture_Loader {
 			}
 		}
 
-		return $this->resolve_assets( $data );
+		return Preview_Receipt_Builder::apply_receipt_data_filter( $this->resolve_assets( $data ) );
 	}
 
 	/**

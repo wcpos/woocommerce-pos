@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\API\V2\Proxy\Null_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Orders_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Proxy_Behavior;
+use WCPOS\WooCommercePOS\API\V2\Proxy\Refunds_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Taxes_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Terms_Proxy_Behavior;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -50,6 +51,7 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 			'tags'       => Terms_Proxy_Behavior::class,
 			'coupons'    => Coupons_Proxy_Behavior::class,
 			'tax_rates'  => Taxes_Proxy_Behavior::class,
+			'refunds'    => Refunds_Proxy_Behavior::class,
 		);
 
 		foreach ( Collections::with( 'proxy' ) as $collection => $row ) {
@@ -133,7 +135,10 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$order     = OrderHelper::create_order();
 		$behavior  = new Orders_Proxy_Behavior();
 		$request   = new WP_REST_Request();
-		$input     = array( 'pos_cashier' => 11, 'dp' => '2' );
+		$input     = array(
+			'pos_cashier' => 11,
+			'dp' => '2',
+		);
 		$request->set_query_params( $input );
 		$forwarded = $behavior->forwarded_params( $input, $request );
 		$data      = $behavior->post_process( array( array( 'id' => $order->get_id() ) ) );
@@ -142,6 +147,68 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$this->assertSame( '6', $forwarded['dp'] );
 		$this->assertArrayHasKey( 'tax_ids', $data[0] );
 		$this->assertArrayHasKey( 'links', $data[0] );
+	}
+
+	/**
+	 * Query-string search wins over a conflicting JSON body during the forward.
+	 */
+	public function test_order_search_with_conflicting_json_body_uses_query_search(): void {
+		// Arrange.
+		$alpha = OrderHelper::create_order();
+		$alpha->set_billing_first_name( 'alpha' );
+		$alpha->save();
+		$beta = OrderHelper::create_order();
+		$beta->set_billing_first_name( 'beta' );
+		$beta->save();
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$request->set_query_params( array( 'search' => 'alpha' ) );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"search":"beta"}' );
+
+		// Act.
+		$forwarded = $behavior->forwarded_params( $request->get_query_params(), $request );
+		$ids       = $behavior->around(
+			static function () use ( $forwarded ): array {
+				return wc_get_orders( $forwarded + array( 'return' => 'ids', 'limit' => -1 ) );
+			}
+		);
+
+		// Assert.
+		$this->assertSame( array( 'dp' => '6' ), $forwarded );
+		$this->assertContains( $alpha->get_id(), $ids );
+		$this->assertNotContains( $beta->get_id(), $ids );
+		$this->assertSame( 'beta', $request->get_param( 'search' ) );
+	}
+
+	/**
+	 * A JSON body alone must not filter the forwarded collection.
+	 */
+	public function test_order_search_with_only_json_body_leaves_query_unfiltered(): void {
+		// Arrange.
+		$alpha = OrderHelper::create_order();
+		$alpha->set_billing_first_name( 'alpha' );
+		$alpha->save();
+		$beta = OrderHelper::create_order();
+		$beta->set_billing_first_name( 'beta' );
+		$beta->save();
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"search":"beta"}' );
+
+		// Act.
+		$forwarded = $behavior->forwarded_params( $request->get_query_params(), $request );
+		$ids       = $behavior->around(
+			static function () use ( $forwarded ): array {
+				return wc_get_orders( $forwarded + array( 'return' => 'ids', 'limit' => -1 ) );
+			}
+		);
+
+		// Assert.
+		$this->assertSame( array( 'dp' => '6' ), $forwarded );
+		$this->assertContains( $alpha->get_id(), $ids );
+		$this->assertContains( $beta->get_id(), $ids );
 	}
 
 	/** Order search falls back to posts storage when OrderUtil is unavailable. */
@@ -217,7 +284,10 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$uuid     = '550e8400-e29b-41d4-a716-446655440000';
 		$behavior = new Orders_Proxy_Behavior();
 		$request  = new WP_REST_Request();
-		$input    = array( 'pos_register' => $uuid, 'dp' => '2' );
+		$input    = array(
+			'pos_register' => $uuid,
+			'dp' => '2',
+		);
 		$request->set_query_params( $input );
 
 		$forwarded = $behavior->forwarded_params( $input, $request );
@@ -229,7 +299,12 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 
 		$this->assertArrayNotHasKey( 'pos_register', $forwarded );
 		$this->assertSame(
-			array( array( 'key' => '_wcpos_register', 'value' => $uuid ) ),
+			array(
+				array(
+					'key' => '_wcpos_register',
+					'value' => $uuid,
+				),
+			),
 			$filtered['meta_query']
 		);
 	}

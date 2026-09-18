@@ -145,7 +145,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -253,8 +253,14 @@ jobs:
       - name: Get latest stable versions
         id: versions
         run: |
-          # Get latest WordPress version
-          WP_VERSION=$(curl -s https://api.wordpress.org/core/version-check/1.7/ | jq -r '.offers[0].version')
+          # Get latest WordPress version. The value becomes a release-zip URL in
+          # the wp-env config below, so an empty or "null" answer from the API
+          # must fail here with a readable reason, not as a malformed download.
+          WP_VERSION=$(curl -sf https://api.wordpress.org/core/version-check/1.7/ | jq -r '.offers[0].version // empty')
+          if [[ ! "$WP_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Could not resolve the latest stable WordPress version from api.wordpress.org (got '${WP_VERSION}')"
+            exit 1
+          fi
           echo "wp=$WP_VERSION" >> $GITHUB_OUTPUT
           echo "Latest WordPress: $WP_VERSION"
 
@@ -290,7 +296,7 @@ jobs:
           coverage: none
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -353,10 +359,12 @@ jobs:
 
       - name: Configure wp-env with latest versions
         run: |
-          # Use latest stable versions (null = latest WordPress)
+          # The release zip for the version the API just offered. Never null or a
+          # GitHub ref: wp-env would then fetch a WordPress/WordPress tag, and the
+          # mirror lags the API by hours after a release (2026-09-17: 7.1.1).
           cat > .wp-env.json << EOF
           {
-            "core": null,
+            "core": "https://downloads.wordpress.org/release/wordpress-${{ steps.versions.outputs.wp }}.zip",
             "phpVersion": "8.2",
             "plugins": [
               "/tmp/wc-plugin/woocommerce",
@@ -450,7 +458,7 @@ jobs:
           coverage: none
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -598,7 +606,7 @@ jobs:
           coverage: none
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -649,9 +657,10 @@ jobs:
 
       - name: Configure wp-env with latest versions
         run: |
+          # Same release zip the smoke test ran on (see its wp-env step).
           cat > .wp-env.json << 'EOF'
           {
-            "core": null,
+            "core": "https://downloads.wordpress.org/release/wordpress-${{ needs.smoke-test.outputs.wp_version }}.zip",
             "phpVersion": "8.2",
             "plugins": [
               "/tmp/wc-plugin/woocommerce",

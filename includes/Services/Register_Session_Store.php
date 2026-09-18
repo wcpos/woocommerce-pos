@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -38,6 +39,7 @@ final class Register_Session_Store {
 			store_id BIGINT NULL,
 			status VARCHAR(16) NOT NULL,
 			opened_at_gmt DATETIME NOT NULL,
+			business_day CHAR(10) NULL,
 			opened_by BIGINT NOT NULL,
 			expected_float DECIMAL(19,4) NULL,
 			counted_float DECIMAL(19,4) NOT NULL,
@@ -123,6 +125,10 @@ final class Register_Session_Store {
 		global $wpdb;
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
+			// An idempotent replay, not a fault: the outbox retries a write whose response
+			// was lost, and returning the existing row IS the success path. A warning here
+			// would appear in the merchant's log for every recovered network timeout.
+			$this->log_replay( $existing );
 			return $existing;
 		}
 		$open = $this->list(
@@ -132,6 +138,16 @@ final class Register_Session_Store {
 			)
 		);
 		if ( $open ) {
+			Logger::warning(
+				'Register session opening refused: register already has an open session',
+				array(
+					'register_id' => $fields['register_id'],
+					'session_id' => $open[0]['id'],
+					'requested_session_id' => $fields['id'],
+					'status' => $open[0]['status'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			return new \WP_Error(
 				'wcpos_session_already_open',
 				__( 'This register already has an open session.', 'woocommerce-pos' ),
@@ -145,9 +161,64 @@ final class Register_Session_Store {
 		$fields['created_at_gmt'] = current_time( 'mysql', true );
 		$fields['opening_variance'] = null === $fields['expected_float'] ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(%s AS DECIMAL(19,4)) - CAST(%s AS DECIMAL(19,4))', $fields['counted_float'], $fields['expected_float'] ) );
 		if ( false === $wpdb->insert( $this->table_name(), $fields ) ) {
+			Logger::warning(
+				'Register session write refused: storage operation failed',
+				array(
+					'session_id' => $fields['id'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Session write failed.' );
 		}
-		return $this->get( $fields['id'] );
+		$row = $this->get( $fields['id'] );
+		Logger::log(
+			'Register session opened',
+			array(
+				'session_id' => $row['id'],
+				'register_id' => $row['register_id'],
+				'counted_float' => $row['counted_float'],
+				'user_id' => $row['opened_by'],
+			)
+		);
+		return $row;
+	}
+
+	/** An idempotent replay returned the existing row: the success path, not a fault.
+	 *
+	 * The REST controller answers a replay before create() runs, so it calls this too;
+	 * without it a recovered network timeout leaves no server record at all.
+	 *
+	 * @param array $row Existing session row.
+	 */
+	public function log_replay( array $row ): void {
+		Logger::log(
+			'Register session already recorded; returning the existing row',
+			array(
+				'session_id' => $row['id'],
+				'register_id' => $row['register_id'],
+			)
+		);
+	}
+
+	/** The cashier responsible for the drawer may not sign off its own variance.
+	 *
+	 * The REST layer refuses an approver who is the current requester, but the
+	 * session records its cashier as opened_by, and after a user switch the two
+	 * differ: the opener's credentials would then approve the shortfall on the
+	 * drawer they opened. This is the one place both approval routes pass through.
+	 *
+	 * @param array $session Current row.
+	 * @param int   $user_id Proposed approver.
+	 */
+	private function refuse_own_approval( array $session, int $user_id ): ?\WP_Error {
+		if ( $user_id !== (int) $session['opened_by'] ) {
+			return null;
+		}
+		return new \WP_Error(
+			'wcpos_override_refused',
+			__( 'The cashier who opened this session cannot approve it.', 'woocommerce-pos' ),
+			array( 'status' => 403 )
+		);
 	}
 
 	/** Stamp a manager approval only while the session is counting.
@@ -159,6 +230,10 @@ final class Register_Session_Store {
 	 */
 	public function approve( array $session, int $user_id ) {
 		global $wpdb;
+		$refused = $this->refuse_own_approval( $session, $user_id );
+		if ( $refused ) {
+			return $refused;
+		}
 		$updated = $wpdb->update(
 			$this->table_name(),
 			array( 'approved_by' => $user_id ),
@@ -168,11 +243,33 @@ final class Register_Session_Store {
 			)
 		);
 		if ( false === $updated ) {
+			Logger::warning(
+				'Register session write refused: storage operation failed',
+				array(
+					'session_id' => $session['id'],
+					'user_id' => get_current_user_id(),
+				)
+			);
 			throw new \RuntimeException( 'Session write failed.' );
 		}
 		if ( 0 === $updated ) {
+			Logger::warning(
+				'Register session approval refused: status changed or approval already recorded',
+				array(
+					'session_id' => $session['id'],
+					'user_id' => $user_id,
+					'status' => $this->get( $session['id'] )['status'] ?? null,
+				)
+			);
 			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
+		Logger::log(
+			'Register session approved',
+			array(
+				'session_id' => $session['id'],
+				'user_id' => $user_id,
+			)
+		);
 		return $this->get( $session['id'] );
 	}
 
@@ -186,6 +283,12 @@ final class Register_Session_Store {
 	 */
 	public function transition( array $session, array $fields ) {
 		global $wpdb;
+		if ( isset( $fields['approved_by'] ) ) {
+			$refused = $this->refuse_own_approval( $session, (int) $fields['approved_by'] );
+			if ( $refused ) {
+				return $refused;
+			}
+		}
 		if ( 'counting' === $session['status'] && 'closed' === $fields['status'] ) {
 			$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
 			$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
@@ -202,9 +305,19 @@ final class Register_Session_Store {
 					ARRAY_A
 				);
 				if ( null === $variance ) {
+					Logger::warning( 'Register session closing refused: variance calculation failed', array( 'session_id' => $session['id'] ) );
 					throw new \RuntimeException( 'Session variance calculation failed.' );
 				}
 				if ( '1' === $variance['exceeds_threshold'] ) {
+					Logger::warning(
+						'Register session closing refused: variance requires manager approval',
+						array(
+							'session_id' => $session['id'],
+							'variance' => $variance['variance'],
+							'threshold' => $threshold,
+							'user_id' => get_current_user_id(),
+						)
+					);
 					return new \WP_Error(
 						'wcpos_override_refused',
 						__( 'Manager approval is required to close this session.', 'woocommerce-pos' ),
@@ -229,11 +342,45 @@ final class Register_Session_Store {
 			)
 		);
 		if ( false === $updated ) {
+			// Closure_Store runs this inside its transaction and restates the failure
+			// after the rollback, where a warning survives database logging.
+			if ( ! isset( $fields['closure_id'] ) ) {
+				Logger::warning(
+					'Register session write refused: storage operation failed',
+					array(
+						'session_id' => $session['id'],
+						'user_id' => get_current_user_id(),
+					)
+				);
+			}
 			throw new \RuntimeException( 'Session write failed.' );
 		}
 		$row = $this->get( $session['id'] );
 		if ( 0 === $updated && ( $row['status'] ?? null ) !== $fields['status'] ) {
+			Logger::warning(
+				'Register session transition refused: status changed',
+				array(
+					'session_id' => $session['id'],
+					'from' => $session['status'],
+					'to' => $fields['status'],
+					'status' => $row['status'] ?? null,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		// Closure_Store logs its transition after commit, not before a possible rollback.
+		if ( $updated > 0 && $session['status'] !== $fields['status'] && ! isset( $fields['closure_id'] ) ) {
+			Logger::log(
+				'Register session state changed',
+				array(
+					'session_id' => $session['id'],
+					'from' => $session['status'],
+					'to' => $fields['status'],
+					'user_id' => get_current_user_id(),
+					'approved_by' => $row['approved_by'],
+				)
+			);
 		}
 		return $row;
 	}

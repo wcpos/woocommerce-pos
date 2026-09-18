@@ -33,6 +33,32 @@ use WCPOS\WooCommercePOS\Templates;
  * @coversNothing
  */
 class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
+	/** Both API lanes preview reports without selecting an order. */
+	public function test_report_previews_render_grouped_thermal_and_partial_documents(): void {
+		// wcpos/v2 inherits the v1 controller; the current lane is the one the till uses.
+		foreach ( array( 'report-default', 'thermal-report-80mm', 'plugin-core' ) as $key ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $key . '/preview' );
+			$request->set_param( 'type', 'report' );
+			$request->set_param( 'order_id', 999999 );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data();
+			$html = 'thermal-report-80mm' === $key
+				? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] )
+				: $data['preview_html'];
+			$this->assertStringContainsString( 'Sales report', $html );
+			$this->assertStringContainsString( 'Card payments', $html );
+			$request->set_param( 'report', 'cash-movements' );
+			$partial_response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $partial_response->get_status() );
+			$partial = $partial_response->get_data();
+			$html = 'thermal-report-80mm' === $key
+				? ( new \Mustache\Engine() )->render( $partial['template_content'], $partial['receipt_data'] )
+				: $partial['preview_html'];
+			$this->assertStringContainsString( 'Offline movements are not included.', $html );
+		}
+	}
+
 	/**
 	 * The Templates controller instance.
 	 *
@@ -399,9 +425,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test virtual template paths cannot escape through a symlink.
 	 */
 	public function test_get_virtual_template_path_with_symlink_outside_templates_returns_null(): void {
-		$symlink_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/report.php';
+		// Every type now ships a core file, so the guard is exercised through the theme
+		// override directory, which the resolver trusts by the same realpath rule.
+		$theme_dir    = get_stylesheet_directory() . '/woocommerce-pos/';
+		$symlink_path = $theme_dir . 'report.html';
 
-		if ( file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
+		if ( ! wp_mkdir_p( $theme_dir ) || file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
 			$this->markTestSkipped( 'Unable to create an isolated symlink fixture.' );
 		}
 
@@ -416,7 +445,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->markTestSkipped( 'Symlinks are not available in this test environment.' );
 			}
 
-			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_PLUGIN_CORE, 'report' );
+			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_THEME, 'report' );
 
 			$this->assertNull( $path );
 		} finally {
@@ -1317,6 +1346,66 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Closure defaults render the fixture without an order in both preview lanes. */
+	public function test_closure_defaults_preview_fixture_and_x_report_copy(): void {
+		foreach ( array( 'v1', 'v2' ) as $lane ) {
+			foreach ( array( 'plugin-core', 'closure-default', 'thermal-closure-80mm' ) as $key ) {
+				$request = 'v2' === $lane
+					? $this->wp_rest_get_request( '/wcpos/v2/templates/' . $key . '/preview' )
+					: $this->wp_rest_get_request( '/wcpos/v1/templates/' . $key . '/preview' );
+				$request->set_param( 'type', 'closure' );
+				$request->set_param( 'order_id', 999999999 );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( 0, $data['order_id'] );
+				$this->assertNotEmpty( $data['receipt_data']['store']['name'] );
+				$this->assertSame(
+					array(
+						array(
+							'name' => 'cash',
+							'expected' => '180.0000',
+							'counted' => '178.0000',
+							'variance' => '-2.0000',
+						),
+						array(
+							'name' => 'card',
+							'expected' => '120.0000',
+							'counted' => '120.0000',
+							'variance' => '0.0000',
+						),
+					),
+					array_map(
+						static function ( $tender ) {
+							return array_intersect_key( $tender, array_flip( array( 'name', 'expected', 'counted', 'variance' ) ) ); },
+						$data['receipt_data']['closure']['tenders']
+					)
+				);
+				$html = $data['preview_html'] ?? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] );
+				foreach ( array( 'Closure 42', 'Main register', 'Alex', 'Opening float', 'Short', 'Paid out', 'Petty cash', 'Voided', 'VAT 20%', 'WCPOS' ) as $text ) {
+					$this->assertStringContainsString( $text, $html );
+				}
+				if ( 'thermal-closure-80mm' !== $key ) {
+					$this->assertStringContainsString( 'Exact', $html );
+				}
+				$this->assertSame( 'Cash', $data['receipt_data']['closure']['tenders'][0]['label'] );
+				$this->assertNotEmpty( $data['receipt_data']['closure']['tenders'][0]['counted_display'] );
+				$this->assertNotEmpty( $data['receipt_data']['closure']['opened_at']['datetime'] );
+				$this->assertStringNotContainsString( '178.0000', $html );
+				$copy = $data['receipt_data'];
+				$copy['fiscal']['is_x_report'] = true;
+				$copy['fiscal']['is_reprint'] = true;
+				$copy['fiscal']['reprint_count'] = 2;
+				$copy['closure']['corrections'] = array( array( 'reason' => 'CORRECTION MUST NOT PRINT' ) );
+				$html = ( new \Mustache\Engine() )->render( $data['template_content'], $copy );
+				$this->assertStringContainsString( 'X-report', $html );
+				$this->assertStringContainsString( 'COPY 2', $html );
+				$this->assertStringNotContainsString( 'Closure 42', $html );
+				$this->assertStringNotContainsString( 'CORRECTION MUST NOT PRINT', $html );
+			}
+		}
+	}
+
 	// ---- Task 9: Preview tests ----
 
 	/**
@@ -1662,7 +1751,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * without preview_html, causing "No preview available" in the gallery modal.
 	 */
 	public function test_preview_returns_html_for_logicless_template_with_order(): void {
-		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates( 'receipt' );
 
 		$logicless = null;
 		foreach ( $gallery as $t ) {
@@ -1702,7 +1791,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test preview returns thermal data for thermal gallery template.
 	 */
 	public function test_preview_returns_thermal_data_for_thermal_template(): void {
-		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates( 'receipt' );
 		$thermal = null;
 
 		foreach ( $gallery as $t ) {
@@ -1752,7 +1841,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test preview returns thermal data with mock data when no orders exist.
 	 */
 	public function test_preview_thermal_with_no_orders_uses_mock_data(): void {
-		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates( 'receipt' );
 		$thermal = null;
 
 		foreach ( $gallery as $t ) {

@@ -50,7 +50,7 @@ class Settlement {
 		if ( ! Pos_Uuid::is_uuid( $payment_id ) ) {
 			return new WP_Error( 'rest_invalid_param', __( 'Payment id must be a UUID.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
-		$patch = array_intersect_key( $patch, array_flip( array( 'provider_refs', 'receipt', 'status', 'expires_at', 'amount', 'currency', 'event_id' ) ) );
+		$patch = array_intersect_key( $patch, array_flip( array( 'provider_refs', 'receipt', 'status', 'expires_at', 'amount', 'currency', 'event_id', 'authorized_at_gmt' ) ) );
 		$order_id = $this->find_order( $payment_id );
 		if ( ! $order_id ) {
 			$order_id = Order_Lock::instance()->with_lock(

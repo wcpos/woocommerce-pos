@@ -264,6 +264,8 @@ class Receipt_Store_Resolver {
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
 			'locale'                   => $this->resolve_locale(),
+			'hour12'                   => Receipt_Date_Formatter::hour12(),
+			'hour_token'               => Receipt_Date_Formatter::hour_token(),
 			'timezone'                 => $this->resolve_store_timezone()->getName(),
 			'currency_position'        => $this->resolve_store_option_string(
 				'get_currency_position',
@@ -333,22 +335,7 @@ class Receipt_Store_Resolver {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public static function with_store_tax_id_labels( array $tax_ids, string $locale = '' ): array {
-		$labels = Receipt_I18n_Labels::get_labels( $locale );
-
-		return array_map(
-			static function ( array $tax_id ) use ( $labels ): array {
-				if ( ! empty( $tax_id['label'] ) ) {
-					return $tax_id;
-				}
-
-				$type            = isset( $tax_id['type'] ) ? (string) $tax_id['type'] : 'other';
-				$key             = 'store_tax_id_label_' . $type;
-				$tax_id['label'] = $labels[ $key ] ?? $labels['store_tax_id_label_other'];
-
-				return $tax_id;
-			},
-			$tax_ids
-		);
+		return Receipt_Sections::label_tax_ids( $tax_ids, 'store', $locale );
 	}
 
 	/**

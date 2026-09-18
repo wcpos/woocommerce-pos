@@ -21,6 +21,7 @@ use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WP_Error;
 use WP_Query;
 use WP_REST_Request;
@@ -64,6 +65,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	private const WCPOS_SORT_PARAM_MAP = array(
 		'orderby' => 'orderby',
 		'order'   => 'order',
+		'search'  => 'search',
 	);
 
 	/**
@@ -80,8 +82,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'wcpos_variation_response' ), 10, 3 );
 		add_action( 'woocommerce_rest_insert_product_variation_object', array( $this, 'wcpos_insert_product_variation_object' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'wcpos_product_variation_query' ), 10, 2 );
-		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
-		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
 
 		/*
 		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
@@ -92,6 +92,21 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 * Apply the collection's declared rules for nested and flat direct reads.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return \WP_Error|\WP_REST_Response
+	 */
+	public function get_items( $request ) {
+		$plan = Collection_Rules::for_request( 'variations', $request, self::WCPOS_SORT_PARAM_MAP );
+		return $plan->around(
+			function () use ( $request ) {
+				return parent::get_items( $request );
+			}
+		);
 	}
 
 	/**
@@ -186,6 +201,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$params['per_page']['minimum'] = -1;
 		}
 
+		// Search text is literal on every lane: `sanitize_text_field` would strip `%30`
+		// and blank malformed UTF-8 before the declared search rule ever saw them.
+		if ( isset( $params['search'] ) && \is_array( $params['search'] ) ) {
+			$params['search']['sanitize_callback'] = 'rest_sanitize_request_arg';
+		}
+
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// DECLARED once, in Sync\Collection_Rules, and projected here — so a sort cannot
@@ -271,49 +292,10 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_Query $wp_query WP_Query object.
 	 *
 	 * @return string
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
-		global $wpdb;
-
-		if ( empty( $search ) ) {
-			return $search; // skip processing - no search term in query.
-		}
-
-		$q            = $wp_query->query_vars;
-		$n            = ! empty( $q['exact'] ) ? '' : '%';
-		$search_terms = (array) $q['search_terms'];
-
-		// Fields in the main 'posts' table.
-		$post_fields = array(); // nothing at the moment for variations.
-
-		// Meta fields to search.
-		$meta_fields = Barcode_Field::search_keys();
-
-		$meta_placeholders = implode( ', ', array_fill( 0, \count( $meta_fields ), '%s' ) );
-		$search_conditions = array();
-
-		foreach ( $search_terms as $term ) {
-			$term = $n . $wpdb->esc_like( $term ) . $n;
-
-			// Search in meta fields.
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $meta_placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
-			$search_conditions[] = $wpdb->prepare(
-				"EXISTS (
-					SELECT 1 FROM {$wpdb->postmeta} AS wcpos_search_meta WHERE wcpos_search_meta.post_id = {$wpdb->posts}.ID AND wcpos_search_meta.meta_key IN ($meta_placeholders) AND wcpos_search_meta.meta_value LIKE %s
-				)",
-				array_merge( $meta_fields, array( $term ) )
-			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		}
-
-		if ( ! empty( $search_conditions ) ) {
-			$search = ' AND (' . implode( ' AND ', $search_conditions ) . ') ';
-			if ( ! is_user_logged_in() ) {
-				$search .= " AND ($wpdb->posts.post_password = '') ";
-			}
-		}
-
-		return $search;
+		return Product_Search::variation_posts_search( $search, $wp_query->query_vars, Collection_Rules::rules( 'variations' )['search'] );
 	}
 
 	/**
@@ -323,15 +305,10 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_join_to_posts_search( string $join, WP_Query $query ) {
-		global $wpdb;
-
-		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
-			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
-		}
-
-		return $join;
+		return empty( $query->query_vars['s'] ) ? $join : Product_Search::posts_join( $join, $query->query_vars );
 	}
 
 	/**
@@ -341,15 +318,10 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_Query $query   The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_groupby_posts_search( string $groupby, WP_Query $query ) {
-		global $wpdb;
-
-		if ( ! empty( $query->query_vars['s'] ) ) {
-			$groupby = "{$wpdb->posts}.ID";
-		}
-
-		return $groupby;
+		return empty( $query->query_vars['s'] ) ? $groupby : Product_Search::posts_groupby( $groupby, $query->query_vars );
 	}
 
 	/**
@@ -361,19 +333,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @return array $args Key value array of query var to query value.
 	 */
 	public function wcpos_product_variation_query( array $args, WP_REST_Request $request ) {
-		if ( ! empty( $request['search'] ) ) {
-			// We need to set the query up for a postmeta join.
-			add_filter( 'posts_join', array( $this, 'wcpos_posts_join_to_posts_search' ), 10, 2 );
-			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_posts_search' ), 10, 2 );
-		}
-
-		// if POS only products are enabled, exclude online-only products.
-		if ( $this->wcpos_pos_only_products_enabled() ) {
-			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_variation_exclude_online_only' ), 10, 2 );
-		}
-
 		// Check for wcpos_include/wcpos_exclude parameter.
-		// NOTE: do this after POS visibility filter so that takes precedence.
+		// The Collection Rules visibility backstop runs first, at priority 10.
 		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
 			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_variation_include_exclude' ), 20, 2 );
 		}
@@ -391,6 +352,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return string
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_where_product_variation_exclude_online_only( string $where, WP_Query $query ) {
 		global $wpdb;
@@ -474,7 +436,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_REST_Request $request Full details about the request.
 	 */
 	public function wcpos_get_all_items( $request ) {
-		return parent::get_items( $request );
+		return $this->get_items( $request );
 	}
 
 
@@ -489,6 +451,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_Query $wp_query The WP_Query instance.
 	 *
 	 * @return array
+	 * @deprecated Collection Rules now installs this behavior.
 	 */
 	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
 		if ( ! isset( $this->wcpos_request ) ) {
@@ -519,10 +482,11 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		 * The POS sorts (`sku`, `barcode`, `stock_quantity`, `stock_status`) are NOT mapped
 		 * onto `meta_key` + `orderby => meta_value` here any more. That pair INNER JOINs
 		 * postmeta, so it dropped every variation with no value for the key — a sort acting
-		 * as a filter. `Sync\Collection_Rules` declares them and `wcpos_posts_clauses()`
+		 * as a filter. `Sync\Collection_Rules` declares them and its scoped plan
 		 * applies them as a LEFT JOIN, on this lane and on `wcpos/v2` alike.
 		 */
 
-		return $args;
+		$plan = Collection_Rules::for_request( 'variations', $request, self::WCPOS_SORT_PARAM_MAP );
+		return $plan->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
 	}
 }

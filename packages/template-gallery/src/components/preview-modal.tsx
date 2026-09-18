@@ -17,7 +17,7 @@ import { PreviewToggle } from './preview-toggle';
 import type { PreviewResponse } from '../types';
 
 interface PreviewModalProps {
-	templateType: 'receipt' | 'display' | 'closure';
+	templateType: 'receipt' | 'display' | 'closure' | 'report';
 	templateId: number | string;
 	templateName: string;
 	templateDescription?: string;
@@ -138,11 +138,11 @@ export function PreviewModal(props: PreviewModalProps) {
 
 function ReceiptPreviewModal(props: PreviewModalProps) {
 	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
-	const isClosure = props.templateType === 'closure';
+	const isDocument = props.templateType === 'closure' || props.templateType === 'report';
 	const [selectedSource, setSource] = React.useState<'sample' | 'order'>(
 		hasPosOrders ? 'order' : 'sample'
 	);
-	const source = isClosure ? 'sample' : selectedSource;
+	const source = isDocument ? 'sample' : selectedSource;
 	const orderId = source === 'order' ? 'latest' : undefined;
 	const {
 		data: preview,
@@ -164,7 +164,7 @@ function ReceiptPreviewModal(props: PreviewModalProps) {
 			preview={preview}
 			isFetching={isFetching}
 			controls={
-				!isClosure && (
+				!isDocument && (
 					<PreviewToggle source={source} disabled={!hasPosOrders} onToggle={setSource} />
 				)
 			}

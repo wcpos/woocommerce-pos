@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; font-size: 13px; color: #1d2327; background: #fff; }
+    a { color: #2271b1; } a:hover { color: #135e96; }
+    .cb { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 1px solid #8c8f94; border-radius: 4px; background: #fff; margin: 0; position: relative; flex: none; cursor: pointer; }
+    .cb:checked { border-color: #2271b1; }
+    .cb:checked::before { content: ""; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px; border: solid #2271b1; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    .cb.mixed { border-color: #2271b1; }
+    .cb.mixed::before { content: ""; position: absolute; left: 3px; top: 6px; width: 8px; height: 2px; background: #2271b1; border-radius: 1px; }
+    .row { display: flex; align-items: flex-start; gap: 8px; }
+    .row label { line-height: 16px; cursor: pointer; }
+    .hint { color: #646970; line-height: 1.4; }
+    .card { border: 1px solid #dcdcde; border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .cap { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #646970; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #fcf9e8; color: #8a6d00; border: 1px solid #f0e6b8; }
+  </style>
+</helmet>
+<div style="width: 1120px; height: 560px; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; gap: 24px;">
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div class="cap">Checkbox states</div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+      <div class="card">
+        <div class="row"><input class="cb" type="checkbox" id="s1"><label for="s1">Delete products</label></div>
+        <div class="hint">Not granted. Nothing behind this task is on the role.</div>
+      </div>
+      <div class="card">
+        <div class="row"><input class="cb mixed" type="checkbox" id="s2" aria-checked="mixed"><label for="s2">Create &amp; edit products</label></div>
+        <div class="hint">Mixed. Only some of the permissions behind this task are on the role. Ticking grants the rest; unticking removes them all.</div>
+      </div>
+      <div class="card">
+        <div class="row"><input class="cb" type="checkbox" id="s3" checked><label for="s3">Manage orders</label></div>
+        <div class="hint">Granted. Every permission behind this task is on the role.</div>
+      </div>
+    </div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div class="cap">Copy for the mixed state, three options</div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+      <div class="card">
+        <div class="cap" style="color: #2271b1;">A · Count and consequence</div>
+        <div class="row">
+          <input class="cb mixed" type="checkbox" id="a1" aria-checked="mixed">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <label for="a1">Create &amp; edit products</label>
+            <span class="hint">Some permissions are missing (3 of 7 granted), so the POS may refuse product edits. Tick to grant the rest, or <a href="#adv">review them under Advanced</a>.</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cap" style="color: #2271b1;">B · Short badge</div>
+        <div class="row" style="align-items: center;">
+          <input class="cb mixed" type="checkbox" id="b1" aria-checked="mixed">
+          <label for="b1">Create &amp; edit products</label>
+          <span class="pill">3 of 7</span>
+          <a href="#adv" style="font-size: 12px;">Review</a>
+        </div>
+        <div class="hint">Lightest. Relies on the mixed glyph and a tooltip on the badge to explain itself.</div>
+      </div>
+      <div class="card">
+        <div class="cap" style="color: #2271b1;">C · Plain language, no numbers</div>
+        <div class="row">
+          <input class="cb mixed" type="checkbox" id="c1" aria-checked="mixed">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <label for="c1">Create &amp; edit products</label>
+            <span class="hint">Incomplete: this role can do part of this task but not all of it. Tick to allow the whole task.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1120,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

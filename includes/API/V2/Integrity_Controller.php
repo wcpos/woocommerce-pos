@@ -259,7 +259,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		if ( null !== $bucket_raw && '' !== $bucket_raw ) {
-			if ( 'products' !== $collection ) {
+			if ( null === ( Collections::row( $collection )['repair']['drill_down'] ?? null ) ) {
 				return new WP_Error(
 					'woocommerce_pos_sync_unsupported_scan_drill_down_collection',
 					\sprintf( 'integrity/scan drill-down does not support the "%s" collection', $collection ),
@@ -267,7 +267,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 				);
 			}
 			$bucket = max( 0, (int) $bucket_raw );
-			if ( $this->maybe_schedule_digest_rebuild() ) {
+			if ( true === Collections::row( $collection )['repair']['self_heal'] && $this->maybe_schedule_digest_rebuild() ) {
 				return rest_ensure_response(
 					$this->envelope(
 						array(
@@ -297,7 +297,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$window_start = $first_bucket * $bucket_size;
 		$window_end   = ( $first_bucket + $limit_buckets ) * $bucket_size;
 
-		if ( 'products' === $collection && $this->maybe_schedule_digest_rebuild() ) {
+		if ( true === Collections::row( $collection )['repair']['self_heal'] && $this->maybe_schedule_digest_rebuild() ) {
 			return rest_ensure_response(
 				$this->envelope(
 					array(
@@ -443,7 +443,8 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * bucket mismatches forever and the till shows a permanent "records need
 	 * attention" for data that is already correct. Observed on dev-pro
 	 * 2026-08-19: 138 products drifted by a hookless bulk edit, re-escalated
-	 * every sweep, local copies byte-identical to the server.
+	 * every sweep, local copies byte-identical to the server. Missing stored
+	 * digests in a partially populated table likewise need rebuilding.
 	 *
 	 * Why a STREAK and not the first sight of drift: for a hookless write the
 	 * integrity scan is the ONLY signal — such a write bypasses the sequence
@@ -462,7 +463,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	private function maybe_schedule_stale_digest_rebuild( int $bucket, int $bucket_size, array $changes ): void {
 		$stale = 0;
 		foreach ( $changes as $change ) {
-			if ( 'changed' === ( $change['status'] ?? '' ) ) {
+			if ( \in_array( $change['status'] ?? '', array( 'changed', 'missing_stored' ), true ) ) {
 				++$stale;
 			}
 		}
@@ -475,7 +476,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$streak_key = $bucket_size . ':' . $bucket;
 
 		if ( 0 === $stale ) {
-			// Reconciled (or only deletions/missing_stored left) — forget it.
+			// Reconciled (or only deletions left) — forget it.
 			if ( isset( $streaks[ $streak_key ] ) ) {
 				unset( $streaks[ $streak_key ] );
 				$this->save_drift_streaks( $streaks );

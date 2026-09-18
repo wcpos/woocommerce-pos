@@ -12,6 +12,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Interfaces\Provider_Adapter_Interface;
+use WCPOS\WooCommercePOS\Interfaces\Poll_Provider_Adapter_Interface;
 use WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter;
 use WCPOS\WooCommercePOS\Services\Providers\Printnode_Adapter;
 use WCPOS\WooCommercePOS\Services\Providers\Star_Cloudprnt_Adapter;
@@ -133,6 +134,61 @@ class Provider {
 			default:
 				return null;
 		}
+	}
+
+	/**
+	 * Resolve the wire format and HTTP content type for a print job.
+	 *
+	 * @param array $printer  Printer configuration.
+	 * @param array $template Template configuration.
+	 *
+	 * @return array{kind:string, content_type:string}
+	 */
+	public static function format( array $printer, array $template ): array {
+		// Printer rows saved before the provider field existed have none; they must behave as the default provider.
+		$provider = self::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
+		$adapter  = self::adapter( $provider );
+		if ( null === $adapter ) {
+			return array(
+				'kind' => '',
+				'content_type' => '',
+			);
+		}
+
+		return $adapter->format( $printer, $template );
+	}
+
+	/**
+	 * Resolve the HTTP content type for a printer when no template is in hand.
+	 *
+	 * The reprint path uses this only when the template cannot be rendered and
+	 * the job carries no `pn_kind`; otherwise it keeps the stored content type
+	 * so the two halves cannot drift apart.
+	 *
+	 * PrintNode reports its PDF default even for a printer in raw mode. The
+	 * reprint path's `pn_kind` condition keeps raw jobs away from this answer.
+	 * Prefer format() when a template is in hand to resolve both halves together.
+	 *
+	 * @param array $printer Printer configuration.
+	 *
+	 * @return string
+	 */
+	public static function printer_content_type( array $printer ): string {
+		$provider = self::normalize( \is_string( $printer['provider'] ?? null ) ? $printer['provider'] : null );
+		$adapter  = self::adapter( $provider );
+
+		return null === $adapter ? 'application/octet-stream' : $adapter->content_type();
+	}
+
+	/**
+	 * Resolve only polling adapters without widening the base provider contract.
+	 *
+	 * @param string $key Provider key.
+	 * @return Poll_Provider_Adapter_Interface|null
+	 */
+	public static function poll_adapter( string $key ): ?Poll_Provider_Adapter_Interface {
+		$adapter = self::adapter( $key );
+		return $adapter instanceof Poll_Provider_Adapter_Interface ? $adapter : null;
 	}
 
 	/**

@@ -76,7 +76,7 @@ export function isTemplateEnabled(template: AnyTemplate): boolean {
 }
 
 interface DraggableRowProps {
-	type: 'receipt' | 'display' | 'closure';
+	type: 'receipt' | 'display' | 'closure' | 'report';
 	onSetActive: (id: number | string) => void;
 	settingActiveId?: number | string | null;
 	template: AnyTemplate;
@@ -278,7 +278,7 @@ function DraggableRow({
 }
 
 interface TemplatesTableProps {
-	type?: 'receipt' | 'display' | 'closure';
+	type?: 'receipt' | 'display' | 'closure' | 'report';
 	onSetActive: (id: number | string) => void;
 	settingActiveId?: number | string | null;
 	templates: AnyTemplate[];
