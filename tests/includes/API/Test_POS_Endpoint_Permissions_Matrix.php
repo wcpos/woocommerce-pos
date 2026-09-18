@@ -224,7 +224,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 
 			$refresh_result = $this->auth_service->refresh_access_token( $expired_refresh_token );
 			$this->assertInstanceOf( WP_Error::class, $refresh_result, $role . ' expired refresh token should not mint access tokens.' );
-			$this->assertEquals( 'woocommmerce_pos_auth_invalid_token', $refresh_result->get_error_code() );
+			$this->assertEquals( 'woocommerce_pos_auth_token_expired', $refresh_result->get_error_code(), $role . ' expired refresh token is reported as expired, not as a generic decode failure.' );
 		}
 	}
 
