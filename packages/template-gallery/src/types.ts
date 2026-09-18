@@ -19,6 +19,16 @@ export interface Template {
 	gallery_key: string | null;
 	preview_data?: string | null;
 	gallery_version: number;
+	/**
+	 * How the installed copy compares with the bundled template it came from. Null for a
+	 * hand-written template, which has no original to be behind; absent entirely when the
+	 * response came from a plugin build older than the comparison.
+	 */
+	gallery_update?: {
+		status: 'current' | 'outdated-untouched' | 'outdated-edited';
+		installed_version: number;
+		latest_version: number;
+	} | null;
 	source: 'custom';
 	menu_order: number;
 	date_created: string;

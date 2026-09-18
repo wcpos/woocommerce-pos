@@ -171,6 +171,10 @@ export function GalleryGrid() {
 					onReorder={(orderedIds) => reorderTemplates.mutate(orderedIds)}
 					togglingId={togglingId}
 					deletingId={deleteTemplate.isPending ? (deleteTemplate.variables ?? null) : null}
+					// Installing the current version alongside is the same install the gallery does,
+					// so the merchant's edited copy is left exactly as it is and they port at leisure.
+					onInstallNewVersion={(galleryKey) => installGallery.mutate(galleryKey)}
+					installingNewVersion={installGallery.isPending}
 				/>
 			</section>
 

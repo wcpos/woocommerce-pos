@@ -33,6 +33,18 @@ function isOffline(template: AnyTemplate): boolean {
 	);
 }
 
+/**
+ * The bundled original of an installed template has moved on AND the merchant has edited their
+ * copy, so it can only be offered — never replaced. An unedited copy is updated in place on
+ * upgrade and never reaches the UI at all, which is what keeps this from becoming a badge every
+ * merchant learns to ignore.
+ */
+function pendingUpdate(template: AnyTemplate): Template['gallery_update'] {
+	const update = (template as Template).gallery_update;
+
+	return update && update.status === 'outdated-edited' ? update : null;
+}
+
 function getPrintMethod(template: AnyTemplate): string {
 	return isThermal(template) ? t('table.receipt_printer') : t('table.browser');
 }
@@ -74,6 +86,9 @@ interface DraggableRowProps {
 	onDelete: (id: number) => void;
 	isToggling: boolean;
 	isDeleting: boolean;
+	/** Install the current bundled version alongside the merchant's edited copy. */
+	onInstallNewVersion?: (galleryKey: string) => void;
+	isInstallingNewVersion?: boolean;
 }
 
 function DraggableRow({
@@ -87,6 +102,8 @@ function DraggableRow({
 	onDelete,
 	isToggling,
 	isDeleting,
+	onInstallNewVersion,
+	isInstallingNewVersion,
 }: DraggableRowProps) {
 	const rowRef = React.useRef<HTMLTableRowElement>(null);
 	const handleRef = React.useRef<HTMLTableCellElement>(null);
@@ -99,6 +116,7 @@ function DraggableRow({
 	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
 	const canDelete = !isVirtual;
 	const enabled = isTemplateEnabled(template);
+	const update = pendingUpdate(template);
 
 	React.useEffect(() => {
 		const row = rowRef.current;
@@ -158,7 +176,23 @@ function DraggableRow({
 				&#8801;
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
-				<div className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">{template.title}</div>
+				<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
+					<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
+						{template.title}
+					</span>
+					{update && (
+						<span
+							title={t('table.update_available_title', {
+								installed: String(update.installed_version),
+								latest: String(update.latest_version),
+								name: template.title,
+							})}
+							className="wcpos:text-xs wcpos:text-amber-800 wcpos:bg-amber-100 wcpos:rounded wcpos:px-1.5 wcpos:py-0.5 wcpos:whitespace-nowrap"
+						>
+							{t('table.update_available')}
+						</span>
+					)}
+				</div>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatCategory(template.category)}
@@ -213,6 +247,16 @@ function DraggableRow({
 							{t('common.edit')}
 						</a>
 					)}
+					{update && onInstallNewVersion && (template as Template).gallery_key && (
+						<button
+							type="button"
+							onClick={() => onInstallNewVersion((template as Template).gallery_key as string)}
+							disabled={isInstallingNewVersion}
+							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
+						>
+							{t('table.install_new_version')}
+						</button>
+					)}
 					{canDelete && (
 						<button
 							type="button"
@@ -244,6 +288,9 @@ interface TemplatesTableProps {
 	onReorder: (orderedIds: (number | string)[]) => void;
 	togglingId: number | string | null;
 	deletingId: number | null;
+	/** Install the current bundled version alongside a merchant's edited copy. */
+	onInstallNewVersion?: (galleryKey: string) => void;
+	installingNewVersion?: boolean;
 }
 
 export function TemplatesTable({
@@ -257,6 +304,8 @@ export function TemplatesTable({
 	onReorder,
 	togglingId,
 	deletingId,
+	onInstallNewVersion,
+	installingNewVersion,
 }: TemplatesTableProps) {
 	const tableRef = React.useRef<HTMLTableElement>(null);
 
@@ -362,6 +411,8 @@ export function TemplatesTable({
 							onDelete={onDelete}
 							isToggling={template.id === togglingId}
 							isDeleting={template.id === deletingId}
+							onInstallNewVersion={onInstallNewVersion}
+							isInstallingNewVersion={installingNewVersion}
 						/>
 					))}
 				</tbody>
