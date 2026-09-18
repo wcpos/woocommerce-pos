@@ -261,6 +261,51 @@ class Test_Order_Write_Parity extends Sync_REST_Store_Test_Case {
 		}
 	}
 
+	/** A quantity-only edit by line id must not reset a renamed line to the catalog name. */
+	public function test_quantity_edit_by_line_id_both_lanes_keep_the_stored_line_name(): void {
+		// Arrange. The stored line carries a name the catalog does not.
+		$product = ProductHelper::create_simple_product();
+		$created = $this->create_in_both_lanes(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => $product->get_id(),
+						'name'       => 'Engraved: Happy Birthday',
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		$ids     = $this->created_order_ids( $created );
+		$line_id = array_keys( wc_get_order( $ids[0] )->get_items() )[0];
+		foreach ( $ids as $id ) {
+			$this->assertSame( 'Engraved: Happy Birthday', array_values( wc_get_order( $id )->get_items() )[0]->get_name() );
+		}
+
+		// Act. Neither identity nor name is posted.
+		$this->update_in_both_lanes(
+			$created[2],
+			$ids[0],
+			$ids[1],
+			array(
+				'line_items' => array(
+					array(
+						'id'       => $line_id,
+						'quantity' => 3,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		foreach ( $ids as $id ) {
+			$items = array_values( wc_get_order( $id )->get_items() );
+			$this->assertSame( 1, count( $items ) );
+			$this->assertSame( 3, $items[0]->get_quantity() );
+			$this->assertSame( 'Engraved: Happy Birthday', $items[0]->get_name(), 'set_product() must not run for an unchanged binding.' );
+		}
+	}
+
 	/** Dropping UUID reconciliation would append a duplicate rather than update the line. */
 	public function test_line_without_id_both_lanes_update_the_uuid_matched_item(): void {
 		// Arrange.
