@@ -124,6 +124,73 @@ class Registry_Private_Base_Test_Double {
 /** The subclass the filter registers; the namespace it inherits is not in its own scope. */
 class Registry_Private_Settings_Test_Double extends Registry_Private_Base_Test_Double {}
 
+/**
+ * A controller whose constructor assigns a namespace it never declares.
+ *
+ * The attribute is deliberate: the shape under test IS the dynamic property, and
+ * PHP 8.2+ deprecates creating one without it. PHP 7.4 reads the line as a comment.
+ */
+#[\AllowDynamicProperties]
+class Registry_Dynamic_Settings_Test_Double {
+	/** Assign the namespace without a property declaration. */
+	public function __construct() {
+		$this->namespace = Controller_Registry::V1_NAMESPACE; // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+	}
+
+	/** Register the probe under whatever namespace this instance holds. */
+	public function register_routes(): void {
+		register_rest_route(
+			$this->namespace,
+			'/settings/dynamic-probe',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static function (): WP_REST_Response {
+					return new WP_REST_Response( array(), 200 );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}
+
+/**
+ * A subclass whose constructor assigns a namespace dynamically while the base
+ * keeps a private one: two slots again, and the base's is invisible from here.
+ */
+#[\AllowDynamicProperties]
+class Registry_Dynamic_Over_Private_Test_Double extends Registry_Private_Base_Test_Double {
+	/** Assign the namespace the subclass reads, without declaring it. */
+	public function __construct() {
+		$this->namespace = Controller_Registry::V1_NAMESPACE; // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+	}
+
+	/** Register the parent's probe, then one under this instance's own namespace. */
+	public function register_routes(): void {
+		parent::register_routes();
+		register_rest_route(
+			$this->namespace,
+			'/settings/dynamic-over-private-probe',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static function (): WP_REST_Response {
+					return new WP_REST_Response( array(), 200 );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}
+
+/** A subclass that declares its own namespace while the base keeps a private one. */
+class Registry_Shadowed_Settings_Test_Double extends Registry_Private_Base_Test_Double {
+	/**
+	 * The subclass's own slot; the base's private slot is a second one.
+	 *
+	 * @var string
+	 */
+	protected $namespace = Controller_Registry::V1_NAMESPACE;
+}
+
 /** A v2-filter replacement that deliberately serves nothing. */
 class Registry_Silent_Settings_Test_Double {
 	/** Register no route at all. */
@@ -203,6 +270,27 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		if ( 'test_a_promoted_controller_outside_core_s_base_class_is_stamped_v2' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Plain_Settings_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+		}
+		if ( 'test_a_namespace_the_constructor_assigned_without_declaring_is_stamped' === $this->getName() ) {
+			$this->v2_filter = static function ( array $map ): array {
+				$map['settings'] = Registry_Dynamic_Settings_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+		}
+		if ( 'test_a_dynamic_namespace_over_a_private_base_slot_stamps_both' === $this->getName() ) {
+			$this->v2_filter = static function ( array $map ): array {
+				$map['settings'] = Registry_Dynamic_Over_Private_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+		}
+		if ( 'test_a_shadowed_namespace_is_stamped_in_every_scope_that_holds_one' === $this->getName() ) {
+			$this->v2_filter = static function ( array $map ): array {
+				$map['settings'] = Registry_Shadowed_Settings_Test_Double::class;
 				return $map;
 			};
 			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
@@ -460,6 +548,52 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( '/wcpos/v2/settings/plain-probe', $this->server->get_routes( 'wcpos/v1' ) );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertInstanceOf( Registry_Plain_Settings_Test_Double::class, $registry->controllers()['v2-settings'] );
+	}
+
+	/** A namespace held only on the instance is still the one the controller reads. */
+	public function test_a_namespace_the_constructor_assigned_without_declaring_is_stamped(): void {
+		// Arrange.
+		$frozen_probe = '/' . Controller_Registry::V1_NAMESPACE . '/settings/dynamic-probe';
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/dynamic-probe' ) );
+
+		// Assert.
+		$this->assertArrayHasKey( '/wcpos/v2/settings/dynamic-probe', $this->server->get_routes( 'wcpos/v2' ) );
+		$this->assertArrayNotHasKey( $frozen_probe, $this->server->get_routes( Controller_Registry::V1_NAMESPACE ) );
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/** An instance-only namespace can sit on top of a private base slot; both are read, both are stamped. */
+	public function test_a_dynamic_namespace_over_a_private_base_slot_stamps_both(): void {
+		// Arrange.
+		$frozen = $this->server->get_routes( Controller_Registry::V1_NAMESPACE );
+		$v2     = $this->server->get_routes( 'wcpos/v2' );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/dynamic-over-private-probe' ) );
+
+		// Assert. The base's inherited route reads the private slot and the
+		// subclass's reads the instance slot, so both have to be written.
+		$this->assertArrayHasKey( '/wcpos/v2/settings/private-probe', $v2 );
+		$this->assertArrayHasKey( '/wcpos/v2/settings/dynamic-over-private-probe', $v2 );
+		$this->assertArrayNotHasKey( '/' . Controller_Registry::V1_NAMESPACE . '/settings/private-probe', $frozen );
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/** A private base slot and the subclass's own slot are two slots, and the inherited route reads the base's. */
+	public function test_a_shadowed_namespace_is_stamped_in_every_scope_that_holds_one(): void {
+		// Arrange.
+		$frozen_probe = '/' . Controller_Registry::V1_NAMESPACE . '/settings/private-probe';
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/private-probe' ) );
+
+		// Assert. The inherited register_routes() reads the base's private slot,
+		// so stamping only the subclass's would leave this route on the frozen lane.
+		$this->assertArrayHasKey( '/wcpos/v2/settings/private-probe', $this->server->get_routes( 'wcpos/v2' ) );
+		$this->assertArrayNotHasKey( $frozen_probe, $this->server->get_routes( Controller_Registry::V1_NAMESPACE ) );
+		$this->assertSame( 200, $response->get_status() );
 	}
 
 	/** A subclass must not get a dynamic property while the base keeps registering on its own namespace. */

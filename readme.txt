@@ -128,6 +128,22 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.10.19 - 2026/09/19 =
+
+- **A till no longer loses live records during its startup tidy-up.** With the POS open twice on the same device, the tidy-up could mistake live records — including the sign-in row — for damaged ones and remove them. It now leaves alone anything it cannot fully account for. Web merchants receive this through WooCommerce POS plugin 1.10.19, which serves the storage worker; desktop and phone apps carry it in this release.
+- **A sale that could not be sent because the till was signed out now waits for sign-in instead of being given up on.** The cashier is told as soon as it happens, and the sale sends itself once the session is back.
+- **A refused POS request now says why it was refused.** A 401 from the POS routes names the reason in the response and in Health > Logs, instead of only reporting that the request failed.
+
+= 1.10.18 - 2026/09/18 =
+
+- **A web till with the POS open in more than one tab repairs its local database again.** Since the 1.10 storage repairs shipped, every repair on web was refused whenever another tab of the same store could be open, so a damaged record stayed damaged and the same storage errors repeated on every sync. The tab that leads the store now owns the repair and the other tabs follow it. Web merchants receive this through WooCommerce POS plugin 1.10.18, which serves the storage worker; desktop and phone apps carry it in this release.
+- **Voiding an order the server had refused no longer fails silently.** When an order could not be created on the server (for example while the till was signed out) and the cashier then voided it, the void raised an error nothing caught and the order stayed in the cart. The till now removes the order and its failed request locally and confirms the removal; any other failure to void shows an error instead of nothing.
+- **A till opened from WordPress admin no longer sends an invalid sign-in token on its first requests.** A request made before a token was stored carried the word "undefined" as its credential, which the server rejected as an invalid token instead of falling back to the WordPress login session. Such requests now carry no token, and a retry after a token refresh no longer keeps the old token in the request address.
+- **A plugin update no longer restores cashier permissions the merchant had removed.** Every update re-granted every default capability, so a store that had turned off product or coupon editing for cashiers saw it come back after each release. Updates now grant only capabilities that are new since the last update; a deleted cashier role is still recreated whole.
+- **Product search on the older `wcpos/v1` routes splits the typed text the same way as the rest of the POS.** Punctuation stays literal and single letters and common words count, so "IT 5012" no longer searches as "5012" and "0,4" is one term.
+- **An order digest write no longer fails on a busy MariaDB.** The checkout-lane digest write now retries once on lock contention, as the product and customer digests already did.
+- **The older order-update route checks order ownership the same way as the current one under HPOS.** A role that can edit its own orders but not other people's is treated the same on both routes. Cashiers are unaffected.
+
 = 1.10.17 - 2026/09/17 =
 
 - **A till no longer gets stuck at login on "Something went wrong: useStoreSession must be called within an active store session".** A damaged range in the till's local database made the login write fail and left the cashier on a red banner. The write is now repaired and retried, and if the saved session still cannot be honoured the till returns to the store list with a message instead of the banner. If the site has to be added again, it opens a fresh local database and does not pick up sales still waiting to sync in the old one. Web merchants receive the storage repair through WooCommerce POS plugin 1.10.17, which serves the storage worker; desktop and phone apps carry it in this release.
