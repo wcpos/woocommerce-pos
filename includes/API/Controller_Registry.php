@@ -221,12 +221,13 @@ final class Controller_Registry {
 		$registry_key = $key;
 		if ( self::V2_NAMESPACE === $lane ) {
 			$registry_key = 'v2-' . $key;
-			// Any controller whose namespace can be written is stamped, not only a
+			// Any controller that keeps a namespace is stamped, not only a
 			// WP_REST_Controller subclass: the v2 map takes a class name, so a
 			// controller written against WP_REST_Server directly is as entitled to
 			// the promotion as one that extends core's base.
-			if ( property_exists( $controller, 'namespace' ) ) {
-				self::stamp_namespace( $controller, $lane );
+			$scope = self::namespace_scope( $controller );
+			if ( null !== $scope ) {
+				self::stamp_namespace( $controller, $scope, $lane );
 			}
 		}
 		$this->controllers[ $registry_key ] = $controller;
@@ -345,21 +346,47 @@ final class Controller_Registry {
 	}
 
 	/**
+	 * The class that declares this controller's namespace, if any declares one.
+	 *
+	 * Walked rather than asked, because property_exists() answers false for a
+	 * property a BASE class keeps private — the shape where a naive write would
+	 * quietly add a dynamic property to the subclass while the inherited
+	 * register_routes() went on reading the original value. A controller that
+	 * declares no namespace anywhere has nothing to stamp and registers where its
+	 * own register_routes() says, as it did before the map was derived.
+	 *
+	 * @param object $controller Controller instance.
+	 *
+	 * @return string|null The declaring class name, or null when there is none.
+	 */
+	private static function namespace_scope( object $controller ): ?string {
+		for ( $class = new \ReflectionClass( $controller ); false !== $class; $class = $class->getParentClass() ) {
+			if ( $class->hasProperty( 'namespace' ) ) {
+				return $class->getName();
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * WP_REST_Controller::$namespace is protected with no setter (Paul, 2026-09-18: stamp
 	 * every v2 entry here rather than ask each class to opt in, so a v1 replacement from
 	 * Pro or a third party reaches wcpos/v2 with no work on its side).
 	 *
 	 * @param object $controller Controller instance.
-	 * @param string $namespace Target namespace.
+	 * @param string $scope      The class that declares the property, so a namespace
+	 *                           a base class keeps private is written where it lives.
+	 * @param string $namespace  Target namespace.
 	 */
-	private static function stamp_namespace( object $controller, string $namespace ): void {
+	private static function stamp_namespace( object $controller, string $scope, string $namespace ): void {
 		try {
 			\Closure::bind(
 				function () use ( $namespace ): void {
 					$this->namespace = $namespace;
 				},
 				$controller,
-				$controller
+				$scope
 			)();
 		} catch ( \Error $e ) {
 			// The controller declared its namespace readonly, so it has already
