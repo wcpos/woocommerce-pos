@@ -122,9 +122,17 @@ class Test_Auth_Refusal_Reason extends WCPOS_REST_Unit_Test_Case {
 			'POS request refused: woocommerce_pos_auth_session_revoked — Session has been revoked',
 			$this->rows[0]['message']
 		);
-		$this->assertStringContainsString( '[route] => /wcpos/v2/push/orders', $this->rows[0]['message'] );
-		$this->assertStringContainsString( '[method] => POST', $this->rows[0]['message'] );
-		$this->assertStringContainsString( '[reason] => woocommerce_pos_auth_session_revoked', $this->rows[0]['message'] );
+		// How the Logger encodes the context is the Logger's own concern, and it is
+		// not the same on both trunks: print_r here, one-line JSON on next so the
+		// log reader can parse a row per line. Both write it after the same marker,
+		// so assert against the part after the marker — that proves each value
+		// reached the diagnostic context and not merely the message text.
+		$marker = strpos( $this->rows[0]['message'], ' | Context: ' );
+		$this->assertNotFalse( $marker, 'The log row carries no context.' );
+		$logged_context = substr( $this->rows[0]['message'], $marker );
+		$this->assertStringContainsString( '/wcpos/v2/push/orders', $logged_context );
+		$this->assertStringContainsString( 'POST', $logged_context );
+		$this->assertStringContainsString( 'woocommerce_pos_auth_session_revoked', $logged_context );
 		$this->assertStringNotContainsString( $tokens['access_token'], $this->rows[0]['message'] );
 	}
 
