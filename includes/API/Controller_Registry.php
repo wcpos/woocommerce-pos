@@ -217,8 +217,7 @@ final class Controller_Registry {
 			// WP_REST_Controller subclass: the v2 map takes a class name, so a
 			// controller written against WP_REST_Server directly is as entitled to
 			// the promotion as one that extends core's base.
-			$scope = self::namespace_scope( $controller );
-			if ( null !== $scope ) {
+			foreach ( self::namespace_scopes( $controller ) as $scope ) {
 				self::stamp_namespace( $controller, $scope, $lane );
 			}
 		}
@@ -338,27 +337,58 @@ final class Controller_Registry {
 	}
 
 	/**
-	 * The class that declares this controller's namespace, if any declares one.
+	 * Every scope holding a namespace slot on this controller, outermost first.
 	 *
-	 * Walked rather than asked, because property_exists() answers false for a
-	 * property a BASE class keeps private — the shape where a naive write would
-	 * quietly add a dynamic property to the subclass while the inherited
-	 * register_routes() went on reading the original value. A controller that
-	 * declares no namespace anywhere has nothing to stamp and registers where its
-	 * own register_routes() says, as it did before the map was derived.
+	 * The ancestry is walked rather than asked, because property_exists() answers
+	 * false for a property a BASE class keeps private, and a private declaration
+	 * is a slot of its own: a subclass that declares its own namespace alongside
+	 * one the base keeps private has two, and an inherited register_routes() reads
+	 * the base's. Writing from the wrong scope would quietly add a dynamic
+	 * property while the controller went on reading the old value, so each slot is
+	 * written where it lives and all of them are written.
+	 *
+	 * A namespace a constructor assigned without declaring the property belongs to
+	 * no class, but the instance holds it and the controller reads it, so the
+	 * runtime class is the scope for that one.
+	 *
+	 * A controller that keeps no namespace at all has nothing to stamp and
+	 * registers where its own register_routes() says, as it did before the map was
+	 * derived.
 	 *
 	 * @param object $controller Controller instance.
 	 *
-	 * @return string|null The declaring class name, or null when there is none.
+	 * @return string[] Class names, empty when the controller holds no namespace.
 	 */
-	private static function namespace_scope( object $controller ): ?string {
+	private static function namespace_scopes( object $controller ): array {
+		$scopes = array();
+
 		for ( $class = new \ReflectionClass( $controller ); false !== $class; $class = $class->getParentClass() ) {
-			if ( $class->hasProperty( 'namespace' ) ) {
-				return $class->getName();
+			if ( ! $class->hasProperty( 'namespace' ) ) {
+				continue;
+			}
+			// Ask where the slot this class can see actually lives, rather than
+			// assuming this class owns it: an inherited protected property is ONE
+			// slot visible from every descendant, so naming each descendant would
+			// write it several times — harmless for a plain property, not for one
+			// with a set hook. A private declaration a subclass shadows really is
+			// a second slot, and this reports it as such.
+			$scopes[] = $class->getProperty( 'namespace' )->getDeclaringClass()->getName();
+		}
+
+		// A namespace a constructor assigned without declaring the property belongs
+		// to no class, but the instance holds it and the controller reads it. It
+		// can also sit on top of a private one a base declares, so this is asked
+		// whether or not the walk above found anything. The property list is read
+		// rather than hasProperty(), which answers false for exactly this case
+		// (measured on PHP 8.3) while getProperties() still returns the property.
+		foreach ( ( new \ReflectionObject( $controller ) )->getProperties() as $property ) {
+			if ( 'namespace' === $property->getName() && ! $property->isDefault() ) {
+				$scopes[] = \get_class( $controller );
+				break;
 			}
 		}
 
-		return null;
+		return array_values( array_unique( $scopes ) );
 	}
 
 	/**
