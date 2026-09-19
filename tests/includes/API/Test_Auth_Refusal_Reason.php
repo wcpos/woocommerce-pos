@@ -127,7 +127,10 @@ class Test_Auth_Refusal_Reason extends WCPOS_REST_Unit_Test_Case {
 		// log reader can parse a row per line. Assert the values reached the row.
 		$this->assertStringContainsString( '/wcpos/v2/push/orders', $this->rows[0]['message'] );
 		$this->assertStringContainsString( 'POST', $this->rows[0]['message'] );
-		$this->assertStringContainsString( 'woocommerce_pos_auth_session_revoked', $this->rows[0]['message'] );
+		// The reason also appears in the message prefix asserted above, so count
+		// both: the second occurrence is the context's, and it goes away if the
+		// context stops carrying the key.
+		$this->assertSame( 2, substr_count( $this->rows[0]['message'], 'woocommerce_pos_auth_session_revoked' ) );
 		$this->assertStringNotContainsString( $tokens['access_token'], $this->rows[0]['message'] );
 	}
 
