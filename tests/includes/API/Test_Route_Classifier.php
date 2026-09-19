@@ -175,7 +175,9 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 		);
 		// The auth family, the health probe, and the five service surfaces the
 		// wp-admin settings screen drives with cookie auth (no protocol claim),
-		// each declared by its V1 controller and inherited by the V2 twin.
+		// each declared by its V1 controller and carried onto wcpos/v2 by the
+		// Controller Registry. The order is registration order and pins nothing:
+		// the v2-native controllers register before the promoted services.
 		$this->assertSame(
 			array(
 				'/wcpos/v1/auth/',
@@ -187,6 +189,10 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 				'/wcpos/v1/extensions',
 				'/wcpos/v1/logs',
 				'/wcpos/v2/status',
+				'/wcpos/v2/registers',
+				'/wcpos/v2/sessions',
+				'/wcpos/v2/movements',
+				'/wcpos/v2/closures',
 				'/wcpos/v2/auth/',
 				'/wcpos/v2/settings',
 				'/wcpos/v2/templates',
@@ -195,10 +201,6 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 				'/wcpos/v2/star-online/devices',
 				'/wcpos/v2/extensions',
 				'/wcpos/v2/logs',
-				'/wcpos/v2/registers',
-				'/wcpos/v2/sessions',
-				'/wcpos/v2/movements',
-				'/wcpos/v2/closures',
 			),
 			$built_classifications['protocol_exempt']
 		);

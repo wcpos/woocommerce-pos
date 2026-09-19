@@ -1,6 +1,6 @@
 <?php
 /**
- * Permanent aliases for legacy WCPOS REST API class names.
+ * Permanent aliases for legacy unversioned and folded v2 WCPOS REST API class names.
  *
  * WCPOS Pro and third-party extensions subclass these controllers by FQCN.
  * Keep the old names as a permanent public API while implementations live in V1.
@@ -51,6 +51,26 @@ spl_autoload_register(
 			'WCPOS\WooCommercePOS\API\Traits\Query_Helpers'          => 'WCPOS\WooCommercePOS\API\V1\Traits\Query_Helpers',
 			'WCPOS\WooCommercePOS\API\Traits\Uuid_Handler'           => 'WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler',
 			'WCPOS\WooCommercePOS\API\Traits\WCPOS_REST_API'         => 'WCPOS\WooCommercePOS\API\V1\Traits\WCPOS_REST_API',
+
+			// The wcpos/v2 service twins were folded into Controller_Registry in 1.10.19.
+			// It stamps every v2 entry, so subclasses registered through
+			// woocommerce_pos_rest_api_v2_controllers still answer under wcpos/v2.
+			// Outside the registry, a subclass inherits v1 and must set its own namespace.
+			'WCPOS\WooCommercePOS\API\V2\Auth'                           => 'WCPOS\WooCommercePOS\API\V1\Auth',
+			'WCPOS\WooCommercePOS\API\V2\Cashier'                        => 'WCPOS\WooCommercePOS\API\V1\Cashier',
+			'WCPOS\WooCommercePOS\API\V2\Checkout_Controller'            => 'WCPOS\WooCommercePOS\API\V1\Checkout_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Data_Order_Statuses_Controller' => 'WCPOS\WooCommercePOS\API\V1\Data_Order_Statuses_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Extensions'                     => 'WCPOS\WooCommercePOS\API\V1\Extensions',
+			'WCPOS\WooCommercePOS\API\V2\Gateway_Bootstrap_Controller'   => 'WCPOS\WooCommercePOS\API\V1\Gateway_Bootstrap_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Logs'                           => 'WCPOS\WooCommercePOS\API\V1\Logs',
+			'WCPOS\WooCommercePOS\API\V2\Payment_Gateways'               => 'WCPOS\WooCommercePOS\API\V1\Payment_Gateways',
+			'WCPOS\WooCommercePOS\API\V2\Print_Jobs_Controller'          => 'WCPOS\WooCommercePOS\API\V1\Print_Jobs_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Receipts_Controller'            => 'WCPOS\WooCommercePOS\API\V1\Receipts_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Settings'                       => 'WCPOS\WooCommercePOS\API\V1\Settings',
+			'WCPOS\WooCommercePOS\API\V2\Shipping_Methods_Controller'    => 'WCPOS\WooCommercePOS\API\V1\Shipping_Methods_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Stores'                         => 'WCPOS\WooCommercePOS\API\V1\Stores',
+			'WCPOS\WooCommercePOS\API\V2\Tax_Classes_Controller'         => 'WCPOS\WooCommercePOS\API\V1\Tax_Classes_Controller',
+			'WCPOS\WooCommercePOS\API\V2\Templates_Controller'           => 'WCPOS\WooCommercePOS\API\V1\Templates_Controller',
 		);
 
 		if ( isset( $aliases[ $class ] ) ) {
