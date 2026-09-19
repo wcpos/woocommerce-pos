@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.18
+Stable tag: 1.10.19
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,12 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.19 - 2026/09/19 =
+
+- **A till no longer loses live records during its startup tidy-up.** With the POS open twice on the same device, the tidy-up could mistake live records — including the sign-in row — for damaged ones and remove them. It now leaves alone anything it cannot fully account for. Web merchants receive this through WooCommerce POS plugin 1.10.19, which serves the storage worker; desktop and phone apps carry it in this release.
+- **A sale that could not be sent because the till was signed out now waits for sign-in instead of being given up on.** The cashier is told as soon as it happens, and the sale sends itself once the session is back.
+- **A refused POS request now says why it was refused.** A 401 from the POS routes names the reason in the response and in Health > Logs, instead of only reporting that the request failed.
 
 = 1.10.18 - 2026/09/18 =
 
