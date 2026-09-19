@@ -361,17 +361,34 @@ final class Controller_Registry {
 	 */
 	private static function namespace_scopes( object $controller ): array {
 		$scopes = array();
+
 		for ( $class = new \ReflectionClass( $controller ); false !== $class; $class = $class->getParentClass() ) {
-			if ( $class->hasProperty( 'namespace' ) ) {
-				$scopes[] = $class->getName();
+			if ( ! $class->hasProperty( 'namespace' ) ) {
+				continue;
+			}
+			// Ask where the slot this class can see actually lives, rather than
+			// assuming this class owns it: an inherited protected property is ONE
+			// slot visible from every descendant, so naming each descendant would
+			// write it several times — harmless for a plain property, not for one
+			// with a set hook. A private declaration a subclass shadows really is
+			// a second slot, and this reports it as such.
+			$scopes[] = $class->getProperty( 'namespace' )->getDeclaringClass()->getName();
+		}
+
+		// A namespace a constructor assigned without declaring the property belongs
+		// to no class, but the instance holds it and the controller reads it. It
+		// can also sit on top of a private one a base declares, so this is asked
+		// whether or not the walk above found anything. The property list is read
+		// rather than hasProperty(), which answers false for exactly this case
+		// (measured on PHP 8.3) while getProperties() still returns the property.
+		foreach ( ( new \ReflectionObject( $controller ) )->getProperties() as $property ) {
+			if ( 'namespace' === $property->getName() && ! $property->isDefault() ) {
+				$scopes[] = \get_class( $controller );
+				break;
 			}
 		}
 
-		if ( empty( $scopes ) && property_exists( $controller, 'namespace' ) ) {
-			$scopes[] = \get_class( $controller );
-		}
-
-		return $scopes;
+		return array_values( array_unique( $scopes ) );
 	}
 
 	/**
