@@ -21,7 +21,7 @@
     "szepeviktor/phpstan-wordpress": "v2.0.4",
     "woocommerce/woocommerce-sniffs": "2.0.0",
     "wp-coding-standards/wpcs": "3.4.1",
-    "wp-phpunit/wp-phpunit": "7.1.0",
+    "wp-phpunit/wp-phpunit": "7.1.1",
     "yoast/phpunit-polyfills": "4.0.0"
   },
   "require": {
