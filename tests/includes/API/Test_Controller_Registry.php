@@ -96,6 +96,34 @@ class Registry_Plain_Settings_Test_Double {
 	}
 }
 
+/** A base class that keeps its namespace private and reads it when it registers. */
+class Registry_Private_Base_Test_Double {
+	/**
+	 * Endpoint namespace, private to this class.
+	 *
+	 * @var string
+	 */
+	private $namespace = Controller_Registry::V1_NAMESPACE;
+
+	/** Register the probe under whatever namespace this class holds. */
+	public function register_routes(): void {
+		register_rest_route(
+			$this->namespace,
+			'/settings/private-probe',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static function (): WP_REST_Response {
+					return new WP_REST_Response( array(), 200 );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}
+
+/** The subclass the filter registers; the namespace it inherits is not in its own scope. */
+class Registry_Private_Settings_Test_Double extends Registry_Private_Base_Test_Double {}
+
 /** A v2-filter replacement that deliberately serves nothing. */
 class Registry_Silent_Settings_Test_Double {
 	/** Register no route at all. */
@@ -175,6 +203,13 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		if ( 'test_a_promoted_controller_outside_core_s_base_class_is_stamped_v2' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Plain_Settings_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+		}
+		if ( 'test_a_namespace_private_to_a_base_class_is_stamped_in_its_own_scope' === $this->getName() ) {
+			$this->v2_filter = static function ( array $map ): array {
+				$map['settings'] = Registry_Private_Settings_Test_Double::class;
 				return $map;
 			};
 			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
@@ -425,6 +460,22 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( '/wcpos/v2/settings/plain-probe', $this->server->get_routes( 'wcpos/v1' ) );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertInstanceOf( Registry_Plain_Settings_Test_Double::class, $registry->controllers()['v2-settings'] );
+	}
+
+	/** A subclass must not get a dynamic property while the base keeps registering on its own namespace. */
+	public function test_a_namespace_private_to_a_base_class_is_stamped_in_its_own_scope(): void {
+		// Arrange.
+		$frozen_probe = '/' . Controller_Registry::V1_NAMESPACE . '/settings/private-probe';
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/private-probe' ) );
+
+		// Assert. A dynamic property on the subclass would leave the inherited
+		// register_routes() reading the base's original value, so the probe would
+		// be on the frozen lane instead.
+		$this->assertArrayHasKey( '/wcpos/v2/settings/private-probe', $this->server->get_routes( 'wcpos/v2' ) );
+		$this->assertArrayNotHasKey( $frozen_probe, $this->server->get_routes( Controller_Registry::V1_NAMESPACE ) );
+		$this->assertSame( 200, $response->get_status() );
 	}
 
 	/**
