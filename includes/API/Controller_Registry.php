@@ -211,13 +211,11 @@ final class Controller_Registry {
 		$registry_key = $key;
 		if ( self::V2_NAMESPACE === $lane ) {
 			$registry_key = 'v2-' . $key;
-			// Any controller that declares the property is stamped, not only a
+			// Any controller whose namespace can be written is stamped, not only a
 			// WP_REST_Controller subclass: the v2 map takes a class name, so a
 			// controller written against WP_REST_Server directly is as entitled to
-			// the promotion as one that extends core's base. One that keeps no
-			// namespace has nothing to stamp and registers where its own
-			// register_routes() says.
-			if ( property_exists( $controller, 'namespace' ) ) {
+			// the promotion as one that extends core's base.
+			if ( self::stampable( $controller ) ) {
 				self::stamp_namespace( $controller, $lane );
 			}
 		}
@@ -334,6 +332,28 @@ final class Controller_Registry {
 	 */
 	public function controllers(): array {
 		return $this->controllers;
+	}
+
+	/**
+	 * Whether this controller's namespace is ours to write.
+	 *
+	 * A controller that declares no namespace has nothing to stamp, and one that
+	 * declares it readonly has already decided it — the first would invent a
+	 * property nothing reads, and the second is fatal (PHP 8.1+ refuses the write
+	 * even from inside the class). Either way the controller registers where its
+	 * own register_routes() says, as it did before the map was derived.
+	 *
+	 * @param object $controller Controller instance.
+	 */
+	private static function stampable( object $controller ): bool {
+		if ( ! property_exists( $controller, 'namespace' ) ) {
+			return false;
+		}
+
+		$property = new \ReflectionProperty( $controller, 'namespace' );
+
+		// isReadOnly() arrived in PHP 8.1, with readonly itself.
+		return ! method_exists( $property, 'isReadOnly' ) || ! $property->isReadOnly();
 	}
 
 	/**

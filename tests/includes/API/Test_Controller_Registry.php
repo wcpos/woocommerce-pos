@@ -179,6 +179,16 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 			};
 			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
 		}
+		if ( 'test_a_readonly_namespace_is_left_alone_rather_than_fatally_rewritten' === $this->getName() ) {
+			if ( version_compare( PHP_VERSION, '8.1', '>=' ) ) {
+				self::define_readonly_double();
+				$this->v2_filter = static function ( array $map ): array {
+					$map['settings'] = 'Registry_Readonly_Settings_Test_Double';
+					return $map;
+				};
+				add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			}
+		}
 		if ( 'test_a_v2_filter_replacement_that_serves_nothing_is_not_overridden_by_the_core_service' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Silent_Settings_Test_Double::class;
@@ -415,6 +425,50 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( '/wcpos/v2/settings/plain-probe', $this->server->get_routes( 'wcpos/v1' ) );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertInstanceOf( Registry_Plain_Settings_Test_Double::class, $registry->controllers()['v2-settings'] );
+	}
+
+	/**
+	 * Declare the readonly double. `readonly` does not parse below PHP 8.1, and
+	 * the suite runs on 7.4, so the class cannot be written out in this file.
+	 */
+	private static function define_readonly_double(): void {
+		if ( class_exists( 'Registry_Readonly_Settings_Test_Double' ) ) {
+			return;
+		}
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- The only way to express PHP 8.1 syntax in a 7.4-parsed suite.
+		eval(
+			'class Registry_Readonly_Settings_Test_Double {
+				public readonly string $namespace;
+				public function __construct() { $this->namespace = "wcpos/v1"; }
+				public function register_routes(): void {
+					register_rest_route( $this->namespace, "/settings/readonly-probe", array(
+						"methods" => "GET",
+						"callback" => "__return_true",
+						"permission_callback" => "__return_true",
+					) );
+				}
+			}'
+		);
+	}
+
+	/** A controller that declared its namespace readonly keeps it, and must not fatal registration. */
+	public function test_a_readonly_namespace_is_left_alone_rather_than_fatally_rewritten(): void {
+		if ( version_compare( PHP_VERSION, '8.1', '<' ) ) {
+			$this->markTestSkipped( 'readonly properties need PHP 8.1.' );
+		}
+
+		// Arrange.
+		$registry = $this->registry();
+
+		// Act. Registration already ran in setUp; reaching here at all is the point.
+		$v1_routes = $this->server->get_routes( 'wcpos/v1' );
+		$v2_routes = $this->server->get_routes( 'wcpos/v2' );
+
+		// Assert.
+		$this->assertArrayHasKey( '/wcpos/v1/settings/readonly-probe', $v1_routes );
+		$this->assertArrayNotHasKey( '/wcpos/v2/settings/readonly-probe', $v2_routes );
+		$this->assertInstanceOf( 'Registry_Readonly_Settings_Test_Double', $registry->controllers()['v2-settings'] );
+		$this->assertArrayHasKey( '/wcpos/v2/status', $v2_routes );
 	}
 
 	/** An explicit v2-filter choice stands even when it serves nothing; only derived entries fall back. */
