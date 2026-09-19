@@ -67,6 +67,35 @@ class Registry_Legacy_Auth_Test_Double {
 	}
 }
 
+/**
+ * A controller written against WP_REST_Server directly, not extending core's
+ * base class, that keeps its own namespace property and reads it when it
+ * registers. The registry must stamp it like any other promoted entry.
+ */
+class Registry_Plain_Settings_Test_Double {
+	/**
+	 * Endpoint namespace, as a core-shaped controller declares it.
+	 *
+	 * @var string
+	 */
+	protected $namespace = 'wcpos/v1';
+
+	/** Register the probe under whatever namespace this controller carries. */
+	public function register_routes(): void {
+		register_rest_route(
+			$this->namespace,
+			'/settings/plain-probe',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static function (): WP_REST_Response {
+					return new WP_REST_Response( array(), 200 );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}
+
 /** A v2-filter replacement that deliberately serves nothing. */
 class Registry_Silent_Settings_Test_Double {
 	/** Register no route at all. */
@@ -142,6 +171,13 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 				return $map;
 			};
 			add_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
+		}
+		if ( 'test_a_promoted_controller_outside_core_s_base_class_is_stamped_v2' === $this->getName() ) {
+			$this->v2_filter = static function ( array $map ): array {
+				$map['settings'] = Registry_Plain_Settings_Test_Double::class;
+				return $map;
+			};
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_a_v2_filter_replacement_that_serves_nothing_is_not_overridden_by_the_core_service' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
@@ -364,6 +400,21 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), array_values( $promoted_sync_keys ) );
 		$this->assertCount( 1, $status_handlers );
 		$this->assertSame( 'sync-status', $registry->routes()['/wcpos/v2/status'] );
+	}
+
+	/** Promotion is not limited to subclasses of core's controller base class. */
+	public function test_a_promoted_controller_outside_core_s_base_class_is_stamped_v2(): void {
+		// Arrange.
+		$registry = $this->registry();
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/plain-probe' ) );
+
+		// Assert.
+		$this->assertArrayHasKey( '/wcpos/v2/settings/plain-probe', $this->server->get_routes( 'wcpos/v2' ) );
+		$this->assertArrayNotHasKey( '/wcpos/v2/settings/plain-probe', $this->server->get_routes( 'wcpos/v1' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertInstanceOf( Registry_Plain_Settings_Test_Double::class, $registry->controllers()['v2-settings'] );
 	}
 
 	/** An explicit v2-filter choice stands even when it serves nothing; only derived entries fall back. */
