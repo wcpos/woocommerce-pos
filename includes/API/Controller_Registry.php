@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /**
  * Owns both controller maps, their instances, route attribution and classification merge.
  *
@@ -215,7 +217,7 @@ final class Controller_Registry {
 			// WP_REST_Controller subclass: the v2 map takes a class name, so a
 			// controller written against WP_REST_Server directly is as entitled to
 			// the promotion as one that extends core's base.
-			if ( self::stampable( $controller ) ) {
+			if ( property_exists( $controller, 'namespace' ) ) {
 				self::stamp_namespace( $controller, $lane );
 			}
 		}
@@ -335,28 +337,6 @@ final class Controller_Registry {
 	}
 
 	/**
-	 * Whether this controller's namespace is ours to write.
-	 *
-	 * A controller that declares no namespace has nothing to stamp, and one that
-	 * declares it readonly has already decided it — the first would invent a
-	 * property nothing reads, and the second is fatal (PHP 8.1+ refuses the write
-	 * even from inside the class). Either way the controller registers where its
-	 * own register_routes() says, as it did before the map was derived.
-	 *
-	 * @param object $controller Controller instance.
-	 */
-	private static function stampable( object $controller ): bool {
-		if ( ! property_exists( $controller, 'namespace' ) ) {
-			return false;
-		}
-
-		$property = new \ReflectionProperty( $controller, 'namespace' );
-
-		// isReadOnly() arrived in PHP 8.1, with readonly itself.
-		return ! method_exists( $property, 'isReadOnly' ) || ! $property->isReadOnly();
-	}
-
-	/**
 	 * WP_REST_Controller::$namespace is protected with no setter (Paul, 2026-09-18: stamp
 	 * every v2 entry here rather than ask each class to opt in, so a v1 replacement from
 	 * Pro or a third party reaches wcpos/v2 with no work on its side).
@@ -365,12 +345,22 @@ final class Controller_Registry {
 	 * @param string $namespace Target namespace.
 	 */
 	private static function stamp_namespace( object $controller, string $namespace ): void {
-		\Closure::bind(
-			function () use ( $namespace ): void {
-				$this->namespace = $namespace;
-			},
-			$controller,
-			$controller
-		)();
+		try {
+			\Closure::bind(
+				function () use ( $namespace ): void {
+					$this->namespace = $namespace;
+				},
+				$controller,
+				$controller
+			)();
+		} catch ( \Error $e ) {
+			// The controller declared its namespace readonly, so it has already
+			// decided it and PHP refuses the write even from inside the class.
+			// Left alone it registers where its own register_routes() says, as it
+			// did before the map was derived; rethrowing would abort rest_api_init
+			// and take every WCPOS route with it. The bound closure does nothing
+			// else, so there is no other Error this can swallow.
+			Logger::log( 'wcpos/v2 promotion left ' . \get_class( $controller ) . ' on its own namespace: ' . $e->getMessage() );
+		}
 	}
 }

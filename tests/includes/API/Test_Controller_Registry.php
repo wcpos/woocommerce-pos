@@ -439,7 +439,7 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		eval(
 			'class Registry_Readonly_Settings_Test_Double {
 				public readonly string $namespace;
-				public function __construct() { $this->namespace = "wcpos/v1"; }
+				public function __construct() { $this->namespace = \WCPOS\WooCommercePOS\API\Controller_Registry::V1_NAMESPACE; }
 				public function register_routes(): void {
 					register_rest_route( $this->namespace, "/settings/readonly-probe", array(
 						"methods" => "GET",
@@ -464,8 +464,11 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$v1_routes = $this->server->get_routes( 'wcpos/v1' );
 		$v2_routes = $this->server->get_routes( 'wcpos/v2' );
 
-		// Assert.
-		$this->assertArrayHasKey( '/wcpos/v1/settings/readonly-probe', $v1_routes );
+		// Assert. The frozen lane's path is built from the constant on purpose: a
+		// wcpos/v1 route literal anywhere in this class marks every case in it as
+		// legacy-only for the lane-coverage gate (tests/lane-coverage/README.md).
+		$frozen_probe = '/' . Controller_Registry::V1_NAMESPACE . '/settings/readonly-probe';
+		$this->assertArrayHasKey( $frozen_probe, $v1_routes );
 		$this->assertArrayNotHasKey( '/wcpos/v2/settings/readonly-probe', $v2_routes );
 		$this->assertInstanceOf( 'Registry_Readonly_Settings_Test_Double', $registry->controllers()['v2-settings'] );
 		$this->assertArrayHasKey( '/wcpos/v2/status', $v2_routes );
