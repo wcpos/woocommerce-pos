@@ -211,7 +211,15 @@ final class Controller_Registry {
 		$registry_key = $key;
 		if ( self::V2_NAMESPACE === $lane ) {
 			$registry_key = 'v2-' . $key;
-			self::stamp_namespace( $controller, $lane );
+			// Any controller that declares the property is stamped, not only a
+			// WP_REST_Controller subclass: the v2 map takes a class name, so a
+			// controller written against WP_REST_Server directly is as entitled to
+			// the promotion as one that extends core's base. One that keeps no
+			// namespace has nothing to stamp and registers where its own
+			// register_routes() says.
+			if ( property_exists( $controller, 'namespace' ) ) {
+				self::stamp_namespace( $controller, $lane );
+			}
 		}
 		$this->controllers[ $registry_key ] = $controller;
 
@@ -337,16 +345,6 @@ final class Controller_Registry {
 	 * @param string $namespace Target namespace.
 	 */
 	private static function stamp_namespace( object $controller, string $namespace ): void {
-		// Any controller that declares the property is stamped, not only a
-		// WP_REST_Controller subclass: the v2 map takes a class name, so a
-		// controller written against WP_REST_Server directly is as entitled to
-		// the promotion as one that extends core's base. A class that keeps no
-		// namespace of its own has nothing to stamp and registers where its own
-		// register_routes() says.
-		if ( ! property_exists( $controller, 'namespace' ) ) {
-			return;
-		}
-
 		\Closure::bind(
 			function () use ( $namespace ): void {
 				$this->namespace = $namespace;
