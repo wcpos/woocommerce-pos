@@ -100,10 +100,22 @@ final class Service_Groups {
 	 * spawned from a page view, a third-party plugin creating an order on
 	 * `template_redirect`, or a lane the classifier got wrong. Nothing in the
 	 * order group listens to trash or delete, so those need no arming.
+	 *
+	 * Refunds need their own hook. `save()` derives that action from the object
+	 * type, so a `WC_Order_Refund` fires `woocommerce_before_order_refund_object_save`
+	 * instead. `wc_create_refund()` does save the parent order too, but only AFTER
+	 * WooCommerce has decided whether to send the customer refunded-order email —
+	 * and that decision reads `Emails::manage_customer_emails`, which belongs to
+	 * this group. Arming the parent save alone left the filter unregistered at the
+	 * moment it was consulted, so a merchant with POS customer emails switched off
+	 * still had the shopper emailed on a storefront-lane refund (a gateway refund
+	 * webhook on `?wc-api=` is that lane). The refund save runs before the email
+	 * decision, so arming it is early enough.
 	 */
 	public static function arm_order_group(): void {
 		self::$armed = true;
 		add_action( 'woocommerce_before_order_object_save', array( self::class, 'ensure_order_group' ), 0, 0 );
+		add_action( 'woocommerce_before_order_refund_object_save', array( self::class, 'ensure_order_group' ), 0, 0 );
 	}
 
 	/**
