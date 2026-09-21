@@ -88,7 +88,7 @@ function templateSelectOptions(
 		{
 			value: templateId,
 			label:
-				'' === templateId
+				templateId === ''
 					? t('cloud_print.rule_template_none', 'Choose a template…')
 					: t('cloud_print.rule_template_unsupported', 'Unsupported template (#{id})', {
 							id: templateId,

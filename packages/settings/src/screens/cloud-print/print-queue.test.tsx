@@ -372,9 +372,7 @@ describe('PrintQueue', () => {
 	it('shows a recorded failure reason on the row', async () => {
 		routeQueue(() => {
 			const base = makeQueue();
-			base.jobs = base.jobs.map((job) =>
-				job.id === 13 ? { ...job, error: 'EX_TIMEOUT' } : job
-			);
+			base.jobs = base.jobs.map((job) => (job.id === 13 ? { ...job, error: 'EX_TIMEOUT' } : job));
 			return base;
 		});
 		renderQueue();
@@ -402,9 +400,7 @@ describe('PrintQueue', () => {
 		routeQueue(() => {
 			const base = makeQueue();
 			base.jobs = base.jobs.map((job) =>
-				job.id === 13
-					? { ...job, error: 'claim_timeout', unconfirmed: true, retried_to: 21 }
-					: job
+				job.id === 13 ? { ...job, error: 'claim_timeout', unconfirmed: true, retried_to: 21 } : job
 			);
 			return base;
 		});
@@ -412,7 +408,9 @@ describe('PrintQueue', () => {
 
 		await waitFor(() => expect(screen.getByTestId('queue-table')).toBeInTheDocument());
 		expect(screen.getByTestId('queue-error-13')).toHaveTextContent('never confirmed');
-		expect(screen.getByTestId('queue-error-13')).not.toHaveTextContent('retry it if it did not print');
+		expect(screen.getByTestId('queue-error-13')).not.toHaveTextContent(
+			'retry it if it did not print'
+		);
 	});
 
 	it('shows completion timing instead of a stale error on a printed job', async () => {
