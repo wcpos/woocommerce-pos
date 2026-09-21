@@ -110,7 +110,13 @@ final class Closure_Csv {
 			$columns[ $field ] = array( $field );
 		}
 
-		$stream = fopen( 'php://memory', 'w+' );
+		// php://temp, not php://memory: this buffers a whole-store export, which the
+		// page cap allows to be very large. php://temp spills past ~2 MB to disk, so
+		// the buffer is not resident while stream_get_contents() below materializes
+		// the string. (The returned string is still held in memory — streaming the
+		// response instead would need Raw_Response to stop taking a string and
+		// setting Content-Length, which is a shared helper and a separate change.)
+		$stream = fopen( 'php://temp', 'w+' );
 		if ( false === $stream ) {
 			throw new \RuntimeException( 'Could not open closure CSV stream.' );
 		}

@@ -6,23 +6,20 @@ import { Button } from '../../components/ui';
 import useNotices from '../../hooks/use-notices';
 import { t } from '../../translations';
 
-/**
- * The response is an attachment, so the browser downloads it without navigating
- * and fires no event this page can observe — there is no honest way to know when
- * the file has finished. So the pending label is a brief acknowledgement of the
- * click, not a progress indicator, and it clears itself. Leaving it latched would
- * strand the button on "Downloading…" until the merchant reloaded the screen.
- */
-const PENDING_FEEDBACK_MS = 3000;
+const FALLBACK_FILENAME = 'wcpos-closures.csv';
+
+/** Prefer the server's filename so the download matches what the route named it. */
+function filenameFrom(disposition: string | null): string {
+	if (!disposition) return FALLBACK_FILENAME;
+	const match = /filename="([^"]+)"/.exec(disposition);
+	return match?.[1] || FALLBACK_FILENAME;
+}
 
 export default function ExportClosures() {
 	const [pending, setPending] = React.useState(false);
 	const { setNotice } = useNotices();
-	const pendingTimer = React.useRef<ReturnType<typeof setTimeout>>();
 
-	React.useEffect(() => () => clearTimeout(pendingTimer.current), []);
-
-	const download = () => {
+	const download = async () => {
 		const { root, nonce } = window.wpApiSettings ?? {};
 		if (!root || !nonce) {
 			setNotice({
@@ -34,15 +31,50 @@ export default function ExportClosures() {
 			});
 			return;
 		}
+
 		const url = addQueryArgs(`${root}wcpos/v2/closures/export`, {
 			wcpos: 1,
 			_wpnonce: nonce,
 		});
+
 		setNotice(null);
 		setPending(true);
-		clearTimeout(pendingTimer.current);
-		pendingTimer.current = setTimeout(() => setPending(false), PENDING_FEEDBACK_MS);
-		window.location.assign(url);
+		let objectUrl: string | undefined;
+		try {
+			// Fetched rather than navigated to. A top-level navigation cannot tell a CSV
+			// from an error: only a successful export carries Content-Disposition, so a
+			// refusal would replace this screen with raw JSON and lose the merchant's
+			// place. Fetching keeps failures on the page as a notice.
+			const response = await fetch(url, { credentials: 'same-origin' });
+			if (!response.ok) {
+				setNotice({
+					type: 'error',
+					message: t(
+						'export_closures.refused',
+						'The export could not be created. Check that you have permission to view reports, then try again.'
+					),
+				});
+				return;
+			}
+			objectUrl = URL.createObjectURL(await response.blob());
+			const link = document.createElement('a');
+			link.href = objectUrl;
+			link.download = filenameFrom(response.headers.get('content-disposition'));
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+		} catch {
+			setNotice({
+				type: 'error',
+				message: t(
+					'export_closures.failed',
+					'The download could not be started. Reload this page and try again.'
+				),
+			});
+		} finally {
+			if (objectUrl) URL.revokeObjectURL(objectUrl);
+			setPending(false);
+		}
 	};
 
 	return (
