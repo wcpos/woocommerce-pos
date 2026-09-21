@@ -364,6 +364,31 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $this->received );
 	}
 
+	/**
+	 * A malfunctioning scope filter must fail closed.
+	 *
+	 * The fallback for "the filter did not answer with an array" has to be deny, not unrestricted.
+	 * An `is_array()` guard whose fallback means *no scope* looks like hardening while handing out
+	 * every store at exactly the moment something is wrong.
+	 */
+	public function test_report_malformed_scope_filter_denies_rather_than_unscoping(): void {
+		foreach ( array( 'nonsense', 7, null, false ) as $bad ) {
+			add_filter(
+				'woocommerce_pos_closures_list_args',
+				static function () use ( $bad ) {
+					return $bad;
+				},
+				20
+			);
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $this->args );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 404, $response->get_status() );
+			$this->assertNull( $this->received );
+			remove_all_filters( 'woocommerce_pos_closures_list_args', 20 );
+		}
+	}
+
 	/** A caller allowed no stores at all reads no report. */
 	public function test_report_deny_all_store_scope_refuses_every_report(): void {
 		add_filter(

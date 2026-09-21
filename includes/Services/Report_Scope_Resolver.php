@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use WCPOS\WooCommercePOS\Logger;
 use WP_Error;
 
 /** Loads stored scope facts before the gate; builds query bounds only after it. */
@@ -132,7 +133,21 @@ final class Report_Scope_Resolver {
 			array(),
 			$request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/reports' )
 		);
-		if ( ! \is_array( $args ) || ! array_key_exists( 'store_id', $args ) ) {
+		if ( ! \is_array( $args ) ) {
+			// A filter that answers with something other than an array has malfunctioned, and we
+			// cannot know what this caller may reach. Deny — `array()` is the allow-nothing scope
+			// the caller refuses on. Returning null here would read as "unrestricted" and hand
+			// every store out at precisely the moment something is wrong: the safe-looking
+			// fallback is the unsafe one.
+			Logger::warning(
+				'Report scope refused: woocommerce_pos_closures_list_args did not return an array',
+				array( 'type' => \gettype( $args ) )
+			);
+			return array();
+		}
+		// An array without a store_id key is the ordinary unrestricted case: no Pro plugin is
+		// scoping this caller. That is not the same as a malformed answer.
+		if ( ! array_key_exists( 'store_id', $args ) ) {
 			return null;
 		}
 		return array_map( 'intval', (array) $args['store_id'] );
