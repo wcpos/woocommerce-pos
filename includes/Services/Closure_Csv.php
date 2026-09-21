@@ -33,6 +33,13 @@ final class Closure_Csv {
 
 	/** Build a UTF-8 download; presentation always comes from the frozen row.
 	 *
+	 * The variable tender, payment-method and tax-rate columns are unioned from the
+	 * SCOPED rows on the first pass. That ordering is load-bearing, not incidental:
+	 * a header is not a row, so it is easy to forget it carries data, and a column
+	 * list precomputed across every closure would disclose another store's tax-rate
+	 * and payment-method names to a caller scoped away from them. Do not hoist or
+	 * cache this union outside the scope.
+	 *
 	 * @param Closure_Store $store Closure store.
 	 * @param array         $scope Authorization scope from woocommerce_pos_closures_list_args.
 	 * @throws \RuntimeException On read, stream or page-limit failure.

@@ -215,7 +215,8 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * set within the scope it is allowed, never a filtered view.
 	 */
 	public function test_export_honours_extension_store_scoping(): void {
-		// Arrange: one closure in the fixture's store (456), scoped away to store 789.
+		// Arrange: capture what a store with NO closures produces, before creating one.
+		$empty_body = $this->get( 'closures/export' )->get_raw_body();
 		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
 		$scope = static function ( $args ) {
 			$args['store_id'] = 789;
@@ -225,14 +226,23 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		add_filter( 'woocommerce_pos_closures_list_args', $scope );
 		try {
-			$scoped = $this->export_csv( $this->get( 'closures/export' ) );
+			$scoped_response = $this->get( 'closures/export' );
+			$scoped_body = $scoped_response->get_raw_body();
+			$scoped = $this->export_csv( $scoped_response );
 		} finally {
 			remove_filter( 'woocommerce_pos_closures_list_args', $scope );
 		}
 		$unscoped = $this->export_csv( $this->get( 'closures/export' ) );
 
-		// Assert: header only under the scope, the row back once it lifts.
+		// Assert: the scoped export is byte-identical to what a store with no closures
+		// at all produces. Asserting indistinguishability rather than a row count means
+		// no oracle survives — the variable tender, payment-method and tax-rate columns
+		// are unioned from in-scope rows only, so a caller cannot learn that a closure
+		// exists elsewhere from a column name, a row count or the content length.
+		$this->assertSame( $empty_body, $scoped_body );
 		$this->assertSame( 1, count( $scoped ) );
+		// And the row is genuinely there once the scope lifts, so the test above is not
+		// passing because the fixture failed to create anything.
 		$this->assertSame( 2, count( $unscoped ) );
 	}
 
