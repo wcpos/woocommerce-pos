@@ -322,6 +322,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		// "passed". Both families must refuse, not be corrected.
 		foreach ( array(
 			'invalid',
+			// Pins array_key_exists() over isset(): isset() is FALSE for null, so the
+			// key would be skipped as absent, list() would receive store_id => null,
+			// render `store_id IS NULL`, and export ONLY unassigned closures — an
+			// unreadable restriction silently becoming a real one.
+			null,
 			false,
 			true,
 			1.0,
@@ -385,6 +390,48 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert: accepted, and indistinguishable from a store with no closures.
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $empty_body, $response->get_raw_body() );
+	}
+
+	/** The export's own paging and ordering win over anything the scope supplies.
+	 *
+	 * The scope is merged FIRST and the export's page, per_page and number_order
+	 * second, so they override. Reverse the array_merge() arguments and an extension
+	 * could start the walk at page 5, shrink per_page, or reorder the file — each of
+	 * which silently truncates or rearranges a fiscal export that claims to be the
+	 * whole set. Nothing else in the suite would notice, because no other test has a
+	 * filter that supplies those keys.
+	 */
+	public function test_export_paging_and_order_beat_the_scope_filter(): void {
+		// Arrange: three closures across two registers, as the ordering test uses.
+		$store = new Closure_Store();
+		$first = $this->closure_session();
+		$second = $this->closure_session();
+		$registers = array( $first['register_id'], $second['register_id'] );
+		sort( $registers, SORT_STRING );
+		$lower = $first['register_id'] === $registers[0] ? $first : $second;
+		$upper = $first['register_id'] === $registers[1] ? $first : $second;
+		$store->create( $this->closure_fields( $upper, 1 ) );
+		$store->create( $this->closure_fields( $lower, 2 ) );
+		$store->create( $this->closure_fields( $this->closure_session( $registers[0] ), 10 ) );
+		// A filter that tries to take over paging and ordering.
+		$hostile = static function ( $args ) {
+			$args['page'] = 5;
+			$args['per_page'] = 1;
+			$args['number_order'] = true;
+			return $args;
+		};
+
+		// Act.
+		add_filter( 'woocommerce_pos_closures_list_args', $hostile );
+		try {
+			$csv = $this->export_csv( $this->get( 'closures/export' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_closures_list_args', $hostile );
+		}
+
+		// Assert: all three rows, still in register-then-number order.
+		$this->assertSame( 4, count( $csv ) );
+		$this->assertSame( array( '2', '10', '1' ), array_column( array_slice( $csv, 1 ), 0 ) );
 	}
 
 	/** A caller cannot narrow the export with query params; it is the whole allowed set. */
