@@ -214,9 +214,7 @@ describe('AutoPrintRules', () => {
 
 	it('keeps a template the newly chosen printer can still render', () => {
 		const { onChange } = renderRules({
-			assignments: [
-				{ printer_id: 'kitchen', store_id: 0, scope: 'every', template_id: '22' },
-			],
+			assignments: [{ printer_id: 'kitchen', store_id: 0, scope: 'every', template_id: '22' }],
 		});
 
 		fireEvent.change(screen.getByTestId('rule-printer-0'), { target: { value: 'front' } });
