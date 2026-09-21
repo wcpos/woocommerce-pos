@@ -153,6 +153,7 @@ final class Controller_Registry {
 			'sessions'        => V2\Sessions_Controller::class,
 			'closures'        => V2\Closures_Controller::class,
 			'records'         => V2\Records_Controller::class,
+			'reports'         => V2\Reports_Controller::class,
 		);
 		$map     = $natives + array_diff_key( $v1, array_flip( self::FROZEN_DATA_KEYS ) );
 

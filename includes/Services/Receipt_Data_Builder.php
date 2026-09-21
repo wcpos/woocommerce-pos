@@ -155,17 +155,8 @@ class Receipt_Data_Builder {
 		foreach ( array( 'name', 'address_lines' ) as $field ) {
 			$store_section[ $field ] = $row['breakdowns']['store'][ $field ] ?? $store_section[ $field ];
 		}
-		$fiscal = array_fill_keys( array( 'immutable_id', 'receipt_number', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
-		$fiscal += array(
-			'sequence' => null,
-			'signed_at' => null,
-			'is_reprint' => false,
-			'reprint_count' => 0,
-			'extra_fields' => array(),
-		);
-		$fiscal['document_type'] = $xreport ? 'xreport' : 'closure';
-		$fiscal['receipt_number'] = $xreport ? '' : (string) $row['number'];
-		return array(
+		$fiscal = self::document_fiscal( $xreport ? 'xreport' : 'closure', $xreport ? '' : (string) $row['number'] );
+		$data = array(
 			'closure' => $row,
 			'store' => $store_section,
 			'presentation_hints' => $hints,
@@ -178,8 +169,176 @@ class Receipt_Data_Builder {
 				'currency' => $currency,
 				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
 			),
-			'fiscal' => Receipt_Payload_Assembler::fiscal( $fiscal ),
+			'fiscal' => $fiscal,
 			'i18n' => $i18n,
+		);
+		$identity = array_intersect_key( $fiscal, array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id' ) ) );
+		$printed = array_intersect_key( $row, array_flip( array( 'id', 'number', 'printed_number' ) ) );
+		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), $xreport ? 'xreport' : 'closure' );
+		// The identity is core-owned, as on the refund path: an extension cannot restate the
+		// document type or the closure's number. Its other fiscal additions are kept.
+		$data['fiscal'] = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
+		// Restore what a template actually prints, not merely what fiscal records. Both the PHP
+		// and the shipped gallery closure templates head the document with `closure.number` and
+		// branch on `fiscal.is_x_report`, so protecting `fiscal.receipt_number` and
+		// `fiscal.document_type` alone would still let an extension print a closure under another
+		// number, or print an X-report as a numbered closure. The two flags are derived, so they
+		// are re-derived here rather than trusted back from the filter.
+		// The whole `closure` section is restored, not just the printed identity. It is the frozen
+		// fiscal record — expected, counted, variance, the tender rows and their `_display`
+		// companions — and the shipped templates print those figures under the authentic closure
+		// number. An extension that could rewrite `variance_display` could make a short drawer
+		// print as balanced. Enrichment belongs in a top-level key or `fiscal.extra_fields`, both
+		// of which survive this.
+		$data['closure'] = array_merge( (array) ( $data['closure'] ?? array() ), $row, $printed );
+		$data['fiscal']['is_x_report'] = $xreport;
+		$data['fiscal']['is_closure_document'] = true;
+		return $data;
+	}
+
+	/**
+	 * Merge a report core with the plugin-owned envelope, without running receipt filters.
+	 *
+	 * @param string $key Registered report key.
+	 * @param string $title Registered title.
+	 * @param array  $scope Resolved query scope.
+	 * @param array  $core Producer's report and top-level extras.
+	 */
+	public function build_report_document( string $key, string $title, array $scope, array $core ): array {
+		$resolver = new Receipt_Store_Resolver( wcpos_get_store( $scope['store_id'] ) );
+		$timezone = new DateTimeZone( $scope['timezone'] );
+		$locale = $resolver->resolve_locale();
+		$document_scope = array_intersect_key( $scope, array_flip( array( 'mode', 'store_id', 'register_id', 'register_name', 'business_day', 'session_id', 'session_number' ) ) );
+		// The document schema uses an empty string for all registers; the query scope uses null.
+		$document_scope['register_id'] = $scope['register_id'] ?? '';
+		if ( 'range' === $scope['mode'] ) {
+			foreach ( array( 'from', 'to' ) as $field ) {
+				$day = new \DateTimeImmutable( $scope[ $field ] . ' 00:00:00', $timezone );
+				$document_scope[ $field ] = Receipt_Date_Formatter::from_timestamp( $day->getTimestamp(), $timezone, $locale );
+			}
+			$document_scope['label'] = $document_scope['from']['date'] . ' – ' . $document_scope['to']['date'];
+		} else {
+			foreach ( array( 'opened_at', 'closed_at' ) as $field ) {
+				$instant = new \DateTimeImmutable( $scope[ $field ], new DateTimeZone( 'UTC' ) );
+				$document_scope[ $field ] = Receipt_Date_Formatter::from_timestamp( $instant->getTimestamp(), $timezone, $locale );
+			}
+			/* translators: %s: closed session number. */
+			$document_scope['label'] = sprintf( __( 'Session %s', 'woocommerce-pos' ), $scope['session_number'] );
+		}
+		$report = array_intersect_key( $core['report'] ?? array(), array_flip( array( 'subtitle', 'group_by', 'columns', 'column_count', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' ) ) );
+		$user = wp_get_current_user();
+		$fiscal = self::document_fiscal( 'report' );
+		// The report schema's shared fields are typed: no sequence or signature is issued.
+		$fiscal['sequence'] = 0;
+		$fiscal['signed_at'] = '';
+		$fiscal['is_report_document'] = true;
+		$store = $resolver->build_store_section();
+		// The report schema's logo is a string, even when no store/site logo is configured.
+		$store['logo'] = $store['logo'] ?? '';
+		$identity = array(
+			'report' => array(
+				'key' => $key,
+				'title' => $title,
+				'scope' => $document_scope,
+			),
+			'sections' => array(
+				'store' => array_intersect_key( $store, array_flip( array( 'id', 'name' ) ) ),
+				'register' => array(
+					'id' => $document_scope['register_id'],
+					'name' => $scope['register_name'],
+				),
+				'cashier' => array( 'id' => (int) $user->ID ),
+				'software' => array(
+					'name' => 'WCPOS',
+					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+				),
+				'fiscal' => array(
+					'document_type' => 'report',
+					'is_report_document' => true,
+				),
+			),
+		);
+		$data = array(
+			'report' => array(
+				'key' => $key,
+				'title' => $title,
+				'scope' => $document_scope,
+			) + $report,
+			'store' => $store,
+			'register' => array(
+				'id' => $document_scope['register_id'],
+				'name' => $scope['register_name'],
+			),
+			'cashier' => array(
+				'id' => (int) $user->ID,
+				'name' => $user->display_name,
+			),
+			'software' => array(
+				'name' => 'WCPOS',
+				'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+			),
+			'fiscal' => $fiscal,
+			'i18n' => Receipt_I18n_Labels::get_labels( $locale ),
+		) + $core;
+
+		/**
+		 * Filters a server-built report document before it is validated.
+		 *
+		 * Runs on every document a registered report produces, after the plugin has merged its
+		 * envelope and the report's key, title and resolved scope over the producer's tabular
+		 * core. Extensions may add optional top-level extras or adjust presentation; the document
+		 * is validated against the `report` JSON schema afterwards, so a filtered document that
+		 * breaks the schema fails as the report's own failure. Device-built reports never reach
+		 * PHP and so never run this filter.
+		 *
+		 * The plugin's own statement of the document — its key, its title, the scope that was
+		 * authorised, and the identity a reader relies on — is restored after this filter and
+		 * cannot be rewritten here.
+		 *
+		 * @param array  $data  The report document.
+		 * @param string $key   The report key.
+		 * @param array  $scope The resolved scope (see Report_Scope_Resolver).
+		 *
+		 * @since 1.11.0
+		 *
+		 * @hook woocommerce_pos_report_data
+		 */
+		$data = (array) apply_filters( 'woocommerce_pos_report_data', $data, $key, $scope );
+
+		// Restored for the same reason the closure path restores its identity, and covering what a
+		// template prints rather than only what `fiscal` records: the key and title name the
+		// report, the scope states what was asked for and authorised, and the store, register and
+		// cashier lines head the rendered document. An extension may enrich any of these sections
+		// — only the identity-bearing fields come back.
+		foreach ( array( 'key', 'title', 'scope' ) as $field ) {
+			$data['report'][ $field ] = $identity['report'][ $field ];
+		}
+		foreach ( $identity['sections'] as $section => $fields ) {
+			foreach ( $fields as $field => $value ) {
+				$data[ $section ][ $field ] = $value;
+			}
+		}
+		return $data;
+	}
+
+	/**
+	 * Shared unsigned fiscal envelope for closure and report documents.
+	 *
+	 * @param string $type Document type.
+	 * @param string $number Captured closure number, or empty for an unnumbered document.
+	 */
+	private static function document_fiscal( string $type, string $number = '' ): array {
+		$values = array_fill_keys( array( 'immutable_id', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
+		return Receipt_Payload_Assembler::fiscal(
+			$values + array(
+				'document_type' => $type,
+				'receipt_number' => $number,
+				'sequence' => null,
+				'signed_at' => null,
+				'is_reprint' => false,
+				'reprint_count' => 0,
+				'extra_fields' => array(),
+			)
 		);
 	}
 
@@ -664,12 +823,14 @@ class Receipt_Data_Builder {
 		 * by Receipt_Data_Schema should keep their documented types.
 		 *
 		 * Sample previews for the template editor and gallery also run through this filter,
-		 * with mode `preview` and an unsaved order whose id is 0; a plugin that needs a
-		 * persisted order should return `$data` unchanged when `$order->get_id()` is 0.
+		 * with mode `preview` and an unsaved order whose id is 0. Closure and X-report
+		 * documents also run through this filter, with modes `closure` and `xreport`
+		 * and an unsaved id-0 order, never null. A plugin that needs a persisted order
+		 * should return `$data` unchanged when `$order->get_id()` is 0.
 		 *
 		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
 		 * @param WC_Abstract_Order $order Order the receipt is for.
-		 * @param string            $mode  Receipt mode: 'live', 'fiscal', 'refund' or 'preview', passed unchanged.
+		 * @param string            $mode  Receipt mode: 'live', 'fiscal', 'refund', 'preview', 'closure' or 'xreport', passed unchanged.
 		 *
 		 * @since 1.10.8
 		 *
