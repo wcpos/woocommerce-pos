@@ -122,7 +122,10 @@ class Settings {
 		wp_localize_script(
 			PLUGIN_NAME . '-settings',
 			'wpApiSettings',
-			array( 'root' => esc_url_raw( get_rest_url() ), 'nonce' => wp_create_nonce( 'wp_rest' ) )
+			array(
+				'root' => esc_url_raw( get_rest_url() ),
+				'nonce' => wp_create_nonce( 'wp_rest' ),
+			)
 		);
 
 		wp_add_inline_script( PLUGIN_NAME . '-settings', Menu::get_posthog_inline_script(), 'before' );

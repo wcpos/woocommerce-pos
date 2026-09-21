@@ -222,7 +222,10 @@ class Closures_Controller extends \WP_REST_Controller {
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_export_failed', 500 );
 		}
-		$site = sanitize_title( get_bloginfo( 'name' ) ) ?: (string) get_current_blog_id();
+		$site = sanitize_title( get_bloginfo( 'name' ) );
+		if ( '' === $site ) {
+			$site = (string) get_current_blog_id();
+		}
 		return Raw_Response::serve(
 			$csv,
 			'text/csv; charset=utf-8',

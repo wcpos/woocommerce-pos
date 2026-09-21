@@ -37,7 +37,11 @@ final class Closure_Csv {
 	 * @throws \RuntimeException On read, stream or page-limit failure.
 	 */
 	public function build( Closure_Store $store ): string {
-		$keys = array( 'tenders' => array(), 'payment_methods' => array(), 'tax_rates' => array() );
+		$keys = array(
+			'tenders' => array(),
+			'payment_methods' => array(),
+			'tax_rates' => array(),
+		);
 		foreach ( $this->rows( $store ) as $row ) {
 			foreach ( array( 'counted', 'expected', 'variance' ) as $field ) {
 				foreach ( array_keys( $row[ $field ] ?? array() ) as $key ) {
@@ -51,16 +55,24 @@ final class Closure_Csv {
 			}
 		}
 		foreach ( $keys as &$group ) {
-			uksort( $group, static function ( $left, $right ) use ( $group ): int {
-				return strcmp( (string) $group[ $left ], (string) $group[ $right ] ) ?: strcmp( (string) $left, (string) $right );
-			} );
+			uksort(
+				$group,
+				static function ( $left, $right ) use ( $group ): int {
+						$by_label = strcmp( (string) $group[ $left ], (string) $group[ $right ] );
+					return 0 !== $by_label ? $by_label : strcmp( (string) $left, (string) $right );
+				}
+			);
 			$used = array();
 			foreach ( $group as $key => &$suffix ) {
-				$base = trim( preg_replace( '/[^a-z0-9]+/', '_', strtolower( (string) $suffix ) ), '_' ) ?: 'unnamed';
+				$base = trim( preg_replace( '/[^a-z0-9]+/', '_', strtolower( (string) $suffix ) ), '_' );
+				if ( '' === $base ) {
+					$base = 'unnamed';
+				}
 				$suffix = $base;
 				$counter = 2;
 				while ( isset( $used[ $suffix ] ) ) {
-					$suffix = $base . '_' . $counter++;
+					$suffix = $base . '_' . $counter;
+					++$counter;
 				}
 				$used[ $suffix ] = true;
 			}
@@ -73,7 +85,10 @@ final class Closure_Csv {
 				$columns[ $field . '_' . $suffix ] = array( $field, $key );
 			}
 		}
-		foreach ( array( 'payment_methods' => array( 'sales', 'refunds' ), 'tax_rates' => array( 'net', 'tax', 'gross' ) ) as $section => $fields ) {
+		foreach ( array(
+			'payment_methods' => array( 'sales', 'refunds' ),
+			'tax_rates' => array( 'net', 'tax', 'gross' ),
+		) as $section => $fields ) {
 			foreach ( $keys[ $section ] as $key => $suffix ) {
 				foreach ( $fields as $field ) {
 					$prefix = 'payment_methods' === $section ? 'tender_' : 'tax_';
@@ -133,13 +148,22 @@ final class Closure_Csv {
 	 */
 	private function rows( Closure_Store $store, bool $counts = false ): \Generator {
 		for ( $page = 1; $page <= self::MAX_EXPORT_PAGES; ++$page ) {
-			$rows = $store->list( array( 'page' => $page, 'per_page' => Closure_Store::MAX_PER_PAGE, 'number_order' => 'register_asc' ) );
+			$rows = $store->list(
+				array(
+					'page' => $page,
+					'per_page' => Closure_Store::MAX_PER_PAGE,
+					'number_order' => 'register_asc',
+				)
+			);
 			if ( $counts ) {
 				$rows = $store->with_correction_counts( $rows );
 			}
 			foreach ( $rows as $row ) {
 				// Stored breakdowns support both keyed maps and the receipt contract's lists.
-				foreach ( array( 'payment_methods' => 'method', 'tax_rates' => 'name' ) as $section => $identity ) {
+				foreach ( array(
+					'payment_methods' => 'method',
+					'tax_rates' => 'name',
+				) as $section => $identity ) {
 					$values = $row['breakdowns'][ $section ] ?? array();
 					$values = is_array( $values ) ? $values : array();
 					$is_list = array_keys( $values ) === range( 0, count( $values ) - 1 );

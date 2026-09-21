@@ -89,12 +89,30 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, count( $csv ) );
 		$this->assertSame(
 			array(
-				'closure_number', 'register_id', 'register_name', 'store_id', 'store_name',
-				'business_day', 'opened_at_gmt', 'closed_at_gmt', 'closed_by', 'closed_by_name',
-				'currency', 'timezone', 'float_expected', 'float_counted', 'float_variance',
-				'period_sales_total', 'period_refunds_total', 'perpetual_sales_total',
-				'perpetual_refunds_total', 'first_sale_counter', 'last_sale_counter',
-				'unsynced_count', 'unsynced_total', 'corrections_count',
+				'closure_number',
+				'register_id',
+				'register_name',
+				'store_id',
+				'store_name',
+				'business_day',
+				'opened_at_gmt',
+				'closed_at_gmt',
+				'closed_by',
+				'closed_by_name',
+				'currency',
+				'timezone',
+				'float_expected',
+				'float_counted',
+				'float_variance',
+				'period_sales_total',
+				'period_refunds_total',
+				'perpetual_sales_total',
+				'perpetual_refunds_total',
+				'first_sale_counter',
+				'last_sale_counter',
+				'unsynced_count',
+				'unsynced_total',
+				'corrections_count',
 			),
 			$csv[0]
 		);
@@ -190,7 +208,12 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_export_admin_query_without_protocol_returns_download(): void {
 		// Arrange.
 		$request = new \WP_REST_Request( 'GET', '/wcpos/v2/closures/export' );
-		$request->set_query_params( array( 'wcpos' => '1', '_wpnonce' => wp_create_nonce( 'wp_rest' ) ) );
+		$request->set_query_params(
+			array(
+				'wcpos' => '1',
+				'_wpnonce' => wp_create_nonce( 'wp_rest' ),
+			)
+		);
 		// Act.
 		$response = $this->server->dispatch( $request );
 		// Assert: raw CSV proves this reached export, not the UUID or list branch.
@@ -242,8 +265,12 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$currency = 'EUR';
 		$timezone = 'Europe/Madrid';
-		$currency_filter = static function () use ( &$currency ) { return $currency; };
-		$timezone_filter = static function () use ( &$timezone ) { return $timezone; };
+		$currency_filter = static function () use ( &$currency ) {
+			return $currency;
+		};
+		$timezone_filter = static function () use ( &$timezone ) {
+			return $timezone;
+		};
 		add_filter( 'pre_option_woocommerce_currency', $currency_filter );
 		add_filter( 'pre_option_timezone_string', $timezone_filter );
 		try {
@@ -274,6 +301,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$store = new Closure_Store();
 		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
 		$table = $store->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table name from Closure_Store::table_name(); the id is prepared.
 		$stored = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %s", $row['id'] ), ARRAY_A );
 		for ( $number = 2; $number <= 101; ++$number ) {
 			$copy = $stored;
@@ -283,17 +311,33 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			if ( 101 === $number ) {
 				$breakdowns = $row['breakdowns'];
 				$breakdowns['payment_methods'] = array(
-					array( 'method' => 'z_card', 'sales' => '8.0000', 'refunds' => '0.0000' ),
-					array( 'method' => 'a_cash', 'sales' => '2.0000' ),
+					array(
+						'method' => 'z_card',
+						'sales' => '8.0000',
+						'refunds' => '0.0000',
+					),
+					array(
+						'method' => 'a_cash',
+						'sales' => '2.0000',
+					),
 				);
 				$breakdowns['tax_rates'] = array(
 					'VAT A' => array( 'net' => '1.0000' ),
 					'VAT-A' => array( 'net' => '2.0000' ),
 					'VAT_A_2' => array( 'net' => '3.0000' ),
 				);
-				$breakdowns['opening_float'] = array( 'expected' => '100.0000', 'counted' => '99.0000', 'variance' => '-1.0000' );
+				$breakdowns['opening_float'] = array(
+					'expected' => '100.0000',
+					'counted' => '99.0000',
+					'variance' => '-1.0000',
+				);
 				$copy['breakdowns'] = wp_json_encode( $breakdowns );
-				$copy['counted'] = wp_json_encode( array( 'cash' => '101.0000', 'voucher' => '0.0000' ) );
+				$copy['counted'] = wp_json_encode(
+					array(
+						'cash' => '101.0000',
+						'voucher' => '0.0000',
+					)
+				);
 			}
 			$this->assertSame( 1, $wpdb->insert( $table, $copy ) );
 		}
@@ -328,14 +372,26 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		$fields = $this->closure_fields( $session );
 		$fields['breakdowns']['tax_rates'] = array(
-			'rate_a' => array( 'name' => 'VAT', 'net' => '10.0000' ),
-			'rate_b' => array( 'name' => 'VAT', 'net' => '20.0000' ),
+			'rate_a' => array(
+				'name' => 'VAT',
+				'net' => '10.0000',
+			),
+			'rate_b' => array(
+				'name' => 'VAT',
+				'net' => '20.0000',
+			),
 		);
 		$store->create( $fields );
 		$fields = $this->closure_fields( $this->closure_session( $session['register_id'] ), 2 );
 		$fields['breakdowns']['tax_rates'] = array(
-			array( 'name' => 'VAT', 'net' => '30.0000' ),
-			array( 'name' => 'VAT', 'net' => '40.0000' ),
+			array(
+				'name' => 'VAT',
+				'net' => '30.0000',
+			),
+			array(
+				'name' => 'VAT',
+				'net' => '40.0000',
+			),
 		);
 		$store->create( $fields );
 
@@ -358,12 +414,23 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		$fields = $this->closure_fields( $session );
 		$fields['breakdowns']['tax_rates'] = array(
-			12 => array( 'name' => 'VAT', 'net' => '10.0000' ),
-			36 => array( 'name' => 'VAT', 'net' => '20.0000' ),
+			12 => array(
+				'name' => 'VAT',
+				'net' => '10.0000',
+			),
+			36 => array(
+				'name' => 'VAT',
+				'net' => '20.0000',
+			),
 		);
 		$store->create( $fields );
 		$fields = $this->closure_fields( $this->closure_session( $session['register_id'] ), 2 );
-		$fields['breakdowns']['tax_rates'] = array( 36 => array( 'name' => 'VAT', 'net' => '30.0000' ) );
+		$fields['breakdowns']['tax_rates'] = array(
+			36 => array(
+				'name' => 'VAT',
+				'net' => '30.0000',
+			),
+		);
 		$store->create( $fields );
 
 		// Act.
