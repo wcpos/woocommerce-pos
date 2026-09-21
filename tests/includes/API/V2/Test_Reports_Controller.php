@@ -651,6 +651,15 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			array( 'session_id' => 2 ),
 			array( 'mode' => 'session' ),
 			array( 'to' => '2000-01-01' ),
+			// These three pin the `/D` modifier on each identifier pattern: without it `$` matches
+			// before a trailing newline, so every one of these would pass validation. The modifier
+			// looks like syntax, so nothing else would notice a tidying pass removing it.
+			array( 'register_id' => wp_generate_uuid4() . "\n" ),
+			array( 'store_id' => "5\n" ),
+			array(
+				'mode' => 'session',
+				'session_id' => wp_generate_uuid4() . "\n",
+			),
 		) as $invalid ) {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 			$request->set_query_params( array_replace( $this->args, $invalid ) );

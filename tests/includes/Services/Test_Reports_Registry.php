@@ -154,6 +154,30 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'broken', Receipt_Data_Schema::get_field_tree( 'report' ) );
 	}
 
+	/**
+	 * Pins the `/D` modifier on the report-key pattern.
+	 *
+	 * Without it `$` matches *before* a trailing newline, so `"sales\n"` satisfies `^[a-z0-9_]+$`
+	 * and enters the catalogue as a second entry beside the real `sales`. The modifier reads as
+	 * syntax rather than logic, so a tidying pass could drop it with every test still green —
+	 * this is the assertion that would scream.
+	 */
+	public function test_registry_key_with_a_trailing_newline_is_dropped(): void {
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports["sneaky\n"] = array(
+					'title' => 'Sneaky',
+					'scopes' => array( 'range' ),
+				);
+				return $reports;
+			}
+		);
+		$reports = Reports_Registry::all();
+		$this->assertArrayNotHasKey( "sneaky\n", $reports );
+		$this->assertSame( array( 'sales', 'cash_movements' ), array_keys( $reports ) );
+	}
+
 	/** PHP turns a numeric string array key into an int; the grammar and the route allow it. */
 	public function test_registry_numeric_report_key_is_kept(): void {
 		add_filter(
