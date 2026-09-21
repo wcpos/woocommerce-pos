@@ -93,7 +93,7 @@ describe('Export closures', () => {
 	 * carries Content-Disposition, so a top-level navigation to a refusal would replace
 	 * the Settings screen with raw JSON and lose the merchant's place.
 	 */
-	it.each([403, 500])('keeps a %s refusal on the screen as a notice', async (status) => {
+	it.each([401, 403])('sends a %s to the permissions message', async (status) => {
 		window.wpApiSettings = { root: 'https://example.com/wp-json/', nonce: 'test-nonce' };
 		vi.stubGlobal(
 			'fetch',
@@ -104,11 +104,32 @@ describe('Export closures', () => {
 		fireEvent.click(screen.getByTestId('export-closures-download'));
 
 		await waitFor(() =>
-			expect(screen.getByRole('alert')).toHaveTextContent('The export could not be created')
+			expect(screen.getByRole('alert')).toHaveTextContent('permission to view reports')
 		);
 		// Nothing was downloaded, and the screen is still usable.
 		expect(clicked).toHaveLength(0);
 		expect(screen.getByTestId('export-closures-download')).not.toBeDisabled();
+	});
+
+	/**
+	 * A 5xx is not a permissions problem. Telling a correctly authorized administrator
+	 * to check their report permissions sends them to fix something that is not broken.
+	 */
+	it.each([500, 503])('sends a %s to the server-failure message', async (status) => {
+		window.wpApiSettings = { root: 'https://example.com/wp-json/', nonce: 'test-nonce' };
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({ ok: false, status }))
+		);
+		renderScreen();
+
+		fireEvent.click(screen.getByTestId('export-closures-download'));
+
+		await waitFor(() =>
+			expect(screen.getByRole('alert')).toHaveTextContent('problem on the server')
+		);
+		expect(screen.getByRole('alert')).not.toHaveTextContent('permission to view reports');
+		expect(clicked).toHaveLength(0);
 	});
 
 	it('reports a transport failure without stranding the button', async () => {

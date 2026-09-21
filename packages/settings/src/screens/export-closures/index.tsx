@@ -47,12 +47,21 @@ export default function ExportClosures() {
 			// place. Fetching keeps failures on the page as a notice.
 			const response = await fetch(url, { credentials: 'same-origin' });
 			if (!response.ok) {
+				// A 5xx is not a permissions problem: telling a correctly authorized
+				// administrator to check their report permissions sends them to fix
+				// something that is not broken.
+				const permissionProblem = response.status === 401 || response.status === 403;
 				setNotice({
 					type: 'error',
-					message: t(
-						'export_closures.refused',
-						'The export could not be created. Check that you have permission to view reports, then try again.'
-					),
+					message: permissionProblem
+						? t(
+								'export_closures.refused',
+								'The export could not be created. Check that you have permission to view reports, then try again.'
+							)
+						: t(
+								'export_closures.server_error',
+								'The export could not be created because of a problem on the server. Try again, and check the WCPOS logs if it keeps happening.'
+							),
 				});
 				return;
 			}

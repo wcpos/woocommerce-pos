@@ -283,7 +283,12 @@ class Closures_Controller extends \WP_REST_Controller {
 		}
 		$ids = \is_array( $scope['store_id'] ) ? $scope['store_id'] : array( $scope['store_id'] );
 		foreach ( $ids as $id ) {
-			if ( ! \is_scalar( $id ) || ! preg_match( '/^[1-9]\d{0,17}$/D', (string) $id ) ) {
+			// Not is_scalar(): true and 1.0 both stringify to "1" and would pass the
+			// pattern, so a malformed scope would silently export store 1 — the same
+			// fail-open this validator exists to prevent, one type deeper.
+			$valid = ( \is_int( $id ) && $id > 0 )
+				|| ( \is_string( $id ) && 1 === preg_match( '/^[1-9]\d{0,17}$/D', $id ) );
+			if ( ! $valid ) {
 				return false;
 			}
 		}

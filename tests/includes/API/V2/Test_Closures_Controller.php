@@ -314,7 +314,9 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_export_refuses_a_malformed_store_scope(): void {
 		// Arrange.
 		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
-		foreach ( array( 'invalid', false, 0, -1, array( 'bad' ), array( 0 ), array( 456, 'bad' ) ) as $value ) {
+		// true and 1.0 both stringify to "1": a scalar check would have let them through
+		// and exported store 1 to a caller whose scope could not be read.
+		foreach ( array( 'invalid', false, true, 1.0, '1.0', 0, -1, array( 'bad' ), array( 0 ), array( true ), array( 456, 'bad' ) ) as $value ) {
 			$broken = static function ( $args ) use ( $value ) {
 				$args['store_id'] = $value;
 				return $args;
