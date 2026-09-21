@@ -151,6 +151,14 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			static function ( $data, $key, $scope ) use ( &$filtered ) {
 				$filtered = array( $key, $scope );
 				$data['example']['note'] = 'Filtered';
+				// The plugin's own statement of the document is not the filter's to rewrite.
+				$data['report']['key'] = 'forged';
+				$data['report']['title'] = 'Forged';
+				$data['report']['scope']['register_name'] = 'Forged register';
+				$data['register']['name'] = 'Forged register';
+				$data['cashier']['id'] = 999;
+				$data['software']['name'] = 'Forged';
+				$data['fiscal']['document_type'] = 'receipt';
 				return $data;
 			},
 			10,
@@ -181,6 +189,17 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['fiscal']['is_report_document'] );
 		$this->assertSame( array( 'example', $this->received ), $filtered );
 		$this->assertSame( 'Filtered', $data['example']['note'] );
+		// woocommerce_pos_report_data may enrich, but the identity is restored after it, exactly
+		// as the closure path restores its own. Without this the filter could relabel a report,
+		// or restate the scope it was authorised for, and still pass schema validation.
+		$this->assertSame( 'Closure fixture', $data['report']['scope']['register_name'] );
+		$this->assertSame( 'Closure fixture', $data['register']['name'] );
+		$this->assertSame( 'report', $data['fiscal']['document_type'] );
+		$this->assertTrue( $data['fiscal']['is_report_document'] );
+		// The producer is told which stores the caller may reach, so it can honour a Pro scope it
+		// would otherwise be unable to see; null means unrestricted.
+		$this->assertArrayHasKey( 'allowed_store_ids', $this->received );
+		$this->assertNull( $this->received['allowed_store_ids'] );
 		$this->assertSame( 'Closure fixture', $this->received['register_name'] );
 		$this->assertArrayNotHasKey( 'session', $this->received );
 		$this->assertArrayNotHasKey( 'closure', $this->received );
@@ -424,6 +443,75 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 456, $this->received['store_id'] );
 	}
 
+	/**
+	 * A restriction we cannot read is one we must not guess at.
+	 *
+	 * `intval()` turns `false`, `null` or `'invalid'` into 0, and a row's NULL store casts to 0
+	 * too — so an unreadable restriction would match exactly the unassigned rows it exists to
+	 * protect. Validation has to happen before coercion, not after.
+	 */
+	public function test_report_unreadable_store_restriction_denies(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $session['register_id'] ) );
+		foreach ( array( 'invalid', false, null, 0, -1 ) as $bad ) {
+			add_filter(
+				'woocommerce_pos_closures_list_args',
+				static function ( $args ) use ( $bad ) {
+					$args['store_id'] = array( $bad );
+					return $args;
+				},
+				20
+			);
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( array_replace( $this->args, array( 'register_id' => $session['register_id'] ) ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 404, $response->get_status() );
+			$this->assertNull( $this->received );
+			remove_all_filters( 'woocommerce_pos_closures_list_args', 20 );
+		}
+	}
+
+	/**
+	 * Authorising a historical session does not authorise its register's current details.
+	 *
+	 * Once the register moves to a store the caller cannot reach, its live name is out-of-scope
+	 * metadata — and a later rename would otherwise leak through every replay of the old session.
+	 */
+	public function test_report_session_does_not_leak_a_moved_registers_current_name(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session, 12 ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $this->args['from'] ), array( 'id' => $session['id'] ) );
+		$wpdb->update(
+			( new Register_Store() )->table_name(),
+			array(
+				'store_id' => 789,
+				'name' => 'Renamed in another store',
+			),
+			array( 'id' => $session['register_id'] )
+		);
+		add_filter(
+			'woocommerce_pos_closures_list_args',
+			static function ( $args ) {
+				$args['store_id'] = array( 456 );
+				return $args;
+			}
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params(
+			array(
+				'mode' => 'session',
+				'session_id' => $session['id'],
+				'register_id' => $session['register_id'],
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotSame( 'Renamed in another store', $this->received['register_name'] );
+		$this->assertNotSame( 'Renamed in another store', $response->get_data()['report']['scope']['register_name'] );
+	}
+
 	/** A caller allowed no stores at all reads no report. */
 	public function test_report_deny_all_store_scope_refuses_every_report(): void {
 		add_filter(
@@ -610,6 +698,9 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 				$data['fiscal']['is_x_report'] = ! ( $data['fiscal']['is_x_report'] ?? false );
 				// Not part of the identity: a fiscal-jurisdiction extension's own enrichment.
 				$data['fiscal']['extra_fields'] = array( 'jurisdiction' => 'AT' );
+				// The frozen financial record. A short drawer must not be printable as balanced.
+				$data['closure']['counted'] = array( 'cash' => '999.0000' );
+				$data['closure']['period_sales_total'] = '999.0000';
 				return $data;
 			},
 			10,
@@ -637,6 +728,11 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		// fiscal.is_x_report, so an extension must not be able to print a closure under another
 		// number, or print an X-report as a numbered closure.
 		$this->assertSame( 42, $data['closure']['number'] );
+		// The whole frozen record is restored, not just the printed identity: the shipped
+		// templates print these figures under the authentic closure number, so an extension able
+		// to rewrite them could make a short drawer print as balanced.
+		$this->assertSame( array( 'cash' => '101.0000' ), $data['closure']['counted'] );
+		$this->assertNotSame( '999.0000', $data['closure']['period_sales_total'] );
 		$this->assertFalse( $data['fiscal']['is_x_report'] );
 		$this->assertTrue( $xreport['fiscal']['is_x_report'] );
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );

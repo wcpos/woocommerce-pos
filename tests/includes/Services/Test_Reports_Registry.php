@@ -122,6 +122,38 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 		$this->assertSame( 'device', $reports['nulls']['source'] );
 	}
 
+	/**
+	 * A malformed nested extras definition breaks every report, not just its own.
+	 *
+	 * Extras merge into the report field tree, which derives the JSON schema every report document
+	 * is validated against. `field_metadata_to_json_schema()` takes `array $field`, so a null
+	 * definition throws a TypeError and every report's read fails — from one bad registration.
+	 */
+	public function test_registry_malformed_nested_extras_are_dropped_not_merged(): void {
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports['broken'] = array(
+					'title' => 'Broken',
+					'scopes' => array( 'range' ),
+					'extras' => array( 'broken' => array( 'fields' => array( 'note' => null ) ) ),
+				);
+				$reports['fine'] = array(
+					'title' => 'Fine',
+					'scopes' => array( 'range' ),
+				);
+				return $reports;
+			}
+		);
+		$reports = Reports_Registry::all();
+		$this->assertArrayNotHasKey( 'broken', $reports );
+		$this->assertArrayHasKey( 'fine', $reports );
+		// The schema still builds, so unrelated reports keep working.
+		$schema = Receipt_Data_Schema::get_json_schema( 'report' );
+		$this->assertArrayHasKey( 'report', $schema['properties'] );
+		$this->assertArrayNotHasKey( 'broken', Receipt_Data_Schema::get_field_tree( 'report' ) );
+	}
+
 	/** PHP turns a numeric string array key into an int; the grammar and the route allow it. */
 	public function test_registry_numeric_report_key_is_kept(): void {
 		add_filter(

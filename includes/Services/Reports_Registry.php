@@ -145,6 +145,24 @@ final class Reports_Registry {
 				return 'invalid ' . $field;
 			}
 		}
+		// Extras are merged into the report field tree, which derives the JSON schema every report
+		// document is validated against. A malformed nested definition therefore does not break
+		// only this report: `field_metadata_to_json_schema()` takes `array $field`, so a null
+		// field definition throws a TypeError and every report's document read fails. Validate the
+		// nesting here, where a bad registration is dropped and logged.
+		foreach ( $report['extras'] ?? array() as $section ) {
+			if ( ! is_array( $section ) ) {
+				return 'invalid extras section';
+			}
+			if ( array_key_exists( 'fields', $section ) && ! is_array( $section['fields'] ) ) {
+				return 'invalid extras fields';
+			}
+			foreach ( $section['fields'] ?? array() as $definition ) {
+				if ( ! is_array( $definition ) ) {
+					return 'invalid extras field definition';
+				}
+			}
+		}
 		foreach ( $report['group_by'] ?? array() as $option ) {
 			if ( ! is_array( $option ) || ! is_string( $option['key'] ?? null ) || ! is_string( $option['label'] ?? null ) ) {
 				return 'invalid group_by option';

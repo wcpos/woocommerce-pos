@@ -184,7 +184,13 @@ class Receipt_Data_Builder {
 		// `fiscal.document_type` alone would still let an extension print a closure under another
 		// number, or print an X-report as a numbered closure. The two flags are derived, so they
 		// are re-derived here rather than trusted back from the filter.
-		$data['closure'] = array_merge( (array) ( $data['closure'] ?? array() ), $printed );
+		// The whole `closure` section is restored, not just the printed identity. It is the frozen
+		// fiscal record — expected, counted, variance, the tender rows and their `_display`
+		// companions — and the shipped templates print those figures under the authentic closure
+		// number. An extension that could rewrite `variance_display` could make a short drawer
+		// print as balanced. Enrichment belongs in a top-level key or `fiscal.extra_fields`, both
+		// of which survive this.
+		$data['closure'] = array_merge( (array) ( $data['closure'] ?? array() ), $row, $printed );
 		$data['fiscal']['is_x_report'] = $xreport;
 		$data['fiscal']['is_closure_document'] = true;
 		return $data;
@@ -229,7 +235,30 @@ class Receipt_Data_Builder {
 		$store = $resolver->build_store_section();
 		// The report schema's logo is a string, even when no store/site logo is configured.
 		$store['logo'] = $store['logo'] ?? '';
-		return array(
+		$identity = array(
+			'report' => array(
+				'key' => $key,
+				'title' => $title,
+				'scope' => $document_scope,
+			),
+			'sections' => array(
+				'store' => array_intersect_key( $store, array_flip( array( 'id', 'name' ) ) ),
+				'register' => array(
+					'id' => $document_scope['register_id'],
+					'name' => $scope['register_name'],
+				),
+				'cashier' => array( 'id' => (int) $user->ID ),
+				'software' => array(
+					'name' => 'WCPOS',
+					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+				),
+				'fiscal' => array(
+					'document_type' => 'report',
+					'is_report_document' => true,
+				),
+			),
+		);
+		$data = array(
 			'report' => array(
 				'key' => $key,
 				'title' => $title,
@@ -251,6 +280,45 @@ class Receipt_Data_Builder {
 			'fiscal' => $fiscal,
 			'i18n' => Receipt_I18n_Labels::get_labels( $locale ),
 		) + $core;
+
+		/**
+		 * Filters a server-built report document before it is validated.
+		 *
+		 * Runs on every document a registered report produces, after the plugin has merged its
+		 * envelope and the report's key, title and resolved scope over the producer's tabular
+		 * core. Extensions may add optional top-level extras or adjust presentation; the document
+		 * is validated against the `report` JSON schema afterwards, so a filtered document that
+		 * breaks the schema fails as the report's own failure. Device-built reports never reach
+		 * PHP and so never run this filter.
+		 *
+		 * The plugin's own statement of the document — its key, its title, the scope that was
+		 * authorised, and the identity a reader relies on — is restored after this filter and
+		 * cannot be rewritten here.
+		 *
+		 * @param array  $data  The report document.
+		 * @param string $key   The report key.
+		 * @param array  $scope The resolved scope (see Report_Scope_Resolver).
+		 *
+		 * @since 1.11.0
+		 *
+		 * @hook woocommerce_pos_report_data
+		 */
+		$data = (array) apply_filters( 'woocommerce_pos_report_data', $data, $key, $scope );
+
+		// Restored for the same reason the closure path restores its identity, and covering what a
+		// template prints rather than only what `fiscal` records: the key and title name the
+		// report, the scope states what was asked for and authorised, and the store, register and
+		// cashier lines head the rendered document. An extension may enrich any of these sections
+		// — only the identity-bearing fields come back.
+		foreach ( array( 'key', 'title', 'scope' ) as $field ) {
+			$data['report'][ $field ] = $identity['report'][ $field ];
+		}
+		foreach ( $identity['sections'] as $section => $fields ) {
+			foreach ( $fields as $field => $value ) {
+				$data[ $section ][ $field ] = $value;
+			}
+		}
+		return $data;
 	}
 
 	/**

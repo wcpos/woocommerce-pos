@@ -85,9 +85,17 @@ final class Report_Scope_Resolver {
 				'store_id' => $store_id,
 				// Keep the requested register until the gate: a session must not fill a missing one for Free.
 				'register_id' => $args['register_id'] ?? null,
-				'register_name' => $register['name'] ?? '',
+				// Authorising a historical session does not authorise reading its register's
+				// *current* details. Once a register moves to a store this caller cannot reach,
+				// its live name is out-of-scope metadata — and renaming it would otherwise leak
+				// through every replay of the old session. Fall back to the label the closure
+				// captured at the time, which is what the closure builder prints anyway.
+				'register_name' => ( $session && ! self::row_in_scope( $register['store_id'] ?? null, $allowed ) )
+					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? '' )
+					: ( $register['name'] ?? '' ),
 				'timezone' => $timezone->getName(),
 				'business_day' => $session ? $session['business_day'] : ( new DateTimeImmutable( 'today', $timezone ) )->format( 'Y-m-d' ),
+				'allowed_store_ids' => $allowed,
 				'session' => $session,
 				'closure' => $closure,
 			)
@@ -102,6 +110,11 @@ final class Report_Scope_Resolver {
 	public static function resolve( array $context ): array {
 		$scope = array_intersect_key( $context, array_flip( array( 'mode', 'store_id', 'register_id', 'register_name', 'business_day', 'timezone' ) ) );
 		$scope['group_by'] = $context['group_by'] ?? null;
+		// The contract makes scoping the query the report's own responsibility, so the report has
+		// to be told what the caller may reach. Without this a range request naming no store or
+		// register leaves `store_id` at 0 and the producer has no way to honour a Pro scope it
+		// cannot see — a duty assigned with no means of discharging it. Null means unrestricted.
+		$scope['allowed_store_ids'] = $context['allowed_store_ids'];
 		if ( 'session' === $scope['mode'] ) {
 			$session = $context['session'];
 			$scope['register_id'] = $session['register_id'];
@@ -160,7 +173,22 @@ final class Report_Scope_Resolver {
 		if ( ! array_key_exists( 'store_id', $args ) ) {
 			return null;
 		}
-		return array_map( 'intval', (array) $args['store_id'] );
+		// The values have to be validated before coercion, not after. `intval()` turns `false`,
+		// `null` or `'invalid'` into 0 — and `row_in_scope()` turns a row's NULL store into 0 too,
+		// so a malformed restriction would match exactly the unassigned rows the restriction is
+		// there to protect. A restriction we cannot read is a restriction we must not guess at.
+		$ids = array();
+		foreach ( (array) $args['store_id'] as $id ) {
+			if ( ! is_numeric( $id ) || (int) $id <= 0 ) {
+				Logger::warning(
+					'Report scope refused: woocommerce_pos_closures_list_args gave an unreadable store restriction',
+					array( 'type' => \gettype( $id ) )
+				);
+				return array();
+			}
+			$ids[] = (int) $id;
+		}
+		return $ids;
 	}
 
 	/**

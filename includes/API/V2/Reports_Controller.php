@@ -140,22 +140,9 @@ class Reports_Controller extends \WP_REST_Controller {
 			if ( ! is_array( $core ) ) {
 				return $this->failed( $key, __( 'The report callback must return an array.', 'woocommerce-pos' ) );
 			}
+			// The builder owns build → woocommerce_pos_report_data → restore identity, so that the
+			// report path and the closure path protect their documents the same way.
 			$data = ( new Receipt_Data_Builder() )->build_report_document( $key, $report['title'], $scope, $core );
-			/**
-			 * Filters every server-built report document before schema validation.
-			 *
-			 * The plugin has merged its envelope and key/title/scope with the callable's
-			 * tabular core. Extensions may add optional top-level extras or adjust the
-			 * document; invalid filtered documents fail with a named report error.
-			 * Device-built reports do not run PHP filters.
-			 *
-			 * @param array  $data  The report document.
-			 * @param string $key   The report key.
-			 * @param array  $scope The resolved scope (see Report_Scope_Resolver).
-			 * @since 1.11.0
-			 * @hook woocommerce_pos_report_data
-			 */
-			$data = (array) apply_filters( 'woocommerce_pos_report_data', $data, $key, $scope );
 			$valid = Report_Document_Validator::validate( $data );
 			return is_wp_error( $valid ) ? $this->failed( $key, $valid->get_error_message() ) : new WP_REST_Response( $data );
 		} catch ( \Throwable $error ) {
