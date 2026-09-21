@@ -34,15 +34,16 @@ final class Closure_Csv {
 	/** Build a UTF-8 download; presentation always comes from the frozen row.
 	 *
 	 * @param Closure_Store $store Closure store.
+	 * @param array         $scope Authorization scope from woocommerce_pos_closures_list_args.
 	 * @throws \RuntimeException On read, stream or page-limit failure.
 	 */
-	public function build( Closure_Store $store ): string {
+	public function build( Closure_Store $store, array $scope = array() ): string {
 		$keys = array(
 			'tenders' => array(),
 			'payment_methods' => array(),
 			'tax_rates' => array(),
 		);
-		foreach ( $this->rows( $store ) as $row ) {
+		foreach ( $this->rows( $store, $scope ) as $row ) {
 			foreach ( array( 'counted', 'expected', 'variance' ) as $field ) {
 				foreach ( array_keys( $row[ $field ] ?? array() ) as $key ) {
 					$keys['tenders'][ $key ] = (string) $key;
@@ -110,7 +111,7 @@ final class Closure_Csv {
 				throw new \RuntimeException( 'Could not write closure CSV BOM.' );
 			}
 			$this->write( $stream, array_keys( $columns ) );
-			foreach ( $this->rows( $store, true ) as $row ) {
+			foreach ( $this->rows( $store, $scope, true ) as $row ) {
 				$cells = array();
 				foreach ( $columns as $column => $path ) {
 					$value = $row;
@@ -143,16 +144,20 @@ final class Closure_Csv {
 	/** Page through the existing list query in register/number order.
 	 *
 	 * @param Closure_Store $store Closure store.
+	 * @param array         $scope Authorization scope; paging and ordering always win over it.
 	 * @param bool          $counts Include grouped correction counts on the writing pass.
 	 * @throws \RuntimeException When the page limit would truncate the file.
 	 */
-	private function rows( Closure_Store $store, bool $counts = false ): \Generator {
+	private function rows( Closure_Store $store, array $scope = array(), bool $counts = false ): \Generator {
 		for ( $page = 1; $page <= self::MAX_EXPORT_PAGES; ++$page ) {
 			$rows = $store->list(
-				array(
-					'page' => $page,
-					'per_page' => Closure_Store::MAX_PER_PAGE,
-					'number_order' => 'register_asc',
+				array_merge(
+					$scope,
+					array(
+						'page' => $page,
+						'per_page' => Closure_Store::MAX_PER_PAGE,
+						'number_order' => 'register_asc',
+					)
 				)
 			);
 			if ( $counts ) {

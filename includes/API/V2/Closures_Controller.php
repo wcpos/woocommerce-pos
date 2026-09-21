@@ -168,7 +168,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			if ( 'GET' === $request->get_method() ) {
 				if ( '/wcpos/v2/closures/export' === $route ) {
-					return $this->export( $store );
+					return $this->export( $store, $request );
 				}
 				$args = $this->list_args( $request );
 				if ( is_wp_error( $args ) ) {
@@ -213,12 +213,21 @@ class Closures_Controller extends \WP_REST_Controller {
 
 	/** Download recorded figures without applying corrections or list filters.
 	 *
-	 * @param Closure_Store $store Closure store.
+	 * "The whole set" means no caller-supplied filters — but an extension's store
+	 * scoping is an authorization boundary, not a browsing filter. Pro restricts a
+	 * manager to its authorized stores through this filter, and
+	 * Fiscal_Record_Store::resolve_document() enforces the same scope on a single
+	 * document read, so an export that skipped it would be a way around both.
+	 * Resolved from an empty base so the caller's own query params are still ignored.
+	 *
+	 * @param Closure_Store    $store Closure store.
+	 * @param \WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	private function export( Closure_Store $store ) {
+	private function export( Closure_Store $store, $request ) {
+		$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request );
 		try {
-			$csv = ( new Closure_Csv() )->build( $store );
+			$csv = ( new Closure_Csv() )->build( $store, is_array( $scope ) ? $scope : array() );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_export_failed', 500 );
 		}

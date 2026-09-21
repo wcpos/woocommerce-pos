@@ -204,6 +204,52 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'woocommerce_pos_rest_forbidden', $response->get_data()['code'] );
 	}
 
+	/** An extension's store scoping is an authorization boundary, not a list filter.
+	 *
+	 * Pro restricts a manager to its authorized stores through
+	 * `woocommerce_pos_closures_list_args`, and Fiscal_Record_Store::resolve_document()
+	 * enforces the same scope on a single document read. An export that paged the store
+	 * directly would serve fiscal figures for stores the caller cannot reach by either
+	 * existing path, so the scope is resolved from an empty base and applied to both
+	 * passes. The caller's OWN query params are still ignored: the export is the whole
+	 * set within the scope it is allowed, never a filtered view.
+	 */
+	public function test_export_honours_extension_store_scoping(): void {
+		// Arrange: one closure in the fixture's store (456), scoped away to store 789.
+		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$scope = static function ( $args ) {
+			$args['store_id'] = 789;
+			return $args;
+		};
+
+		// Act.
+		add_filter( 'woocommerce_pos_closures_list_args', $scope );
+		try {
+			$scoped = $this->export_csv( $this->get( 'closures/export' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_closures_list_args', $scope );
+		}
+		$unscoped = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert: header only under the scope, the row back once it lifts.
+		$this->assertSame( 1, count( $scoped ) );
+		$this->assertSame( 2, count( $unscoped ) );
+	}
+
+	/** A caller cannot narrow the export with query params; it is the whole allowed set. */
+	public function test_export_ignores_caller_supplied_list_filters(): void {
+		// Arrange: two registers, one closure each.
+		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$other = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $other ) );
+
+		// Act: ask for one register only.
+		$csv = $this->export_csv( $this->get( 'closures/export', array( 'register_id' => $other['register_id'] ) ) );
+
+		// Assert: both rows are still exported.
+		$this->assertSame( 3, count( $csv ) );
+	}
+
 	/** The admin navigation carries query authentication, not protocol headers. */
 	public function test_export_admin_query_without_protocol_returns_download(): void {
 		// Arrange.
