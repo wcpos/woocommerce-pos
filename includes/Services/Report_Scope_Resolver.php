@@ -188,7 +188,14 @@ final class Report_Scope_Resolver {
 		// there to protect. A restriction we cannot read is a restriction we must not guess at.
 		$ids = array();
 		foreach ( (array) $args['store_id'] as $id ) {
-			if ( ! is_numeric( $id ) || (int) $id <= 0 ) {
+			// Deliberately narrower than is_numeric(), which accepts shapes that then *coerce* into
+			// a different, plausible-looking restriction rather than failing: 1.9 and '1.9' and
+			// ' 1' all become store 1, '1e2' becomes store 100, '007' becomes store 7. Silently
+			// turning an unreadable restriction into a readable one is the same guessing this
+			// guard exists to prevent — only harder to notice, because the result looks valid.
+			$well_formed = ( \is_int( $id ) && $id > 0 )
+				|| ( \is_string( $id ) && preg_match( '/^[1-9][0-9]*$/D', $id ) );
+			if ( ! $well_formed ) {
 				Logger::warning(
 					'Report scope refused: woocommerce_pos_closures_list_args gave an unreadable store restriction',
 					array( 'type' => \gettype( $id ) )

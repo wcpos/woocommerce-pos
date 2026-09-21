@@ -454,8 +454,35 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_report_unreadable_store_restriction_denies(): void {
 		global $wpdb;
 		$session = $this->closure_session();
-		$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $session['register_id'] ) );
-		foreach ( array( 'invalid', false, null, 0, -1 ) as $bad ) {
+		$register = ( new Register_Store() )->table_name();
+
+		// Each case pairs a malformed restriction with the store the register is put in, chosen so
+		// that a laxer guard would ADMIT the request. `is_numeric()` accepts the coercing shapes
+		// and each becomes a different, entirely plausible restriction — 1.9 and ' 1' become
+		// store 1, '1e2' becomes store 100, '007' becomes store 7 — so with the register sitting
+		// in that store a coercing guard answers 200. Pairing them this way is what makes the
+		// assertion bite: an earlier version of this test left the register unassigned, so every
+		// case answered 404 whether the value was refused or quietly rewritten, and the test
+		// passed against the very bug it was written for.
+		$cases = array(
+			array( 'invalid', null ),
+			array( false, null ),
+			array( null, null ),
+			array( 0, null ),
+			array( -1, null ),
+			array( true, 1 ),
+			array( 1.0, 1 ),
+			array( 1.9, 1 ),
+			array( '1.9', 1 ),
+			array( ' 1', 1 ),
+			array( '1e2', 100 ),
+			array( '007', 7 ),
+			array( '1 ', 1 ),
+			array( '+1', 1 ),
+			array( array( 1 ), 1 ),
+		);
+		foreach ( $cases as list( $bad, $store ) ) {
+			$wpdb->update( $register, array( 'store_id' => $store ), array( 'id' => $session['register_id'] ) );
 			add_filter(
 				'woocommerce_pos_closures_list_args',
 				static function ( $args ) use ( $bad ) {
@@ -467,7 +494,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 			$request->set_query_params( array_replace( $this->args, array( 'register_id' => $session['register_id'] ) ) );
 			$response = $this->server->dispatch( $request );
-			$this->assertSame( 404, $response->get_status() );
+			$this->assertSame( 404, $response->get_status(), 'restriction ' . var_export( $bad, true ) . ' was not refused' );
 			$this->assertNull( $this->received );
 			remove_all_filters( 'woocommerce_pos_closures_list_args', 20 );
 		}
