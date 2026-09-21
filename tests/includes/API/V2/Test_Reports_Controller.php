@@ -259,6 +259,59 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * A store the caller cannot reach is absent, by either door.
+	 *
+	 * Pro answers `woocommerce_pos_closures_list_args` with the caller's stores; the fixture's
+	 * store is 456, so a caller scoped to 789 must not reach it by naming its register (range)
+	 * or its session (session mode). 404 rather than 403, so the scope cannot be probed.
+	 */
+	public function test_report_store_outside_the_caller_scope_is_not_found_and_never_runs_callback(): void {
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session, 7 ) );
+		$absent = wp_generate_uuid4();
+		$queries = array(
+			'register' => array_replace( $this->args, array( 'register_id' => $session['register_id'] ) ),
+			'session' => array(
+				'mode' => 'session',
+				'session_id' => $session['id'],
+				'register_id' => $session['register_id'],
+			),
+		);
+		// What a caller who simply named something that does not exist would be told.
+		$missing = array(
+			'register' => array_replace( $this->args, array( 'register_id' => $absent ) ),
+			'session' => array(
+				'mode' => 'session',
+				'session_id' => $absent,
+				'register_id' => $absent,
+			),
+		);
+		$codes = array();
+		foreach ( $missing as $door => $query ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $query );
+			$codes[ $door ] = $this->server->dispatch( $request )->get_data()['code'];
+		}
+		add_filter(
+			'woocommerce_pos_closures_list_args',
+			static function ( $args ) {
+				$args['store_id'] = array( 789 );
+				return $args;
+			}
+		);
+		foreach ( $queries as $door => $query ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $query );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 404, $response->get_status() );
+			// Indistinguishable from absent: the refusal must not reveal that the row exists
+			// in a store the caller cannot reach, nor (for a session) that it is still open.
+			$this->assertSame( $codes[ $door ], $response->get_data()['code'] );
+			$this->assertNull( $this->received );
+		}
+	}
+
 	/** Session identity must not bypass the Free day or explicit-register boundary. */
 	public function test_report_session_scope_refusals_never_run_callback(): void {
 		global $wpdb;

@@ -126,7 +126,7 @@ class Reports_Controller extends \WP_REST_Controller {
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
-		$context = Report_Scope_Resolver::context( $args );
+		$context = Report_Scope_Resolver::context( $args, $request );
 		if ( is_wp_error( $context ) ) {
 			return $context;
 		}
