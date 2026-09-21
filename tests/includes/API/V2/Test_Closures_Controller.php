@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -57,6 +58,324 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			unset( $body[ $key . '_gmt' ] );
 		}
 		return $body;
+	}
+
+	/** Parse the download with PHP's CSV reader, including embedded newlines.
+	 *
+	 * @param object $response Export response.
+	 */
+	private function export_csv( $response ): array {
+		$this->assertSame( 200, $response->get_status() );
+		$body = $response->get_raw_body();
+		$this->assertSame( "\xEF\xBB\xBF", substr( $body, 0, 3 ) );
+		$stream = fopen( 'php://memory', 'w+' );
+		fwrite( $stream, substr( $body, 3 ) );
+		rewind( $stream );
+		$rows = array();
+		while ( false !== ( $row = fgetcsv( $stream, 0, ',', '"', '' ) ) ) {
+			$rows[] = $row;
+		}
+		fclose( $stream );
+		return $rows;
+	}
+
+	/** An empty store still supplies the fixed schema, not a document lookup. */
+	public function test_export_empty_store_returns_header_only(): void {
+		// Arrange: no closure fixtures.
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert.
+		$this->assertSame( 1, count( $csv ) );
+		$this->assertSame(
+			array(
+				'closure_number', 'register_id', 'register_name', 'store_id', 'store_name',
+				'business_day', 'opened_at_gmt', 'closed_at_gmt', 'closed_by', 'closed_by_name',
+				'currency', 'timezone', 'float_expected', 'float_counted', 'float_variance',
+				'period_sales_total', 'period_refunds_total', 'perpetual_sales_total',
+				'perpetual_refunds_total', 'first_sale_counter', 'last_sale_counter',
+				'unsynced_count', 'unsynced_total', 'corrections_count',
+			),
+			$csv[0]
+		);
+	}
+
+	/** Register ordering wins over global number or closing time ordering. */
+	public function test_export_multiple_registers_orders_register_then_number(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$first = $this->closure_session();
+		$second = $this->closure_session();
+		$registers = array( $first['register_id'], $second['register_id'] );
+		sort( $registers, SORT_STRING );
+		$lower = $first['register_id'] === $registers[0] ? $first : $second;
+		$upper = $first['register_id'] === $registers[1] ? $first : $second;
+		$store->create( $this->closure_fields( $upper, 1 ) );
+		$store->create( $this->closure_fields( $lower, 2 ) );
+		$store->create( $this->closure_fields( $this->closure_session( $registers[0] ), 10 ) );
+
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert.
+		$this->assertSame( 4, count( $csv ) );
+		$this->assertSame( array( '2', '10', '1' ), array_column( array_slice( $csv, 1 ), 0 ) );
+		$this->assertSame( array( $registers[0], $registers[0], $registers[1] ), array_column( array_slice( $csv, 1 ), 1 ) );
+	}
+
+	/** Recounts add metadata, never settled figures or extra CSV rows. */
+	public function test_export_corrected_closure_preserves_recorded_figures(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$fields = $this->closure_fields( $this->closure_session() );
+		$fields['counted']['cash'] = '98.0000';
+		$row = $store->create( $fields );
+		$store->recount( $row, wp_generate_uuid4(), array( 'cash' => '110.0000' ), 'Recount' );
+		$store->recount( $row, wp_generate_uuid4(), array( 'cash' => '120.0000' ), 'Recount again' );
+
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert.
+		$this->assertSame( 2, count( $csv ) );
+		$data = array_combine( $csv[0], $csv[1] );
+		$this->assertSame( '2', $data['corrections_count'] );
+		$this->assertSame( '98.0000', $data['counted_cash'] );
+		$this->assertSame( '100.0000', $data['expected_cash'] );
+		$this->assertSame( '-2.0000', $data['variance_cash'] );
+	}
+
+	/** A reporting cashier does not own Settings. */
+	public function test_export_without_manage_capability_returns_403(): void {
+		// Arrange.
+		wp_get_current_user()->add_cap( 'manage_woocommerce_pos', false );
+		// Act.
+		$response = $this->get( 'closures/export' );
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
+	}
+
+	/** Settings access cannot bypass the blind-count redaction boundary. */
+	public function test_export_without_reports_capability_returns_403(): void {
+		// Arrange.
+		wp_get_current_user()->add_cap( 'manage_woocommerce_pos' );
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports', false );
+		// Act.
+		$response = $this->get( 'closures/export' );
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
+	}
+
+	/** POS access remains the floor, even for an otherwise capable manager.
+	 *
+	 * The refusal comes from the baseline gate in API::rest_pre_dispatch(), which
+	 * runs before the controller, so the code is `woocommerce_pos_rest_forbidden`
+	 * rather than the controller's own `rest_forbidden`. That ordering is the
+	 * point: the export is not exempted from the central POS-access gate just to
+	 * make its error envelope uniform.
+	 */
+	public function test_export_without_access_capability_returns_403(): void {
+		// Arrange.
+		wp_get_current_user()->add_cap( 'access_woocommerce_pos', false );
+		// Act.
+		$response = $this->get( 'closures/export' );
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_forbidden', $response->get_data()['code'] );
+	}
+
+	/** The admin navigation carries query authentication, not protocol headers. */
+	public function test_export_admin_query_without_protocol_returns_download(): void {
+		// Arrange.
+		$request = new \WP_REST_Request( 'GET', '/wcpos/v2/closures/export' );
+		$request->set_query_params( array( 'wcpos' => '1', '_wpnonce' => wp_create_nonce( 'wp_rest' ) ) );
+		// Act.
+		$response = $this->server->dispatch( $request );
+		// Assert: raw CSV proves this reached export, not the UUID or list branch.
+		$this->assertSame( 1, count( $this->export_csv( $response ) ) );
+	}
+
+	/** Browsers receive an attachment with a byte-accurate length. */
+	public function test_export_response_has_csv_download_headers(): void {
+		// Arrange: an empty export is a valid file.
+		// Act.
+		$response = $this->get( 'closures/export' );
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$headers = $response->get_headers();
+		$this->assertSame( 'text/csv; charset=utf-8', $headers['Content-Type'] );
+		$this->assertMatchesRegularExpression( '/^attachment; filename="wcpos-closures-.+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.csv"$/', $headers['Content-Disposition'] );
+		$this->assertSame( (string) strlen( $response->get_raw_body() ), $headers['Content-Length'] );
+		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+	}
+
+	/** Quoting and spreadsheet formula protection apply to frozen merchant text.
+	 *
+	 * The register name is the merchant-controlled string the export freezes onto
+	 * the row, so it is the one the test can set directly. It exercises all three
+	 * hazards at once: a leading `=` that a spreadsheet would execute, an embedded
+	 * comma and quote that must be CSV-quoted, and a newline inside a cell.
+	 */
+	public function test_export_formula_register_name_round_trips_safely(): void {
+		// Arrange.
+		$name = '=Café, "North"' . "\nAnnex";
+		$register_id = ( new Register_Store() )->create(
+			array(
+				'name' => $name,
+				'store_id' => 456,
+			)
+		)['id'];
+		$this->closure_registers[] = $register_id;
+		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session( $register_id ) ) );
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+		// Assert: the formula is defused with a leading quote, and the comma, quote
+		// and newline survive the round trip through the CSV parser intact.
+		$data = array_combine( $csv[0], $csv[1] );
+		$this->assertSame( "'" . $name, $data['register_name'] );
+	}
+
+	/** Currency and timezone are recorded facts, not current store preferences. */
+	public function test_export_changed_settings_preserves_frozen_presentation(): void {
+		// Arrange.
+		$currency = 'EUR';
+		$timezone = 'Europe/Madrid';
+		$currency_filter = static function () use ( &$currency ) { return $currency; };
+		$timezone_filter = static function () use ( &$timezone ) { return $timezone; };
+		add_filter( 'pre_option_woocommerce_currency', $currency_filter );
+		add_filter( 'pre_option_timezone_string', $timezone_filter );
+		try {
+			$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+			$this->assertSame( 'EUR', $row['breakdowns']['currency'] );
+			$this->assertSame( 'Europe/Madrid', $row['breakdowns']['timezone'] );
+			$currency = 'USD';
+			$timezone = 'America/New_York';
+			// Act.
+			$csv = $this->export_csv( $this->get( 'closures/export' ) );
+			// Assert.
+			$data = array_combine( $csv[0], $csv[1] );
+			$this->assertSame( 'EUR', $data['currency'] );
+			$this->assertSame( 'Europe/Madrid', $data['timezone'] );
+			$this->assertSame( '', $data['business_day'] );
+			$this->assertSame( 'Closure fixture', $data['register_name'] );
+			$this->assertSame( $row['breakdowns']['labels']['closed_by_name'], $data['closed_by_name'] );
+		} finally {
+			remove_filter( 'pre_option_woocommerce_currency', $currency_filter );
+			remove_filter( 'pre_option_timezone_string', $timezone_filter );
+		}
+	}
+
+	/** Later pages extend a deterministic header; collisions and absence stay distinct. */
+	public function test_export_multiple_pages_preserves_union_and_distinct_columns(): void {
+		// Arrange. Clone stored rows to exercise paging without 101 session transactions.
+		global $wpdb;
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$table = $store->table_name();
+		$stored = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %s", $row['id'] ), ARRAY_A );
+		for ( $number = 2; $number <= 101; ++$number ) {
+			$copy = $stored;
+			$copy['id'] = wp_generate_uuid4();
+			$copy['session_id'] = wp_generate_uuid4();
+			$copy['number'] = $number;
+			if ( 101 === $number ) {
+				$breakdowns = $row['breakdowns'];
+				$breakdowns['payment_methods'] = array(
+					array( 'method' => 'z_card', 'sales' => '8.0000', 'refunds' => '0.0000' ),
+					array( 'method' => 'a_cash', 'sales' => '2.0000' ),
+				);
+				$breakdowns['tax_rates'] = array(
+					'VAT A' => array( 'net' => '1.0000' ),
+					'VAT-A' => array( 'net' => '2.0000' ),
+					'VAT_A_2' => array( 'net' => '3.0000' ),
+				);
+				$breakdowns['opening_float'] = array( 'expected' => '100.0000', 'counted' => '99.0000', 'variance' => '-1.0000' );
+				$copy['breakdowns'] = wp_json_encode( $breakdowns );
+				$copy['counted'] = wp_json_encode( array( 'cash' => '101.0000', 'voucher' => '0.0000' ) );
+			}
+			$this->assertSame( 1, $wpdb->insert( $table, $copy ) );
+		}
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+		// Assert.
+		$this->assertSame( 102, count( $csv ) );
+		$first = array_combine( $csv[0], $csv[1] );
+		$last = array_combine( $csv[0], $csv[101] );
+		$this->assertSame( '101', $last['closure_number'] );
+		$this->assertSame( '', $first['counted_voucher'] );
+		$this->assertSame( '0.0000', $last['counted_voucher'] );
+		$this->assertSame( '', $last['expected_voucher'] );
+		$this->assertSame( '-1.0000', $last['float_variance'] );
+		$this->assertSame( '8.0000', $last['tender_z_card_sales'] );
+		$this->assertSame( '0.0000', $last['tender_z_card_refunds'] );
+		$this->assertSame( '', $last['tender_a_cash_refunds'] );
+		$this->assertSame( '1.0000', $last['tax_vat_a_net'] );
+		$this->assertSame( '2.0000', $last['tax_vat_a_2_net'] );
+		$this->assertSame( '3.0000', $last['tax_vat_a_2_2_net'] );
+		$this->assertSame( count( $csv[0] ), count( array_unique( $csv[0] ) ) );
+		$this->assertSame(
+			array( 'counted_cash', 'counted_voucher', 'expected_cash', 'expected_voucher', 'variance_cash', 'variance_voucher', 'tender_a_cash_sales', 'tender_a_cash_refunds', 'tender_z_card_sales', 'tender_z_card_refunds', 'tax_vat_a_net', 'tax_vat_a_tax', 'tax_vat_a_gross', 'tax_vat_a_2_net', 'tax_vat_a_2_tax', 'tax_vat_a_2_gross', 'tax_vat_a_2_2_net', 'tax_vat_a_2_2_tax', 'tax_vat_a_2_2_gross' ),
+			array_slice( $csv[0], 15, 19 )
+		);
+	}
+
+	/** A shared tax display name must not overwrite a distinct stored rate. */
+	public function test_export_duplicate_tax_names_preserves_every_rate(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$session = $this->closure_session();
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['tax_rates'] = array(
+			'rate_a' => array( 'name' => 'VAT', 'net' => '10.0000' ),
+			'rate_b' => array( 'name' => 'VAT', 'net' => '20.0000' ),
+		);
+		$store->create( $fields );
+		$fields = $this->closure_fields( $this->closure_session( $session['register_id'] ), 2 );
+		$fields['breakdowns']['tax_rates'] = array(
+			array( 'name' => 'VAT', 'net' => '30.0000' ),
+			array( 'name' => 'VAT', 'net' => '40.0000' ),
+		);
+		$store->create( $fields );
+
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert.
+		$this->assertSame( 3, count( $csv ) );
+		$columns = array( 'tax_vat_net', 'tax_vat_2_net', 'tax_vat_3_net', 'tax_vat_4_net' );
+		$first = array_combine( $csv[0], $csv[1] );
+		$second = array_combine( $csv[0], $csv[2] );
+		$this->assertSame( array( '', '', '10.0000', '20.0000' ), array_values( array_intersect_key( $first, array_flip( $columns ) ) ) );
+		$this->assertSame( array( '30.0000', '40.0000', '', '' ), array_values( array_intersect_key( $second, array_flip( $columns ) ) ) );
+	}
+
+	/** Numeric tax IDs are map identities, not list positions. */
+	public function test_export_numeric_tax_keys_keeps_rate_columns_aligned(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$session = $this->closure_session();
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['tax_rates'] = array(
+			12 => array( 'name' => 'VAT', 'net' => '10.0000' ),
+			36 => array( 'name' => 'VAT', 'net' => '20.0000' ),
+		);
+		$store->create( $fields );
+		$fields = $this->closure_fields( $this->closure_session( $session['register_id'] ), 2 );
+		$fields['breakdowns']['tax_rates'] = array( 36 => array( 'name' => 'VAT', 'net' => '30.0000' ) );
+		$store->create( $fields );
+
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert.
+		$first = array_combine( $csv[0], $csv[1] );
+		$second = array_combine( $csv[0], $csv[2] );
+		$this->assertSame( '10.0000', $first['tax_vat_net'] );
+		$this->assertSame( '20.0000', $first['tax_vat_2_net'] );
+		$this->assertSame( '', $second['tax_vat_net'] );
+		$this->assertSame( '30.0000', $second['tax_vat_2_net'] );
 	}
 
 	/** Create replay print and recount. */

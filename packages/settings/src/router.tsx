@@ -12,6 +12,7 @@ import { queryClient } from './query-client';
 import AccessPage from './screens/access';
 import CheckoutPage from './screens/checkout';
 import CloudPrintPage from './screens/cloud-print';
+import ExportClosuresPage from './screens/export-closures';
 import ExtensionsPage from './screens/extensions';
 import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
@@ -87,6 +88,13 @@ const registersRoute = createRoute({
 	component: RegistersPage,
 });
 
+const exportClosuresRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/export-closures',
+	component: ExportClosuresPage,
+	// No loader — this downloads a file, not a settings section.
+});
+
 const extensionsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/extensions',
@@ -121,6 +129,7 @@ const routeTree = rootRoute.addChildren([
 	accessRoute,
 	sessionsRoute,
 	registersRoute,
+	exportClosuresRoute,
 	extensionsRoute,
 	logsRoute,
 	licenseRoute,

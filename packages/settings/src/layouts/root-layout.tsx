@@ -26,6 +26,7 @@ const pageTitles: Record<string, string> = {
 	'/sessions': 'sessions.sessions',
 	'/registers': 'registers.registers',
 	'/extensions': 'common.extensions',
+	'/export-closures': 'export_closures.title',
 	'/logs': 'common.logs',
 	'/license': 'common.license',
 };
@@ -38,6 +39,7 @@ const pageSkeletons: Record<string, React.ReactNode> = {
 	'/sessions': <SessionsSkeleton />,
 	'/registers': <ListSkeleton rows={5} />,
 	'/extensions': <CardGridSkeleton cards={4} />,
+	'/export-closures': <FormSkeleton rows={1} />,
 	'/logs': <ListSkeleton rows={8} />,
 	'/license': <LicenseSkeleton />,
 };
@@ -48,7 +50,10 @@ export function RootLayout() {
 	const location = useLocation();
 
 	const titleKey = pageTitles[location.pathname] || 'common.settings';
-	const pageTitle = t(titleKey);
+	const pageTitle =
+		location.pathname === '/export-closures'
+			? t('export_closures.title', 'Export closures')
+			: t(titleKey);
 
 	return (
 		<div className="wcpos:flex-1 wcpos:flex wcpos:bg-white">

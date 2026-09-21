@@ -7,7 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\API\V1\Raw_Response;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Closure_Csv;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -32,6 +34,7 @@ class Closures_Controller extends \WP_REST_Controller {
 		foreach ( array(
 			'/closures' => 'GET,POST',
 			'/closures/last' => 'GET',
+			'/closures/export' => 'GET',
 			'/closures/(?P<closure_id>[0-9a-fA-F-]{36})' => 'GET',
 			'/closures/(?P<closure_id>[0-9a-fA-F-]{36})/print' => 'POST',
 			'/closures/(?P<closure_id>[0-9a-fA-F-]{36})/recount' => 'POST',
@@ -50,6 +53,8 @@ class Closures_Controller extends \WP_REST_Controller {
 
 	/** Offline replay and cookie requests do not require a protocol claim. */
 	public function wcpos_route_classifications(): array {
+		// `/closures` covers `/closures/export` by slash-prefix match, so the
+		// admin screen's cookie request needs no protocol claim and no new entry.
 		return array( 'protocol_exempt' => array( '/wcpos/v2/closures' ) );
 	}
 
@@ -76,6 +81,9 @@ class Closures_Controller extends \WP_REST_Controller {
 		// A print hands over the figures, so a blind cashier may write a closure but never print one.
 		if ( '/print' === substr( $route, -6 ) ) {
 			$required[] = 'view_woocommerce_pos_reports';
+		}
+		if ( '/wcpos/v2/closures/export' === $route ) {
+			$required[] = 'manage_woocommerce_pos';
 		}
 		foreach ( $required as $cap ) {
 			if ( ! current_user_can( $cap ) ) {
@@ -159,6 +167,9 @@ class Closures_Controller extends \WP_REST_Controller {
 				return new WP_REST_Response( $this->visible( $row ) );
 			}
 			if ( 'GET' === $request->get_method() ) {
+				if ( '/wcpos/v2/closures/export' === $route ) {
+					return $this->export( $store );
+				}
 				$args = $this->list_args( $request );
 				if ( is_wp_error( $args ) ) {
 					return $args;
@@ -198,6 +209,29 @@ class Closures_Controller extends \WP_REST_Controller {
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_write_failed', 500 );
 		}
+	}
+
+	/** Download recorded figures without applying corrections or list filters.
+	 *
+	 * @param Closure_Store $store Closure store.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function export( Closure_Store $store ) {
+		try {
+			$csv = ( new Closure_Csv() )->build( $store );
+		} catch ( \RuntimeException $error ) {
+			return $this->error( 'wcpos_closure_export_failed', 500 );
+		}
+		$site = sanitize_title( get_bloginfo( 'name' ) ) ?: (string) get_current_blog_id();
+		return Raw_Response::serve(
+			$csv,
+			'text/csv; charset=utf-8',
+			array(
+				'Content-Disposition' => 'attachment; filename="wcpos-closures-' . $site . '-' . gmdate( 'Y-m-d' ) . '.csv"',
+				'Content-Length' => (string) strlen( $csv ),
+				'Cache-Control' => 'no-store',
+			)
+		);
 	}
 
 	/** Validate the immutable client fields, excluding server-owned columns.
@@ -308,7 +342,7 @@ class Closures_Controller extends \WP_REST_Controller {
 					return $this->error( 'rest_invalid_param', 400 );
 				}
 				$value = strtolower( $value );
-			} elseif ( ! is_scalar( $value ) || ! preg_match( '/^[1-9]\d{0,17}$/D', (string) $value ) || ( 'per_page' === $key && $value > 100 ) ) {
+			} elseif ( ! is_scalar( $value ) || ! preg_match( '/^[1-9]\d{0,17}$/D', (string) $value ) || ( 'per_page' === $key && $value > Closure_Store::MAX_PER_PAGE ) ) {
 				return $this->error( 'rest_invalid_param', 400 );
 			}
 			$args[ $key ] = $value;
