@@ -18,6 +18,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Services\Request_Lane;
+use WCPOS\WooCommercePOS\Services\Service_Groups;
 use WCPOS\WooCommercePOS\Templates;
 use WC_Unit_Test_Case;
 
@@ -54,7 +55,7 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 
 		$this->run_init();
 
-		$this->assertSame( array( 'always' ), Init::constructed_groups() );
+		$this->assertSame( array( 'always' ), Service_Groups::constructed() );
 		$this->assertSame( $emails_before, $this->callback_count( 'woocommerce_email_recipient_new_order' ), 'Emails is an order-event service; a shop page never constructs it.' );
 		$this->assertSame( $ready_before, did_action( 'woocommerce_pos_order_services_ready' ) );
 		// The always-on group is really there: the read-side order filters and
@@ -74,7 +75,7 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 		// on template_redirect: none of them wait for the lane classifier.
 		$order = wc_create_order();
 
-		$this->assertContains( 'order', Init::constructed_groups(), 'The first order write constructs the order-event services.' );
+		$this->assertContains( 'order', Service_Groups::constructed(), 'The first order write constructs the order-event services.' );
 		$this->assertSame( $emails_before + 1, $this->callback_count( 'woocommerce_email_recipient_new_order' ) );
 		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), 'The ready action fires exactly once.' );
 		$this->assertTrue( post_type_exists( 'wcpos_print_job' ), 'Print_Job_Service registered its post type although init had already run.' );
@@ -101,12 +102,12 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$this->run_init();
-		$this->assertSame( array( 'always' ), Init::constructed_groups(), $label );
+		$this->assertSame( array( 'always' ), Service_Groups::constructed(), $label );
 		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
 
 		$write( $order );
 
-		$this->assertContains( 'order', Init::constructed_groups(), $label );
+		$this->assertContains( 'order', Service_Groups::constructed(), $label );
 		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), $label );
 		$this->assertGreaterThan( 0, $this->callback_count( 'woocommerce_pos_print_job_created' ), $label . ': the cloud-print relay observer is present.' );
 	}
@@ -149,7 +150,7 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 
 		$this->run_init();
 
-		$this->assertSame( array( 'always', 'order', 'pos' ), Init::constructed_groups(), $lane );
+		$this->assertSame( array( 'always', 'order', 'pos' ), Service_Groups::constructed(), $lane );
 		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), $lane );
 	}
 
@@ -188,14 +189,14 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 		unregister_post_type( 'wcpos_template' );
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$this->run_init();
-		$this->assertSame( array( 'always' ), Init::constructed_groups() );
+		$this->assertSame( array( 'always' ), Service_Groups::constructed() );
 
 		$active = Templates::get_active_template_id( 'receipt' );
 
 		$this->assertSame( $template_id, $active, 'The custom template is still the active one.' );
 		$this->assertSame( (string) $template_id, (string) get_option( 'wcpos_active_template_receipt' ), 'The active-template option survived the read.' );
 		$this->assertTrue( taxonomy_exists( 'wcpos_template_type' ), 'The static reader registered the types it needs.' );
-		$this->assertSame( array( 'always' ), Init::constructed_groups(), 'Reading a template does not construct the order-event group.' );
+		$this->assertSame( array( 'always' ), Service_Groups::constructed(), 'Reading a template does not construct the order-event group.' );
 	}
 
 	public function test_ensure_order_services_is_idempotent_when_called_directly(): void {
