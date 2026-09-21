@@ -272,6 +272,38 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_closure_export_failed', $response->get_data()['code'] );
 	}
 
+	/** A legacy closure with no business day is still exported, with an empty cell.
+	 *
+	 * `business_day` is CHAR(10) NULL and Activator::upgrade_business_days() back-fills
+	 * it in batches of 100, so a store mid-upgrade holds both stamped and unstamped
+	 * rows. This export promises every closure the store has ever written, so the
+	 * unstamped ones must appear — a blank cell is a missing stamp, but a missing ROW
+	 * would be a silently incomplete fiscal record. Pinned separately from the frozen
+	 * presentation test, where the empty day was only incidental.
+	 */
+	public function test_export_includes_a_legacy_closure_without_a_business_day(): void {
+		// Arrange: two closures, one back-dated to the unstamped legacy shape.
+		global $wpdb;
+		$store = new Closure_Store();
+		$legacy = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$stamped = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$wpdb->update( $store->table_name(), array( 'business_day' => null ), array( 'id' => $legacy['id'] ) );
+		$wpdb->update( $store->table_name(), array( 'business_day' => '2026-09-11' ), array( 'id' => $stamped['id'] ) );
+
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert: both rows present; the legacy one carries an empty day, not an invented one.
+		$this->assertSame( 3, count( $csv ) );
+		$rows = array();
+		foreach ( array_slice( $csv, 1 ) as $row ) {
+			$cells = array_combine( $csv[0], $row );
+			$rows[ $cells['register_id'] ] = $cells['business_day'];
+		}
+		$this->assertSame( '', $rows[ $legacy['register_id'] ] );
+		$this->assertSame( '2026-09-11', $rows[ $stamped['register_id'] ] );
+	}
+
 	/** A malformed store VALUE is an unreadable restriction, not an absent one.
 	 *
 	 * The container being an array is not enough. Today Closure_Store::list() renders
