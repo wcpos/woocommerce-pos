@@ -173,10 +173,20 @@ class Receipt_Data_Builder {
 			'i18n' => $i18n,
 		);
 		$identity = array_intersect_key( $fiscal, array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id' ) ) );
+		$printed = array_intersect_key( $row, array_flip( array( 'id', 'number', 'printed_number' ) ) );
 		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), $xreport ? 'xreport' : 'closure' );
 		// The identity is core-owned, as on the refund path: an extension cannot restate the
 		// document type or the closure's number. Its other fiscal additions are kept.
 		$data['fiscal'] = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
+		// Restore what a template actually prints, not merely what fiscal records. Both the PHP
+		// and the shipped gallery closure templates head the document with `closure.number` and
+		// branch on `fiscal.is_x_report`, so protecting `fiscal.receipt_number` and
+		// `fiscal.document_type` alone would still let an extension print a closure under another
+		// number, or print an X-report as a numbered closure. The two flags are derived, so they
+		// are re-derived here rather than trusted back from the filter.
+		$data['closure'] = array_merge( (array) ( $data['closure'] ?? array() ), $printed );
+		$data['fiscal']['is_x_report'] = $xreport;
+		$data['fiscal']['is_closure_document'] = true;
 		return $data;
 	}
 

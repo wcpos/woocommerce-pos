@@ -26,11 +26,15 @@ final class Report_Scope_Resolver {
 		$closure = null;
 		$register_id = $args['register_id'] ?? null;
 		$allowed = self::allowed_store_ids( $request );
+		if ( array() === $allowed ) {
+			// A caller allowed no stores at all can read no report.
+			return new WP_Error( 'wcpos_report_not_found', __( 'Report not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
 		if ( 'session' === $args['mode'] ) {
 			$session = ( new Register_Session_Store() )->get( $args['session_id'] );
 			// Out of scope answers exactly as absent does, and before the closed check, so the
 			// refusal cannot be read as "this session exists elsewhere, and it is still open".
-			if ( ! $session || ! self::in_scope( (int) $session['store_id'], $allowed ) ) {
+			if ( ! $session || ! self::row_in_scope( $session['store_id'], $allowed ) ) {
 				return new WP_Error( 'wcpos_report_session_not_found', __( 'Session not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 			}
 			if ( empty( $session['closure_id'] ) || empty( $session['closed_at_gmt'] ) ) {
@@ -48,7 +52,7 @@ final class Report_Scope_Resolver {
 		$register = null === $register_id ? null : ( new Register_Store() )->get( $register_id );
 		// Same reasoning: a register in a store the caller cannot reach is simply absent, and
 		// answers with the code a non-existent one does, so neither can be told from the other.
-		if ( null !== $register_id && ( ! $register || ! self::in_scope( (int) $register['store_id'], $allowed ) ) ) {
+		if ( null !== $register_id && ( ! $register || ! self::row_in_scope( $register['store_id'], $allowed ) ) ) {
 			return new WP_Error( 'wcpos_report_register_not_found', __( 'Register not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		// A closed session retains its store even if its register has since moved.
@@ -56,7 +60,10 @@ final class Report_Scope_Resolver {
 		if ( ! $session && $register && isset( $args['store_id'] ) && $args['store_id'] !== $store_id ) {
 			return self::mismatch();
 		}
-		if ( ! self::in_scope( $store_id, $allowed ) ) {
+		// A store named outright is checked the same way a row's store is. A store nobody named
+		// leaves $store_id at 0, and there is nothing to authorize: scoping the query is then the
+		// report's own responsibility per the contract.
+		if ( isset( $args['store_id'] ) && ! self::row_in_scope( $args['store_id'], $allowed ) ) {
 			return new WP_Error( 'wcpos_report_not_found', __( 'Report not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		$resolver = new Receipt_Store_Resolver( wcpos_get_store( $store_id ) );
@@ -132,22 +139,24 @@ final class Report_Scope_Resolver {
 	}
 
 	/**
-	 * Whether a store is within the caller's scope.
+	 * Whether an addressed resource's store is within the caller's scope.
+	 *
+	 * Membership is required whenever a scope is in force, with **no exemption for 0**. The
+	 * `store_id` columns on the sessions, registers and closures tables are all `BIGINT NULL`, so
+	 * an unassigned row casts to 0; treating 0 as "nothing was named" would let a scoped caller
+	 * read any unassigned register or session. `Fiscal_Record_Store::resolve_document()` refuses
+	 * the same row, and this must not be laxer than the read it sits beside.
 	 *
 	 * Every refusal built on this answers **404, not 403**: out of scope reads as absent, as it
 	 * does on the records and closures reads, so a scoped manager cannot probe what exists
 	 * elsewhere. That is the opposite of `Report_Scope_Gate`'s 403, which is a tier boundary the
 	 * merchant is meant to see and the app turns into a *See Pro* button.
 	 *
-	 * A store of 0 means none was named — no session, register or `store_id` — so there is no
-	 * specific store to authorize, and scoping the query is the report's own responsibility per
-	 * the contract.
-	 *
-	 * @param int        $store_id Store to test, or 0 when none was named.
+	 * @param mixed      $store_id The row's store, possibly null.
 	 * @param int[]|null $allowed  Allowed stores, or null when unrestricted.
 	 */
-	private static function in_scope( int $store_id, ?array $allowed ): bool {
-		return null === $allowed || $store_id <= 0 || \in_array( $store_id, $allowed, true );
+	private static function row_in_scope( $store_id, ?array $allowed ): bool {
+		return null === $allowed || \in_array( (int) $store_id, $allowed, true );
 	}
 
 	/** Conflicting identifiers cannot widen a report's scope. */

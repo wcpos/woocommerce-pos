@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Reports_Registry;
 use WCPOS\WooCommercePOS\Services\Report_Document_Validator;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
@@ -226,18 +227,42 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_report_capability_and_access_refusals_never_run_callback(): void {
 		foreach ( array(
-			'read_example_report' => 'wcpos_report_forbidden',
-			'view_woocommerce_pos_reports' => 'wcpos_report_forbidden',
-			'access_woocommerce_pos' => 'woocommerce_pos_rest_forbidden',
-		) as $cap => $code ) {
+			// The floor is the visible boundary: you cannot open Reports at all, and are told so.
+			'view_woocommerce_pos_reports' => array( 403, 'wcpos_report_forbidden' ),
+			// access_woocommerce_pos is the whole plugin's floor, enforced by the baseline gate in
+			// API::rest_pre_dispatch() before this controller is reached, with its own code.
+			'access_woocommerce_pos' => array( 403, 'woocommerce_pos_rest_forbidden' ),
+			// A report's own capability is a visibility boundary: the report is hidden, not refused.
+			'read_example_report' => array( 404, 'wcpos_report_not_found' ),
+		) as $cap => $expected ) {
 			wp_get_current_user()->add_cap( $cap, false );
 			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 			$request->set_query_params( $this->args );
 			$response = $this->server->dispatch( $request );
-			$this->assertSame( 403, $response->get_status() );
-			$this->assertSame( $code, $response->get_data()['code'] );
+			$this->assertSame( $expected[0], $response->get_status() );
+			$this->assertSame( $expected[1], $response->get_data()['code'] );
 			$this->assertNull( $this->received );
 			wp_get_current_user()->add_cap( $cap );
+		}
+	}
+
+	/**
+	 * A report the caller may not see is indistinguishable from one that does not exist.
+	 *
+	 * The catalogue already omits it. If the document route answered 403, or named it as
+	 * device-computed, or validated its parameters first, it would hand back the registration the
+	 * catalogue withheld — including which parameters it accepts.
+	 */
+	public function test_report_without_declared_capability_is_indistinguishable_from_missing(): void {
+		wp_get_current_user()->add_cap( 'read_example_report', false );
+		$missing = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports/no_such_report' ) );
+		foreach ( array( $this->args, array( 'mode' => 'nonsense' ), array() ) as $query ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $query );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( $missing->get_status(), $response->get_status() );
+			$this->assertSame( $missing->get_data()['code'], $response->get_data()['code'] );
+			$this->assertNull( $this->received );
 		}
 	}
 
@@ -312,6 +337,49 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * An unassigned row is not a free pass.
+	 *
+	 * `store_id` is `BIGINT NULL` on the sessions, registers and closures tables, so an
+	 * unassigned row casts to 0. Exempting 0 as "no store was named" would let a scoped caller
+	 * read every unassigned register and session. `Fiscal_Record_Store::resolve_document()`
+	 * refuses the same row, and this read must not be laxer than the one beside it.
+	 */
+	public function test_report_register_with_no_store_is_refused_under_a_scope(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $session['register_id'] ) );
+		add_filter(
+			'woocommerce_pos_closures_list_args',
+			static function ( $args ) {
+				$args['store_id'] = array( 456 );
+				return $args;
+			}
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( array_replace( $this->args, array( 'register_id' => $session['register_id'] ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_report_register_not_found', $response->get_data()['code'] );
+		$this->assertNull( $this->received );
+	}
+
+	/** A caller allowed no stores at all reads no report. */
+	public function test_report_deny_all_store_scope_refuses_every_report(): void {
+		add_filter(
+			'woocommerce_pos_closures_list_args',
+			static function ( $args ) {
+				$args['store_id'] = array();
+				return $args;
+			}
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( $this->args );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertNull( $this->received );
+	}
+
 	/** Session identity must not bypass the Free day or explicit-register boundary. */
 	public function test_report_session_scope_refusals_never_run_callback(): void {
 		global $wpdb;
@@ -366,14 +434,28 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Reject bad scope parameters before capability checks, but never invoke the query. */
-	public function test_report_invalid_mode_precedes_capability_refusal(): void {
-		wp_get_current_user()->add_cap( 'read_example_report', false );
+	/**
+	 * Parameter errors are for callers who may see the report; the unauthorized get nothing.
+	 *
+	 * This deliberately runs the other way round from an earlier version of this test. A
+	 * parameter-specific 400 for a caller lacking the capability would confirm the report exists
+	 * and reveal which scopes it accepts, which is exactly what the catalogue withholds. A caller
+	 * who may see it still gets the useful error.
+	 */
+	public function test_report_parameter_errors_are_withheld_from_an_unauthorized_caller(): void {
+		$bad = array_replace( $this->args, array( 'mode' => 'other' ) );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
-		$request->set_query_params( array_replace( $this->args, array( 'mode' => 'other' ) ) );
+		$request->set_query_params( $bad );
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame( 'wcpos_report_scope_unsupported', $response->get_data()['code'] );
+
+		wp_get_current_user()->add_cap( 'read_example_report', false );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( $bad );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_report_not_found', $response->get_data()['code'] );
 		$this->assertNull( $this->received );
 	}
 
@@ -463,6 +545,9 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 				$data['extra_note'] = 'Extension';
 				$data['fiscal']['receipt_number'] = 'forged';
 				$data['fiscal']['document_type'] = 'sale';
+				// What the shipped templates actually head the document with.
+				$data['closure']['number'] = 999;
+				$data['fiscal']['is_x_report'] = ! ( $data['fiscal']['is_x_report'] ?? false );
 				// Not part of the identity: a fiscal-jurisdiction extension's own enrichment.
 				$data['fiscal']['extra_fields'] = array( 'jurisdiction' => 'AT' );
 				return $data;
@@ -487,5 +572,13 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		// extension keeps its other fiscal additions. Restoring the whole block instead would
 		// make this filter read-only for fiscal, and nothing else here would notice.
 		$this->assertSame( array( 'jurisdiction' => 'AT' ), $data['fiscal']['extra_fields'] );
+		// What a template prints is protected, not merely what fiscal records: both shipped
+		// closure templates head the document with closure.number and branch on
+		// fiscal.is_x_report, so an extension must not be able to print a closure under another
+		// number, or print an X-report as a numbered closure.
+		$this->assertSame( 42, $data['closure']['number'] );
+		$this->assertFalse( $data['fiscal']['is_x_report'] );
+		$this->assertTrue( $xreport['fiscal']['is_x_report'] );
+		$this->assertTrue( $data['fiscal']['is_closure_document'] );
 	}
 }

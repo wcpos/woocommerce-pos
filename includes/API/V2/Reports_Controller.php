@@ -112,7 +112,11 @@ class Reports_Controller extends \WP_REST_Controller {
 	public function get_item( $request ) {
 		$key = $request->get_url_params()['key'];
 		$report = Reports_Registry::all()[ $key ] ?? null;
-		if ( null === $report ) {
+		// A report whose declared capability the caller lacks is hidden, not refused, and hidden
+		// *before* its source or its parameters are inspected. The catalogue already omits it, so
+		// answering 403 here — or 404 device_computed, or a parameter-specific 400 — would hand
+		// back the registration the catalogue withheld, along with the parameters it accepts.
+		if ( null === $report || ! current_user_can( $report['capability'] ) ) {
 			return new WP_Error( 'wcpos_report_not_found', __( 'Report not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		if ( 'device' === $report['source'] ) {
@@ -121,10 +125,6 @@ class Reports_Controller extends \WP_REST_Controller {
 		$args = $this->parameters( $request->get_params(), $report );
 		if ( is_wp_error( $args ) ) {
 			return $args;
-		}
-		$allowed = $this->authorize( $report['capability'] );
-		if ( is_wp_error( $allowed ) ) {
-			return $allowed;
 		}
 		$context = Report_Scope_Resolver::context( $args, $request );
 		if ( is_wp_error( $context ) ) {
@@ -215,13 +215,16 @@ class Reports_Controller extends \WP_REST_Controller {
 	}
 
 	/**
-	 * Blind cashiers cannot read Reports, even with a custom report capability.
+	 * The Reports floor, which both routes sit behind.
 	 *
-	 * @param string $capability Declared report capability.
+	 * This is the visible boundary: a blind cashier cannot open Reports at all, and is told so
+	 * with a 403. A report's own declared capability is a *visibility* boundary instead, checked
+	 * in get_item() and answered as absent, so it is not handled here.
+	 *
 	 * @return true|WP_Error
 	 */
-	private function authorize( string $capability = Reports_Registry::DEFAULT_CAPABILITY ) {
-		foreach ( array( 'access_woocommerce_pos', Reports_Registry::DEFAULT_CAPABILITY, $capability ) as $cap ) {
+	private function authorize() {
+		foreach ( array( 'access_woocommerce_pos', Reports_Registry::DEFAULT_CAPABILITY ) as $cap ) {
 			if ( ! current_user_can( $cap ) ) {
 				return new WP_Error( 'wcpos_report_forbidden', __( 'Sorry, you cannot access this report.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 			}
