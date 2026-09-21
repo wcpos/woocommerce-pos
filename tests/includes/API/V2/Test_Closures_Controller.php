@@ -314,9 +314,40 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_export_refuses_a_malformed_store_scope(): void {
 		// Arrange.
 		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
-		// true and 1.0 both stringify to "1": a scalar check would have let them through
-		// and exported store 1 to a caller whose scope could not be read.
-		foreach ( array( 'invalid', false, true, 1.0, '1.0', 0, -1, array( 'bad' ), array( 0 ), array( true ), array( 456, 'bad' ) ) as $value ) {
+		// Two families, both of which a looser check waves through.
+		// Stringify: true and 1.0 both become "1" under is_scalar() + (string).
+		// Coerce: is_numeric() denies booleans but happily rewrites '1e2' into store
+		// 100 and ' 1' into store 1 — an unreadable restriction silently becoming a
+		// different, entirely plausible-looking one, with no log line because it
+		// "passed". Both families must refuse, not be corrected.
+		foreach ( array(
+			'invalid',
+			false,
+			true,
+			1.0,
+			'1.0',
+			0,
+			-1,
+			1.9,
+			'1.9',
+			' 1',
+			'1 ',
+			'1e2',
+			'007',
+			'+1',
+			'0x1',
+			// Pins the /D modifier, which is load-bearing rather than decorative:
+			// without it `$` matches BEFORE a trailing newline, so "1\n" passes the
+			// pattern and becomes store 1. Nothing else in the suite would notice a
+			// tidy-up that dropped it.
+			"1\n",
+			"1\r\n",
+			array( 'bad' ),
+			array( 0 ),
+			array( true ),
+			array( '1e2' ),
+			array( 456, 'bad' ),
+		) as $value ) {
 			$broken = static function ( $args ) use ( $value ) {
 				$args['store_id'] = $value;
 				return $args;
