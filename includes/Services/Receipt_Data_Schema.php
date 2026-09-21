@@ -2072,6 +2072,16 @@ class Receipt_Data_Schema {
 			'type' => 'boolean',
 			'label' => __( 'Is Report Document', 'woocommerce-pos' ),
 		);
+		$core_roots = array_keys( $tree );
+		foreach ( Reports_Registry::all() as $report ) {
+			foreach ( $report['extras'] as $path => $section ) {
+				// Extras live beside the core, never redefine its schema or required fields.
+				if ( is_array( $section ) && ! in_array( explode( '.', $path )[0], $core_roots, true ) ) {
+					$section['label'] = $report['title'];
+					$tree[ $path ] = $section;
+				}
+			}
+		}
 		return $tree;
 	}
 

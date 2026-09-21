@@ -1,0 +1,438 @@
+<?php
+/**
+ * Report REST contract tests.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\API\V2
+ */
+
+namespace WCPOS\WooCommercePOS\Tests\API\V2;
+
+use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Reports_Registry;
+use WCPOS\WooCommercePOS\Services\Report_Document_Validator;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
+use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
+use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+
+/** Gates must prevent queries, not just suppress their response. */
+class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
+	use Closure_Test_Fixture {
+		tearDown as private tear_down_closures;
+	}
+
+	/**
+	 * Actual callback argument.
+	 *
+	 * @var array|null
+	 */
+	private $received;
+	/**
+	 * Optional failing producer.
+	 *
+	 * @var callable|null
+	 */
+	private $producer;
+	/**
+	 * User observed inside the callback.
+	 *
+	 * @var int
+	 */
+	private $callback_user;
+	/**
+	 * Default valid query.
+	 *
+	 * @var array
+	 */
+	private $args;
+
+	/** The route schema is declaration-independent; register after the hook snapshot. */
+	public function setUp(): void {
+		parent::setUp();
+		$this->reset_registry();
+		$this->received = null;
+		$this->producer = null;
+		add_filter(
+			'woocommerce_pos_reports',
+			function ( $reports ) {
+				$reports['example'] = array(
+					'title' => 'Example report',
+					'scopes' => array( 'range', 'session' ),
+					'capability' => 'read_example_report',
+					'group_by' => array(
+						array(
+							'key' => 'cashier',
+							'label' => 'Cashier',
+						),
+					),
+					'extras' => array(
+						'example' => array(
+							'fields' => array(
+								'note' => array(
+									'type' => 'string',
+									'label' => 'Note',
+								),
+							),
+						),
+					),
+					'callback' => function ( $scope ) {
+						$this->received = $scope;
+						$this->callback_user = get_current_user_id();
+						if ( $this->producer ) {
+							return ( $this->producer )( $scope );
+						}
+						$data = ( new Receipt_Preview_Fixture_Loader() )->build( 'report' );
+						$data['example'] = array( 'note' => 'Extra' );
+						// Attempts to restate identity and scope must lose to the plugin.
+						$data['store'] = array( 'id' => 999 );
+						$data['register'] = array( 'id' => 'fake' );
+						$data['cashier'] = array(
+							'id' => 999,
+							'name' => 'Forged',
+						);
+						$data['software'] = array( 'name' => 'Forged' );
+						$data['fiscal'] = array( 'document_type' => 'sale' );
+						return $data;
+					},
+				);
+				return $reports;
+			}
+		);
+		wp_get_current_user()->add_cap( 'access_woocommerce_pos' );
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		wp_get_current_user()->add_cap( 'read_example_report' );
+		update_option( 'timezone_string', 'America/New_York' );
+		$session = $this->closure_session();
+		$today = ( new \DateTimeImmutable( 'today', new \DateTimeZone( 'America/New_York' ) ) )->format( 'Y-m-d' );
+		$this->args = array(
+			'mode' => 'range',
+			'from' => $today,
+			'to' => $today,
+			'register_id' => $session['register_id'],
+		);
+	}
+
+	/** Clear the request cache as well as committed fixture rows. */
+	public function tearDown(): void {
+		$this->reset_registry();
+		$this->tear_down_closures();
+	}
+
+	/** Simulate a fresh request without a test-only production method. */
+	private function reset_registry(): void {
+		$property = new \ReflectionProperty( Reports_Registry::class, 'reports' );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
+	}
+
+	/** Declared capability controls catalogue visibility and callables never leak into JSON. */
+	public function test_registry_authorized_reports_appear_with_public_fields_only(): void {
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$reports = $response->get_data()['reports'];
+		$this->assertSame( array( 'sales', 'cash_movements', 'example' ), array_column( $reports, 'key' ) );
+		$this->assertSame( array( 'device', 'device', 'server' ), array_column( $reports, 'source' ) );
+		$this->assertSame( array( 'key', 'title', 'scopes', 'group_by', 'source', 'tile', 'template' ), array_keys( $reports[2] ) );
+		$this->assertSame( 'Example report', Receipt_Data_Schema::get_field_tree( 'report' )['example']['label'] );
+		wp_get_current_user()->add_cap( 'read_example_report', false );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports' ) );
+		$this->assertSame( array( 'sales', 'cash_movements' ), array_column( $response->get_data()['reports'], 'key' ) );
+	}
+
+	/** Returning raw request params or accepting callback-owned identity breaks this contract. */
+	public function test_report_range_returns_valid_envelope_and_resolved_callback_scope(): void {
+		remove_theme_mod( 'custom_logo' );
+		$filtered = null;
+		add_filter(
+			'woocommerce_pos_report_data',
+			static function ( $data, $key, $scope ) use ( &$filtered ) {
+				$filtered = array( $key, $scope );
+				$data['example']['note'] = 'Filtered';
+				return $data;
+			},
+			10,
+			3
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( $this->args + array( 'group_by' => 'cashier' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( Report_Document_Validator::validate( $data ) );
+		$this->assertIsArray( $this->received );
+		$this->assertNotInstanceOf( \WP_REST_Request::class, $this->received );
+		$this->assertSame( 456, $this->received['store_id'] );
+		$this->assertSame( get_current_user_id(), $data['cashier']['id'] );
+		$this->assertSame( 'WCPOS', $data['software']['name'] );
+		$this->assertNotSame( 999, $data['store']['id'] );
+		$this->assertSame( '', $data['store']['logo'] );
+		$this->assertSame( get_current_user_id(), $this->callback_user );
+		$this->assertSame( 'cashier', $this->received['group_by'] );
+		$this->assertSame( 'America/New_York', $this->received['timezone'] );
+		$this->assertSame( 'example', $data['report']['key'] );
+		$this->assertSame( 'Example report', $data['report']['title'] );
+		$this->assertSame( $this->args['register_id'], $data['report']['scope']['register_id'] );
+		$this->assertSame( $this->args['register_id'], $data['register']['id'] );
+		$this->assertSame( $this->args['from'], $data['report']['scope']['from']['date_ymd'] );
+		$this->assertSame( 'report', $data['fiscal']['document_type'] );
+		$this->assertTrue( $data['fiscal']['is_report_document'] );
+		$this->assertSame( array( 'example', $this->received ), $filtered );
+		$this->assertSame( 'Filtered', $data['example']['note'] );
+		$this->assertSame( 'Closure fixture', $this->received['register_name'] );
+		$this->assertArrayNotHasKey( 'session', $this->received );
+		$this->assertArrayNotHasKey( 'closure', $this->received );
+		$this->assertSame( $data['report'], Receipt_Data_Schema::format_money_fields( $data )['report'] );
+		$start = new \DateTimeImmutable( $this->received['from_utc'], new \DateTimeZone( 'UTC' ) );
+		$end = new \DateTimeImmutable( $this->received['to_utc'], new \DateTimeZone( 'UTC' ) );
+		$this->assertSame( $this->args['from'] . ' 00:00:00', $start->setTimezone( new \DateTimeZone( 'America/New_York' ) )->format( 'Y-m-d H:i:s' ) );
+		$this->assertSame( '00:00:00', $end->setTimezone( new \DateTimeZone( 'America/New_York' ) )->format( 'H:i:s' ) );
+		$this->assertSame( $this->args['to'], $end->setTimezone( new \DateTimeZone( 'America/New_York' ) )->modify( '-1 day' )->format( 'Y-m-d' ) );
+	}
+
+	/** A closed session has a real number and date-field objects in its document. */
+	public function test_report_session_returns_valid_document_from_stored_session(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session, 42 ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $this->args['from'] ), array( 'id' => $session['id'] ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params(
+			array(
+				'mode' => 'session',
+				'session_id' => $session['id'],
+				'register_id' => $session['register_id'],
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( Report_Document_Validator::validate( $data ) );
+		$this->assertSame( 42, $this->received['session_number'] );
+		$this->assertSame( $this->args['from'], $this->received['business_day'] );
+		$this->assertSame( '2026-09-11 12:00:00', $this->received['closed_at'] );
+		$this->assertArrayHasKey( 'date_ymd', $data['report']['scope']['closed_at'] );
+	}
+
+	/**
+	 * A denied request must not run the producer, even if its declared capability is held.
+	 *
+	 * Which layer refuses depends on the capability. `access_woocommerce_pos` is the whole
+	 * plugin's floor and is enforced by the baseline gate in API::rest_pre_dispatch(), which
+	 * runs before this controller is reached and answers with its own code; the two report
+	 * capabilities are the controller's own. The part that matters either way is that the
+	 * producer never runs.
+	 */
+	public function test_report_capability_and_access_refusals_never_run_callback(): void {
+		foreach ( array(
+			'read_example_report' => 'wcpos_report_forbidden',
+			'view_woocommerce_pos_reports' => 'wcpos_report_forbidden',
+			'access_woocommerce_pos' => 'woocommerce_pos_rest_forbidden',
+		) as $cap => $code ) {
+			wp_get_current_user()->add_cap( $cap, false );
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $this->args );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 403, $response->get_status() );
+			$this->assertSame( $code, $response->get_data()['code'] );
+			$this->assertNull( $this->received );
+			wp_get_current_user()->add_cap( $cap );
+		}
+	}
+
+	/** Neither missing register, yesterday, nor an out-of-reach range may execute a Free query. */
+	public function test_report_free_scope_refusals_never_run_callback(): void {
+		$today = new \DateTimeImmutable( $this->args['from'] );
+		foreach ( array( 1, 93, 0 ) as $days ) {
+			$args = $this->args;
+			$args['from'] = $today->modify( '-' . $days . ' days' )->format( 'Y-m-d' );
+			if ( 0 === $days ) {
+				unset( $args['register_id'] );
+			}
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $args );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 403, $response->get_status() );
+			$this->assertSame( 'wcpos_report_scope_locked', $response->get_data()['code'] );
+			$this->assertNull( $this->received );
+		}
+	}
+
+	/** Session identity must not bypass the Free day or explicit-register boundary. */
+	public function test_report_session_scope_refusals_never_run_callback(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => '2000-01-01' ), array( 'id' => $session['id'] ) );
+		$args = array(
+			'mode' => 'session',
+			'session_id' => $session['id'],
+			'register_id' => $session['register_id'],
+		);
+		foreach ( array( $args, array_diff_key( $args, array( 'register_id' => true ) ) ) as $query ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $query );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 403, $response->get_status() );
+			$this->assertSame( 'wcpos_report_scope_locked', $response->get_data()['code'] );
+			$this->assertNull( $this->received );
+		}
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $this->args['from'] ), array( 'id' => $session['id'] ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( array_diff_key( $args, array( 'register_id' => true ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'wcpos_report_scope_locked', $response->get_data()['code'] );
+		$this->assertNull( $this->received );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( array_replace( $args, array( 'register_id' => $this->args['register_id'] ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'wcpos_report_scope_mismatch', $response->get_data()['code'] );
+		$this->assertNull( $this->received );
+	}
+
+	/** Dates and identity types are validated before any query callable. */
+	public function test_report_invalid_parameters_are_rejected_before_callback(): void {
+		foreach ( array(
+			array( 'mode' => 'other' ),
+			array( 'from' => '2026-02-30' ),
+			array( 'group_by' => 'unknown' ),
+			array( 'register_id' => 12 ),
+			array( 'store_id' => array( 1 ) ),
+			array( 'session_id' => 2 ),
+			array( 'mode' => 'session' ),
+			array( 'to' => '2000-01-01' ),
+		) as $invalid ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( array_replace( $this->args, $invalid ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertNull( $this->received );
+		}
+	}
+
+	/** Reject bad scope parameters before capability checks, but never invoke the query. */
+	public function test_report_invalid_mode_precedes_capability_refusal(): void {
+		wp_get_current_user()->add_cap( 'read_example_report', false );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( array_replace( $this->args, array( 'mode' => 'other' ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'wcpos_report_scope_unsupported', $response->get_data()['code'] );
+		$this->assertNull( $this->received );
+	}
+
+	/** A broken registration must not take down the catalogue route. */
+	public function test_registry_malformed_registration_still_serves_valid_reports(): void {
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports['broken'] = array(
+					'title' => 'Broken',
+					'scopes' => array( 'range' ),
+					'callback' => false,
+				);
+				return $reports;
+			}
+		);
+		$this->reset_registry();
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'sales', 'cash_movements', 'example' ), array_column( $response->get_data()['reports'], 'key' ) );
+	}
+
+	/** Blind cashiers may not obtain catalogue metadata either. */
+	public function test_registry_without_reports_capability_is_forbidden(): void {
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports', false );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports' ) );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'wcpos_report_forbidden', $response->get_data()['code'] );
+	}
+
+	/** Device declarations cannot accidentally become server aggregations. */
+	public function test_report_device_and_unknown_keys_return_distinct_not_found_errors(): void {
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports/sales' ) );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_report_is_device_computed', $response->get_data()['code'] );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/reports/missing' ) );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_report_not_found', $response->get_data()['code'] );
+	}
+
+	/** Plugin errors produce a named failure, not an empty document or an uncaught exception. */
+	public function test_report_invalid_and_throwing_producers_return_named_failures(): void {
+		foreach ( array(
+			static function () {
+				return 'invalid'; },
+			static function () {
+				return array( 'report' => array() ); },
+			static function () {
+				throw new \RuntimeException( 'Plugin exploded' ); },
+		) as $producer ) {
+			$this->producer = $producer;
+			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+			$request->set_query_params( $this->args );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 500, $response->get_status() );
+			$this->assertSame( 'wcpos_report_failed', $response->get_data()['code'] );
+			$this->assertSame( 'example', $response->get_data()['data']['key'] );
+			$this->assertStringContainsString( 'example', $response->get_data()['message'] );
+		}
+		$this->assertStringContainsString( 'Plugin exploded', $response->get_data()['message'] );
+		$this->assertArrayNotHasKey( 'trace', $response->get_data()['data'] );
+	}
+
+	/** Validation must run after extensions, not before them. */
+	public function test_report_filter_invalid_document_is_rejected(): void {
+		add_filter(
+			'woocommerce_pos_report_data',
+			static function ( $data ) {
+				$data['report']['column_count'] = 999;
+				return $data;
+			}
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( $this->args );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'example', $response->get_data()['data']['key'] );
+	}
+
+	/** Existing id-0 guards keep working; extensions cannot restate closure fiscal identity. */
+	public function test_receipt_filter_closure_and_xreport_receive_unsaved_order_and_preserve_identity(): void {
+		$seen = array();
+		add_filter(
+			'woocommerce_pos_receipt_data',
+			static function ( $data, $order, $mode ) use ( &$seen ) {
+				$seen[] = array( $order->get_id(), $mode );
+				$data['extra_note'] = 'Extension';
+				$data['fiscal']['receipt_number'] = 'forged';
+				$data['fiscal']['document_type'] = 'sale';
+				// Not part of the identity: a fiscal-jurisdiction extension's own enrichment.
+				$data['fiscal']['extra_fields'] = array( 'jurisdiction' => 'AT' );
+				return $data;
+			},
+			10,
+			3
+		);
+		$session = $this->closure_session();
+		$builder = new Receipt_Data_Builder();
+		$xreport = $builder->build_closure_document( $session, true );
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session, 42 ) );
+		$seen = array();
+		$data = $builder->build_closure_document( $closure );
+		$xreport = $builder->build_closure_document( $this->closure_session(), true );
+		$this->assertSame( array( array( 0, 'closure' ), array( 0, 'xreport' ) ), $seen );
+		$this->assertSame( '42', $data['fiscal']['receipt_number'] );
+		$this->assertSame( 'closure', $data['fiscal']['document_type'] );
+		$this->assertSame( '', $xreport['fiscal']['receipt_number'] );
+		$this->assertSame( 'xreport', $xreport['fiscal']['document_type'] );
+		$this->assertSame( 'Extension', $data['extra_note'] );
+		// Only the named identity is restored after the filter, as on the refund path: an
+		// extension keeps its other fiscal additions. Restoring the whole block instead would
+		// make this filter read-only for fiscal, and nothing else here would notice.
+		$this->assertSame( array( 'jurisdiction' => 'AT' ), $data['fiscal']['extra_fields'] );
+	}
+}
