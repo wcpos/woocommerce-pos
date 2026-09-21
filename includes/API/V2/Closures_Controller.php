@@ -226,6 +226,19 @@ class Closures_Controller extends \WP_REST_Controller {
 	 */
 	private function export( Closure_Store $store, $request ) {
 		$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request );
+		if ( \is_array( $scope ) && ! $this->scope_store_ids_are_valid( $scope ) ) {
+			// The container being an array is not enough: a store restriction whose
+			// VALUE is malformed is an unreadable restriction, and an unreadable
+			// restriction must not be treated as an absent one. Today the predicate
+			// is rendered in SQL, where a bad value matches little and never NULL —
+			// but that safety is incidental to Closure_Store::list(), not stated
+			// here, so it is stated here instead of relied upon.
+			Logger::warning(
+				'Closure export refused: woocommerce_pos_closures_list_args returned a malformed store scope.',
+				array( 'store_id' => wp_json_encode( $scope['store_id'] ?? null ) )
+			);
+			return $this->error( 'wcpos_closure_export_failed', 500 );
+		}
 		if ( ! \is_array( $scope ) ) {
 			// A filter that returns a non-array has malfunctioned. Treating that as
 			// "no scope" would export every store's closures at exactly the moment
@@ -255,6 +268,26 @@ class Closures_Controller extends \WP_REST_Controller {
 				'Cache-Control' => 'no-store',
 			)
 		);
+	}
+
+	/** Every store id in an export scope must be a positive integer.
+	 *
+	 * An empty array is valid and means no store is permitted — that is a real
+	 * restriction, not a malformed one, and it correctly yields an empty export.
+	 *
+	 * @param array $scope Scope from woocommerce_pos_closures_list_args.
+	 */
+	private function scope_store_ids_are_valid( array $scope ): bool {
+		if ( ! \array_key_exists( 'store_id', $scope ) ) {
+			return true;
+		}
+		$ids = \is_array( $scope['store_id'] ) ? $scope['store_id'] : array( $scope['store_id'] );
+		foreach ( $ids as $id ) {
+			if ( ! \is_scalar( $id ) || ! preg_match( '/^[1-9]\d{0,17}$/D', (string) $id ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** Validate the immutable client fields, excluding server-owned columns.

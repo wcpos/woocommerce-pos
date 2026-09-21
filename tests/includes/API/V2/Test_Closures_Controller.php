@@ -272,6 +272,56 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_closure_export_failed', $response->get_data()['code'] );
 	}
 
+	/** A malformed store VALUE is an unreadable restriction, not an absent one.
+	 *
+	 * The container being an array is not enough. Today Closure_Store::list() renders
+	 * the predicate in SQL, where a bad value matches little and never a NULL store —
+	 * but that is incidental to the store, so the route states the rule itself rather
+	 * than inheriting it.
+	 */
+	public function test_export_refuses_a_malformed_store_scope(): void {
+		// Arrange.
+		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		foreach ( array( 'invalid', false, 0, -1, array( 'bad' ), array( 0 ), array( 456, 'bad' ) ) as $value ) {
+			$broken = static function ( $args ) use ( $value ) {
+				$args['store_id'] = $value;
+				return $args;
+			};
+			// Act.
+			add_filter( 'woocommerce_pos_closures_list_args', $broken );
+			try {
+				$response = $this->get( 'closures/export' );
+			} finally {
+				remove_filter( 'woocommerce_pos_closures_list_args', $broken );
+			}
+			// Assert.
+			$this->assertSame( 500, $response->get_status(), wp_json_encode( $value ) );
+		}
+	}
+
+	/** An empty allowed-store list is a real restriction and exports nothing. */
+	public function test_export_empty_store_scope_exports_nothing(): void {
+		// Arrange.
+		$empty_body = $this->get( 'closures/export' )->get_raw_body();
+		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$none = static function ( $args ) {
+			$args['store_id'] = array();
+			return $args;
+		};
+
+		// Act.
+		add_filter( 'woocommerce_pos_closures_list_args', $none );
+		try {
+			$response = $this->get( 'closures/export' );
+		} finally {
+			remove_filter( 'woocommerce_pos_closures_list_args', $none );
+		}
+
+		// Assert: accepted, and indistinguishable from a store with no closures.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $empty_body, $response->get_raw_body() );
+	}
+
 	/** A caller cannot narrow the export with query params; it is the whole allowed set. */
 	public function test_export_ignores_caller_supplied_list_filters(): void {
 		// Arrange: two registers, one closure each.
