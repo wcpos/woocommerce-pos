@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /**
  * Receipt_Data_Schema class.
  */
@@ -2073,12 +2075,31 @@ class Receipt_Data_Schema {
 			'label' => __( 'Is Report Document', 'woocommerce-pos' ),
 		);
 		$core_roots = array_keys( $tree );
-		foreach ( Reports_Registry::all() as $report ) {
+		foreach ( Reports_Registry::all() as $key => $report ) {
 			foreach ( $report['extras'] as $path => $section ) {
 				// Extras live beside the core, never redefine its schema or required fields.
-				if ( is_array( $section ) && ! in_array( explode( '.', $path )[0], $core_roots, true ) ) {
+				if ( ! is_array( $section ) || in_array( explode( '.', $path )[0], $core_roots, true ) ) {
+					continue;
+				}
+				if ( ! isset( $tree[ $path ] ) ) {
 					$section['label'] = $report['title'];
 					$tree[ $path ] = $section;
+					continue;
+				}
+				// Two reports sharing an extras path form the documented union rather than the
+				// later one replacing the earlier. Overwriting would drop the first report's
+				// fields from the picker, and -- because this tree derives the JSON schema -- a
+				// field redeclared with a different type would make the schema reject the first
+				// report's own documents. The incumbent field wins so the result does not depend
+				// on registration order; the collision is logged so it can be sorted out.
+				foreach ( (array) ( $section['fields'] ?? array() ) as $field => $definition ) {
+					if ( isset( $tree[ $path ]['fields'][ $field ] ) ) {
+						Logger::log(
+							sprintf( 'Report "%s" extras field "%s.%s" ignored: already declared by another report', $key, $path, $field )
+						);
+						continue;
+					}
+					$tree[ $path ]['fields'][ $field ] = $definition;
 				}
 			}
 		}

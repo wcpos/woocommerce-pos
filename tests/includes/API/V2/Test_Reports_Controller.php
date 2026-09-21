@@ -389,6 +389,41 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * A closed session keeps its own store even after its register moves.
+	 *
+	 * `Register_Store::update()` permits reassigning `store_id`. Scoping a session report by the
+	 * register's *current* store would 404 a historical report for a caller plainly entitled to
+	 * it, and would contradict the resolver's own use of the session's retained store.
+	 */
+	public function test_report_session_survives_its_register_moving_to_another_store(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session, 11 ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $this->args['from'] ), array( 'id' => $session['id'] ) );
+		// The register is reassigned to a store this caller cannot reach; the session is not.
+		$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => 789 ), array( 'id' => $session['register_id'] ) );
+		add_filter(
+			'woocommerce_pos_closures_list_args',
+			static function ( $args ) {
+				$args['store_id'] = array( 456 );
+				return $args;
+			}
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params(
+			array(
+				'mode' => 'session',
+				'session_id' => $session['id'],
+				'register_id' => $session['register_id'],
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 11, $this->received['session_number'] );
+		$this->assertSame( 456, $this->received['store_id'] );
+	}
+
 	/** A caller allowed no stores at all reads no report. */
 	public function test_report_deny_all_store_scope_refuses_every_report(): void {
 		add_filter(

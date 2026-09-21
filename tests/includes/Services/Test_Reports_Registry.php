@@ -90,6 +90,105 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 		$this->assertSame( array( 'in', 'out', 'net' ), $reports['cash_movements']['totals'] );
 	}
 
+	/**
+	 * An explicit null for an optional field means "not supplied", and must not fatal.
+	 *
+	 * `isset()` is false for null, so a null slipped past validation; `+=` only fills *missing*
+	 * keys, so the null survived into `array_values()` and threw. One third-party declaration
+	 * would have taken the whole catalogue down — the opposite of the drop-and-log promised here.
+	 */
+	public function test_registry_null_optional_fields_are_treated_as_absent(): void {
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports['nulls'] = array(
+					'title' => 'Nulls',
+					'scopes' => array( 'range' ),
+					'group_by' => null,
+					'extras' => null,
+					'tile' => null,
+					'template' => null,
+					'capability' => null,
+					'callback' => null,
+				);
+				return $reports;
+			}
+		);
+		$reports = Reports_Registry::all();
+		$this->assertArrayHasKey( 'nulls', $reports );
+		$this->assertSame( array(), $reports['nulls']['group_by'] );
+		$this->assertSame( array(), $reports['nulls']['extras'] );
+		$this->assertSame( 'view_woocommerce_pos_reports', $reports['nulls']['capability'] );
+		$this->assertSame( 'device', $reports['nulls']['source'] );
+	}
+
+	/** PHP turns a numeric string array key into an int; the grammar and the route allow it. */
+	public function test_registry_numeric_report_key_is_kept(): void {
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports['2026'] = array(
+					'title' => 'Year 2026',
+					'scopes' => array( 'range' ),
+				);
+				return $reports;
+			}
+		);
+		$reports = Reports_Registry::all();
+		$this->assertArrayHasKey( '2026', $reports );
+		$this->assertSame( 'Year 2026', $reports['2026']['title'] );
+	}
+
+	/** Two reports sharing an extras path form a union; neither vanishes, order does not decide. */
+	public function test_registry_colliding_extras_paths_merge_with_the_incumbent_winning(): void {
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports['first'] = array(
+					'title' => 'First',
+					'scopes' => array( 'range' ),
+					'extras' => array(
+						'shared' => array(
+							'fields' => array(
+								'alpha' => array(
+									'type' => 'string',
+									'label' => 'Alpha',
+								),
+								'clash' => array(
+									'type' => 'string',
+									'label' => 'Incumbent',
+								),
+							),
+						),
+					),
+				);
+				$reports['second'] = array(
+					'title' => 'Second',
+					'scopes' => array( 'range' ),
+					'extras' => array(
+						'shared' => array(
+							'fields' => array(
+								'beta' => array(
+									'type' => 'number',
+									'label' => 'Beta',
+								),
+								'clash' => array(
+									'type' => 'number',
+									'label' => 'Latecomer',
+								),
+							),
+						),
+					),
+				);
+				return $reports;
+			}
+		);
+		$fields = Receipt_Data_Schema::get_field_tree( 'report' )['shared']['fields'];
+		$this->assertArrayHasKey( 'alpha', $fields );
+		$this->assertArrayHasKey( 'beta', $fields );
+		$this->assertSame( 'Incumbent', $fields['clash']['label'] );
+	}
+
 	/** A registrant that reads the field tree must not recurse into the registry forever. */
 	public function test_registry_filter_reading_the_field_tree_does_not_recurse(): void {
 		$seen = null;

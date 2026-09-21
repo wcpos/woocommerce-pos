@@ -53,7 +53,17 @@ final class Report_Scope_Resolver {
 		$register = null === $register_id ? null : ( new Register_Store() )->get( $register_id );
 		// Same reasoning: a register in a store the caller cannot reach is simply absent, and
 		// answers with the code a non-existent one does, so neither can be told from the other.
-		if ( null !== $register_id && ( ! $register || ! self::row_in_scope( $register['store_id'], $allowed ) ) ) {
+		//
+		// A session's own register is exempt from the *scope* half, because the session has
+		// already been authorized by its stored store and a register may be reassigned to
+		// another store afterwards (`Register_Store::update()` permits it). Checking the
+		// register's current store would 404 a historical session report for a caller who is
+		// plainly entitled to it — and would contradict the line below, which deliberately keeps
+		// the session's retained store for exactly this reason.
+		if ( null !== $register_id && ! $register ) {
+			return new WP_Error( 'wcpos_report_register_not_found', __( 'Register not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
+		if ( ! $session && null !== $register_id && ! self::row_in_scope( $register['store_id'], $allowed ) ) {
 			return new WP_Error( 'wcpos_report_register_not_found', __( 'Register not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		// A closed session retains its store even if its register has since moved.

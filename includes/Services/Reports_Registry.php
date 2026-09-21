@@ -47,6 +47,22 @@ final class Reports_Registry {
 		}
 		self::$reports = array();
 		foreach ( (array) $reports as $key => $report ) {
+			// PHP coerces a numeric string array key to an integer, so a perfectly legal
+			// declaration like $reports['2026'] arrives here as int 2026. The documented grammar
+			// is [a-z0-9_]+ and the route matches it, so such a key must not be dropped.
+			$key = \is_int( $key ) ? (string) $key : $key;
+			// An optional field explicitly set to null means "not supplied", not "invalid".
+			// Stripping it here is what makes the `+=` defaults below apply: `+=` only fills
+			// *missing* keys, so a key present-but-null would survive and then fatal in
+			// array_values(). That would take the whole catalogue down through one third-party
+			// declaration -- the opposite of the drop-and-log this registry promises.
+			if ( \is_array( $report ) ) {
+				foreach ( array( 'group_by', 'capability', 'extras', 'template', 'tile', 'callback' ) as $optional ) {
+					if ( array_key_exists( $optional, $report ) && null === $report[ $optional ] ) {
+						unset( $report[ $optional ] );
+					}
+				}
+			}
 			$reason = self::invalid_reason( $key, $report );
 			if ( '' !== $reason ) {
 				Logger::log( sprintf( 'Report "%s" registration dropped: %s', $key, $reason ) );
