@@ -42,9 +42,11 @@ final class Closure_Csv {
 	 *
 	 * @param Closure_Store $store Closure store.
 	 * @param array         $scope Authorization scope from woocommerce_pos_closures_list_args.
+	 *                             Required, with no default: a default meaning "no scope"
+	 *                             would let a future caller export every store by omission.
 	 * @throws \RuntimeException On read, stream or page-limit failure.
 	 */
-	public function build( Closure_Store $store, array $scope = array() ): string {
+	public function build( Closure_Store $store, array $scope ): string {
 		$keys = array(
 			'tenders' => array(),
 			'payment_methods' => array(),
@@ -155,7 +157,7 @@ final class Closure_Csv {
 	 * @param bool          $counts Include grouped correction counts on the writing pass.
 	 * @throws \RuntimeException When the page limit would truncate the file.
 	 */
-	private function rows( Closure_Store $store, array $scope = array(), bool $counts = false ): \Generator {
+	private function rows( Closure_Store $store, array $scope, bool $counts = false ): \Generator {
 		for ( $page = 1; $page <= self::MAX_EXPORT_PAGES; ++$page ) {
 			$rows = $store->list(
 				array_merge(

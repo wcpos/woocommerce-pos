@@ -226,8 +226,19 @@ class Closures_Controller extends \WP_REST_Controller {
 	 */
 	private function export( Closure_Store $store, $request ) {
 		$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request );
+		if ( ! \is_array( $scope ) ) {
+			// A filter that returns a non-array has malfunctioned. Treating that as
+			// "no scope" would export every store's closures at exactly the moment
+			// something is wrong, so refuse instead — an export is never urgent
+			// enough to serve unscoped.
+			Logger::warning(
+				'Closure export refused: woocommerce_pos_closures_list_args returned a non-array scope.',
+				array( 'type' => \gettype( $scope ) )
+			);
+			return $this->error( 'wcpos_closure_export_failed', 500 );
+		}
 		try {
-			$csv = ( new Closure_Csv() )->build( $store, is_array( $scope ) ? $scope : array() );
+			$csv = ( new Closure_Csv() )->build( $store, $scope );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_export_failed', 500 );
 		}

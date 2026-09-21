@@ -246,6 +246,32 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 2, count( $unscoped ) );
 	}
 
+	/** A malfunctioning scope filter refuses the export rather than serving it unscoped.
+	 *
+	 * The dangerous failure here is not an error, it is a silent success: degrading a
+	 * broken filter to "no scope" would export every store's closures at exactly the
+	 * moment something is wrong.
+	 */
+	public function test_export_refuses_a_non_array_scope_instead_of_serving_everything(): void {
+		// Arrange.
+		( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$broken = static function () {
+			return 'not-an-array';
+		};
+
+		// Act.
+		add_filter( 'woocommerce_pos_closures_list_args', $broken );
+		try {
+			$response = $this->get( 'closures/export' );
+		} finally {
+			remove_filter( 'woocommerce_pos_closures_list_args', $broken );
+		}
+
+		// Assert: refused, and nothing was served.
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'wcpos_closure_export_failed', $response->get_data()['code'] );
+	}
+
 	/** A caller cannot narrow the export with query params; it is the whole allowed set. */
 	public function test_export_ignores_caller_supplied_list_filters(): void {
 		// Arrange: two registers, one closure each.
