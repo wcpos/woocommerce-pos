@@ -94,7 +94,16 @@ final class Report_Scope_Resolver {
 					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? '' )
 					: ( $register['name'] ?? '' ),
 				'timezone' => $timezone->getName(),
-				'business_day' => $session ? $session['business_day'] : ( new DateTimeImmutable( 'today', $timezone ) )->format( 'Y-m-d' ),
+				// `business_day` is nullable and is back-filled in batches by
+				// Activator::upgrade_business_days(), so a legacy session can still be unstamped —
+				// and the report schema requires a date-shaped value, so carrying the null through
+				// would 500 that session's report. Derive it the way the migration does, from
+				// `opened_at_gmt` in **wp_timezone()**, deliberately not the store's timezone:
+				// matching the migration means the day a report shows does not change when the
+				// back-fill finally lands. A stamped session always keeps its own stamp.
+				'business_day' => $session
+					? ( $session['business_day'] ?? ( new DateTimeImmutable( $session['opened_at_gmt'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' ) )
+					: ( new DateTimeImmutable( 'today', $timezone ) )->format( 'Y-m-d' ),
 				'allowed_store_ids' => $allowed,
 				'session' => $session,
 				'closure' => $closure,

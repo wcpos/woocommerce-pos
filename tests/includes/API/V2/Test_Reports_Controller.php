@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Reports_Registry;
+use WCPOS\WooCommercePOS\Services\Report_Scope_Resolver;
 use WCPOS\WooCommercePOS\Services\Report_Document_Validator;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
@@ -510,6 +511,53 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotSame( 'Renamed in another store', $this->received['register_name'] );
 		$this->assertNotSame( 'Renamed in another store', $response->get_data()['report']['scope']['register_name'] );
+	}
+
+	/**
+	 * A legacy session with no business day still reports.
+	 *
+	 * `business_day` is nullable and back-filled in batches, so an unstamped session survives on
+	 * a store mid-upgrade. The report schema requires a date-shaped value, so carrying the null
+	 * through would 500 that session. The fallback derives it the way the migration does, so the
+	 * day does not change when the back-fill lands.
+	 */
+	public function test_report_session_without_a_business_day_derives_it_as_the_migration_does(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session, 13 ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => null ), array( 'id' => $session['id'] ) );
+		$expected = ( new \DateTimeImmutable( $session['opened_at_gmt'], new \DateTimeZone( 'UTC' ) ) )
+			->setTimezone( wp_timezone() )->format( 'Y-m-d' );
+		add_filter(
+			'woocommerce_pos_reports',
+			static function ( $reports ) {
+				$reports['example']['scopes'] = array( 'range', 'session' );
+				return $reports;
+			},
+			20
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params(
+			array(
+				'mode' => 'session',
+				'session_id' => $session['id'],
+				'register_id' => $session['register_id'],
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		// Free is scoped to today, so an old session is gated — but it must be gated, not 500.
+		$this->assertNotSame( 500, $response->get_status() );
+		$this->assertSame(
+			$expected,
+			Report_Scope_Resolver::resolve(
+				Report_Scope_Resolver::context(
+					array(
+						'mode' => 'session',
+						'session_id' => $session['id'],
+					)
+				)
+			)['business_day']
+		);
 	}
 
 	/** A caller allowed no stores at all reads no report. */
