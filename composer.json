@@ -11,8 +11,8 @@
   ],
   "require-dev": {
     "dealerdirect/phpcodesniffer-composer-installer": "v1.2.1",
-    "friendsofphp/php-cs-fixer": "v3.95.25",
-    "php-stubs/woocommerce-stubs": "v11.1.0",
+    "friendsofphp/php-cs-fixer": "v3.95.26",
+    "php-stubs/woocommerce-stubs": "v11.1.1",
     "php-stubs/wordpress-stubs": "v7.1.0",
     "phpcompatibility/phpcompatibility-wp": "2.1.8",
     "phpstan/phpstan": "2.2.14",
@@ -42,11 +42,6 @@
     "sort-packages": true,
     "allow-plugins": {
       "dealerdirect/phpcodesniffer-composer-installer": true
-    },
-    "audit": {
-      "ignore": {
-        "PKSA-rdkp-vv9z-mjkg": "phpcs dev-only advisory; accepted until upstream fix ships"
-      }
     }
   },
   "scripts": {
