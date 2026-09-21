@@ -60,6 +60,11 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 
 				<NavGroup heading={t('common.tools', 'Tools')}>
 					<NavItem
+						to="/export-closures"
+						label={t('export_closures.title', 'Export closures')}
+						onClick={onNavItemClick}
+					/>
+					<NavItem
 						to="/logs"
 						label={t('common.logs', 'Logs')}
 						badge={unreadLogCounts}

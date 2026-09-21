@@ -13,6 +13,8 @@ use WCPOS\WooCommercePOS\Sync\Health;
 /** Owns closure documents; only print bookkeeping can change. */
 final class Closure_Store {
 	public const TABLE = 'wcpos_closures';
+	/** Shared cap for list consumers, including the whole-store export. */
+	public const MAX_PER_PAGE = 100;
 	/** Verified site tables.
 	 *
 	 * @var array
@@ -181,9 +183,12 @@ final class Closure_Store {
 			}
 		}
 		$where = implode( ' AND ', $where );
-		$limit = max( 1, min( 100, (int) ( $args['per_page'] ?? 50 ) ) );
+		$limit = max( 1, min( self::MAX_PER_PAGE, (int) ( $args['per_page'] ?? 50 ) ) );
 		$offset = ( max( 1, (int) ( $args['page'] ?? 1 ) ) - 1 ) * $limit;
 		$order = empty( $args['number_order'] ) ? 'closed_at_gmt DESC, number DESC, id DESC' : 'number DESC';
+		if ( 'register_asc' === ( $args['number_order'] ?? null ) ) {
+			$order = 'register_id ASC, number ASC, id ASC';
+		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, prepared predicates and integer pagination.
 		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY {$order} LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		if ( '' !== $wpdb->last_error ) {
