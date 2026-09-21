@@ -93,7 +93,23 @@ describe('Export closures', () => {
 	 * carries Content-Disposition, so a top-level navigation to a refusal would replace
 	 * the Settings screen with raw JSON and lose the merchant's place.
 	 */
-	it.each([401, 403])('sends a %s to the permissions message', async (status) => {
+	/** An expired session needs "sign in again", not "check your permissions". */
+	it('sends a 401 to the sign-in message', async () => {
+		window.wpApiSettings = { root: 'https://example.com/wp-json/', nonce: 'test-nonce' };
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({ ok: false, status: 401 }))
+		);
+		renderScreen();
+
+		fireEvent.click(screen.getByTestId('export-closures-download'));
+
+		await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('session has expired'));
+		expect(screen.getByRole('alert')).not.toHaveTextContent('permission to view reports');
+		expect(clicked).toHaveLength(0);
+	});
+
+	it.each([403])('sends a %s to the permissions message', async (status) => {
 		window.wpApiSettings = { root: 'https://example.com/wp-json/', nonce: 'test-nonce' };
 		vi.stubGlobal(
 			'fetch',

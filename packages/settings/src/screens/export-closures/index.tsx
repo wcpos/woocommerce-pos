@@ -8,6 +8,26 @@ import { t } from '../../translations';
 
 const FALLBACK_FILENAME = 'wcpos-closures.csv';
 
+/** One message per recovery: sign in, ask for access, or wait and check the logs. */
+function failureMessage(status: number): string {
+	if (status === 401) {
+		return t(
+			'export_closures.signed_out',
+			'Your session has expired. Reload this page, sign in again, and retry the export.'
+		);
+	}
+	if (status === 403) {
+		return t(
+			'export_closures.refused',
+			'The export could not be created. Check that you have permission to view reports, then try again.'
+		);
+	}
+	return t(
+		'export_closures.server_error',
+		'The export could not be created because of a problem on the server. Try again, and check the WCPOS logs if it keeps happening.'
+	);
+}
+
 /** Prefer the server's filename so the download matches what the route named it. */
 function filenameFrom(disposition: string | null): string {
 	if (!disposition) return FALLBACK_FILENAME;
@@ -47,22 +67,13 @@ export default function ExportClosures() {
 			// place. Fetching keeps failures on the page as a notice.
 			const response = await fetch(url, { credentials: 'same-origin' });
 			if (!response.ok) {
-				// A 5xx is not a permissions problem: telling a correctly authorized
-				// administrator to check their report permissions sends them to fix
-				// something that is not broken.
-				const permissionProblem = response.status === 401 || response.status === 403;
-				setNotice({
-					type: 'error',
-					message: permissionProblem
-						? t(
-								'export_closures.refused',
-								'The export could not be created. Check that you have permission to view reports, then try again.'
-							)
-						: t(
-								'export_closures.server_error',
-								'The export could not be created because of a problem on the server. Try again, and check the WCPOS logs if it keeps happening.'
-							),
-				});
+				// Three different problems with three different recoveries, and sending
+				// them all to one message sends someone to fix the wrong thing. 401 is
+				// an expired session (sign in again), 403 is a capability the account
+				// lacks (ask an administrator), 5xx is the server (nothing the reader
+				// can change). rest_authorization_required_code() returns 401 when the
+				// request is not authenticated and 403 when it is but lacks the cap.
+				setNotice({ type: 'error', message: failureMessage(response.status) });
 				return;
 			}
 			objectUrl = URL.createObjectURL(await response.blob());
