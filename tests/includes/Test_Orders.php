@@ -1937,6 +1937,134 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A nested payment_complete() on a different order keeps its own status.
+	 *
+	 * The date_paid suppression is scoped to the order being transitioned. A
+	 * status-transition handler can settle a *related* order while the filter is
+	 * live — subscriptions, bundles and gift-card plugins all do — and an
+	 * unsuppressed '' would reach that order too. set_status() rejects an unknown
+	 * status and falls back to 'pending', so a just-paid order would be left
+	 * sitting unpaid.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_does_not_clobber_a_nested_payment_complete(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+
+		$quote_order = $this->create_pos_order( 'pos-open' );
+		$quote_order->set_payment_method( 'acme_quotes' );
+		$quote_order->save();
+
+		// A second, unrelated order that a status handler settles mid-transition.
+		$related_order = OrderHelper::create_order();
+		$related_order->set_status( 'pending' );
+		$related_order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$settle_related = static function () use ( $related_order ): void {
+			$related_order->payment_complete();
+		};
+		add_action( 'woocommerce_order_status_on-hold', $settle_related );
+
+		// Act.
+		try {
+			apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $quote_order->get_id() );
+		} finally {
+			remove_action( 'woocommerce_order_status_on-hold', $settle_related );
+		}
+
+		// Assert: the quote moved and stayed unpaid.
+		$fresh_quote = wc_get_order( $quote_order->get_id() );
+		$this->assertSame( 'on-hold', $fresh_quote->get_status() );
+		$this->assertNull( $fresh_quote->get_date_paid() );
+
+		// Assert: the nested order settled normally and was NOT knocked to pending.
+		$fresh_related = wc_get_order( $related_order->get_id() );
+		$this->assertNotSame( 'pending', $fresh_related->get_status(), 'The suppression filter clobbered a nested payment_complete().' );
+		$this->assertNotNull( $fresh_related->get_date_paid(), 'The nested order should have been marked paid.' );
+	}
+
+	/**
+	 * On a site upgraded from before per-gateway statuses, the legacy global
+	 * checkout status is still the merchant's configured choice.
+	 *
+	 * Payment_Gateways_Section::read() seeds it in memory for any gateway with no
+	 * explicit status and leaves the key in place until the merchant saves, so an
+	 * enabled gateway can carry its only configured status there.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_honours_the_legacy_checkout_order_status(): void {
+		// Arrange: gateway enabled, but with no per-gateway status of its own.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'acme_quotes' => array(
+						'order'   => 0,
+						'enabled' => true,
+					),
+				),
+			)
+		);
+		update_option( 'woocommerce_pos_settings_checkout', array( 'order_status' => 'wc-on-hold' ) );
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid() );
+	}
+
+	/**
+	 * With neither a per-gateway status nor a legacy one, nothing is applied.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_ignores_gateway_with_no_status_anywhere(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'acme_quotes' => array(
+						'order'   => 0,
+						'enabled' => true,
+					),
+				),
+			)
+		);
+		delete_option( 'woocommerce_pos_settings_checkout' );
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
 	 * Helper to store POS payment-gateway settings for one gateway.
 	 *
 	 * @param string $gateway_id   Gateway id.
