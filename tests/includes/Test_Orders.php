@@ -1656,6 +1656,310 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A gateway that settles without calling payment_complete() gets the status
+	 * configured for it, so the till can finish the sale.
+	 *
+	 * This is the generic form of the bacs/cheque/cod handling: those three are
+	 * hooked by name only because they happen to expose
+	 * woocommerce_{id}_process_payment_order_status. Any other gateway of the same
+	 * shape (quote, invoice, purchase order) previously stranded the order at
+	 * pos-open.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_applies_configured_order_status(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		$result = apply_filters(
+			'woocommerce_payment_successful_result',
+			array( 'result' => 'success' ),
+			$order->get_id()
+		);
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $fresh->get_status() );
+		$this->assertSame( array( 'result' => 'success' ), $result, 'The filter must pass the result through untouched.' );
+	}
+
+	/**
+	 * The order is not paid, so no date_paid may be stamped.
+	 *
+	 * WCPOS filters woocommerce_payment_complete_order_status to the configured
+	 * status, which makes WooCommerce treat that status as "paid" — so
+	 * WC_Order::set_status() would stamp date_paid and book an unpaid order as
+	 * revenue.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_does_not_stamp_date_paid(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid(), 'An unpaid gateway must not stamp date_paid.' );
+	}
+
+	/**
+	 * A partial tender still owes money, so it must be left alone.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_leaves_pos_partial_untouched(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-partial' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * A gateway that already settled the order owns the status.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_leaves_settled_order_untouched(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = $this->create_pos_order( 'processing' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'processing', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * A gateway with no explicitly stored status is left alone.
+	 *
+	 * The settings view synthesizes `wc-completed` for every installed gateway it
+	 * has never seen, so acting on the computed value would mark an unconfigured
+	 * third-party gateway Completed with no money taken — including one that
+	 * deliberately leaves the order open awaiting an async confirmation. Only an
+	 * explicit stored choice counts as merchant intent.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_ignores_gateway_with_no_stored_status(): void {
+		// Arrange: settings exist, but carry no entry for this gateway.
+		$this->set_gateway_settings( 'some_other_gateway', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_async_gateway' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * A gateway disabled for the POS is left alone.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_ignores_gateway_disabled_for_pos(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed', false );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * A non-POS order paid on the storefront must not get the till's status.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_ignores_non_pos_order(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = OrderHelper::create_order();
+		$order->set_payment_method( 'acme_quotes' );
+		$order->set_status( 'pending' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pending', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * Outside a POS request the filter must not act, so a customer paying a POS
+	 * order from an emailed link does not trigger the till's status.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_ignores_non_pos_request(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * An unregistered configured status must not be written.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_ignores_unregistered_status(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-not-a-real-status' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * The date_paid suppression filter must come off even when the status
+	 * transition blows up.
+	 *
+	 * Left in place it would suppress the configured status — and date_paid — for
+	 * every later payment in the same request, turning a paid sale into a silently
+	 * unpaid one.
+	 *
+	 * Throws an \Error rather than an \Exception on purpose: WC_Order::update_status()
+	 * catches Exception and returns false, so only an Error (a TypeError in a badly
+	 * behaved status handler, say) actually unwinds through this method — which is
+	 * exactly the case the finally block exists for.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_removes_suppression_filter_when_transition_throws(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$exploder = static function (): void {
+			throw new \Error( 'status handler exploded' );
+		};
+		add_action( 'woocommerce_order_status_on-hold', $exploder );
+
+		// Act.
+		$caught = null;
+
+		try {
+			apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+		} catch ( \Error $e ) {
+			$caught = $e->getMessage();
+		} finally {
+			remove_action( 'woocommerce_order_status_on-hold', $exploder );
+		}
+
+		$this->assertSame( 'status handler exploded', $caught, 'Expected the status handler to unwind through update_status().' );
+
+		// Assert: the suppression filter is gone. It sits at PHP_INT_MAX and returns
+		// '', so a leak is visible as an empty status on any later resolution —
+		// here a plain storefront order, which WCPOS otherwise leaves untouched.
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+		$storefront_order = OrderHelper::create_order();
+
+		$this->assertSame(
+			'processing',
+			apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $storefront_order->get_id(), $storefront_order ),
+			'The suppression filter leaked past the failed transition.'
+		);
+	}
+
+	/**
+	 * Helper to store POS payment-gateway settings for one gateway.
+	 *
+	 * @param string $gateway_id   Gateway id.
+	 * @param string $order_status Configured status, with or without the 'wc-' prefix.
+	 * @param bool   $enabled      Optional. Whether the gateway is enabled for POS. Default true.
+	 */
+	private function set_gateway_settings( string $gateway_id, string $order_status, bool $enabled = true ): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					$gateway_id => array(
+						'order'        => 0,
+						'enabled'      => $enabled,
+						'order_status' => $order_status,
+					),
+				),
+			)
+		);
+	}
+
+	/**
 	 * Helper to create a POS order.
 	 *
 	 * @param string $status Optional. Order status without 'wc-' prefix. Default 'pos-open'.
