@@ -1981,9 +1981,13 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertSame( 'on-hold', $fresh_quote->get_status() );
 		$this->assertNull( $fresh_quote->get_date_paid() );
 
-		// Assert: the nested order settled normally and was NOT knocked to pending.
+		// Assert: the nested order settled to its OWN intended status, not to the
+		// 'pending' that an unscoped suppression produces. OrderHelper::create_order()
+		// uses bacs, and the POS gateway settings view defaults bacs (and cheque) to
+		// wc-on-hold, so on-hold is what payment_complete() should land on here.
 		$fresh_related = wc_get_order( $related_order->get_id() );
-		$this->assertNotSame( 'pending', $fresh_related->get_status(), 'The suppression filter clobbered a nested payment_complete().' );
+		$this->assertSame( 'bacs', $fresh_related->get_payment_method(), 'Fixture changed: the expected status below is derived from the bacs default.' );
+		$this->assertSame( 'on-hold', $fresh_related->get_status(), 'The suppression filter clobbered a nested payment_complete().' );
 		$this->assertNotNull( $fresh_related->get_date_paid(), 'The nested order should have been marked paid.' );
 	}
 
