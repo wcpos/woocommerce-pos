@@ -466,8 +466,8 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
 
 		// Act.
-		include __DIR__ . '/../../includes/updates/update-1.11.0.php';
-		include __DIR__ . '/../../includes/updates/update-1.11.0.php';
+		include __DIR__ . '/../../includes/updates/update-2.0.0.php';
+		include __DIR__ . '/../../includes/updates/update-2.0.0.php';
 
 		// Assert.
 		$this->assertSame( 'hidden', wc_get_product( $id )->get_catalog_visibility() );
