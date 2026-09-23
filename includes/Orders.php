@@ -62,6 +62,7 @@ class Orders {
 		add_filter( 'woocommerce_bacs_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cheque_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cod_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
+		add_filter( 'woocommerce_payment_successful_result', array( $this, 'apply_unpaid_gateway_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 		add_filter( 'woocommerce_order_item_product', array( $this, 'order_item_product' ), 10, 2 );
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
@@ -214,6 +215,171 @@ class Orders {
 		return \in_array( $normalized_status, $valid_statuses, true )
 			? $normalized_status
 			: $fallback;
+	}
+
+	/**
+	 * Apply the configured POS order status when a gateway settles without payment.
+	 *
+	 * The generic form of offline_process_payment_order_status(). Those three
+	 * gateways are hooked by name only because BACS, cheque and COD each expose a
+	 * `woocommerce_{id}_process_payment_order_status` filter. A gateway that takes
+	 * no money at the till and exposes no such filter — a quote, invoice or
+	 * purchase-order gateway — returned success while leaving the order at
+	 * pos-open, so the configured status was never applied and the till never
+	 * finished the sale. `woocommerce_payment_successful_result` is the seam every
+	 * gateway passes through: WooCommerce applies it after any successful
+	 * process_payment(), including on the POS pay page.
+	 *
+	 * Deliberately narrow, because "returned success but left the order open" is
+	 * also what a gateway awaiting an async confirmation looks like:
+	 *
+	 * - `pos-open` only, never `pos-partial` — a partial tender is still owed
+	 *   money, and closing it would lose that.
+	 * - no `date_paid` — money moving means the payment_complete path owns the
+	 *   status.
+	 * - the gateway must be enabled for POS *and* carry an explicitly stored
+	 *   status. The settings view synthesizes `wc-completed` for every installed
+	 *   gateway it has never seen, so trusting the computed value would mark an
+	 *   unconfigured third-party gateway Completed with no money taken.
+	 *
+	 * @param array $result   Gateway result, passed through untouched.
+	 * @param int   $order_id Order ID.
+	 *
+	 * @return array
+	 */
+	public function apply_unpaid_gateway_order_status( $result, $order_id ) {
+		if ( ! woocommerce_pos_request() ) {
+			return $result;
+		}
+
+		$order = wc_get_order( $order_id );
+
+		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+			return $result;
+		}
+
+		if ( ! $order->has_status( 'pos-open' ) || $order->get_date_paid( 'edit' ) ) {
+			return $result;
+		}
+
+		$gateway_id = $order->get_payment_method();
+		$configured = $this->get_stored_gateway_order_status( $gateway_id );
+
+		if ( '' === $configured ) {
+			return $result;
+		}
+
+		$status = $this->normalize_status( $configured, '' );
+
+		if ( '' === $status || $order->has_status( $status ) ) {
+			return $result;
+		}
+
+		/*
+		 * payment_complete_order_status() reports the configured status as this
+		 * order's paid status, which makes WC_Order::set_status() stamp date_paid
+		 * the moment the status changes — booking an unpaid order as revenue. No
+		 * payment was taken here, so suppress it for this transition only.
+		 *
+		 * Scoped to this order id: a status-transition handler can call
+		 * payment_complete() on a *different* order while this filter is live
+		 * (subscriptions, bundles and gift-card plugins all do), and an
+		 * unconditional '' would reach that order too — set_status() rejects an
+		 * unknown status and falls back to 'pending', leaving an order that was
+		 * just paid sitting unpaid.
+		 */
+		$target_id          = $order->get_id();
+		$suppress_paid_date = static function ( $payment_status, $filtered_order_id ) use ( $target_id ) {
+			return (int) $filtered_order_id === $target_id ? '' : $payment_status;
+		};
+
+		add_filter( 'woocommerce_payment_complete_order_status', $suppress_paid_date, PHP_INT_MAX, 2 );
+
+		try {
+			/*
+			 * update_status()'s return value is deliberately not checked. It reports
+			 * false only when the order has no id — impossible here — because
+			 * WC_Abstract_Order::save() and WC_Order::status_transition() each catch
+			 * Exception themselves and handle_exception() does not rethrow, so a
+			 * throwing hook never reaches update_status()'s own catch and it still
+			 * returns true. Nor could the checkout be aborted from here:
+			 * WC_Form_Handler::pay_action() applies this filter inside its
+			 * `'success' === $result['result']` branch and redirects unconditionally
+			 * on the next line.
+			 */
+			$order->update_status(
+				$status,
+				/* translators: %s: payment gateway title. */
+				sprintf( __( 'Order status set by %s; no payment was taken at the till.', 'woocommerce-pos' ), $order->get_payment_method_title() )
+			);
+		} finally {
+			// Must come off even if a status-change handler throws: left in place it
+			// would suppress the configured status, and date_paid, for every later
+			// payment in this request.
+			remove_filter( 'woocommerce_payment_complete_order_status', $suppress_paid_date, PHP_INT_MAX );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Read the explicitly stored per-gateway order status.
+	 *
+	 * Reads the raw options rather than the settings service, because the service
+	 * rebuilds its view from the installed gateways and synthesizes a default
+	 * status for gateways the merchant has never configured. Only a status the
+	 * merchant actually chose, on a gateway they enabled for POS, counts as intent.
+	 *
+	 * Two places hold such a choice, matching Payment_Gateways_Section::read():
+	 * the per-gateway entry, and — on sites upgraded from before per-gateway
+	 * statuses — the legacy global `checkout.order_status`, which that section
+	 * still applies in memory to any gateway with no explicit status of its own
+	 * until the merchant next saves.
+	 *
+	 * @param string $gateway_id The payment gateway ID.
+	 *
+	 * @return string The stored status (may include the wc- prefix), or '' when absent.
+	 */
+	private function get_stored_gateway_order_status( string $gateway_id ): string {
+		if ( '' === $gateway_id ) {
+			return '';
+		}
+
+		$stored = get_option( 'woocommerce_pos_settings_payment_gateways', array() );
+
+		if ( ! \is_array( $stored ) || ! isset( $stored['gateways'][ $gateway_id ] ) || ! \is_array( $stored['gateways'][ $gateway_id ] ) ) {
+			return '';
+		}
+
+		$gateway = $stored['gateways'][ $gateway_id ];
+
+		if ( ! isset( $gateway['enabled'] ) || ! wc_string_to_bool( $gateway['enabled'] ) ) {
+			return '';
+		}
+
+		if ( isset( $gateway['order_status'] ) && \is_string( $gateway['order_status'] ) && '' !== $gateway['order_status'] ) {
+			return $gateway['order_status'];
+		}
+
+		return $this->get_legacy_checkout_order_status();
+	}
+
+	/**
+	 * Read the legacy global checkout order status.
+	 *
+	 * Pre-dates per-gateway statuses. Payment_Gateways_Section::read() still seeds
+	 * it in memory for gateways with no explicit status, and leaves the key in
+	 * place until the merchant saves, so an upgraded site can have an enabled
+	 * gateway whose only configured status lives here.
+	 *
+	 * @return string The stored legacy status, or '' when absent.
+	 */
+	private function get_legacy_checkout_order_status(): string {
+		$checkout = get_option( 'woocommerce_pos_settings_checkout', array() );
+
+		return \is_array( $checkout ) && isset( $checkout['order_status'] ) && \is_string( $checkout['order_status'] )
+			? $checkout['order_status']
+			: '';
 	}
 
 	/**
