@@ -259,7 +259,9 @@ if ( ! \function_exists( 'wcpos_site_identity_home_row' ) ) {
 	 */
 	function wcpos_site_identity_home_row(): ?string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		global $wpdb;
-		$row = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", 'woocommerce_pos_uuid_home' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- bypasses the option cache on purpose, see docblock.
+		$row = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bypasses the option cache on purpose, see docblock.
+			$wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", 'woocommerce_pos_uuid_home' ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- core table name.
+		);
 
 		return \is_string( $row ) ? $row : null;
 	}

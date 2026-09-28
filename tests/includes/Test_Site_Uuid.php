@@ -188,7 +188,7 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 		// marker and its own marker write: emulated as a side effect of the uuid
 		// write, the last thing this call does before writing the marker.
 		$other_request_finishes_first = static function ( $value ) use ( $wpdb ) {
-			$wpdb->update( $wpdb->options, array( 'option_value' => 'example.com/staging' ), array( 'option_name' => 'woocommerce_pos_uuid_home' ) );
+			$wpdb->update( $wpdb->options, array( 'option_value' => 'example.com/staging' ), array( 'option_name' => 'woocommerce_pos_uuid_home' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the other request's write must bypass this request's option cache.
 
 			return $value;
 		};
