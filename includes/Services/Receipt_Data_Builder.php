@@ -27,10 +27,12 @@ class Receipt_Data_Builder {
 			$sessions = new Register_Session_Store();
 			$orders = $sessions->captured_orders( $row );
 			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
-			$row['expected'] = $sessions->expected( $row, $orders, $movements );
+			// Read the session's refunds once: the drawer derivation and the count share them.
+			$refunds = $sessions->session_refunds( $row );
+			$row['expected'] = $sessions->expected( $row, $orders, $movements, array_merge( array(), ...array_column( $refunds, 'rows' ) ) );
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
-			$refund_count = count( $sessions->session_refunds( $row ) );
+			$refund_count = count( $refunds );
 			foreach ( $orders as $payments ) {
 				foreach ( $payments as $payment ) {
 					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) ) {

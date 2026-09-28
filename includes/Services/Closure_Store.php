@@ -500,19 +500,22 @@ final class Closure_Store {
 				);
 				return new \WP_Error( 'wcpos_closure_number_invalid', __( 'The closure number precedes the register sequence.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
-			$fields['expected'] = $sessions->expected( $session );
+			// Read the session's sales and refunds once for the drawer derivation and the totals.
+			$orders = $sessions->captured_orders( $session );
+			$refunds = $sessions->session_refunds( $session );
+			$fields['expected'] = $sessions->expected( $session, $orders, null, array_merge( array(), ...array_column( $refunds, 'rows' ) ) );
 			$fields['variance'] = $this->variance( $fields['counted'], $fields['expected'] );
 			$totals = array(
 				'sales' => array(),
 				'refunds' => array(),
 			);
-			foreach ( $sessions->captured_orders( $session ) as $rows ) {
+			foreach ( $orders as $rows ) {
 				foreach ( $rows as $row ) {
 					$refund = 'refund' === $row['kind'] || '-' === substr( $row['amount'], 0, 1 );
 					$totals[ $refund ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
 				}
 			}
-			foreach ( $sessions->session_refunds( $session ) as $refund ) {
+			foreach ( $refunds as $refund ) {
 				foreach ( $refund['rows'] as $row ) {
 					$totals['refunds'][] = ltrim( $row['amount'], '-' );
 				}
