@@ -30,10 +30,10 @@ class Receipt_Data_Builder {
 			$row['expected'] = $sessions->expected( $row, $orders, $movements );
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
-			$refund_count = 0;
+			$refund_count = count( $sessions->session_refunds( $row ) );
 			foreach ( $orders as $payments ) {
 				foreach ( $payments as $payment ) {
-					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
+					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) ) {
 						++$refund_count;
 					}
 

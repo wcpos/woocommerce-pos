@@ -340,7 +340,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			'1e2',
 			'007',
 			'+1',
-			'0x1',
+			'0x1', // phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- Deliberately invalid numeric input.
 			// Pins the /D modifier, which is load-bearing rather than decorative:
 			// without it `$` matches BEFORE a trailing newline, so "1\n" passes the
 			// pattern and becomes store 1. Nothing else in the suite would notice a
@@ -1039,11 +1039,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame(
 			array(
 				'expected_delta' => array(
-					'cash' => '40.0000',
+					'cash' => '50.0000',
 					'card' => '30.0000',
 				),
 				'sales_delta' => '80.0000',
-				'refunds_delta' => '10.0000',
+				'refunds_delta' => '0.0000',
 			),
 			$corrections[1]['figures']
 		);

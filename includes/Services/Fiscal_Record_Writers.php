@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Order;
 use WC_Order_Refund;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /** Writes history only; never changes order or payment state. */
 final class Fiscal_Record_Writers {
@@ -106,10 +107,9 @@ final class Fiscal_Record_Writers {
 				);
 				$cash = array();
 				foreach ( $rows as $row ) {
-					// Every cash-kind gateway is the drawer; a refund is the captured row's refunded_amount.
+					// Every cash-kind gateway is the drawer.
 					if ( 'cash' === ( $row['kind'] ?? '' ) ) {
 						$cash[] = $row['amount'];
-						$cash[] = '-' . ltrim( $row['refunded_amount'] ?? '0', '-' );
 					}
 				}
 				$delta = array( 'cash' => Closure_Store::sum( $cash ) );
@@ -218,10 +218,18 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		$sale = $this->store->find_sale( $order_id );
+		$provenance = $this->store->provenance_from_order( $order );
+		foreach ( array(
+			'register_id' => '_wcpos_register',
+			'session_id' => '_wcpos_session',
+		) as $key => $meta ) {
+			$value = $refund->get_meta( $meta, true );
+			$provenance[ $key ] = Pos_Uuid::is_uuid( $value ) ? strtolower( $value ) : null;
+		}
 		$this->write(
 			$order,
 			array_merge(
-				$this->store->provenance_from_order( $order ),
+				$provenance,
 				array(
 					'type' => 'refund',
 					'order_id' => $order_id,
@@ -236,5 +244,36 @@ final class Fiscal_Record_Writers {
 				)
 			)
 		);
+		$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
+		$record = $this->store->find_refund( $order_id, $refund_id );
+		// Replaying a refund received before the closure does not make it late.
+		if ( $closure && $record && $record['received_at_gmt'] >= $closure['received_at_gmt'] ) {
+			$sessions = new Register_Session_Store();
+			$rows = $sessions->refund_tender_rows( $refund );
+			$delta = array( 'cash' => $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $rows )['cash'] );
+			$this->write(
+				$order,
+				array_merge(
+					$provenance,
+					array(
+						'type' => 'late_refund',
+						'order_id' => $order_id,
+						'refund_id' => $refund_id,
+						'closure_id' => $closure['id'],
+						'corrects_record_id' => $record['id'],
+						'cashier_id' => (int) $refund->get_refunded_by(),
+						'device_time' => null,
+						'device_tz' => null,
+						'payload' => array(
+							'reason' => (string) $refund->get_reason(),
+							'amount' => Closure_Store::sum( array( (string) $refund->get_amount() ) ),
+							'tender_rows' => $rows,
+							'expected_delta' => $delta,
+							'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+						),
+					)
+				)
+			);
+		}
 	}
 }

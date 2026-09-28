@@ -1558,7 +1558,7 @@ class Receipt_Data_Schema {
 						'fields' => array(
 							'expected_delta' => array(
 								'type' => 'array',
-								'label' => __( 'Late Sale Expected Delta by Tender', 'woocommerce-pos' ),
+								'label' => __( 'Expected Delta by Tender', 'woocommerce-pos' ),
 							),
 							'sales_delta' => array(
 								'type' => 'money',
@@ -1566,7 +1566,7 @@ class Receipt_Data_Schema {
 							),
 							'refunds_delta' => array(
 								'type' => 'money',
-								'label' => __( 'Late Sale Refunds Delta', 'woocommerce-pos' ),
+								'label' => __( 'Refunds Delta', 'woocommerce-pos' ),
 							),
 							'cash_delta' => array(
 								'type' => 'money',

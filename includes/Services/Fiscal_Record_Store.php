@@ -16,7 +16,7 @@ final class Fiscal_Record_Store {
 	/** Stable suffix for site-local fiscal history. */
 	public const TABLE = 'wcpos_fiscal_records';
 	/** PHP validation keeps the portable schema free of ENUMs. */
-	public const TYPES = array( 'sale', 'refund', 'void', 'cancellation', 'late_sale', 'late_movement', 'recount' );
+	public const TYPES = array( 'sale', 'refund', 'void', 'cancellation', 'late_sale', 'late_refund', 'late_movement', 'recount' );
 	/** Bound payload-heavy read responses. */
 	public const MAX_PER_PAGE = 200;
 	/** Keep ordinary history reads small. */
@@ -128,6 +128,7 @@ final class Fiscal_Record_Store {
 			'sale' => 'order_id',
 			'cancellation' => 'order_id',
 			'late_sale' => 'order_id',
+			'late_refund' => 'refund_id',
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';

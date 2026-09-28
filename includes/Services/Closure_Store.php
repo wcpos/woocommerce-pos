@@ -254,7 +254,7 @@ final class Closure_Store {
 			$figures = array();
 			if ( 'late_sale' === $record['type'] ) {
 				$tenders = $payload['tender_rows'];
-				$figures['expected_delta'] = ( new Register_Session_Store() )->expected( array( 'counted_float' => '0' ), array( $tenders ), array() );
+				$figures['expected_delta'] = ( new Register_Session_Store() )->expected( array( 'counted_float' => '0' ), array( $tenders ), array(), array() );
 				$sales = array();
 				$refunds = array();
 				foreach ( $tenders as $tender ) {
@@ -263,10 +263,22 @@ final class Closure_Store {
 					} else {
 						$sales[] = $tender['amount'];
 					}
-					$refunds[] = $tender['refunded_amount'] ?? '0';
 				}
 				$figures['sales_delta'] = self::sum( $sales );
 				$figures['refunds_delta'] = self::sum( $refunds );
+			} elseif ( 'late_refund' === $record['type'] ) {
+				$sessions = new Register_Session_Store();
+				$refund = wc_get_order( $record['refund_id'] );
+				$tenders = $refund instanceof \WC_Order_Refund ? $sessions->refund_tender_rows( $refund ) : $payload['tender_rows'];
+				$figures['expected_delta'] = $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $tenders );
+				$figures['refunds_delta'] = self::sum(
+					array_map(
+						static function ( $row ) {
+							return ltrim( $row['amount'], '-' );
+						},
+						$tenders
+					)
+				);
 			} elseif ( 'late_movement' === $record['type'] ) {
 				$void = 'void' === $payload['type'];
 				$movement = $void ? ( new Cash_Movement_Store() )->get( $payload['voids'] ) : $payload;
@@ -497,7 +509,11 @@ final class Closure_Store {
 				foreach ( $rows as $row ) {
 					$refund = 'refund' === $row['kind'] || '-' === substr( $row['amount'], 0, 1 );
 					$totals[ $refund ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
-					$totals['refunds'][] = $row['refunded_amount'] ?? '0';
+				}
+			}
+			foreach ( $sessions->session_refunds( $session ) as $refund ) {
+				foreach ( $refund['rows'] as $row ) {
+					$totals['refunds'][] = ltrim( $row['amount'], '-' );
 				}
 			}
 			$findings = array();

@@ -83,7 +83,7 @@ trait Session_Expected_Tests {
 				$this->assertSame( 'captured', $payment['status'] );
 				$rows = $ledger->read( $order );
 				if ( 'pos_cash' === $method ) {
-					// The ledger records a refund on the original row's refunded_amount (no refund row).
+					// A sale-row aggregate does not bind a refund to this session.
 					$rows[0]['refunded_amount'] = '10.00';
 				}
 				foreach ( array( 'authorized', 'pending', 'failed', 'voided' ) as $status ) {
@@ -108,7 +108,7 @@ trait Session_Expected_Tests {
 			}
 			$this->assertSame(
 				array(
-					'cash' => '155.0000',
+					'cash' => '165.0000',
 					'card' => '30.0000',
 				),
 				$store->expected( $session )
