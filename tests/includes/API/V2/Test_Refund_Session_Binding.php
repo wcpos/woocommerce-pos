@@ -428,6 +428,33 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** An allocation recovers a lost refund record (and its late arrival) before deciding. */
+	public function test_refund_allocation_recovers_a_missing_refund_record(): void {
+		// Arrange: a counted refund whose refund record is gone.
+		$session = $this->closure_session( null, 'open' );
+		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
+		$refund = $this->refund( $order, $session );
+		$session = ( new Register_Session_Store() )->transition(
+			$session,
+			array(
+				'status' => 'counting',
+				'counting_started_at_gmt' => '2026-09-11 11:00:00',
+			)
+		);
+		$closure = $this->close( $session );
+		global $wpdb;
+		$table = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->table_name();
+		$wpdb->delete( $table, array( 'refund_id' => $refund->get_id() ) );
+		$this->assertSame( array(), $this->records( array( 'type' => 'refund', 'order_id' => $order->get_id() ) ) );
+		// Act.
+		$this->allocate( $order, $payment, $refund );
+		// Assert: the refund record is back and the counted refund got its reallocation.
+		$this->assertCount( 1, $this->records( array( 'type' => 'refund', 'order_id' => $order->get_id() ) ) );
+		$corrections = $this->records( array( 'type' => 'late_refund', 'closure_id' => $closure['id'] ) );
+		$this->assertCount( 1, $corrections );
+		$this->assertSame( 'reallocation', $corrections[0]['payload']['kind'] );
+	}
+
 	/** Same-session allocation is counted exactly once.
 	 *
 	 * @dataProvider storage_modes

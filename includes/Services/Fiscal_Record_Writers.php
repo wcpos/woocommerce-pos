@@ -220,7 +220,12 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		$sale = $this->store->find_sale( $order_id );
-		$provenance = $this->refund_provenance( $order, $refund );
+		try {
+			$provenance = $this->refund_provenance( $order, $refund );
+		} catch ( \Throwable $error ) {
+			$this->fail_quietly( 'refund', $order, $refund, $error );
+			return;
+		}
 		$this->write(
 			$order,
 			array_merge(
@@ -268,6 +273,7 @@ final class Fiscal_Record_Writers {
 	 *
 	 * @param WC_Order        $order Parent order.
 	 * @param WC_Order_Refund $refund Refund object.
+	 * @throws \RuntimeException When the session row cannot be read.
 	 */
 	private function refund_provenance( WC_Order $order, WC_Order_Refund $refund ): array {
 		$provenance = $this->store->provenance_from_order( $order );
@@ -278,7 +284,12 @@ final class Fiscal_Record_Writers {
 			$value = $refund->get_meta( $meta, true );
 			$provenance[ $key ] = Pos_Uuid::is_uuid( $value ) ? strtolower( $value ) : null;
 		}
+		global $wpdb;
 		$session = $provenance['session_id'] ? ( new Register_Session_Store() )->get( $provenance['session_id'] ) : null;
+		if ( '' !== $wpdb->last_error ) {
+			// A failed read must not freeze the sale's store onto the refund's record.
+			throw new \RuntimeException( 'Refund session read failed.' );
+		}
 		$provenance['store_id'] = $session['store_id'] ?? $provenance['store_id'];
 		return $provenance;
 	}
@@ -373,8 +384,13 @@ final class Fiscal_Record_Writers {
 		}
 		$record = $this->store->find_refund( $order->get_id(), $refund->get_id() );
 		if ( ! $record ) {
-			// The refund record itself never landed; its failure signal already fired.
-			return;
+			// The refund record never landed: the refund observer is idempotent, so run it again
+			// (it also writes the late arrival for an uncounted refund) before deciding anything.
+			$this->handle_refund( $order->get_id(), $refund->get_id() );
+			$record = $this->store->find_refund( $order->get_id(), $refund->get_id() );
+			if ( ! $record ) {
+				return;
+			}
 		}
 		$provenance = $this->refund_provenance( $order, $refund );
 		// A refund the closure did not count is a late arrival whose record projects the live
