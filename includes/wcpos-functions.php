@@ -283,11 +283,19 @@ if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
 			// call, seeing a matching home, no longer returns.
 			$previous = get_option( 'woocommerce_pos_uuid', '' );
 			$minted   = \Ramsey\Uuid\Uuid::uuid4()->toString();
-			if ( update_option( 'woocommerce_pos_uuid', $minted ) && ! update_option( 'woocommerce_pos_uuid_home', $home ) && \is_string( $previous ) && '' !== $previous ) {
-				// The marker did not move: put the previous uuid back so the next
-				// call retries the whole move, rather than minting again on top of
-				// a rotation the marker never recorded.
-				update_option( 'woocommerce_pos_uuid', $previous );
+			if ( update_option( 'woocommerce_pos_uuid', $minted ) ) {
+				// update_option() also answers false when the marker already holds
+				// $home: a concurrent mover finished the move between this call's
+				// read and its write. That is a completed move, not a failed one,
+				// and rolling back here would leave the old uuid behind the new
+				// marker for good, since every later call sees a matching home.
+				$marker_moved = update_option( 'woocommerce_pos_uuid_home', $home ) || get_option( 'woocommerce_pos_uuid_home' ) === $home;
+				if ( ! $marker_moved && \is_string( $previous ) && '' !== $previous ) {
+					// The marker did not move: put the previous uuid back so the next
+					// call retries the whole move, rather than minting again on top of
+					// a rotation the marker never recorded.
+					update_option( 'woocommerce_pos_uuid', $previous );
+				}
 			}
 
 			$stored = get_option( 'woocommerce_pos_uuid', '' );

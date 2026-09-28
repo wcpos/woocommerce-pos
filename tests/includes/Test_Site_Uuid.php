@@ -167,6 +167,45 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A concurrent request that finished the move first is not a failed marker
+	 * write. update_option() answers false when the marker already holds the
+	 * new home; rolling back on that would leave the old uuid behind the new
+	 * marker, and every later call would return it for the moved site.
+	 */
+	public function test_site_uuid_marker_already_moved_by_concurrent_request_keeps_new_uuid(): void {
+		$home   = 'https://example.com';
+		$filter = static function () use ( &$home ) {
+			return $home;
+		};
+		add_filter( 'home_url', $filter );
+		// The other request lands its whole move between this call's read of the
+		// marker and its own marker write: emulated as a side effect of the uuid
+		// write, the last thing this call does before writing the marker.
+		$other_request_finishes_first = static function ( $value ) {
+			update_option( 'woocommerce_pos_uuid_home', 'example.com/staging' );
+
+			return $value;
+		};
+
+		try {
+			$original = wcpos_get_site_uuid();
+
+			$home = 'https://example.com/staging';
+			add_filter( 'pre_update_option_woocommerce_pos_uuid', $other_request_finishes_first );
+			$returned = wcpos_get_site_uuid();
+			remove_filter( 'pre_update_option_woocommerce_pos_uuid', $other_request_finishes_first );
+
+			$this->assertNotSame( $original, $returned );
+			$this->assertSame( $returned, get_option( 'woocommerce_pos_uuid' ) );
+			$this->assertSame( 'example.com/staging', get_option( 'woocommerce_pos_uuid_home' ) );
+			$this->assertSame( $returned, wcpos_get_site_uuid() );
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_pos_uuid', $other_request_finishes_first );
+			remove_filter( 'home_url', $filter );
+		}
+	}
+
+	/**
 	 * Scheme, host case, `www.` and trailing slashes do not change the identity.
 	 */
 	public function test_site_identity_home_normalization_preserves_uuid(): void {
