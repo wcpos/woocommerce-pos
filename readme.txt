@@ -44,9 +44,11 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 * **Customer Management:** create new customers and edit customer details
 * **Payment Terminals:** take in-person card payments with Stripe Terminal and SumUp readers
 * **Payment Gateways:** check out with any WooCommerce gateway — Stripe, PayPal, Square, Mollie and more
-* **Coupons:** apply coupons at the POS with search, coupon pills, and sequential discounts
+* **Coupons:** manage the coupon catalogue from the till (applying a coupon at the register is free)
 * **Refunds:** refund POS orders directly from the till
-* **End of Day Reports:** summarise daily sales, transactions, and cash flow for reconciliation
+* **Reports:** sales by period with margin by category and brand, and the closures history for every register
+* **Card readers at the till:** Stripe Terminal (smart readers, Bluetooth readers and Tap to Pay), SumUp and Mollie Terminal, driven from checkout
+* **Customer-facing display:** a second screen showing the customer their cart and total as it is rung up
 * **Stores:** Manage locations with unique tax settings, pricing and receipts
 * **Priority [Discord support](https://wcpos.com/discord):** one-on-one support via private chat
 
@@ -86,7 +88,7 @@ To install a WordPress Plugin manually:
 == Frequently Asked Questions ==
 
 = Is WCPOS really free? =
-Yes. The free plugin is a complete point of sale — unlimited products, orders and customers, with no transaction fees and no per-register charges. Pro adds advanced tools (see below), but you never need it to start selling.
+Yes. The free plugin is a complete point of sale — unlimited products, orders and customers, named registers with a cash drawer, split payments and coupons at the till, with no transaction fees and no per-register charges. Pro adds advanced tools (see below), but you never need it to start selling.
 
 = Do I need anything besides WooCommerce? =
 No. If you have a WooCommerce store, install WCPOS and you're taking orders in under two minutes — same catalog, same stock, same prices, at the counter.
@@ -95,16 +97,16 @@ No. If you have a WooCommerce store, install WCPOS and you're taking orders in u
 Any modern browser, plus native desktop apps (Windows, macOS) and iOS & Android apps (mobile in beta). One login, everything stays in sync.
 
 = Does it work offline? =
-Yes. Products are stored locally for instant search, so you can keep browsing, building carts and saving orders during a connection drop, and your changes sync automatically when you reconnect. Taking payment is the one step that still needs a connection -- offline checkout is coming in a future release.
+Yes. Products are stored locally for instant search, so you can keep browsing, building carts and saving orders during a connection drop, and your changes sync automatically when you reconnect. A cash sale completes at the till even when the store can't be reached and syncs when it can; card payments through an integrated reader still need a connection.
 
 = What hardware do I need? =
 Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
 
 = Can I take card payments? =
-Cash and manual card payments are built in. WCPOS Pro adds integrated payment terminals (Stripe Terminal, SumUp) so you can take chip-and-PIN payments right from the register.
+Cash and manual card payments are built in, and a sale can be split between them. WCPOS Pro adds integrated card readers (Stripe Terminal, SumUp, Mollie Terminal) driven from the register, including Bluetooth readers and Tap to Pay on a phone or tablet.
 
 = What's the difference between free and Pro? =
-Free is a full POS for taking orders. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders and customers, apply coupons and refunds, use supported payment gateways and integrated terminals such as Stripe Terminal and SumUp, and print end-of-day reports. See [wcpos.com/pro](https://wcpos.com/pro).
+Free is a full POS for taking orders, running a cash drawer and closing the day. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders, customers and coupons, refund at the till, use supported payment gateways and integrated card readers such as Stripe Terminal, SumUp and Mollie Terminal, show a customer-facing display, and read sales and closures reports. See [wcpos.com/pro](https://wcpos.com/pro).
 
 = Can I try it before installing? =
 Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) (login `demo` / `demo`).
@@ -351,6 +353,9 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 Earlier releases: https://github.com/wcpos/woocommerce-pos/releases
 
 == Upgrade Notice ==
+
+= 2.0.0 =
+2.0 is a major update: a new register and checkout. It needs WooCommerce 9.0 or later; on an older store the POS stops at a notice until WooCommerce is updated. Update when the store is quiet, and read "Upgrading to 2.0" at docs.wcpos.com first.
 
 = 1.10.1 =
 Fixes variations: readable names on products with three or more attributes, variation images on orders and receipts, and disabled variations no longer for sale at the till. Recommended for anyone selling variable products.
