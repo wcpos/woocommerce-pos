@@ -263,22 +263,72 @@ if ( ! \function_exists( 'wcpos_is_pro_active' ) ) {
 	}
 }
 
+if ( ! \function_exists( 'wcpos_get_site_identity_home' ) ) {
+	/**
+	 * Get the site address as an identity: no scheme, no `www.`, no trailing
+	 * slash; the host lower-cased; the port and the case-sensitive path kept,
+	 * so `example.com/staging` is another site and `www.example.com` is not.
+	 *
+	 * @return string Normalised home address.
+	 */
+	function wcpos_get_site_identity_home(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$parts = wp_parse_url( '//' . preg_replace( '#^(?:https?:)?//#i', '', home_url() ) );
+		$host  = preg_replace( '#^www\.#', '', strtolower( (string) ( $parts['host'] ?? '' ) ) );
+		$port  = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+
+		return untrailingslashit( $host . $port . ( $parts['path'] ?? '' ) );
+	}
+}
+
 /*
- * Get the site UUID (Plugin State), generating and persisting it on first use.
+ * Get the site UUID (Plugin State), tied to the site address.
  *
  * @return string Site UUID.
  */
 if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
 	/**
-	 * Get the site UUID, generating and persisting it on first use.
+	 * Get the site UUID, generating it on first use or when the address changes.
 	 *
 	 * Single owner for the woocommerce_pos_uuid option — the
 	 * generate-if-missing logic previously lived in three places (REST index,
 	 * POS frontend, analytics) and could race.
+	 * The saved home prevents database clones sharing a live store's identity.
+	 * On upgrade, an absent home is recorded without changing the existing UUID.
 	 *
 	 * @return string Site UUID.
 	 */
 	function wcpos_get_site_uuid(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$home        = wcpos_get_site_identity_home();
+		$stored_home = get_option( 'woocommerce_pos_uuid_home' );
+		if ( false === $stored_home ) {
+			// Keep the first writer's home if another request wins the race.
+			$stored_home = add_option( 'woocommerce_pos_uuid_home', $home )
+				? $home
+				: get_option( 'woocommerce_pos_uuid_home' );
+		}
+
+		if ( $stored_home !== $home ) {
+			// A moved address is a new identity. Two requests can both land
+			// here; the last write wins and each returns what is stored, so the
+			// REST response never advertises a uuid the database does not hold.
+			// The home marker advances only behind a persisted uuid: a vetoed or
+			// failed write would otherwise hand out an identity that the next
+			// call, seeing a matching home, no longer returns.
+			$previous = get_option( 'woocommerce_pos_uuid', '' );
+			$minted   = \Ramsey\Uuid\Uuid::uuid4()->toString();
+			if ( update_option( 'woocommerce_pos_uuid', $minted ) &amp;&amp; ! update_option( 'woocommerce_pos_uuid_home', $home ) &amp;&amp; \is_string( $previous ) &amp;&amp; '' !== $previous ) {
+				// The marker did not move: put the previous uuid back so the next
+				// call retries the whole move, rather than minting again on top of
+				// a rotation the marker never recorded.
+				update_option( 'woocommerce_pos_uuid', $previous );
+			}
+
+			$stored = get_option( 'woocommerce_pos_uuid', '' );
+			if ( \is_string( $stored ) &amp;&amp; '' !== $stored ) {
+				return $stored;
+			}
+		}
+
 		$uuid = get_option( 'woocommerce_pos_uuid', '' );
 		if ( \is_string( $uuid ) &amp;&amp; '' !== $uuid ) {
 			return $uuid;
