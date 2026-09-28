@@ -130,6 +130,43 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A vetoed home-marker write after the uuid rotated must put the previous
+	 * uuid back, or every later call would mint again while the marker still
+	 * differs. The move goes through once the write succeeds.
+	 */
+	public function test_site_uuid_vetoed_home_write_restores_previous_uuid(): void {
+		$home   = 'https://example.com';
+		$filter = static function () use ( &$home ) {
+			return $home;
+		};
+		add_filter( 'home_url', $filter );
+		$veto = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+
+		try {
+			$original = wcpos_get_site_uuid();
+
+			$home = 'https://example.com/staging';
+			add_filter( 'pre_update_option_woocommerce_pos_uuid_home', $veto, 10, 2 );
+			$returned = wcpos_get_site_uuid();
+			remove_filter( 'pre_update_option_woocommerce_pos_uuid_home', $veto );
+
+			$this->assertSame( $original, $returned );
+			$this->assertSame( $original, get_option( 'woocommerce_pos_uuid' ) );
+			$this->assertSame( 'example.com', get_option( 'woocommerce_pos_uuid_home' ) );
+
+			$changed = wcpos_get_site_uuid();
+			$this->assertNotSame( $original, $changed );
+			$this->assertSame( $changed, get_option( 'woocommerce_pos_uuid' ) );
+			$this->assertSame( 'example.com/staging', get_option( 'woocommerce_pos_uuid_home' ) );
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_pos_uuid_home', $veto );
+			remove_filter( 'home_url', $filter );
+		}
+	}
+
+	/**
 	 * Scheme, host case, `www.` and trailing slashes do not change the identity.
 	 */
 	public function test_site_identity_home_normalization_preserves_uuid(): void {
