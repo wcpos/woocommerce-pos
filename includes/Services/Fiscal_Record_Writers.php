@@ -220,16 +220,7 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		$sale = $this->store->find_sale( $order_id );
-		$provenance = $this->store->provenance_from_order( $order );
-		foreach ( array(
-			'register_id' => '_wcpos_register',
-			'session_id' => '_wcpos_session',
-		) as $key => $meta ) {
-			$value = $refund->get_meta( $meta, true );
-			$provenance[ $key ] = Pos_Uuid::is_uuid( $value ) ? strtolower( $value ) : null;
-		}
-		$session = $provenance['session_id'] ? ( new Register_Session_Store() )->get( $provenance['session_id'] ) : null;
-		$provenance['store_id'] = $session['store_id'] ?? $provenance['store_id'];
+		$provenance = $this->refund_provenance( $order, $refund );
 		$this->write(
 			$order,
 			array_merge(
@@ -250,36 +241,78 @@ final class Fiscal_Record_Writers {
 		);
 		$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
 		$record = $this->store->find_refund( $order_id, $refund_id );
-		// Replaying a refund received before the closure does not make it late.
-		if ( $closure && $record && $record['received_at_gmt'] >= $closure['received_at_gmt'] ) {
-			$sessions = new Register_Session_Store();
-			$rows = $sessions->refund_tender_rows( $refund );
-			$delta = array( 'cash' => $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $rows )['cash'] );
-			$this->write(
-				$order,
-				array_merge(
-					$provenance,
-					array(
-						'type' => 'late_refund',
-						'source_id' => 'refund:' . $refund_id,
-						'order_id' => $order_id,
-						'refund_id' => $refund_id,
-						'closure_id' => $closure['id'],
-						'corrects_record_id' => $record['id'],
-						'cashier_id' => (int) $refund->get_refunded_by(),
-						'device_time' => null,
-						'device_tz' => null,
-						'payload' => array(
-							'reason' => (string) $refund->get_reason(),
-							'amount' => Closure_Store::sum( array( (string) $refund->get_amount() ) ),
-							'tender_rows' => $rows,
-							'expected_delta' => $delta,
-							'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
-						),
-					)
-				)
-			);
+		// A refund the closure counted (or a replay of one) is not late.
+		if ( $closure && $record && ! $this->closure_counted( $refund, $closure ) ) {
+			$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
 		}
+	}
+
+	/** Provenance for a refund's records: the refund's own stamp and its session's store.
+	 *
+	 * @param WC_Order        $order Parent order.
+	 * @param WC_Order_Refund $refund Refund object.
+	 */
+	private function refund_provenance( WC_Order $order, WC_Order_Refund $refund ): array {
+		$provenance = $this->store->provenance_from_order( $order );
+		foreach ( array(
+			'register_id' => '_wcpos_register',
+			'session_id' => '_wcpos_session',
+		) as $key => $meta ) {
+			$value = $refund->get_meta( $meta, true );
+			$provenance[ $key ] = Pos_Uuid::is_uuid( $value ) ? strtolower( $value ) : null;
+		}
+		$session = $provenance['session_id'] ? ( new Register_Session_Store() )->get( $provenance['session_id'] ) : null;
+		$provenance['store_id'] = $session['store_id'] ?? $provenance['store_id'];
+		return $provenance;
+	}
+
+	/** Whether the closure's figures already include this refund.
+	 *
+	 * @param WC_Order_Refund $refund Refund object.
+	 * @param array           $closure Closure row.
+	 */
+	private function closure_counted( WC_Order_Refund $refund, array $closure ): bool {
+		return (string) $refund->get_meta( '_wcpos_closure', true ) === (string) $closure['id'];
+	}
+
+	/** Write the late-arrival correction for a refund received after its closure.
+	 *
+	 * @param WC_Order        $order Parent order.
+	 * @param WC_Order_Refund $refund Refund object.
+	 * @param array           $provenance Refund provenance.
+	 * @param array           $record The refund record.
+	 * @param array           $closure The closure it arrived after.
+	 */
+	private function record_late_arrival( WC_Order $order, WC_Order_Refund $refund, array $provenance, array $record, array $closure ): void {
+		$order_id = $order->get_id();
+		$refund_id = $refund->get_id();
+		$sessions = new Register_Session_Store();
+		$rows = $sessions->refund_tender_rows( $refund );
+		$delta = array( 'cash' => $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $rows )['cash'] );
+		$this->write(
+			$order,
+			array_merge(
+				$provenance,
+				array(
+					'type' => 'late_refund',
+					'source_id' => 'refund:' . $refund_id,
+					'order_id' => $order_id,
+					'refund_id' => $refund_id,
+					'closure_id' => $closure['id'],
+					'corrects_record_id' => $record['id'],
+					'cashier_id' => (int) $refund->get_refunded_by(),
+					'device_time' => null,
+					'device_tz' => null,
+					'payload' => array(
+						'reason' => (string) $refund->get_reason(),
+						'amount' => Closure_Store::sum( array( (string) $refund->get_amount() ) ),
+						'tender_rows' => $rows,
+						'expected_delta' => $delta,
+						'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+					),
+				)
+			)
+		);
 	}
 
 	/** Record a post-closure shift from unallocated cash to a payment tender.
@@ -330,13 +363,20 @@ final class Fiscal_Record_Writers {
 		if ( ! wcpos_is_pos_order( $order ) || ! $closure ) {
 			return;
 		}
-		// A late-arrival record already projects the refund's live allocations.
-		if ( $this->store->find_by_source( 'late_refund', 'refund:' . $refund->get_id() ) ) {
+		$record = $this->store->find_refund( $order->get_id(), $refund->get_id() );
+		if ( ! $record ) {
+			// The refund record itself never landed; its failure signal already fired.
 			return;
 		}
-		$provenance = $this->store->provenance_from_order( $order );
-		$register_id = $refund->get_meta( '_wcpos_register', true );
-		$provenance['store_id'] = ( new Register_Session_Store() )->get( strtolower( $session_id ) )['store_id'] ?? $provenance['store_id'];
+		$provenance = $this->refund_provenance( $order, $refund );
+		// A refund the closure did not count is a late arrival whose record projects the live
+		// allocations: recover that record if its insert failed, and never write a reallocation.
+		if ( ! $this->closure_counted( $refund, $closure ) ) {
+			if ( ! $this->store->find_by_source( 'late_refund', 'refund:' . $refund->get_id() ) ) {
+				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
+			}
+			return;
+		}
 		$amount = Closure_Store::sum( array( $amount ) );
 		$delta = array( 'cash' => $amount );
 		$tender = array_intersect_key( $row, array_flip( array( 'method_id', 'kind' ) ) );
@@ -352,10 +392,8 @@ final class Fiscal_Record_Writers {
 		$provenance['source_id'] = substr( $digest, 0, 8 ) . '-' . substr( $digest, 8, 4 ) . '-' . substr( $digest, 12, 4 ) . '-' . substr( $digest, 16, 4 ) . '-' . substr( $digest, 20, 12 );
 		$provenance['order_id'] = $order->get_id();
 		$provenance['refund_id'] = $refund->get_id();
-		$provenance['session_id'] = strtolower( $session_id );
-		$provenance['register_id'] = Pos_Uuid::is_uuid( $register_id ) ? strtolower( $register_id ) : null;
 		$provenance['closure_id'] = $closure['id'];
-		$provenance['corrects_record_id'] = $this->store->find_refund( $order->get_id(), $refund->get_id() )['id'] ?? null;
+		$provenance['corrects_record_id'] = $record['id'];
 		$provenance['cashier_id'] = (int) $refund->get_refunded_by();
 		$provenance['device_time'] = null;
 		$provenance['device_tz'] = null;

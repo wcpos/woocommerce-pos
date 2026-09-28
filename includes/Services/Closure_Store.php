@@ -520,6 +520,11 @@ final class Closure_Store {
 					$totals['refunds'][] = ltrim( $row['amount'], '-' );
 				}
 			}
+			// The refund writers ask this stamp, not the clock, whether a refund was inside the closure.
+			foreach ( $refunds as $refund ) {
+				$refund['refund']->update_meta_data( '_wcpos_closure', $fields['id'] );
+				$refund['refund']->save_meta_data();
+			}
 			$findings = array();
 			foreach ( $totals as $kind => $amounts ) {
 				$period = self::sum( $amounts );

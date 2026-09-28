@@ -275,6 +275,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 			$closure['expected']
 		);
 		$this->assertSame( '10.0000', $closure['period_refunds_total'] );
+		$this->assertSame( $closure['id'], wc_get_order( $refund->get_id() )->get_meta( '_wcpos_closure' ) );
 		// Act.
 		$this->allocate( $order, $payment, $refund );
 		// Assert.
@@ -363,6 +364,8 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$closure = $this->close( $session );
+		// The observer gets the refund as the ledger reloads it, after the closure stamped it.
+		$refund = wc_get_order( $refund->get_id() );
 		$row = array(
 			'id' => $payment,
 			'method_id' => 'pos_card',
@@ -387,6 +390,40 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		Fiscal_Record_Writers::instance()->handle_allocation( $order, $row, $refund, '10.00' );
 		$this->assertCount( 1, $this->records( $filters ) );
 		$this->assertSame( 'reallocation', $this->records( $filters )[0]['payload']['kind'] );
+	}
+
+	/** An allocation recovers a late-arrival record whose insert was lost, and writes no reallocation. */
+	public function test_refund_allocation_recovers_a_missing_late_arrival_record(): void {
+		// Arrange: a late refund whose late-arrival record is gone.
+		$session = $this->closure_session();
+		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
+		$closure = $this->close( $session );
+		$refund = $this->refund( $order, $session );
+		$filters = array(
+			'type' => 'late_refund',
+			'closure_id' => $closure['id'],
+		);
+		$lost = $this->records( $filters );
+		$this->assertCount( 1, $lost );
+		global $wpdb;
+		$wpdb->delete( ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->table_name(), array( 'id' => $lost[0]['id'] ) );
+		$this->assertSame( array(), $this->records( $filters ) );
+		// Act.
+		$this->allocate( $order, $payment, $refund );
+		// Assert: the late arrival is back, projected live; no reallocation was written.
+		$records = $this->records( $filters );
+		$this->assertCount( 1, $records );
+		$this->assertArrayNotHasKey( 'kind', $records[0]['payload'] );
+		// Recovered after the card allocation landed, so the frozen delta already shows no cash.
+		$this->assertSame( '0.0000', $records[0]['payload']['expected_delta']['cash'] );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/closures/' . $closure['id'] ) );
+		$this->assertSame(
+			array(
+				'cash' => '0.0000',
+				'card' => '-10.0000',
+			),
+			$response->get_data()['corrections'][0]['figures']['expected_delta']
+		);
 	}
 
 	/** Same-session allocation is counted exactly once.
