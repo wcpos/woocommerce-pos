@@ -244,6 +244,8 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertCount( 1, $records );
 		$this->assertSame( 789, $records[0]['store_id'] );
+		// The frozen document identifies the refund's register, not the sale's.
+		$this->assertSame( $register['id'], $records[0]['payload']['register']['id'] );
 	}
 
 	/** An allocation after closing records the tender shift, not another refund.

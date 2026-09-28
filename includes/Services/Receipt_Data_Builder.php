@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
@@ -885,7 +886,21 @@ class Receipt_Data_Builder {
 	 * @throws \RuntimeException When the refund document cannot be encoded.
 	 */
 	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects ): array {
-		$data = $this->build_data( $order );
+		// The document identifies where the refund was made: its session's store and its register,
+		// falling back to the sale's when the refund carries no stamp.
+		$session_id = (string) $refund->get_meta( '_wcpos_session', true );
+		$session = Pos_Uuid::is_uuid( $session_id ) ? ( new Register_Session_Store() )->get( strtolower( $session_id ) ) : null;
+		$store_id = (int) ( $session['store_id'] ?? 0 );
+		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id, array( 'status' => array( 'publish', 'trash' ) ) ) : null;
+		$data = $this->build_data( $order, \is_object( $pos_store ) ? $pos_store : null );
+		$register_id = (string) $refund->get_meta( '_wcpos_register', true );
+		$register_row = Pos_Uuid::is_uuid( $register_id ) ? ( new Register_Store() )->get( strtolower( $register_id ) ) : null;
+		if ( $register_row ) {
+			$data['register'] = array(
+				'id' => $register_row['id'],
+				'name' => $register_row['name'],
+			);
+		}
 		$display_incl = ! empty( $data['tax']['display_incl'] );
 		$items = $this->get_refund_items( $refund, $display_incl );
 		$data['lines'] = $items['lines'];
