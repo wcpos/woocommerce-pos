@@ -602,14 +602,16 @@ class Ledger {
 			return $row;
 		}
 		$refunded = 0;
-		foreach ( $row['refunds'] as $refund ) {
-			if ( 'succeeded' === $refund['status'] ) {
-				$refunded += Money::minor( $refund['amount'] );
+		foreach ( $row['refunds'] as $allocation ) {
+			if ( 'succeeded' === $allocation['status'] ) {
+				$refunded += Money::minor( $allocation['amount'] );
 			}
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $row );
 		$this->replace_and_save( $order, $rows, $row );
+		/** Fires after saving the allocation: order, payment row, refund, normalized amount. */
+		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::normalize( $amount ) );
 		return $row;
 	}
 

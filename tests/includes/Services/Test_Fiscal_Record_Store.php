@@ -59,7 +59,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 			'void' => 'payment_id',
 			'cancellation' => 'order_id',
 			'late_sale' => 'order_id',
-			'late_refund' => 'refund_id',
+			'late_refund' => 'source_id',
 			'late_movement' => 'source_id',
 			'recount' => 'source_id',
 		) as $type => $key ) {

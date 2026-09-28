@@ -128,7 +128,6 @@ final class Fiscal_Record_Store {
 			'sale' => 'order_id',
 			'cancellation' => 'order_id',
 			'late_sale' => 'order_id',
-			'late_refund' => 'refund_id',
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';

@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Register_Store;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -25,10 +27,25 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private $order_ids = array();
 
+	/** Whether this case switched order storage to HPOS.
+	 *
+	 * @var bool
+	 */
+	private $hpos_enabled = false;
+
 	/** Restore order storage and clean committed, unstamped records. */
 	public function tearDown(): void {
-		$this->clean_up_cot_setup();
+		// The closure write commits the test transaction, which makes the HPOS-on option
+		// durable; switching it off must happen AFTER the framework's rollback and be
+		// committed below, or the database keeps HPOS on for every later test.
 		$this->fixture_tear_down();
+		if ( $this->hpos_enabled ) {
+			// The framework's teardown restored the hook table, so re-allow the switch.
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->hpos_enabled = false;
+		}
 		global $wpdb;
 		foreach ( $this->order_ids as $id ) {
 			$wpdb->delete( ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->table_name(), array( 'order_id' => $id ) );
@@ -54,10 +71,18 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 			}
 		);
 		parent::setUp();
-		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_cash' );
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_closures' );
 		add_action( 'woocommerce_order_refunded', array( Fiscal_Record_Writers::instance(), 'handle_refund' ), 10, 2 );
+		add_action( 'woocommerce_pos_refund_allocated', array( Fiscal_Record_Writers::instance(), 'handle_allocation' ), 10, 4 );
+	}
+
+	/** Switch order storage to HPOS for this case, restored in tearDown. */
+	private function enable_hpos(): void {
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->hpos_enabled = true;
+		$this->setup_cot();
+		$this->toggle_cot_feature_and_usage( true );
 	}
 
 	/** Seed one captured cash sale through the payment route.
@@ -177,6 +202,116 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		return $response->get_data();
 	}
 
+	/** The refund session's store wins over both the register and sale store.
+	 *
+	 * @dataProvider storage_modes
+	 * @param bool $hpos Use HPOS.
+	 */
+	public function test_refund_cross_store_uses_session_store( bool $hpos ): void {
+		// Arrange.
+		if ( $hpos ) {
+			$this->enable_hpos();
+		}
+		$register = ( new Register_Store() )->create(
+			array(
+				'name' => 'Refund store fixture',
+				'store_id' => 456,
+			)
+		);
+		$this->closure_registers[] = $register['id'];
+		$session = ( new Register_Session_Store() )->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'register_id' => $register['id'],
+				'store_id' => 789,
+				'opened_at_gmt' => '2026-09-11 08:00:00',
+				'opened_by' => get_current_user_id(),
+				'expected_float' => null,
+				'counted_float' => '100',
+			)
+		);
+		list( $order ) = $this->sale( $session );
+		$order->update_meta_data( '_pos_store', 456 );
+		$order->save();
+		// Act.
+		$this->refund( $order, $session );
+		// Assert.
+		$records = $this->records(
+			array(
+				'type' => 'refund',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( 789, $records[0]['store_id'] );
+	}
+
+	/** An allocation after closing records the tender shift, not another refund.
+	 *
+	 * @dataProvider storage_modes
+	 * @param bool $hpos Use HPOS.
+	 */
+	public function test_refund_allocation_after_closure_records_reallocation( bool $hpos ): void {
+		// Arrange.
+		if ( $hpos ) {
+			$this->enable_hpos();
+		}
+		$session = $this->closure_session( null, 'open' );
+		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
+		$refund = $this->refund( $order, $session );
+		$session = ( new Register_Session_Store() )->transition(
+			$session,
+			array(
+				'status' => 'counting',
+				'counting_started_at_gmt' => '2026-09-11 11:00:00',
+			)
+		);
+		$closure = $this->close( $session );
+		$this->assertSame(
+			array(
+				'cash' => '90.0000',
+				'card' => '50.0000',
+			),
+			$closure['expected']
+		);
+		$this->assertSame( '10.0000', $closure['period_refunds_total'] );
+		// Act.
+		$this->allocate( $order, $payment, $refund );
+		// Assert.
+		$records = $this->records(
+			array(
+				'type' => 'late_refund',
+				'closure_id' => $closure['id'],
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'reallocation', $records[0]['payload']['kind'] );
+		$this->assertSame( '10.0000', $records[0]['payload']['expected_delta']['cash'] );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/closures/' . $closure['id'] ) );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertCount( 1, $data['corrections'] );
+		$this->assertEquals(
+			array(
+				'card' => '-10.0000',
+				'cash' => '10.0000',
+			),
+			$data['corrections'][0]['figures']['expected_delta']
+		);
+		$this->assertSame( '0.0000', $data['corrections'][0]['figures']['refunds_delta'] );
+		$this->assertSame( $closure['expected'], $data['expected'] );
+		$this->assertSame( $closure['period_refunds_total'], $data['period_refunds_total'] );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'cash' => '100.0000',
+				'card' => '40.0000',
+			),
+			$response->get_data()['expected']
+		);
+	}
+
 	/** Same-session allocation is counted exactly once.
 	 *
 	 * @dataProvider storage_modes
@@ -184,7 +319,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_refund_same_session_subtracts_once( bool $hpos ): void {
 		if ( $hpos ) {
-			$this->setup_cot();
+			$this->enable_hpos();
 		}
 		// Arrange.
 		$session = $this->closure_session();
@@ -216,7 +351,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_refund_cross_session_preserves_original_drawer( bool $hpos ): void {
 		if ( $hpos ) {
-			$this->setup_cot();
+			$this->enable_hpos();
 		}
 		// Arrange.
 		$first = $this->closure_session();
@@ -257,7 +392,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_refund_closed_session_creates_one_correction( bool $hpos ): void {
 		if ( $hpos ) {
-			$this->setup_cot();
+			$this->enable_hpos();
 		}
 		// Arrange.
 		$session = $this->closure_session();
@@ -266,6 +401,15 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$refund = $this->refund( $order, $session );
 		$this->allocate( $order, $payment, $refund );
+		$this->assertCount(
+			1,
+			$this->records(
+				array(
+					'type' => 'late_refund',
+					'closure_id' => $closure['id'],
+				)
+			)
+		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Replay WooCommerce's lifecycle event.
 		do_action( 'woocommerce_order_refunded', $order->get_id(), $refund->get_id() );
 		// Assert.
@@ -311,7 +455,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_refund_no_session_leaves_drawer_unchanged( bool $hpos ): void {
 		if ( $hpos ) {
-			$this->setup_cot();
+			$this->enable_hpos();
 		}
 		// Arrange.
 		$session = $this->closure_session();
@@ -350,7 +494,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	public function test_refund_later_allocation_projects_live_tenders( bool $hpos ): void {
 		// Arrange.
 		if ( $hpos ) {
-			$this->setup_cot();
+			$this->enable_hpos();
 		}
 		$session = $this->closure_session();
 		list( $order, $payment ) = $this->sale( $session, 'pos_card' );

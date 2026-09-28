@@ -268,10 +268,11 @@ final class Closure_Store {
 				$figures['refunds_delta'] = self::sum( $refunds );
 			} elseif ( 'late_refund' === $record['type'] ) {
 				$sessions = new Register_Session_Store();
-				$refund = wc_get_order( $record['refund_id'] );
+				$reallocation = 'reallocation' === ( $payload['kind'] ?? null );
+				$refund = $reallocation ? null : wc_get_order( $record['refund_id'] );
 				$tenders = $refund instanceof \WC_Order_Refund ? $sessions->refund_tender_rows( $refund ) : $payload['tender_rows'];
 				$figures['expected_delta'] = $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $tenders );
-				$figures['refunds_delta'] = self::sum(
+				$figures['refunds_delta'] = $reallocation ? '0.0000' : self::sum(
 					array_map(
 						static function ( $row ) {
 							return ltrim( $row['amount'], '-' );

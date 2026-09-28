@@ -31,6 +31,7 @@ final class Fiscal_Record_Writers {
 		$this->store = new Fiscal_Record_Store();
 		add_action( 'woocommerce_pos_payment_voided', array( $this, 'handle_void' ), 10, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'handle_cancellation' ), 10, 2 );
+		add_action( 'woocommerce_pos_refund_allocated', array( $this, 'handle_allocation' ), 10, 4 );
 		add_action( 'woocommerce_order_refunded', array( $this, 'handle_refund' ), 10, 2 );
 	}
 
@@ -226,6 +227,8 @@ final class Fiscal_Record_Writers {
 			$value = $refund->get_meta( $meta, true );
 			$provenance[ $key ] = Pos_Uuid::is_uuid( $value ) ? strtolower( $value ) : null;
 		}
+		$session = $provenance['session_id'] ? ( new Register_Session_Store() )->get( $provenance['session_id'] ) : null;
+		$provenance['store_id'] = $session['store_id'] ?? $provenance['store_id'];
 		$this->write(
 			$order,
 			array_merge(
@@ -257,6 +260,7 @@ final class Fiscal_Record_Writers {
 					$provenance,
 					array(
 						'type' => 'late_refund',
+						'source_id' => 'refund:' . $refund_id,
 						'order_id' => $order_id,
 						'refund_id' => $refund_id,
 						'closure_id' => $closure['id'],
@@ -275,5 +279,64 @@ final class Fiscal_Record_Writers {
 				)
 			);
 		}
+	}
+
+	/** Record a post-closure shift from unallocated cash to a payment tender.
+	 *
+	 * @param WC_Order        $order Parent order.
+	 * @param array           $row Allocated payment row.
+	 * @param WC_Order_Refund $refund Refund object.
+	 * @param string          $amount Normalized allocation amount.
+	 */
+	public function handle_allocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount ): void {
+		$session_id = $refund->get_meta( '_wcpos_session', true );
+		$closure = Pos_Uuid::is_uuid( $session_id ) ? ( new Closure_Store() )->for_session( strtolower( $session_id ) ) : null;
+		if ( ! wcpos_is_pos_order( $order ) || ! $closure ) {
+			return;
+		}
+		foreach ( $this->store->list(
+			array(
+				'type' => 'late_refund',
+				'order_id' => $order->get_id(),
+			)
+		) as $record ) {
+			if ( $record['refund_id'] === $refund->get_id() && ! isset( $record['payload']['kind'] ) ) {
+				return;
+			}
+		}
+		$provenance = $this->store->provenance_from_order( $order );
+		$register_id = $refund->get_meta( '_wcpos_register', true );
+		$provenance['store_id'] = ( new Register_Session_Store() )->get( strtolower( $session_id ) )['store_id'] ?? $provenance['store_id'];
+		$amount = Closure_Store::sum( array( $amount ) );
+		$delta = array( 'cash' => $amount );
+		$tender = array_intersect_key( $row, array_flip( array( 'method_id', 'kind' ) ) );
+		$tender['amount'] = '-' . $amount;
+		$tender['refund_id'] = $refund->get_id();
+		$cash = $tender;
+		$cash['method_id'] = 'pos_cash';
+		$cash['kind'] = 'cash';
+		$cash['amount'] = $amount;
+		$provenance['type'] = 'late_refund';
+		// The column is CHAR(36): a deterministic UUID-shaped digest of the allocation identity.
+		$digest = md5( 'refund:' . $refund->get_id() . ':' . $row['id'] );
+		$provenance['source_id'] = substr( $digest, 0, 8 ) . '-' . substr( $digest, 8, 4 ) . '-' . substr( $digest, 12, 4 ) . '-' . substr( $digest, 16, 4 ) . '-' . substr( $digest, 20, 12 );
+		$provenance['order_id'] = $order->get_id();
+		$provenance['refund_id'] = $refund->get_id();
+		$provenance['session_id'] = strtolower( $session_id );
+		$provenance['register_id'] = Pos_Uuid::is_uuid( $register_id ) ? strtolower( $register_id ) : null;
+		$provenance['closure_id'] = $closure['id'];
+		$provenance['corrects_record_id'] = $this->store->find_refund( $order->get_id(), $refund->get_id() )['id'] ?? null;
+		$provenance['cashier_id'] = (int) $refund->get_refunded_by();
+		$provenance['device_time'] = null;
+		$provenance['device_tz'] = null;
+		$provenance['payload'] = array(
+			'kind' => 'reallocation',
+			'reason' => (string) $refund->get_reason(),
+			'amount' => $amount,
+			'tender_rows' => array( $tender, $cash ),
+			'expected_delta' => $delta,
+			'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+		);
+		$this->write( $order, $provenance );
 	}
 }
