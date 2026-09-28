@@ -232,15 +232,18 @@ if ( ! \function_exists( 'wcpos_is_pro_active' ) ) {
 
 if ( ! \function_exists( 'wcpos_get_site_identity_home' ) ) {
 	/**
-	 * Get the site address without its scheme or trailing slash.
+	 * Get the site address as an identity: no scheme, no `www.`, no trailing
+	 * slash; the host lower-cased; the port and the case-sensitive path kept,
+	 * so `example.com/staging` is another site and `www.example.com` is not.
 	 *
-	 * @return string Lower-cased host with the port and case-sensitive path kept.
+	 * @return string Normalised home address.
 	 */
 	function wcpos_get_site_identity_home(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$parts = wp_parse_url( '//' . preg_replace( '#^(?:https?:)?//#i', '', home_url() ) );
+		$host  = preg_replace( '#^www\.#', '', strtolower( (string) ( $parts['host'] ?? '' ) ) );
 		$port  = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
 
-		return untrailingslashit( strtolower( $parts['host'] ) . $port . ( $parts['path'] ?? '' ) );
+		return untrailingslashit( $host . $port . ( $parts['path'] ?? '' ) );
 	}
 }
 
@@ -272,11 +275,21 @@ if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
 		}
 
 		if ( $stored_home !== $home ) {
-			$uuid = \Ramsey\Uuid\Uuid::uuid4()->toString();
-			update_option( 'woocommerce_pos_uuid', $uuid );
-			update_option( 'woocommerce_pos_uuid_home', $home );
+			// A moved address is a new identity. Two requests can both land
+			// here; the last write wins and each returns what is stored, so the
+			// REST response never advertises a uuid the database does not hold.
+			// The home marker advances only behind a persisted uuid: a vetoed or
+			// failed write would otherwise hand out an identity that the next
+			// call, seeing a matching home, no longer returns.
+			$minted = \Ramsey\Uuid\Uuid::uuid4()->toString();
+			if ( update_option( 'woocommerce_pos_uuid', $minted ) ) {
+				update_option( 'woocommerce_pos_uuid_home', $home );
+			}
 
-			return $uuid;
+			$stored = get_option( 'woocommerce_pos_uuid', '' );
+			if ( \is_string( $stored ) && '' !== $stored ) {
+				return $stored;
+			}
 		}
 
 		$uuid = get_option( 'woocommerce_pos_uuid', '' );
