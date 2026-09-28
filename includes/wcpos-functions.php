@@ -312,9 +312,12 @@ if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
 				// request's option cache still holds the old marker (the same-value
 				// UPDATE touched no row, so nothing refreshed it), so the check
 				// reads the row itself and, when the move is confirmed, drops the
-				// stale cache so a later call in this request does not mint again.
+				// stale cache so a later call in this request does not mint again,
+				// and drops the uuid this request cached from its own write so the
+				// value returned below is the one the other request left stored.
 				$marker_moved = update_option( 'woocommerce_pos_uuid_home', $home ) || wcpos_site_identity_home_row() === $home;
 				if ( $marker_moved && get_option( 'woocommerce_pos_uuid_home' ) !== $home ) {
+					wp_cache_delete( 'woocommerce_pos_uuid', 'options' );
 					wp_cache_delete( 'woocommerce_pos_uuid_home', 'options' );
 					wp_cache_delete( 'alloptions', 'options' );
 				}
