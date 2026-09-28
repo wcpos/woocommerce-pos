@@ -247,6 +247,24 @@ if ( ! \function_exists( 'wcpos_get_site_identity_home' ) ) {
 	}
 }
 
+if ( ! \function_exists( 'wcpos_site_identity_home_row' ) ) {
+	/**
+	 * Read the persisted home marker straight from the options table.
+	 *
+	 * get_option() answers from the request's option cache, which a same-value
+	 * update_option() leaves untouched; this is the only read that can tell a
+	 * marker another request already advanced from one whose write failed.
+	 *
+	 * @return string|null The stored marker, or null when absent.
+	 */
+	function wcpos_site_identity_home_row(): ?string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		global $wpdb;
+		$row = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", 'woocommerce_pos_uuid_home' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- bypasses the option cache on purpose, see docblock.
+
+		return \is_string( $row ) ? $row : null;
+	}
+}
+
 /*
  * Get the site UUID (Plugin State), tied to the site address.
  *
@@ -284,12 +302,20 @@ if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
 			$previous = get_option( 'woocommerce_pos_uuid', '' );
 			$minted   = \Ramsey\Uuid\Uuid::uuid4()->toString();
 			if ( update_option( 'woocommerce_pos_uuid', $minted ) ) {
-				// update_option() also answers false when the marker already holds
-				// $home: a concurrent mover finished the move between this call's
+				// update_option() also answers false when the row already holds
+				// $home: a concurrent request finished the move between this one's
 				// read and its write. That is a completed move, not a failed one,
-				// and rolling back here would leave the old uuid behind the new
-				// marker for good, since every later call sees a matching home.
-				$marker_moved = update_option( 'woocommerce_pos_uuid_home', $home ) || get_option( 'woocommerce_pos_uuid_home' ) === $home;
+				// and rolling back would leave the old uuid behind the new marker
+				// for good, since every later call sees a matching home. This
+				// request's option cache still holds the old marker (the same-value
+				// UPDATE touched no row, so nothing refreshed it), so the check
+				// reads the row itself and, when the move is confirmed, drops the
+				// stale cache so a later call in this request does not mint again.
+				$marker_moved = update_option( 'woocommerce_pos_uuid_home', $home ) || wcpos_site_identity_home_row() === $home;
+				if ( $marker_moved && get_option( 'woocommerce_pos_uuid_home' ) !== $home ) {
+					wp_cache_delete( 'woocommerce_pos_uuid_home', 'options' );
+					wp_cache_delete( 'alloptions', 'options' );
+				}
 				if ( ! $marker_moved && \is_string( $previous ) && '' !== $previous ) {
 					// The marker did not move: put the previous uuid back so the next
 					// call retries the whole move, rather than minting again on top of

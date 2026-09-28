@@ -168,11 +168,17 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 
 	/**
 	 * A concurrent request that finished the move first is not a failed marker
-	 * write. update_option() answers false when the marker already holds the
-	 * new home; rolling back on that would leave the old uuid behind the new
+	 * write. update_option() answers false when the row already holds the new
+	 * home; rolling back on that would leave the old uuid behind the new
 	 * marker, and every later call would return it for the moved site.
+	 *
+	 * The other request has its own option cache, so its write reaches this
+	 * request only through the database: it is emulated as a direct row update,
+	 * leaving this request's cached marker stale exactly as a real second
+	 * request would find it.
 	 */
 	public function test_site_uuid_marker_already_moved_by_concurrent_request_keeps_new_uuid(): void {
+		global $wpdb;
 		$home   = 'https://example.com';
 		$filter = static function () use ( &$home ) {
 			return $home;
@@ -181,8 +187,8 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 		// The other request lands its whole move between this call's read of the
 		// marker and its own marker write: emulated as a side effect of the uuid
 		// write, the last thing this call does before writing the marker.
-		$other_request_finishes_first = static function ( $value ) {
-			update_option( 'woocommerce_pos_uuid_home', 'example.com/staging' );
+		$other_request_finishes_first = static function ( $value ) use ( $wpdb ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => 'example.com/staging' ), array( 'option_name' => 'woocommerce_pos_uuid_home' ) );
 
 			return $value;
 		};
@@ -197,6 +203,8 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 
 			$this->assertNotSame( $original, $returned );
 			$this->assertSame( $returned, get_option( 'woocommerce_pos_uuid' ) );
+			// The stale cache was dropped: this request now sees the moved marker
+			// and a later call returns the same uuid rather than minting again.
 			$this->assertSame( 'example.com/staging', get_option( 'woocommerce_pos_uuid_home' ) );
 			$this->assertSame( $returned, wcpos_get_site_uuid() );
 		} finally {
