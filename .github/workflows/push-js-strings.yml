@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - 'packages/settings/src/translations/locales/en/wp-admin-settings.json'
       - 'packages/analytics/src/translations/locales/en/wp-admin-analytics.json'
@@ -28,6 +29,19 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve lane
+        id: resolve-lane
+        run: |
+          lane="$GITHUB_REF_NAME"
+          case "$lane" in
+            main|next) ;;
+            *)
+              echo "::error::Translations are sent only from main or next (got $lane)"
+              exit 1
+              ;;
+          esac
+          echo "lane=$lane" >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -43,12 +57,12 @@ jobs:
           cp packages/template-editor/src/translations/locales/en/wp-admin-template-editor.json /tmp/translations-out/
           cp packages/consent/src/translations/locales/en/wp-admin-consent.json /tmp/translations-out/
 
-          git checkout --orphan translations-source
+          git checkout --orphan ${{ steps.resolve-lane.outputs.lane == 'next' && 'translations-source-next' || 'translations-source' }}
           git rm -rf .
           cp /tmp/translations-out/*.json .
           git add .
           git commit -m "translation source strings from ${{ github.sha }}"
-          git push -f origin translations-source
+          git push -f origin ${{ steps.resolve-lane.outputs.lane == 'next' && 'translations-source-next' || 'translations-source' }}
 
           git checkout ${{ github.sha }} -- .github
 
@@ -66,7 +80,8 @@ jobs:
           gh api repos/wcpos/translations/dispatches \
             -f event_type=update-js-strings \
             -f "client_payload[repo_name]=${{ github.event.repository.name }}" \
-            -f "client_payload[ref]=translations-source" \
+            -f "client_payload[ref]=${{ steps.resolve-lane.outputs.lane == 'next' && 'translations-source-next' || 'translations-source' }}" \
+            -f "client_payload[lane]=${{ steps.resolve-lane.outputs.lane }}" \
             -f "client_payload[force]=${{ inputs.force || 'false' }}"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

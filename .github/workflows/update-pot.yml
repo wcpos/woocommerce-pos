@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - '**.php'
   workflow_dispatch:
@@ -21,10 +22,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve lane
+        id: resolve-lane
+        run: |
+          lane="$GITHUB_REF_NAME"
+          case "$lane" in
+            main|next) ;;
+            *)
+              echo "::error::Translations are sent only from main or next (got $lane)"
+              exit 1
+              ;;
+          esac
+          echo "lane=$lane" >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
           persist-credentials: false
 
       - name: Setup PHP with tools
@@ -100,8 +114,8 @@ jobs:
           commit-message: "chore(i18n): update languages/woocommerce-pos.pot"
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          branch: chore/update-pot-file
-          base: main
+          branch: ${{ steps.resolve-lane.outputs.lane == 'next' && 'chore/update-pot-file-next' || 'chore/update-pot-file' }}
+          base: ${{ github.ref_name }}
           delete-branch: true
           title: "chore(i18n): update languages/woocommerce-pos.pot"
           body: |
