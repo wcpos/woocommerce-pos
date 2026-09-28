@@ -194,9 +194,6 @@ final class Closure_Store {
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Closure read failed.' );
 		}
-		if ( '' !== $wpdb->last_error ) {
-			throw new \RuntimeException( 'Closure read failed.' );
-		}
 		foreach ( $rows as &$row ) {
 			foreach ( array( 'number', 'printed_number', 'store_id', 'opened_by', 'closed_by', 'approved_by', 'unsynced_count', 'first_sale_counter', 'last_sale_counter', 'first_receipt_id', 'last_receipt_id', 'print_count' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
@@ -528,7 +525,11 @@ final class Closure_Store {
 				$refund['refund']->update_meta_data( '_wcpos_closure', $fields['id'] );
 				$refund['refund']->save_meta_data();
 				// An unstamped counted refund would later read as a late arrival: fail the closure instead.
-				if ( '' !== $wpdb->last_error || (string) $refund['refund']->get_meta( '_wcpos_closure', true ) !== (string) $fields['id'] ) {
+				$stored = wc_get_order( $refund['refund']->get_id() );
+				if ( $stored instanceof \WC_Order_Refund ) {
+					$stored->read_meta_data( true );
+				}
+				if ( '' !== $wpdb->last_error || ! $stored instanceof \WC_Order_Refund || (string) $stored->get_meta( '_wcpos_closure', true ) !== (string) $fields['id'] ) {
 					throw new \RuntimeException( 'Closure refund stamp failed.' );
 				}
 			}

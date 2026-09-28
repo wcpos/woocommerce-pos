@@ -337,6 +337,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$row = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '20.00' );
 		$refund->save();
 		$first = $ledger->refund( $order, $row['id'], $refund->get_id(), '5.00' );
 		$again = $ledger->refund( $order, $row['id'], $refund->get_id(), '5.00' );
@@ -361,6 +362,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$ledger->save( $order, array( $row ) );
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '20.00' );
 		$refund->save();
 		$error = $ledger->refund( $order, $row['id'], $refund->get_id(), '6.00' );
 		$this->assertSame( 'wcpos_refund_not_allocatable', $error->get_error_code() );
@@ -396,6 +398,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00' ) );
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $this->create_pos_order()->get_id() );
+		$refund->set_amount( '20.00' );
 		$refund->save();
 		$error = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '5.00' );
 		$this->assertSame( 'rest_invalid_param', $error->get_error_code() );

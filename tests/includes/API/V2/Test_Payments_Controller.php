@@ -359,6 +359,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->record( $order, $payment );
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '20.00' );
 		$refund->save();
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/refund' );
 		$request->set_body_params(
