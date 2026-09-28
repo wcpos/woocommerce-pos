@@ -437,6 +437,8 @@ class Test_Uninstall extends WP_UnitTestCase {
 	 */
 	public function test_uninstall_default_deletes_operational_state_preserves_user_config(): void {
 		// Arrange: operational state.
+		update_option( 'woocommerce_pos_uuid', 'existing-uuid-value' );
+		update_option( 'woocommerce_pos_uuid_home', 'example.com' );
 		update_option( 'woocommerce_pos_db_version', '1.10.0' );
 		update_option( 'wcpos_sync_schema_version', '3' );
 		update_option( 'woocommerce_pos_secret_key', 'abc123' );
@@ -453,6 +455,8 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->run_uninstall( false );
 
 		// Assert: operational state gone.
+		$this->assertFalse( get_option( 'woocommerce_pos_uuid' ), 'site UUID should be deleted' );
+		$this->assertFalse( get_option( 'woocommerce_pos_uuid_home' ), 'site UUID home should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_db_version' ), 'db_version should be deleted' );
 		$this->assertFalse( get_option( 'wcpos_sync_schema_version' ), 'sync schema latch should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_secret_key' ), 'JWT secret should be deleted' );

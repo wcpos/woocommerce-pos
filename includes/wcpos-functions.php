@@ -230,22 +230,55 @@ if ( ! \function_exists( 'wcpos_is_pro_active' ) ) {
 	}
 }
 
+if ( ! \function_exists( 'wcpos_get_site_identity_home' ) ) {
+	/**
+	 * Get the site address without its scheme or trailing slash.
+	 *
+	 * @return string Lower-cased host with the port and case-sensitive path kept.
+	 */
+	function wcpos_get_site_identity_home(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$parts = wp_parse_url( '//' . preg_replace( '#^(?:https?:)?//#i', '', home_url() ) );
+		$port  = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+
+		return untrailingslashit( strtolower( $parts['host'] ) . $port . ( $parts['path'] ?? '' ) );
+	}
+}
+
 /*
- * Get the site UUID (Plugin State), generating and persisting it on first use.
+ * Get the site UUID (Plugin State), tied to the site address.
  *
  * @return string Site UUID.
  */
 if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
 	/**
-	 * Get the site UUID, generating and persisting it on first use.
+	 * Get the site UUID, generating it on first use or when the address changes.
 	 *
 	 * Single owner for the woocommerce_pos_uuid option — the
 	 * generate-if-missing logic previously lived in three places (REST index,
 	 * POS frontend, analytics) and could race.
+	 * The saved home prevents database clones sharing a live store's identity.
+	 * On upgrade, an absent home is recorded without changing the existing UUID.
 	 *
 	 * @return string Site UUID.
 	 */
 	function wcpos_get_site_uuid(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$home        = wcpos_get_site_identity_home();
+		$stored_home = get_option( 'woocommerce_pos_uuid_home' );
+		if ( false === $stored_home ) {
+			// Keep the first writer's home if another request wins the race.
+			$stored_home = add_option( 'woocommerce_pos_uuid_home', $home )
+				? $home
+				: get_option( 'woocommerce_pos_uuid_home' );
+		}
+
+		if ( $stored_home !== $home ) {
+			$uuid = \Ramsey\Uuid\Uuid::uuid4()->toString();
+			update_option( 'woocommerce_pos_uuid', $uuid );
+			update_option( 'woocommerce_pos_uuid_home', $home );
+
+			return $uuid;
+		}
+
 		$uuid = get_option( 'woocommerce_pos_uuid', '' );
 		if ( \is_string( $uuid ) && '' !== $uuid ) {
 			return $uuid;
