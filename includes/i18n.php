@@ -27,6 +27,10 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	private const MISSING_LOCALE_CACHE_TTL = DAY_IN_SECONDS;
 	private const WRITE_FAILED_CACHE_TTL = HOUR_IN_SECONDS;
 	private const DOWNLOAD_LOCK_TTL = 30;
+	// A rolling ref changes content under the same name.
+	private const ROLLING_TRANSLATION_VERSION = 'next';
+	// Twelve hours matches how often jsDelivr refreshes a branch ref.
+	private const ROLLING_TRANSLATION_CACHE_TTL = 12 * HOUR_IN_SECONDS;
 
 	/**
 	 * Text domain for the plugin.
@@ -261,7 +265,11 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 				if ( $downloaded ) {
 					// Recompute file path — download_translation() may have switched to fallback path.
 					$file = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
-					set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
+					set_transient(
+						$this->transient_key . '_' . $candidate_locale,
+						$this->version,
+						self::ROLLING_TRANSLATION_VERSION === $this->version ? self::ROLLING_TRANSLATION_CACHE_TTL : WEEK_IN_SECONDS
+					);
 					delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
 					delete_transient( $this->get_write_failed_transient_key() );
 					$this->load_translation_file( $candidate_locale, $file );

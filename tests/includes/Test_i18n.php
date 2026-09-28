@@ -250,6 +250,35 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 	}
 
 	/**
+	 * Verify successful next downloads expire the version transient within 12 hours.
+	 *
+	 * @covers ::load_translations
+	 */
+	public function test_next_download_version_transient_expires_within_twelve_hours(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+
+		$this->http_responder = function ( $request, $url ) {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\nreturn array('messages' => array());",
+			);
+		};
+
+		$started_at = time();
+		$i18n       = new i18n( 'woocommerce-pos', 'next', $this->temp_lang_dir );
+
+		$this->assertSame( 'next', get_transient( 'wcpos_i18n_woocommerce-pos_de_DE' ) );
+		$expires_at = (int) get_option( '_transient_timeout_wcpos_i18n_woocommerce-pos_de_DE' );
+		$this->assertGreaterThanOrEqual( $started_at + 12 * HOUR_IN_SECONDS, $expires_at );
+		$this->assertLessThanOrEqual( time() + 12 * HOUR_IN_SECONDS, $expires_at );
+	}
+
+	/**
 	 * Verify cached version transient prevents re-download.
 	 *
 	 * @covers ::load_translations
