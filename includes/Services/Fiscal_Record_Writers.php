@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Order;
 use WC_Order_Refund;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /** Writes history only; never changes order or payment state. */
@@ -289,20 +290,49 @@ final class Fiscal_Record_Writers {
 	 * @param string          $amount Normalized allocation amount.
 	 */
 	public function handle_allocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount ): void {
+		try {
+			$this->record_reallocation( $order, $row, $refund, $amount );
+		} catch ( \Throwable $error ) {
+			// The allocation is already saved; fiscal bookkeeping must not fail the request.
+			Logger::log( 'Fiscal reallocation record failed: ' . $error->getMessage() );
+			do_action(
+				'woocommerce_pos_fiscal_record_failed',
+				'late_refund',
+				$order,
+				array(
+					'refund_id' => $refund->get_id(),
+					'payment_id' => $row['id'] ?? null,
+				)
+			);
+		}
+	}
+
+	/** The write behind handle_allocation(): only a succeeded, non-cash allocation after the closure shifts the drawer.
+	 *
+	 * @param WC_Order        $order Parent order.
+	 * @param array           $row Allocated payment row.
+	 * @param WC_Order_Refund $refund Refund object.
+	 * @param string          $amount Normalized allocation amount.
+	 */
+	private function record_reallocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount ): void {
+		$succeeded = false;
+		foreach ( $row['refunds'] ?? array() as $allocation ) {
+			if ( (int) $allocation['id'] === $refund->get_id() && 'succeeded' === ( $allocation['status'] ?? null ) ) {
+				$succeeded = true;
+			}
+		}
+		// A pending allocation has moved no money yet; cash to cash is no shift at all.
+		if ( ! $succeeded || 'cash' === ( $row['kind'] ?? '' ) ) {
+			return;
+		}
 		$session_id = $refund->get_meta( '_wcpos_session', true );
 		$closure = Pos_Uuid::is_uuid( $session_id ) ? ( new Closure_Store() )->for_session( strtolower( $session_id ) ) : null;
 		if ( ! wcpos_is_pos_order( $order ) || ! $closure ) {
 			return;
 		}
-		foreach ( $this->store->list(
-			array(
-				'type' => 'late_refund',
-				'order_id' => $order->get_id(),
-			)
-		) as $record ) {
-			if ( $record['refund_id'] === $refund->get_id() && ! isset( $record['payload']['kind'] ) ) {
-				return;
-			}
+		// A late-arrival record already projects the refund's live allocations.
+		if ( $this->store->find_by_source( 'late_refund', 'refund:' . $refund->get_id() ) ) {
+			return;
 		}
 		$provenance = $this->store->provenance_from_order( $order );
 		$register_id = $refund->get_meta( '_wcpos_register', true );

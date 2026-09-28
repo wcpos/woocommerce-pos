@@ -312,6 +312,83 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** A cash-kind allocation after closing is no shift and records nothing.
+	 *
+	 * @dataProvider storage_modes
+	 * @param bool $hpos Use HPOS.
+	 */
+	public function test_refund_cash_allocation_after_closure_records_nothing( bool $hpos ): void {
+		// Arrange.
+		if ( $hpos ) {
+			$this->enable_hpos();
+		}
+		$session = $this->closure_session( null, 'open' );
+		list( $order, $payment ) = $this->sale( $session );
+		$refund = $this->refund( $order, $session );
+		$session = ( new Register_Session_Store() )->transition(
+			$session,
+			array(
+				'status' => 'counting',
+				'counting_started_at_gmt' => '2026-09-11 11:00:00',
+			)
+		);
+		$closure = $this->close( $session );
+		$this->assertSame( '140.0000', $closure['expected']['cash'] );
+		// Act.
+		$this->allocate( $order, $payment, $refund );
+		// Assert.
+		$this->assertSame(
+			array(),
+			$this->records(
+				array(
+					'type' => 'late_refund',
+					'closure_id' => $closure['id'],
+				)
+			)
+		);
+		$this->assertSame( '140.0000', $this->cash( $session ) );
+	}
+
+	/** A pending allocation has moved no money and records nothing until it succeeds. */
+	public function test_refund_pending_allocation_after_closure_records_nothing(): void {
+		// Arrange.
+		$session = $this->closure_session( null, 'open' );
+		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
+		$refund = $this->refund( $order, $session );
+		$session = ( new Register_Session_Store() )->transition(
+			$session,
+			array(
+				'status' => 'counting',
+				'counting_started_at_gmt' => '2026-09-11 11:00:00',
+			)
+		);
+		$closure = $this->close( $session );
+		$row = array(
+			'id' => $payment,
+			'method_id' => 'pos_card',
+			'kind' => 'card',
+			'refunds' => array(
+				array(
+					'id' => $refund->get_id(),
+					'amount' => '10.00',
+					'status' => 'pending',
+				),
+			),
+		);
+		$filters = array(
+			'type' => 'late_refund',
+			'closure_id' => $closure['id'],
+		);
+		// Act.
+		Fiscal_Record_Writers::instance()->handle_allocation( $order, $row, $refund, '10.00' );
+		// Assert.
+		$this->assertSame( array(), $this->records( $filters ) );
+		$row['refunds'][0]['status'] = 'succeeded';
+		Fiscal_Record_Writers::instance()->handle_allocation( $order, $row, $refund, '10.00' );
+		$this->assertCount( 1, $this->records( $filters ) );
+		$this->assertSame( 'reallocation', $this->records( $filters )[0]['payload']['kind'] );
+	}
+
 	/** Same-session allocation is counted exactly once.
 	 *
 	 * @dataProvider storage_modes

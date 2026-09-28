@@ -229,6 +229,22 @@ final class Fiscal_Record_Store {
 	}
 
 	/**
+	 * Read a record by its replay identity.
+	 *
+	 * @param string $type Record type.
+	 * @param string $source_id Replay identity.
+	 */
+	public function find_by_source( string $type, string $source_id ): ?array {
+		$this->ensure_installed();
+		return $this->find(
+			array(
+				'type' => $type,
+				'source_id' => $source_id,
+			)
+		);
+	}
+
+	/**
 	 * Resolve a frozen refund document belonging to an order.
 	 *
 	 * @param int                   $order_id Parent order ID.
