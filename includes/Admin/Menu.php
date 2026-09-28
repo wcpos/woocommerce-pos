@@ -608,7 +608,7 @@ JS;
 		/**
 		 * Filters the preview base URL so a site can use its own host.
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 *
 		 * @param string $url Preview base URL without a trailing slash.
 		 * @hook woocommerce_pos_template_gallery_preview_base_url

@@ -101,7 +101,7 @@ class Descriptor_Builder {
 		/**
 		 * Filters the POS payment method kind.
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 * @hook wcpos_payment_method_kind
 		 *
 		 * @param string             $kind    Payment method kind.
@@ -130,7 +130,7 @@ class Descriptor_Builder {
 		/**
 		 * Filters the POS payment method capture mode.
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 * @hook wcpos_payment_method_capture_mode
 		 *
 		 * @param string             $mode    Capture mode.

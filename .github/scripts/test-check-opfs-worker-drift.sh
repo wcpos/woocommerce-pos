@@ -91,7 +91,7 @@ done
 # ---------------------------------------------------------------------------
 # newest_bundle_tag — must sort numerically; v1.10.14 beats v1.10.9
 # ---------------------------------------------------------------------------
-tags=$(printf 'v1.10.0\nv1.10.9\nv1.10.13\nv1.10.14\nv1.9.10\nv1.11.0\n')
+tags=$(printf 'v1.10.0\nv1.10.9\nv1.10.13\nv1.10.14\nv1.9.10\nv2.0.0\n')
 
 got=$(printf '%s' "$tags" | newest_bundle_tag "1.10")
 [[ "$got" == "v1.10.14" ]] || fail "expected v1.10.14, got '$got'"
@@ -124,7 +124,7 @@ cat > "$TMP_DIR/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
   'api --paginate repos/wcpos/web-bundle/git/matching-refs/tags/v1.10.'*)
-    printf 'v1.10.9\nv1.10.23\nv1.11.0\n' ;;
+    printf 'v1.10.9\nv1.10.23\nv2.0.0\n' ;;
   'api repos/wcpos/web-bundle/contents/build/opfs.worker.js?ref=v1.10.23 -H Accept: application/vnd.github.raw')
     printf 'new worker' ;;
   *) echo "Unexpected GitHub request: $*" >&2; exit 1 ;;

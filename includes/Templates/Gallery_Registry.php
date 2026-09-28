@@ -30,7 +30,7 @@ class Gallery_Registry {
 		 * on a merchant's installed copy to tell them theirs has fallen behind, so an entry added
 		 * here must carry one and must bump it whenever its markup changes.
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 *
 		 * @param array<string,array<string,mixed>> $catalogue Gallery templates keyed by template key.
 		 */

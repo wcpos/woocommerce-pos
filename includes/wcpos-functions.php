@@ -254,7 +254,7 @@ if ( ! \function_exists( 'wcpos_register_capture_mode' ) ) {
 	 * return the scoped key for a gateway; the descriptor still advertises the
 	 * bare mode.
 	 *
-	 * @since 1.11.0
+	 * @since 2.0.0
 	 *
 	 * @param string $key           Capture mode, or `<mode>:<provider>`.
 	 * @param string $handler_class Handler class name.

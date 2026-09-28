@@ -386,7 +386,7 @@ class API {
 			return $result;
 		}
 
-		// The 1.11.0 protocol gate: a POS client whose protocol signal predates the
+		// The 2.0.0 protocol gate: a POS client whose protocol signal predates the
 		// boundary gets a deliberate "update required" refusal instead of bytes it
 		// cannot parse. It runs BEFORE the permission gate: authentication has
 		// already been attempted by this point, and a stale client's only

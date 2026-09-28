@@ -121,7 +121,7 @@ final class Orders_Controller extends WP_REST_Controller {
 		 *
 		 * The interim hook-parity seam for order-scoping plugins on a lane that
 		 * bypasses `woocommerce_rest_orders_prepare_object_query`. It retires with
-		 * the lane at the 1.11.0 protocol boundary (ADR 0035, #1748).
+		 * the lane at the 2.0.0 protocol boundary (ADR 0035, #1748).
 		 *
 		 * The contract, precisely:
 		 *  - NARROW ONLY. Return the subset of `$ids` to serve; ids added by the
