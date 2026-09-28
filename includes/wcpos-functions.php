@@ -251,8 +251,8 @@ if ( ! \function_exists( 'wcpos_site_identity_home_row' ) ) {
 	/**
 	 * Read the persisted home marker straight from the options table.
 	 *
-	 * get_option() answers from the request's option cache, which a same-value
-	 * update_option() leaves untouched; this is the only read that can tell a
+	 * The option cache answers get_option() for the rest of the request, and a
+	 * same-value update_option() leaves it untouched; this is the only read that can tell a
 	 * marker another request already advanced from one whose write failed.
 	 *
 	 * @return string|null The stored marker, or null when absent.
