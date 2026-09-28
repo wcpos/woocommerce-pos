@@ -43,7 +43,7 @@ class Font_Pack_Loader {
 		 * Filters the font pack sources so a site can add a pack (for example a
 		 * CJK face hosted elsewhere) or replace where a pack is fetched from.
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 * @param array<string, string> $sources Pack name → base URL with `%s` for the lane ref.
 		 * @hook woocommerce_pos_font_pack_sources
 		 */
@@ -60,7 +60,7 @@ class Font_Pack_Loader {
 		 * Filters the enabled font packs so a site can drop one it does not need.
 		 * Packs must have a source (see `woocommerce_pos_font_pack_sources`).
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 * @param string[] $packs Enabled pack names.
 		 * @hook woocommerce_pos_font_packs
 		 */

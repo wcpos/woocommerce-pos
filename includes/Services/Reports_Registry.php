@@ -110,7 +110,7 @@ final class Reports_Registry {
 		 * and the Free scope gate are checked before invoking a server producer.
 		 *
 		 * @param array $reports Registrations keyed by report key.
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 * @hook woocommerce_pos_reports
 		 */
 		$reports = apply_filters( 'woocommerce_pos_reports', $reports );

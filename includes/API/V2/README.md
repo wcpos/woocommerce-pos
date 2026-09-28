@@ -3,7 +3,7 @@
 This directory contains the controllers for the `wcpos/v2` sync REST surface.
 The sync engine and shared domain services remain under `includes/Sync`.
 
-## Protocol gate (1.11.0)
+## Protocol gate (2.0.0)
 
 A POS-client request (one carrying the `X-WCPOS` / `wcpos=1` marker) under
 `/wcpos/v2/` must carry a client protocol signal of 2 or newer
@@ -20,7 +20,7 @@ service surfaces the wp-admin settings screen drives with cookie auth and no cli
 protocol claim: `/settings/`, `/templates/`, `/extensions/`, `/logs/` and
 `/print-jobs/` (their wire shapes did not change at the boundary; each controller
 declares its own entry in `wcpos_route_classifications()`).
-`server_protocol` stays 2: every 1.11.0 wire change is one the protocol-2
+`server_protocol` stays 2: every 2.0.0 wire change is one the protocol-2
 client already tolerates (free#1752).
 
 ## Version-skew stance for the sync journal (decided 2026-08-22, free#1560)
@@ -58,7 +58,7 @@ onwards, any change to a journal row's shape, to the `head` / `horizon` /
 plan in its PR: a dual-emit window, or a client-minimum gate. "No released
 client speaks this yet" stops being true the day 1.10.0 ships.
 
-## Bare variation records (1.11.0, free#1869)
+## Bare variation records (2.0.0, free#1869)
 
 Behind the protocol gate (free#1868), variations are bare wc/v3 records on the flat list,
 write-ack and barcode lanes, with `_rxdb_revision`, `_rxdb_digest` (when indexed)
@@ -67,7 +67,7 @@ and UUID metadata. `/resolve/barcode` returns a bare product or variation as
 computed before transport stamps; `woocommerce_pos_sync_variation_revision_fields`
 allows site-local fields to participate in the same recipe on reads and CAS.
 
-## One checkpoint shape, schema-scoped order revisions (1.11.0, free#1870)
+## One checkpoint shape, schema-scoped order revisions (2.0.0, free#1870)
 
 Behind the protocol gate, `/orders/pull` speaks the `/changes/*` envelope
 vocabulary: `complete` replaces the inverted `hasMore`, and `epoch`, `head` and
@@ -81,7 +81,7 @@ are hashed, generated dates are out (`date_paid*` / `date_completed*` stay), and
 `register_rest_field` keys ride outside the hash by construction (free#1744);
 `woocommerce_pos_sync_order_revision_fields` opts site-local fields back in.
 
-## Unsupported collections on the `/changes/*` read lanes (1.11.0, free#1740)
+## Unsupported collections on the `/changes/*` read lanes (2.0.0, free#1740)
 
 `/changes/revision-hash` and `/changes/range-checksum` serve `products` (variations
 folded in) and `tax_rates`; `/changes/sequence-log` serves `all`, `products` and
@@ -96,7 +96,7 @@ labels its rows by collection (`variations`, `coupons`, `customers`, …, from
 ignore the parameter, and `/digests` keeps its documented 200-with-`note` answer for
 an unknown collection because the client's boot prime reads it.
 
-## Order journal rows carry no revision value (1.11.0, free#1757)
+## Order journal rows carry no revision value (2.0.0, free#1757)
 
 An order row in the sync journal is a change pointer — `(object_type, object_id, deleted,
 modified_gmt, sequence)` — and the order observers always write its `revision` column empty

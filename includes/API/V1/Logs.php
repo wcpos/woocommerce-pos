@@ -45,7 +45,7 @@ class Logs extends WP_REST_Controller {
 	 * Declare the protocol-gate classification.
 	 *
 	 * The wp-admin settings screen calls this surface with cookie auth and no
-	 * client protocol claim, and its wire shape did not change at the 1.11.0
+	 * client protocol claim, and its wire shape did not change at the 2.0.0
 	 * boundary, so the whole prefix is exempt from the gate on both namespaces.
 	 * The sync surface stays gated (#1868).
 	 *

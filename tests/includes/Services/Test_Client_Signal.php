@@ -27,13 +27,13 @@ class Test_Client_Signal extends WP_UnitTestCase {
 			)
 		);
 		$request->set_header( 'X-WCPOS-Protocol', '2' );
-		$request->set_header( 'X-WCPOS-Client', 'electron/1.11.0' );
+		$request->set_header( 'X-WCPOS-Client', 'electron/2.0.0' );
 
 		$this->assertSame(
 			array(
 				'protocol'    => '2',
 				'platform'    => 'electron',
-				'app_version' => '1.11.0',
+				'app_version' => '2.0.0',
 				'channel'     => 'header',
 			),
 			Client_Signal::read( $request )
@@ -46,7 +46,7 @@ class Test_Client_Signal extends WP_UnitTestCase {
 		$request->set_query_params(
 			array(
 				'wcpos_protocol' => '2',
-				'wcpos_client'   => 'web/1.11.0',
+				'wcpos_client'   => 'web/2.0.0',
 			)
 		);
 
@@ -54,7 +54,7 @@ class Test_Client_Signal extends WP_UnitTestCase {
 			array(
 				'protocol'    => '2',
 				'platform'    => 'web',
-				'app_version' => '1.11.0',
+				'app_version' => '2.0.0',
 				'channel'     => 'query',
 			),
 			Client_Signal::read( $request )

@@ -319,7 +319,7 @@ final class Order_Serializer {
 		 * Adding a key brings a site-local field into CAS on every order write;
 		 * removing one takes it out. Read the coherence contract above first.
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 *
 		 * @param string[] $fields Top-level order keys inside the hash.
 		 */

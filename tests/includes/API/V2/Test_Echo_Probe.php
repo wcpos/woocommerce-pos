@@ -29,7 +29,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 			'x-wcpos-idempotency-key' => 'wcpos-idem-456',
 			'x-wcpos-store'           => 'store-9',
 			'x-wcpos-protocol'        => '2',
-			'x-wcpos-client'          => 'electron/1.11.0',
+			'x-wcpos-client'          => 'electron/2.0.0',
 		);
 		$request = new WP_REST_Request( 'GET', '/wcpos/v2/echo' );
 
@@ -112,7 +112,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 				'wcpos'         => '1',
 				'store_id'      => '9',
 				'wcpos_protocol' => '2',
-				'wcpos_client'   => 'web/1.11.0',
+				'wcpos_client'   => 'web/2.0.0',
 			)
 		);
 

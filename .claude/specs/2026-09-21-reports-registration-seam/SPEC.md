@@ -115,7 +115,7 @@ not take the Reports page down.
  *  what each key means, the resolved-scope contract the callable receives, the document it
  *  must return, and that a report without a callback is computed on the device]
  *
- * @since 1.11.0
+ * @since 2.0.0
  * @hook woocommerce_pos_reports
  */
 $reports = apply_filters( 'woocommerce_pos_reports', $reports );
@@ -337,7 +337,7 @@ filtered document that breaks the schema is caught:
  * @param array  $data  The report document.
  * @param string $key   The report key.
  * @param array  $scope The resolved scope (see Report_Scope_Resolver).
- * @since 1.11.0
+ * @since 2.0.0
  * @hook woocommerce_pos_report_data
  */
 $data = (array) apply_filters( 'woocommerce_pos_report_data', $data, $key, $scope );

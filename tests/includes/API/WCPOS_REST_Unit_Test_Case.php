@@ -111,7 +111,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 
 	/**
 	 * Build a GET request the way a current POS client sends it: the WCPOS marker
-	 * plus the protocol signal the 1.11.0 gate requires (free#1868). Gate tests
+	 * plus the protocol signal the 2.0.0 gate requires (free#1868). Gate tests
 	 * strip the protocol header to model a pre-boundary client.
 	 *
 	 * @param string $path Route path.

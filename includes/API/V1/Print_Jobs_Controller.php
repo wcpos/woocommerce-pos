@@ -88,7 +88,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			),
 			// The wp-admin settings screen drives the queue, reprint, test print,
 			// relay registration and the PrintNode / Star lookups with cookie auth
-			// and no client protocol claim; unchanged at the 1.11.0 boundary. The
+			// and no client protocol claim; unchanged at the 2.0.0 boundary. The
 			// two discovery routes sit at the namespace root, outside the prefix.
 			'protocol_exempt' => array(
 				"/{$this->namespace}/{$this->rest_base}",

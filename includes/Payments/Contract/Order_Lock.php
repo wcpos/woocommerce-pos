@@ -211,7 +211,7 @@ final class Order_Lock {
 			/**
 			 * Filters whether nested named locks are trusted on this database server.
 			 *
-			 * @since 1.11.0
+			 * @since 2.0.0
 			 *
 			 * @param bool   $supported Detected from the server version.
 			 * @param string $info      The server version string.

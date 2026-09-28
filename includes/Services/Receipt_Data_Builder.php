@@ -299,7 +299,7 @@ class Receipt_Data_Builder {
 		 * @param string $key   The report key.
 		 * @param array  $scope The resolved scope (see Report_Scope_Resolver).
 		 *
-		 * @since 1.11.0
+		 * @since 2.0.0
 		 *
 		 * @hook woocommerce_pos_report_data
 		 */

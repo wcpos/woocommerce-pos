@@ -573,7 +573,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 		} else {
 			$request = new WP_REST_Request( $method, $path );
 			$request->set_header( 'X-WCPOS', '1' );
-			// A current client: the 1.11.0 protocol gate refuses marked v2 requests without this (free#1868).
+			// A current client: the 2.0.0 protocol gate refuses marked v2 requests without this (free#1868).
 			$request->set_header( 'X-WCPOS-Protocol', '2' );
 		}
 

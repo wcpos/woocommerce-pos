@@ -1,6 +1,6 @@
 <?php
 /**
- * Update to 1.11.0.
+ * Update to 2.0.0.
  *
  * POS Only now implies WooCommerce catalog visibility `hidden` (#1862), kept in
  * step by Catalog_Visibility on every later write. Products that were already
@@ -22,5 +22,5 @@ namespace WCPOS\WooCommercePOS;
  * Gallery_Update_Status::maintain(), which db_upgrade() calls immediately after this loop and
  * admin_init calls again if an upgrade ever bumps the version without reaching woocommerce_init.
  * A versioned file cannot host a recurring reconciliation: this one stops being included the
- * moment the stored version passes 1.11.0.
+ * moment the stored version passes 2.0.0.
  */
