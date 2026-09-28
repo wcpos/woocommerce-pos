@@ -892,7 +892,14 @@ class Receipt_Data_Builder {
 		// resolved (its session's store, its register), or the sale's when the refund carries none.
 		$store_id = (int) ( $provenance['store_id'] ?? 0 );
 		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id, array( 'status' => array( 'publish', 'trash' ) ) ) : null;
-		$data = $this->build_data( $order, \is_object( $pos_store ) ? $pos_store : null );
+		$store_missing = $store_id > 0 && ! \is_object( $pos_store );
+		// A deleted refund store keeps its id on the document, the way a deleted order store does.
+		$data = $this->build_data( $order, $store_missing ? new \stdClass() : ( \is_object( $pos_store ) ? $pos_store : null ) );
+		if ( $store_missing ) {
+			$data['store']['id'] = $store_id;
+			/* translators: %d: store ID. */
+			$data['store']['name'] = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $store_id );
+		}
 		$register_id = (string) ( $provenance['register_id'] ?? $refund->get_meta( '_wcpos_register', true ) );
 		if ( Pos_Uuid::is_uuid( $register_id ) ) {
 			global $wpdb;
