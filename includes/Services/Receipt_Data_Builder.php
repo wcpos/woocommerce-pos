@@ -884,6 +884,7 @@ class Receipt_Data_Builder {
 	 * @param int              $number Minted refund sequence.
 	 * @param string|null      $corrects Original sale identity.
 	 * @param array|null       $provenance Resolved refund provenance (store_id, register_id).
+	 * @throws \RuntimeException When the refund's register cannot be read.
 	 * @throws \RuntimeException When the refund document cannot be encoded.
 	 */
 	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects, ?array $provenance = null ): array {
@@ -893,11 +894,16 @@ class Receipt_Data_Builder {
 		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id, array( 'status' => array( 'publish', 'trash' ) ) ) : null;
 		$data = $this->build_data( $order, \is_object( $pos_store ) ? $pos_store : null );
 		$register_id = (string) ( $provenance['register_id'] ?? $refund->get_meta( '_wcpos_register', true ) );
-		$register_row = Pos_Uuid::is_uuid( $register_id ) ? ( new Register_Store() )->get( strtolower( $register_id ) ) : null;
-		if ( $register_row ) {
+		if ( Pos_Uuid::is_uuid( $register_id ) ) {
+			global $wpdb;
+			$register_row = ( new Register_Store() )->get( strtolower( $register_id ) );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Refund register read failed.' );
+			}
+			// The stamped id stays truthful even when the register row is gone.
 			$data['register'] = array(
-				'id' => $register_row['id'],
-				'name' => $register_row['name'],
+				'id' => $register_row['id'] ?? strtolower( $register_id ),
+				'name' => $register_row['name'] ?? '',
 			);
 		}
 		$display_incl = ! empty( $data['tax']['display_incl'] );

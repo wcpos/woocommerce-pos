@@ -432,11 +432,13 @@ final class Register_Session_Store {
 	/** Attribute a refund to succeeded ledger allocations, with the remainder in cash.
 	 *
 	 * @param \WC_Order_Refund $refund Refund to attribute.
+	 * @throws \RuntimeException When the parent order cannot be read.
 	 */
 	public function refund_tender_rows( \WC_Order_Refund $refund ): array {
 		$order = wc_get_order( $refund->get_parent_id() );
 		if ( ! $order ) {
-			return array();
+			// Silently attributing nothing would let a closure count a zero refund and stamp it.
+			throw new \RuntimeException( 'Refund parent order could not be read.' );
 		}
 		$rows = array();
 		$remaining = Money::minor( $refund->get_amount() );

@@ -194,6 +194,9 @@ final class Closure_Store {
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Closure read failed.' );
 		}
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Closure read failed.' );
+		}
 		foreach ( $rows as &$row ) {
 			foreach ( array( 'number', 'printed_number', 'store_id', 'opened_by', 'closed_by', 'approved_by', 'unsynced_count', 'first_sale_counter', 'last_sale_counter', 'first_receipt_id', 'last_receipt_id', 'print_count' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];

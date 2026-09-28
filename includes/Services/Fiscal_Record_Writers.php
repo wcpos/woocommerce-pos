@@ -222,29 +222,24 @@ final class Fiscal_Record_Writers {
 		$sale = $this->store->find_sale( $order_id );
 		try {
 			$provenance = $this->refund_provenance( $order, $refund );
-		} catch ( \Throwable $error ) {
-			$this->fail_quietly( 'refund', $order, $refund, $error );
-			return;
-		}
-		$this->write(
-			$order,
-			array_merge(
-				$provenance,
-				array(
-					'type' => 'refund',
-					'order_id' => $order_id,
-					'refund_id' => $refund_id,
-					'corrects_record_id' => $sale['id'] ?? null,
-					'device_time' => null,
-					'device_tz' => null,
-					'cashier_id' => (int) $refund->get_refunded_by(),
-					'payload' => static function ( int $number ) use ( $order, $refund, $sale, $provenance ): array {
-						return ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, $number, $sale['payload']['fiscal']['immutable_id'] ?? null, $provenance );
-					},
+			$this->write(
+				$order,
+				array_merge(
+					$provenance,
+					array(
+						'type' => 'refund',
+						'order_id' => $order_id,
+						'refund_id' => $refund_id,
+						'corrects_record_id' => $sale['id'] ?? null,
+						'device_time' => null,
+						'device_tz' => null,
+						'cashier_id' => (int) $refund->get_refunded_by(),
+						'payload' => static function ( int $number ) use ( $order, $refund, $sale, $provenance ): array {
+							return ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, $number, $sale['payload']['fiscal']['immutable_id'] ?? null, $provenance );
+						},
+					)
 				)
-			)
-		);
-		try {
+			);
 			$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
 			$record = $this->store->find_refund( $order_id, $refund_id );
 			// A refund the closure counted (or a replay of one) is not late.
@@ -252,8 +247,8 @@ final class Fiscal_Record_Writers {
 				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
 			}
 		} catch ( \Throwable $error ) {
-			// The refund and its record are durable; the correction must not fail the request.
-			$this->fail_quietly( 'late_refund', $order, $refund, $error );
+			// The refund is durable; fiscal bookkeeping must not fail its request, only signal.
+			$this->fail_quietly( 'refund', $order, $refund, $error );
 		}
 	}
 

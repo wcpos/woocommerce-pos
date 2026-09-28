@@ -615,24 +615,29 @@ class Ledger {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
+		// A handler may save a different amount than was requested: hold it to the same caps.
 		$refunded = 0;
+		$reserved = 0;
+		$saved = 0;
 		foreach ( $row['refunds'] as $allocation ) {
 			if ( 'succeeded' === $allocation['status'] ) {
 				$refunded += Money::minor( $allocation['amount'] );
 			}
+			if ( in_array( $allocation['status'], array( 'succeeded', 'pending' ), true ) ) {
+				$reserved += Money::minor( $allocation['amount'] );
+				if ( (int) $allocation['id'] === $refund_id ) {
+					$saved += Money::minor( $allocation['amount'] );
+				}
+			}
+		}
+		if ( $reserved > Money::minor( $row['amount'] ) || ( $refund_amount > 0 && $refund_allocated + $saved > $refund_amount ) ) {
+			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $row );
 		$this->replace_and_save( $order, $rows, $row );
-		// A handler may save a different amount than was requested; observers get what was saved.
-		$saved = $amount;
-		foreach ( $row['refunds'] as $allocation ) {
-			if ( (int) $allocation['id'] === $refund_id ) {
-				$saved = $allocation['amount'];
-			}
-		}
 		/** Fires after saving the allocation: order, payment row, refund, the saved amount. */
-		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::normalize( $saved ) );
+		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
 		return $row;
 	}
 
