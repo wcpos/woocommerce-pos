@@ -883,17 +883,16 @@ class Receipt_Data_Builder {
 	 * @param \WC_Order_Refund $refund Refund document source.
 	 * @param int              $number Minted refund sequence.
 	 * @param string|null      $corrects Original sale identity.
+	 * @param array|null       $provenance Resolved refund provenance (store_id, register_id).
 	 * @throws \RuntimeException When the refund document cannot be encoded.
 	 */
-	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects ): array {
-		// The document identifies where the refund was made: its session's store and its register,
-		// falling back to the sale's when the refund carries no stamp.
-		$session_id = (string) $refund->get_meta( '_wcpos_session', true );
-		$session = Pos_Uuid::is_uuid( $session_id ) ? ( new Register_Session_Store() )->get( strtolower( $session_id ) ) : null;
-		$store_id = (int) ( $session['store_id'] ?? 0 );
+	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects, ?array $provenance = null ): array {
+		// The document identifies where the refund was made: the provenance the record writer
+		// resolved (its session's store, its register), or the sale's when the refund carries none.
+		$store_id = (int) ( $provenance['store_id'] ?? 0 );
 		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id, array( 'status' => array( 'publish', 'trash' ) ) ) : null;
 		$data = $this->build_data( $order, \is_object( $pos_store ) ? $pos_store : null );
-		$register_id = (string) $refund->get_meta( '_wcpos_register', true );
+		$register_id = (string) ( $provenance['register_id'] ?? $refund->get_meta( '_wcpos_register', true ) );
 		$register_row = Pos_Uuid::is_uuid( $register_id ) ? ( new Register_Store() )->get( strtolower( $register_id ) ) : null;
 		if ( $register_row ) {
 			$data['register'] = array(

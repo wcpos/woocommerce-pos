@@ -624,8 +624,15 @@ class Ledger {
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $row );
 		$this->replace_and_save( $order, $rows, $row );
-		/** Fires after saving the allocation: order, payment row, refund, normalized amount. */
-		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::normalize( $amount ) );
+		// A handler may save a different amount than was requested; observers get what was saved.
+		$saved = $amount;
+		foreach ( $row['refunds'] as $allocation ) {
+			if ( (int) $allocation['id'] === $refund_id ) {
+				$saved = $allocation['amount'];
+			}
+		}
+		/** Fires after saving the allocation: order, payment row, refund, the saved amount. */
+		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::normalize( $saved ) );
 		return $row;
 	}
 

@@ -238,8 +238,8 @@ final class Fiscal_Record_Writers {
 					'device_time' => null,
 					'device_tz' => null,
 					'cashier_id' => (int) $refund->get_refunded_by(),
-					'payload' => static function ( int $number ) use ( $order, $refund, $sale ): array {
-						return ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, $number, $sale['payload']['fiscal']['immutable_id'] ?? null );
+					'payload' => static function ( int $number ) use ( $order, $refund, $sale, $provenance ): array {
+						return ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, $number, $sale['payload']['fiscal']['immutable_id'] ?? null, $provenance );
 					},
 				)
 			)

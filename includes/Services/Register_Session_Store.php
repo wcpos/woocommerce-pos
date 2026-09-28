@@ -481,7 +481,7 @@ final class Register_Session_Store {
 		$orders = $hpos ? $wpdb->prefix . 'wc_orders' : $wpdb->posts;
 		$type = $hpos ? 'type' : 'post_type';
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT m.{$key} FROM {$table} m INNER JOIN {$orders} o ON o.id = m.{$key} WHERE m.meta_key = %s AND m.meta_value = %s AND o.{$type} = %s ORDER BY m.{$key} DESC", '_wcpos_session', $session['id'], 'shop_order_refund' ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT m.{$key} FROM {$table} m INNER JOIN {$orders} o ON o.id = m.{$key} WHERE m.meta_key = %s AND LOWER(m.meta_value) = %s AND o.{$type} = %s ORDER BY m.{$key} DESC", '_wcpos_session', strtolower( $session['id'] ), 'shop_order_refund' ) );
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Session refunds read failed.' );
 		}
