@@ -239,12 +239,29 @@ final class Fiscal_Record_Writers {
 				)
 			)
 		);
-		$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
-		$record = $this->store->find_refund( $order_id, $refund_id );
-		// A refund the closure counted (or a replay of one) is not late.
-		if ( $closure && $record && ! $this->closure_counted( $refund, $closure ) ) {
-			$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
+		try {
+			$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
+			$record = $this->store->find_refund( $order_id, $refund_id );
+			// A refund the closure counted (or a replay of one) is not late.
+			if ( $closure && $record && ! $this->closure_counted( $refund, $closure ) ) {
+				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
+			}
+		} catch ( \Throwable $error ) {
+			// The refund and its record are durable; the correction must not fail the request.
+			$this->fail_quietly( 'late_refund', $order, $refund, $error );
 		}
+	}
+
+	/** Log a lost correction and fire the recovery signal without failing the caller.
+	 *
+	 * @param string          $type Record type.
+	 * @param WC_Order        $order Parent order.
+	 * @param WC_Order_Refund $refund Refund object.
+	 * @param \Throwable      $error What went wrong.
+	 */
+	private function fail_quietly( string $type, WC_Order $order, WC_Order_Refund $refund, \Throwable $error ): void {
+		Logger::log( 'Fiscal ' . $type . ' record failed: ' . $error->getMessage() );
+		do_action( 'woocommerce_pos_fiscal_record_failed', $type, $order, array( 'refund_id' => $refund->get_id() ) );
 	}
 
 	/** Provenance for a refund's records: the refund's own stamp and its session's store.
@@ -327,16 +344,7 @@ final class Fiscal_Record_Writers {
 			$this->record_reallocation( $order, $row, $refund, $amount );
 		} catch ( \Throwable $error ) {
 			// The allocation is already saved; fiscal bookkeeping must not fail the request.
-			Logger::log( 'Fiscal reallocation record failed: ' . $error->getMessage() );
-			do_action(
-				'woocommerce_pos_fiscal_record_failed',
-				'late_refund',
-				$order,
-				array(
-					'refund_id' => $refund->get_id(),
-					'payment_id' => $row['id'] ?? null,
-				)
-			);
+			$this->fail_quietly( 'late_refund', $order, $refund, $error );
 		}
 	}
 

@@ -524,6 +524,10 @@ final class Closure_Store {
 			foreach ( $refunds as $refund ) {
 				$refund['refund']->update_meta_data( '_wcpos_closure', $fields['id'] );
 				$refund['refund']->save_meta_data();
+				// An unstamped counted refund would later read as a late arrival: fail the closure instead.
+				if ( '' !== $wpdb->last_error || (string) $refund['refund']->get_meta( '_wcpos_closure', true ) !== (string) $fields['id'] ) {
+					throw new \RuntimeException( 'Closure refund stamp failed.' );
+				}
 			}
 			$findings = array();
 			foreach ( $totals as $kind => $amounts ) {

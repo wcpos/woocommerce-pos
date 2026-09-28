@@ -33,6 +33,15 @@ class Receipt_Data_Builder {
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
 			$refund_count = count( $refunds );
+			foreach ( $refunds as $refund ) {
+				$id = (int) $refund['refund']->get_refunded_by();
+				if ( $id ) {
+					$cashiers[ $id ] = array(
+						'id' => $id,
+						'name' => get_userdata( $id )->display_name ?? (string) $id,
+					);
+				}
+			}
 			foreach ( $orders as $payments ) {
 				foreach ( $payments as $payment ) {
 					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) ) {
