@@ -142,6 +142,29 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** A paid status landed after the gateway answered is not the gateway paying. */
+	public function test_status_change_after_gateway_result_does_not_mint_webview_row(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$this->in_pos_request(
+			function () use ( $order ): void {
+				// Act: the pay form armed the order, the gateway returned success without
+				// landing a status, and something moved the order to a paid status after.
+				do_action( 'woocommerce_before_pay_action', $order );
+				$result = apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+				$order->set_status( 'processing' );
+				$order->save();
+
+				// Assert.
+				$this->assertSame( array( 'result' => 'success' ), $result, 'The result passes through untouched.' );
+				$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			}
+		);
+	}
+
 	/**
 	 * Run a callback with the POS request query var set.
 	 *

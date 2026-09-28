@@ -18,6 +18,8 @@ use WC_Order_Item_Product;
 use WC_Product_Simple;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Orders;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
 /**
@@ -1785,6 +1787,39 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$fresh = wc_get_order( $order->get_id() );
 		$this->assertSame( 'on-hold', $fresh->get_status() );
 		$this->assertNull( $fresh->get_date_paid(), 'An unpaid gateway must not stamp date_paid.' );
+	}
+
+	/**
+	 * No payment was taken, so the ledger must not say it was.
+	 *
+	 * On the order-pay request the webview passthrough is armed for this order
+	 * before the gateway runs, and a transition to a paid status while it is
+	 * armed reads as an offline tender. The configured status is applied after
+	 * the gateway answered, so it must not mint a captured row.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_does_not_mint_webview_ledger_row(): void {
+		// Arrange.
+		Webview_Passthrough::register_hooks();
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->set_total( '92.95' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act: the pay form arms the passthrough, then the gateway returns success.
+		do_action( 'woocommerce_before_pay_action', $order );
+		apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid(), 'An unpaid gateway must not stamp date_paid.' );
+		$this->assertSame( array(), Ledger::instance()->read( $fresh ), 'An unpaid gateway must not mint a captured ledger row.' );
 	}
 
 	/**
