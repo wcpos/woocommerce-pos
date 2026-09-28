@@ -268,7 +268,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 					set_transient(
 						$this->transient_key . '_' . $candidate_locale,
 						$this->version,
-						$this->version === self::ROLLING_TRANSLATION_VERSION ? self::ROLLING_TRANSLATION_CACHE_TTL : WEEK_IN_SECONDS
+						self::ROLLING_TRANSLATION_VERSION === $this->version ? self::ROLLING_TRANSLATION_CACHE_TTL : WEEK_IN_SECONDS
 					);
 					delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
 					delete_transient( $this->get_write_failed_transient_key() );
