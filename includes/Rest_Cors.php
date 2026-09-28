@@ -345,6 +345,16 @@ final class Rest_Cors {
 			return true;
 		}
 
+		// The client's discovery probe of the REST index. When a host strips the
+		// front page's `Link` header, `use-url-discovery.ts` falls back to a HEAD
+		// of `/wp-json/`, sent as `?_method=head` with no marker (HEAD carries no
+		// `X-WCPOS` so it needs no preflight). The front-end twin lives in
+		// `Init::send_headers()`; before 1.10.0 every REST response was stamped,
+		// so the probe never needed claiming (roadmap#383).
+		if ( '/' === $request->get_route() && isset( $query_params['_method'] ) && 'head' === strtolower( (string) $query_params['_method'] ) ) {
+			return true;
+		}
+
 		return 'OPTIONS' === $request->get_method() && self::preflight_announces_wcpos( $request );
 	}
 

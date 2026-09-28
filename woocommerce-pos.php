@@ -14,7 +14,7 @@
  * Tested up to:      7.1
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
- * WC tested up to:   11.1.0
+ * WC tested up to:   11.1.2
  * WC requires at least: 9.0
  *
  * @see      http://wcpos.com
@@ -43,7 +43,9 @@ if ( ! class_exists( API\V2\Ping::class, false ) ) {
 API\V2\Ping::maybe_serve();
 
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.9.10' );
+	// On next, this is wcpos/translations' moving jsDelivr branch ref, refreshed by the CDN within about 12 hours.
+	// On main, the release workflow replaces it with a CalVer tag; resolve this one-line conflict in main's favour when merging next.
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', 'next' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );

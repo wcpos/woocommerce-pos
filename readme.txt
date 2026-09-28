@@ -128,6 +128,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.10.20 - 2026/09/23 =
+
+- **Checkout no longer reports "Checkout failed" for a sale that reached the store.** If the till was busy sending another change, or an earlier attempt had failed, the checkout screen could give up waiting even though the order had been saved. It now hears back as soon as the order is saved, and pressing Checkout again after a failure tries straight away.
+- **Search repairs a damaged search index instead of failing at every launch.** When the saved search index could not be read, search stayed broken with "Failed to initialize search". The index is now discarded and rebuilt from the till's records.
+- **Gateways that take no payment at the till — quotes, invoices, purchase orders — now close the order with the Order Status you set for them.** The checkout used to succeed but leave the order at POS - Open. Only gateways with an Order Status saved in POS > Settings > Checkout are affected, and the order is not marked paid.
+- **Refunds that arrive from a payment gateway now respect your POS customer-email settings.** A refund recorded by a gateway's webhook could email the customer even with POS customer emails switched off; refunds made in wp-admin or at the till were not affected.
+
 = 1.10.19 - 2026/09/19 =
 
 - **A till no longer loses live records during its startup tidy-up.** With the POS open twice on the same device, the tidy-up could mistake live records — including the sign-in row — for damaged ones and remove them. It now leaves alone anything it cannot fully account for. Web merchants receive this through WCPOS plugin 1.10.19, which serves the storage worker; desktop and phone apps carry it in this release.

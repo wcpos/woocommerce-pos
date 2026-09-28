@@ -25,6 +25,9 @@ class Webview_Passthrough {
 	public static function register_hooks(): void {
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 10, 1 );
 		add_action( 'woocommerce_before_pay_action', array( __CLASS__, 'on_before_pay_action' ), 10, 1 );
+		// Priority 1: the window must close before Orders::apply_unpaid_gateway_order_status()
+		// runs on this same filter at 10 and lands the merchant's configured status.
+		add_filter( 'woocommerce_payment_successful_result', array( __CLASS__, 'on_payment_successful_result' ), 1, 2 );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 10, 3 );
 	}
 
@@ -41,6 +44,30 @@ class Webview_Passthrough {
 	 */
 	public static function on_before_pay_action( $order ): void {
 		self::$paying_order_id = $order instanceof WC_Order ? $order->get_id() : 0;
+	}
+
+	/**
+	 * Forget the paying order once the gateway has answered.
+	 *
+	 * WC_Form_Handler::pay_action() applies this filter after process_payment()
+	 * returns success, so a status the gateway landed is already recorded by now
+	 * and anything that moves the order afterwards is not the gateway paying it.
+	 * Orders::apply_unpaid_gateway_order_status() runs on this very filter for a
+	 * gateway that took no payment, applying the merchant's configured status and
+	 * withholding date_paid on purpose; with the window still open that transition
+	 * read as an offline tender and minted a captured row for the full total.
+	 *
+	 * @param mixed $result   Gateway result, passed through untouched.
+	 * @param mixed $order_id Order being paid.
+	 *
+	 * @return mixed
+	 */
+	public static function on_payment_successful_result( $result, $order_id ) {
+		if ( self::$paying_order_id === (int) $order_id ) {
+			self::$paying_order_id = 0;
+		}
+
+		return $result;
 	}
 
 	/**

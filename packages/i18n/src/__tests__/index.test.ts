@@ -235,3 +235,29 @@ describe('createI18nInstance fallback to bundled English', () => {
 		expect(t('common.settings')).toBe('Settings');
 	});
 });
+
+describe('createI18nInstance localStorage cache lifetime', () => {
+	const originalWcpos = (window as any).wcpos;
+
+	afterEach(() => {
+		(window as any).wcpos = originalWcpos;
+	});
+
+	function cacheExpirationFor(translationVersion: string): number {
+		(window as any).wcpos = { translationVersion };
+		const { i18n } = createI18nInstance({
+			namespace: NS,
+			project: 'woocommerce-pos',
+			resources: { en: { [NS]: enTranslations } },
+		});
+		return (i18n.options.backend as any).backendOptions[0].expirationTime;
+	}
+
+	it('keeps a pinned CalVer version for 7 days', () => {
+		expect(cacheExpirationFor('2026.9.12')).toBe(7 * 24 * 60 * 60 * 1000);
+	});
+
+	it('expires the rolling next ref after 12 hours', () => {
+		expect(cacheExpirationFor('next')).toBe(12 * 60 * 60 * 1000);
+	});
+});
