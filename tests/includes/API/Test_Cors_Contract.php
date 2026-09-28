@@ -456,6 +456,45 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The client's discovery fallback: a marker-less `?_method=head` of the
+	 * REST index when the front page carries no `Link` header (roadmap#383).
+	 * Before 1.10.0 every REST response was stamped, so the probe never needed
+	 * claiming; the ownership rule has to claim it explicitly now.
+	 *
+	 * @return void
+	 */
+	public function test_rest_index_head_probe_is_claimed(): void {
+		// Arrange.
+		$server  = $this->new_spy_server();
+		$request = new WP_REST_Request( 'GET', '/' );
+		$request->set_query_params( array( '_method' => 'HEAD' ) );
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		// Assert.
+		$this->assertSame( '*', $server->sent_headers['Access-Control-Allow-Origin'] ?? null );
+	}
+
+	/**
+	 * The plain REST index stays core's: the probe claim keys on `_method=head`,
+	 * not on the route alone.
+	 *
+	 * @return void
+	 */
+	public function test_plain_rest_index_request_is_left_to_core(): void {
+		// Arrange.
+		$server  = $this->new_spy_server();
+		$request = new WP_REST_Request( 'GET', '/' );
+
+		// Act.
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		// Assert.
+		$this->assertArrayNotHasKey( 'Access-Control-Allow-Origin', $server->sent_headers );
+	}
+
+	/**
 	 * A REST server that records sent headers instead of emitting them.
 	 *
 	 * `sent_headers` models header()'s replace semantics (last writer wins);
