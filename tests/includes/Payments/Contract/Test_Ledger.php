@@ -22,13 +22,21 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		Capture_Mode_Registry::instance()->register( 'integrity', Integrity_Handler::class );
 		Integrity_Handler::$calls = 0;
 		Integrity_Handler::$tips = 'none';
-		add_filter( 'wcpos_payment_method_capture_mode', static function ( $mode, $gateway ) {
-			return 'pos_card' === $gateway->id ? 'integrity' : $mode;
-		}, 10, 2 );
-		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {
-			$settings['gateways']['pos_card']['enabled'] = true;
-			return $settings;
-		} );
+		add_filter(
+			'wcpos_payment_method_capture_mode',
+			static function ( $mode, $gateway ) {
+				return 'pos_card' === $gateway->id ? 'integrity' : $mode;
+			},
+			10,
+			2
+		);
+		add_filter(
+			'woocommerce_pos_payment_gateways_settings',
+			static function ( $settings ) {
+				$settings['gateways']['pos_card']['enabled'] = true;
+				return $settings;
+			}
+		);
 	}
 
 	public function test_record_provenance_survives_transitions_and_register_replay_conflicts(): void {
@@ -37,7 +45,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$input = $this->payment( 'pos_cash', '20.00' );
 		$input['register_id'] = strtoupper( wp_generate_uuid4() );
 		$input['session_id'] = strtoupper( wp_generate_uuid4() );
-		$row = $ledger->record( $order, $input, array( 'register_id' => wp_generate_uuid4(), 'session_id' => wp_generate_uuid4() ) );
+		$row = $ledger->record(
+			$order,
+			$input,
+			array(
+				'register_id' => wp_generate_uuid4(),
+				'session_id' => wp_generate_uuid4(),
+			)
+		);
 		$this->assertSame( strtolower( $input['register_id'] ), $row['register_id'] );
 		$this->assertSame( strtolower( $input['session_id'] ), $row['session_id'] );
 		$stored = $ledger->find( wc_get_order( $order->get_id() ), $row['id'] );
@@ -45,7 +60,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $row['session_id'], $stored['session_id'] );
 		$row['status'] = 'authorized';
 		foreach ( array( 'captured', 'voided' ) as $status ) {
-			$row = $ledger->apply_transition( $row, array( 'status' => $status, 'register_id' => wp_generate_uuid4(), 'session_id' => wp_generate_uuid4() ) );
+			$row = $ledger->apply_transition(
+				$row,
+				array(
+					'status' => $status,
+					'register_id' => wp_generate_uuid4(),
+					'session_id' => wp_generate_uuid4(),
+				)
+			);
 			$this->assertSame( $status, $row['status'] );
 			$this->assertSame( strtolower( $input['register_id'] ), $row['register_id'] );
 			$this->assertSame( strtolower( $input['session_id'] ), $row['session_id'] );
@@ -60,7 +82,13 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_record_invalid_provenance_normalizes_to_null(): void {
 		$order = $this->create_pos_order();
-		$input = array_merge( $this->payment( 'pos_cash', '20.00' ), array( 'register_id' => array(), 'session_id' => 'bad' ) );
+		$input = array_merge(
+			$this->payment( 'pos_cash', '20.00' ),
+			array(
+				'register_id' => array(),
+				'session_id' => 'bad',
+			)
+		);
 		$row = Ledger::instance()->record( $order, $input );
 		$this->assertNull( $row['register_id'] );
 		$this->assertNull( $row['session_id'] );
@@ -71,10 +99,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_intent_disabled_method_returns_403(): void {
 		$order = $this->create_pos_order();
-		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {
-			$settings['gateways']['pos_card']['enabled'] = false;
-			return $settings;
-		}, 20 );
+		add_filter(
+			'woocommerce_pos_payment_gateways_settings',
+			static function ( $settings ) {
+				$settings['gateways']['pos_card']['enabled'] = false;
+				return $settings;
+			},
+			20
+		);
 		$input = $this->payment( 'pos_card', '20.00' );
 		$error = Ledger::instance()->intent( $order, $input['id'], $input, array() );
 		$this->assertSame( 'wcpos_payment_method_disabled', $error->get_error_code() );
@@ -105,7 +137,16 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	/** A device leg is minted for one reader; the order keeps which one, and nothing else the till claims. */
 	public function test_intent_keeps_the_reader_from_the_row_and_no_other_client_ref(): void {
 		$order = $this->create_pos_order();
-		$input = $this->payment( 'pos_card', '20.00', array( 'provider_refs' => array( 'reader' => 'sn-1', 'payment_intent' => 'pi_forged' ) ) );
+		$input = $this->payment(
+			'pos_card',
+			'20.00',
+			array(
+				'provider_refs' => array(
+					'reader' => 'sn-1',
+					'payment_intent' => 'pi_forged',
+				),
+			)
+		);
 		Ledger::instance()->intent( $order, $input['id'], $input, array() );
 		$this->assertSame( array( 'reader' => 'sn-1' ), Ledger::instance()->find( $order, $input['id'] )['provider_refs'] );
 	}
@@ -196,8 +237,22 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function capture_confirmations(): array {
 		return array(
 			'exact' => array( array( 'amount' => '92.95' ), 'none', false ),
-			'authorized exact' => array( array( 'status' => 'authorized', 'amount' => '92.95' ), 'none', false ),
-			'authorized mismatch' => array( array( 'status' => 'authorized', 'amount' => '90.00' ), 'none', true ),
+			'authorized exact' => array(
+				array(
+					'status' => 'authorized',
+					'amount' => '92.95',
+				),
+				'none',
+				false,
+			),
+			'authorized mismatch' => array(
+				array(
+					'status' => 'authorized',
+					'amount' => '90.00',
+				),
+				'none',
+				true,
+			),
 			'implicit' => array( array(), 'none', false ),
 			'tip' => array( array( 'amount' => '100.00' ), 'on_reader', false ),
 			'over' => array( array( 'amount' => '100.00' ), 'none', true ),
@@ -295,7 +350,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_pos_order();
 		$ledger = Ledger::instance();
 		$row = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
-		$row['refunds'] = array( array( 'id' => 123, 'amount' => '15.00', 'status' => 'pending', 'provider_ref' => null ) );
+		$row['refunds'] = array(
+			array(
+				'id' => 123,
+				'amount' => '15.00',
+				'status' => 'pending',
+				'provider_ref' => null,
+			),
+		);
 		$ledger->save( $order, array( $row ) );
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
@@ -305,6 +367,28 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 400, $error->get_error_data()['status'] );
 		$exact = $ledger->refund( $order, $row['id'], $refund->get_id(), '5.00' );
 		$this->assertSame( '5.00', $exact['refunded_amount'] );
+	}
+
+	/** Allocations for one refund across every row are capped by the refund's own amount. */
+	public function test_refund_allocations_across_rows_cannot_exceed_the_refund_amount(): void {
+		// Arrange: two rows, one 10.00 refund.
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$cash = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$card = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '10.00' );
+		$refund->save();
+		// Act.
+		$first = $ledger->refund( $order, $cash['id'], $refund->get_id(), '6.00' );
+		$over = $ledger->refund( $order, $card['id'], $refund->get_id(), '6.00' );
+		$rest = $ledger->refund( $order, $card['id'], $refund->get_id(), '4.00' );
+		// Assert.
+		$this->assertSame( '6.00', $first['refunded_amount'] );
+		$this->assertSame( 'wcpos_refund_not_allocatable', $over->get_error_code() );
+		$this->assertSame( 400, $over->get_error_data()['status'] );
+		$this->assertSame( '4.00', $rest['refunded_amount'] );
 	}
 
 	public function test_refund_rejects_foreign_parent(): void {
@@ -319,12 +403,26 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_row_schema_normalizes_expiry_and_seen_events(): void {
 		$order = $this->create_pos_order();
-		$row = $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending', 'expires_at' => 'invalid', 'seen_events' => array( 'event', 123 ) ) );
+		$row = $this->payment(
+			'pos_cash',
+			'20.00',
+			array(
+				'status' => 'pending',
+				'expires_at' => 'invalid',
+				'seen_events' => array( 'event', 123 ),
+			)
+		);
 		Ledger::instance()->save( $order, array( $row ) );
 		$stored = Ledger::instance()->find( $order, $row['id'] );
 		$this->assertNull( $stored['expires_at'] );
 		$this->assertSame( array( 'event' ), $stored['seen_events'] );
-		$new = Ledger::instance()->apply_transition( $stored, array( 'expires_at' => '2026-09-09T00:00:00Z', 'seen_events' => array( 'forged' ) ) );
+		$new = Ledger::instance()->apply_transition(
+			$stored,
+			array(
+				'expires_at' => '2026-09-09T00:00:00Z',
+				'seen_events' => array( 'forged' ),
+			)
+		);
 		$this->assertSame( '2026-09-09T00:00:00Z', $new['expires_at'] );
 		$this->assertSame( array( 'event' ), $new['seen_events'] );
 	}
@@ -335,13 +433,26 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// A resumed intent that comes back captured for the wrong money is refused.
 		$input = $this->payment( 'pos_card', '20.00' );
 		$ledger->intent( $order, $input['id'], $input, array() );
-		$error = $ledger->intent( $order, $input['id'], $input, array( 'resume' => array( 'status' => 'captured', 'amount' => '999.00' ) ) );
+		$error = $ledger->intent(
+			$order,
+			$input['id'],
+			$input,
+			array(
+				'resume' => array(
+					'status' => 'captured',
+					'amount' => '999.00',
+				),
+			)
+		);
 		$this->assertSame( 'wcpos_amount_mismatch', $error->get_error_code() );
 		$this->assertSame( 'failed', $ledger->find( $order, $input['id'] )['status'] );
 		// A void whose cancel raced a capture is verified the same way.
 		$input = $this->payment( 'pos_card', '20.00' );
 		$ledger->intent( $order, $input['id'], $input, array() );
-		Integrity_Handler::$void_result = array( 'status' => 'captured', 'amount' => '999.00' );
+		Integrity_Handler::$void_result = array(
+			'status' => 'captured',
+			'amount' => '999.00',
+		);
 		$error = $ledger->void( $order, $input['id'], 'changed mind' );
 		$this->assertSame( 'wcpos_amount_mismatch', $error->get_error_code() );
 		// A cancel that is only requested leaves the row pending with the stamp.
@@ -356,7 +467,16 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function test_intent_drains_a_settlement_parked_before_the_row_existed(): void {
 		$order = $this->create_pos_order();
 		$input = $this->payment( 'pos_card', '20.00' );
-		$this->assertTrue( wcpos_settle_payment( $input['id'], array( 'status' => 'captured', 'amount' => '20.00', 'event_id' => 'early' ) ) );
+		$this->assertTrue(
+			wcpos_settle_payment(
+				$input['id'],
+				array(
+					'status' => 'captured',
+					'amount' => '20.00',
+					'event_id' => 'early',
+				)
+			)
+		);
 		$result = Ledger::instance()->intent( $order, $input['id'], $input, array() );
 		$this->assertSame( 'captured', $result['payment']['status'] );
 		$this->assertSame( array( 'early' ), $result['payment']['seen_events'] );
@@ -370,7 +490,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// complete the order on money that was already reversed — and never unwind it.
 		$order = $this->create_pos_order();
 		$input = $this->payment( 'pos_card', '92.95' );
-		$this->assertTrue( wcpos_settle_payment( $input['id'], array( 'status' => 'voided', 'event_id' => 'reversed' ) ) );
+		$this->assertTrue(
+			wcpos_settle_payment(
+				$input['id'],
+				array(
+					'status' => 'voided',
+					'event_id' => 'reversed',
+				)
+			)
+		);
 		$result = Ledger::instance()->intent( $order, $input['id'], $input, array( 'resume' => array( 'status' => 'authorized' ) ) );
 		$this->assertSame( 'voided', $result['payment']['status'] );
 		$order = wc_get_order( $order->get_id() );
@@ -381,7 +509,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_row_schema_carries_events_and_void_requested_at_for_handlers(): void {
 		$order = $this->create_pos_order();
-		$row = $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending', 'events' => 'nope', 'void_requested_at' => 'invalid' ) );
+		$row = $this->payment(
+			'pos_cash',
+			'20.00',
+			array(
+				'status' => 'pending',
+				'events' => 'nope',
+				'void_requested_at' => 'invalid',
+			)
+		);
 		Ledger::instance()->save( $order, array( $row ) );
 		$stored = Ledger::instance()->find( $order, $row['id'] );
 		$this->assertSame( array(), $stored['events'] );
@@ -389,9 +525,19 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// A handler owns both: they survive apply_transition, and the log is capped newest-last.
 		$events = array();
 		for ( $i = 0; $i < Ledger::EVENTS_MAX + 5; ++$i ) {
-			$events[] = array( 't' => gmdate( 'c' ), 'level' => 'info', 'message' => 'event ' . $i );
+			$events[] = array(
+				't' => gmdate( 'c' ),
+				'level' => 'info',
+				'message' => 'event ' . $i,
+			);
 		}
-		$new = Ledger::instance()->apply_transition( $stored, array( 'events' => $events, 'void_requested_at' => '2026-09-09T00:00:00Z' ) );
+		$new = Ledger::instance()->apply_transition(
+			$stored,
+			array(
+				'events' => $events,
+				'void_requested_at' => '2026-09-09T00:00:00Z',
+			)
+		);
 		Ledger::instance()->save( $order, array( $new ) );
 		$stored = Ledger::instance()->find( $order, $row['id'] );
 		$this->assertCount( Ledger::EVENTS_MAX, $stored['events'] );
@@ -487,7 +633,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$card = Ledger::instance()->record( $order, $this->payment( 'pos_card', '82.95', array( 'status' => 'authorized' ) ) );
 		$approved = $card['authorized_at_gmt'];
 		// A capture answer that carries no approval time (here an explicit null) must not erase it.
-		$captured = Ledger::instance()->apply_result( $order, $card['id'], array( 'status' => 'captured', 'captured_at_gmt' => '2030-01-01T00:00:00+00:00', 'authorized_at_gmt' => null ) );
+		$captured = Ledger::instance()->apply_result(
+			$order,
+			$card['id'],
+			array(
+				'status' => 'captured',
+				'captured_at_gmt' => '2030-01-01T00:00:00+00:00',
+				'authorized_at_gmt' => null,
+			)
+		);
 
 		// Assert.
 		$this->assertNotNull( $approved );
@@ -684,7 +838,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function test_void_pending_row_returns_order_to_open(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
-		$row   = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		$row   = $this->payment(
+			'pos_cash',
+			'10.00',
+			array(
+				'status' => 'pending',
+				'kind' => 'cash',
+				'capture_mode' => 'manual',
+			)
+		);
 		Ledger::instance()->save( $order, array( $row ) );
 		$this->assertSame( 'pending', $order->get_status() );
 
@@ -734,7 +896,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function test_void_captured_provider_row_is_invalid_transition(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
-		$row   = $this->payment( 'stripe_terminal', '20.00', array( 'status' => 'captured', 'kind' => 'card', 'capture_mode' => 'device' ) );
+		$row   = $this->payment(
+			'stripe_terminal',
+			'20.00',
+			array(
+				'status' => 'captured',
+				'kind' => 'card',
+				'capture_mode' => 'device',
+			)
+		);
 		Ledger::instance()->save( $order, array( $row ) );
 
 		// Act.
@@ -750,7 +920,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function test_status_projection_pending_row_flips_order_to_pending(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
-		$row   = $this->payment( 'pos_card', '20.00', array( 'status' => 'pending', 'kind' => 'card', 'capture_mode' => 'manual' ) );
+		$row   = $this->payment(
+			'pos_card',
+			'20.00',
+			array(
+				'status' => 'pending',
+				'kind' => 'card',
+				'capture_mode' => 'manual',
+			)
+		);
 
 		// Act.
 		Ledger::instance()->save( $order, array( $row ) );
@@ -796,7 +974,13 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			'amount'       => '10.00',
 			'status'       => 'captured',
 		);
-		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			array(
+				'schema' => Ledger::SCHEMA,
+				'payments' => array( $row ),
+			)
+		);
 		$order->save();
 
 		// Act.
@@ -813,7 +997,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_pos_order();
 		$row   = $this->payment( 'pos_card', '20.00', array( 'status' => 'pending' ) );
 		unset( $row['capture_mode'] );
-		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) ) );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => array( $row ),
+				)
+			)
+		);
 		$order->save();
 
 		// Act.
@@ -831,7 +1023,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_pos_order();
 		$row   = $this->payment( 'pos_card', '20.00', array( 'capture_mode' => 'manual' ) );
 		unset( $row['status'] );
-		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) ) );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => array( $row ),
+				)
+			)
+		);
 		$order->save();
 
 		// Act.
@@ -849,7 +1049,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_pos_order();
 		$row   = $this->payment( 'pos_card', '20.00', array( 'status' => 'pending' ) );
 		unset( $row['capture_mode'] );
-		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => Ledger::SCHEMA, 'payments' => array( $row ) ) ) );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => array( $row ),
+				)
+			)
+		);
 		$order->save();
 
 		// Act.
@@ -903,13 +1111,18 @@ class Integrity_Handler extends Manual_Handler {
 	}
 	public function intent( array $row, array $context ) {
 		++self::$calls;
-		if ( isset( $context['error'] ) ) { return $context['error']; }
-		if ( isset( $context['resume'] ) ) { $row = array_merge( $row, $context['resume'] ); }
+		if ( isset( $context['error'] ) ) {
+			return $context['error']; }
+		if ( isset( $context['resume'] ) ) {
+			$row = array_merge( $row, $context['resume'] ); }
 		$row['handoff'] = array( 'token' => 'secret' );
 		return $row;
 	}
 	public function void( array $row, string $reason ) {
-		if ( null !== self::$void_result ) { $result = array_merge( $row, self::$void_result ); self::$void_result = null; return $result; }
+		if ( null !== self::$void_result ) {
+			$result = array_merge( $row, self::$void_result );
+			self::$void_result = null;
+			return $result; }
 		return parent::void( $row, $reason );
 	}
 	public function capture( array $row, array $context ) {
