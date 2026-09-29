@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Health;
 
@@ -390,19 +391,26 @@ final class Register_Session_Store {
 	 * @param array      $session Session row.
 	 * @param array|null $orders Captured orders already read for this report.
 	 * @param array|null $movements Movements already read for this report.
+	 * @param array|null $refunds Refund tender rows already read for this report.
 	 * @throws \RuntimeException On calculation failure.
 	 */
-	public function expected( array $session, ?array $orders = null, ?array $movements = null ): array {
+	public function expected( array $session, ?array $orders = null, ?array $movements = null, ?array $refunds = null ): array {
 		global $wpdb;
 		$totals = array( 'cash' => array( $session['counted_float'] ) );
-		foreach ( $orders ?? $this->captured_orders( $session ) as $rows ) {
+		$orders = $orders ?? $this->captured_orders( $session );
+		if ( null === $refunds ) {
+			$refunds = array();
+			foreach ( $this->session_refunds( $session ) as $refund ) {
+				$refunds = array_merge( $refunds, $refund['rows'] );
+			}
+		}
+		$orders[] = $refunds;
+		foreach ( $orders as $rows ) {
 			foreach ( $rows as $row ) {
 				// Every cash-kind gateway (pos_cash, cod, an extension's cash tender) is the drawer.
 				$method = $row['method'] ?? $row['method_id'];
 				$method = 'cash' === ( $row['kind'] ?? '' ) ? 'cash' : ( array( 'pos_card' => 'card' )[ $method ] ?? $method );
 				$totals[ $method ][] = $row['amount'];
-				// A refund is the original row's refunded_amount (the ledger keeps no refund row).
-				$totals[ $method ][] = '-' . ltrim( $row['refunded_amount'] ?? '0', '-' );
 			}
 		}
 		foreach ( $movements ?? ( new Cash_Movement_Store() )->list( $session['id'] ) as $row ) {
@@ -419,6 +427,77 @@ final class Register_Session_Store {
 			}
 		}
 		return $totals;
+	}
+
+	/** Attribute a refund to succeeded ledger allocations, with the remainder in cash.
+	 *
+	 * @param \WC_Order_Refund $refund Refund to attribute.
+	 * @throws \RuntimeException When the parent order cannot be read.
+	 */
+	public function refund_tender_rows( \WC_Order_Refund $refund ): array {
+		$order = wc_get_order( $refund->get_parent_id() );
+		if ( ! $order ) {
+			// Silently attributing nothing would let a closure count a zero refund and stamp it.
+			throw new \RuntimeException( 'Refund parent order could not be read.' );
+		}
+		$rows = array();
+		$remaining = Money::minor( $refund->get_amount() );
+		// A succeeded allocation is a fact about the refund, kept even if its row was voided later.
+		foreach ( Ledger::instance()->read( $order ) as $row ) {
+			foreach ( $row['refunds'] ?? array() as $allocation ) {
+				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 && Money::minor( $allocation['amount'] ) > 0 ) {
+					// Rows written before the handler-result checks may over- or mis-allocate: attribute at most the refund, never a negative.
+					$amount = min( Money::minor( $allocation['amount'] ), $remaining );
+					$remaining -= $amount;
+					$rows[] = array(
+						'method_id' => $row['method_id'],
+						'kind' => $row['kind'],
+						'amount' => Money::format( -$amount ),
+						'refund_id' => $refund->get_id(),
+					);
+				}
+			}
+		}
+		if ( $remaining > 0 ) {
+			$rows[] = array(
+				'method_id' => 'pos_cash',
+				'kind' => 'cash',
+				'amount' => Money::format( -$remaining ),
+				'refund_id' => $refund->get_id(),
+			);
+		}
+		return $rows;
+	}
+
+	/** Read refunds by their own session stamp in either order storage mode.
+	 *
+	 * @param array $session Session row.
+	 * @throws \RuntimeException On read failure.
+	 */
+	public function session_refunds( array $session ): array {
+		global $wpdb;
+		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$key = $hpos ? 'order_id' : 'post_id';
+		$orders = $hpos ? $wpdb->prefix . 'wc_orders' : $wpdb->posts;
+		$type = $hpos ? 'type' : 'post_type';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT m.{$key} FROM {$table} m INNER JOIN {$orders} o ON o.id = m.{$key} WHERE m.meta_key = %s AND LOWER(m.meta_value) = %s AND o.{$type} = %s ORDER BY m.{$key} DESC", '_wcpos_session', strtolower( $session['id'] ), 'shop_order_refund' ) );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session refunds read failed.' );
+		}
+		$result = array();
+		foreach ( $ids as $id ) {
+			$refund = wc_get_order( $id );
+			if ( ! $refund instanceof \WC_Order_Refund ) {
+				throw new \RuntimeException( 'Session refund could not be read.' );
+			}
+			$result[ $id ] = array(
+				'refund' => $refund,
+				'rows' => $this->refund_tender_rows( $refund ),
+			);
+		}
+		return $result;
 	}
 
 	/** Count distinct orders with captured session rows.

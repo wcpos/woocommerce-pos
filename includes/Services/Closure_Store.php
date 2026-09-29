@@ -254,7 +254,7 @@ final class Closure_Store {
 			$figures = array();
 			if ( 'late_sale' === $record['type'] ) {
 				$tenders = $payload['tender_rows'];
-				$figures['expected_delta'] = ( new Register_Session_Store() )->expected( array( 'counted_float' => '0' ), array( $tenders ), array() );
+				$figures['expected_delta'] = ( new Register_Session_Store() )->expected( array( 'counted_float' => '0' ), array( $tenders ), array(), array() );
 				$sales = array();
 				$refunds = array();
 				foreach ( $tenders as $tender ) {
@@ -263,10 +263,26 @@ final class Closure_Store {
 					} else {
 						$sales[] = $tender['amount'];
 					}
-					$refunds[] = $tender['refunded_amount'] ?? '0';
 				}
 				$figures['sales_delta'] = self::sum( $sales );
 				$figures['refunds_delta'] = self::sum( $refunds );
+			} elseif ( 'late_refund' === $record['type'] ) {
+				$sessions = new Register_Session_Store();
+				$reallocation = 'reallocation' === ( $payload['kind'] ?? null );
+				$refund = $reallocation ? null : wc_get_order( $record['refund_id'] );
+				if ( self::read_failed() ) {
+					throw new \RuntimeException( 'Closure correction refund read failed.' );
+				}
+				$tenders = $refund instanceof \WC_Order_Refund ? $sessions->refund_tender_rows( $refund ) : $payload['tender_rows'];
+				$figures['expected_delta'] = $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $tenders );
+				$figures['refunds_delta'] = $reallocation ? '0.0000' : self::sum(
+					array_map(
+						static function ( $row ) {
+							return ltrim( $row['amount'], '-' );
+						},
+						$tenders
+					)
+				);
 			} elseif ( 'late_movement' === $record['type'] ) {
 				$void = 'void' === $payload['type'];
 				$movement = $void ? ( new Cash_Movement_Store() )->get( $payload['voids'] ) : $payload;
@@ -305,6 +321,12 @@ final class Closure_Store {
 			);
 		}
 		return $rows;
+	}
+
+	/** Whether the last database query failed (read fresh, after any earlier check). */
+	private static function read_failed(): bool {
+		global $wpdb;
+		return '' !== $wpdb->last_error;
 	}
 
 	/** Normalize a validated scalar without SQL, floats or integer overflow.
@@ -487,17 +509,37 @@ final class Closure_Store {
 				);
 				return new \WP_Error( 'wcpos_closure_number_invalid', __( 'The closure number precedes the register sequence.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
-			$fields['expected'] = $sessions->expected( $session );
+			// Read the session's sales and refunds once for the drawer derivation and the totals.
+			$orders = $sessions->captured_orders( $session );
+			$refunds = $sessions->session_refunds( $session );
+			$fields['expected'] = $sessions->expected( $session, $orders, null, array_merge( array(), ...array_column( $refunds, 'rows' ) ) );
 			$fields['variance'] = $this->variance( $fields['counted'], $fields['expected'] );
 			$totals = array(
 				'sales' => array(),
 				'refunds' => array(),
 			);
-			foreach ( $sessions->captured_orders( $session ) as $rows ) {
+			foreach ( $orders as $rows ) {
 				foreach ( $rows as $row ) {
 					$refund = 'refund' === $row['kind'] || '-' === substr( $row['amount'], 0, 1 );
 					$totals[ $refund ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
-					$totals['refunds'][] = $row['refunded_amount'] ?? '0';
+				}
+			}
+			foreach ( $refunds as $refund ) {
+				foreach ( $refund['rows'] as $row ) {
+					$totals['refunds'][] = ltrim( $row['amount'], '-' );
+				}
+			}
+			// The refund writers ask this stamp, not the clock, whether a refund was inside the closure.
+			foreach ( $refunds as $refund ) {
+				$refund['refund']->update_meta_data( '_wcpos_closure', $fields['id'] );
+				$refund['refund']->save_meta_data();
+				// An unstamped counted refund would later read as a late arrival: fail the closure instead.
+				$stored = wc_get_order( $refund['refund']->get_id() );
+				if ( $stored instanceof \WC_Order_Refund ) {
+					$stored->read_meta_data( true );
+				}
+				if ( '' !== $wpdb->last_error || ! $stored instanceof \WC_Order_Refund || (string) $stored->get_meta( '_wcpos_closure', true ) !== (string) $fields['id'] ) {
+					throw new \RuntimeException( 'Closure refund stamp failed.' );
 				}
 			}
 			$findings = array();

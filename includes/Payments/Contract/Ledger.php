@@ -589,7 +589,22 @@ class Ledger {
 		if ( ! $refund || 'shop_order_refund' !== $refund->get_type() || $refund->get_parent_id() !== $order->get_id() ) {
 			return $this->invalid( __( 'Refund must belong to this order.', 'woocommerce-pos' ) );
 		}
-		if ( ! is_numeric( $amount ) || Money::minor( $amount ) <= 0 || $allocated + Money::minor( $amount ) > Money::minor( $row['amount'] ) ) {
+		if ( ! is_numeric( $amount ) || Money::minor( $amount ) <= 0 ) {
+			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		}
+		// The refund itself is a cap too: its allocations across every row may not exceed its amount
+		// (so a zero-amount refund allocates nothing).
+		$requested = Money::minor( $amount );
+		$refund_allocated = 0;
+		foreach ( $rows as $payment_row ) {
+			foreach ( $payment_row['refunds'] ?? array() as $allocation ) {
+				if ( (int) $allocation['id'] === $refund_id && in_array( $allocation['status'], array( 'succeeded', 'pending' ), true ) ) {
+					$refund_allocated += Money::minor( $allocation['amount'] );
+				}
+			}
+		}
+		$refund_amount = Money::minor( $refund->get_amount() );
+		if ( $allocated + $requested > Money::minor( $row['amount'] ) || $refund_allocated + $requested > $refund_amount ) {
 			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
@@ -601,15 +616,29 @@ class Ledger {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
+		// A handler may save a different amount than was requested: hold it to the same caps, and it must be positive.
 		$refunded = 0;
-		foreach ( $row['refunds'] as $refund ) {
-			if ( 'succeeded' === $refund['status'] ) {
-				$refunded += Money::minor( $refund['amount'] );
+		$reserved = 0;
+		$saved = 0;
+		foreach ( $row['refunds'] as $allocation ) {
+			if ( 'succeeded' === $allocation['status'] ) {
+				$refunded += Money::minor( $allocation['amount'] );
 			}
+			if ( in_array( $allocation['status'], array( 'succeeded', 'pending' ), true ) ) {
+				$reserved += Money::minor( $allocation['amount'] );
+				if ( (int) $allocation['id'] === $refund_id ) {
+					$saved += Money::minor( $allocation['amount'] );
+				}
+			}
+		}
+		if ( $saved <= 0 || $reserved > Money::minor( $row['amount'] ) || $refund_allocated + $saved > $refund_amount ) {
+			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $row );
 		$this->replace_and_save( $order, $rows, $row );
+		/** Fires after saving the allocation: order, payment row, refund, the saved amount. */
+		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
 		return $row;
 	}
 

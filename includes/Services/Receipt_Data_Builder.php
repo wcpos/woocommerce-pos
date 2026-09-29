@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
@@ -27,13 +28,24 @@ class Receipt_Data_Builder {
 			$sessions = new Register_Session_Store();
 			$orders = $sessions->captured_orders( $row );
 			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
-			$row['expected'] = $sessions->expected( $row, $orders, $movements );
+			// Read the session's refunds once: the drawer derivation and the count share them.
+			$refunds = $sessions->session_refunds( $row );
+			$row['expected'] = $sessions->expected( $row, $orders, $movements, array_merge( array(), ...array_column( $refunds, 'rows' ) ) );
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
-			$refund_count = 0;
+			$refund_count = count( $refunds );
+			foreach ( $refunds as $refund ) {
+				$id = (int) $refund['refund']->get_refunded_by();
+				if ( $id ) {
+					$cashiers[ $id ] = array(
+						'id' => $id,
+						'name' => get_userdata( $id )->display_name ?? (string) $id,
+					);
+				}
+			}
 			foreach ( $orders as $payments ) {
 				foreach ( $payments as $payment ) {
-					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) || (float) ( $payment['refunded_amount'] ?? 0 ) > 0 ) {
+					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) ) {
 						++$refund_count;
 					}
 
@@ -871,10 +883,36 @@ class Receipt_Data_Builder {
 	 * @param \WC_Order_Refund $refund Refund document source.
 	 * @param int              $number Minted refund sequence.
 	 * @param string|null      $corrects Original sale identity.
+	 * @param array|null       $provenance Resolved refund provenance (store_id, register_id).
+	 * @throws \RuntimeException When the refund's register cannot be read.
 	 * @throws \RuntimeException When the refund document cannot be encoded.
 	 */
-	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects ): array {
-		$data = $this->build_data( $order );
+	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects, ?array $provenance = null ): array {
+		// The document identifies where the refund was made: the provenance the record writer
+		// resolved (its session's store, its register), or the sale's when the refund carries none.
+		$store_id = (int) ( $provenance['store_id'] ?? 0 );
+		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id, array( 'status' => array( 'publish', 'trash' ) ) ) : null;
+		$store_missing = $store_id > 0 && ! \is_object( $pos_store );
+		// A deleted refund store keeps its id on the document, the way a deleted order store does.
+		$data = $this->build_data( $order, $store_missing ? new \stdClass() : ( \is_object( $pos_store ) ? $pos_store : null ) );
+		if ( $store_missing ) {
+			$data['store']['id'] = $store_id;
+			/* translators: %d: store ID. */
+			$data['store']['name'] = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $store_id );
+		}
+		$register_id = (string) ( $provenance['register_id'] ?? $refund->get_meta( '_wcpos_register', true ) );
+		if ( Pos_Uuid::is_uuid( $register_id ) ) {
+			global $wpdb;
+			$register_row = ( new Register_Store() )->get( strtolower( $register_id ) );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Refund register read failed.' );
+			}
+			// The stamped id stays truthful even when the register row is gone.
+			$data['register'] = array(
+				'id' => $register_row['id'] ?? strtolower( $register_id ),
+				'name' => $register_row['name'] ?? '',
+			);
+		}
 		$display_incl = ! empty( $data['tax']['display_incl'] );
 		$items = $this->get_refund_items( $refund, $display_incl );
 		$data['lines'] = $items['lines'];

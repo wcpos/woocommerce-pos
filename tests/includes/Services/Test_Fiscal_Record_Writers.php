@@ -237,6 +237,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			$this->assertEquals( 10, $records[0]['payload']['totals']['total_incl'] );
 			$this->assertSame( 'unallocated', $records[0]['payload']['fiscal']['extra_fields']['allocation'] );
 			$this->assertSame( array(), $records[0]['payload']['fiscal']['extra_fields']['allocations'] );
+			$this->assertNull( $records[0]['session_id'] );
+			$this->assertNull( $records[0]['register_id'] );
 			$this->assertNull( $records[0]['device_time'] );
 			$this->assertNull( $records[0]['device_tz'] );
 		}
@@ -389,8 +391,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertCount( 1, $records );
 		$this->assertSame( $closure['id'], $records[0]['closure_id'] );
-		$this->assertSame( '40.0000', $records[0]['payload']['expected_delta']['cash'] );
-		$this->assertSame( '-40.0000', $records[0]['payload']['variance_delta']['cash'] );
+		$this->assertSame( '50.0000', $records[0]['payload']['expected_delta']['cash'] );
+		$this->assertSame( '-50.0000', $records[0]['payload']['variance_delta']['cash'] );
 		// The fixture binds two captured rows to the session: cash 50 (refunded 10) and card 30.
 		$this->assertCount( 2, $records[0]['payload']['tender_rows'] );
 		$this->assertSame( $closure, $store->get( $closure['id'] ) );

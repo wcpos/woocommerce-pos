@@ -430,10 +430,10 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );
 		$this->assertTrue( $data['fiscal']['is_x_report'] );
 		$this->assertSame( '', $data['fiscal']['receipt_number'] );
-		$this->assertSame( '140.0000', $data['closure']['expected']['cash'] );
+		$this->assertSame( '150.0000', $data['closure']['expected']['cash'] );
 		$this->assertSame( 'Cash', $data['closure']['tenders'][0]['label'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['transaction_count'] );
-		$this->assertSame( 1, $data['closure']['breakdowns']['refund_count'] );
+		$this->assertSame( 0, $data['closure']['breakdowns']['refund_count'] );
 		$this->assertStringContainsString( 'X-report · Closure fixture', $this->html( $data ) );
 		$this->assertStringNotContainsString( 'sales not yet on the server', $this->html( $data ) );
 		$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
@@ -494,6 +494,23 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$refund['refunded_amount'] = '0';
 		$rows[] = $refund;
 		$ledger->save( $order, $rows, false );
+		$data = $this->document( 'xreport:' . $session['id'] )->get_data()['data'];
+		$this->assertSame( 2, $data['closure']['breakdowns']['refund_count'] );
+		$stamp = static function ( $refund ) use ( $session ) {
+			$refund->update_meta_data( '_wcpos_session', $session['id'] );
+		};
+		add_action( 'woocommerce_create_refund', $stamp );
+		try {
+			$refund = wc_create_refund(
+				array(
+					'order_id' => $order->get_id(),
+					'amount' => '10',
+				)
+			);
+			$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		} finally {
+			remove_action( 'woocommerce_create_refund', $stamp );
+		}
 		$data = $this->document( 'xreport:' . $session['id'] )->get_data()['data'];
 		$this->assertSame( 3, $data['closure']['breakdowns']['refund_count'] );
 		$this->assertSame( 1, $data['closure']['breakdowns']['transaction_count'] );
@@ -658,7 +675,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			),
 			$reads
 		);
-		$this->assertSame( '147.0000', $data['closure']['expected']['cash'] );
+		$this->assertSame( '157.0000', $data['closure']['expected']['cash'] );
 		$this->assertNotEmpty( $data['closure']['tenders'][0]['expected_display'] );
 		$this->assertNotEmpty( $data['closure']['opened_at']['datetime'] );
 		$this->assertSame( 'Paid in', $data['closure']['breakdowns']['movements'][0]['type_label'] );

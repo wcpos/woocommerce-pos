@@ -122,17 +122,17 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $row );
 		$this->assertSame( 1, $row['number'] );
 		$this->assertSame( '80.0000', $row['period_sales_total'] );
-		$this->assertSame( '10.0000', $row['period_refunds_total'] );
+		$this->assertSame( '0.0000', $row['period_refunds_total'] );
 		$this->assertSame( '80.0000', $row['perpetual_sales_total'] );
-		$this->assertSame( '10.0000', $row['perpetual_refunds_total'] );
+		$this->assertSame( '0.0000', $row['perpetual_refunds_total'] );
 		$this->assertSame(
 			array(
-				'cash' => '140.0000',
+				'cash' => '150.0000',
 				'card' => '30.0000',
 			),
 			$row['expected']
 		);
-		$this->assertSame( array( 'cash' => '-39.0000' ), $row['variance'] );
+		$this->assertSame( array( 'cash' => '-49.0000' ), $row['variance'] );
 		$this->assertSame( array( 'cash' => '100.0000' ), $row['till_expected'] );
 		$this->assertSame( '0.0000', $row['findings']['total_mismatch']['period_sales_total']['reported'] );
 		$this->assertSame( '80.0000', $row['findings']['total_mismatch']['period_sales_total']['derived'] );
@@ -146,11 +146,11 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$register = ( new Register_Store() )->get( $session['register_id'] );
 		$this->assertSame( '2026-09-11T08:00:00Z', $register['counters_started_at_gmt'] );
 		$this->assertSame( '80.0000', $register['counters']['perpetual_sales_total'] );
-		$this->assertSame( '10.0000', $register['counters']['perpetual_refunds_total'] );
+		$this->assertSame( '0.0000', $register['counters']['perpetual_refunds_total'] );
 		$second = $store->create( $this->closure_fields( $this->closure_session( $session['register_id'] ), 2 ) );
 		$this->assertSame( '0.0000', $second['period_sales_total'] );
 		$this->assertSame( '80.0000', $second['perpetual_sales_total'] );
-		$this->assertSame( '10.0000', $second['perpetual_refunds_total'] );
+		$this->assertSame( '0.0000', $second['perpetual_refunds_total'] );
 		$order->delete( true );
 	}
 
