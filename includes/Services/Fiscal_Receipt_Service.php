@@ -51,8 +51,16 @@ class Fiscal_Receipt_Service {
 			return;
 		}
 
-		update_post_meta( $order_id, self::META_KEY_SUBMISSION_STATUS, $status );
-		update_post_meta( $order_id, self::META_KEY_STATUS_UPDATED_AT, current_time( 'mysql', true ) );
+		// Through the order object, not update_post_meta(): on HPOS the order's meta
+		// table is wc_orders_meta and a postmeta row is invisible to get_submission_status().
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
+		$order->update_meta_data( self::META_KEY_SUBMISSION_STATUS, $status );
+		$order->update_meta_data( self::META_KEY_STATUS_UPDATED_AT, current_time( 'mysql', true ) );
+		$order->save();
 	}
 
 	/**
@@ -63,7 +71,8 @@ class Fiscal_Receipt_Service {
 	 * @return string
 	 */
 	public function get_submission_status( int $order_id ): string {
-		$status = get_post_meta( $order_id, self::META_KEY_SUBMISSION_STATUS, true );
+		$order  = wc_get_order( $order_id );
+		$status = $order ? $order->get_meta( self::META_KEY_SUBMISSION_STATUS ) : '';
 
 		if ( in_array( $status, self::VALID_STATUSES, true ) ) {
 			return $status;

@@ -102,22 +102,46 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	 * Test payment_details returns stored values.
 	 */
 	public function test_payment_details_returns_stored_values(): void {
+		// Arrange: written the way process_payment() writes them.
 		$order = OrderHelper::create_order();
 		$order->update_meta_data( '_pos_cash_amount_tendered', '50.00' );
 		$order->update_meta_data( '_pos_cash_change', '10.00' );
 		$order->save();
 
-		// Clear meta cache.
-		wp_cache_flush();
+		// Act: on a fresh load, so the values come from storage rather than the object.
+		$details = Cash::payment_details( wc_get_order( $order->get_id() ) );
 
-		// Use update_post_meta since payment_details uses get_post_meta.
-		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '50.00' );
-		update_post_meta( $order->get_id(), '_pos_cash_change', '10.00' );
+		// Assert.
+		$this->assertSame( '50.00', $details['tendered'] );
+		$this->assertSame( '10.00', $details['change'] );
+	}
 
-		$details = Cash::payment_details( $order );
+	/**
+	 * The details are read from HPOS order meta, where get_post_meta() would find nothing.
+	 */
+	public function test_payment_details_hpos_returns_stored_values(): void {
+		// Arrange.
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->setup_cot();
+		$this->disable_cot_sync();
 
-		$this->assertEquals( '50.00', $details['tendered'] );
-		$this->assertEquals( '10.00', $details['change'] );
+		try {
+			$order = OrderHelper::create_order();
+			$order->update_meta_data( '_pos_cash_amount_tendered', '50.00' );
+			$order->update_meta_data( '_pos_cash_change', '10.00' );
+			$order->save();
+
+			// Act.
+			$details = Cash::payment_details( wc_get_order( $order->get_id() ) );
+
+			// Assert.
+			$this->assertSame( '', get_post_meta( $order->get_id(), '_pos_cash_amount_tendered', true ) );
+			$this->assertSame( '50.00', $details['tendered'] );
+			$this->assertSame( '10.00', $details['change'] );
+		} finally {
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
 	}
 
 	/**
@@ -348,13 +372,14 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$this->assertArrayHasKey( 'tendered', $details );
 		$this->assertArrayHasKey( 'change', $details );
 
-		// Set meta and test again.
-		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '100.00' );
-		update_post_meta( $order->get_id(), '_pos_cash_change', '20.00' );
+		// Set meta the way process_payment() does and test again.
+		$order->update_meta_data( '_pos_cash_amount_tendered', '100.00' );
+		$order->update_meta_data( '_pos_cash_change', '20.00' );
+		$order->save();
 
-		$details = Cash::payment_details( $order );
-		$this->assertEquals( '100.00', $details['tendered'] );
-		$this->assertEquals( '20.00', $details['change'] );
+		$details = Cash::payment_details( wc_get_order( $order->get_id() ) );
+		$this->assertSame( '100.00', $details['tendered'] );
+		$this->assertSame( '20.00', $details['change'] );
 	}
 
 	/**

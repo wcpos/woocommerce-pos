@@ -192,6 +192,12 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/HPOSToggleTrait.php';
 		require_once $this->plugin_dir . '/tests/Helpers/EmailHelper.php';
 		require_once $this->plugin_dir . '/tests/Helpers/FakeMutationStore.php';
+
+		// Tripwire: plugin code touching ORDER meta via get/update/add/delete_post_meta()
+		// fails the test with a LogicException naming the file and line. Order meta lives
+		// in wc_orders_meta on HPOS, where the post-meta API silently reads nothing.
+		require_once $this->plugin_dir . '/tests/Helpers/Order_Postmeta_Guard.php';
+		\WCPOS\WooCommercePOS\Tests\Helpers\Order_Postmeta_Guard::install();
 	}
 
 	/**
