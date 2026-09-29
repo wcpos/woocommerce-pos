@@ -1,0 +1,67 @@
+---
+description: Order data goes through the order object, never the post-meta or posts API — HPOS stores orders outside wp_posts
+globs: includes/**/*.php
+alwaysApply: true
+---
+
+# Order meta is not post meta
+
+WooCommerce stores orders in one of two places. On **posts storage** an order is a
+`shop_order` post and its meta is in `wp_postmeta`. On **HPOS** (the default for new
+stores, usually with compatibility sync off) the order lives in `wc_orders` and its meta
+in `wc_orders_meta`; `wp_posts` holds only a `shop_order_placehold` row that reserves the
+id and carries no data.
+
+So `get_post_meta( $order_id, … )` on an HPOS store returns nothing, and
+`update_post_meta( $order_id, … )` writes a row the order never sees. **Neither fails
+loudly.** The code runs, the suite passes on posts storage, and merchants on HPOS silently
+lose the feature. This shipped three times before the tripwire below existed: tax-ID
+inference (#2098), `Cash::payment_details()` and `Fiscal_Receipt_Service`.
+
+## The rule
+
+For anything that is an order (or refund), read and write through the order object:
+
+```php
+$order = wc_get_order( $order_id );
+$value = $order->get_meta( '_pos_cash_change' );
+
+$order->update_meta_data( '_pos_cash_change', $change );
+$order->delete_meta_data( '_stale_key' );
+$order->save();
+```
+
+Never on an order id: `get_post_meta()`, `update_post_meta()`, `add_post_meta()`,
+`delete_post_meta()`, `get_post_custom()`, `metadata_exists( 'post', … )`,
+`get_post()`, `get_post_field()`, `get_post_status()`, `wp_update_post()`, or SQL
+against `{$wpdb->posts}` / `{$wpdb->postmeta}`. Fetching orders in bulk goes through
+`wc_get_orders()` with objects, not ids plus `get_post_meta()`.
+
+If a code path genuinely must branch on storage (a raw SQL count, a CPT-only date touch),
+gate it on `OrderUtil::custom_orders_table_usage_is_enabled()` and handle both tables —
+see `WCPOS_REST_API::wcpos_preflight_meta_count()` and `Sync\Order_Modified_Date` for
+the accepted shape.
+
+Post meta is still correct for things that ARE posts: products and variations, receipt
+templates, stores, print jobs. The rule is about the object's type, not the function.
+
+## The tripwire
+
+`tests/Helpers/Order_Postmeta_Guard.php` is installed by the test bootstrap. Any test in
+which a file under `includes/` calls a `*_post_meta()` function on an order id fails with
+a `LogicException` naming the file and line:
+
+```
+includes/Gateways/Cash.php:58 used get_post_meta() on order #123 (key '_pos_cash_change').
+Order meta is not post meta: on HPOS this reads or writes the empty placeholder post.
+Load the order and use $order->get_meta() / update_meta_data() + save().
+```
+
+When you see that message the failing test is the messenger, not the bug: fix the named
+line. Do not widen the guard's exemptions, catch the exception, or write the test's
+fixture data with `update_post_meta()` so the read "works" — that last one is exactly how
+`Cash::payment_details()` stayed green for years.
+
+Cover order-meta code on both backends by pairing a test class with an `_HPOS` subclass
+that uses `HPOSToggleTrait` (`setup_cot()` + `disable_cot_sync()` in `setUp()`), as
+`Test_Tax_Id_Detector_HPOS` does.
