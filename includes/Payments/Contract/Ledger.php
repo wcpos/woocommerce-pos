@@ -616,7 +616,7 @@ class Ledger {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
-		// A handler may save a different amount than was requested: hold it to the same caps.
+		// A handler may save a different amount than was requested: hold it to the same caps, and it must be positive.
 		$refunded = 0;
 		$reserved = 0;
 		$saved = 0;
@@ -631,7 +631,7 @@ class Ledger {
 				}
 			}
 		}
-		if ( $reserved > Money::minor( $row['amount'] ) || $refund_allocated + $saved > $refund_amount ) {
+		if ( $saved <= 0 || $reserved > Money::minor( $row['amount'] ) || $refund_allocated + $saved > $refund_amount ) {
 			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );

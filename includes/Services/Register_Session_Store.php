@@ -442,10 +442,8 @@ final class Register_Session_Store {
 		}
 		$rows = array();
 		$remaining = Money::minor( $refund->get_amount() );
+		// A succeeded allocation is a fact about the refund, kept even if its row was voided later.
 		foreach ( Ledger::instance()->read( $order ) as $row ) {
-			if ( ! in_array( $row['status'] ?? null, Ledger::COUNTING_STATUSES, true ) ) {
-				continue;
-			}
 			foreach ( $row['refunds'] ?? array() as $allocation ) {
 				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 ) {
 					// Rows written before the refund-wide cap may over-allocate: never attribute more than the refund.
