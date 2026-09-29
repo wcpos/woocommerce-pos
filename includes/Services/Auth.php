@@ -251,13 +251,22 @@ class Auth {
 					);
 				}
 
-				// The session is live: record that, so eviction can tell a device that is
-				// working right now from one that has not been seen in a week.
+				// The session registry is authoritative; the blacklist transient above is only a
+				// fast path that can be evicted or purged. Once the session is live, record that,
+				// so eviction can tell a device working right now from one unseen for a week.
 				if ( isset( $decoded_token->refresh_jti ) ) {
-					$this->sessions->touch(
-						absint( $decoded_token->data->user->id ),
-						(string) $decoded_token->refresh_jti
-					);
+					$user_id     = absint( $decoded_token->data->user->id );
+					$refresh_jti = (string) $decoded_token->refresh_jti;
+
+					if ( ! $this->sessions->is_live( $user_id, $refresh_jti ) ) {
+						return new WP_Error(
+							'woocommerce_pos_auth_session_revoked',
+							'Session has been revoked',
+							array( 'status' => 403 )
+						);
+					}
+
+					$this->sessions->touch( $user_id, $refresh_jti );
 				}
 			}
 
@@ -592,7 +601,9 @@ class Auth {
 		 * Before the first row read on this path. A refresh loads the whole session row —
 		 * `is_live()` below, then `refresh_activity()` — so it needs
 		 * the same protection a login has against a row too large to read (#1776).
-		 * Validating an ACCESS token needs no such guard: it no longer touches the row.
+		 * Validating an ACCESS token READS the row through `is_live()` but never writes it,
+		 * and runs no guard because `guard_row()` can write; the read primes the user meta
+		 * cache that WordPress fills anyway to read the user's capabilities, so it adds no query.
 		 */
 		$this->sessions->guard_row( absint( $decoded->data->user->id ) );
 

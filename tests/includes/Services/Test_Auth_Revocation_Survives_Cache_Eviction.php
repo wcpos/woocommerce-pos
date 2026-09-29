@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Session_Registry;
 use WP_Error;
 use WP_UnitTestCase;
 
@@ -170,5 +171,45 @@ class Test_Auth_Revocation_Survives_Cache_Eviction extends WP_UnitTestCase {
 		// Assert.
 		$this->assertNotInstanceOf( WP_Error::class, $result );
 		$this->assertSame( $jti, $result->refresh_jti );
+	}
+
+	/**
+	 * An access token whose session has expired in the registry is rejected.
+	 */
+	public function test_expired_session_access_token_is_rejected(): void {
+		// Arrange: the session expires while its access token is still within its own lifetime.
+		list( $tokens, $jti ) = $this->login();
+
+		$sessions                    = get_user_meta( $this->user->ID, Session_Registry::META_KEY, true );
+		$sessions[ $jti ]['expires'] = time() - 1;
+		update_user_meta( $this->user->ID, Session_Registry::META_KEY, $sessions );
+
+		// Act.
+		$result = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		// Assert.
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_auth_session_revoked', $result->get_error_code() );
+	}
+
+	/**
+	 * Bearer authentication for every REST request refuses a revoked session after eviction.
+	 */
+	public function test_revoked_session_bearer_is_refused_by_request_authentication_after_eviction(): void {
+		// Arrange: the path the global determine_current_user filter takes.
+		list( $tokens, $jti )          = $this->login();
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $tokens['access_token']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$this->assertSame( $this->user->ID, $this->auth_service->authenticate_request() );
+
+		// Act.
+		$this->auth_service->revoke_session_with_blacklist( $this->user->ID, $jti );
+		$this->evict_revocation_record( $jti );
+		$result = $this->auth_service->authenticate_request();
+
+		// Assert.
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_auth_session_revoked', $result->get_error_code() );
+
+		unset( $_SERVER['HTTP_AUTHORIZATION'] );
 	}
 }

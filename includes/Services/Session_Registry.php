@@ -278,8 +278,9 @@ final class Session_Registry {
 		$key  = self::SESSION_SEEN_TRANSIENT_PREFIX . $jti;
 		$seen = get_transient( $key );
 
-		// The throttle reads the transient, never the session row: this runs on every
-		// authenticated request, and the row is the one thing this path must not touch.
+		// The throttle keeps activity in the transient, out of the session row: this runs
+		// on every authenticated request, and a per-request WRITE to the row would race
+		// logins and revokes.
 		if ( is_numeric( $seen ) && time() - (int) $seen < self::SESSION_ACTIVITY_REFRESH_SECONDS ) {
 			return;
 		}
