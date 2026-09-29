@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.10.19\n"
+"Project-Id-Version: WCPOS 1.10.20\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-23T08:26:26+00:00\n"
+"POT-Creation-Date: 2026-09-29T12:03:02+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1043,7 +1043,7 @@ msgstr ""
 #. translators: Checkout error shown when card nonce validation fails.
 #. translators: Checkout error shown when cash nonce validation fails.
 #: includes/Gateways/Card.php:89
-#: includes/Gateways/Cash.php:139
+#: includes/Gateways/Cash.php:141
 msgid "Nonce verification failed"
 msgstr ""
 
@@ -1061,9 +1061,9 @@ msgstr ""
 #. translators: Cash checkout field label for the amount of money received from the customer.
 #. translators: Cash numpad label for the amount of money received from the customer.
 #. translators: Order note label for the cash amount received from the customer at checkout.
-#: includes/Gateways/Cash.php:89
-#: includes/Gateways/Cash.php:92
-#: includes/Gateways/Cash.php:203
+#: includes/Gateways/Cash.php:91
+#: includes/Gateways/Cash.php:94
+#: includes/Gateways/Cash.php:205
 msgid "Amount Tendered"
 msgstr ""
 
@@ -1071,7 +1071,7 @@ msgstr ""
 #. translators: Template-editor field label for total cash returned to the customer after payments; not "change" meaning modify.
 #. translators: Template-editor field label for cash returned to the customer after payment; not "change" meaning modify.
 #. translators: Receipt/payment label for cash returned to the customer when the received amount is greater than the total; not "change" meaning modify.
-#: includes/Gateways/Cash.php:97
+#: includes/Gateways/Cash.php:99
 #: includes/Services/Receipt_Data_Schema.php:916
 #: includes/Services/Receipt_Data_Schema.php:1031
 #: includes/Services/Receipt_I18n_Labels.php:174
@@ -1080,22 +1080,22 @@ msgid "Change"
 msgstr ""
 
 #. translators: Money returned to the customer after a cash payment.
-#: includes/Gateways/Cash.php:205
+#: includes/Gateways/Cash.php:207
 msgctxt "Money returned from cash sale"
 msgid "Change"
 msgstr ""
 
 #. translators: Checkout validation error for the cash amount received from the customer.
-#: includes/Gateways/Cash.php:276
+#: includes/Gateways/Cash.php:278
 msgid "Tendered amount must be zero or greater."
 msgstr ""
 
-#: includes/Gateways/Cash.php:296
+#: includes/Gateways/Cash.php:298
 msgid "Partial cash payments are not supported by the POS API checkout flow."
 msgstr ""
 
 #. translators: Fee line-item name added when a cash payment is partial.
-#: includes/Gateways/Cash.php:304
+#: includes/Gateways/Cash.php:306
 msgid "Partial Payment"
 msgstr ""
 
