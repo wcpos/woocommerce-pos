@@ -231,10 +231,13 @@ class Frontend {
 		);
 
 		$site_uuid        = wcpos_get_site_uuid();
-		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' );
-		if ( false === $opfs_worker_hash ) {
-			$opfs_worker_hash = VERSION;
-		}
+		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/sqlite.worker.js' );
+		$sqlite_wasm_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/sqlite3.wasm' );
+		// Hash the concatenated worker and WASM SHA-256 digests so either asset busts
+		// the manifest and worker caches together (wcpos/monorepo#2242).
+		$opfs_worker_hash = false === $opfs_worker_hash || false === $sqlite_wasm_hash
+			? VERSION
+			: hash( 'sha256', $opfs_worker_hash . $sqlite_wasm_hash );
 
 		// Pos_Uuid is the sole authority for `_woocommerce_pos_uuid`: the value here
 		// must match what /cashier and /customers serve, or the client forks identities.
@@ -288,7 +291,7 @@ class Frontend {
 		$opfs_worker = add_query_arg(
 			'ver',
 			$opfs_worker_hash,
-			PLUGIN_URL . 'assets/js/opfs.worker.js'
+			PLUGIN_URL . 'assets/js/sqlite.worker.js'
 		);
 
 		// getScript helper and initialProps.

@@ -26,7 +26,7 @@ This plan does not migrate `template-editor`, `template-gallery`, or `woocommerc
 
 - Work in a dedicated git worktree, not the main working tree.
 - Start from current `main` after pulling latest.
-- Do not include unrelated files such as `assets/js/opfs.worker.js` in these implementation commits unless the user explicitly requests that in the implementation worktree.
+- Do not include unrelated files such as `assets/js/sqlite.worker.js` or `assets/js/sqlite3.wasm` in these implementation commits unless the user explicitly requests that in the implementation worktree.
 - `classnames@2.5.1` was verified with `npm view classnames version` on 2026-04-15 and is already used by settings.
 - `react@19.2.5` is the npm latest as of 2026-04-15, but this repo's packages use React `18.3.1`; keep the shared package peer dependency at `^18.0.0` to match current consumers.
 

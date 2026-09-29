@@ -118,29 +118,67 @@ if ( cd "$TMP_DIR" && GH_TOKEN= bash "$CHECK_SCRIPT" >/dev/null 2>&1 ); then
   fail "expected a non-zero exit when GH_TOKEN is unset"
 fi
 
-# Execute the full check: a version-bumped plugin must not ship the old worker.
+# Execute the full check against independently changeable worker/WASM fixtures.
 mkdir "$TMP_DIR/bin"
 cat > "$TMP_DIR/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
-  'api --paginate repos/wcpos/web-bundle/git/matching-refs/tags/v1.10.'*)
-    printf 'v1.10.9\nv1.10.23\nv2.0.0\n' ;;
-  'api repos/wcpos/web-bundle/contents/build/opfs.worker.js?ref=v1.10.23 -H Accept: application/vnd.github.raw')
+  'api --paginate repos/wcpos/web-bundle/git/matching-refs/tags/v2.0.'*)
+    [[ "${NO_TAGS:-}" != 1 ]] || exit 0
+    printf 'v2.0.9\nv2.0.23\nv1.10.23\n' ;;
+  'api repos/wcpos/web-bundle/contents/build/sqlite.worker.js?ref=v2.0.23 -H Accept: application/vnd.github.raw')
+    [[ "${FETCH_FAIL:-}" != worker ]] || exit 1
+    [[ "${EMPTY_BLOB:-}" != worker ]] || exit 0
     printf 'new worker' ;;
+  'api repos/wcpos/web-bundle/contents/build/sqlite3.wasm?ref=v2.0.23 -H Accept: application/vnd.github.raw')
+    [[ "${FETCH_FAIL:-}" != wasm ]] || exit 1
+    [[ "${EMPTY_BLOB:-}" != wasm ]] || exit 0
+    printf '\0asm\1\0\0\0' ;;
   *) echo "Unexpected GitHub request: $*" >&2; exit 1 ;;
 esac
 STUB
 chmod +x "$TMP_DIR/bin/gh"
-mk_version_file '1.10.14' "$TMP_DIR/release.php"
-printf 'old worker' > "$TMP_DIR/worker.js"
-if PATH="$TMP_DIR/bin:$PATH" GH_TOKEN=test PLUGIN_FILE="$TMP_DIR/release.php" \
-  WORKER_FILE="$TMP_DIR/worker.js" bash "$CHECK_SCRIPT" > "$TMP_DIR/drift.log" 2>&1; then
-  fail "version bump passed with a worker behind the newest bundle tag"
-fi
+mk_version_file '2.0.0' "$TMP_DIR/release.php"
+
+check_fixture() {
+  PATH="$TMP_DIR/bin:$PATH" GH_TOKEN=test PLUGIN_FILE="$TMP_DIR/release.php" \
+    WORKER_FILE="$TMP_DIR/worker.js" WASM_FILE="$TMP_DIR/sqlite3.wasm" \
+    bash "$CHECK_SCRIPT"
+}
+
 printf 'new worker' > "$TMP_DIR/worker.js"
-PATH="$TMP_DIR/bin:$PATH" GH_TOKEN=test PLUGIN_FILE="$TMP_DIR/release.php" \
-  WORKER_FILE="$TMP_DIR/worker.js" bash "$CHECK_SCRIPT" \
-  || fail "version bump failed after vendoring the newest bundle worker"
+printf '\0asm\1\0\0\0' > "$TMP_DIR/sqlite3.wasm"
+check_fixture || fail "matching worker and WASM failed"
+
+for asset in worker.js sqlite3.wasm; do
+  cp "$TMP_DIR/$asset" "$TMP_DIR/saved"
+  printf 'old asset' > "$TMP_DIR/$asset"
+  if check_fixture > "$TMP_DIR/drift.log" 2>&1; then
+    fail "drift in $asset passed"
+  fi
+  grep -q "$asset has drifted" "$TMP_DIR/drift.log" || fail "wrong drift error for $asset"
+  rm "$TMP_DIR/$asset"
+  if check_fixture > "$TMP_DIR/drift.log" 2>&1; then
+    fail "missing local $asset passed"
+  fi
+  mv "$TMP_DIR/saved" "$TMP_DIR/$asset"
+done
+
+for asset in worker wasm; do
+  if FETCH_FAIL="$asset" check_fixture > "$TMP_DIR/drift.log" 2>&1; then
+    fail "failed $asset fetch passed"
+  fi
+  grep -q 'could not fetch' "$TMP_DIR/drift.log" || fail "wrong fetch error for $asset"
+  if EMPTY_BLOB="$asset" check_fixture > "$TMP_DIR/drift.log" 2>&1; then
+    fail "empty $asset fetch passed"
+  fi
+  grep -q 'came back empty' "$TMP_DIR/drift.log" || fail "wrong empty error for $asset"
+done
+
+if NO_TAGS=1 check_fixture > "$TMP_DIR/drift.log" 2>&1; then
+  fail "2.0.0 passed without any v2.0.x bundle tags"
+fi
+grep -q 'no v2.0.x tag found' "$TMP_DIR/drift.log" || fail "wrong missing-tag error"
 
 # ---------------------------------------------------------------------------
 # Wiring

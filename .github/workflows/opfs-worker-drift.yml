@@ -1,8 +1,8 @@
 name: OPFS Worker Drift
 
-# The POS web app loads its OPFS worker from THIS repo (Frontend.php builds the URL
+# The POS web app loads its SQLite worker and WASM from THIS repo (Frontend.php builds the URL
 # from PLUGIN_URL), not from the CDN bundle — so a bundle release does not reach web
-# merchants until the worker is re-vendored here.
+# merchants until both assets are re-vendored here.
 #
 # The drift is caused by an event in another repo (a wcpos/web-bundle tag), which
 # fires nothing here; hence the schedule as well as the PR trigger.
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   drift:
-    name: 🧵 OPFS worker matches the bundle
+    name: 🧵 SQLite worker and WASM match the bundle
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,7 +38,7 @@ jobs:
       - name: Test the drift script
         run: bash .github/scripts/test-check-opfs-worker-drift.sh
 
-      - name: Check the vendored worker against the bundle
+      - name: Check the vendored worker and WASM against the bundle
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/check-opfs-worker-drift.sh
