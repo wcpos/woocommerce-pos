@@ -27,4 +27,3 @@ phpstan.neon
 phpstan-constants.php
 assets/img/template-gallery/previews
 fonts/packs
-NOTES.md
