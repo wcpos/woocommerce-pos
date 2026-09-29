@@ -232,7 +232,6 @@ class Tax_Id_Detector {
 				'orderby' => 'date',
 				'order'   => 'DESC',
 				'status'  => 'any',
-				'return'  => 'ids',
 			)
 		);
 		if ( ! \is_array( $orders ) || empty( $orders ) ) {
@@ -241,16 +240,14 @@ class Tax_Id_Detector {
 
 		// Tally populated rows per candidate.
 		$counts = array_fill_keys( array_keys( $candidates ), 0 );
-		foreach ( $orders as $order_id ) {
-			if ( \is_object( $order_id ) && \method_exists( $order_id, 'get_id' ) ) {
-				$order_id = $order_id->get_id();
-			}
-			$meta = \get_post_meta( (int) $order_id );
-			if ( ! \is_array( $meta ) || empty( $meta ) ) {
+		foreach ( $orders as $order ) {
+			// Read meta through the order object: with HPOS on (and sync off) it lives
+			// in wc_orders_meta, where get_post_meta() finds nothing.
+			if ( ! \is_object( $order ) || ! \method_exists( $order, 'get_meta' ) ) {
 				continue;
 			}
 			foreach ( $candidates as $meta_key => $_type ) {
-				$value = isset( $meta[ $meta_key ][0] ) ? $meta[ $meta_key ][0] : null;
+				$value = $order->get_meta( $meta_key );
 				if ( '' === $value || array() === $value || null === $value ) {
 					continue;
 				}
