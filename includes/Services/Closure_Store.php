@@ -270,6 +270,9 @@ final class Closure_Store {
 				$sessions = new Register_Session_Store();
 				$reallocation = 'reallocation' === ( $payload['kind'] ?? null );
 				$refund = $reallocation ? null : wc_get_order( $record['refund_id'] );
+				if ( '' !== $wpdb->last_error ) {
+					throw new \RuntimeException( 'Closure correction refund read failed.' );
+				}
 				$tenders = $refund instanceof \WC_Order_Refund ? $sessions->refund_tender_rows( $refund ) : $payload['tender_rows'];
 				$figures['expected_delta'] = $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $tenders );
 				$figures['refunds_delta'] = $reallocation ? '0.0000' : self::sum(

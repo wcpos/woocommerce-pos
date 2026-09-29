@@ -447,8 +447,9 @@ final class Register_Session_Store {
 				continue;
 			}
 			foreach ( $row['refunds'] ?? array() as $allocation ) {
-				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() ) {
-					$amount = Money::minor( $allocation['amount'] );
+				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 ) {
+					// Rows written before the refund-wide cap may over-allocate: never attribute more than the refund.
+					$amount = min( Money::minor( $allocation['amount'] ), $remaining );
 					$remaining -= $amount;
 					$rows[] = array(
 						'method_id' => $row['method_id'],
