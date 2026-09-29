@@ -125,6 +125,24 @@ class Test_Tax_Id_Detector extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A tax-ID meta key filled in on recent orders is inferred for its type.
+	 *
+	 * Runs on posts storage here and on HPOS storage in Test_Tax_Id_Detector_HPOS.
+	 */
+	public function test_infer_from_recent_orders_with_populated_key_returns_that_key(): void {
+		// Arrange.
+		$order = wc_create_order();
+		$order->update_meta_data( '_billing_eu_vat_number', 'DE123456789' );
+		$order->save();
+
+		// Act.
+		$inferred = Tax_Id_Detector::infer_from_recent_orders();
+
+		// Assert.
+		$this->assertSame( '_billing_eu_vat_number', $inferred[ Tax_Id_Types::TYPE_EU_VAT ] ?? null );
+	}
+
+	/**
 	 * `summary()` integrates settings and inference; with no plugins active and
 	 * no orders, falls back to defaults.
 	 */
