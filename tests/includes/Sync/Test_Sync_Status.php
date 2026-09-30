@@ -162,6 +162,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
 				'schema_version' => null,
+				'capabilities'   => array( 'products_id_fast_path' ),
 			),
 			$response->get_data()
 		);
@@ -183,6 +184,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 				'healthy'        => true,
 				'missing_tables' => array(),
 				'schema_version' => Api::SCHEMA_VERSION,
+				'capabilities'   => array( 'products_id_fast_path' ),
 			),
 			$response->get_data()
 		);
@@ -347,5 +349,22 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 			$this->assertContains( $response->get_status(), array( 401, 403 ), $path . ' bypassed the capability gate.' );
 			$this->assertNotEquals( 503, $response->get_status(), $path . ' exposed health before authorization.' );
 		}
+	}
+
+	/**
+	 * Status advertises the products ID fast path even while the store is unhealthy.
+	 */
+	public function test_sync_status_lists_the_products_id_fast_path_capability(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$response     = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+		$data         = $response->get_data();
+		$capabilities = $data['capabilities'];
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $data['healthy'] );
+		$this->assertIsArray( $capabilities );
+		$this->assertSame( array_values( $capabilities ), $capabilities );
+		$this->assertContains( 'products_id_fast_path', $capabilities );
 	}
 }
