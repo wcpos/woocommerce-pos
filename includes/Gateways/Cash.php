@@ -54,9 +54,11 @@ class Cash extends Abstract_POS_Gateway {
 	 * @return array
 	 */
 	public static function payment_details( WC_Order $order ) {
+		// Read through the order: process_payment() writes these with update_meta_data(),
+		// and on HPOS that is wc_orders_meta, which get_post_meta() cannot see.
 		return array(
-			'tendered' => get_post_meta( $order->get_id(), '_pos_cash_amount_tendered', true ),
-			'change'   => get_post_meta( $order->get_id(), '_pos_cash_change', true ),
+			'tendered' => $order->get_meta( '_pos_cash_amount_tendered' ),
+			'change'   => $order->get_meta( '_pos_cash_change' ),
 		);
 	}
 
