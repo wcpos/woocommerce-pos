@@ -358,32 +358,56 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A product with no lookup row takes its stock pair from postmeta, matching the hydrated read.
+	 * Stock matches the hydrated product whether its lookup row is missing, stale or current,
+	 * and a missing `_stock_status` answers WooCommerce's `instock` fallback.
 	 */
-	public function test_fast_path_missing_lookup_row_falls_back_to_postmeta(): void {
+	public function test_fast_path_stock_matches_the_product_with_or_without_a_lookup_row(): void {
 		global $wpdb;
-		$managed   = $this->product(
+		$missing   = $this->product(
 			array(
 				'manage_stock'   => true,
 				'stock_quantity' => 0,
 				'stock_status'   => 'outofstock',
 			)
 		)->get_id();
-		$unmanaged = $this->product( array( 'stock_status' => 'onbackorder' ) )->get_id();
-		// A leftover `_stock` on an unmanaged product: WooCommerce's lookup fill ignores it, and so must the fallback.
-		update_post_meta( $unmanaged, '_stock', '7' );
-		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $managed ) );
-		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $unmanaged ) );
+		$stale     = $this->product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+			)
+		)->get_id();
+		$no_status = $this->product( array( 'stock_status' => 'outofstock' ) )->get_id();
+		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $missing ) );
+		// Written outside the data layer: the lookup row keeps 5.
+		update_post_meta( $stale, '_stock', '3' );
+		delete_post_meta( $no_status, '_stock_status' );
 
 		$rows     = array_column( $this->fast()->get_data(), null, 'id' );
 		$hydrated = array_column( $this->hydrated(), null, 'id' );
 
-		$this->assertSame( 0, $rows[ $managed ]['stock_quantity'] );
-		$this->assertSame( 'outofstock', $rows[ $managed ]['stock_status'] );
-		$this->assertSame( $hydrated[ $managed ], $rows[ $managed ] );
-		$this->assertNull( $rows[ $unmanaged ]['stock_quantity'] );
-		$this->assertSame( 'onbackorder', $rows[ $unmanaged ]['stock_status'] );
-		$this->assertSame( $hydrated[ $unmanaged ]['stock_status'], $rows[ $unmanaged ]['stock_status'] );
+		$this->assertSame( 0, $rows[ $missing ]['stock_quantity'] );
+		$this->assertSame( 'outofstock', $rows[ $missing ]['stock_status'] );
+		$this->assertSame( 3, $hydrated[ $stale ]['stock_quantity'] );
+		$this->assertSame( 'instock', $hydrated[ $no_status ]['stock_status'] );
+		foreach ( array( $missing, $stale, $no_status ) as $id ) {
+			$this->assertSame( $hydrated[ $id ]['stock_quantity'], $rows[ $id ]['stock_quantity'], "stock_quantity {$id}" );
+			$this->assertSame( $hydrated[ $id ]['stock_status'], $rows[ $id ]['stock_status'], "stock_status {$id}" );
+		}
+	}
+
+	/**
+	 * A leftover `_stock` on an unmanaged product is reported by the product, so the fast path reports it too.
+	 */
+	public function test_fast_path_unmanaged_product_with_leftover_stock_reports_the_hydrated_value(): void {
+		$unmanaged = $this->product( array( 'manage_stock' => false ) )->get_id();
+		update_post_meta( $unmanaged, '_stock', '7' );
+
+		$rows     = array_column( $this->fast()->get_data(), null, 'id' );
+		$hydrated = array_column( $this->hydrated(), null, 'id' );
+
+		$this->assertSame( 7, $hydrated[ $unmanaged ]['stock_quantity'] );
+		$this->assertSame( 7, $rows[ $unmanaged ]['stock_quantity'] );
+		$this->assertSame( $hydrated[ $unmanaged ]['stock_quantity'], $rows[ $unmanaged ]['stock_quantity'] );
 	}
 
 	/**
