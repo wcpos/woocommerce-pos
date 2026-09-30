@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Fixed: changing or resetting a user's password now signs that user out of the POS on every device, and logging out of WordPress in a browser ends that browser's web POS session; the user's other devices stay signed in after a logout. (#2102)
 - Fixed: Cashiers can only edit customer accounts. Any account with a staff role, other cashiers included, is out of their reach through the POS and through WordPress's own user screens and API. A cashier who also holds the Shop manager role keeps that role's rights. (#2104)
 
 - Changed: the `wcpos/v2` service map is now derived from the v1 controller map, so a plugin replacing a v1 service through `woocommerce_pos_rest_api_controllers` answers under `wcpos/v2` as well without registering a v2 twin. The fifteen `WCPOS\WooCommercePOS\API\V2\*` pass-through classes are gone and their names alias the v1 classes; a class registered through `woocommerce_pos_rest_api_v2_controllers` no longer needs its own `$namespace`. Outside the registry, subclasses of those aliases inherit the v1 namespace and must set their own.
