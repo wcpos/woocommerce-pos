@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\API\V2\Proxy\Fast_Path_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Null_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Proxy_Behavior;
 use WCPOS\WooCommercePOS\Sync\Api;
@@ -73,6 +74,12 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	 */
 	public function proxy( WP_REST_Request $request, string $wc_route, string $resource, ?Proxy_Behavior $behavior = null ) {
 		$behavior     = $behavior ?? self::behavior_for( $resource );
+		if ( $behavior instanceof Fast_Path_Behavior ) {
+			$fast = $behavior->fast_response( $request );
+			if ( null !== $fast ) {
+				return $fast;
+			}
+		}
 		$query_params = $behavior->forwarded_params( $request->get_query_params(), $request );
 		$inner = new WP_REST_Request( WP_REST_Server::READABLE, $wc_route );
 		unset( $query_params[ Store_Scope::PARAM ] );
