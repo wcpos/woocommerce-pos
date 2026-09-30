@@ -50,6 +50,14 @@ class Test_Auth_Revocation_Survives_Cache_Eviction extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Tear down: never leak a bearer header into later tests, even when a test fails.
+	 */
+	public function tearDown(): void {
+		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		parent::tearDown();
+	}
+
+	/**
 	 * Mint a linked token pair and return it with the session JTI.
 	 *
 	 * @return array{0: array, 1: string}
@@ -209,7 +217,43 @@ class Test_Auth_Revocation_Survives_Cache_Eviction extends WP_UnitTestCase {
 		// Assert.
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'woocommerce_pos_auth_session_revoked', $result->get_error_code() );
+	}
 
-		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+	/**
+	 * A session entry of the wrong type rejects the access token instead of raising an error.
+	 */
+	public function test_malformed_session_entry_rejects_access_token(): void {
+		// Arrange.
+		list( $tokens, $jti ) = $this->login();
+
+		$sessions         = get_user_meta( $this->user->ID, Session_Registry::META_KEY, true );
+		$sessions[ $jti ] = 'garbage';
+		update_user_meta( $this->user->ID, Session_Registry::META_KEY, $sessions );
+
+		// Act.
+		$result = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		// Assert.
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_auth_session_revoked', $result->get_error_code() );
+	}
+
+	/**
+	 * A session entry of the wrong type refuses the refresh instead of raising an error.
+	 */
+	public function test_malformed_session_entry_refuses_refresh(): void {
+		// Arrange.
+		list( $tokens, $jti ) = $this->login();
+
+		$sessions         = get_user_meta( $this->user->ID, Session_Registry::META_KEY, true );
+		$sessions[ $jti ] = 'garbage';
+		update_user_meta( $this->user->ID, Session_Registry::META_KEY, $sessions );
+
+		// Act.
+		$result = $this->auth_service->refresh_access_token( $tokens['refresh_token'] );
+
+		// Assert.
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_auth_refresh_token_revoked', $result->get_error_code() );
 	}
 }
