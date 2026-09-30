@@ -62,6 +62,7 @@ docs/
 
 # WCPOS PDF dev-harness output
 tests/Tools/pdf-harness/out/
+tests/Tools/fast-path-fixture/out/
 
 # Lane-coverage inventory is generated locally by scripts/lane-coverage.php --write;
 # CI regenerates everything it needs from source (see .github/workflows/lane-coverage.yml).

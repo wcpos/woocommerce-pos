@@ -155,8 +155,9 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 		$sql = "SELECT {$posts}.ID AS id, {$posts}.post_modified_gmt AS date_modified_gmt,"
 			. ' pm_stock.meta_value AS meta_stock, pm_status.meta_value AS meta_stock_status'
 			. " FROM {$posts}"
-			. " LEFT JOIN {$wpdb->postmeta} pm_stock ON pm_stock.post_id = {$posts}.ID AND pm_stock.meta_key = '_stock'"
-			. " LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = {$posts}.ID AND pm_status.meta_key = '_stock_status'"
+			// The first meta row, as get_post_meta( $id, $key, true ) reads it; a duplicate row must not repeat the product.
+			. " LEFT JOIN {$wpdb->postmeta} pm_stock ON pm_stock.meta_id = ( SELECT MIN( m_stock.meta_id ) FROM {$wpdb->postmeta} m_stock WHERE m_stock.post_id = {$posts}.ID AND m_stock.meta_key = '_stock' )"
+			. " LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.meta_id = ( SELECT MIN( m_status.meta_id ) FROM {$wpdb->postmeta} m_status WHERE m_status.post_id = {$posts}.ID AND m_status.meta_key = '_stock_status' )"
 			. " WHERE {$posts}.post_type = 'product'"
 			// The shared published rule, posts table for both aliases: its variation branch never matches a `product` row.
 			. ' AND ' . Digest_Index::published_product_predicate_sql( $posts, $posts );
