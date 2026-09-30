@@ -234,10 +234,13 @@ class Test_Cashier_Core_User_Routes extends WCPOS_REST_Unit_Test_Case {
 		);
 		$multi_role = $this->factory->user->create( array( 'role' => 'customer' ) );
 		get_user_by( 'id', $multi_role )->add_role( 'author' );
+		$cashier_manager = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		get_user_by( 'id', $cashier_manager )->add_role( 'shop_manager' );
 		$actors  = array(
-			'administrator'       => $this->admin,
-			'shop_manager'        => $this->shop_manager,
-			'user_manager_no_pos' => $this->factory->user->create( array( 'role' => 'user_manager_no_pos' ) ),
+			'administrator'        => $this->admin,
+			'shop_manager'         => $this->shop_manager,
+			'user_manager_no_pos'  => $this->factory->user->create( array( 'role' => 'user_manager_no_pos' ) ),
+			'cashier+shop_manager' => $cashier_manager,
 		);
 		$targets = array(
 			'administrator'   => $this->factory->user->create( array( 'role' => 'administrator' ) ),
@@ -294,5 +297,35 @@ class Test_Cashier_Core_User_Routes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertFalse( $edit_shop_manager, 'shop manager' );
 		$this->assertTrue( $edit_customer, 'customer' );
 		$this->assertFalse( $promote_self, 'promote self' );
+	}
+
+	/** Constructing the Activator alone registers the staff rule, once, with no Init or requirement check. */
+	public function test_user_meta_caps_filter_is_registered_by_the_activator_without_init(): void {
+		// Arrange.
+		$filter = array( Permission_Rules::class, 'map_user_meta_caps' );
+		remove_filter( 'map_meta_cap', $filter, 10 );
+		try {
+			$this->assertFalse( has_filter( 'map_meta_cap', $filter ), 'the rule is off' );
+			$this->assertTrue( current_user_can( 'edit_user', $this->shop_manager ), 'nothing else supplies the rule' );
+
+			// Act.
+			new \WCPOS\WooCommercePOS\Activator();
+			$registered = has_filter( 'map_meta_cap', $filter );
+			$can_edit   = current_user_can( 'edit_user', $this->shop_manager );
+			new \WCPOS\WooCommercePOS\Activator();
+			$count = 0;
+			foreach ( $GLOBALS['wp_filter']['map_meta_cap']->callbacks[10] as $callback ) {
+				if ( $filter === $callback['function'] ) {
+					++$count;
+				}
+			}
+
+			// Assert.
+			$this->assertSame( 10, $registered );
+			$this->assertFalse( $can_edit, 'the rule holds' );
+			$this->assertSame( 1, $count, 'registered exactly once' );
+		} finally {
+			add_filter( 'map_meta_cap', $filter, 10, 4 );
+		}
 	}
 }
