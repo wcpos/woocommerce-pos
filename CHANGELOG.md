@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Added (developers): `GET /wcpos/v2/products?per_page=-1&_fields=id,date_modified_gmt,stock_quantity,stock_status` answers every product the listing would return (every status except trash and auto-draft, minus products hidden from the POS; `include`, `exclude`, `modified_after` and `dates_are_gmt` honoured) from one database query instead of hydrating each product. Stock values come from WooCommerce's product lookup table, so a stock value written outside WooCommerce can lag until the product is next saved, and a product with no lookup row reports `instock`. `GET /wcpos/v2/status` now lists `capabilities`, starting with `products_id_fast_path`. (#2113)
 - Fixed: Changing or resetting a user's password signs that user out of the POS on every device. Logging out of WordPress in a browser ends the POS session in that browser only; the user's other tills stay signed in. (#2102)
 - Added: device-stamped business days on register sessions and closures, with business-day filtering and a site-timezone approximation for older rows.
 - Added: normalised corrections on closure detail reads and receipt documents, plus correction counts on closure lists; shipped templates remain unchanged.
