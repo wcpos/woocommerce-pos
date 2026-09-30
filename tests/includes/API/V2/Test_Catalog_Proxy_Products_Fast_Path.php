@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Store_Scope;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_REST_Response;
+use WP_User;
 
 /**
  * `per_page=-1` with exactly the four reconciliation fields is one SQL query whose rows
@@ -497,6 +498,50 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, $this->prepared );
 		$this->assertContains( $product->get_id(), self::ids( $rows ) );
 		$this->assertSame( self::FIELDS, array_keys( $rows[0] ) );
+	}
+
+	/**
+	 * A cashier wc/v3 refuses to list products for is refused by the fast path with
+	 * wc/v3's own error, answered without the forward and without the query.
+	 */
+	public function test_fast_path_refuses_a_cashier_who_cannot_read_products_like_the_hydrated_route(): void {
+		$this->product();
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		// The cap wc_rest_check_post_permissions( 'product', 'read' ) checks; the role stays untouched.
+		( new WP_User( $cashier_id ) )->add_cap( 'read_private_products', false );
+		wp_set_current_user( $cashier_id );
+
+		$this->forwarded = 0;
+		$fast            = $this->dispatch_products(
+			array(
+				'per_page' => '-1',
+				'_fields'  => implode( ',', self::FIELDS ),
+			)
+		);
+		$fast_forwarded  = $this->forwarded;
+		$hydrated        = $this->dispatch_products( array( 'per_page' => 10 ) );
+
+		$this->assertTrue( $fast->is_error(), wp_json_encode( $fast->get_data() ) );
+		$this->assertTrue( $hydrated->is_error(), wp_json_encode( $hydrated->get_data() ) );
+		$this->assertSame( $hydrated->get_status(), $fast->get_status() );
+		$this->assertSame( $hydrated->get_data()['code'], $fast->get_data()['code'] );
+		$this->assertSame( 'woocommerce_rest_cannot_view', $fast->get_data()['code'] );
+		$this->assertSame( 0, $fast_forwarded );
+		$this->assertSame( 0, $this->prepared );
+	}
+
+	/**
+	 * As a stock cashier, the fast path serves the hydrated listing's rows.
+	 */
+	public function test_fast_path_parity_as_a_cashier(): void {
+		$this->fixtures();
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$expected = $this->hydrated();
+		$actual   = $this->fast()->get_data();
+
+		$this->assertNotEmpty( $actual );
+		$this->assertSame( $expected, $actual );
 	}
 
 	/**
