@@ -127,13 +127,24 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 	 * WooCommerce's data layer, or a product with no lookup row, can differ from the
 	 * hydrated value; a missing row answers `stock_quantity: null`, `stock_status: 'instock'`.
 	 *
+	 * Before the query, wc/v3's own permission check for the listing runs
+	 * ({@see self::wc_v3_permission()}), and its refusal is answered as wc/v3 would.
+	 * WooCommerce's product-query filters (`woocommerce_rest_product_object_query` and the
+	 * other listing filters the hydrated forward applies) are not honoured by the fast path,
+	 * so a plugin that narrows the product REST listing through them does not narrow this
+	 * one; only the permission check is reproduced.
+	 *
 	 * @param WP_REST_Request $request Original proxy request.
 	 *
-	 * @return null|WP_REST_Response Null when the request is not the fast-path shape.
+	 * @return null|WP_REST_Response Null when not the fast-path shape or wc/v3's route is absent.
 	 */
 	public function fast_response( WP_REST_Request $request ): ?WP_REST_Response {
 		if ( ! $this->is_fast_path_request( $request ) ) {
 			return null;
+		}
+		$permission = $this->wc_v3_permission( $request );
+		if ( true !== $permission ) {
+			return $permission instanceof WP_Error ? rest_convert_error_to_response( $permission ) : null;
 		}
 		global $wpdb;
 		$params   = $request->get_query_params();
@@ -195,6 +206,37 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 		$response->header( 'X-WP-TotalPages', '1' );
 
 		return $response;
+	}
+
+	/**
+	 * Run wc/v3's OWN permission check for the products listing.
+	 *
+	 * Run because the fast path skips the forward: calls the `/wc/v3/products` GET handler's
+	 * registered `permission_callback` (with its `woocommerce_rest_check_permissions` filter)
+	 * as `WP_REST_Server::respond_to_request()` does, mapping a refusal to that method's error.
+	 *
+	 * @param WP_REST_Request $request Original proxy request.
+	 *
+	 * @return null|true|WP_Error True when allowed; the refusal; null when the route or its
+	 *                            callback is not registered (the hydrated forward then answers).
+	 */
+	private function wc_v3_permission( WP_REST_Request $request ) {
+		$routes = rest_get_server()->get_routes();
+		foreach ( $routes['/wc/v3/products'] ?? array() as $handler ) {
+			if ( empty( $handler['methods']['GET'] ) || empty( $handler['permission_callback'] ) ) {
+				continue;
+			}
+			$inner = new WP_REST_Request( 'GET', '/wc/v3/products' );
+			$inner->set_query_params( $request->get_query_params() );
+			$permission = \call_user_func( $handler['permission_callback'], $inner );
+			if ( true === $permission || is_wp_error( $permission ) ) {
+				return $permission;
+			}
+
+			return new WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to do that.' ), array( 'status' => rest_authorization_required_code() ) ); // phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- core's own string, as respond_to_request() builds it.
+		}
+
+		return null;
 	}
 
 	/**
