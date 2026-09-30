@@ -1098,7 +1098,8 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 * @covers \WCPOS\WooCommercePOS\Services\Auth::generate_access_token
 	 */
 	public function test_direct_generate_access_token_with_refresh_jti(): void {
-		$refresh_jti = 'test-refresh-jti-' . wp_generate_uuid4();
+		$tokens      = $this->auth_service->generate_token_pair( $this->test_user );
+		$refresh_jti = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' )->jti;
 		$token       = $this->auth_service->generate_access_token( $this->test_user, $refresh_jti );
 
 		$this->assertIsString( $token );
