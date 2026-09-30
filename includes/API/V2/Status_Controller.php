@@ -22,6 +22,16 @@ final class Status_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
 
 	/**
+	 * Named features this server supports, which a client may test for instead of comparing versions.
+	 *
+	 * - `products_id_fast_path`: `GET /wcpos/v2/products?per_page=-1&_fields=id,date_modified_gmt,stock_quantity,stock_status`
+	 *   is answered from one query (#2113).
+	 *
+	 * Append new names; never rename or remove one.
+	 */
+	private const CAPABILITIES = array( 'products_id_fast_path' );
+
+	/**
 	 * Register the sync status route.
 	 */
 	public function register_routes(): void {
@@ -49,6 +59,7 @@ final class Status_Controller extends WP_REST_Controller {
 				'healthy'        => array() === $missing_tables,
 				'missing_tables' => $missing_tables,
 				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
+				'capabilities'   => self::CAPABILITIES,
 			),
 			200
 		);
