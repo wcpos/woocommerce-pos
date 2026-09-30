@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-29T01:31:49+00:00\n"
+"POT-Creation-Date: 2026-09-30T11:06:24+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -35,24 +35,24 @@ msgid "http://wcpos.com"
 msgstr ""
 
 #. translators: 1: Minimum PHP version, 2: Update URL.
-#: includes/Activator.php:349
+#: includes/Activator.php:352
 #, php-format
 msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
 #. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
-#: includes/Activator.php:373
+#: includes/Activator.php:376
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:395
+#: includes/Activator.php:398
 msgid "<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:396
+#: includes/Activator.php:399
 msgid "Enable permalinks"
 msgstr ""
 
@@ -60,7 +60,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the POS cashier/operator who served the customer.
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Activator.php:638
+#: includes/Activator.php:641
 #: includes/Services/Receipt_Data_Schema.php:445
 #: includes/Services/Receipt_I18n_Labels.php:90
 #: includes/Services/Reports_Registry.php:187
@@ -70,7 +70,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:833
+#: includes/Activator.php:836
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -1102,6 +1102,10 @@ msgstr ""
 msgid "Payment context must be an object."
 msgstr ""
 
+#: includes/API/V2/Proxy/Products_Proxy_Behavior.php:194
+msgid "Could not fetch products."
+msgstr ""
+
 #: includes/API/V2/Records_Controller.php:66
 msgid "Sorry, you cannot access fiscal records."
 msgstr ""
@@ -1218,7 +1222,7 @@ msgstr ""
 #. translators: Checkout error shown when card nonce validation fails.
 #. translators: Checkout error shown when cash nonce validation fails.
 #: includes/Gateways/Card.php:89
-#: includes/Gateways/Cash.php:139
+#: includes/Gateways/Cash.php:141
 msgid "Nonce verification failed"
 msgstr ""
 
@@ -1236,9 +1240,9 @@ msgstr ""
 #. translators: Cash checkout field label for the amount of money received from the customer.
 #. translators: Cash numpad label for the amount of money received from the customer.
 #. translators: Order note label for the cash amount received from the customer at checkout.
-#: includes/Gateways/Cash.php:89
-#: includes/Gateways/Cash.php:92
-#: includes/Gateways/Cash.php:203
+#: includes/Gateways/Cash.php:91
+#: includes/Gateways/Cash.php:94
+#: includes/Gateways/Cash.php:205
 msgid "Amount Tendered"
 msgstr ""
 
@@ -1246,7 +1250,7 @@ msgstr ""
 #. translators: Template-editor field label for total cash returned to the customer after payments; not "change" meaning modify.
 #. translators: Template-editor field label for cash returned to the customer after payment; not "change" meaning modify.
 #. translators: Receipt/payment label for cash returned to the customer when the received amount is greater than the total; not "change" meaning modify.
-#: includes/Gateways/Cash.php:97
+#: includes/Gateways/Cash.php:99
 #: includes/Services/Receipt_Data_Schema.php:931
 #: includes/Services/Receipt_Data_Schema.php:1046
 #: includes/Services/Receipt_Data_Schema.php:1723
@@ -1257,22 +1261,22 @@ msgid "Change"
 msgstr ""
 
 #. translators: Money returned to the customer after a cash payment.
-#: includes/Gateways/Cash.php:205
+#: includes/Gateways/Cash.php:207
 msgctxt "Money returned from cash sale"
 msgid "Change"
 msgstr ""
 
 #. translators: Checkout validation error for the cash amount received from the customer.
-#: includes/Gateways/Cash.php:276
+#: includes/Gateways/Cash.php:278
 msgid "Tendered amount must be zero or greater."
 msgstr ""
 
-#: includes/Gateways/Cash.php:296
+#: includes/Gateways/Cash.php:298
 msgid "Partial cash payments are not supported by the POS API checkout flow."
 msgstr ""
 
 #. translators: Fee line-item name added when a cash payment is partial.
-#: includes/Gateways/Cash.php:304
+#: includes/Gateways/Cash.php:306
 msgid "Partial Payment"
 msgstr ""
 
@@ -1444,8 +1448,8 @@ msgstr ""
 msgid "An identical request is already being processed."
 msgstr ""
 
-#: includes/Services/Auth.php:315
-#: includes/Services/Auth.php:394
+#: includes/Services/Auth.php:362
+#: includes/Services/Auth.php:441
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
@@ -1601,7 +1605,7 @@ msgstr ""
 msgid "Cash payment received — amount tendered: %1$s, change given: %2$s."
 msgstr ""
 
-#: includes/Services/Permission_Rules.php:356
+#: includes/Services/Permission_Rules.php:399
 msgid "Only an administrator can edit or delete a staff account from the POS."
 msgstr ""
 
