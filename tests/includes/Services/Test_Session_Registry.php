@@ -801,6 +801,70 @@ class Test_Session_Registry extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Reads skip an entry that is not a session and leave the stored row as it was.
+	 */
+	public function test_malformed_entries_are_skipped_by_reads_without_rewriting_the_row(): void {
+		// Arrange.
+		$token     = $this->auth_service->generate_refresh_token( $this->test_user );
+		$valid_jti = $this->auth_service->validate_token( $token, 'refresh' )->jti;
+		$row       = get_user_meta( $this->test_user->ID, Session_Registry::META_KEY, true );
+
+		$row['bad-string'] = 'garbage';
+		$row['bad-array']  = array( 'created' => time() );
+		update_user_meta( $this->test_user->ID, Session_Registry::META_KEY, $row );
+		$registry = $this->auth_service->sessions();
+
+		// Act.
+		$sessions = $registry->list( $this->test_user->ID );
+		$entries  = $registry->entries( $this->test_user->ID );
+
+		// Assert.
+		$this->assertCount( 1, $sessions );
+		$this->assertSame( $valid_jti, $sessions[0]['jti'] );
+		$this->assertTrue( $registry->is_live( $this->test_user->ID, $valid_jti ) );
+		$this->assertFalse( $registry->is_live( $this->test_user->ID, 'bad-string' ) );
+		$this->assertFalse( $registry->is_live( $this->test_user->ID, 'bad-array' ) );
+		$this->assertSame( array( $valid_jti ), array_keys( $entries ) );
+
+		$stored = get_user_meta( $this->test_user->ID, Session_Registry::META_KEY, true );
+		$this->assertArrayHasKey( 'bad-string', $stored );
+		$this->assertArrayHasKey( 'bad-array', $stored );
+	}
+
+	/**
+	 * A malformed entry does not block the next login, and the login keeps the valid sessions.
+	 */
+	public function test_login_survives_a_malformed_entry_and_keeps_valid_sessions(): void {
+		// Arrange.
+		$tokens_a = $this->auth_service->generate_token_pair( $this->test_user );
+		$jti_a    = $this->auth_service->validate_token( $tokens_a['refresh_token'], 'refresh' )->jti;
+		$row      = get_user_meta( $this->test_user->ID, Session_Registry::META_KEY, true );
+
+		$row['bad-string'] = 'garbage';
+		$row['bad-array']  = array( 'created' => time() );
+		update_user_meta( $this->test_user->ID, Session_Registry::META_KEY, $row );
+
+		// Act.
+		$tokens_b  = $this->auth_service->generate_token_pair( $this->test_user );
+		$refreshed = $this->auth_service->refresh_access_token( $tokens_a['refresh_token'] );
+
+		// Assert.
+		$this->assertIsArray( $tokens_b );
+		$this->assertArrayHasKey( 'access_token', $tokens_b );
+		$this->assertArrayHasKey( 'refresh_token', $tokens_b );
+		$this->assertNotInstanceOf( WP_Error::class, $refreshed );
+
+		$jti_b = $this->auth_service->validate_token( $tokens_b['refresh_token'], 'refresh' )->jti;
+		$this->assertTrue( $this->auth_service->sessions()->is_live( $this->test_user->ID, $jti_b ) );
+
+		$stored = get_user_meta( $this->test_user->ID, Session_Registry::META_KEY, true );
+		$this->assertArrayHasKey( $jti_a, $stored );
+		$this->assertArrayHasKey( $jti_b, $stored );
+		$this->assertArrayNotHasKey( 'bad-string', $stored );
+		$this->assertArrayNotHasKey( 'bad-array', $stored );
+	}
+
+	/**
 	 * How many times `$run` writes the session row.
 	 *
 	 * Counts through the `update_user_metadata` short-circuit filter, returning `$check`

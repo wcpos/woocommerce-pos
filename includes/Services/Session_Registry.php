@@ -97,9 +97,7 @@ final class Session_Registry {
 	 * @return array
 	 */
 	public function entries( int $user_id ): array {
-		$entries = get_user_meta( $user_id, self::META_KEY, true );
-
-		return \is_array( $entries ) ? $entries : array();
+		return $this->read_row( $user_id );
 	}
 
 	/**
@@ -129,10 +127,7 @@ final class Session_Registry {
 		// point in the login flow where WCPOS knows the user id.
 		$this->discard_oversized_row( $user_id );
 
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) ) {
-			$refresh_tokens = array();
-		}
+		$refresh_tokens = $this->read_row( $user_id );
 
 		// Clean up expired tokens.
 		$refresh_tokens = array_filter(
@@ -206,8 +201,8 @@ final class Session_Registry {
 	 * @return array
 	 */
 	public function list( int $user_id ): array {
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) ) {
+		$refresh_tokens = $this->read_row( $user_id );
+		if ( empty( $refresh_tokens ) ) {
 			return array();
 		}
 
@@ -251,15 +246,10 @@ final class Session_Registry {
 	 * @return bool
 	 */
 	public function is_live( int $user_id, string $jti ): bool {
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) ) {
-			return false;
-		}
+		$row = $this->read_row( $user_id );
 
-		$entry = $refresh_tokens[ $jti ] ?? null;
-
-		// A malformed entry (not an array, or no expiry) is not a live session.
-		return \is_array( $entry ) && isset( $entry['expires'] ) && (int) $entry['expires'] > time();
+		// read_row() has already skipped malformed entries, which are not live sessions.
+		return isset( $row[ $jti ] ) && (int) $row[ $jti ]['expires'] > time();
 	}
 
 	/**
@@ -304,8 +294,8 @@ final class Session_Registry {
 		// Public surface: any caller reaching the row goes through the size guard first.
 		$this->discard_oversized_row( $user_id );
 
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $jti ] ) ) {
+		$refresh_tokens = $this->read_row( $user_id );
+		if ( ! isset( $refresh_tokens[ $jti ] ) ) {
 			return false;
 		}
 
@@ -328,8 +318,8 @@ final class Session_Registry {
 			return false;
 		}
 
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $refresh_jti ] ) ) {
+		$refresh_tokens = $this->read_row( $user_id );
+		if ( ! isset( $refresh_tokens[ $refresh_jti ] ) ) {
 			return false;
 		}
 
@@ -366,6 +356,31 @@ final class Session_Registry {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Read the stored sessions, skipping malformed entries.
+	 *
+	 * An entry that is not an array or has no expiry is not a session, so it is left out
+	 * and the valid entries keep their keys. This never writes: a path that already saves
+	 * the row saves it without the skipped entries, and a pure read leaves the row alone.
+	 *
+	 * @param int $user_id The user ID.
+	 *
+	 * @return array Valid session entries keyed by refresh token JTI.
+	 */
+	private function read_row( int $user_id ): array {
+		$row = get_user_meta( $user_id, self::META_KEY, true );
+		if ( ! \is_array( $row ) ) {
+			return array();
+		}
+
+		return array_filter(
+			$row,
+			function ( $entry ) {
+				return \is_array( $entry ) && isset( $entry['expires'] );
+			}
+		);
 	}
 
 	/**
