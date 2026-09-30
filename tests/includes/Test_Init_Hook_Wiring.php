@@ -65,7 +65,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'edited_term',
 		'pre_update_option_woocommerce_pos_settings_general',
 		'pre_update_option_woocommerce_pos_settings_visibility',
-		'profile_update',
+		// profile_update is now unconditional: session revocation listens on it at 10.
 		'remove_user_role',
 		'set_user_role',
 		// The request boundary for the coalesced order journal rows and
@@ -226,7 +226,9 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'admin_notices'                                         => array( 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
+			'password_reset'                                        => array( 10 ),
 			'pre_update_option_woocommerce_pos_pro_settings_license' => array( 10 ),
+			'profile_update'                                        => array( 10 ),
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
 			'rest_allowed_cors_headers'                             => array( 10 ),
@@ -251,6 +253,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
 			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),
+			'wp_logout'                                             => array( 10 ),
 		);
 		ksort( $expected );
 

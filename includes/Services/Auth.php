@@ -86,6 +86,44 @@ class Auth {
 	}
 
 	/**
+	 * On `wp_logout`: end the web POS session named by this browser's cookie.
+	 *
+	 * Sessions of native apps and other browsers stay live. The cookie itself is left alone.
+	 *
+	 * @param mixed $user_id ID of the user logging out.
+	 */
+	public static function revoke_web_session_on_logout( $user_id ): void {
+		if ( absint( $user_id ) > 0 ) {
+			self::instance()->cleanup_previous_web_session( absint( $user_id ) );
+		}
+	}
+
+	/**
+	 * On `password_reset`: end every POS session of the user.
+	 *
+	 * @param mixed $user User whose password is being reset.
+	 */
+	public static function revoke_sessions_on_password_reset( $user ): void {
+		if ( $user instanceof WP_User ) {
+			self::instance()->revoke_all_refresh_tokens( $user->ID );
+		}
+	}
+
+	/**
+	 * On `profile_update`: end every POS session of the user when the password changed.
+	 *
+	 * @param mixed $user_id       ID of the updated user.
+	 * @param mixed $old_user_data User data before the update.
+	 */
+	public static function revoke_sessions_on_password_change( $user_id, $old_user_data = null ): void {
+		$user = get_userdata( absint( $user_id ) );
+
+		if ( $old_user_data instanceof WP_User && $user instanceof WP_User && $old_user_data->user_pass !== $user->user_pass ) {
+			self::instance()->revoke_all_refresh_tokens( $user->ID );
+		}
+	}
+
+	/**
 	 * Extract a WCPOS token from an authorization value.
 	 *
 	 * @param mixed $auth_value Authorization value.
