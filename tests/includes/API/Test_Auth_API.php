@@ -166,6 +166,70 @@ class Test_Auth_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A refresh without a refresh_token answers 400.
+	 */
+	public function test_refresh_token_missing_parameter_returns_400(): void {
+		// Arrange.
+		$request = $this->create_request();
+
+		// Act.
+		$response = $this->api->refresh_token( $request );
+
+		// Assert.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'invalid_request', $response->get_data()['error'] );
+	}
+
+	/**
+	 * A refresh with an invalid token answers 403.
+	 */
+	public function test_refresh_token_invalid_token_returns_403(): void {
+		// Arrange.
+		$request = $this->create_request( array( 'refresh_token' => 'invalid_token' ) );
+
+		// Act.
+		$response = $this->api->refresh_token( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'invalid_grant', $response->get_data()['error'] );
+	}
+
+	/**
+	 * A refresh for a revoked session answers 403.
+	 */
+	public function test_refresh_token_revoked_session_returns_403(): void {
+		// Arrange.
+		$tokens  = $this->auth_service->generate_token_pair( $this->regular_user );
+		$decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$this->assertTrue( $this->auth_service->revoke_session_with_blacklist( $this->regular_user->ID, $decoded->jti ) );
+		$request = $this->create_request( array( 'refresh_token' => $tokens['refresh_token'] ) );
+
+		// Act.
+		$response = $this->api->refresh_token( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'invalid_grant', $response->get_data()['error'] );
+	}
+
+	/**
+	 * A refresh with a valid token answers 200 with an access token.
+	 */
+	public function test_refresh_token_valid_returns_200(): void {
+		// Arrange.
+		$tokens  = $this->auth_service->generate_token_pair( $this->regular_user );
+		$request = $this->create_request( array( 'refresh_token' => $tokens['refresh_token'] ) );
+
+		// Act.
+		$response = $this->api->refresh_token( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'access_token', $response->get_data() );
+	}
+
+	/**
 	 * Test login user data includes granted capabilities.
 	 */
 	public function test_login_user_data_includes_capabilities_array(): void {
