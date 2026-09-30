@@ -271,6 +271,14 @@ class Init {
 				'reason'   => 'Append after lifecycle; REST priority 999 reports the final response status, gated by consent (#1811).',
 				'phase'    => 'post-latch',
 			),
+			array(
+				'hook'     => 'map_meta_cap',
+				'callback' => array( Services\Permission_Rules::class, 'map_user_meta_caps' ),
+				'priority' => 10,
+				'args'     => 4,
+				'reason'   => 'Default 10; the staff-account rule (#1918) for till users below shop manager wherever WordPress checks a user edit, not only on POS lanes. Only adds do_not_allow.',
+				'phase'    => 'post-latch',
+			),
 		);
 
 		return array_values(

@@ -345,6 +345,49 @@ class Permission_Rules {
 	}
 
 	/**
+	 * Apply the staff-account rule (#1918) wherever WordPress checks a user edit.
+	 *
+	 * Filters `map_meta_cap` so a till user below shop manager (holds
+	 * `access_woocommerce_pos` but not `manage_woocommerce`) may edit, delete,
+	 * remove or promote another account only when can_modify() allows it, on core,
+	 * wc/v3 and wp-admin routes as well as the POS lanes. Promoting oneself needs
+	 * `manage_options`. It only ever adds `do_not_allow`; it never grants.
+	 *
+	 * @param array  $caps    Primitive capabilities required.
+	 * @param string $cap     Capability being checked.
+	 * @param int    $user_id Acting user ID.
+	 * @param array  $args    Extra arguments; `$args[0]` is the target user ID.
+	 *
+	 * @return array
+	 */
+	public static function map_user_meta_caps( $caps, $cap, $user_id, $args ): array {
+		$caps = (array) $caps;
+		if ( ! \in_array( $cap, array( 'edit_user', 'delete_user', 'remove_user', 'promote_user', 'edit_users', 'delete_users', 'promote_users' ), true ) ) {
+			return $caps;
+		}
+		if ( ! isset( $args[0] ) || ! is_numeric( $args[0] ) || (int) $args[0] < 1 ) {
+			return $caps;
+		}
+		$actor = (int) $user_id;
+		if ( ! user_can( $actor, 'access_woocommerce_pos' ) || user_can( $actor, 'manage_woocommerce' ) ) {
+			return $caps;
+		}
+		$target = (int) $args[0];
+		if ( $actor === $target ) {
+			if ( \in_array( $cap, array( 'promote_user', 'promote_users' ), true ) && ! user_can( $actor, 'manage_options' ) ) {
+				$caps[] = 'do_not_allow';
+			}
+
+			return $caps;
+		}
+		if ( ! self::can_modify( $actor, $target ) ) {
+			$caps[] = 'do_not_allow';
+		}
+
+		return $caps;
+	}
+
+	/**
 	 * Build the staff account permission error.
 	 *
 	 * @return \WP_Error
