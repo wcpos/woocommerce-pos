@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Fixed: Changing or resetting a user's password signs that user out of the POS on every device. Logging out of WordPress in a browser ends the POS session in that browser only; the user's other tills stay signed in. (#2102)
 - Added: device-stamped business days on register sessions and closures, with business-day filtering and a site-timezone approximation for older rows.
 - Added: normalised corrections on closure detail reads and receipt documents, plus correction counts on closure lists; shipped templates remain unchanged.
 - Added: manager-credential approval for closure recounts, recording both the cashier and approving manager.

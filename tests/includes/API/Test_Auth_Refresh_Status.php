@@ -110,4 +110,27 @@ class Test_Auth_Refresh_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertArrayHasKey( 'access_token', $response->get_data() );
 	}
+
+	/**
+	 * A refresh for a deleted user answers 403.
+	 *
+	 * The handler maps a missing user to 404, but deleting the user deletes the session row
+	 * with its meta, so the revoked-session check answers first.
+	 */
+	public function test_refresh_deleted_user_returns_403(): void {
+		// Arrange.
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$tokens  = Auth::instance()->generate_token_pair( get_userdata( $user_id ) );
+		wp_delete_user( $user_id );
+		wp_set_current_user( 0 );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/auth/refresh' );
+		$request->set_body_params( array( 'refresh_token' => $tokens['refresh_token'] ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'invalid_grant', $response->get_data()['error'] );
+	}
 }
