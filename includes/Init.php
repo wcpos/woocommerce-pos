@@ -271,6 +271,18 @@ class Init {
 				'reason'   => 'Append after lifecycle; REST priority 999 reports the final response status, gated by consent (#1811).',
 				'phase'    => 'post-latch',
 			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					add_action( 'wp_logout', array( Services\Auth::class, 'revoke_web_session_on_logout' ), 10, 1 );
+					add_action( 'password_reset', array( Services\Auth::class, 'revoke_sessions_on_password_reset' ), 10, 1 );
+					add_action( 'profile_update', array( Services\Auth::class, 'revoke_sessions_on_password_change' ), 10, 2 );
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; logout ends this browser\'s web POS session, a password reset or change ends every POS session. Auth is built only when one fires.',
+				'phase'    => 'post-latch',
+			),
 		);
 
 		return array_values(

@@ -865,6 +865,29 @@ class Test_Session_Registry extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Reads skip an entry that holds an object instead of a session array, without throwing.
+	 */
+	public function test_object_entry_is_skipped_by_reads(): void {
+		// Arrange.
+		$token     = $this->auth_service->generate_refresh_token( $this->test_user );
+		$valid_jti = $this->auth_service->validate_token( $token, 'refresh' )->jti;
+		$row       = get_user_meta( $this->test_user->ID, Session_Registry::META_KEY, true );
+
+		$row['bad-object'] = new \stdClass();
+		update_user_meta( $this->test_user->ID, Session_Registry::META_KEY, $row );
+		$registry = $this->auth_service->sessions();
+
+		// Act.
+		$sessions = $registry->list( $this->test_user->ID );
+		$is_live  = $registry->is_live( $this->test_user->ID, 'bad-object' );
+
+		// Assert.
+		$this->assertCount( 1, $sessions );
+		$this->assertSame( $valid_jti, $sessions[0]['jti'] );
+		$this->assertFalse( $is_live );
+	}
+
+	/**
 	 * How many times `$run` writes the session row.
 	 *
 	 * Counts through the `update_user_metadata` short-circuit filter, returning `$check`
