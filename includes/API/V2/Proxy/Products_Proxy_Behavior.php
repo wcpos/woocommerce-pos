@@ -122,10 +122,12 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 	 * `include` (which wins over `exclude`, as in WP_Query) and `modified_after`,
 	 * ordered `post_date DESC, ID ASC` like the hydrated default plus Stable_Sort.
 	 *
-	 * Parity limit: stock values come from `wc_product_meta_lookup`, falling back to the
-	 * product's postmeta (`_manage_stock`, `_stock`, `_stock_status`) when it has no lookup
-	 * row. A lookup row written stale (meta changed outside WooCommerce's data layer after
-	 * the row was written) can still lag the hydrated value until the next save.
+	 * Stock values are read from the product's own postmeta (`_stock`, `_stock_status`)
+	 * exactly as `WC_Product::get_stock_quantity()` / `get_stock_status()` read them.
+	 * `wc_product_meta_lookup` is deliberately NOT used: it gates the quantity on managed
+	 * stock (null for an unmanaged product even when `_stock` holds a value the product
+	 * reports) and can lag meta written outside WooCommerce's data layer, either of which
+	 * would make the listing disagree with the product permanently.
 	 *
 	 * Before the query, wc/v3's own permission check for the listing runs
 	 * ({@see self::wc_v3_permission()}), and its refusal is answered as wc/v3 would.
@@ -150,10 +152,9 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 		$params = $request->get_query_params();
 		$posts  = $wpdb->posts;
 
-		$sql = "SELECT {$posts}.ID AS id, {$posts}.post_modified_gmt AS date_modified_gmt, lookup.product_id AS lookup_id, lookup.stock_quantity, lookup.stock_status,"
-			. ' pm_manage.meta_value AS meta_manage_stock, pm_stock.meta_value AS meta_stock, pm_status.meta_value AS meta_stock_status'
-			. " FROM {$posts} LEFT JOIN {$wpdb->wc_product_meta_lookup} lookup ON lookup.product_id = {$posts}.ID"
-			. " LEFT JOIN {$wpdb->postmeta} pm_manage ON pm_manage.post_id = {$posts}.ID AND pm_manage.meta_key = '_manage_stock'"
+		$sql = "SELECT {$posts}.ID AS id, {$posts}.post_modified_gmt AS date_modified_gmt,"
+			. ' pm_stock.meta_value AS meta_stock, pm_status.meta_value AS meta_stock_status'
+			. " FROM {$posts}"
 			. " LEFT JOIN {$wpdb->postmeta} pm_stock ON pm_stock.post_id = {$posts}.ID AND pm_stock.meta_key = '_stock'"
 			. " LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = {$posts}.ID AND pm_status.meta_key = '_stock_status'"
 			. " WHERE {$posts}.post_type = 'product'"
@@ -194,18 +195,14 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 		$statuses = wc_get_product_stock_status_options();
 		$data     = array();
 		foreach ( (array) $rows as $row ) {
-			if ( null === $row['lookup_id'] ) {
-				// No lookup row: fill the stock pair from postmeta as WooCommerce fills the lookup.
-				$row['stock_quantity'] = 'yes' === $row['meta_manage_stock'] && '' !== (string) $row['meta_stock'] ? $row['meta_stock'] : null;
-				$row['stock_status']   = $row['meta_stock_status'];
-			}
 			$modified = (string) $row['date_modified_gmt'];
 			$data[]   = array(
 				'id'                => (int) $row['id'],
 				'date_modified_gmt' => ( '' === $modified || '0000-00-00 00:00:00' === $modified ) ? null : mysql_to_rfc3339( $modified ),
-				'stock_quantity'    => null === $row['stock_quantity'] ? null : wc_stock_amount( $row['stock_quantity'] ),
+				// As WC_Product::set_stock_quantity() reads `_stock`: '' is null, not gated on `_manage_stock`.
+				'stock_quantity'    => ( null === $row['meta_stock'] || '' === (string) $row['meta_stock'] ) ? null : wc_stock_amount( $row['meta_stock'] ),
 				// WooCommerce's own fallback for an unknown or missing stock status.
-				'stock_status'      => isset( $statuses[ (string) $row['stock_status'] ] ) ? $row['stock_status'] : 'instock',
+				'stock_status'      => isset( $statuses[ (string) $row['meta_stock_status'] ] ) ? $row['meta_stock_status'] : 'instock',
 			);
 		}
 		$response = new WP_REST_Response( $data, 200 );
