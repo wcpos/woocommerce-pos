@@ -839,9 +839,10 @@ final class Digest_Index {
 
 	/**
 	 * The readable-catalog predicate over a post alias and its parent alias — a published product,
-	 * or a variation whose parent product is published. One home for the rule.
+	 * or a variation whose parent product is published. One home for the rule. The wcpos/v2 products
+	 * ID fast path ({@see \WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior::fast_response()}) calls it too.
 	 */
-	private function published_product_predicate_sql( string $post_alias, string $parent_alias ): string {
+	public static function published_product_predicate_sql( string $post_alias, string $parent_alias ): string {
 		return "(({$post_alias}.post_type = 'product' AND {$post_alias}.post_status = 'publish')"
 			. " OR ({$post_alias}.post_type = 'product_variation' AND {$parent_alias}.post_type = 'product'"
 			. " AND {$parent_alias}.post_status = 'publish'))";
