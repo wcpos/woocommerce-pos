@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V2\Proxy;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Store_Scope;
 use WP_Date_Query;
@@ -115,17 +116,16 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 	/**
 	 * Answer the reconciliation read (#2113) from ONE SQL query, without hydration.
 	 *
-	 * Rows are the hydrated listing's set: `product` posts (no variations) in every
-	 * status except those registered `exclude_from_search` (trash, auto-draft) —
-	 * wc/v3's default `status=any`, so drafts, pending, private and future are listed —
+	 * Rows are published `product` posts (no variations; by
+	 * {@see Digest_Index::published_product_predicate_sql()}, the reconcile listing's rule),
 	 * minus the POS-hidden catalog ids ({@see Pos_Visibility::CATALOG}), narrowed by
 	 * `include` (which wins over `exclude`, as in WP_Query) and `modified_after`,
 	 * ordered `post_date DESC, ID ASC` like the hydrated default plus Stable_Sort.
 	 *
-	 * Parity limit: stock values come from `wc_product_meta_lookup`, which WooCommerce
-	 * updates on product save and in `update_product_stock()`. Meta written outside
-	 * WooCommerce's data layer, or a product with no lookup row, can differ from the
-	 * hydrated value; a missing row answers `stock_quantity: null`, `stock_status: 'instock'`.
+	 * Parity limit: stock values come from `wc_product_meta_lookup`, falling back to the
+	 * product's postmeta (`_manage_stock`, `_stock`, `_stock_status`) when it has no lookup
+	 * row. A lookup row written stale (meta changed outside WooCommerce's data layer after
+	 * the row was written) can still lag the hydrated value until the next save.
 	 *
 	 * Before the query, wc/v3's own permission check for the listing runs
 	 * ({@see self::wc_v3_permission()}), and its refusal is answered as wc/v3 would.
@@ -147,16 +147,18 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 			return $permission instanceof WP_Error ? rest_convert_error_to_response( $permission ) : null;
 		}
 		global $wpdb;
-		$params   = $request->get_query_params();
-		$posts    = $wpdb->posts;
-		$excluded = array_values( get_post_stati( array( 'exclude_from_search' => true ) ) );
+		$params = $request->get_query_params();
+		$posts  = $wpdb->posts;
 
-		$sql = "SELECT {$posts}.ID AS id, {$posts}.post_modified_gmt AS date_modified_gmt, lookup.stock_quantity, lookup.stock_status"
+		$sql = "SELECT {$posts}.ID AS id, {$posts}.post_modified_gmt AS date_modified_gmt, lookup.product_id AS lookup_id, lookup.stock_quantity, lookup.stock_status,"
+			. ' pm_manage.meta_value AS meta_manage_stock, pm_stock.meta_value AS meta_stock, pm_status.meta_value AS meta_stock_status'
 			. " FROM {$posts} LEFT JOIN {$wpdb->wc_product_meta_lookup} lookup ON lookup.product_id = {$posts}.ID"
-			. " WHERE {$posts}.post_type = 'product'";
-		if ( array() !== $excluded ) {
-			$sql .= $wpdb->prepare( " AND {$posts}.post_status NOT IN (" . implode( ',', array_fill( 0, \count( $excluded ), '%s' ) ) . ')', $excluded ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb, placeholders built by array_fill.
-		}
+			. " LEFT JOIN {$wpdb->postmeta} pm_manage ON pm_manage.post_id = {$posts}.ID AND pm_manage.meta_key = '_manage_stock'"
+			. " LEFT JOIN {$wpdb->postmeta} pm_stock ON pm_stock.post_id = {$posts}.ID AND pm_stock.meta_key = '_stock'"
+			. " LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = {$posts}.ID AND pm_status.meta_key = '_stock_status'"
+			. " WHERE {$posts}.post_type = 'product'"
+			// The shared published rule, posts table for both aliases: its variation branch never matches a `product` row.
+			. ' AND ' . Digest_Index::published_product_predicate_sql( $posts, $posts );
 		$sql     = ( new Pos_Visibility() )->apply_to_sql_where( $sql, "{$posts}.ID", Pos_Visibility::CATALOG );
 		$include = wp_parse_id_list( $params['include'] ?? array() );
 		$exclude = wp_parse_id_list( $params['exclude'] ?? array() );
@@ -192,6 +194,11 @@ final class Products_Proxy_Behavior extends Scoped_Proxy_Behavior implements Fas
 		$statuses = wc_get_product_stock_status_options();
 		$data     = array();
 		foreach ( (array) $rows as $row ) {
+			if ( null === $row['lookup_id'] ) {
+				// No lookup row: fill the stock pair from postmeta as WooCommerce fills the lookup.
+				$row['stock_quantity'] = 'yes' === $row['meta_manage_stock'] && '' !== (string) $row['meta_stock'] ? $row['meta_stock'] : null;
+				$row['stock_status']   = $row['meta_stock_status'];
+			}
 			$modified = (string) $row['date_modified_gmt'];
 			$data[]   = array(
 				'id'                => (int) $row['id'],

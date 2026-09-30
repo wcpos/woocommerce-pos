@@ -150,7 +150,8 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Walk the hydrated listing (`per_page=100`) until an empty page, projected to the four fields.
+	 * Walk the hydrated `status=publish` listing (`per_page=100`) until an empty page, projected
+	 * to the four fields — the set the fast path serves.
 	 *
 	 * @param array $params Extra query parameters.
 	 */
@@ -159,6 +160,7 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 		for ( $page = 1; $page < 100; $page++ ) {
 			$response = $this->dispatch_products(
 				array_merge(
+					array( 'status' => 'publish' ),
 					$params,
 					array(
 						'per_page' => 100,
@@ -305,8 +307,11 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( $expected, $actual );
 		$served = self::ids( $actual );
-		$this->assertContains( $ids['draft'], $served );
-		$this->assertContains( $ids['private'], $served );
+		$this->assertContains( $ids['managed'], $served );
+		$this->assertNotContains( $ids['draft'], $served );
+		$this->assertNotContains( $ids['private'], $served );
+		$this->assertNotContains( $ids['draft'], self::ids( $expected ) );
+		$this->assertNotContains( $ids['private'], self::ids( $expected ) );
 		$this->assertNotContains( $ids['trashed'], $served );
 		$this->assertNotContains( $ids['auto_draft'], $served );
 	}
@@ -336,24 +341,49 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A product with no lookup row answers `stock_quantity: null`, `stock_status: 'instock'`.
+	 * Only published products are listed; draft, private and pending ones are absent.
 	 */
-	public function test_fast_path_missing_lookup_row_answers_instock_and_null(): void {
+	public function test_fast_path_lists_published_products_only(): void {
+		$published = $this->product()->get_id();
+		$draft     = $this->product( array(), 'draft' )->get_id();
+		$private   = $this->product( array(), 'private' )->get_id();
+		$pending   = $this->product( array(), 'pending' )->get_id();
+
+		$served = self::ids( $this->fast()->get_data() );
+
+		$this->assertContains( $published, $served );
+		$this->assertNotContains( $draft, $served );
+		$this->assertNotContains( $private, $served );
+		$this->assertNotContains( $pending, $served );
+	}
+
+	/**
+	 * A product with no lookup row takes its stock pair from postmeta, matching the hydrated read.
+	 */
+	public function test_fast_path_missing_lookup_row_falls_back_to_postmeta(): void {
 		global $wpdb;
-		$product = $this->product(
+		$managed   = $this->product(
 			array(
 				'manage_stock'   => true,
 				'stock_quantity' => 0,
 				'stock_status'   => 'outofstock',
 			)
-		);
-		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $product->get_id() ) );
+		)->get_id();
+		$unmanaged = $this->product( array( 'stock_status' => 'onbackorder' ) )->get_id();
+		// A leftover `_stock` on an unmanaged product: WooCommerce's lookup fill ignores it, and so must the fallback.
+		update_post_meta( $unmanaged, '_stock', '7' );
+		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $managed ) );
+		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $unmanaged ) );
 
-		$rows = array_column( $this->fast()->get_data(), null, 'id' );
+		$rows     = array_column( $this->fast()->get_data(), null, 'id' );
+		$hydrated = array_column( $this->hydrated(), null, 'id' );
 
-		$this->assertArrayHasKey( $product->get_id(), $rows );
-		$this->assertNull( $rows[ $product->get_id() ]['stock_quantity'] );
-		$this->assertSame( 'instock', $rows[ $product->get_id() ]['stock_status'] );
+		$this->assertSame( 0, $rows[ $managed ]['stock_quantity'] );
+		$this->assertSame( 'outofstock', $rows[ $managed ]['stock_status'] );
+		$this->assertSame( $hydrated[ $managed ], $rows[ $managed ] );
+		$this->assertNull( $rows[ $unmanaged ]['stock_quantity'] );
+		$this->assertSame( 'onbackorder', $rows[ $unmanaged ]['stock_status'] );
+		$this->assertSame( $hydrated[ $unmanaged ]['stock_status'], $rows[ $unmanaged ]['stock_status'] );
 	}
 
 	/**
