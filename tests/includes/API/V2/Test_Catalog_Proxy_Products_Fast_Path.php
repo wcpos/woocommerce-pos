@@ -150,7 +150,8 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Walk the hydrated listing (`per_page=100`) until an empty page, projected to the four fields.
+	 * Walk the hydrated `status=publish` listing (`per_page=100`) until an empty page, projected
+	 * to the four fields — the set the fast path serves.
 	 *
 	 * @param array $params Extra query parameters.
 	 */
@@ -159,6 +160,7 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 		for ( $page = 1; $page < 100; $page++ ) {
 			$response = $this->dispatch_products(
 				array_merge(
+					array( 'status' => 'publish' ),
 					$params,
 					array(
 						'per_page' => 100,
@@ -305,8 +307,11 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( $expected, $actual );
 		$served = self::ids( $actual );
-		$this->assertContains( $ids['draft'], $served );
-		$this->assertContains( $ids['private'], $served );
+		$this->assertContains( $ids['managed'], $served );
+		$this->assertNotContains( $ids['draft'], $served );
+		$this->assertNotContains( $ids['private'], $served );
+		$this->assertNotContains( $ids['draft'], self::ids( $expected ) );
+		$this->assertNotContains( $ids['private'], self::ids( $expected ) );
 		$this->assertNotContains( $ids['trashed'], $served );
 		$this->assertNotContains( $ids['auto_draft'], $served );
 	}
@@ -336,24 +341,73 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A product with no lookup row answers `stock_quantity: null`, `stock_status: 'instock'`.
+	 * Only published products are listed; draft, private and pending ones are absent.
 	 */
-	public function test_fast_path_missing_lookup_row_answers_instock_and_null(): void {
+	public function test_fast_path_lists_published_products_only(): void {
+		$published = $this->product()->get_id();
+		$draft     = $this->product( array(), 'draft' )->get_id();
+		$private   = $this->product( array(), 'private' )->get_id();
+		$pending   = $this->product( array(), 'pending' )->get_id();
+
+		$served = self::ids( $this->fast()->get_data() );
+
+		$this->assertContains( $published, $served );
+		$this->assertNotContains( $draft, $served );
+		$this->assertNotContains( $private, $served );
+		$this->assertNotContains( $pending, $served );
+	}
+
+	/**
+	 * Stock matches the hydrated product whether its lookup row is missing, stale or current,
+	 * and a missing `_stock_status` answers WooCommerce's `instock` fallback.
+	 */
+	public function test_fast_path_stock_matches_the_product_with_or_without_a_lookup_row(): void {
 		global $wpdb;
-		$product = $this->product(
+		$missing   = $this->product(
 			array(
 				'manage_stock'   => true,
 				'stock_quantity' => 0,
 				'stock_status'   => 'outofstock',
 			)
-		);
-		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $product->get_id() ) );
+		)->get_id();
+		$stale     = $this->product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+			)
+		)->get_id();
+		$no_status = $this->product( array( 'stock_status' => 'outofstock' ) )->get_id();
+		$wpdb->delete( $wpdb->wc_product_meta_lookup, array( 'product_id' => $missing ) );
+		// Written outside the data layer: the lookup row keeps 5.
+		update_post_meta( $stale, '_stock', '3' );
+		delete_post_meta( $no_status, '_stock_status' );
 
-		$rows = array_column( $this->fast()->get_data(), null, 'id' );
+		$rows     = array_column( $this->fast()->get_data(), null, 'id' );
+		$hydrated = array_column( $this->hydrated(), null, 'id' );
 
-		$this->assertArrayHasKey( $product->get_id(), $rows );
-		$this->assertNull( $rows[ $product->get_id() ]['stock_quantity'] );
-		$this->assertSame( 'instock', $rows[ $product->get_id() ]['stock_status'] );
+		$this->assertSame( 0, $rows[ $missing ]['stock_quantity'] );
+		$this->assertSame( 'outofstock', $rows[ $missing ]['stock_status'] );
+		$this->assertSame( 3, $hydrated[ $stale ]['stock_quantity'] );
+		$this->assertSame( 'instock', $hydrated[ $no_status ]['stock_status'] );
+		foreach ( array( $missing, $stale, $no_status ) as $id ) {
+			$this->assertSame( $hydrated[ $id ]['stock_quantity'], $rows[ $id ]['stock_quantity'], "stock_quantity {$id}" );
+			$this->assertSame( $hydrated[ $id ]['stock_status'], $rows[ $id ]['stock_status'], "stock_status {$id}" );
+		}
+	}
+
+	/**
+	 * A leftover `_stock` on an unmanaged product is reported by the product, so the fast path reports it too.
+	 */
+	public function test_fast_path_unmanaged_product_with_leftover_stock_reports_the_hydrated_value(): void {
+		$unmanaged = $this->product( array( 'manage_stock' => false ) )->get_id();
+		update_post_meta( $unmanaged, '_stock', '7' );
+
+		$rows     = array_column( $this->fast()->get_data(), null, 'id' );
+		$hydrated = array_column( $this->hydrated(), null, 'id' );
+
+		$this->assertSame( 7, $hydrated[ $unmanaged ]['stock_quantity'] );
+		$this->assertSame( 7, $rows[ $unmanaged ]['stock_quantity'] );
+		$this->assertSame( $hydrated[ $unmanaged ]['stock_quantity'], $rows[ $unmanaged ]['stock_quantity'] );
 	}
 
 	/**
@@ -542,6 +596,33 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertNotEmpty( $actual );
 		$this->assertSame( $expected, $actual );
+	}
+
+	/**
+	 * A second `_stock` / `_stock_status` row (some imports write them) neither duplicates the
+	 * product nor inflates the total; the first row answers, as it does for the product.
+	 */
+	public function test_fast_path_duplicate_stock_meta_lists_the_product_once_with_its_first_value(): void {
+		$id = $this->product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 4,
+			)
+		)->get_id();
+		add_post_meta( $id, '_stock', '9' );
+		add_post_meta( $id, '_stock_status', 'outofstock' );
+
+		$response = $this->fast();
+		$data     = $response->get_data();
+		$rows     = array_column( $data, null, 'id' );
+		$hydrated = array_column( $this->hydrated(), null, 'id' );
+
+		$this->assertSame( 1, \count( array_keys( self::ids( $data ), $id, true ) ) );
+		$this->assertSame( (string) \count( $data ), (string) $response->get_headers()['X-WP-Total'] );
+		$this->assertSame( 4, $hydrated[ $id ]['stock_quantity'] );
+		$this->assertSame( 'instock', $hydrated[ $id ]['stock_status'] );
+		$this->assertSame( $hydrated[ $id ]['stock_quantity'], $rows[ $id ]['stock_quantity'] );
+		$this->assertSame( $hydrated[ $id ]['stock_status'], $rows[ $id ]['stock_status'] );
 	}
 
 	/**
