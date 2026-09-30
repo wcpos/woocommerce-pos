@@ -256,7 +256,10 @@ final class Session_Registry {
 			return false;
 		}
 
-		return isset( $refresh_tokens[ $jti ] ) && $refresh_tokens[ $jti ]['expires'] > time();
+		$entry = $refresh_tokens[ $jti ] ?? null;
+
+		// A malformed entry (not an array, or no expiry) is not a live session.
+		return \is_array( $entry ) && isset( $entry['expires'] ) && (int) $entry['expires'] > time();
 	}
 
 	/**

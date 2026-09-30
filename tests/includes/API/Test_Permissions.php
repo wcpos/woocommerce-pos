@@ -527,16 +527,30 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that the auth/refresh endpoint is public (not 403).
+	 * Test that the auth/refresh endpoint is public: logged out, a valid refresh token
+	 * answers 200 with an access token, and an invalid one answers 403 `invalid_grant`
+	 * from the handler itself (not from a permission gate).
 	 */
 	public function test_auth_refresh_endpoint_is_public(): void {
+		// Arrange.
+		$user   = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$tokens = \WCPOS\WooCommercePOS\Services\Auth::instance()->generate_token_pair( $user );
 		wp_set_current_user( 0 );
 
-		$request = $this->wp_rest_post_request( '/wcpos/v1/auth/refresh' );
-		$request->set_body_params( array( 'refresh_token' => 'dummy' ) );
-		$response = $this->server->dispatch( $request );
+		$valid_request = $this->wp_rest_post_request( '/wcpos/v1/auth/refresh' );
+		$valid_request->set_body_params( array( 'refresh_token' => $tokens['refresh_token'] ) );
+		$invalid_request = $this->wp_rest_post_request( '/wcpos/v1/auth/refresh' );
+		$invalid_request->set_body_params( array( 'refresh_token' => 'dummy' ) );
 
-		$this->assertNotEquals( 403, $response->get_status() );
+		// Act.
+		$valid_response   = $this->server->dispatch( $valid_request );
+		$invalid_response = $this->server->dispatch( $invalid_request );
+
+		// Assert.
+		$this->assertSame( 200, $valid_response->get_status() );
+		$this->assertArrayHasKey( 'access_token', $valid_response->get_data() );
+		$this->assertSame( 403, $invalid_response->get_status() );
+		$this->assertSame( 'invalid_grant', $invalid_response->get_data()['error'] );
 	}
 
 	// ──────────────────────────────────────────────

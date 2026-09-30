@@ -251,7 +251,7 @@ class Auth extends WP_REST_Controller {
 		$refresh_token = $request->get_param( 'refresh_token' );
 
 		if ( empty( $refresh_token ) ) {
-			return rest_ensure_response(
+			return new WP_REST_Response(
 				array(
 					'error'             => 'invalid_request',
 					'error_description' => 'Missing refresh_token parameter',
@@ -277,7 +277,7 @@ class Auth extends WP_REST_Controller {
 				$oauth_error = 'invalid_grant';
 			}
 
-			return rest_ensure_response(
+			return new WP_REST_Response(
 				array(
 					'error'             => $oauth_error,
 					'error_description' => $error_msg,
