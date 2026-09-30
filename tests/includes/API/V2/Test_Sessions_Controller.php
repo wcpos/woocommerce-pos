@@ -778,4 +778,40 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'query', $refuse );
 		}
 	}
+
+	/** A revoked session's access token cannot approve a close once its cached revocation is gone. */
+	public function test_close_with_revoked_session_approver_token_is_refused(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$route = 'sessions/' . $id . '/status';
+		$close = array(
+			'status' => 'counting',
+			'at' => '2026-09-11T11:00:00Z',
+		);
+		$this->post( $route, $close );
+		$close['status'] = 'closed';
+		$close['counted'] = array( 'cash' => '100' );
+		$manager = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$tokens = Auth::instance()->generate_token_pair( $manager );
+		$jti = Auth::instance()->validate_token( $tokens['refresh_token'], 'refresh' )->jti;
+		Auth::instance()->revoke_session_with_blacklist( $manager->ID, $jti );
+		delete_transient( 'wcpos_blacklist_' . $jti );
+		$close['approver_token'] = $tokens['access_token'];
+
+		// Act.
+		$refused = $this->post( $route, $close );
+
+		// Assert.
+		$this->assertSame( 403, $refused->get_status() );
+		$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		$stored = ( new Register_Session_Store() )->get( $id );
+		$this->assertSame( 'counting', $stored['status'] );
+		$this->assertNull( $stored['approved_by'] );
+		// Control: a fresh session-linked token for the same manager approves the close.
+		$close['approver_token'] = Auth::instance()->generate_token_pair( $manager )['access_token'];
+		$response = $this->post( $route, $close );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
+	}
 }
