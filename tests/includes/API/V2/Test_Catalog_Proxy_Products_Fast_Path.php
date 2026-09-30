@@ -599,6 +599,33 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A second `_stock` / `_stock_status` row (some imports write them) neither duplicates the
+	 * product nor inflates the total; the first row answers, as it does for the product.
+	 */
+	public function test_fast_path_duplicate_stock_meta_lists_the_product_once_with_its_first_value(): void {
+		$id = $this->product(
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 4,
+			)
+		)->get_id();
+		add_post_meta( $id, '_stock', '9' );
+		add_post_meta( $id, '_stock_status', 'outofstock' );
+
+		$response = $this->fast();
+		$data     = $response->get_data();
+		$rows     = array_column( $data, null, 'id' );
+		$hydrated = array_column( $this->hydrated(), null, 'id' );
+
+		$this->assertSame( 1, \count( array_keys( self::ids( $data ), $id, true ) ) );
+		$this->assertSame( (string) \count( $data ), (string) $response->get_headers()['X-WP-Total'] );
+		$this->assertSame( 4, $hydrated[ $id ]['stock_quantity'] );
+		$this->assertSame( 'instock', $hydrated[ $id ]['stock_status'] );
+		$this->assertSame( $hydrated[ $id ]['stock_quantity'], $rows[ $id ]['stock_quantity'] );
+		$this->assertSame( $hydrated[ $id ]['stock_status'], $rows[ $id ]['stock_status'] );
+	}
+
+	/**
 	 * Assert wc/v3 answered: its `per_page` 400, which only the forward can produce.
 	 *
 	 * @param WP_REST_Response $response Response.
