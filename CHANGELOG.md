@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Fixed: Cashiers can only edit customer accounts. Any account with a staff role, other cashiers included, is out of their reach through the POS and through WordPress's own user screens and API. A cashier who also holds the Shop manager role keeps that role's rights. (#2104)
+
 - Changed: the `wcpos/v2` service map is now derived from the v1 controller map, so a plugin replacing a v1 service through `woocommerce_pos_rest_api_controllers` answers under `wcpos/v2` as well without registering a v2 twin. The fifteen `WCPOS\WooCommercePOS\API\V2\*` pass-through classes are gone and their names alias the v1 classes; a class registered through `woocommerce_pos_rest_api_v2_controllers` no longer needs its own `$namespace`. Outside the registry, subclasses of those aliases inherit the v1 namespace and must set their own.
 
 - Fixed: tills could keep showing **Online Only** products that the store had hidden from the POS. From 1.10.1 to 1.10.14 the POS product search could return a hidden product (fixed in 1.10.15), and a till that searched during that window stored it locally; the one-time removal notice that 1.10.1 wrote for hidden products predates those copies, and the catalogue change stream never mentions a hidden record again, so the copies stayed on the till until the client's own existence audit reached them — which on a host reporting sustained load runs only a little at a time. Upgrading now writes a fresh removal notice for every hidden product and variation, and every till drops its stale copies on its next ordinary sync, no reset or manual sync needed.
