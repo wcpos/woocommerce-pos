@@ -183,59 +183,71 @@ class Test_Payment_Gateways_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * The catalog uses admin display values when the public title is null.
 	 */
 	public function test_payment_gateways_null_title_falls_back_to_method_title(): void {
-		$gateway = new class() extends WC_Payment_Gateway {
-			/**
-			 * Set up a minimal gateway without assigning a public display name.
-			 */
-			public function __construct() {
-				$this->id                 = 'wcpos_catalog_untitled';
-				$this->method_title       = 'Catalog Method';
-				$this->method_description = 'Catalog description';
-				$this->enabled            = 'yes';
-				$this->supports           = array( 'products' );
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_catalog_untitled',
+				'method_title'       => 'Catalog Method',
+				'method_description' => 'Catalog description',
+				'enabled'            => 'yes',
+				'supports'           => array( 'products' ),
+			),
+			function () {
+				$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+
+				$match = wp_list_filter( $response->get_data(), array( 'id' => 'wcpos_catalog_untitled' ) );
+				$this->assertNotEmpty( $match );
+				$found = array_shift( $match );
+
+				$this->assertSame( 'Catalog Method', $found['title'] );
+				$this->assertSame( 'Catalog description', $found['description'] );
 			}
-		};
-
-		$add_gateway = static function ( $gateways ) use ( $gateway ) {
-			return array_merge( $gateways, array( $gateway ) );
-		};
-
-		add_filter( 'woocommerce_payment_gateways', $add_gateway );
-
-		$registry                   = WC_Payment_Gateways::instance();
-		$registry->payment_gateways = array();
-		$registry->init();
-
-		try {
-			$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
-			$response = $this->server->dispatch( $request );
-			$this->assertSame( 200, $response->get_status() );
-
-			$match = wp_list_filter( $response->get_data(), array( 'id' => 'wcpos_catalog_untitled' ) );
-			$this->assertNotEmpty( $match );
-			$found = array_shift( $match );
-
-			$this->assertSame( 'Catalog Method', $found['title'] );
-			$this->assertSame( 'Catalog description', $found['description'] );
-		} finally {
-			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
-			$registry->payment_gateways = array();
-			$registry->init();
-		}
+		);
 	}
 
 	/**
 	 * The catalog uses the gateway id when both titles are empty.
 	 */
 	public function test_payment_gateways_empty_titles_fall_back_to_id(): void {
-		$gateway = new class() extends WC_Payment_Gateway {
+		$this->with_stub_gateway(
+			array(
+				'id'           => 'wcpos_catalog_nameless',
+				'title'        => '',
+				'method_title' => '',
+			),
+			function () {
+				$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+
+				$match = wp_list_filter( $response->get_data(), array( 'id' => 'wcpos_catalog_nameless' ) );
+				$this->assertNotEmpty( $match );
+				$found = array_shift( $match );
+
+				$this->assertSame( 'wcpos_catalog_nameless', $found['title'] );
+			}
+		);
+	}
+
+	/**
+	 * Register a stub gateway with the given public properties for the duration
+	 * of the callback, then restore the gateway registry.
+	 *
+	 * @param array    $props    Property name => value, assigned on the stub (e.g. 'id', 'title', 'method_title').
+	 * @param callable $callback Runs while the stub is registered.
+	 */
+	private function with_stub_gateway( array $props, callable $callback ): void {
+		$gateway = new class( $props ) extends WC_Payment_Gateway {
 			/**
-			 * Set up a minimal gateway without assigning a public display name.
+			 * Assign the given properties without building form fields.
+			 *
+			 * @param array $props Property name => value.
 			 */
-			public function __construct() {
-				$this->id           = 'wcpos_catalog_nameless';
-				$this->title        = '';
-				$this->method_title = '';
+			public function __construct( array $props ) {
+				foreach ( $props as $name => $value ) {
+					$this->$name = $value;
+				}
 			}
 		};
 
@@ -250,15 +262,7 @@ class Test_Payment_Gateways_Controller extends WCPOS_REST_Unit_Test_Case {
 		$registry->init();
 
 		try {
-			$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
-			$response = $this->server->dispatch( $request );
-			$this->assertSame( 200, $response->get_status() );
-
-			$match = wp_list_filter( $response->get_data(), array( 'id' => 'wcpos_catalog_nameless' ) );
-			$this->assertNotEmpty( $match );
-			$found = array_shift( $match );
-
-			$this->assertSame( 'wcpos_catalog_nameless', $found['title'] );
+			$callback();
 		} finally {
 			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
 			$registry->payment_gateways = array();

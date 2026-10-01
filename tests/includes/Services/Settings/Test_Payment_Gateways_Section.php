@@ -116,132 +116,115 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 	 * A gateway without a public title uses its admin display values.
 	 */
 	public function test_read_gateway_with_null_title_falls_back_to_method_title(): void {
-		$gateway = new class() extends WC_Payment_Gateway {
-			/**
-			 * Set up a minimal gateway without assigning a public display name.
-			 */
-			public function __construct() {
-				$this->id                 = 'wcpos_untitled_gateway';
-				$this->method_title       = 'Untitled Method';
-				$this->method_description = 'Method description';
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_untitled_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_untitled_gateway']['title'] );
+				$this->assertSame( 'Method description', $settings['gateways']['wcpos_untitled_gateway']['description'] );
 			}
-		};
-
-		$add_gateway = static function ( $gateways ) use ( $gateway ) {
-			return array_merge( $gateways, array( $gateway ) );
-		};
-
-		add_filter( 'woocommerce_payment_gateways', $add_gateway );
-
-		$registry                   = WC_Payment_Gateways::instance();
-		$registry->payment_gateways = array();
-		$registry->init();
-
-		try {
-			$section  = new Payment_Gateways_Section();
-			$settings = $section->read();
-
-			$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_untitled_gateway']['title'] );
-			$this->assertSame( 'Method description', $settings['gateways']['wcpos_untitled_gateway']['description'] );
-		} finally {
-			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
-			$registry->payment_gateways = array();
-			$registry->init();
-		}
+		);
 	}
 
 	/**
 	 * A gateway without public or admin titles uses its id.
 	 */
 	public function test_read_gateway_with_empty_titles_falls_back_to_id(): void {
-		$gateway = new class() extends WC_Payment_Gateway {
-			/**
-			 * Set up a minimal gateway without assigning a public display name.
-			 */
-			public function __construct() {
-				$this->id           = 'wcpos_nameless_gateway';
-				$this->title        = '';
-				$this->method_title = '';
+		$this->with_stub_gateway(
+			array(
+				'id'           => 'wcpos_nameless_gateway',
+				'title'        => '',
+				'method_title' => '',
+			),
+			function () {
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'wcpos_nameless_gateway', $settings['gateways']['wcpos_nameless_gateway']['title'] );
 			}
-		};
-
-		$add_gateway = static function ( $gateways ) use ( $gateway ) {
-			return array_merge( $gateways, array( $gateway ) );
-		};
-
-		add_filter( 'woocommerce_payment_gateways', $add_gateway );
-
-		$registry                   = WC_Payment_Gateways::instance();
-		$registry->payment_gateways = array();
-		$registry->init();
-
-		try {
-			$section  = new Payment_Gateways_Section();
-			$settings = $section->read();
-
-			$this->assertSame( 'wcpos_nameless_gateway', $settings['gateways']['wcpos_nameless_gateway']['title'] );
-		} finally {
-			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
-			$registry->payment_gateways = array();
-			$registry->init();
-		}
+		);
 	}
 
 	/**
 	 * A saved null title falls back without replacing the enabled setting.
 	 */
 	public function test_read_saved_null_title_falls_back_to_method_title(): void {
-		$gateway = new class() extends WC_Payment_Gateway {
-			/**
-			 * Set up a minimal gateway without assigning a public display name.
-			 */
-			public function __construct() {
-				$this->id                 = 'wcpos_saved_null_gateway';
-				$this->method_title       = 'Untitled Method';
-				$this->method_description = 'Method description';
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_null_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array(
+						'gateways' => array(
+							'wcpos_saved_null_gateway' => array(
+								'title'   => null,
+								'enabled' => true,
+							),
+						),
+					)
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_saved_null_gateway']['title'] );
+				$this->assertTrue( $settings['gateways']['wcpos_saved_null_gateway']['enabled'] );
 			}
-		};
-
-		$add_gateway = static function ( $gateways ) use ( $gateway ) {
-			return array_merge( $gateways, array( $gateway ) );
-		};
-
-		add_filter( 'woocommerce_payment_gateways', $add_gateway );
-
-		$registry                   = WC_Payment_Gateways::instance();
-		$registry->payment_gateways = array();
-		$registry->init();
-
-		try {
-			update_option(
-				'woocommerce_pos_settings_payment_gateways',
-				array( 'gateways' => array( 'wcpos_saved_null_gateway' => array( 'title' => null, 'enabled' => true ) ) )
-			);
-
-			$section  = new Payment_Gateways_Section();
-			$settings = $section->read();
-
-			$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_saved_null_gateway']['title'] );
-			$this->assertSame( true, $settings['gateways']['wcpos_saved_null_gateway']['enabled'] );
-		} finally {
-			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
-			$registry->payment_gateways = array();
-			$registry->init();
-		}
+		);
 	}
 
 	/**
 	 * A saved non-empty POS title takes precedence over the fallback.
 	 */
 	public function test_read_saved_pos_title_wins_over_fallback(): void {
-		$gateway = new class() extends WC_Payment_Gateway {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_title_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array( 'gateways' => array( 'wcpos_saved_title_gateway' => array( 'title' => 'Front Counter' ) ) )
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Front Counter', $settings['gateways']['wcpos_saved_title_gateway']['title'] );
+			}
+		);
+	}
+
+	/**
+	 * Register a stub gateway with the given public properties for the duration
+	 * of the callback, then restore the gateway registry.
+	 *
+	 * @param array    $props    Property name => value, assigned on the stub (e.g. 'id', 'title', 'method_title').
+	 * @param callable $callback Runs while the stub is registered.
+	 */
+	private function with_stub_gateway( array $props, callable $callback ): void {
+		$gateway = new class( $props ) extends WC_Payment_Gateway {
 			/**
-			 * Set up a minimal gateway without assigning a public display name.
+			 * Assign the given properties without building form fields.
+			 *
+			 * @param array $props Property name => value.
 			 */
-			public function __construct() {
-				$this->id                 = 'wcpos_saved_title_gateway';
-				$this->method_title       = 'Untitled Method';
-				$this->method_description = 'Method description';
+			public function __construct( array $props ) {
+				foreach ( $props as $name => $value ) {
+					$this->$name = $value;
+				}
 			}
 		};
 
@@ -256,15 +239,7 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		$registry->init();
 
 		try {
-			update_option(
-				'woocommerce_pos_settings_payment_gateways',
-				array( 'gateways' => array( 'wcpos_saved_title_gateway' => array( 'title' => 'Front Counter' ) ) )
-			);
-
-			$section  = new Payment_Gateways_Section();
-			$settings = $section->read();
-
-			$this->assertSame( 'Front Counter', $settings['gateways']['wcpos_saved_title_gateway']['title'] );
+			$callback();
 		} finally {
 			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
 			$registry->payment_gateways = array();
