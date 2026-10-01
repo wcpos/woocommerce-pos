@@ -133,6 +133,11 @@ class Payment_Gateways_Section extends Abstract_Section {
 			if ( ! is_string( $response['gateways'][ $id ]['title'] ) || '' === trim( $response['gateways'][ $id ]['title'] ) ) {
 				$response['gateways'][ $id ]['title'] = $contract->get_display_title( $gateway );
 			}
+
+			// A saved empty string is a deliberate blank and is kept.
+			if ( ! is_string( $response['gateways'][ $id ]['description'] ) ) {
+				$response['gateways'][ $id ]['description'] = $contract->get_display_description( $gateway );
+			}
 		}
 
 		/**

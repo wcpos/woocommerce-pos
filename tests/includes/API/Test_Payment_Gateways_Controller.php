@@ -192,7 +192,7 @@ class Test_Payment_Gateways_Controller extends WCPOS_REST_Unit_Test_Case {
 				'supports'           => array( 'products' ),
 			),
 			function () {
-				$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
+				$request  = $this->wp_rest_get_request( '/wcpos/v2/payment-gateways' );
 				$response = $this->server->dispatch( $request );
 				$this->assertSame( 200, $response->get_status() );
 
@@ -217,7 +217,7 @@ class Test_Payment_Gateways_Controller extends WCPOS_REST_Unit_Test_Case {
 				'method_title' => '',
 			),
 			function () {
-				$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
+				$request  = $this->wp_rest_get_request( '/wcpos/v2/payment-gateways' );
 				$response = $this->server->dispatch( $request );
 				$this->assertSame( 200, $response->get_status() );
 

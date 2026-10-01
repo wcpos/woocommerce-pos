@@ -208,6 +208,54 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A saved null description falls back to the method description.
+	 */
+	public function test_read_saved_null_description_falls_back_to_method_description(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_null_desc_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array( 'gateways' => array( 'wcpos_saved_null_desc_gateway' => array( 'description' => null ) ) )
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Method description', $settings['gateways']['wcpos_saved_null_desc_gateway']['description'] );
+			}
+		);
+	}
+
+	/**
+	 * A saved empty description is kept as a deliberate blank.
+	 */
+	public function test_read_saved_empty_description_is_kept(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_empty_desc_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array( 'gateways' => array( 'wcpos_saved_empty_desc_gateway' => array( 'description' => '' ) ) )
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( '', $settings['gateways']['wcpos_saved_empty_desc_gateway']['description'] );
+			}
+		);
+	}
+
+	/**
 	 * Register a stub gateway with the given public properties for the duration
 	 * of the callback, then restore the gateway registry.
 	 *
