@@ -123,8 +123,8 @@ class Payment_Gateways extends WC_REST_Controller {
 	public function prepare_item_for_response( $item, $request ): WP_REST_Response {
 		$data = array(
 			'id'            => $item->id,
-			'title'         => $item->get_title(),
-			'description'   => $item->get_description(),
+			'title'         => $this->gateway_contract->get_display_title( $item ),
+			'description'   => $this->gateway_contract->get_display_description( $item ),
 			'enabled'       => $this->gateway_contract->is_pos_enabled( $item ),
 			'provider'      => $this->gateway_contract->get_provider( $item, $request ),
 			'pos_type'      => $this->gateway_contract->infer_pos_type( $item, $request ),
