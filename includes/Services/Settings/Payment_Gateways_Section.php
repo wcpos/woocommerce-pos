@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WC_Payment_Gateways;
+use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 
 /**
  * The Payment Gateways Settings Section.
@@ -106,6 +107,8 @@ class Payment_Gateways_Section extends Abstract_Section {
 		// Gateways that represent deferred/unverified payment default to on-hold.
 		$on_hold_gateways = array( 'bacs', 'cheque' );
 
+		$contract = new Gateway_Contract();
+
 		// loop through installed gateways and merge with saved settings.
 		foreach ( $installed_gateways as $id => $gateway ) {
 			// sanity check for gateway class.
@@ -118,14 +121,23 @@ class Payment_Gateways_Section extends Abstract_Section {
 			$response['gateways'][ $id ] = array_replace_recursive(
 				array(
 					'id'           => $gateway->id,
-					'title'        => $gateway->title,
-					'description'  => $gateway->description,
+					'title'        => $contract->get_display_title( $gateway ),
+					'description'  => $contract->get_display_description( $gateway ),
 					'enabled'      => false,
 					'order'        => 999,
 					'order_status' => $default_status,
 				),
 				$gateways_settings['gateways'][ $id ] ?? array()
 			);
+
+			if ( ! is_string( $response['gateways'][ $id ]['title'] ) || '' === trim( $response['gateways'][ $id ]['title'] ) ) {
+				$response['gateways'][ $id ]['title'] = $contract->get_display_title( $gateway );
+			}
+
+			// A saved empty string is a deliberate blank and is kept.
+			if ( ! is_string( $response['gateways'][ $id ]['description'] ) ) {
+				$response['gateways'][ $id ]['description'] = $contract->get_display_description( $gateway );
+			}
 		}
 
 		/**
