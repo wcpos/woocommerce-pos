@@ -15,7 +15,7 @@
     "php-stubs/woocommerce-stubs": "v11.1.2",
     "php-stubs/wordpress-stubs": "v7.1.0",
     "phpcompatibility/phpcompatibility-wp": "2.1.8",
-    "phpstan/phpstan": "2.2.15",
+    "phpstan/phpstan": "2.2.16",
     "sirbrillig/phpcs-variable-analysis": "v3.0.0",
     "squizlabs/php_codesniffer": "3.13.6",
     "szepeviktor/phpstan-wordpress": "v2.0.4",
