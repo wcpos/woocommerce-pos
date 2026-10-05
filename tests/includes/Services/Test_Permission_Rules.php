@@ -58,7 +58,11 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 		} elseif ( 'orders' === $collection ) {
 			$order = wc_create_order();
 			$id = $order->get_id();
-			wp_update_post( array( 'ID' => $id, 'post_author' => 'self' === $target_role ? $actor : $this->user ) );
+			// Ownership is the order's `_pos_user`; the placeholder post's author is set to the
+			// OPPOSITE user so a rule that still read `post_author` would answer wrong.
+			$order->update_meta_data( '_pos_user', (string) ( 'self' === $target_role ? $actor : $this->user ) );
+			$order->save_meta_data();
+			wp_update_post( array( 'ID' => $id, 'post_author' => 'self' === $target_role ? $this->user : $actor ) );
 		}
 		wp_set_current_user( $actor );
 		$params = 'customers' === $collection ? array( 'first_name' => 'Permission rule' ) : array( 'customer_note' => 'Permission rule' );
@@ -137,22 +141,25 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Missing post ownership must retain each lane's pre-refactor edit decision.
+	 * Ownership is read from the order, so an HPOS order with no post row at all is
+	 * still judged by `_pos_user` on both lanes.
 	 *
 	 * @dataProvider missing_order_post_rows
 	 */
-	public function test_order_edit_missing_post_preserves_lane_verdict( $lane, $expected ): void {
+	public function test_order_edit_missing_post_judges_pos_user_ownership( $lane, $owner, $expected ): void {
 		// Arrange: HPOS order exists, but its placeholder post does not.
 		global $wpdb;
 		$this->setup_cot();
 		$this->cot_setup = true;
 		$this->disable_cot_sync();
+		$actor = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$order = wc_create_order();
 		$id    = $order->get_id();
+		$order->update_meta_data( '_pos_user', (string) ( $owner ? $actor : $this->user ) );
+		$order->save_meta_data();
 		$wpdb->delete( $wpdb->posts, array( 'ID' => $id ), array( '%d' ) );
 		clean_post_cache( $id );
-		$actor = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$user  = get_user_by( 'id', $actor );
+		$user = get_user_by( 'id', $actor );
 		$user->add_cap( 'access_woocommerce_pos' );
 		$user->add_cap( 'edit_shop_orders' );
 		wp_set_current_user( $actor );
@@ -178,8 +185,45 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 
 	public function missing_order_post_rows(): array {
 		return array(
-			'v1 retains flat edit grant' => array( 'v1', 200 ),
-			'v2 retains missing-post denial' => array( 'v2', 403 ),
+			'v1 owner edits'      => array( 'v1', true, 200 ),
+			'v1 non-owner denied' => array( 'v1', false, 403 ),
+			'v2 owner edits'      => array( 'v2', true, 200 ),
+			'v2 non-owner denied' => array( 'v2', false, 403 ),
+		);
+	}
+
+	/**
+	 * On posts storage WooCommerce writes `post_author = 1` for every order, so a rule
+	 * keyed on the post author treated a cashier's own sale as someone else's.
+	 *
+	 * @dataProvider posts_storage_ownership_rows
+	 */
+	public function test_order_edit_posts_storage_cashier_owns_own_sale( $lane, $context ): void {
+		// Arrange: posts storage, a cashier holding the flat cap but not the `others` one.
+		$this->assertFalse( \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() );
+		$actor = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user  = get_user_by( 'id', $actor );
+		foreach ( array( 'access_woocommerce_pos', 'read_private_shop_orders', "{$context}_shop_orders" ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos_user', (string) $actor );
+		$order->save_meta_data();
+		$this->assertSame( 1, (int) get_post( $order->get_id() )->post_author );
+		wp_set_current_user( $actor );
+
+		// Act.
+		$verdict = Permission_Rules::verdict( 'orders', $context, $order->get_id(), $actor, $lane );
+
+		// Assert.
+		$this->assertTrue( $verdict, is_wp_error( $verdict ) ? $verdict->get_error_code() : '' );
+	}
+
+	public function posts_storage_ownership_rows(): array {
+		return array(
+			'v1 edit'   => array( 'v1', 'edit' ),
+			'v2 edit'   => array( 'v2', 'edit' ),
+			'v2 delete' => array( 'v2', 'delete' ),
 		);
 	}
 

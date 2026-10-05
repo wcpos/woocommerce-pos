@@ -221,19 +221,18 @@ class Permission_Rules {
 			if ( 'v1' === $lane && ( ! wc_get_order( $object_id ) || ! current_user_can( "{$context}_shop_orders" ) ) ) {
 				return $permission;
 			}
-			// Without a post row, only v1 historically granted the flat edit cap.
+			// Edit is always ownership-aware (ORDER_RULES), so it has no flat fallback.
 			$caps = array(
 				'read'   => 'read_private_shop_orders',
 				'create' => 'publish_shop_orders',
-				'edit'   => 'v1' === $lane ? 'edit_shop_orders' : null,
 				'delete' => 'delete_shop_orders',
 			);
 			$cap  = $caps[ $context ] ?? null;
 			foreach ( self::ORDER_RULES as $rule ) {
 				if ( $lane === $rule['lane'] && $context === $rule['context'] && $rule['ownership'] ) {
-					$post = get_post( $object_id );
-					if ( $post ) {
-						$cap = get_current_user_id() === (int) $post->post_author ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
+					$order = wc_get_order( $object_id );
+					if ( $order instanceof \WC_Abstract_Order ) {
+						$cap = self::owns_order( $order ) ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
 					}
 				}
 			}
@@ -246,6 +245,28 @@ class Permission_Rules {
 			$permission = current_user_can( 'access_woocommerce_pos' );
 		}
 		return $permission;
+	}
+
+	/**
+	 * Whether the current user is the cashier an order is assigned to.
+	 *
+	 * `_pos_user` is the only ownership signal an order carries on both storage
+	 * modes: the write lanes stamp it server-side on creation and move it on a
+	 * cashier reassignment. `post_author` is not that signal — the posts store
+	 * writes `1` for every order, and the HPOS placeholder row inherits whoever
+	 * was logged in when it was inserted (the customer, or nobody, for a web
+	 * order). An order without `_pos_user` (a web order) belongs to no cashier,
+	 * so it needs the `*_others_shop_orders` capability.
+	 *
+	 * @param \WC_Abstract_Order $order Order being judged.
+	 * @return bool
+	 */
+	private static function owns_order( \WC_Abstract_Order $order ): bool {
+		$cashier = $order->get_meta( '_pos_user' );
+		$actor   = get_current_user_id();
+
+		// The lanes stamp the canonical decimal string, so an exact match is the strict test.
+		return $actor > 0 && is_scalar( $cashier ) && (string) $cashier === (string) $actor;
 	}
 
 	/**

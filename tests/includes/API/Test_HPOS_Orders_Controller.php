@@ -1171,7 +1171,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$user->add_cap( 'access_woocommerce_pos' );
 		$user->add_cap( 'read_private_shop_orders' );
 		$user->add_cap( 'edit_shop_orders' );
-		$this->assertNotSame( $user->ID, (int) get_post( $order->get_id() )->post_author );
+		$this->assertSame( '', $order->get_meta( '_pos_user' ), 'A web order is assigned to no cashier' );
 		$this->assertFalse( user_can( $user, 'edit_posts' ) );
 		$user->add_cap( 'edit_others_shop_orders', $can_edit_others );
 		$this->assertSame( $can_edit_others, user_can( $user, 'edit_others_shop_orders' ) );
