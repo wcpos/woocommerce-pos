@@ -58,11 +58,13 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 		} elseif ( 'orders' === $collection ) {
 			$order = wc_create_order();
 			$id = $order->get_id();
-			// Ownership is the order's `_pos_user`; the placeholder post's author is set to the
-			// OPPOSITE user so a rule that still read `post_author` would answer wrong.
+			// Ownership is the order's `_pos_user`. The placeholder post's author is never the
+			// actor, so a rule that still read `post_author` denies the `self` rows, and
+			// WooCommerce's own author-based check (HposOrderCapabilityHelper, WC 11+)
+			// answers the same on every WooCommerce version.
 			$order->update_meta_data( '_pos_user', (string) ( 'self' === $target_role ? $actor : $this->user ) );
 			$order->save_meta_data();
-			wp_update_post( array( 'ID' => $id, 'post_author' => 'self' === $target_role ? $this->user : $actor ) );
+			wp_update_post( array( 'ID' => $id, 'post_author' => $this->user ) );
 		}
 		wp_set_current_user( $actor );
 		$params = 'customers' === $collection ? array( 'first_name' => 'Permission rule' ) : array( 'customer_note' => 'Permission rule' );
@@ -223,14 +225,21 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 	 * A WooCommerce grant does not bypass ownership: the cashier who created an order
 	 * (so is its post author wherever a post row carries one) loses it on reassignment.
 	 *
+	 * With compatibility sync the `shop_order` post carries the author; without it,
+	 * WooCommerce 11's HposOrderCapabilityHelper reads the placeholder's author.
+	 *
 	 * @dataProvider reassigned_order_rows
 	 */
 	public function test_order_write_reassigned_order_denies_creator_on_both_lanes( $storage, $lane, $context ): void {
 		// Arrange.
-		if ( 'hpos-sync' === $storage ) {
+		if ( 'posts' !== $storage ) {
 			$this->setup_cot();
 			$this->cot_setup = true;
-			$this->enable_cot_sync();
+			if ( 'hpos-sync' === $storage ) {
+				$this->enable_cot_sync();
+			} else {
+				$this->disable_cot_sync();
+			}
 		}
 		$this->install_sync_read_lane();
 		$creator  = $this->factory->user->create( array( 'role' => 'subscriber' ) );
@@ -244,8 +253,8 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 		$order->update_meta_data( '_pos_user', (string) $assignee );
 		$order->save();
 		$id = $order->get_id();
-		if ( 'hpos-sync' === $storage ) {
-			$this->assertSame( 'shop_order', get_post_type( $id ) );
+		if ( 'posts' !== $storage ) {
+			$this->assertSame( 'hpos-sync' === $storage ? 'shop_order' : 'shop_order_placehold', get_post_type( $id ) );
 			$this->assertSame( $creator, (int) get_post( $id )->post_author );
 		}
 
@@ -274,9 +283,12 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 			'posts v1 edit'      => array( 'posts', 'v1', 'edit' ),
 			'posts v2 edit'      => array( 'posts', 'v2', 'edit' ),
 			'posts v2 delete'    => array( 'posts', 'v2', 'delete' ),
-			'hpos-sync v1 edit'  => array( 'hpos-sync', 'v1', 'edit' ),
-			'hpos-sync v2 edit'  => array( 'hpos-sync', 'v2', 'edit' ),
+			'hpos-sync v1 edit'   => array( 'hpos-sync', 'v1', 'edit' ),
+			'hpos-sync v2 edit'   => array( 'hpos-sync', 'v2', 'edit' ),
 			'hpos-sync v2 delete' => array( 'hpos-sync', 'v2', 'delete' ),
+			'hpos v1 edit'        => array( 'hpos', 'v1', 'edit' ),
+			'hpos v2 edit'        => array( 'hpos', 'v2', 'edit' ),
+			'hpos v2 delete'      => array( 'hpos', 'v2', 'delete' ),
 		);
 	}
 
