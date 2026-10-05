@@ -386,7 +386,8 @@ class Test_Gateway_Contract extends WCPOS_REST_Unit_Test_Case {
 
 		try {
 			$gateway  = \WC_Payment_Gateways::instance()->payment_gateways()['wcpos_refund_provider_only'];
-			$request  = new WP_REST_Request( 'GET', '/wcpos/v1/payment-gateways' );
+			// The request only rides along to the filters; the v2 route is the one this lane owns.
+			$request  = new WP_REST_Request( 'GET', '/wcpos/v2/payment-methods' );
 			$contract = new Gateway_Contract();
 
 			$this->assertFalse( $gateway->supports( 'refunds' ), 'the gateway class itself declares no refunds' );
