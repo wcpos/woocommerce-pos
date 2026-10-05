@@ -475,9 +475,10 @@ class Init {
 			return;
 		}
 
-		// The relay's consent callback is expected unmarked traffic (see
-		// register_public_relay_routes()), not a misconfigured client.
-		if ( '/wcpos/v1/print-jobs/relay-verification' === $route ) {
+		// The relay's consent callback and the payment providers' webhooks are expected
+		// unmarked traffic (the relay and SumUp/Stripe/Mollie send no WCPOS header), not a
+		// misconfigured client; every card payment was logging this warning.
+		if ( in_array( $route, array( '/wcpos/v1/print-jobs/relay-verification', '/wcpos/v2/payments/webhook' ), true ) ) {
 			return;
 		}
 
