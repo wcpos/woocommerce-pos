@@ -134,6 +134,11 @@ case "$*" in
     [[ "${FETCH_FAIL:-}" != wasm ]] || exit 1
     [[ "${EMPTY_BLOB:-}" != wasm ]] || exit 0
     printf '\0asm\1\0\0\0' ;;
+  # The next lane reads the branch head, never a tag.
+  'api repos/wcpos/web-bundle/contents/build/sqlite.worker.js?ref=next -H Accept: application/vnd.github.raw')
+    printf 'next worker' ;;
+  'api repos/wcpos/web-bundle/contents/build/sqlite3.wasm?ref=next -H Accept: application/vnd.github.raw')
+    printf '\0asm\1\0\0\0' ;;
   *) echo "Unexpected GitHub request: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -181,6 +186,26 @@ fi
 grep -q 'no v2.0.x tag found' "$TMP_DIR/drift.log" || fail "wrong missing-tag error"
 
 # ---------------------------------------------------------------------------
+# The next lane: BUNDLE_REF names the web-bundle branch; no tag is resolved, so a
+# version with no tags (every `next` VERSION) still gets checked.
+# ---------------------------------------------------------------------------
+printf 'next worker' > "$TMP_DIR/worker.js"
+NO_TAGS=1 BUNDLE_REF=next check_fixture > "$TMP_DIR/drift.log" 2>&1 \
+  || fail "matching next-lane worker failed: $(cat "$TMP_DIR/drift.log")"
+grep -q 'matches wcpos/web-bundle@next:' "$TMP_DIR/drift.log" || fail "next lane did not compare against @next"
+
+printf 'old asset' > "$TMP_DIR/worker.js"
+if NO_TAGS=1 BUNDLE_REF=next check_fixture > "$TMP_DIR/drift.log" 2>&1; then
+  fail "next-lane worker drift passed"
+fi
+grep -q 'worker.js has drifted' "$TMP_DIR/drift.log" || fail "wrong next-lane drift error"
+grep -q 'lane ref @next' "$TMP_DIR/drift.log" || fail "next-lane drift does not name the lane ref"
+# On dev-next the page loads Pro's vendored copy of this plugin: the fix is not done at merge.
+grep -q 'deploy-dev.yml --repo wcpos/woocommerce-pos-pro --ref next' "$TMP_DIR/drift.log" \
+  || fail "next-lane drift does not name the Pro deploy"
+printf 'new worker' > "$TMP_DIR/worker.js"
+
+# ---------------------------------------------------------------------------
 # Wiring
 # ---------------------------------------------------------------------------
 [[ -f "$WORKFLOW_FILE" ]] || fail "workflow not found: $WORKFLOW_FILE"
@@ -188,5 +213,10 @@ grep -q 'check-opfs-worker-drift.sh' "$WORKFLOW_FILE" \
   || fail "workflow does not run check-opfs-worker-drift.sh"
 grep -q 'test-check-opfs-worker-drift.sh' "$WORKFLOW_FILE" \
   || fail "workflow does not run this test script"
+# The next lane is checked on its own pushes/PRs and by the schedule, against the branch.
+grep -q 'BUNDLE_REF: next' "$WORKFLOW_FILE" \
+  || fail "workflow has no scheduled next-lane check against web-bundle@next"
+grep -qE "github\.base_ref == 'next'" "$WORKFLOW_FILE" \
+  || fail "workflow does not check next-lane PRs against web-bundle@next"
 
 echo "PASS: check-opfs-worker-drift.sh"

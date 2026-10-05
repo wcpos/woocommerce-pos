@@ -84,15 +84,26 @@ for file in "$WORKER_FILE" "$WASM_FILE"; do
   [[ -f "$file" ]] || fail "vendored asset not found: $file"
 done
 
-major_minor=$(plugin_major_minor "$PLUGIN_FILE") \
-  || fail "could not parse the VERSION constant out of $PLUGIN_FILE"
+# The `next` lane has no tag: its jsDelivr ref IS the web-bundle `next` branch (owner
+# ruling, 2026-09-04), so dev-next loads whatever that branch's head holds. The lane's
+# workflow passes it as BUNDLE_REF and the version-to-tag resolution is skipped. Left
+# unchecked, the vendored worker fell one rxdb minor behind the bundle for five days
+# and dev-next failed every boot with RxDB RM1 the moment the bundle was published
+# (2026-10-05).
+if [[ -n "${BUNDLE_REF:-}" ]]; then
+  tag="$BUNDLE_REF"
+  major_minor="(lane ref)"
+else
+  major_minor=$(plugin_major_minor "$PLUGIN_FILE") \
+    || fail "could not parse the VERSION constant out of $PLUGIN_FILE"
 
-tags=$(gh api --paginate "repos/${BUNDLE_REPO}/git/matching-refs/tags/v${major_minor}." \
-  --jq '.[].ref | sub("^refs/tags/"; "")' 2>/dev/null) \
-  || fail "could not list ${BUNDLE_REPO} tags for v${major_minor}.x"
+  tags=$(gh api --paginate "repos/${BUNDLE_REPO}/git/matching-refs/tags/v${major_minor}." \
+    --jq '.[].ref | sub("^refs/tags/"; "")' 2>/dev/null) \
+    || fail "could not list ${BUNDLE_REPO} tags for v${major_minor}.x"
 
-tag=$(printf '%s\n' "$tags" | newest_bundle_tag "$major_minor")
-[[ -n "$tag" ]] || fail "no v${major_minor}.x tag found in ${BUNDLE_REPO} — cannot verify the worker"
+  tag=$(printf '%s\n' "$tags" | newest_bundle_tag "$major_minor")
+  [[ -n "$tag" ]] || fail "no v${major_minor}.x tag found in ${BUNDLE_REPO} — cannot verify the worker"
+fi
 
 expected="$(mktemp)"
 trap 'rm -f "$expected"' EXIT
@@ -118,10 +129,17 @@ for i in 0 1; do
     continue
   fi
 
+  if [[ -n "${BUNDLE_REF:-}" ]]; then
+    resolved="lane ref @${tag}  ->  branch head of ${BUNDLE_REPO}"
+    reach="On a Pro dev site the page loads Pro's VENDORED copy of this plugin, so after merging also run: gh workflow run deploy-dev.yml --repo wcpos/woocommerce-pos-pro --ref ${tag}"
+  else
+    resolved="plugin version   $major_minor.x  ->  bundle ref @${major_minor}  ->  resolves to ${tag}"
+    reach="Desktop is unaffected — electron packages its own assets."
+  fi
   cat >&2 <<MSG
 ::error::$file has drifted from the bundle the plugin loads.
 
-  plugin version   $major_minor.x  ->  bundle ref @${major_minor}  ->  resolves to ${tag}
+  ${resolved}
   vendored copy    $have
   bundle copy      $want
 
@@ -131,7 +149,7 @@ copy above, not the bundle's. Re-vendor it:
   gh api "repos/${BUNDLE_REPO}/contents/${bundle_path}?ref=${tag}" \\
     -H "Accept: application/vnd.github.raw" > ${file}
 
-Then commit the result. Desktop is unaffected — electron packages its own assets.
+Then commit the result. ${reach}
 MSG
   exit 1
 done
