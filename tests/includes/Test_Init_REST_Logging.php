@@ -99,6 +99,19 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A payment provider's webhook never carries the marker: it is expected unmarked traffic.
+	 */
+	public function test_payment_webhook_without_marker_does_not_warn(): void {
+		global $wp;
+
+		$wp->query_vars = array( 'rest_route' => '/wcpos/v2/payments/webhook' );
+
+		$this->invoke_log_unmarked_wcpos_rest_request();
+
+		$this->assertCount( 0, $this->logged_messages );
+	}
+
+	/**
 	 * It does not warn for an unrelated REST namespace.
 	 */
 	public function test_non_wcpos_request_does_not_log_missing_marker_warning(): void {
