@@ -219,6 +219,66 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 		$this->assertTrue( $verdict, is_wp_error( $verdict ) ? $verdict->get_error_code() : '' );
 	}
 
+	/**
+	 * A WooCommerce grant does not bypass ownership: the cashier who created an order
+	 * (so is its post author wherever a post row carries one) loses it on reassignment.
+	 *
+	 * @dataProvider reassigned_order_rows
+	 */
+	public function test_order_write_reassigned_order_denies_creator_on_both_lanes( $storage, $lane, $context ): void {
+		// Arrange.
+		if ( 'hpos-sync' === $storage ) {
+			$this->setup_cot();
+			$this->cot_setup = true;
+			$this->enable_cot_sync();
+		}
+		$this->install_sync_read_lane();
+		$creator  = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$assignee = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user     = get_user_by( 'id', $creator );
+		foreach ( array( 'access_woocommerce_pos', 'read_private_shop_orders', "{$context}_shop_orders" ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+		wp_set_current_user( $creator );
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos_user', (string) $assignee );
+		$order->save();
+		$id = $order->get_id();
+		if ( 'hpos-sync' === $storage ) {
+			$this->assertSame( 'shop_order', get_post_type( $id ) );
+			$this->assertSame( $creator, (int) get_post( $id )->post_author );
+		}
+
+		// Act: judge, then dispatch the same operation on the lane.
+		$verdict = Permission_Rules::verdict( 'orders', $context, $id, $creator, $lane );
+		if ( 'v1' === $lane ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $id );
+			$request->set_method( 'delete' === $context ? 'DELETE' : 'PATCH' );
+			if ( 'delete' !== $context ) {
+				$request->set_body_params( array( 'customer_note' => 'Reassigned' ) );
+			}
+			$response = $this->server->dispatch( $request );
+		} else {
+			$response = $this->push( 'orders', $context, $id, array( 'customer_note' => 'Reassigned' ) );
+		}
+
+		// Assert.
+		$this->assertWPError( $verdict );
+		$this->assertSame( 403, $verdict->get_error_data()['status'] );
+		$this->assertSame( 403, $response->get_status(), wp_json_encode( $response->get_data() ) );
+	}
+
+	public function reassigned_order_rows(): array {
+		return array(
+			'posts v1 edit'      => array( 'posts', 'v1', 'edit' ),
+			'posts v2 edit'      => array( 'posts', 'v2', 'edit' ),
+			'posts v2 delete'    => array( 'posts', 'v2', 'delete' ),
+			'hpos-sync v1 edit'  => array( 'hpos-sync', 'v1', 'edit' ),
+			'hpos-sync v2 edit'  => array( 'hpos-sync', 'v2', 'edit' ),
+			'hpos-sync v2 delete' => array( 'hpos-sync', 'v2', 'delete' ),
+		);
+	}
+
 	public function posts_storage_ownership_rows(): array {
 		return array(
 			'v1 edit'   => array( 'v1', 'edit' ),
