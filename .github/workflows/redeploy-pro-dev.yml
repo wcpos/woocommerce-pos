@@ -1,0 +1,70 @@
+name: Redeploy Pro to dev-next
+
+# dev-next's active plugin is woocommerce-pos-pro, whose composer-vendored copy of THIS
+# plugin (`wcpos/woocommerce-pos: dev-next`) is what the page loads. A merge to `next` here
+# deploys the free plugin dir on dev-next, which is inactive there, so nothing the cashier
+# sees changes until Pro's dev deploy runs `composer update` against free's `next` head.
+# On 2026-10-05 the vendored SQLite worker lagged this way for five days and every dev-next
+# boot failed with RxDB RM1 once the web bundle was published; the fix sat merged here
+# until someone dispatched Pro by hand. This workflow is that hand.
+#
+# Only the `next` lane: `main` deploys to dev-free/dev-pro, which run a single variant
+# each and are not switched (owner ruling).
+
+on:
+  workflow_run:
+    workflows: ['Deploy to Dev Site']
+    types: [completed]
+    branches: [next]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: redeploy-pro-dev
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: 🔁 Dispatch woocommerce-pos-pro deploy-dev on next
+    # A dispatch by hand always runs; a workflow_run only after a GREEN deploy of `next`.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'next')
+    runs-on: ubuntu-latest
+    steps:
+      # The secrets context is not available in a step `if`, so a preflight reads them in
+      # its own env and fails NAMING the grant, instead of create-github-app-token failing
+      # with an empty-input message that says nothing about where the value lives.
+      - name: 🔎 The bot App's credentials are visible to this repo
+        env:
+          APP_ID: ${{ secrets.WCPOS_BOT_APP_ID }}
+          PRIVATE_KEY: ${{ secrets.WCPOS_BOT_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::WCPOS_BOT_APP_ID / WCPOS_BOT_PRIVATE_KEY are not visible to wcpos/woocommerce-pos. They are org-level secrets (the monorepo's publish-web-bundle.yml uses them); add this repository to their visibility at github.com/organizations/wcpos/settings/secrets/actions. Until then, after a free merge to next run by hand: gh workflow run deploy-dev.yml --repo wcpos/woocommerce-pos-pro --ref next"
+            exit 1
+          fi
+          echo "✅ bot App credentials visible"
+
+      - name: 🔑 Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v2
+        with:
+          app-id: ${{ secrets.WCPOS_BOT_APP_ID }}
+          private-key: ${{ secrets.WCPOS_BOT_PRIVATE_KEY }}
+          owner: wcpos
+          repositories: woocommerce-pos-pro
+
+      - name: 🚀 Dispatch Pro's deploy-dev on next
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FREE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run deploy-dev.yml --repo wcpos/woocommerce-pos-pro --ref next
+          echo "Dispatched woocommerce-pos-pro deploy-dev.yml on next (free head ${FREE_SHA:0:9}). It runs composer update against wcpos/woocommerce-pos dev-next and deploys to dev-next."
+          # Name the run so the trail from here leads to it.
+          sleep 10
+          gh run list --repo wcpos/woocommerce-pos-pro --workflow deploy-dev.yml --branch next --event workflow_dispatch --limit 1 --json url,status --jq '.[0] | "\(.url) \(.status)"' || true
