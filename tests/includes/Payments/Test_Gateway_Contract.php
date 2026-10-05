@@ -392,6 +392,8 @@ class Test_Gateway_Contract extends WCPOS_REST_Unit_Test_Case {
 
 			$this->assertFalse( $gateway->supports( 'refunds' ), 'the gateway class itself declares no refunds' );
 			$this->assertTrue( $contract->get_capabilities( $gateway, $request )['supports_provider_refunds'] );
+			// Automatic refunds go through process_refund(), which this gateway does not offer.
+			$this->assertFalse( $contract->get_capabilities( $gateway, $request )['supports_automatic_refunds'] );
 			// The v2 descriptor is the source: a gateway it does not call refundable stays as before.
 			$this->assertFalse( $contract->get_capabilities( \WC_Payment_Gateways::instance()->payment_gateways()['bacs'], $request )['supports_provider_refunds'] );
 		} finally {

@@ -112,7 +112,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	public function supports_pos_provider_refunds( ?WP_REST_Request $request = null ): bool {
 		$default = $this->direct_adapter
 			? $this->direct_adapter->supports_pos_provider_refunds( $request )
-			: $this->get_default_refund_support();
+			: ( $this->get_default_refund_support() || $this->descriptor_refunds_via_provider() );
 
 		return (bool) apply_filters( 'wcpos_payment_gateway_supports_provider_refunds', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 	}
@@ -195,21 +195,26 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	}
 
 	/**
-	 * Default refund support for the gateway.
-	 *
-	 * The WooCommerce `refunds` feature flag is the legacy answer. A gateway whose POS
-	 * capture-mode provider refunds (the v2 descriptor's `refunds.via` is `provider`)
-	 * refunds from the till through that provider, not through `process_refund()`, so
-	 * it counts even when the gateway class declares no `refunds` support — the
-	 * terminal extensions' legacy gateways do not, and the refund form offered only
-	 * cash for a SumUp sale (first physical Solo run, 2026-10-05).
+	 * Default refund support for the gateway: WooCommerce's `refunds` feature flag,
+	 * which is what `process_refund()` (an automatic refund) needs.
 	 */
 	private function get_default_refund_support(): bool {
+		return ! in_array( $this->gateway->id, self::MANUAL_GATEWAYS, true ) && $this->gateway->supports( 'refunds' );
+	}
+
+	/**
+	 * Whether the gateway's POS capture mode refunds through its provider.
+	 *
+	 * A gateway whose v2 descriptor says `refunds.via` is `provider` refunds from the
+	 * till through that provider, not through `process_refund()`, so it supports
+	 * provider refunds even when the gateway class declares no `refunds` feature — the
+	 * terminal extensions' legacy gateways do not, and the refund form offered only
+	 * cash for a SumUp sale (first physical Solo run, 2026-10-05). Automatic refunds
+	 * stay on the feature flag.
+	 */
+	private function descriptor_refunds_via_provider(): bool {
 		if ( in_array( $this->gateway->id, self::MANUAL_GATEWAYS, true ) ) {
 			return false;
-		}
-		if ( $this->gateway->supports( 'refunds' ) ) {
-			return true;
 		}
 		$descriptor = Contract\Descriptor_Builder::instance()->get( $this->gateway->id );
 
