@@ -4,16 +4,25 @@ name: OPFS Worker Drift
 # from PLUGIN_URL), not from the CDN bundle — so a bundle release does not reach web
 # merchants until both assets are re-vendored here.
 #
-# The drift is caused by an event in another repo (a wcpos/web-bundle tag), which
-# fires nothing here; hence the schedule as well as the PR trigger.
+# The drift is caused by an event in another repo (a wcpos/web-bundle tag, or a push to
+# its `next` branch), which fires nothing here; hence the schedule as well as the PR trigger.
+#
+# Two lanes, two references:
+#   main → the released `v<major.minor>.<patch>` tag the plugin's VERSION resolves to.
+#   next → the web-bundle `next` BRANCH, which is the dev lane's jsDelivr ref (@next) and
+#          what dev-next loads. Checked on `next` pushes/PRs and by the schedule, because
+#          the worker fell one rxdb minor behind for five days unnoticed and dev-next failed
+#          every boot with RxDB RM1 the moment the bundle was published (2026-10-05).
 
 on:
   pull_request:
     branches:
       - main
+      - next
   push:
     branches:
       - main
+      - next
   schedule:
     - cron: '17 6 * * *'
   workflow_dispatch:
@@ -41,4 +50,24 @@ jobs:
       - name: Check the vendored worker and WASM against the bundle
         env:
           GH_TOKEN: ${{ github.token }}
+          # A `next` push or PR compares against the lane's branch; `main` resolves a tag.
+          BUNDLE_REF: ${{ (github.base_ref == 'next' || github.ref_name == 'next') && 'next' || '' }}
+        run: bash .github/scripts/check-opfs-worker-drift.sh
+
+  # The schedule runs from the default branch, so the `next` lane gets its own checkout.
+  drift-next:
+    name: 🧵 next lane — worker and WASM match web-bundle@next
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout next
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - name: Check the vendored worker and WASM against web-bundle@next
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_REF: next
         run: bash .github/scripts/check-opfs-worker-drift.sh
