@@ -329,6 +329,13 @@ run_case "human PR rejects skipped smoke test for composer lock changes" fail \
   MOCK_PATCH="" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
+run_case "human PR rejects skipped smoke test for php-scoper lock changes" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="chore(deps): bump scoped dependencies" \
+  MOCK_CHANGED_FILES="php-scoper/composer.lock" \
+  MOCK_PATCH="" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
 echo "merge-gate tests passed"
 
 # --- Fix-bot pinning-test discipline ---
@@ -686,7 +693,7 @@ run_case "delegation naming a workflow that does not run the suite is rejected" 
 # deadlock for lock-only dependency PRs.
 gate_php_paths() {
   sed -n '/^requires_php_tests()/,/^}/p' "$MERGE_GATE_SCRIPT" \
-    | grep -oE '\*\.php|composer\.(json|lock)|package\.json|pnpm-workspace\.yaml|patches/\*|\.github/[a-zA-Z0-9._/-]+\.(json|sh|yml)' \
+    | grep -oE '\*\.php|(php-scoper/)?composer\.(json|lock)|package\.json|pnpm-workspace\.yaml|patches/\*|\.github/[a-zA-Z0-9._/-]+\.(json|sh|yml)' \
     | sed -e 's|^\*\.php$|**.php|' -e 's|^patches/\*$|patches/**|' | sort -u
 }
 workflow_php_paths() {
