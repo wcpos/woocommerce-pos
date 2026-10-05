@@ -249,7 +249,8 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 			$this->assertSame( $creator, (int) get_post( $id )->post_author );
 		}
 
-		// Act: judge, then dispatch the same operation on the lane.
+		// Act: judge, then dispatch the same operation on the lane — the current lane
+		// is the route literal below; the legacy lane is the v1 PATCH/DELETE.
 		$verdict = Permission_Rules::verdict( 'orders', $context, $id, $creator, $lane );
 		if ( 'v1' === $lane ) {
 			$request = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $id );
@@ -259,7 +260,7 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 			}
 			$response = $this->server->dispatch( $request );
 		} else {
-			$response = $this->push( 'orders', $context, $id, array( 'customer_note' => 'Reassigned' ) );
+			$response = $this->push( 'orders', $context, $id, array( 'customer_note' => 'Reassigned' ), '/wcpos/v2/push/orders' );
 		}
 
 		// Assert.
