@@ -364,4 +364,72 @@ class Test_Gateway_Contract extends WCPOS_REST_Unit_Test_Case {
 			'}'
 		);
 	}
+
+	/**
+	 * A gateway whose POS capture-mode provider refunds counts as refundable to the original
+	 * method even when its WooCommerce class declares no `refunds` support: the terminal
+	 * extensions' legacy gateways do not, and the refund form offered only cash for a SumUp
+	 * sale on the first physical Solo run (2026-10-05).
+	 */
+	public function test_provider_refunds_follow_the_capture_mode_descriptor(): void {
+		$gateways_filter = static function ( array $gateways ): array {
+			$gateways[] = Refund_Provider_Only_Test_Gateway::class;
+			return $gateways;
+		};
+		$mode_filter = static function ( string $mode, WC_Payment_Gateway $gateway ): string {
+			return 'wcpos_refund_provider_only' === $gateway->id ? 'server:acme_refunds' : $mode;
+		};
+		add_filter( 'woocommerce_payment_gateways', $gateways_filter );
+		add_filter( 'wcpos_payment_method_capture_mode', $mode_filter, 10, 2 );
+		wcpos_register_capture_mode( 'server:acme_refunds', Acme_Refunding_Test_Handler::class );
+		\WC_Payment_Gateways::instance()->init();
+
+		try {
+			$gateway  = \WC_Payment_Gateways::instance()->payment_gateways()['wcpos_refund_provider_only'];
+			$request  = new WP_REST_Request( 'GET', '/wcpos/v1/payment-gateways' );
+			$contract = new Gateway_Contract();
+
+			$this->assertFalse( $gateway->supports( 'refunds' ), 'the gateway class itself declares no refunds' );
+			$this->assertTrue( $contract->get_capabilities( $gateway, $request )['supports_provider_refunds'] );
+			// The v2 descriptor is the source: a gateway it does not call refundable stays as before.
+			$this->assertFalse( $contract->get_capabilities( \WC_Payment_Gateways::instance()->payment_gateways()['bacs'], $request )['supports_provider_refunds'] );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $gateways_filter );
+			remove_filter( 'wcpos_payment_method_capture_mode', $mode_filter, 10 );
+			$reflection = new \ReflectionClass( \WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::class );
+			$property   = $reflection->getProperty( 'instance' );
+			$property->setAccessible( true );
+			$property->setValue( null, null );
+			\WC_Payment_Gateways::instance()->init();
+		}
+	}
+}
+
+/** A legacy-shaped gateway: no `refunds` feature flag. */
+class Refund_Provider_Only_Test_Gateway extends WC_Payment_Gateway {
+	public function __construct() {
+		$this->id          = 'wcpos_refund_provider_only';
+		$this->title       = 'Refund Provider Only';
+		$this->description = '';
+		$this->enabled     = 'yes';
+		$this->supports    = array( 'products' );
+	}
+}
+
+/** A server capture mode whose provider refunds. */
+class Acme_Refunding_Test_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler {
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array(
+			'capture'      => array(
+				'mode'     => 'server',
+				'provider' => 'acme_refunds',
+			),
+			'capabilities' => array(
+				'refunds' => array(
+					'via'     => 'provider',
+					'partial' => true,
+				),
+			),
+		);
+	}
 }

@@ -196,8 +196,23 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 
 	/**
 	 * Default refund support for the gateway.
+	 *
+	 * The WooCommerce `refunds` feature flag is the legacy answer. A gateway whose POS
+	 * capture-mode provider refunds (the v2 descriptor's `refunds.via` is `provider`)
+	 * refunds from the till through that provider, not through `process_refund()`, so
+	 * it counts even when the gateway class declares no `refunds` support — the
+	 * terminal extensions' legacy gateways do not, and the refund form offered only
+	 * cash for a SumUp sale (first physical Solo run, 2026-10-05).
 	 */
 	private function get_default_refund_support(): bool {
-		return ! in_array( $this->gateway->id, self::MANUAL_GATEWAYS, true ) && $this->gateway->supports( 'refunds' );
+		if ( in_array( $this->gateway->id, self::MANUAL_GATEWAYS, true ) ) {
+			return false;
+		}
+		if ( $this->gateway->supports( 'refunds' ) ) {
+			return true;
+		}
+		$descriptor = Contract\Descriptor_Builder::instance()->get( $this->gateway->id );
+
+		return 'provider' === ( $descriptor['capabilities']['refunds']['via'] ?? 'none' );
 	}
 }
