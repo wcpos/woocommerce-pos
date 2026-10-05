@@ -134,6 +134,14 @@ class Permission_Rules {
 			if ( 'v1' === $lane && 'orders' === $collection && is_wp_error( $permission ) && self::wc_filter( false, $context, $object_id, 'shop_order', 'orders', 'v1' ) ) {
 				return true;
 			}
+			// The implicit v1 scope passes WooCommerce's grant through; ownership still rules.
+			if ( 'v1' === $lane && 'orders' === $collection && true === $permission && ! self::wc_filter( true, $context, $object_id, 'shop_order', 'orders', 'v1' ) ) {
+				return new \WP_Error(
+					"woocommerce_rest_cannot_{$context}",
+					__( 'Sorry, you are not allowed to edit this resource.', 'woocommerce' ),
+					array( 'status' => rest_authorization_required_code() )
+				);
+			}
 			return $permission;
 		} finally {
 			if ( $restore ) {
@@ -216,26 +224,32 @@ class Permission_Rules {
 				}
 			}
 		}
-		if ( ! $permission && 'shop_order' === $post_type && in_array( $collection, array( 'writes', 'orders' ), true ) ) {
+		if ( 'shop_order' === $post_type && in_array( $collection, array( 'writes', 'orders' ), true ) ) {
+			$ownership = self::ownership_applies( $lane, $context );
+			$order     = $ownership ? wc_get_order( $object_id ) : false;
+			if ( $permission ) {
+				// WooCommerce granted on its own signal — under HPOS with compatibility
+				// sync the post author is whoever created the order — but the cashier the
+				// order is assigned to is the owner, so a reassigned order still needs the
+				// `others` capability from its creator.
+				if ( $order instanceof \WC_Abstract_Order && ! self::owns_order( $order ) && ! current_user_can( "{$context}_others_shop_orders" ) ) {
+					$permission = false;
+				}
+				return $permission;
+			}
 			// V1 checked existence before its fallback (23defd774); v2 did not.
 			if ( 'v1' === $lane && ( ! wc_get_order( $object_id ) || ! current_user_can( "{$context}_shop_orders" ) ) ) {
 				return $permission;
 			}
-			// Without a post row, only v1 historically granted the flat edit cap.
+			// Edit is always ownership-aware (ORDER_RULES), so it has no flat fallback.
 			$caps = array(
 				'read'   => 'read_private_shop_orders',
 				'create' => 'publish_shop_orders',
-				'edit'   => 'v1' === $lane ? 'edit_shop_orders' : null,
 				'delete' => 'delete_shop_orders',
 			);
 			$cap  = $caps[ $context ] ?? null;
-			foreach ( self::ORDER_RULES as $rule ) {
-				if ( $lane === $rule['lane'] && $context === $rule['context'] && $rule['ownership'] ) {
-					$post = get_post( $object_id );
-					if ( $post ) {
-						$cap = get_current_user_id() === (int) $post->post_author ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
-					}
-				}
+			if ( $order instanceof \WC_Abstract_Order ) {
+				$cap = self::owns_order( $order ) ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
 			}
 			if ( $cap && current_user_can( $cap ) ) {
 				$permission = true;
@@ -246,6 +260,45 @@ class Permission_Rules {
 			$permission = current_user_can( 'access_woocommerce_pos' );
 		}
 		return $permission;
+	}
+
+	/**
+	 * Whether ORDER_RULES makes this lane's context ownership-aware.
+	 *
+	 * @param string $lane    Permission lane.
+	 * @param string $context Permission context.
+	 * @return bool
+	 */
+	private static function ownership_applies( string $lane, string $context ): bool {
+		foreach ( self::ORDER_RULES as $rule ) {
+			if ( $lane === $rule['lane'] && $context === $rule['context'] ) {
+				return (bool) $rule['ownership'];
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether the current user is the cashier an order is assigned to.
+	 *
+	 * `_pos_user` is the only ownership signal an order carries on both storage
+	 * modes: the write lanes stamp it server-side on creation and move it on a
+	 * cashier reassignment. `post_author` is not that signal — the posts store
+	 * writes `1` for every order, and the HPOS placeholder row inherits whoever
+	 * was logged in when it was inserted (the customer, or nobody, for a web
+	 * order). An order without `_pos_user` (a web order) belongs to no cashier,
+	 * so it needs the `*_others_shop_orders` capability.
+	 *
+	 * @param \WC_Abstract_Order $order Order being judged.
+	 * @return bool
+	 */
+	private static function owns_order( \WC_Abstract_Order $order ): bool {
+		$cashier = $order->get_meta( '_pos_user' );
+		$actor   = get_current_user_id();
+
+		// The lanes stamp the canonical decimal string, so an exact match is the strict test.
+		return $actor > 0 && is_scalar( $cashier ) && (string) $cashier === (string) $actor;
 	}
 
 	/**
