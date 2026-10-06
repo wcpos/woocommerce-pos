@@ -174,6 +174,7 @@ final class Service_Groups {
 		new Orders();
 		Stock_Validator::instance();
 		Order_Write_Intent::register();
+		Role_Meta_Guard::register();
 	}
 
 	/**

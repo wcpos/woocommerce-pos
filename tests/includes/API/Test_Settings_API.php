@@ -326,8 +326,7 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Access writes mutate WordPress role capabilities, so manage_woocommerce_pos
-	 * is not enough — edit_users AND promote_users are both required.
+	 * Access writes require manage_woocommerce_pos, edit_users and promote_users together.
 	 */
 	public function test_access_update_requires_user_management_capabilities(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
@@ -368,6 +367,101 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * User management capabilities alone do not permit access changes.
+	 */
+	public function test_access_update_requires_manage_woocommerce_pos(): void {
+		// Arrange.
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'edit_users' );
+		$user->add_cap( 'promote_users' );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $user_id );
+
+		try {
+			foreach ( self::NAMESPACES as $namespace ) {
+				$request = $this->wp_rest_post_request( $namespace . '/settings/access' );
+				$request->set_header( 'Content-Type', 'application/json' );
+				$request->set_body( wp_json_encode( array( 'cashier' => array( 'capabilities' => array( 'wcpos' => array( 'manage_woocommerce_pos' => true ) ) ) ) ) );
+
+				// Act.
+				$response = $this->server->dispatch( $request );
+
+				// Assert.
+				$this->assertSame( 403, $response->get_status() );
+				$this->assertSame( 'rest_forbidden', $response->as_error()->get_error_code() );
+				$this->assertFalse( get_role( 'cashier' )->has_cap( 'manage_woocommerce_pos' ) );
+			}
+		} finally {
+			wp_delete_user( $user_id );
+		}
+	}
+
+	/**
+	 * Cashiers with user management capabilities cannot change access settings.
+	 */
+	public function test_access_update_refused_for_cashier_with_user_management_caps(): void {
+		// Arrange.
+		$cashier = get_role( 'cashier' );
+		try {
+			$cashier->add_cap( 'promote_users' );
+			$user_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+			wp_set_current_user( 0 );
+			wp_set_current_user( $user_id );
+			$payloads = array(
+				array( 'cashier' => array( 'capabilities' => array( 'wcpos' => array( 'manage_woocommerce_pos' => true ) ) ) ),
+				array( 'shop_manager' => array( 'capabilities' => array( 'wc' => array( 'edit_products' => false ) ) ) ),
+			);
+			foreach ( self::NAMESPACES as $namespace ) {
+				foreach ( $payloads as $payload ) {
+					$request = $this->wp_rest_post_request( $namespace . '/settings/access' );
+					$request->set_header( 'Content-Type', 'application/json' );
+					$request->set_body( wp_json_encode( $payload ) );
+
+					// Act.
+					$response = $this->server->dispatch( $request );
+
+					// Assert.
+					$this->assertSame( 403, $response->get_status() );
+					$this->assertSame( 'rest_forbidden', $response->as_error()->get_error_code() );
+					$this->assertFalse( $cashier->has_cap( 'manage_woocommerce_pos' ) );
+					$this->assertTrue( get_role( 'shop_manager' )->has_cap( 'edit_products' ) );
+				}
+			}
+		} finally {
+			$cashier->remove_cap( 'promote_users' );
+		}
+	}
+
+	/**
+	 * Administrators can grant and revoke cashier capabilities.
+	 */
+	public function test_access_update_by_administrator_is_applied(): void {
+		// Arrange.
+		$cashier = get_role( 'cashier' );
+		wp_set_current_user( $this->user );
+		try {
+			foreach ( self::NAMESPACES as $namespace ) {
+				foreach ( array( true, false ) as $grant ) {
+					$request = $this->wp_rest_post_request( $namespace . '/settings/access' );
+					$request->set_header( 'Content-Type', 'application/json' );
+					$request->set_body( wp_json_encode( array( 'cashier' => array( 'capabilities' => array( 'wc' => array( 'delete_products' => $grant ) ) ) ) ) );
+
+					// Act.
+					$response = $this->server->dispatch( $request );
+
+					// Assert.
+					$this->assertSame( 200, $response->get_status() );
+					$this->assertSame( $grant, $cashier->has_cap( 'delete_products' ) );
+				}
+			}
+		} finally {
+			$cashier->remove_cap( 'delete_products' );
+		}
 	}
 
 	/**

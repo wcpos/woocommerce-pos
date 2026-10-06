@@ -52,7 +52,7 @@ class Settings extends WP_REST_Controller {
 	 * default manage_woocommerce_pos check.
 	 *
 	 * The access section mutates WordPress role capabilities, so its writes
-	 * require edit_users + promote_users.
+	 * require manage_woocommerce_pos + edit_users + promote_users.
 	 *
 	 * @var array<string, string>
 	 */
@@ -347,7 +347,7 @@ class Settings extends WP_REST_Controller {
 	 * @return bool
 	 */
 	public function update_access_permission_check(): bool {
-		return current_user_can( 'edit_users' ) && current_user_can( 'promote_users' );
+		return current_user_can( 'manage_woocommerce_pos' ) && current_user_can( 'edit_users' ) && current_user_can( 'promote_users' );
 	}
 
 	/**
