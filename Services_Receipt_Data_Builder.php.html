@@ -334,23 +334,6 @@ class Receipt_Data_Builder {
 			),
 		);
 
-		$tenders = Pos_Payments::from_order( $order );
-		if ( ! empty( $tenders ) ) {
-			$payments               = array();
-			$totals['change_total'] = 0.0;
-			foreach ( $tenders as $t ) {
-				$payments[] = Receipt_Sections::payment(
-					$t['method'],
-					$t['title'],
-					(float) $t['amount'],
-					$t['reference'] ?? '',
-					(float) ( $t['tendered'] ?? 0 ),
-					(float) ( $t['change'] ?? 0 )
-				);
-				$totals['change_total'] += (float) ( $t['change'] ?? 0 );
-			}
-		}
-
 		$tax_summary = $this->get_tax_summary( $order );
 
 		$fiscal = Receipt_Payload_Assembler::fiscal(
