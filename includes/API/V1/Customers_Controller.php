@@ -24,6 +24,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Order_Search;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -705,39 +706,38 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			return;
 		}
 
-		$terms = array_slice( $terms, 0, 10 );
+		$search = Collection_Rules::rules( 'customers' )['search'];
+		$terms  = array_slice( $terms, 0, $search['term_cap'] );
 
 		$meta_keys = array_merge(
-			array(
-				'first_name',
-				'last_name',
-				'billing_first_name',
-				'billing_last_name',
-				'billing_email',
-				'billing_company',
-				'billing_phone',
-			),
+			$search['meta'],
 			Tax_Id_Reader::fallback_user_meta_keys()
 		);
 
+		$user_fields = "{$wpdb->users}." . implode( " LIKE %s OR {$wpdb->users}.", $search['users'] ) . ' LIKE %s';
 		$meta_key_placeholders = implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
+		$phone_key_placeholders = implode( ', ', array_fill( 0, \count( $search['phone_meta'] ), '%s' ) );
 		$term_groups           = array();
 
 		foreach ( $terms as $term ) {
 			$like         = '%' . $wpdb->esc_like( $term ) . '%';
-			$prepare_args = array_merge( array( $like, $like, $like ), $meta_keys, array( $like ) );
+			$prepare_args = array_merge( array_fill( 0, \count( $search['users'] ), $like ), $meta_keys, array( $like ) );
+			$phone        = '';
+			$digits       = preg_replace( '/\D+/', '', $term );
+			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
+				$phone = " OR ( wcpos_search_meta.meta_key IN ($phone_key_placeholders) AND " . Order_Search::phone_digits_expression( 'wcpos_search_meta.meta_value' ) . ' LIKE %s )';
+				$prepare_args = array_merge( $prepare_args, $search['phone_meta'], array( '%' . $digits . '%' ) );
+			}
 
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $meta_key_placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb, columns from the declaration, and meta keys and LIKE values are passed to prepare().
 			$term_groups[] = $wpdb->prepare(
-				"( {$wpdb->users}.user_email LIKE %s
-					OR {$wpdb->users}.user_login LIKE %s
-					OR {$wpdb->users}.display_name LIKE %s
+				"( {$user_fields}
 					OR EXISTS (
 						SELECT 1
 						FROM {$wpdb->usermeta} AS wcpos_search_meta
 						WHERE wcpos_search_meta.user_id = {$wpdb->users}.ID
-							AND wcpos_search_meta.meta_key IN ($meta_key_placeholders)
-							AND wcpos_search_meta.meta_value LIKE %s
+							AND ( ( wcpos_search_meta.meta_key IN ($meta_key_placeholders)
+							AND wcpos_search_meta.meta_value LIKE %s ){$phone} )
 					)
 				)",
 				$prepare_args

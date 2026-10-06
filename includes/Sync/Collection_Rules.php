@@ -436,6 +436,30 @@ final class Collection_Rules {
 			 * kinds this table has never expressed; that is a later increment.
 			 */
 			'customers' => array(
+				'search' => array(
+					'param'      => 'search',
+					'term_cap'   => self::SEARCH_TERM_CAP,
+					'users'      => array( 'user_email', 'user_login', 'display_name' ),
+					'meta'       => array( 'first_name', 'last_name', 'billing_first_name', 'billing_last_name', 'billing_email', 'billing_company', 'billing_phone', 'shipping_first_name', 'shipping_last_name', 'shipping_company', 'shipping_phone' ),
+					'phone_meta' => array( 'billing_phone', 'shipping_phone' ),
+					'carriers'   => array(
+						'user_email',
+						'user_login',
+						'display_name',
+						'first_name',
+						'last_name',
+						'billing_first_name',
+						'billing_last_name',
+						'billing_email',
+						'billing_company',
+						'billing_phone',
+						'shipping_first_name',
+						'shipping_last_name',
+						'shipping_company',
+						'shipping_phone',
+						'tax_ids',
+					),
+				),
 				'sorts' => array(
 					'first_name' => array(),
 					'last_name'  => array(),
@@ -445,6 +469,20 @@ final class Collection_Rules {
 				),
 			),
 		);
+
+		if ( isset( $rules[ $collection ]['search'] ) ) {
+			/**
+			 * Extend what the POS searches for a collection.
+			 *
+			 * A store adds a custom meta key by appending to meta (customers) or
+			 * posts.meta / hpos.addresses (orders). The POS client reads the same
+			 * declaration, so both lanes change together. No settings UI exists or is planned.
+			 *
+			 * @param array  $search     Search declaration.
+			 * @param string $collection Collection slug.
+			 */
+			$rules[ $collection ]['search'] = apply_filters( 'woocommerce_pos_search_fields', $rules[ $collection ]['search'], $collection );
+		}
 
 		return $rules[ $collection ] ?? array();
 	}

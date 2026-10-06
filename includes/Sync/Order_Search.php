@@ -137,7 +137,7 @@ final class Order_Search {
 	 * @param string $column Trusted phone value column.
 	 * @return string
 	 */
-	private static function phone_digits_expression( string $column ): string {
+	public static function phone_digits_expression( string $column ): string {
 		foreach ( array( ' ', '-', '(', ')', '+', '.' ) as $character ) {
 			$column = "REPLACE({$column}, '{$character}', '')";
 		}
