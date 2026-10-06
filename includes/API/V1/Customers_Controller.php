@@ -23,8 +23,8 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Customer_Search;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
-use WCPOS\WooCommercePOS\Sync\Order_Search;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -693,59 +693,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			return;
 		}
 
-		$terms = preg_split( '/\s+/u', (string) $query_params['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
-
-		/*
-		 * Whitespace-only searches are filtered out before the hook is added, so reaching this
-		 * point means the string could not be split (eg. malformed UTF-8). We can't honour the
-		 * search, and falling through would hand back the entire customer list, so match nothing.
-		 */
-		if ( false === $terms || empty( $terms ) ) {
-			$query->query_where .= ' AND 1 = 0';
-
-			return;
-		}
-
-		$search = Collection_Rules::rules( 'customers' )['search'];
-		$terms  = array_slice( $terms, 0, $search['term_cap'] );
-
-		$meta_keys = array_merge(
-			$search['meta'],
-			Tax_Id_Reader::fallback_user_meta_keys()
-		);
-
-		$user_fields = "{$wpdb->users}." . implode( " LIKE %s OR {$wpdb->users}.", $search['users'] ) . ' LIKE %s';
-		$meta_key_placeholders = implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
-		$phone_key_placeholders = implode( ', ', array_fill( 0, \count( $search['phone_meta'] ), '%s' ) );
-		$term_groups           = array();
-
-		foreach ( $terms as $term ) {
-			$like         = '%' . $wpdb->esc_like( $term ) . '%';
-			$prepare_args = array_merge( array_fill( 0, \count( $search['users'] ), $like ), $meta_keys, array( $like ) );
-			$phone        = '';
-			$digits       = preg_replace( '/\D+/', '', $term );
-			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
-				$phone = " OR ( wcpos_search_meta.meta_key IN ($phone_key_placeholders) AND " . Order_Search::phone_digits_expression( 'wcpos_search_meta.meta_value' ) . ' LIKE %s )';
-				$prepare_args = array_merge( $prepare_args, $search['phone_meta'], array( '%' . $digits . '%' ) );
-			}
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb, columns from the declaration, and meta keys and LIKE values are passed to prepare().
-			$term_groups[] = $wpdb->prepare(
-				"( {$user_fields}
-					OR EXISTS (
-						SELECT 1
-						FROM {$wpdb->usermeta} AS wcpos_search_meta
-						WHERE wcpos_search_meta.user_id = {$wpdb->users}.ID
-							AND ( ( wcpos_search_meta.meta_key IN ($meta_key_placeholders)
-							AND wcpos_search_meta.meta_value LIKE %s ){$phone} )
-					)
-				)",
-				$prepare_args
-			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		}
-
-		$query->query_where .= ' AND ( ' . implode( ' AND ', $term_groups ) . ' )';
+		$query->query_where .= ' AND ' . Customer_Search::where( (string) $query_params['_wcpos_search'] );
 	}
 
 	/**
