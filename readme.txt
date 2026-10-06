@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.20
+Stable tag: 1.10.21
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,19 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.21 - 2026/10/06 =
+
+- **Till totals now match your store to the cent** on stores that round tax at subtotal level.
+- **Adding a Bluetooth printer no longer crashes the app** on iPad and iPhone.
+- **Cashiers can only edit customer accounts**, never staff accounts.
+- **Changing a user's password signs them out of the POS on every device.**
+- **Cashiers can edit and delete their own sales again** when their role lacks "edit others' orders".
+- **Payment gateways with no customer-facing title now show a name** in POS settings and at the till.
+- **Fixes for stores using High-Performance Order Storage:** cash tendered and change, tax-ID suggestions and fiscal submission status now read correctly.
+- **Connecting the app to a store with no REST link on its front page works again.**
+- **A staging copy of your store no longer overwrites the live store in the app's site list.** A store moved to a new domain appears as a new site and needs connecting once more.
+- Developers: a faster product-ID listing on `wcpos/v2`, advertised as a capability on `GET /wcpos/v2/status`. Details on GitHub.
 
 = 1.10.20 - 2026/09/23 =
 
