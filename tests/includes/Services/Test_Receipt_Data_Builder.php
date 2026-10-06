@@ -1713,6 +1713,45 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test the payments list supplies one receipt entry per tender.
+	 */
+	public function test_build_payments_list_one_entry_per_tender(): void {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_woocommerce_pos_payments', '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]' );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertCount( 2, $payload['payments'] );
+		$this->assertSame( 'pos_card', $payload['payments'][0]['method_id'] );
+		$this->assertSame( 'Card', $payload['payments'][0]['method_title'] );
+		$this->assertSame( 20.0, $payload['payments'][0]['amount'] );
+		$this->assertSame( 'auth-1', $payload['payments'][0]['transaction_id'] );
+		$this->assertSame( 0.0, $payload['payments'][0]['tendered'] );
+		$this->assertSame( 0.0, $payload['payments'][0]['change'] );
+		$this->assertSame( 'pos_cash', $payload['payments'][1]['method_id'] );
+		$this->assertSame( 19.0, $payload['payments'][1]['amount'] );
+		$this->assertSame( '', $payload['payments'][1]['transaction_id'] );
+		$this->assertSame( 20.0, $payload['payments'][1]['tendered'] );
+		$this->assertSame( 1.0, $payload['payments'][1]['change'] );
+		$this->assertSame( 1.0, $payload['totals']['change_total'] );
+	}
+
+	/**
+	 * Test an invalid payments list keeps the order's single payment.
+	 */
+	public function test_build_invalid_payments_list_keeps_single_order_payment(): void {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_woocommerce_pos_payments', 'garbage' );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertCount( 1, $payload['payments'] );
+		$this->assertSame( $order->get_payment_method(), $payload['payments'][0]['method_id'] );
+	}
+
+	/**
 	 * Test tax summary entries include the compound flag.
 	 */
 	public function test_build_tax_summary_includes_compound_flag(): void {

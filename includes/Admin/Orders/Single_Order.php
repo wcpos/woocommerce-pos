@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Admin\Orders;
 use WC_Abstract_Order;
 use WC_Order;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
+use WCPOS\WooCommercePOS\Services\Pos_Payments;
 
 /**
  * Single_Order class.
@@ -24,6 +25,7 @@ class Single_Order {
 		add_action( 'woocommerce_admin_order_data_after_order_details', array( $this, 'add_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'add_customer_change_note' ), 10 );
+		add_action( 'woocommerce_admin_order_totals_after_total', array( $this, 'render_pos_payments' ) );
 
 		$this->add_available_gateways();
 	}
@@ -93,6 +95,43 @@ class Single_Order {
 		}
 		echo '</select>';
 		echo '</p>';
+	}
+
+	/**
+	 * Display POS payments below the admin order totals.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function render_pos_payments( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Abstract_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+			return;
+		}
+		$tenders = Pos_Payments::from_order( $order );
+		if ( empty( $tenders ) ) {
+			return;
+		}
+
+		echo '<tr><td class="label">' . /* translators: Order totals label shown in WooCommerce admin for POS orders. */ esc_html__( 'POS payments', 'woocommerce-pos' ) . ':</td><td width="1%"></td><td class="total"></td></tr>';
+		foreach ( $tenders as $tender ) {
+			echo '<tr><td class="label">' . esc_html( $tender['title'] );
+			if ( isset( $tender['reference'] ) ) {
+				echo ' (' . esc_html( $tender['reference'] ) . ')';
+			}
+			echo ':</td><td width="1%"></td><td class="total">';
+			echo wp_kses_post( wc_price( (float) $tender['amount'], array( 'currency' => $order->get_currency() ) ) );
+			$details = array();
+			if ( isset( $tender['tendered'] ) ) {
+				$details[] = /* translators: Order note label for the cash amount received from the customer at checkout. */ __( 'Amount Tendered', 'woocommerce-pos' ) . ': ' . wc_price( (float) $tender['tendered'], array( 'currency' => $order->get_currency() ) );
+			}
+			if ( isset( $tender['change'] ) ) {
+				$details[] = /* translators: Money returned to the customer after a cash payment. */ _x( 'Change', 'Money returned from cash sale', 'woocommerce-pos' ) . ': ' . wc_price( (float) $tender['change'], array( 'currency' => $order->get_currency() ) );
+			}
+			if ( ! empty( $details ) ) {
+				echo '<br><small>' . wp_kses_post( implode( '<br>', $details ) ) . '</small>';
+			}
+			echo '</td></tr>';
+		}
 	}
 
 	/**
