@@ -14,6 +14,7 @@ use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Reports sync store health.
@@ -65,6 +66,7 @@ final class Status_Controller extends WP_REST_Controller {
 				'missing_tables' => $missing_tables,
 				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
 				'capabilities'   => self::CAPABILITIES,
+				'wcpos_version'  => VERSION,
 			),
 			200
 		);

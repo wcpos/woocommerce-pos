@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Sync status tests.
@@ -163,6 +164,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 				),
 				'schema_version' => null,
 				'capabilities'   => array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5' ),
+				'wcpos_version'  => VERSION,
 			),
 			$response->get_data()
 		);
@@ -185,6 +187,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 				'missing_tables' => array(),
 				'schema_version' => Api::SCHEMA_VERSION,
 				'capabilities'   => array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5' ),
+				'wcpos_version'  => VERSION,
 			),
 			$response->get_data()
 		);
@@ -400,5 +403,19 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $capabilities );
 		$this->assertSame( array_values( $capabilities ), $capabilities );
 		$this->assertContains( 'order_create_v5', $capabilities );
+	}
+
+	/**
+	 * Status reports the plugin version next to the capabilities, even while the store is unhealthy.
+	 */
+	public function test_sync_status_reports_the_plugin_version(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $data['healthy'] );
+		$this->assertSame( VERSION, $data['wcpos_version'] );
 	}
 }
