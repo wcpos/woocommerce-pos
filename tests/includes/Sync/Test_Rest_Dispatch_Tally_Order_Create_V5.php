@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 use WC_Tax;
 
 /**
@@ -113,7 +112,7 @@ class Test_Rest_Dispatch_Tally_Order_Create_V5 extends Sync_REST_Store_Test_Case
 	}
 
 	private function push_order_create( array $envelope ) {
-		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/orders' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/push/orders' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_header( 'Idempotency-Key', $envelope['mutationId'] );
 		$request->set_body( (string) wp_json_encode( $envelope ) );
