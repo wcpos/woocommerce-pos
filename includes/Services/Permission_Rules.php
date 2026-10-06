@@ -441,6 +441,103 @@ class Permission_Rules {
 	}
 
 	/**
+	 * The only role a till user may assign.
+	 *
+	 * Customer creation from the till always produces this role; changing a
+	 * role is not a POS feature, so nothing legitimate needs more.
+	 */
+	private const TILL_ASSIGNABLE_ROLES = array( 'customer' );
+
+	/**
+	 * The roles a POS actor may hand out, or null when the actor is not fenced.
+	 *
+	 * Administrators (and so multisite super admins) are not fenced. A shop
+	 * manager — any actor with `manage_woocommerce` — follows WooCommerce's own
+	 * list for shop managers, `woocommerce_shop_manager_editable_roles`
+	 * (customer by default), which WooCommerce enforces only while it is active
+	 * and only for the literal `shop_manager` role name; applying it here keeps
+	 * that fence up when WooCommerce is deactivated (the roles and their
+	 * capabilities persist) and for a cashier who also holds shop manager.
+	 * Everyone else with till access gets TILL_ASSIGNABLE_ROLES.
+	 *
+	 * @param int $actor Acting user ID.
+	 *
+	 * @return array|null Role names, or null for an unfenced actor.
+	 */
+	private static function assignable_roles( int $actor ): ?array {
+		if ( $actor < 1 || ! user_can( $actor, 'access_woocommerce_pos' ) || user_can( $actor, 'manage_options' ) ) {
+			return null;
+		}
+		$allowed = self::TILL_ASSIGNABLE_ROLES;
+		if ( user_can( $actor, 'manage_woocommerce' ) ) {
+			$allowed = (array) apply_filters( 'woocommerce_shop_manager_editable_roles', self::TILL_ASSIGNABLE_ROLES ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's own fence list, applied as WooCommerce applies it.
+		}
+
+		return array_values( array_filter( array_map( 'strval', $allowed ) ) );
+	}
+
+	/**
+	 * Fence the roles a till user may assign (`editable_roles` filter).
+	 *
+	 * The Cashier role holds `edit_users` and, on WooCommerce below 9.9,
+	 * `promote_users` (customer creation needed it). WordPress's role-update
+	 * checks — `WP_REST_Users_Controller::check_role_update()`, `edit_user()`
+	 * and the users.php bulk actions — accept those two capabilities and then
+	 * ask `get_editable_roles()` which roles the actor may hand out; nothing
+	 * ranked them, so a cashier could set an ordinary customer's role to
+	 * Administrator. can_modify() does not catch that: it judges the target's
+	 * current capabilities, which a plain customer has none of until after the
+	 * update. It only ever removes roles; it never adds one.
+	 *
+	 * @param array $roles Editable roles keyed by role name.
+	 *
+	 * @return array
+	 */
+	public static function filter_editable_roles( $roles ): array {
+		$roles   = (array) $roles;
+		$allowed = self::assignable_roles( get_current_user_id() );
+		if ( null === $allowed ) {
+			return $roles;
+		}
+
+		return array_intersect_key( $roles, array_fill_keys( $allowed, true ) );
+	}
+
+	/**
+	 * Refuse a multisite "add existing user" invite outside the fence (`invite_user` action).
+	 *
+	 * WordPress's wp-admin/user-new.php stores the requested role in the `new_user_<key>`
+	 * option and only reads `get_editable_roles()` for the email's label, so an
+	 * invite to an existing network account can carry any role; accepting it
+	 * calls `add_user_to_blog()` with that role unchecked. Same fence as
+	 * filter_editable_roles(): a fenced actor's invite may name only an
+	 * assignable role, or the invite is deleted before its email goes out.
+	 *
+	 * @param int        $user_id     Invited user ID.
+	 * @param array|null $role        Role label array, null when the role was not editable.
+	 * @param string     $newuser_key Invitation key.
+	 *
+	 * @return void
+	 */
+	public static function refuse_unfenced_invite( $user_id, $role, $newuser_key ): void {
+		$allowed = self::assignable_roles( get_current_user_id() );
+		if ( null === $allowed ) {
+			return;
+		}
+		$invite    = get_option( 'new_user_' . $newuser_key );
+		$requested = \is_array( $invite ) && isset( $invite['role'] ) ? (string) $invite['role'] : '';
+		if ( \in_array( $requested, $allowed, true ) ) {
+			return;
+		}
+		delete_option( 'new_user_' . $newuser_key );
+		wp_die(
+			esc_html__( 'Sorry, you are not allowed to give users that role.', 'woocommerce-pos' ),
+			'',
+			array( 'response' => 403 )
+		);
+	}
+
+	/**
 	 * Build the staff account permission error.
 	 *
 	 * @return \WP_Error

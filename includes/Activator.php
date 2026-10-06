@@ -42,6 +42,10 @@ class Activator {
 		// The staff-account rule (#1918, #2104) must hold even when WooCommerce is
 		// inactive and Init never starts; it depends on nothing from WooCommerce.
 		add_filter( 'map_meta_cap', array( Services\Permission_Rules::class, 'map_user_meta_caps' ), 10, 4 );
+		// So must the role fence: a cashier may hand out no role above customer. Last,
+		// so a role-editor plugin adding roles back at a later priority cannot widen it.
+		add_filter( 'editable_roles', array( Services\Permission_Rules::class, 'filter_editable_roles' ), PHP_INT_MAX );
+		add_action( 'invite_user', array( Services\Permission_Rules::class, 'refuse_unfenced_invite' ), 10, 3 );
 		add_action( 'plugins_loaded', array( $this, 'init' ) );
 	}
 
