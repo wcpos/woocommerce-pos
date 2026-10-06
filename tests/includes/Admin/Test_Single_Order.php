@@ -54,7 +54,8 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Cash:', $output );
 		$this->assertStringContainsString( 'Amount Tendered:', $output );
 		$this->assertStringContainsString( 'Change:', $output );
-		$this->assertStringContainsString( wc_price( 20, array( 'currency' => $order->get_currency() ) ), $output );
+		// The admin render escapes prices with wp_kses_post, as the Cash gateway's change note does.
+		$this->assertStringContainsString( wp_kses_post( wc_price( 20, array( 'currency' => $order->get_currency() ) ) ), $output );
 	}
 
 	/** Test orders without a POS payments list produce no payment rows. */
