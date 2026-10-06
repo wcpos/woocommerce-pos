@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 
 /**
@@ -155,6 +156,82 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->target_order->save();
 
 		$this->assert_order_search_finds_target( 'WidgetCoProbe WooPhoneProbe' );
+	}
+
+	/** Shipping first names participate in order search. */
+	public function test_order_search_matches_shipping_first_name(): void {
+		$this->target_order->set_shipping_first_name( 'ShippingRecipientProbe' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'ShippingRecipientProbe' );
+	}
+
+	/** Shipping phones participate in order search. */
+	public function test_order_search_matches_shipping_phone(): void {
+		$this->target_order->set_shipping_phone( 'ShippingPhoneProbe' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'ShippingPhoneProbe' );
+	}
+
+	/** Line item names participate in order search. */
+	public function test_order_search_matches_line_item_name(): void {
+		$product = ProductHelper::create_simple_product( array( 'name' => 'Unique LineNameProbe Widget' ) );
+		$this->target_order->add_product( $product );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'LineNameProbe' );
+	}
+
+	/** Simple product SKUs participate in order search. */
+	public function test_order_search_matches_line_item_sku(): void {
+		$product = ProductHelper::create_simple_product( array( 'sku' => 'Unique-LineSkuProbe-Code' ) );
+		$this->target_order->add_product( $product );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'LineSkuProbe' );
+	}
+
+	/** A variation's SKU takes precedence over its parent product's SKU. */
+	public function test_order_search_matches_variation_sku_not_parent_sku(): void {
+		$product = ProductHelper::create_variation_product();
+		$product->set_sku( 'ParentSkuProbe' );
+		$product->save();
+		$variation = wc_get_product( $product->get_children()[0] );
+		$variation->set_sku( 'VariationSkuProbe' );
+		$variation->save();
+		$this->target_order->add_product( $variation );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'VariationSkuProbe' );
+		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'ParentSkuProbe' ) ) );
+	}
+
+	/** Sequential order numbers participate in order search. */
+	public function test_order_search_matches_order_number_meta(): void {
+		$this->target_order->update_meta_data( '_order_number', 'NumberMetaProbe-123' );
+		$this->target_order->update_meta_data( '_order_number_formatted', 'FormattedNumberProbe-123' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'NumberMetaProbe' );
+		$this->assert_order_search_finds_target( 'FormattedNumberProbe' );
+	}
+
+	/** Phone searches ignore punctuation, but never add country or trunk prefixes. */
+	public function test_order_search_matches_phone_digits(): void {
+		$this->target_order->set_billing_phone( '+61 412-345-678' );
+		$this->target_order->set_shipping_phone( '(04) 1234 5678' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( '412345' );
+		$this->assert_order_search_finds_target( '61412' );
+		$this->assert_order_search_finds_target( '0412' );
+		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'x61412' ) ) );
+	}
+
+	/** An unmatched search must not become an unconstrained order query. */
+	public function test_order_search_unmatched_term_returns_zero_rows(): void {
+		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'UnmatchedOrderSearchProbe' ) ) );
 	}
 
 	/** Numeric ids can be combined with billing-field terms. */
