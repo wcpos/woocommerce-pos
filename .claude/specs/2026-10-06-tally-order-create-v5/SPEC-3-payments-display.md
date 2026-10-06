@@ -66,8 +66,10 @@ charged or stored here (read-only display). Orders without the meta must be byte
   - label: `esc_html( $title )`, followed by ` (` . `esc_html( $reference )` . `)` when a reference is present, then `:`;
   - total: `wc_price( (float) $amount, array( 'currency' => $order->get_currency() ) )` passed through `wp_kses_post`;
     when the tender has `tendered` or `change`, append `<br><small>` with
-    `Tendered: <wc_price>` and/or `Change: <wc_price>` (translated with `__()` and translators comments, matching
-    the wording in `includes/Gateways/Cash.php::calculate_change`), escaped the same way.
+    `Amount Tendered: <wc_price>` and/or `Change: <wc_price>`, reusing the EXACT translatable calls from
+    `includes/Gateways/Cash.php::calculate_change` (the same `__( 'Amount Tendered', 'woocommerce-pos' )` and
+    `_x( 'Change', 'Money returned from cash sale', 'woocommerce-pos' )` with the same translators comments) and
+    appending `': '` as that method does; separate the two with `<br>`. The wording is settled; escape it the same way.
   - Use the row markup from Context. Add `use WCPOS\WooCommercePOS\Services\Pos_Payments;`.
 
 ## Tests to write
@@ -89,7 +91,7 @@ Fixture meta value (canonical, as spec 2 stores it):
 
 3. `test_render_pos_payments_lists_each_tender_for_pos_order`: POS order with the fixture meta; capture
    `( new Single_Order() )->render_pos_payments( $order->get_id() )` with `ob_start()`/`ob_get_clean()`. Assert the
-   output contains `'POS payments'`, `'Card (auth-1):'`, `'Cash:'`, `'Tendered:'`, `'Change:'`, and
+   output contains `'POS payments'`, `'Card (auth-1):'`, `'Cash:'`, `'Amount Tendered:'`, `'Change:'`, and
    `wc_price( 20, array( 'currency' => $order->get_currency() ) )`.
 4. `test_render_pos_payments_prints_nothing_without_list_or_for_web_order`: a POS order without the meta and a
    non-POS order WITH the meta both produce `''`.
