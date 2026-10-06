@@ -38,6 +38,55 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		$this->assertSame( 10, has_action( 'woocommerce_process_shop_order_meta', array( $handler, 'add_customer_change_note' ) ) );
 	}
 
+	/** Test each POS tender is displayed under the order totals. */
+	public function test_render_pos_payments_lists_each_tender_for_pos_order(): void {
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_woocommerce_pos_payments', '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]' );
+		$order->save();
+
+		ob_start();
+		( new Single_Order() )->render_pos_payments( $order->get_id() );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'POS payments', $output );
+		$this->assertStringContainsString( 'Card (auth-1):', $output );
+		$this->assertStringContainsString( 'Cash:', $output );
+		$this->assertStringContainsString( 'Amount Tendered:', $output );
+		$this->assertStringContainsString( 'Change:', $output );
+		// The admin render escapes prices with wp_kses_post, as the Cash gateway's change note does.
+		$this->assertStringContainsString( wp_kses_post( wc_price( 20, array( 'currency' => $order->get_currency() ) ) ), $output );
+	}
+
+	/** Test orders without a POS payments list produce no payment rows. */
+	public function test_render_pos_payments_prints_nothing_without_list_or_for_web_order(): void {
+		$pos_order = OrderHelper::create_order();
+		$pos_order->set_created_via( 'woocommerce-pos' );
+		$pos_order->save();
+		$web_order = OrderHelper::create_order();
+		$web_order->set_created_via( 'checkout' );
+		$web_order->update_meta_data( '_woocommerce_pos_payments', '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]' );
+		$web_order->save();
+		$handler = new Single_Order();
+
+		ob_start();
+		$handler->render_pos_payments( $pos_order->get_id() );
+		$pos_output = ob_get_clean();
+		ob_start();
+		$handler->render_pos_payments( $web_order->get_id() );
+		$web_output = ob_get_clean();
+
+		$this->assertSame( '', $pos_output );
+		$this->assertSame( '', $web_output );
+	}
+
+	/** Test the payments callback is registered after admin order totals. */
+	public function test_render_pos_payments_is_hooked_after_admin_totals(): void {
+		$handler = new Single_Order();
+
+		$this->assertSame( 10, has_action( 'woocommerce_admin_order_totals_after_total', array( $handler, 'render_pos_payments' ) ) );
+	}
+
 	/** Test customer changes are noted only for POS orders. */
 	public function test_customer_change_adds_note_only_for_pos_order(): void {
 		$old_customer = self::factory()->user->create( array( 'display_name' => 'Old Admin Customer' ) );
