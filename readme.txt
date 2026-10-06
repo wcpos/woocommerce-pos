@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.21
+Stable tag: 1.10.22
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,10 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.22 - 2026/10/06 =
+
+- **Cashiers can no longer change a customer's role.** Only the Customer role can be assigned from a cashier account; staff roles are reserved for store managers and administrators.
 
 = 1.10.21 - 2026/10/06 =
 
