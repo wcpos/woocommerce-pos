@@ -14,6 +14,7 @@ use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Reports sync store health.
@@ -28,10 +29,13 @@ final class Status_Controller extends WP_REST_Controller {
 	 *   is answered from one query (#2113).
 	 * - `order_payments_list`: an order create records the `_woocommerce_pos_payments` meta (a JSON list of
 	 *   tenders; `payment_method` is the primary tender), validated and write-once (Services\Pos_Payments).
+	 * - `order_create_v5`: `POST /wcpos/v2/push/orders` takes TallyUI order.create v5 creates mapped to the
+	 *   WooCommerce shape: `fee_lines`, `shipping_lines` (`method_id` `pos` allowed) and custom `product_id: 0`
+	 *   lines priced and taxed from `_woocommerce_pos_data`, idempotent on `mutationId` (#2137).
 	 *
 	 * Append new names; never rename or remove one.
 	 */
-	private const CAPABILITIES = array( 'products_id_fast_path', 'order_payments_list' );
+	private const CAPABILITIES = array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5' );
 
 	/**
 	 * Register the sync status route.
@@ -62,6 +66,7 @@ final class Status_Controller extends WP_REST_Controller {
 				'missing_tables' => $missing_tables,
 				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
 				'capabilities'   => self::CAPABILITIES,
+				'wcpos_version'  => VERSION,
 			),
 			200
 		);
