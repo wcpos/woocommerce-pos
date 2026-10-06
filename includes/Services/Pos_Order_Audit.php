@@ -30,11 +30,10 @@ final class Pos_Order_Audit {
 	/**
 	 * Audit keys sourced from the till at the sale (client-supplied, validated,
 	 * write-once).
-	 * The payments list is recorded on create only (not a cash key, so never filled on update).
 	 *
 	 * @var string[]
 	 */
-	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback', Pos_Payments::META_KEY );
+	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
 
 	/**
 	 * The subset of till keys that are monetary AMOUNTS (unsigned plain decimals);
@@ -164,7 +163,7 @@ final class Pos_Order_Audit {
 		$till = array();
 		foreach ( self::TILL_META_KEYS as $key ) {
 			if ( array_key_exists( $key, $client ) && self::is_valid_till_value( $key, $client[ $key ] ) ) {
-				$till[ $key ] = Pos_Payments::META_KEY === $key ? Pos_Payments::normalize( $client[ $key ] ) : (string) $client[ $key ];
+				$till[ $key ] = (string) $client[ $key ];
 			}
 		}
 
@@ -176,7 +175,6 @@ final class Pos_Order_Audit {
 	 * cash AMOUNTS must be unsigned plain decimals (a malformed amount would break
 	 * Pro analytics aggregations). `_pos_store` is an identifier — the store-scope
 	 * model allows numeric ids, uuids, or slugs — so any non-empty scalar is kept.
-	 * The payments key accepts only a list validated by Pos_Payments::normalize().
 	 *
 	 * @param string $key   The till meta key.
 	 * @param mixed  $value The client-supplied value.
@@ -184,9 +182,6 @@ final class Pos_Order_Audit {
 	 * @return bool
 	 */
 	public static function is_valid_till_value( string $key, $value ): bool {
-		if ( Pos_Payments::META_KEY === $key ) {
-			return null !== Pos_Payments::normalize( $value );
-		}
 		if ( ! \is_scalar( $value ) || '' === (string) $value ) {
 			return false;
 		}

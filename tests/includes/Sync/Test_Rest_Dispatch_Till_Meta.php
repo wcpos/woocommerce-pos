@@ -308,68 +308,6 @@ class Test_Rest_Dispatch_Till_Meta extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A paid split-tender create records canonical payments and the primary method.
-	 */
-	public function test_payments_list_create_records_canonical_list_and_primary_method(): void {
-		// Arrange.
-		$canonical = '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]';
-
-		// Act.
-		$created = $this->create_order(
-			array( '_woocommerce_pos_payments' => '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1","foo":"bar"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]' ),
-			array(
-				'status'               => 'completed',
-				'set_paid'             => true,
-				'payment_method'       => 'pos_card',
-				'payment_method_title' => 'Card',
-			)
-		);
-		$order = wc_get_order( $created['order_id'] );
-
-		// Assert.
-		$this->assertSame( $canonical, $order->get_meta( '_woocommerce_pos_payments' ) );
-		$this->assertSame( 'pos_card', $order->get_payment_method() );
-		$this->assertTrue( $order->is_paid() );
-	}
-
-	/**
-	 * An update cannot replace the list recorded at create.
-	 */
-	public function test_payments_list_update_with_different_list_preserves_created_list(): void {
-		// Arrange.
-		$canonical = '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]';
-		$created   = $this->create_order( array( '_woocommerce_pos_payments' => $canonical ) );
-		$payload   = array(
-			'meta_data' => $this->meta_entries(
-				array( '_woocommerce_pos_payments' => '[{"method":"pos_cash","title":"Cash","amount":"39.00"}]' )
-			),
-		);
-
-		// Act.
-		$response = $this->push_envelope( 'update', $payload, $created['revision'] );
-
-		// Assert.
-		$this->assertSame( 200, $response->get_status() );
-		$order = wc_get_order( $created['order_id'] );
-		$this->assertSame( $canonical, $order->get_meta( '_woocommerce_pos_payments' ) );
-	}
-
-	/**
-	 * An invalid list is dropped without refusing the create.
-	 */
-	public function test_payments_list_invalid_on_create_is_not_recorded(): void {
-		// Arrange.
-		$meta = array( '_woocommerce_pos_payments' => '[{"method":"pos_cash","title":"Cash","amount":"-5"}]' );
-
-		// Act.
-		$created = $this->create_order( $meta );
-		$order   = wc_get_order( $created['order_id'] );
-
-		// Assert.
-		$this->assertSame( '', $order->get_meta( '_woocommerce_pos_payments' ) );
-	}
-
-	/**
 	 * Till metadata written by an update cannot be overwritten by a later update.
 	 *
 	 * @return void

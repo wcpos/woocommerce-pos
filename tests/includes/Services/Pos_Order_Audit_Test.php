@@ -264,50 +264,6 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Payments metadata is stored as canonical JSON with unknown keys removed.
-	 */
-	public function test_till_meta_from_payload_normalizes_the_payments_list(): void {
-		// Arrange.
-		$canonical = '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]';
-		$meta      = array(
-			array(
-				'key'   => '_woocommerce_pos_payments',
-				'value' => '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1","foo":"bar"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]',
-			),
-		);
-
-		// Act.
-		$result = Pos_Order_Audit::till_meta_from_payload( $meta );
-
-		// Assert.
-		$this->assertSame( array( '_woocommerce_pos_payments' => $canonical ), $result );
-	}
-
-	/**
-	 * Payments metadata is protected while unrelated metadata is retained.
-	 */
-	public function test_strip_audit_meta_removes_the_payments_list(): void {
-		// Arrange.
-		$note = array(
-			'key'   => 'note',
-			'value' => 'kept',
-		);
-		$meta = array(
-			array(
-				'key'   => '_woocommerce_pos_payments',
-				'value' => '[{"method":"pos_cash","title":"Cash","amount":"19.00"}]',
-			),
-			$note,
-		);
-
-		// Act.
-		$result = Pos_Order_Audit::strip_audit_meta( $meta );
-
-		// Assert.
-		$this->assertSame( array( $note ), $result );
-	}
-
-	/**
 	 * Cash amounts must be unsigned plain decimals; the store id is any
 	 * non-empty scalar.
 	 */
@@ -326,8 +282,5 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_change', array( '1' ) ) );
 		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_store', 'uuid-or-slug' ) );
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_store', '' ) );
-		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_woocommerce_pos_payments', '[{"method":"pos_card","title":"Card","amount":"20.00","reference":"auth-1"},{"method":"pos_cash","title":"Cash","amount":"19.00","tendered":"20.00","change":"1.00"}]' ) );
-		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_woocommerce_pos_payments', '[]' ) );
-		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_woocommerce_pos_payments', array( 'x' ) ) );
 	}
 }
