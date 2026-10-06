@@ -26,10 +26,12 @@ final class Status_Controller extends WP_REST_Controller {
 	 *
 	 * - `products_id_fast_path`: `GET /wcpos/v2/products?per_page=-1&_fields=id,date_modified_gmt,stock_quantity,stock_status`
 	 *   is answered from one query (#2113).
+	 * - `order_payments_list`: an order create records the `_woocommerce_pos_payments` meta (a JSON list of
+	 *   tenders; `payment_method` is the primary tender), validated and write-once (Services\Pos_Payments).
 	 *
 	 * Append new names; never rename or remove one.
 	 */
-	private const CAPABILITIES = array( 'products_id_fast_path' );
+	private const CAPABILITIES = array( 'products_id_fast_path', 'order_payments_list' );
 
 	/**
 	 * Register the sync status route.

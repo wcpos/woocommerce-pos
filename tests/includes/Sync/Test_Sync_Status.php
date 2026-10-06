@@ -162,7 +162,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
 				'schema_version' => null,
-				'capabilities'   => array( 'products_id_fast_path' ),
+				'capabilities'   => array( 'products_id_fast_path', 'order_payments_list' ),
 			),
 			$response->get_data()
 		);
@@ -184,7 +184,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 				'healthy'        => true,
 				'missing_tables' => array(),
 				'schema_version' => Api::SCHEMA_VERSION,
-				'capabilities'   => array( 'products_id_fast_path' ),
+				'capabilities'   => array( 'products_id_fast_path', 'order_payments_list' ),
 			),
 			$response->get_data()
 		);
@@ -366,5 +366,22 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $capabilities );
 		$this->assertSame( array_values( $capabilities ), $capabilities );
 		$this->assertContains( 'products_id_fast_path', $capabilities );
+	}
+
+	/**
+	 * Status advertises the payments list even while the store is unhealthy.
+	 */
+	public function test_sync_status_lists_the_order_payments_list_capability(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$response     = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+		$data         = $response->get_data();
+		$capabilities = $data['capabilities'];
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $data['healthy'] );
+		$this->assertIsArray( $capabilities );
+		$this->assertSame( array_values( $capabilities ), $capabilities );
+		$this->assertContains( 'order_payments_list', $capabilities );
 	}
 }
