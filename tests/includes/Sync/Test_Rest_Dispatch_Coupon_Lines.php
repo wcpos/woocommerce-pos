@@ -267,4 +267,113 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( 'pin20' ), $codes );
 		$this->assertSame( '8.00', $order->get_total() );
 	}
+
+	/**
+	 * The POS removes a synced coupon with a deletion marker, `{ id, code: null }` —
+	 * the same `<key>: null` shape wc/v3's item_is_null() honours for line_items,
+	 * fee_lines and shipping_lines (and that remove_omitted_order_items mints for
+	 * them). coupon_lines is the one collection wc/v3 keys by code instead, so the
+	 * marker reached calculate_coupons as a codeless line and 400'd: item added →
+	 * coupon added → order saved → coupon removed → Checkout fails (2026-10-07
+	 * merchant report, reproduced on the demo store).
+	 */
+	public function test_update_with_a_coupon_deletion_marker_removes_the_coupon(): void {
+		list( $order_id, $coupon_line_id ) = $this->create_couponed_order();
+
+		$response = $this->push_envelope(
+			'update',
+			array(
+				'status'       => 'completed',
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_line_id,
+						'code' => null,
+					),
+				),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( array(), array_values( $order->get_items( 'coupon' ) ) );
+		$this->assertSame( '10.00', $order->get_total() );
+		$this->assertSame( 'completed', $order->get_status() );
+		$this->assertSame( array(), $response->get_data()['document']['coupon_lines'] );
+	}
+
+	/** Removing one of two coupons with a marker keeps the other, ids and all, and re-derives the total. */
+	public function test_update_with_a_marker_for_one_of_two_coupons_keeps_the_other(): void {
+		list( $order_id ) = $this->create_couponed_order();
+		$this->make_coupon( 'pin20', 2.00 );
+		$add = $this->push_envelope(
+			'update',
+			array(
+				'coupon_lines' => array( array( 'code' => 'pin10' ), array( 'code' => 'pin20' ) ),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+		$this->assertSame( 200, $add->get_status() );
+		$lines = $add->get_data()['document']['coupon_lines'];
+		$this->assertCount( 2, $lines );
+		$by_code = array_column( $lines, null, 'code' );
+
+		// The full document as the till sends it: the kept line echoes its id, the removed one is a marker.
+		$response = $this->push_envelope(
+			'update',
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $by_code['pin10']['id'],
+						'code' => null,
+					),
+					array(
+						'id'   => $by_code['pin20']['id'],
+						'code' => 'pin20',
+					),
+				),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$order = wc_get_order( $order_id );
+		$codes = array_map(
+			static function ( $coupon ) {
+				return $coupon->get_code();
+			},
+			array_values( $order->get_items( 'coupon' ) )
+		);
+		$this->assertSame( array( 'pin20' ), $codes );
+		$this->assertSame( '8.00', $order->get_total() );
+		$this->assertSame( array( 'pin20' ), array_column( $response->get_data()['document']['coupon_lines'], 'code' ) );
+	}
+
+	/** A deletion marker for a line already gone (a retried push) is a no-op, not a 400. */
+	public function test_update_with_a_stale_coupon_deletion_marker_is_a_no_op(): void {
+		list( $order_id, $coupon_line_id ) = $this->create_couponed_order();
+		$order = wc_get_order( $order_id );
+		$order->remove_coupon( 'pin10' );
+		$order->save();
+
+		$response = $this->push_envelope(
+			'update',
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_line_id,
+						'code' => null,
+					),
+				),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), array_values( wc_get_order( $order_id )->get_items( 'coupon' ) ) );
+	}
 }

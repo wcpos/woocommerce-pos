@@ -27,6 +27,90 @@ class Test_Order_Write_Payload extends WP_UnitTestCase {
 
 	private const OMITTED_LINE_UUID = 'a1f1a7c0-7c0e-4f17-9cc9-0f2ee4051002';
 
+	/**
+	 * `{ id, code: null }` is the POS's deletion marker for a synced coupon line (the
+	 * shape wc/v3 honours for every other line collection). Forwarded as-is it is a
+	 * codeless coupon line and wc/v3 400s — "item added → coupon added → order saved
+	 * → coupon removed → Checkout fails". for_update drops the marker so the
+	 * remaining code-set drives wc/v3's remove-and-reapply; the v1 override shares
+	 * is_coupon_deletion_marker().
+	 *
+	 * @dataProvider coupon_deletion_marker_shapes
+	 */
+	public function test_is_coupon_deletion_marker( $line, bool $expected ): void {
+		$this->assertSame( $expected, Order_Write_Payload::is_coupon_deletion_marker( $line ) );
+	}
+
+	public function coupon_deletion_marker_shapes(): array {
+		return array(
+			'synced line, null code'      => array( array( 'id' => 7, 'code' => null ), true ),
+			'numeric-string id'           => array( array( 'id' => '7', 'code' => null ), true ),
+			'zero id'                     => array( array( 'id' => 0, 'code' => null ), false ),
+			'negative id'                 => array( array( 'id' => -1, 'code' => null ), false ),
+			'fractional id'               => array( array( 'id' => 1.5, 'code' => null ), false ),
+			'exponent string id'          => array( array( 'id' => '1e3', 'code' => null ), false ),
+			'signed string id'            => array( array( 'id' => '+7', 'code' => null ), false ),
+			'null code without an id'     => array( array( 'code' => null ), false ),
+			'no code key (malformed)'     => array( array( 'id' => 7 ), false ),
+			'empty code (malformed)'      => array( array( 'id' => 7, 'code' => '' ), false ),
+			'live line'                   => array( array( 'id' => 7, 'code' => 'pin10' ), false ),
+			'empty line (malformed)'      => array( array(), false ),
+			'not an array'                => array( 'pin10', false ),
+		);
+	}
+
+	/** A deletion marker for the order's only coupon forwards an empty coupon_lines (wc/v3 then removes it). */
+	public function test_for_update_turns_a_coupon_deletion_marker_into_a_removal(): void {
+		$coupon = new WC_Coupon();
+		$coupon->set_code( 'pin10' );
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->set_amount( 1 );
+		$coupon->save();
+		$order = new WC_Order();
+		$order->add_item( $this->line_item( ProductHelper::create_simple_product(), self::KEPT_LINE_UUID ) );
+		$order->save();
+		$order->apply_coupon( 'pin10' );
+		$order->save();
+		$coupon_line_id = array_values( $order->get_items( 'coupon' ) )[0]->get_id();
+
+		$removal = ( new Order_Write_Payload() )->for_update(
+			$order->get_id(),
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_line_id,
+						'code' => null,
+					),
+				),
+			)
+		);
+		$this->assertSame( array(), $removal['coupon_lines'] );
+
+		// The same marker once the coupon is already gone (a retried push) is a no-op:
+		// the sets match and coupon_lines is withheld from the forward.
+		$order->remove_coupon( 'pin10' );
+		$order->save();
+		$retry = ( new Order_Write_Payload() )->for_update(
+			$order->get_id(),
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_line_id,
+						'code' => null,
+					),
+				),
+			)
+		);
+		$this->assertArrayNotHasKey( 'coupon_lines', $retry );
+
+		// A genuinely malformed line still reaches wc/v3's "Coupon code is required".
+		$malformed = ( new Order_Write_Payload() )->for_update(
+			$order->get_id(),
+			array( 'coupon_lines' => array( array() ) )
+		);
+		$this->assertSame( array( array() ), $malformed['coupon_lines'] );
+	}
+
 	/** Partial updates reconcile identity without deleting omissions, reconciling coupons, or losing email clears. */
 	public function test_for_partial_update_preserves_partial_document_semantics(): void {
 		// Arrange.
