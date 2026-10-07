@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Template_Router;
 use WP_REST_Response;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -59,6 +60,9 @@ final class Site {
 			'wp_version'       => get_bloginfo( 'version' ),
 			'wcpos_version'    => VERSION,
 			'use_jwt_as_param' => SettingsService::instance()->use_jwt_as_param_enabled(),
+			// Custom meta keys a store added to search (woocommerce_pos_search_fields), so the till
+			// searches them locally too; the declared fields are fixed in both codebases.
+			'search_meta_keys' => Collection_Rules::client_search_meta_keys(),
 			'namespaces'       => array( 'wcpos/v2' ),
 			'authentication'   => array(
 				'wcpos' => array(
