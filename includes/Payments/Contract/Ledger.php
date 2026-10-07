@@ -266,7 +266,9 @@ class Ledger {
 		$balance = Money::minor( $this->balance( $order, $rows ) );
 		// A provider leg still pending has reserved its share of the balance: cash taken on top
 		// of it would count twice if the terminal later confirms (the money moved both ways).
-		$reserved = $this->pending_reserved( $rows );
+		// A leg the till has already asked to cancel does not block cash: the cashier accepted
+		// that risk by releasing it, and a provider outage must not stop the sale.
+		$reserved = $this->pending_reserved( $rows, false );
 		if ( 0 === $balance || Money::minor( $amount ) > $balance || Money::minor( $amount ) > $balance - $reserved ) {
 			$row['status']          = 'failed';
 			$row['failure_reason']  = 0 === $balance ? 'order_already_paid' : ( Money::minor( $amount ) > $balance ? 'amount_exceeds_balance' : 'payment_in_flight' );
@@ -787,15 +789,21 @@ class Ledger {
 		if ( ! isset( $messages[ $reason ] ) ) {
 			return null;
 		}
-		return new WP_Error(
-			'wcpos_' . $reason,
-			$messages[ $reason ],
-			array(
-				'status' => 'amount_exceeds_balance' === $reason ? 400 : 409,
-				'payment' => self::to_wire( $row ),
-				'order' => $this->summary( $order ),
-			)
+		$data = array(
+			'status' => 'amount_exceeds_balance' === $reason ? 400 : 409,
+			'payment' => self::to_wire( $row ),
+			'order' => $this->summary( $order ),
 		);
+		if ( 'payment_in_flight' === $reason ) {
+			foreach ( $this->read( $order ) as $live ) {
+				if ( 'pending' === $live['status'] && ( ! isset( $data['payment_id'] ) || strtotime( $live['created_at_gmt'] ) >= strtotime( $data['created_at_gmt'] ?? '0' ) ) ) {
+					$data['payment_id'] = $live['id'];
+					$data['created_at_gmt'] = $live['created_at_gmt'];
+				}
+			}
+			unset( $data['created_at_gmt'] );
+		}
+		return new WP_Error( 'wcpos_' . $reason, $messages[ $reason ], $data );
 	}
 
 	/**
@@ -1085,12 +1093,13 @@ class Ledger {
 	/**
 	 * Minor units reserved by pending legs: money a provider may still confirm.
 	 *
-	 * @param array $rows Payment rows.
+	 * @param array $rows               Payment rows.
+	 * @param bool  $include_cancelling Whether legs whose cancel is already requested still reserve.
 	 */
-	private function pending_reserved( array $rows ): int {
+	private function pending_reserved( array $rows, bool $include_cancelling = true ): int {
 		$reserved = 0;
 		foreach ( $rows as $row ) {
-			if ( 'pending' === ( $row['status'] ?? '' ) ) {
+			if ( 'pending' === ( $row['status'] ?? '' ) && ( $include_cancelling || empty( $row['void_requested_at'] ) ) ) {
 				$reserved += Money::minor( $row['amount'] ?? 0 );
 			}
 		}
