@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Client_Signal;
 use WCPOS\WooCommercePOS\Services\Protocol_Gate;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -305,6 +306,9 @@ class API {
 		$response->data['wc_version']       = WC()->version;
 		$response->data['wcpos_version']    = VERSION;
 		$response->data['use_jwt_as_param'] = SettingsService::instance()->use_jwt_as_param_enabled();
+		// Connected tills refresh their site row from this index at launch (use-site-info):
+		// a filter added after connect reaches them here, not only at the next connect.
+		$response->data['search_meta_keys'] = Collection_Rules::client_search_meta_keys();
 
 		// Add WCPOS authentication endpoint to the response.
 		$response->data['authentication']['wcpos'] = array(

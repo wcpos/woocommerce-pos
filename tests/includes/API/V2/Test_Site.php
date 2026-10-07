@@ -90,6 +90,34 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** The REST index — what a connected till refreshes from at launch — carries the same keys. */
+	public function test_rest_index_carries_search_meta_keys(): void {
+		$filter = static function ( $search, $collection ) {
+			if ( 'customers' === $collection ) {
+				$search['meta'][] = 'loyalty_number';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		try {
+			$request = new WP_REST_Request( 'GET', '/' );
+			$request->set_query_params( array( 'wcpos' => '1' ) );
+			$data = $this->server->dispatch( $request )->get_data();
+			$this->assertSame(
+				array(
+					'customers' => array( 'loyalty_number' ),
+					'orders' => array(),
+				),
+				$data['search_meta_keys']
+			);
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
+	/**
+	 * Extensions can add fields to the discovery payload.
+	 */
 	public function test_site_info_filter_can_add_a_field(): void {
 		$filter = static function ( array $data ): array {
 			$data['extension_field'] = 'extension-value';

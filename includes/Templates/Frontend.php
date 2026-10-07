@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Template_Router;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -264,6 +265,8 @@ class Frontend {
 				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v2' ) ),
 				'wcpos_login_url'    => Template_Router::get_auth_url(),
 				'locale'             => get_locale(),
+				// The browser POS never calls wcpos/v2/site: this block IS its site row.
+				'search_meta_keys'   => Collection_Rules::client_search_meta_keys(),
 			),
 			'wp_credentials' => $this->wp_credentials,
 			'stores'         => $stores,
