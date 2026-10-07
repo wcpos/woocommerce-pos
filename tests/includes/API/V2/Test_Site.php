@@ -7,8 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_REST_Request;
+use WP_REST_Response;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -100,9 +102,9 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
 		try {
-			$request = new WP_REST_Request( 'GET', '/' );
-			$request->set_query_params( array( 'wcpos' => '1' ) );
-			$data = $this->server->dispatch( $request )->get_data();
+			// The index filter itself, not a dispatch to '/': the lane-coverage gate cannot
+			// classify the root route, and the filter is the unit under test.
+			$data = ( new API() )->rest_index( new WP_REST_Response( array() ) )->get_data();
 			$this->assertSame(
 				array(
 					'customers' => array( 'loyalty_number' ),
