@@ -50,7 +50,9 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->target_order->set_billing_email( 'aurelia.order.probe@example.invalid' );
 		// IDs share the global auto-increment: scrub numeric address fields so the
 		// numeric-id LIKE search can never collide with a postcode/phone.
+		// Line-item SKUs are scrubbed for the same reason.
 		$this->scrub_numeric_address_fields( $this->target_order );
+		$this->scrub_numeric_line_item_skus( $this->target_order );
 		$this->target_order->save();
 
 		$other_order = OrderHelper::create_order();
@@ -58,7 +60,25 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$other_order->set_billing_last_name( 'RenshawProbe' );
 		$other_order->set_billing_email( 'benedict.order.probe@example.invalid' );
 		$this->scrub_numeric_address_fields( $other_order );
+		$this->scrub_numeric_line_item_skus( $other_order );
 		$other_order->save();
+	}
+
+	/**
+	 * Keep fixture SKUs digit-free so the numeric order-id search cannot match them.
+	 *
+	 * @param \WC_Order $order Fixture order.
+	 */
+	private function scrub_numeric_line_item_skus( \WC_Order $order ): void {
+		foreach ( $order->get_items() as $item ) {
+			$product = $item->get_product();
+			if ( ! $product ) {
+				continue;
+			}
+
+			$product->set_sku( 'OrderSearchFixture' . strtr( uniqid(), '0123456789', 'ghijklmnop' ) );
+			$product->save();
+		}
 	}
 
 	/**
