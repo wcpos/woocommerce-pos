@@ -313,6 +313,27 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $card['id'], $result->get_error_data()['payment_id'] );
 	}
 
+	public function test_in_flight_refusal_names_the_leg_that_blocks_not_the_one_being_cancelled(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$older = $this->payment( 'pos_card', '40.00' );
+		$ledger->intent( $order, $older['id'], $older, array() );
+		$newer = $this->payment( 'pos_card', '52.95' );
+		$ledger->intent( $order, $newer['id'], $newer, array() );
+		$rows = $ledger->read( $order );
+		foreach ( $rows as &$row ) {
+			if ( $row['id'] === $newer['id'] ) {
+				$row['void_requested_at'] = gmdate( 'c' );
+			}
+		}
+		unset( $row );
+		$ledger->save( $order, $rows, false );
+		$cash = $this->payment( 'pos_cash', '60.00', array( 'tendered' => '60.00' ) );
+		$result = $ledger->record( $order, $cash );
+		$this->assertSame( 'wcpos_payment_in_flight', $result->get_error_code() );
+		$this->assertSame( $older['id'], $result->get_error_data()['payment_id'] );
+	}
+
 	public function test_intent_replay_determinate_error_on_answered_row_leaves_it_pending(): void {
 		$order = $this->create_pos_order();
 		$input = $this->payment( 'pos_card', '20.00', array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );

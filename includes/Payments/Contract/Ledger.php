@@ -795,13 +795,22 @@ class Ledger {
 			'order' => $this->summary( $order ),
 		);
 		if ( 'payment_in_flight' === $reason ) {
+			// Name the newest leg that is actually blocking: one not already being cancelled,
+			// falling back to a cancelling one only when nothing else is live.
+			$blocking = null;
 			foreach ( $this->read( $order ) as $live ) {
-				if ( 'pending' === $live['status'] && ( ! isset( $data['payment_id'] ) || strtotime( $live['created_at_gmt'] ) >= strtotime( $data['created_at_gmt'] ?? '0' ) ) ) {
-					$data['payment_id'] = $live['id'];
-					$data['created_at_gmt'] = $live['created_at_gmt'];
+				if ( 'pending' !== $live['status'] ) {
+					continue;
+				}
+				$live_cancelling     = ! empty( $live['void_requested_at'] );
+				$blocking_cancelling = null !== $blocking && ! empty( $blocking['void_requested_at'] );
+				if ( null === $blocking || ( $blocking_cancelling && ! $live_cancelling ) || ( $blocking_cancelling === $live_cancelling && strtotime( $live['created_at_gmt'] ) >= strtotime( $blocking['created_at_gmt'] ) ) ) {
+					$blocking = $live;
 				}
 			}
-			unset( $data['created_at_gmt'] );
+			if ( $blocking ) {
+				$data['payment_id'] = $blocking['id'];
+			}
 		}
 		return new WP_Error( 'wcpos_' . $reason, $messages[ $reason ], $data );
 	}

@@ -82,9 +82,11 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$order->save();
 		( new Payments_Sweeper() )->run();
 		$this->assertSame( array(), Sweep_Test_Handler::$intents );
+		// The row is closed through the handler's void (which may recover and cancel a live
+		// provider action), never voided blind.
+		$this->assertSame( array( array( $id, 'order_closed', 'pending' ) ), Sweep_Test_Handler::$voids );
 		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $id );
 		$this->assertSame( 'voided', $row['status'] );
-		$this->assertSame( 'order_closed', $row['failure_reason'] );
 	}
 
 	public function test_sweeper_pending_with_action_is_not_redispatched(): void {
