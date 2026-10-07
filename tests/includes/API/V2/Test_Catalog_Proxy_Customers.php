@@ -681,6 +681,36 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Declared user columns the search does not know are ignored, not sent to the database. */
+	public function test_customer_search_ignores_unknown_declared_user_column(): void {
+		$probe    = wp_generate_password( 12, false );
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'billing_company', $probe );
+		$filter = static function ( $search, $collection ) {
+			if ( 'customers' === $collection ) {
+				$search['users'][] = 'not_a_user_column';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params(
+				array(
+					'role' => 'all',
+					'search' => $probe,
+				)
+			);
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
 	/**
 	 * Dispatch a v2 customers list request with the given query params.
 	 *

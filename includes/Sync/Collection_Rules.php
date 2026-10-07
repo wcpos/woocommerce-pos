@@ -474,9 +474,12 @@ final class Collection_Rules {
 			/**
 			 * Extend what the POS searches for a collection.
 			 *
-			 * A store adds a custom meta key by appending to meta (customers) or
-			 * posts.meta / hpos.addresses (orders). The POS client reads the same
-			 * declaration, so both lanes change together. No settings UI exists or is planned.
+			 * A store adds a custom meta key by appending it to `meta` (customers) or `posts.meta` (orders).
+			 * An order key is searched in post meta on legacy storage and in the order meta table under HPOS.
+			 * Keys are passed to the query as values. The column lists (`users`, `hpos.addresses`) accept only
+			 * the columns the search builders know, and any other entry is ignored. `line_items` and `hpos.orders`
+			 * describe what is searched and do not change the query. The POS client reads the same declaration,
+			 * so both lanes change together. No settings UI exists or is planned.
 			 *
 			 * @param array  $search     Search declaration.
 			 * @param string $collection Collection slug.

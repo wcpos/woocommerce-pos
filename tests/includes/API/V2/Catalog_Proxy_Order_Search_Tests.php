@@ -232,6 +232,43 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->assert_order_search_finds_target( 'FormattedNumberProbe' );
 	}
 
+	/** A store can extend order search with a custom order meta key, as the filter docblock says. */
+	public function test_order_search_matches_filtered_order_meta(): void {
+		$filter = static function ( $search, $collection ) {
+			if ( 'orders' === $collection ) {
+				$search['posts']['meta'][] = '_wcpos_probe_reference';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$this->target_order->update_meta_data( '_wcpos_probe_reference', 'FilteredMetaProbe-41' );
+			$this->target_order->save();
+			$this->assert_order_search_finds_target( 'FilteredMetaProbe' );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
+	/** Declared columns the search does not know are ignored, not sent to the database. */
+	public function test_order_search_ignores_unknown_declared_columns(): void {
+		$filter = static function ( $search, $collection ) {
+			if ( 'orders' === $collection ) {
+				$search['hpos']['addresses'][] = 'not_an_address_column';
+				$search['line_items']['name'] = 'not_an_item_column';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$this->assert_order_search_finds_target( 'AureliaProbe' );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
 	/** Phone searches ignore punctuation, but never add country or trunk prefixes. */
 	public function test_order_search_matches_phone_digits(): void {
 		$this->target_order->set_billing_phone( '+61 412-345-678' );

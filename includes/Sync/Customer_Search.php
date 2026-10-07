@@ -18,6 +18,9 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
  * `woocommerce_pos_search_fields`); the per-site tax-ID meta keys join it at query time.
  */
 final class Customer_Search {
+	/** The users columns a declaration may name; any other entry is ignored. */
+	private const USER_COLUMNS = array( 'user_login', 'user_nicename', 'user_email', 'user_url', 'display_name' );
+
 	/**
 	 * Build the per-term AND-ed WHERE fragment for a search string.
 	 *
@@ -39,15 +42,17 @@ final class Customer_Search {
 		$rule  = Collection_Rules::rules( 'customers' )['search'];
 		$terms = array_slice( $terms, 0, $rule['term_cap'] );
 
-		$meta_keys              = array_merge( $rule['meta'], Tax_Id_Reader::fallback_user_meta_keys() );
-		$user_fields            = "{$wpdb->users}." . implode( " LIKE %s OR {$wpdb->users}.", $rule['users'] ) . ' LIKE %s';
-		$meta_key_placeholders  = implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
-		$phone_key_placeholders = implode( ', ', array_fill( 0, \count( $rule['phone_meta'] ), '%s' ) );
+		$user_columns           = array_values( array_filter( $rule['users'], static fn( $column ) => \is_string( $column ) && \in_array( $column, self::USER_COLUMNS, true ) ) );
+		$meta_keys              = array_values( array_unique( array_filter( array_merge( $rule['meta'], Tax_Id_Reader::fallback_user_meta_keys() ), 'is_string' ) ) );
+		$phone_keys             = array_values( array_unique( array_filter( $rule['phone_meta'], 'is_string' ) ) );
+		$user_fields            = empty( $user_columns ) ? '1 = 0' : "{$wpdb->users}." . implode( " LIKE %s OR {$wpdb->users}.", $user_columns ) . ' LIKE %s';
+		$meta_key_placeholders  = empty( $meta_keys ) ? 'NULL' : implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
+		$phone_key_placeholders = empty( $phone_keys ) ? 'NULL' : implode( ', ', array_fill( 0, \count( $phone_keys ), '%s' ) );
 		$groups                 = array();
 
 		foreach ( $terms as $term ) {
 			$like = '%' . $wpdb->esc_like( $term ) . '%';
-			$args = array_merge( array_fill( 0, \count( $rule['users'] ), $like ), $meta_keys, array( $like ) );
+			$args = array_merge( array_fill( 0, \count( $user_columns ), $like ), $meta_keys, array( $like ) );
 
 			// A term with digits and no letters is a phone fragment: compare the stored phone
 			// with its punctuation stripped, so `0412` finds `(04) 1234 5678`.
@@ -55,10 +60,10 @@ final class Customer_Search {
 			$digits = preg_replace( '/\D+/', '', $term );
 			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
 				$phone = " OR ( wcpos_search_meta.meta_key IN ($phone_key_placeholders) AND " . Order_Search::phone_digits_expression( 'wcpos_search_meta.meta_value' ) . ' LIKE %s )';
-				$args  = array_merge( $args, $rule['phone_meta'], array( '%' . $digits . '%' ) );
+				$args  = array_merge( $args, $phone_keys, array( '%' . $digits . '%' ) );
 			}
 
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb, columns from the declaration; meta keys and LIKE values are passed to prepare().
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb, columns are allowlisted; meta keys and LIKE values are passed to prepare().
 			$groups[] = $wpdb->prepare(
 				"( {$user_fields}
 					OR EXISTS (

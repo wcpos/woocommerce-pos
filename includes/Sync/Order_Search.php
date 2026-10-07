@@ -14,6 +14,9 @@ namespace WCPOS\WooCommercePOS\Sync;
  * unlike the former search body, it never becomes an unconstrained order query.
  */
 final class Order_Search {
+	/** The wc_order_addresses columns a declaration may name; any other entry is ignored. */
+	private const ADDRESS_COLUMNS = array( 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'email', 'phone' );
+
 	/**
 	 * Split a search string into at most ten whitespace-separated terms.
 	 *
@@ -32,7 +35,7 @@ final class Order_Search {
 	 * Build an HPOS where fragment with AND-across-terms semantics.
 	 *
 	 * @param string $search Search text.
-	 * @param array  $tables Orders and address table names.
+	 * @param array  $tables Orders and address table names, with an optional meta entry.
 	 * @param array  $rule   Declared search carriers and cap.
 	 * @return string
 	 */
@@ -41,13 +44,16 @@ final class Order_Search {
 		$conditions = array();
 		$orders     = $tables['orders'];
 		$addresses  = $tables['addresses'];
-		$fields = implode( ' LIKE %s OR ', $rule['hpos']['addresses'] ) . ' LIKE %s';
-		$number_keys = "'" . implode( "', '", $rule['number_meta'] ) . "'";
+		$meta = $tables['meta'] ?? "{$wpdb->prefix}wc_orders_meta";
+		$columns = array_values( array_filter( $rule['hpos']['addresses'], static fn( $column ) => \is_string( $column ) && \in_array( $column, self::ADDRESS_COLUMNS, true ) ) );
+		$fields = empty( $columns ) ? '1 = 0' : implode( ' LIKE %s OR ', $columns ) . ' LIKE %s';
+		$keys = array_values( array_unique( array_filter( array_merge( $rule['posts']['meta'], $rule['number_meta'] ), 'is_string' ) ) );
+		$meta_in = empty( $keys ) ? 'NULL' : implode( ', ', array_fill( 0, \count( $keys ), '%s' ) );
 		$items = self::line_items_where( "`{$orders}`.id", $rule );
 		foreach ( self::terms( $search, $rule ) as $term ) {
 			$like = '%' . $wpdb->esc_like( $term ) . '%';
 			$id   = ctype_digit( $term ) ? "`{$orders}`.id = %d OR " : '';
-			$args = array_fill( 0, 1 + count( $rule['hpos']['addresses'] ), $like );
+			$args = array_fill( 0, 1 + \count( $columns ), $like );
 			if ( '' !== $id ) {
 				array_unshift( $args, (int) $term );
 			}
@@ -57,15 +63,16 @@ final class Order_Search {
 				$phone = ' OR ' . self::phone_digits_expression( 'phone' ) . ' LIKE %s';
 				$args[] = '%' . $digits . '%';
 			}
+			$args = array_merge( $args, $keys );
 			array_push( $args, $like, $like, $like, $like, $like );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from WooCommerce.
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from WooCommerce, columns are allowlisted; meta keys are passed to prepare().
 			$conditions[] = $wpdb->prepare(
 				"( {$id}`{$orders}`.billing_email LIKE %s OR `{$orders}`.id IN (
 					SELECT order_id FROM `{$addresses}` WHERE address_type IN ('billing','shipping')
 					AND ( {$fields}{$phone} )
 				) OR EXISTS (
-					SELECT 1 FROM {$wpdb->prefix}wc_orders_meta AS wcpos_number
-					WHERE wcpos_number.order_id = `{$orders}`.id AND wcpos_number.meta_key IN ( {$number_keys} ) AND wcpos_number.meta_value LIKE %s
+					SELECT 1 FROM `{$meta}` AS wcpos_order_meta
+					WHERE wcpos_order_meta.order_id = `{$orders}`.id AND wcpos_order_meta.meta_key IN ( {$meta_in} ) AND wcpos_order_meta.meta_value LIKE %s
 				) OR {$items} )",
 				$args
 			);
@@ -83,12 +90,13 @@ final class Order_Search {
 	public static function posts_where( string $search, array $rule ): string {
 		global $wpdb;
 		$conditions = array();
-		$keys = "'" . implode( "', '", array_merge( $rule['posts']['meta'], $rule['number_meta'] ) ) . "'";
+		$keys = array_values( array_unique( array_filter( array_merge( $rule['posts']['meta'], $rule['number_meta'] ), 'is_string' ) ) );
+		$meta_in = empty( $keys ) ? 'NULL' : implode( ', ', array_fill( 0, \count( $keys ), '%s' ) );
 		$items = self::line_items_where( "{$wpdb->posts}.ID", $rule );
 		foreach ( self::terms( $search, $rule ) as $term ) {
 			$like = '%' . $wpdb->esc_like( $term ) . '%';
 			$id   = ctype_digit( $term ) ? "{$wpdb->posts}.ID = %d OR " : '';
-			$args = '' === $id ? array( $like ) : array( (int) $term, $like );
+			$args = array_merge( '' === $id ? array() : array( (int) $term ), $keys, array( $like ) );
 			$phone = '';
 			$digits = preg_replace( '/\D+/', '', $term );
 			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
@@ -96,10 +104,10 @@ final class Order_Search {
 				$args[] = '%' . $digits . '%';
 			}
 			array_push( $args, $like, $like, $like, $like );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb.
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; meta keys are passed to prepare().
 			$conditions[] = $wpdb->prepare(
 				"( {$id}EXISTS (
-					SELECT 1 FROM {$wpdb->postmeta} AS wcpos_order_search_meta WHERE wcpos_order_search_meta.post_id = {$wpdb->posts}.ID AND wcpos_order_search_meta.meta_key IN ( {$keys} ) AND ( wcpos_order_search_meta.meta_value LIKE %s{$phone} )
+					SELECT 1 FROM {$wpdb->postmeta} AS wcpos_order_search_meta WHERE wcpos_order_search_meta.post_id = {$wpdb->posts}.ID AND wcpos_order_search_meta.meta_key IN ( {$meta_in} ) AND ( wcpos_order_search_meta.meta_value LIKE %s{$phone} )
 				) OR {$items} )",
 				$args
 			);
@@ -118,10 +126,9 @@ final class Order_Search {
 	 */
 	private static function line_items_where( string $order_id, array $rule ): string {
 		global $wpdb;
-		$name = $rule['line_items']['name'];
 		return "EXISTS (
 			SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items AS wcpos_item
-			WHERE wcpos_item.order_id = {$order_id} AND wcpos_item.order_item_type = 'line_item' AND wcpos_item.{$name} LIKE %s
+			WHERE wcpos_item.order_id = {$order_id} AND wcpos_item.order_item_type = 'line_item' AND wcpos_item.order_item_name LIKE %s
 		) OR {$order_id} IN ( SELECT wcpos_sku_order.order_id FROM (
 			SELECT DISTINCT wcpos_item.order_id FROM {$wpdb->prefix}woocommerce_order_itemmeta AS wcpos_ref
 			INNER JOIN (
