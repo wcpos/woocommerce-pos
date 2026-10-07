@@ -34,8 +34,10 @@ final class Customer_Search {
 	public static function where( string $search ): string {
 		global $wpdb;
 
-		$terms = preg_split( '/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY );
-		if ( false === $terms || empty( $terms ) ) {
+		// The same splitter as orders and the POS client: Unicode separators and control
+		// characters (a pasted zero-width space, a non-breaking space) end a term like a space.
+		$terms = Collection_Rules::search_terms( $search );
+		if ( empty( $terms ) ) {
 			return '1 = 0';
 		}
 

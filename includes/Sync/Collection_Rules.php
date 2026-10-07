@@ -485,10 +485,51 @@ final class Collection_Rules {
 			 * @param array  $search     Search declaration.
 			 * @param string $collection Collection slug.
 			 */
-			$rules[ $collection ]['search'] = apply_filters( 'woocommerce_pos_search_fields', $rules[ $collection ]['search'], $collection );
+			$declared                        = $rules[ $collection ]['search'];
+			$rules[ $collection ]['search'] = self::normalize_search_declaration(
+				$declared,
+				apply_filters( 'woocommerce_pos_search_fields', $declared, $collection )
+			);
 		}
 
 		return $rules[ $collection ] ?? array();
+	}
+
+	/**
+	 * Keep every list the builders merge over an array, whatever a filter callback returned.
+	 *
+	 * A callback that unsets `meta` or `posts.meta` would otherwise reach `array_merge()` as
+	 * null and turn the search request into a 500. Each key present in the declaration keeps
+	 * the filtered value when it has the declared type and falls back to the declared value
+	 * otherwise; keys the filter added pass through untouched.
+	 *
+	 * @param array $declared Declaration before the filter.
+	 * @param mixed $filtered What the filter returned.
+	 * @return array
+	 */
+	private static function normalize_search_declaration( array $declared, $filtered ): array {
+		if ( ! \is_array( $filtered ) ) {
+			return $declared;
+		}
+		foreach ( $declared as $key => $value ) {
+			if ( ! \is_array( $value ) ) {
+				continue;
+			}
+			$filtered[ $key ] = \is_array( $filtered[ $key ] ?? null )
+				? ( self::is_list( $value ) ? $filtered[ $key ] : self::normalize_search_declaration( $value, $filtered[ $key ] ) )
+				: $value;
+		}
+		return $filtered;
+	}
+
+	/**
+	 * Whether an array is a plain list (sequential integer keys).
+	 *
+	 * @param array $value Array to inspect.
+	 * @return bool
+	 */
+	private static function is_list( array $value ): bool {
+		return array_keys( $value ) === range( 0, \count( $value ) - 1 );
 	}
 
 	/**

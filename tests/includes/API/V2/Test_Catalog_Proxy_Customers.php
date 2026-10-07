@@ -651,6 +651,45 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** A filter callback that breaks the declaration's shape must not break search. */
+	public function test_customer_search_survives_a_malformed_filter_return(): void {
+		$probe    = wp_generate_password( 12, false );
+		$customer = CustomerHelper::create_customer( array( 'billing_company' => $probe ) );
+		$filter   = static function ( $search ) {
+			unset( $search['meta'], $search['phone_meta'] );
+			$search['users'] = 'user_email';
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params( array( 'role' => 'all', 'search' => $probe ) );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter );
+		}
+	}
+
+	/** Unicode separators split customer terms exactly as they split order terms. */
+	public function test_customer_search_splits_terms_on_unicode_separators(): void {
+		$first    = wp_generate_password( 10, false );
+		$last     = wp_generate_password( 10, false );
+		$customer = CustomerHelper::create_customer( array( 'first_name' => $first, 'last_name' => $last ) );
+
+		foreach ( array( "\u{200B}", "\u{00A0}", "\u{3000}" ) as $separator ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params( array( 'role' => 'all', 'search' => $first . $separator . $last ) );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ), bin2hex( $separator ) );
+		}
+	}
+
 	/** A store can extend customer search with a custom meta key. */
 	public function test_customer_search_filtered_meta_returns_customer(): void {
 		$probe    = wp_generate_password( 12, false );
