@@ -66,8 +66,32 @@ final class Payments_Sweeper {
 						if ( ! $handler ) {
 							continue;
 						}
-						$result = $handler->status( $row );
+						$dispatch = 'pending' === $row['status'] && empty( $row['provider_refs']['action'] );
+						// Manual records are never pending; legacy webview legs are not provider intents.
+						if ( $dispatch && in_array( $row['capture_mode'], array( 'manual', 'webview' ), true ) ) {
+							continue;
+						}
+						$result = $dispatch
+							? $handler->intent(
+								$row,
+								array(
+									'source' => 'sweep',
+									'reader' => $row['provider_refs']['reader'] ?? null,
+								)
+							)
+							: $handler->status( $row );
 						if ( is_wp_error( $result ) ) {
+							if ( $dispatch && true !== ( $result->get_error_data()['indeterminate'] ?? false ) ) {
+								$ledger->apply_result(
+									$order,
+									$row['id'],
+									array(
+										'status' => 'failed',
+										'failure_reason' => $result->get_error_code(),
+									),
+									false
+								);
+							}
 							Logger::log( sprintf( 'WCPOS payment sweep %s: %s', $row['id'], $result->get_error_message() ) );
 							continue;
 						}

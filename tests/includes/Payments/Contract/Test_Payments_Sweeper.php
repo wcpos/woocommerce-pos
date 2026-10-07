@@ -17,11 +17,60 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		parent::setUp();
 		Capture_Mode_Registry::instance()->register( 'sweep_test', Sweep_Test_Handler::class );
 		Sweep_Test_Handler::$calls = array();
+		Sweep_Test_Handler::$intents = array();
+		Sweep_Test_Handler::$intent_patch = array( 'provider_refs' => array( 'reader' => 'sn-1', 'action' => 'action-1' ) );
 		Sweep_Test_Handler::$voids = array();
 		Sweep_Test_Handler::$preserve_authorized = false;
 		Sweep_Test_Handler::$patch = array( 'status' => 'captured' );
 		Sweep_Test_Handler::$captures = array();
 		Sweep_Test_Handler::$capture_patch = array( 'status' => 'captured' );
+	}
+
+	public function test_sweeper_actionless_pending_is_dispatched_then_polled(): void {
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array( array( $id, array( 'source' => 'sweep', 'reader' => 'sn-1' ) ) ), Sweep_Test_Handler::$intents );
+		$this->assertSame( array(), Sweep_Test_Handler::$calls );
+		$row = $this->row( $order, $id );
+		$this->assertSame( 'action-1', $row['provider_refs']['action'] );
+		$this->assertSame( 'pending', $row['status'] );
+		// The next stale pass uses ordinary status, not another dispatch.
+		$row['updated_at_gmt'] = gmdate( 'c', time() - 600 );
+		$order = wc_get_order( $order->get_id() );
+		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => array( $row ) ) ) );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertCount( 1, Sweep_Test_Handler::$intents );
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( 'captured', $this->row( $order, $id )['status'] );
+	}
+
+	public function test_sweeper_indeterminate_intent_leaves_row_untouched(): void {
+		Sweep_Test_Handler::$intent_patch = new \WP_Error( 'test_timeout', 'Timeout', array( 'indeterminate' => true ) );
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array() ) );
+		$before = $this->row( $order, $id );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( $before, $this->row( $order, $id ) );
+		$this->assertCount( 1, Sweep_Test_Handler::$intents );
+		$this->assertSame( array(), Sweep_Test_Handler::$calls );
+	}
+
+	public function test_sweeper_determinate_intent_fails_row_with_error_code(): void {
+		Sweep_Test_Handler::$intent_patch = new \WP_Error( 'test_declined', 'Declined' );
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array() ) );
+		( new Payments_Sweeper() )->run();
+		$row = $this->row( $order, $id );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'test_declined', $row['failure_reason'] );
+		$this->assertSame( array(), Sweep_Test_Handler::$calls );
+	}
+
+	public function test_sweeper_pending_with_action_is_not_redispatched(): void {
+		list( $order, $id ) = $this->leg( 600 );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array(), Sweep_Test_Handler::$intents );
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( 'captured', $this->row( $order, $id )['status'] );
 	}
 
 	public function test_sweeper_stale_pending_is_polled_but_fresh_row_is_not(): void {
@@ -323,6 +372,8 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 	}
 
 	private function leg( int $age, array $extra = array() ): array {
+		// Existing polling fixtures represent already-dispatched provider legs.
+		$extra = array_merge( array( 'provider_refs' => array( 'action' => 'existing-action' ) ), $extra );
 		$order = wc_create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->set_status( 'pos-open' );
@@ -339,6 +390,12 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 }
 
 class Sweep_Test_Handler extends Manual_Handler {
+	public static $intents = array();
+	public static $intent_patch = array();
+	public function intent( array $row, array $context ) {
+		self::$intents[] = array( $row['id'], $context );
+		return self::$intent_patch;
+	}
 	public static $calls = array();
 	public static $voids = array();
 	public static $patch = array();

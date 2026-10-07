@@ -159,6 +159,113 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( $order ) );
 	}
 
+	public function test_intent_indeterminate_error_preserves_saved_pending_row(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$ledger = Ledger::instance();
+		$error = new \WP_Error( 'test_timeout', 'Timeout', array( 'indeterminate' => true ) );
+		$result = $ledger->intent( $order, $input['id'], $input, array(
+			'error' => $error,
+			'observe' => function ( $row ) use ( $order, $ledger ) {
+				$stored = $ledger->find( wc_get_order( $order->get_id() ), $row['id'] );
+				$this->assertNotNull( $stored );
+				$this->assertSame( 'pending', $stored['status'] );
+				$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+			},
+		) );
+		$this->assertSame( $error, $result );
+		$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $input['id'], $rows[0]['id'] );
+		$this->assertSame( 'pending', $rows[0]['status'] );
+		$this->assertArrayNotHasKey( 'action', $rows[0]['provider_refs'] );
+		$this->assertSame( 'warning', $rows[0]['events'][0]['level'] );
+		$this->assertSame( 'Provider did not answer: test_timeout', $rows[0]['events'][0]['message'] );
+	}
+
+	public function test_intent_determinate_error_removes_saved_row_and_indexes(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$kept = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$input = $this->payment( 'pos_card', '20.00' );
+		$error = new \WP_Error( 'test_declined', 'Declined' );
+		$result = $ledger->intent( $order, $input['id'], $input, array(
+			'error' => $error,
+			'observe' => function ( $row ) use ( $order, $ledger ) {
+				$this->assertNotNull( $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
+			},
+		) );
+		$this->assertSame( $error, $result );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertNull( $ledger->find( $order, $input['id'] ) );
+		$this->assertSame( array( $kept['id'] ), array_values( wp_list_pluck( $order->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
+		$this->assertEmpty( $order->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+		$this->assertCount( 1, $ledger->read( $order ) );
+	}
+
+	public function test_intent_new_captured_result_verifies_money(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$result = Ledger::instance()->intent( $order, $input['id'], $input, array( 'resume' => array( 'status' => 'captured', 'amount' => '99.00' ) ) );
+		$this->assertWPError( $result );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'amount_mismatch', $row['failure_reason'] );
+		$this->assertNull( $order->get_date_paid() );
+	}
+
+	public function test_intent_pending_full_balance_blocks_new_uuid(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $this->payment( 'pos_card', '92.95' );
+		$ledger->intent( $order, $first['id'], $first, array() );
+		$before = $ledger->read( $order );
+		$second = $this->payment( 'pos_card', '92.95' );
+		$result = $ledger->intent( $order, $second['id'], $second, array() );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_payment_in_flight', $result->get_error_code() );
+		$this->assertSame( array( 'status' => 409, 'payment_id' => $first['id'] ), $result->get_error_data() );
+		$this->assertSame( 1, Integrity_Handler::$calls );
+		$this->assertSame( $before, $ledger->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	public function test_intent_pending_partial_balance_allows_remaining_amount(): void {
+		$order = $this->create_pos_order();
+		$order->set_total( '20.00' );
+		$order->save();
+		$ledger = Ledger::instance();
+		$first = $this->payment( 'pos_card', '10.00' );
+		$ledger->intent( $order, $first['id'], $first, array() );
+		$second = $this->payment( 'pos_card', '10.00' );
+		$result = $ledger->intent( $order, $second['id'], $second, array() );
+		$this->assertIsArray( $result );
+		$this->assertSame( $second['id'], $result['payment']['id'] );
+		$this->assertSame( 2, Integrity_Handler::$calls );
+		$this->assertCount( 2, $ledger->read( $order ) );
+	}
+
+	public function test_intent_pending_full_balance_replay_is_allowed(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$input = $this->payment( 'pos_card', '92.95' );
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$result = $ledger->intent( $order, $input['id'], $input, array() );
+		$this->assertIsArray( $result );
+		$this->assertSame( $input['id'], $result['payment']['id'] );
+		$this->assertSame( 2, Integrity_Handler::$calls );
+		$this->assertCount( 1, $ledger->read( $order ) );
+	}
+
+	public function test_intent_source_webview_is_persisted_and_bogus_defaults_to_app(): void {
+		foreach ( array( 'webview' => 'webview', 'bogus' => 'app' ) as $source => $expected ) {
+			$order = $this->create_pos_order();
+			$input = $this->payment( 'pos_card', '20.00', array( 'source' => $source ) );
+			$result = Ledger::instance()->intent( $order, $input['id'], $input, array() );
+			$this->assertIsArray( $result );
+			$this->assertSame( $expected, Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] )['source'] );
+		}
+	}
+
 	public function test_capture_handler_error_preserves_pending_row(): void {
 		$order = $this->create_pos_order();
 		$input = $this->payment( 'pos_card', '20.00' );
@@ -1114,6 +1221,9 @@ class Integrity_Handler extends Manual_Handler {
 	}
 	public function intent( array $row, array $context ) {
 		++self::$calls;
+		if ( isset( $context['observe'] ) ) {
+			$context['observe']( $row );
+		}
 		if ( isset( $context['error'] ) ) {
 			return $context['error']; }
 		if ( isset( $context['resume'] ) ) {

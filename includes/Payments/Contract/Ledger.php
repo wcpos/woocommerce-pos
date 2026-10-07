@@ -371,10 +371,31 @@ class Ledger {
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
 			return new WP_Error( 0 === $balance ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance', 0 === $balance ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ), array( 'status' => 0 === $balance ? 409 : 400 ) );
 		}
+		$pending = 0;
+		$newest_pending = null;
+		foreach ( $rows as $existing ) {
+			if ( 'pending' === $existing['status'] ) {
+				$pending += Money::minor( $existing['amount'] );
+				if ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) {
+					$newest_pending = $existing;
+				}
+			}
+		}
+		if ( Money::minor( $amount ) > $balance - $pending ) {
+			return new WP_Error(
+				'wcpos_payment_in_flight',
+				__( 'Another payment is already in progress on this order.', 'woocommerce-pos' ),
+				array(
+					'status' => 409,
+					'payment_id' => $newest_pending['id'],
+				)
+			);
+		}
 		$row = $this->normalize_row(
 			$order,
 			array(
 				'id' => $id,
+				'source' => in_array( $input['source'] ?? '', self::SOURCES, true ) ? $input['source'] : 'app',
 				'method_id' => $descriptor['id'],
 				'provider' => $descriptor['capture']['provider'],
 				'kind' => $descriptor['kind'],
@@ -394,24 +415,33 @@ class Ledger {
 				'store_id' => isset( $context['store_id'] ) ? (int) $context['store_id'] : null,
 			)
 		);
+		// Persist before contacting the provider: a lost answer must not erase the leg.
+		$rows[] = $row;
+		$this->save( $order, $rows, false );
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] );
 		$new = $handler ? $handler->intent( $row, $context ) : $this->unsupported();
 		if ( is_wp_error( $new ) ) {
+			if ( true === ( $new->get_error_data()['indeterminate'] ?? false ) ) {
+				$row['events'][] = array(
+					't' => gmdate( 'c' ),
+					'level' => 'warning',
+					'message' => 'Provider did not answer: ' . $new->get_error_code(),
+				);
+				$this->replace_and_save( $order, $rows, $row, false );
+			} else {
+				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
+				// save() rebuilds payment-id and live-leg indexes from the remaining rows.
+				$this->save( $order, $rows, false );
+			}
 			return $new;
 		}
 		$handoff = $new['handoff'] ?? array();
-		$row = $this->apply_transition( $row, $new );
+		$row = $this->apply_result( $order, $row['id'], $new, false );
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
-		$row = $this->normalize_row( $order, $row );
-		$rows[] = $row;
-		// A provider can webhook before Free has written the row; that confirmation is
-		// parked and drained here, as record() does — the sweep never drains. Index the
-		// row first WITHOUT deriving: an authorization that covers the balance would
-		// otherwise complete the order before a parked void could be applied, and the
-		// projection never unwinds a completed order.
-		$this->save( $order, $rows, false );
+		// Drain parked confirmations before deriving: a parked void must be applied
+		// before an authorization covering the balance could complete the order.
 		$settled = Settlement::instance()->apply_parked( $order, $row['id'] );
 		if ( is_wp_error( $settled ) ) {
 			return $settled;
@@ -772,7 +802,13 @@ class Ledger {
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
-		return $this->apply_result( $order, $id, $new );
+		$prompt = isset( $new['prompt'] ) && is_array( $new['prompt'] ) ? $new['prompt'] : null;
+		unset( $new['prompt'] );
+		$result = $this->apply_result( $order, $id, $new );
+		if ( ! is_wp_error( $result ) && null !== $prompt ) {
+			$result['prompt'] = $prompt;
+		}
+		return $result;
 	}
 
 	/**

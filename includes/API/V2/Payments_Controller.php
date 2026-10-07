@@ -125,7 +125,11 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
-		return $this->payment_response( $row, $order );
+		$prompt = $row['prompt'] ?? null;
+		unset( $row['prompt'] );
+		$response = $this->payment_response( $row, $order );
+		$response->set_data( array_merge( $response->get_data(), array( 'prompt' => $prompt ) ) );
+		return $response;
 	}
 
 	/**
