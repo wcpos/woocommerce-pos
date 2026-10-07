@@ -472,14 +472,15 @@ final class Collection_Rules {
 
 		if ( isset( $rules[ $collection ]['search'] ) ) {
 			/**
-			 * Extend what the POS searches for a collection.
+			 * Widen the server-side search for a collection.
 			 *
-			 * A store adds a custom meta key by appending it to `meta` (customers) or `posts.meta` (orders).
-			 * An order key is searched in post meta on legacy storage and in the order meta table under HPOS.
-			 * Keys are passed to the query as values. The column lists (`users`, `hpos.addresses`) accept only
-			 * the columns the search builders know, and any other entry is ignored. `line_items` and `hpos.orders`
-			 * describe what is searched and do not change the query. The POS client reads the same declaration,
-			 * so both lanes change together. No settings UI exists or is planned.
+			 * This filter changes only the server's search query. The POS client does not read this declaration.
+			 *
+			 * A store adds a custom meta key by appending it to `meta` (customers) or `posts.meta` (orders). Order keys
+			 * go in `posts.meta` for both storages: they are searched in post meta on legacy storage and in the order
+			 * meta table under HPOS. Keys are passed to the query as values. The column lists (`users`, `hpos.addresses`)
+			 * accept only the columns the search builders know, and any other entry is ignored. `line_items` and
+			 * `hpos.orders` describe what is searched and do not change the query. No settings UI exists or is planned.
 			 *
 			 * @param array  $search     Search declaration.
 			 * @param string $collection Collection slug.
