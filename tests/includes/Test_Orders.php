@@ -15,6 +15,8 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
 use WC_Order_Item_Product;
+use WC_Payment_Gateway;
+use WC_Payment_Gateways;
 use WC_Product_Simple;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Orders;
@@ -2188,7 +2190,8 @@ class Test_Orders extends WC_Unit_Test_Case {
 			$this->assertStringContainsString( '/order-received/', (string) $parts['path'], 'Fixture: pretty permalinks put the endpoint in the path.' );
 
 			// https, upper-case host, no trailing slash, the key dropped, an argument added.
-			$variant = 'https://' . strtoupper( $parts['host'] ) . untrailingslashit( $parts['path'] ) . '?utm_source=gateway';
+			$port    = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+			$variant = 'https://' . strtoupper( $parts['host'] ) . $port . untrailingslashit( $parts['path'] ) . '?utm_source=gateway';
 
 			// Act.
 			apply_filters(
@@ -2295,6 +2298,314 @@ class Test_Orders extends WC_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 'pos-open', wc_get_order( $hosted_order->get_id() )->get_status(), 'The checkout page is not the received page.' );
 		$this->assertSame( 'on-hold', wc_get_order( $finished_order->get_id() )->get_status() );
+	}
+
+	/**
+	 * A gateway that rewrites the redirect later on the same filter is read after
+	 * it has done so.
+	 *
+	 * Stripe swaps get_return_url() for a `#confirm-pi…` hash at priority 99999
+	 * when the intent needs 3DS. Read at priority 10 the result still says
+	 * "received page" and the sale closes while the customer is confirming; read
+	 * last, the fragment says the gateway is not finished.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_reads_the_redirect_after_a_later_gateway_rewrite(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$needs_confirmation = static function ( array $result ): array {
+			$result['redirect'] .= '#confirm-pi-pi_123:' . rawurlencode( 'https://example.test/verify' );
+			return $result;
+		};
+		add_filter( 'woocommerce_payment_successful_result', $needs_confirmation, 99999 );
+
+		// Act.
+		try {
+			apply_filters( 'woocommerce_payment_successful_result', $this->finished_result( $order ), $order->get_id() );
+		} finally {
+			remove_filter( 'woocommerce_payment_successful_result', $needs_confirmation, 99999 );
+		}
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * On plain permalinks every page shares the path, so a moved thank-you page
+	 * and a pay-page redirect must be told apart by their query arguments.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_tells_a_moved_thank_you_page_from_the_pay_page_on_plain_permalinks(): void {
+		// Arrange.
+		$this->set_permalink_structure( '' );
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$move_thank_you = static function (): string {
+			return home_url( '/?page_id=42' );
+		};
+		add_filter( 'woocommerce_get_return_url', $move_thank_you );
+
+		// Act: same host and path as the moved page, but it is the pay page.
+		try {
+			apply_filters(
+				'woocommerce_payment_successful_result',
+				array(
+					'result'   => 'success',
+					'redirect' => home_url( '/?page_id=7&order-pay=' . $order->get_id() . '&pay_for_order=true' ),
+				),
+				$order->get_id()
+			);
+			$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status(), 'A different page_id is a different page.' );
+
+			apply_filters(
+				'woocommerce_payment_successful_result',
+				array(
+					'result'   => 'success',
+					'redirect' => home_url( '/?page_id=42&utm_nooverride=1' ),
+				),
+				$order->get_id()
+			);
+		} finally {
+			remove_filter( 'woocommerce_get_return_url', $move_thank_you );
+		}
+
+		// Assert.
+		$this->assertSame( 'on-hold', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * A store that renamed the received endpoint is read from the URL, not from
+	 * an assumed `order-received`.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_honours_a_renamed_received_endpoint_on_plain_permalinks(): void {
+		// Arrange.
+		$this->set_permalink_structure( '' );
+		update_option( 'woocommerce_checkout_order_received_endpoint', 'thank-you' );
+		WC()->query->init_query_vars();
+
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$hosted_order = $this->create_pos_order( 'pos-open' );
+		$hosted_order->set_payment_method( 'acme_quotes' );
+		$hosted_order->save();
+
+		$finished_order = $this->create_pos_order( 'pos-open' );
+		$finished_order->set_payment_method( 'acme_quotes' );
+		$finished_order->save();
+
+		try {
+			$received = $finished_order->get_checkout_order_received_url();
+			$this->assertStringContainsString( 'thank-you=', $received, 'Fixture: the renamed endpoint is the query key.' );
+			$this->assertStringNotContainsString( 'order-received', $received );
+
+			// Act.
+			apply_filters(
+				'woocommerce_payment_successful_result',
+				array(
+					'result'   => 'success',
+					'redirect' => wc_get_checkout_url(),
+				),
+				$hosted_order->get_id()
+			);
+			apply_filters(
+				'woocommerce_payment_successful_result',
+				array(
+					'result'   => 'success',
+					'redirect' => $received,
+				),
+				$finished_order->get_id()
+			);
+		} finally {
+			delete_option( 'woocommerce_checkout_order_received_endpoint' );
+			WC()->query->init_query_vars();
+		}
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $hosted_order->get_id() )->get_status(), 'The checkout page is not the received page.' );
+		$this->assertSame( 'on-hold', wc_get_order( $finished_order->get_id() )->get_status() );
+	}
+
+	/**
+	 * Two services on one host are two pages; http and https forms of one origin
+	 * are one.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_compares_explicit_ports(): void {
+		// Arrange: a thank-you page on a default port, pinned through the filter so
+		// the test does not depend on the port the test site happens to run on.
+		$this->set_gateway_settings( 'acme_quotes', 'wc-on-hold' );
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$other_service_order = $this->create_pos_order( 'pos-open' );
+		$other_service_order->set_payment_method( 'acme_quotes' );
+		$other_service_order->save();
+
+		$default_port_order = $this->create_pos_order( 'pos-open' );
+		$default_port_order->set_payment_method( 'acme_quotes' );
+		$default_port_order->save();
+
+		$pin_thank_you = static function (): string {
+			return 'https://shop.example/thanks/';
+		};
+		add_filter( 'woocommerce_get_return_url', $pin_thank_you );
+
+		// Act.
+		try {
+			apply_filters(
+				'woocommerce_payment_successful_result',
+				array(
+					'result'   => 'success',
+					'redirect' => 'https://shop.example:9443/thanks/',
+				),
+				$other_service_order->get_id()
+			);
+			apply_filters(
+				'woocommerce_payment_successful_result',
+				array(
+					'result'   => 'success',
+					'redirect' => 'https://shop.example:443/thanks/',
+				),
+				$default_port_order->get_id()
+			);
+		} finally {
+			remove_filter( 'woocommerce_get_return_url', $pin_thank_you );
+		}
+
+		// Assert.
+		$this->assertSame( 'pos-open', wc_get_order( $other_service_order->get_id() )->get_status(), 'Port 9443 is another service.' );
+		$this->assertSame( 'on-hold', wc_get_order( $default_port_order->get_id() )->get_status(), 'An explicit default port is the same origin.' );
+	}
+
+	/**
+	 * A gateway that can refund moves money; if it hands the customer to the
+	 * received page without having taken it, the payment is pending and its
+	 * webhook owns the status.
+	 *
+	 * Mollie's Pay by Bank with its payment screen skipped, and an async "received"
+	 * result from a hosted provider, both return get_return_url() with the order
+	 * untouched. Without this guard they would be marked Completed before the
+	 * bank transfer clears. A quote gateway declares no refunds, because nothing
+	 * was ever paid.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_leaves_order_open_when_a_refund_capable_gateway_returns_unpaid(): void {
+		$this->with_stub_gateway(
+			'wcpos_async_bank',
+			array( 'products', 'refunds' ),
+			function (): void {
+				// Arrange.
+				$this->set_gateway_settings( 'wcpos_async_bank', 'wc-completed' );
+				$order = $this->create_pos_order( 'pos-open' );
+				$order->set_payment_method( 'wcpos_async_bank' );
+				$order->save();
+
+				$_REQUEST['pos']         = '1';
+				$_SERVER['HTTP_X_WCPOS'] = '1';
+
+				// Act.
+				apply_filters( 'woocommerce_payment_successful_result', $this->finished_result( $order ), $order->get_id() );
+
+				// Assert.
+				$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+			}
+		);
+	}
+
+	/**
+	 * A registered gateway without refunds is the quote shape, and still closes.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_applies_status_for_a_registered_gateway_without_refunds(): void {
+		$this->with_stub_gateway(
+			'wcpos_quote_like',
+			array( 'products' ),
+			function (): void {
+				// Arrange.
+				$this->set_gateway_settings( 'wcpos_quote_like', 'wc-on-hold' );
+				$order = $this->create_pos_order( 'pos-open' );
+				$order->set_payment_method( 'wcpos_quote_like' );
+				$order->save();
+
+				$_REQUEST['pos']         = '1';
+				$_SERVER['HTTP_X_WCPOS'] = '1';
+
+				// Act.
+				apply_filters( 'woocommerce_payment_successful_result', $this->finished_result( $order ), $order->get_id() );
+
+				// Assert.
+				$fresh = wc_get_order( $order->get_id() );
+				$this->assertSame( 'on-hold', $fresh->get_status() );
+				$this->assertNull( $fresh->get_date_paid() );
+			}
+		);
+	}
+
+	/**
+	 * Register a stub gateway with the given id and `supports` for the duration
+	 * of the callback, then restore the gateway registry.
+	 *
+	 * @param string   $id       Gateway id.
+	 * @param string[] $supports The gateway's declared features.
+	 * @param callable $callback Runs while the stub is registered.
+	 */
+	private function with_stub_gateway( string $id, array $supports, callable $callback ): void {
+		$gateway = new class( $id, $supports ) extends WC_Payment_Gateway {
+			/**
+			 * Assign the id and features without building form fields.
+			 *
+			 * @param string   $id       Gateway id.
+			 * @param string[] $supports Declared features.
+			 */
+			public function __construct( string $id, array $supports ) {
+				$this->id           = $id;
+				$this->method_title = $id;
+				$this->title        = $id;
+				$this->supports     = $supports;
+			}
+		};
+
+		$add_gateway = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+
+		add_filter( 'woocommerce_payment_gateways', $add_gateway );
+
+		$registry                   = WC_Payment_Gateways::instance();
+		$registry->payment_gateways = array();
+		$registry->init();
+
+		try {
+			$callback();
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+		}
 	}
 
 	/**
