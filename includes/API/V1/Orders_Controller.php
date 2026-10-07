@@ -1137,9 +1137,27 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return false;
 		}
 
+		// Drop the POS's deletion markers (`{ id, code: null }`, the shape wc/v3 honours
+		// for every other line collection) before the comparison: the remaining codes
+		// then differ from the stored set and the parent's remove-and-reapply removes
+		// the coupon. Forwarded as-is, the marker is a codeless line and wc/v3 400s.
+		// Only an existing order can carry a synced coupon line: on a create (order
+		// not yet saved) every line is forwarded as posted so wc/v3 still rejects it.
+		$coupon_lines = $request['coupon_lines'];
+		if ( $order->get_id() > 0 ) {
+			$coupon_lines = array_values(
+				array_filter(
+					$coupon_lines,
+					static function ( $line ) {
+						return ! Order_Write_Payload::is_coupon_deletion_marker( $line );
+					}
+				)
+			);
+		}
+
 		// Extract coupon codes from the request.
 		$requested_codes = array();
-		foreach ( $request['coupon_lines'] as $item ) {
+		foreach ( $coupon_lines as $item ) {
 			$code = $item['code'] ?? '';
 			if ( '' !== $code ) {
 				$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
@@ -1164,7 +1182,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
-		$coupon_lines = $request['coupon_lines'];
 		foreach ( $coupon_lines as &$coupon_line ) {
 			unset( $coupon_line['id'] );
 		}
