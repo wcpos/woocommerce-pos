@@ -241,6 +241,9 @@ class Orders {
 	 *   status. The settings view synthesizes `wc-completed` for every installed
 	 *   gateway it has never seen, so trusting the computed value would mark an
 	 *   unconfigured third-party gateway Completed with no money taken.
+	 * - the gateway's redirect must be the order's own received page. That is
+	 *   the gateway saying it is finished; any other target means it is still
+	 *   collecting the money — see redirect_targets_order_received().
 	 *
 	 * @param array $result   Gateway result, passed through untouched.
 	 * @param int   $order_id Order ID.
@@ -259,6 +262,10 @@ class Orders {
 		}
 
 		if ( ! $order->has_status( 'pos-open' ) || $order->get_date_paid( 'edit' ) ) {
+			return $result;
+		}
+
+		if ( ! \is_array( $result ) || ! $this->redirect_targets_order_received( $result, $order ) ) {
 			return $result;
 		}
 
@@ -320,6 +327,104 @@ class Orders {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Whether a successful gateway result sends the customer to the order's received page.
+	 *
+	 * The redirect is the one thing every gateway declares about what happens
+	 * next, and it separates the two shapes that both "return success and leave
+	 * the order open":
+	 *
+	 * - A gateway that is finished sends the customer to the received page,
+	 *   `get_return_url( $order )`. Quotes, invoices, purchase orders, BACS,
+	 *   cheque and COD all do. No money will ever move through it, so the
+	 *   configured POS status is the only thing that closes the sale.
+	 * - A gateway that still has to collect the money sends them somewhere else:
+	 *   a hosted checkout off-site (Dintero, Mollie, PayPal, Klarna), or an
+	 *   on-site pay or receipt page that posts a form to one. It settles the
+	 *   order later, from its callback, through payment_complete(). Acting on
+	 *   this shape marked the order Completed while the cashier was still
+	 *   looking at the hosted checkout (1.10.20–1.10.22): Dintero's capture
+	 *   handler then found no transaction and bounced the order to on-hold, and
+	 *   the till — which reads any status outside its open/unpaid set as a
+	 *   finished sale — opened the receipt before a payment method was chosen.
+	 *
+	 * Compared without scheme, trailing slash or query string: `get_return_url()`
+	 * may upgrade to https, and a gateway may append its own arguments. Both the
+	 * order's received URL and its `woocommerce_get_return_url`-filtered form are
+	 * accepted, so a plugin that moves the thank-you page still matches. On plain
+	 * permalinks the endpoint rides in the query, so `order-received` is compared
+	 * on its own. A missing or relative redirect never matches: WooCommerce's pay
+	 * handler would redirect to it unchanged, and nothing here can tell what it is.
+	 *
+	 * @param array    $result Gateway result from process_payment().
+	 * @param WC_Order $order  The order being paid.
+	 *
+	 * @return bool
+	 */
+	private function redirect_targets_order_received( array $result, WC_Order $order ): bool {
+		$redirect = isset( $result['redirect'] ) && \is_string( $result['redirect'] ) ? trim( $result['redirect'] ) : '';
+
+		if ( '' === $redirect ) {
+			return false;
+		}
+
+		$received_url = $order->get_checkout_order_received_url();
+
+		/** This filter is documented in woocommerce/includes/abstracts/abstract-wc-payment-gateway.php */
+		$return_url = apply_filters( 'woocommerce_get_return_url', $received_url, $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
+
+		foreach ( array_unique( array( $received_url, $return_url ) ) as $candidate ) {
+			if ( \is_string( $candidate ) && '' !== $candidate && $this->is_same_page( $redirect, $candidate ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether two absolute URLs name the same page.
+	 *
+	 * Host (case-insensitive) and path (without a trailing slash) must match.
+	 * Scheme and query string are ignored, except for the `order-received`
+	 * argument, which is the page itself on plain permalinks.
+	 *
+	 * @param string $url_a First URL.
+	 * @param string $url_b Second URL.
+	 *
+	 * @return bool
+	 */
+	private function is_same_page( string $url_a, string $url_b ): bool {
+		$parts_a = wp_parse_url( $url_a );
+		$parts_b = wp_parse_url( $url_b );
+
+		if ( ! \is_array( $parts_a ) || ! \is_array( $parts_b ) ) {
+			return false;
+		}
+
+		$host_a = strtolower( (string) ( $parts_a['host'] ?? '' ) );
+		$host_b = strtolower( (string) ( $parts_b['host'] ?? '' ) );
+
+		if ( '' === $host_a || $host_a !== $host_b ) {
+			return false;
+		}
+
+		$path_a = untrailingslashit( (string) ( $parts_a['path'] ?? '/' ) );
+		$path_b = untrailingslashit( (string) ( $parts_b['path'] ?? '/' ) );
+
+		if ( $path_a !== $path_b ) {
+			return false;
+		}
+
+		parse_str( (string) ( $parts_a['query'] ?? '' ), $query_a );
+		parse_str( (string) ( $parts_b['query'] ?? '' ), $query_b );
+
+		$received_a = isset( $query_a['order-received'] ) ? (string) $query_a['order-received'] : '';
+		$received_b = isset( $query_b['order-received'] ) ? (string) $query_b['order-received'] : '';
+
+		return $received_a === $received_b;
 	}
 
 	/**
