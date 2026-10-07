@@ -54,13 +54,21 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 	public function test_search_meta_keys_lists_filter_additions_the_client_can_read(): void {
 		wp_set_current_user( 0 );
 		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
-		$this->assertSame( array( 'customers' => array(), 'orders' => array() ), $response->get_data()['search_meta_keys'] );
+		$this->assertSame(
+			array(
+				'customers' => array(),
+				'orders' => array(),
+			),
+			$response->get_data()['search_meta_keys']
+		);
 
 		$filter = static function ( $search, $collection ) {
 			if ( 'customers' === $collection ) {
 				$search['meta'][] = 'loyalty_number';
 				$search['meta'][] = '_hidden_internal';
-				$search['meta'][] = 'first_name'; // already declared: not an addition
+				$search['meta'][] = 'first_name'; // Already declared: not an addition.
+				$search['meta'][] = array( 'not', 'a', 'key' ); // A broken callback must not 500 discovery.
+				$search['meta'][] = new \stdClass();
 			}
 			if ( 'orders' === $collection ) {
 				$search['posts']['meta'][] = 'delivery_slot';
@@ -71,7 +79,10 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		try {
 			$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
 			$this->assertSame(
-				array( 'customers' => array( 'loyalty_number' ), 'orders' => array( 'delivery_slot' ) ),
+				array(
+					'customers' => array( 'loyalty_number' ),
+					'orders' => array( 'delivery_slot' ),
+				),
 				$response->get_data()['search_meta_keys']
 			);
 		} finally {

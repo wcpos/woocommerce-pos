@@ -521,9 +521,13 @@ final class Collection_Rules {
 				$declared = $declared[ $segment ] ?? array();
 				$filtered = $filtered[ $segment ] ?? array();
 			}
-			$keys = array_filter(
-				array_diff( (array) $filtered, (array) $declared ),
-				static fn( $key ) => \is_string( $key ) && '' !== $key && '_' !== $key[0]
+			// Strings only on BOTH sides before the diff: array_diff() stringifies its operands,
+			// and a callback that appended an array or object would otherwise 500 this public
+			// endpoint and block every connect.
+			$strings = static fn( array $list ): array => array_filter( $list, 'is_string' );
+			$keys    = array_filter(
+				array_diff( $strings( (array) $filtered ), $strings( (array) $declared ) ),
+				static fn( string $key ) => '' !== $key && '_' !== $key[0]
 			);
 			$added[ $collection ] = array_values( array_unique( $keys ) );
 		}
