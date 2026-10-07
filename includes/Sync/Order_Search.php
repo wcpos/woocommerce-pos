@@ -57,7 +57,7 @@ final class Order_Search {
 				$phone = ' OR ' . self::phone_digits_expression( 'phone' ) . ' LIKE %s';
 				$args[] = '%' . $digits . '%';
 			}
-			array_push( $args, $like, $like, $like );
+			array_push( $args, $like, $like, $like, $like, $like );
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from WooCommerce.
 			$conditions[] = $wpdb->prepare(
 				"( {$id}`{$orders}`.billing_email LIKE %s OR `{$orders}`.id IN (
@@ -95,7 +95,7 @@ final class Order_Search {
 				$phone = " OR ( wcpos_order_search_meta.meta_key IN ('_billing_phone','_shipping_phone') AND " . self::phone_digits_expression( 'wcpos_order_search_meta.meta_value' ) . ' LIKE %s )';
 				$args[] = '%' . $digits . '%';
 			}
-			array_push( $args, $like, $like );
+			array_push( $args, $like, $like, $like, $like );
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb.
 			$conditions[] = $wpdb->prepare(
 				"( {$id}EXISTS (
@@ -109,7 +109,8 @@ final class Order_Search {
 	}
 
 	/**
-	 * Build shared line-item arms, each with one LIKE placeholder.
+	 * Build shared line-item arms: one LIKE placeholder for the name and three for the SKU.
+	 * The SKU arm matches a variation by its own SKU, or its parent's when it has none, and a simple product by its own SKU.
 	 *
 	 * @param string $order_id Trusted outer order ID column.
 	 * @param array  $rule     Declared search fields.
@@ -118,17 +119,28 @@ final class Order_Search {
 	private static function line_items_where( string $order_id, array $rule ): string {
 		global $wpdb;
 		$name = $rule['line_items']['name'];
-		$sku = $rule['line_items']['sku'];
 		return "EXISTS (
 			SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items AS wcpos_item
 			WHERE wcpos_item.order_id = {$order_id} AND wcpos_item.order_item_type = 'line_item' AND wcpos_item.{$name} LIKE %s
-		) OR EXISTS (
-			SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items AS wcpos_item
-			LEFT JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS wcpos_variation ON wcpos_variation.order_item_id = wcpos_item.order_item_id AND wcpos_variation.meta_key = '_variation_id'
-			LEFT JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS wcpos_product ON wcpos_product.order_item_id = wcpos_item.order_item_id AND wcpos_product.meta_key = '_product_id'
-			INNER JOIN {$wpdb->postmeta} AS wcpos_sku ON wcpos_sku.post_id = COALESCE( NULLIF( wcpos_variation.meta_value, 0 ), wcpos_product.meta_value ) AND wcpos_sku.meta_key = '{$sku}'
-			WHERE wcpos_item.order_id = {$order_id} AND wcpos_item.order_item_type = 'line_item' AND wcpos_sku.meta_value LIKE %s
-		)";
+		) OR {$order_id} IN ( SELECT wcpos_sku_order.order_id FROM (
+			SELECT DISTINCT wcpos_item.order_id FROM {$wpdb->prefix}woocommerce_order_itemmeta AS wcpos_ref
+			INNER JOIN (
+				SELECT '_product_id' AS ref_key, wcpos_sku.product_id FROM {$wpdb->prefix}wc_product_meta_lookup AS wcpos_sku
+				INNER JOIN {$wpdb->posts} AS wcpos_product ON wcpos_product.ID = wcpos_sku.product_id AND wcpos_product.post_type = 'product'
+				WHERE wcpos_sku.sku LIKE %s AND NOT EXISTS ( SELECT 1 FROM {$wpdb->posts} AS wcpos_kid WHERE wcpos_kid.post_parent = wcpos_sku.product_id AND wcpos_kid.post_type = 'product_variation' )
+				UNION ALL
+				SELECT '_variation_id', wcpos_sku.product_id FROM {$wpdb->prefix}wc_product_meta_lookup AS wcpos_sku
+				INNER JOIN {$wpdb->posts} AS wcpos_child ON wcpos_child.ID = wcpos_sku.product_id AND wcpos_child.post_type = 'product_variation'
+				WHERE wcpos_sku.sku LIKE %s
+				UNION ALL
+				SELECT '_variation_id', wcpos_child.ID FROM {$wpdb->posts} AS wcpos_child
+				INNER JOIN {$wpdb->prefix}wc_product_meta_lookup AS wcpos_parent ON wcpos_parent.product_id = wcpos_child.post_parent
+				LEFT JOIN {$wpdb->prefix}wc_product_meta_lookup AS wcpos_own ON wcpos_own.product_id = wcpos_child.ID
+				WHERE wcpos_child.post_type = 'product_variation' AND COALESCE( wcpos_own.sku, '' ) = '' AND wcpos_parent.sku LIKE %s
+			) AS wcpos_match ON wcpos_match.ref_key = wcpos_ref.meta_key AND wcpos_match.product_id = wcpos_ref.meta_value
+			INNER JOIN {$wpdb->prefix}woocommerce_order_items AS wcpos_item ON wcpos_item.order_item_id = wcpos_ref.order_item_id AND wcpos_item.order_item_type = 'line_item'
+			WHERE wcpos_ref.meta_key IN ( '_product_id', '_variation_id' )
+		) AS wcpos_sku_order )";
 	}
 
 	/**

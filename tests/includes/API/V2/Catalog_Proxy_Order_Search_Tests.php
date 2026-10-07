@@ -207,6 +207,21 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'ParentSkuProbe' ) ) );
 	}
 
+	/** A variation without its own SKU is found by its parent's SKU, as WooCommerce reports it. */
+	public function test_order_search_matches_parent_sku_for_variation_without_sku(): void {
+		$product = ProductHelper::create_variation_product();
+		$product->set_sku( 'InheritedParentSkuProbe' );
+		$product->save();
+		$variation = wc_get_product( $product->get_children()[0] );
+		$variation->set_sku( '' );
+		$variation->save();
+		$this->target_order->add_product( $variation );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'InheritedParentSkuProbe' );
+		$this->assertSame( 'InheritedParentSkuProbe', $variation->get_sku() );
+	}
+
 	/** Sequential order numbers participate in order search. */
 	public function test_order_search_matches_order_number_meta(): void {
 		$this->target_order->update_meta_data( '_order_number', 'NumberMetaProbe-123' );
