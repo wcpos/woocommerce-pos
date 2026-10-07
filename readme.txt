@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.23
+Stable tag: 1.10.24
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,10 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.24 - 2026/10/08 =
+
+- **Removing a coupon from a cart that had already been saved no longer makes Checkout fail.** Until now the next Checkout or Save was refused with "Coupon code is required" and the sale could not be completed until the coupon was put back or the cart rebuilt. This has been the case since coupons arrived in 1.9.0.
 
 = 1.10.23 - 2026/10/07 =
 
