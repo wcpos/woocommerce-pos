@@ -570,6 +570,7 @@ final class Collection_Rules_Plan {
 					array(
 						'orders'    => $query->get_table_name( 'orders' ),
 						'addresses' => $query->get_table_name( 'addresses' ),
+						'meta'      => $query->get_table_name( 'meta' ),
 					),
 					$rule
 				);

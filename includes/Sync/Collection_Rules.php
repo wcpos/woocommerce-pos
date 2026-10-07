@@ -252,14 +252,34 @@ final class Collection_Rules {
 					'param'      => 'search',
 					'term_cap'   => self::SEARCH_TERM_CAP,
 					'rank_exact' => false,
-					'carriers'   => array( 'id', 'billing_email', 'first_name', 'last_name', 'company', 'email', 'phone' ),
+					'carriers'   => array(
+						'id',
+						'billing_email',
+						'first_name',
+						'last_name',
+						'company',
+						'email',
+						'phone',
+						'shipping_first_name',
+						'shipping_last_name',
+						'shipping_company',
+						'shipping_phone',
+						'line_item_name',
+						'line_item_sku',
+						'number_meta',
+					),
+					'number_meta' => array( '_order_number', '_order_number_formatted' ),
+					'line_items'  => array(
+						'name' => 'order_item_name',
+						'sku'  => '_sku',
+					),
 					'hpos'       => array(
 						'orders'    => array( 'id', 'billing_email' ),
 						'addresses' => array( 'first_name', 'last_name', 'company', 'email', 'phone' ),
 					),
 					'posts'      => array(
 						'id'   => 'ID',
-						'meta' => array( '_billing_first_name', '_billing_last_name', '_billing_company', '_billing_email', '_billing_phone' ),
+						'meta' => array( '_billing_first_name', '_billing_last_name', '_billing_company', '_billing_email', '_billing_phone', '_shipping_first_name', '_shipping_last_name', '_shipping_company', '_shipping_phone' ),
 					),
 				),
 				'sorts' => array(
@@ -416,6 +436,30 @@ final class Collection_Rules {
 			 * kinds this table has never expressed; that is a later increment.
 			 */
 			'customers' => array(
+				'search' => array(
+					'param'      => 'search',
+					'term_cap'   => self::SEARCH_TERM_CAP,
+					'users'      => array( 'user_email', 'user_login', 'display_name' ),
+					'meta'       => array( 'first_name', 'last_name', 'billing_first_name', 'billing_last_name', 'billing_email', 'billing_company', 'billing_phone', 'shipping_first_name', 'shipping_last_name', 'shipping_company', 'shipping_phone' ),
+					'phone_meta' => array( 'billing_phone', 'shipping_phone' ),
+					'carriers'   => array(
+						'user_email',
+						'user_login',
+						'display_name',
+						'first_name',
+						'last_name',
+						'billing_first_name',
+						'billing_last_name',
+						'billing_email',
+						'billing_company',
+						'billing_phone',
+						'shipping_first_name',
+						'shipping_last_name',
+						'shipping_company',
+						'shipping_phone',
+						'tax_ids',
+					),
+				),
 				'sorts' => array(
 					'first_name' => array(),
 					'last_name'  => array(),
@@ -426,7 +470,66 @@ final class Collection_Rules {
 			),
 		);
 
+		if ( isset( $rules[ $collection ]['search'] ) ) {
+			/**
+			 * Widen the server-side search for a collection.
+			 *
+			 * This filter changes only the server's search query. The POS client does not read this declaration.
+			 *
+			 * A store adds a custom meta key by appending it to `meta` (customers) or `posts.meta` (orders). Order keys
+			 * go in `posts.meta` for both storages: they are searched in post meta on legacy storage and in the order
+			 * meta table under HPOS. Keys are passed to the query as values. The column lists (`users`, `hpos.addresses`)
+			 * accept only the columns the search builders know, and any other entry is ignored. `line_items` and
+			 * `hpos.orders` describe what is searched and do not change the query. No settings UI exists or is planned.
+			 *
+			 * @param array  $search     Search declaration.
+			 * @param string $collection Collection slug.
+			 */
+			$declared                        = $rules[ $collection ]['search'];
+			$rules[ $collection ]['search'] = self::normalize_search_declaration(
+				$declared,
+				apply_filters( 'woocommerce_pos_search_fields', $declared, $collection )
+			);
+		}
+
 		return $rules[ $collection ] ?? array();
+	}
+
+	/**
+	 * Keep every list the builders merge over an array, whatever a filter callback returned.
+	 *
+	 * A callback that unsets `meta` or `posts.meta` would otherwise reach `array_merge()` as
+	 * null and turn the search request into a 500. Each key present in the declaration keeps
+	 * the filtered value when it has the declared type and falls back to the declared value
+	 * otherwise; keys the filter added pass through untouched.
+	 *
+	 * @param array $declared Declaration before the filter.
+	 * @param mixed $filtered What the filter returned.
+	 * @return array
+	 */
+	private static function normalize_search_declaration( array $declared, $filtered ): array {
+		if ( ! \is_array( $filtered ) ) {
+			return $declared;
+		}
+		foreach ( $declared as $key => $value ) {
+			if ( ! \is_array( $value ) ) {
+				continue;
+			}
+			$filtered[ $key ] = \is_array( $filtered[ $key ] ?? null )
+				? ( self::is_list( $value ) ? $filtered[ $key ] : self::normalize_search_declaration( $value, $filtered[ $key ] ) )
+				: $value;
+		}
+		return $filtered;
+	}
+
+	/**
+	 * Whether an array is a plain list (sequential integer keys).
+	 *
+	 * @param array $value Array to inspect.
+	 * @return bool
+	 */
+	private static function is_list( array $value ): bool {
+		return array_keys( $value ) === range( 0, \count( $value ) - 1 );
 	}
 
 	/**

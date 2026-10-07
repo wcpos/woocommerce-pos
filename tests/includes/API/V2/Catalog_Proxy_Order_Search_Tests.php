@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 
 /**
@@ -49,7 +50,9 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->target_order->set_billing_email( 'aurelia.order.probe@example.invalid' );
 		// IDs share the global auto-increment: scrub numeric address fields so the
 		// numeric-id LIKE search can never collide with a postcode/phone.
+		// Line-item SKUs are scrubbed for the same reason.
 		$this->scrub_numeric_address_fields( $this->target_order );
+		$this->scrub_numeric_line_item_skus( $this->target_order );
 		$this->target_order->save();
 
 		$other_order = OrderHelper::create_order();
@@ -57,7 +60,25 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$other_order->set_billing_last_name( 'RenshawProbe' );
 		$other_order->set_billing_email( 'benedict.order.probe@example.invalid' );
 		$this->scrub_numeric_address_fields( $other_order );
+		$this->scrub_numeric_line_item_skus( $other_order );
 		$other_order->save();
+	}
+
+	/**
+	 * Keep fixture SKUs digit-free so the numeric order-id search cannot match them.
+	 *
+	 * @param \WC_Order $order Fixture order.
+	 */
+	private function scrub_numeric_line_item_skus( \WC_Order $order ): void {
+		foreach ( $order->get_items() as $item ) {
+			$product = $item->get_product();
+			if ( ! $product ) {
+				continue;
+			}
+
+			$product->set_sku( 'OrderSearchFixture' . strtr( uniqid(), '0123456789', 'ghijklmnop' ) );
+			$product->save();
+		}
 	}
 
 	/**
@@ -155,6 +176,134 @@ trait Catalog_Proxy_Order_Search_Tests {
 		$this->target_order->save();
 
 		$this->assert_order_search_finds_target( 'WidgetCoProbe WooPhoneProbe' );
+	}
+
+	/** Shipping first names participate in order search. */
+	public function test_order_search_matches_shipping_first_name(): void {
+		$this->target_order->set_shipping_first_name( 'ShippingRecipientProbe' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'ShippingRecipientProbe' );
+	}
+
+	/** Shipping phones participate in order search. */
+	public function test_order_search_matches_shipping_phone(): void {
+		$this->target_order->set_shipping_phone( 'ShippingPhoneProbe' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'ShippingPhoneProbe' );
+	}
+
+	/** Line item names participate in order search. */
+	public function test_order_search_matches_line_item_name(): void {
+		$product = ProductHelper::create_simple_product( array( 'name' => 'Unique LineNameProbe Widget' ) );
+		$this->target_order->add_product( $product );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'LineNameProbe' );
+	}
+
+	/** Simple product SKUs participate in order search. */
+	public function test_order_search_matches_line_item_sku(): void {
+		$product = ProductHelper::create_simple_product( array( 'sku' => 'Unique-LineSkuProbe-Code' ) );
+		$this->target_order->add_product( $product );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'LineSkuProbe' );
+	}
+
+	/** A variation's SKU takes precedence over its parent product's SKU. */
+	public function test_order_search_matches_variation_sku_not_parent_sku(): void {
+		$product = ProductHelper::create_variation_product();
+		$product->set_sku( 'ParentSkuProbe' );
+		$product->save();
+		$variation = wc_get_product( $product->get_children()[0] );
+		$variation->set_sku( 'VariationSkuProbe' );
+		$variation->save();
+		$this->target_order->add_product( $variation );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'VariationSkuProbe' );
+		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'ParentSkuProbe' ) ) );
+	}
+
+	/** A variation without its own SKU is found by its parent's SKU, as WooCommerce reports it. */
+	public function test_order_search_matches_parent_sku_for_variation_without_sku(): void {
+		$product = ProductHelper::create_variation_product();
+		$product->set_sku( 'InheritedParentSkuProbe' );
+		$product->save();
+		$variation = wc_get_product( $product->get_children()[0] );
+		$variation->set_sku( '' );
+		$variation->save();
+		$this->target_order->add_product( $variation );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'InheritedParentSkuProbe' );
+		$this->assertSame( 'InheritedParentSkuProbe', $variation->get_sku() );
+	}
+
+	/** Sequential order numbers participate in order search. */
+	public function test_order_search_matches_order_number_meta(): void {
+		$this->target_order->update_meta_data( '_order_number', 'NumberMetaProbe-123' );
+		$this->target_order->update_meta_data( '_order_number_formatted', 'FormattedNumberProbe-123' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( 'NumberMetaProbe' );
+		$this->assert_order_search_finds_target( 'FormattedNumberProbe' );
+	}
+
+	/** A store can extend order search with a custom order meta key, as the filter docblock says. */
+	public function test_order_search_matches_filtered_order_meta(): void {
+		$filter = static function ( $search, $collection ) {
+			if ( 'orders' === $collection ) {
+				$search['posts']['meta'][] = '_wcpos_probe_reference';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$this->target_order->update_meta_data( '_wcpos_probe_reference', 'FilteredMetaProbe-41' );
+			$this->target_order->save();
+			$this->assert_order_search_finds_target( 'FilteredMetaProbe' );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
+	/** Declared columns the search does not know are ignored, not sent to the database. */
+	public function test_order_search_ignores_unknown_declared_columns(): void {
+		$filter = static function ( $search, $collection ) {
+			if ( 'orders' === $collection ) {
+				$search['hpos']['addresses'][] = 'not_an_address_column';
+				$search['line_items']['name'] = 'not_an_item_column';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$this->assert_order_search_finds_target( 'AureliaProbe' );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
+	/** Phone searches ignore punctuation, but never add country or trunk prefixes. */
+	public function test_order_search_matches_phone_digits(): void {
+		$this->target_order->set_billing_phone( '+61 412-345-678' );
+		$this->target_order->set_shipping_phone( '(04) 1234 5678' );
+		$this->target_order->save();
+
+		$this->assert_order_search_finds_target( '412345' );
+		$this->assert_order_search_finds_target( '61412' );
+		$this->assert_order_search_finds_target( '0412' );
+		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'x61412' ) ) );
+	}
+
+	/** An unmatched search must not become an unconstrained order query. */
+	public function test_order_search_unmatched_term_returns_zero_rows(): void {
+		$this->assertSame( array(), $this->order_ids_for_query( array( 'search' => 'UnmatchedOrderSearchProbe' ) ) );
 	}
 
 	/** Numeric ids can be combined with billing-field terms. */

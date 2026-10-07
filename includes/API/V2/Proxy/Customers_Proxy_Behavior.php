@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Proxy;
 
-use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Sync\Customer_Search;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_REST_Request;
 use WP_User_Query;
@@ -180,42 +180,10 @@ final class Customers_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	 * @param WP_User_Query $query User query.
 	 */
 	public function search_user_table( WP_User_Query $query ): void {
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
-		global $wpdb;
-
 		if ( empty( $query->query_vars['_wcpos_search'] ) ) {
 			return;
 		}
-		$terms = preg_split( '/\s+/u', (string) $query->query_vars['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
-		if ( false === $terms || empty( $terms ) ) {
-			$query->query_where .= ' AND 1 = 0';
-			return;
-		}
-
-		$terms     = array_slice( $terms, 0, 10 );
-		$meta_keys = array_merge(
-			array( 'first_name', 'last_name', 'billing_first_name', 'billing_last_name', 'billing_email', 'billing_company', 'billing_phone' ),
-			Tax_Id_Reader::fallback_user_meta_keys()
-		);
-		$placeholders = implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
-		$groups       = array();
-		foreach ( $terms as $term ) {
-			$like   = '%' . $wpdb->esc_like( $term ) . '%';
-			$groups[] = $wpdb->prepare(
-				"( {$wpdb->users}.user_email LIKE %s
-					OR {$wpdb->users}.user_login LIKE %s
-					OR {$wpdb->users}.display_name LIKE %s
-					OR EXISTS (
-						SELECT 1 FROM {$wpdb->usermeta} AS wcpos_search_meta
-						WHERE wcpos_search_meta.user_id = {$wpdb->users}.ID
-							AND wcpos_search_meta.meta_key IN ($placeholders)
-							AND wcpos_search_meta.meta_value LIKE %s
-					)
-				)",
-				array_merge( array( $like, $like, $like ), $meta_keys, array( $like ) )
-			);
-		}
-		$query->query_where .= ' AND ( ' . implode( ' AND ', $groups ) . ' )';
+		$query->query_where .= ' AND ' . Customer_Search::where( (string) $query->query_vars['_wcpos_search'] );
 	}
 
 	/**

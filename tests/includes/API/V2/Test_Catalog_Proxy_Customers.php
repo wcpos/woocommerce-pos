@@ -204,7 +204,12 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$run_unrelated_query = static function ( array $args ): array {
-			new \WP_User_Query( array( 'fields' => 'ids', 'number' => 1 ) );
+			new \WP_User_Query(
+				array(
+					'fields' => 'ids',
+					'number' => 1,
+				)
+			);
 
 			return $args;
 		};
@@ -581,6 +586,168 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		return $ids;
+	}
+
+	/** Shipping fields participate in customer search. */
+	public function test_customer_search_shipping_fields_returns_customer(): void {
+		foreach ( array( 'shipping_first_name', 'shipping_company', 'shipping_phone' ) as $field ) {
+			$probe    = wp_generate_password( 12, false );
+			$customer = CustomerHelper::create_customer( array( $field => $probe ) );
+			$request  = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params(
+				array(
+					'role' => 'all',
+					'search' => $probe,
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ), $field );
+		}
+	}
+
+	/**
+	 * Phone searches match digits across stored punctuation, but not other numbers.
+	 *
+	 * @dataProvider customer_search_phone_digits_provider
+	 * @param string $phone   Stored phone number.
+	 * @param string $search  Search term.
+	 * @param bool   $matches Whether the customer should be found.
+	 */
+	public function test_customer_search_phone_digits_returns_expected_matches( string $phone, string $search, bool $matches ): void {
+		$customer = CustomerHelper::create_customer( array( 'billing_phone' => $phone ) );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+		$request->set_query_params(
+			array(
+				'role' => 'all',
+				'search' => $search,
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+		if ( $matches ) {
+			$this->assertContains( $customer->get_id(), $ids );
+		} else {
+			$this->assertNotContains( $customer->get_id(), $ids );
+		}
+	}
+
+	/**
+	 * Phone digit search cases.
+	 *
+	 * @return array
+	 */
+	public function customer_search_phone_digits_provider(): array {
+		return array(
+			'hyphen'       => array( '+61 412-345-678', '412345', true ),
+			'country code' => array( '+61 412-345-678', '61412', true ),
+			'other number' => array( '+61 412-345-678', '0499', false ),
+			'parentheses'  => array( '(04) 1234 5678', '0412', true ),
+		);
+	}
+
+	/** A filter callback that breaks the declaration's shape must not break search. */
+	public function test_customer_search_survives_a_malformed_filter_return(): void {
+		$probe    = wp_generate_password( 12, false );
+		$customer = CustomerHelper::create_customer( array( 'billing_company' => $probe ) );
+		$filter   = static function ( $search ) {
+			unset( $search['meta'], $search['phone_meta'] );
+			$search['users'] = 'user_email';
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params( array( 'role' => 'all', 'search' => $probe ) );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter );
+		}
+	}
+
+	/** Unicode separators split customer terms exactly as they split order terms. */
+	public function test_customer_search_splits_terms_on_unicode_separators(): void {
+		$first    = wp_generate_password( 10, false );
+		$last     = wp_generate_password( 10, false );
+		$customer = CustomerHelper::create_customer( array( 'first_name' => $first, 'last_name' => $last ) );
+
+		foreach ( array( "\u{200B}", "\u{00A0}", "\u{3000}" ) as $separator ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params( array( 'role' => 'all', 'search' => $first . $separator . $last ) );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ), bin2hex( $separator ) );
+		}
+	}
+
+	/** A store can extend customer search with a custom meta key. */
+	public function test_customer_search_filtered_meta_returns_customer(): void {
+		$probe    = wp_generate_password( 12, false );
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'loyalty_number', $probe );
+		$filter = static function ( $search, $collection ) {
+			if ( 'customers' === $collection ) {
+				$search['meta'][] = 'loyalty_number';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params(
+				array(
+					'role' => 'all',
+					'search' => $probe,
+				)
+			);
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
+	/** Declared user columns the search does not know are ignored, not sent to the database. */
+	public function test_customer_search_ignores_unknown_declared_user_column(): void {
+		$probe    = wp_generate_password( 12, false );
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'billing_company', $probe );
+		$filter = static function ( $search, $collection ) {
+			if ( 'customers' === $collection ) {
+				$search['users'][] = 'not_a_user_column';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
+			$request->set_query_params(
+				array(
+					'role' => 'all',
+					'search' => $probe,
+				)
+			);
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
 	}
 
 	/**

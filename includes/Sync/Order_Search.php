@@ -14,6 +14,9 @@ namespace WCPOS\WooCommercePOS\Sync;
  * unlike the former search body, it never becomes an unconstrained order query.
  */
 final class Order_Search {
+	/** The wc_order_addresses columns a declaration may name; any other entry is ignored. */
+	private const ADDRESS_COLUMNS = array( 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'email', 'phone' );
+
 	/**
 	 * Split a search string into at most ten whitespace-separated terms.
 	 *
@@ -32,7 +35,7 @@ final class Order_Search {
 	 * Build an HPOS where fragment with AND-across-terms semantics.
 	 *
 	 * @param string $search Search text.
-	 * @param array  $tables Orders and address table names.
+	 * @param array  $tables Orders and address table names, with an optional meta entry.
 	 * @param array  $rule   Declared search carriers and cap.
 	 * @return string
 	 */
@@ -41,20 +44,36 @@ final class Order_Search {
 		$conditions = array();
 		$orders     = $tables['orders'];
 		$addresses  = $tables['addresses'];
-		$fields = implode( ' LIKE %s OR ', $rule['hpos']['addresses'] ) . ' LIKE %s';
+		$meta = $tables['meta'] ?? "{$wpdb->prefix}wc_orders_meta";
+		$columns = array_values( array_filter( $rule['hpos']['addresses'], static fn( $column ) => \is_string( $column ) && \in_array( $column, self::ADDRESS_COLUMNS, true ) ) );
+		$fields = empty( $columns ) ? '1 = 0' : implode( ' LIKE %s OR ', $columns ) . ' LIKE %s';
+		$keys = array_values( array_unique( array_filter( array_merge( $rule['posts']['meta'], $rule['number_meta'] ), 'is_string' ) ) );
+		$meta_in = empty( $keys ) ? 'NULL' : implode( ', ', array_fill( 0, \count( $keys ), '%s' ) );
+		$items = self::line_items_where( "`{$orders}`.id", $rule );
 		foreach ( self::terms( $search, $rule ) as $term ) {
 			$like = '%' . $wpdb->esc_like( $term ) . '%';
 			$id   = ctype_digit( $term ) ? "`{$orders}`.id = %d OR " : '';
-			$args = array_fill( 0, 1 + count( $rule['hpos']['addresses'] ), $like );
+			$args = array_fill( 0, 1 + \count( $columns ), $like );
 			if ( '' !== $id ) {
 				array_unshift( $args, (int) $term );
 			}
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from WooCommerce.
+			$phone = '';
+			$digits = preg_replace( '/\D+/', '', $term );
+			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
+				$phone = ' OR ' . self::phone_digits_expression( 'phone' ) . ' LIKE %s';
+				$args[] = '%' . $digits . '%';
+			}
+			$args = array_merge( $args, $keys );
+			array_push( $args, $like, $like, $like, $like, $like );
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from WooCommerce, columns are allowlisted; meta keys are passed to prepare().
 			$conditions[] = $wpdb->prepare(
 				"( {$id}`{$orders}`.billing_email LIKE %s OR `{$orders}`.id IN (
-					SELECT order_id FROM `{$addresses}` WHERE address_type = 'billing'
-					AND ( {$fields} )
-				) )",
+					SELECT order_id FROM `{$addresses}` WHERE address_type IN ('billing','shipping')
+					AND ( {$fields}{$phone} )
+				) OR EXISTS (
+					SELECT 1 FROM `{$meta}` AS wcpos_order_meta
+					WHERE wcpos_order_meta.order_id = `{$orders}`.id AND wcpos_order_meta.meta_key IN ( {$meta_in} ) AND wcpos_order_meta.meta_value LIKE %s
+				) OR {$items} )",
 				$args
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -71,20 +90,76 @@ final class Order_Search {
 	public static function posts_where( string $search, array $rule ): string {
 		global $wpdb;
 		$conditions = array();
-		$keys = "'" . implode( "', '", $rule['posts']['meta'] ) . "'";
+		$keys = array_values( array_unique( array_filter( array_merge( $rule['posts']['meta'], $rule['number_meta'] ), 'is_string' ) ) );
+		$meta_in = empty( $keys ) ? 'NULL' : implode( ', ', array_fill( 0, \count( $keys ), '%s' ) );
+		$items = self::line_items_where( "{$wpdb->posts}.ID", $rule );
 		foreach ( self::terms( $search, $rule ) as $term ) {
 			$like = '%' . $wpdb->esc_like( $term ) . '%';
 			$id   = ctype_digit( $term ) ? "{$wpdb->posts}.ID = %d OR " : '';
-			$args = '' === $id ? array( $like ) : array( (int) $term, $like );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb.
+			$args = array_merge( '' === $id ? array() : array( (int) $term ), $keys, array( $like ) );
+			$phone = '';
+			$digits = preg_replace( '/\D+/', '', $term );
+			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
+				$phone = " OR ( wcpos_order_search_meta.meta_key IN ('_billing_phone','_shipping_phone') AND " . self::phone_digits_expression( 'wcpos_order_search_meta.meta_value' ) . ' LIKE %s )';
+				$args[] = '%' . $digits . '%';
+			}
+			array_push( $args, $like, $like, $like, $like );
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; meta keys are passed to prepare().
 			$conditions[] = $wpdb->prepare(
 				"( {$id}EXISTS (
-					SELECT 1 FROM {$wpdb->postmeta} AS wcpos_order_search_meta WHERE wcpos_order_search_meta.post_id = {$wpdb->posts}.ID AND wcpos_order_search_meta.meta_key IN ( {$keys} ) AND wcpos_order_search_meta.meta_value LIKE %s
-				) )",
+					SELECT 1 FROM {$wpdb->postmeta} AS wcpos_order_search_meta WHERE wcpos_order_search_meta.post_id = {$wpdb->posts}.ID AND wcpos_order_search_meta.meta_key IN ( {$meta_in} ) AND ( wcpos_order_search_meta.meta_value LIKE %s{$phone} )
+				) OR {$items} )",
 				$args
 			);
 			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
 		return false === preg_match( '//u', $search ) ? '1=0' : implode( ' AND ', $conditions );
+	}
+
+	/**
+	 * Build shared line-item arms: one LIKE placeholder for the name and three for the SKU.
+	 * The SKU arm matches a variation by its own SKU, or its parent's when it has none, and a simple product by its own SKU.
+	 *
+	 * @param string $order_id Trusted outer order ID column.
+	 * @param array  $rule     Declared search fields.
+	 * @return string
+	 */
+	private static function line_items_where( string $order_id, array $rule ): string {
+		global $wpdb;
+		return "EXISTS (
+			SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items AS wcpos_item
+			WHERE wcpos_item.order_id = {$order_id} AND wcpos_item.order_item_type = 'line_item' AND wcpos_item.order_item_name LIKE %s
+		) OR {$order_id} IN ( SELECT wcpos_sku_order.order_id FROM (
+			SELECT DISTINCT wcpos_item.order_id FROM {$wpdb->prefix}woocommerce_order_itemmeta AS wcpos_ref
+			INNER JOIN (
+				SELECT '_product_id' AS ref_key, wcpos_sku.product_id FROM {$wpdb->prefix}wc_product_meta_lookup AS wcpos_sku
+				INNER JOIN {$wpdb->posts} AS wcpos_product ON wcpos_product.ID = wcpos_sku.product_id AND wcpos_product.post_type = 'product'
+				WHERE wcpos_sku.sku LIKE %s AND NOT EXISTS ( SELECT 1 FROM {$wpdb->posts} AS wcpos_kid WHERE wcpos_kid.post_parent = wcpos_sku.product_id AND wcpos_kid.post_type = 'product_variation' )
+				UNION ALL
+				SELECT '_variation_id', wcpos_sku.product_id FROM {$wpdb->prefix}wc_product_meta_lookup AS wcpos_sku
+				INNER JOIN {$wpdb->posts} AS wcpos_child ON wcpos_child.ID = wcpos_sku.product_id AND wcpos_child.post_type = 'product_variation'
+				WHERE wcpos_sku.sku LIKE %s
+				UNION ALL
+				SELECT '_variation_id', wcpos_child.ID FROM {$wpdb->posts} AS wcpos_child
+				INNER JOIN {$wpdb->prefix}wc_product_meta_lookup AS wcpos_parent ON wcpos_parent.product_id = wcpos_child.post_parent
+				LEFT JOIN {$wpdb->prefix}wc_product_meta_lookup AS wcpos_own ON wcpos_own.product_id = wcpos_child.ID
+				WHERE wcpos_child.post_type = 'product_variation' AND COALESCE( wcpos_own.sku, '' ) = '' AND wcpos_parent.sku LIKE %s
+			) AS wcpos_match ON wcpos_match.ref_key = wcpos_ref.meta_key AND wcpos_match.product_id = wcpos_ref.meta_value
+			INNER JOIN {$wpdb->prefix}woocommerce_order_items AS wcpos_item ON wcpos_item.order_item_id = wcpos_ref.order_item_id AND wcpos_item.order_item_type = 'line_item'
+			WHERE wcpos_ref.meta_key IN ( '_product_id', '_variation_id' )
+		) AS wcpos_sku_order )";
+	}
+
+	/**
+	 * Strip the same phone punctuation in both storage dialects.
+	 *
+	 * @param string $column Trusted phone value column.
+	 * @return string
+	 */
+	public static function phone_digits_expression( string $column ): string {
+		foreach ( array( ' ', '-', '(', ')', '+', '.' ) as $character ) {
+			$column = "REPLACE({$column}, '{$character}', '')";
+		}
+		return $column;
 	}
 }

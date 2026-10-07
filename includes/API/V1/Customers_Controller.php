@@ -23,6 +23,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Customer_Search;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WP_Error;
 use WP_REST_Request;
@@ -692,60 +693,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			return;
 		}
 
-		$terms = preg_split( '/\s+/u', (string) $query_params['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
-
-		/*
-		 * Whitespace-only searches are filtered out before the hook is added, so reaching this
-		 * point means the string could not be split (eg. malformed UTF-8). We can't honour the
-		 * search, and falling through would hand back the entire customer list, so match nothing.
-		 */
-		if ( false === $terms || empty( $terms ) ) {
-			$query->query_where .= ' AND 1 = 0';
-
-			return;
-		}
-
-		$terms = array_slice( $terms, 0, 10 );
-
-		$meta_keys = array_merge(
-			array(
-				'first_name',
-				'last_name',
-				'billing_first_name',
-				'billing_last_name',
-				'billing_email',
-				'billing_company',
-				'billing_phone',
-			),
-			Tax_Id_Reader::fallback_user_meta_keys()
-		);
-
-		$meta_key_placeholders = implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
-		$term_groups           = array();
-
-		foreach ( $terms as $term ) {
-			$like         = '%' . $wpdb->esc_like( $term ) . '%';
-			$prepare_args = array_merge( array( $like, $like, $like ), $meta_keys, array( $like ) );
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $meta_key_placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
-			$term_groups[] = $wpdb->prepare(
-				"( {$wpdb->users}.user_email LIKE %s
-					OR {$wpdb->users}.user_login LIKE %s
-					OR {$wpdb->users}.display_name LIKE %s
-					OR EXISTS (
-						SELECT 1
-						FROM {$wpdb->usermeta} AS wcpos_search_meta
-						WHERE wcpos_search_meta.user_id = {$wpdb->users}.ID
-							AND wcpos_search_meta.meta_key IN ($meta_key_placeholders)
-							AND wcpos_search_meta.meta_value LIKE %s
-					)
-				)",
-				$prepare_args
-			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		}
-
-		$query->query_where .= ' AND ( ' . implode( ' AND ', $term_groups ) . ' )';
+		$query->query_where .= ' AND ' . Customer_Search::where( (string) $query_params['_wcpos_search'] );
 	}
 
 	/**

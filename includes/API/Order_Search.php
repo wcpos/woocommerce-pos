@@ -42,6 +42,7 @@ final class Order_Search {
 			array(
 				'orders'    => $query->get_table_name( 'orders' ),
 				'addresses' => $query->get_table_name( 'addresses' ),
+				'meta'      => $query->get_table_name( 'meta' ),
 			),
 			Collection_Rules::rules( 'orders' )['search']
 		);
