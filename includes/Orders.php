@@ -17,6 +17,7 @@ use WC_Order;
 use WC_Order_Item;
 use WC_Order_Item_Product;
 use WC_Order_Item_Shipping;
+use WC_Payment_Gateway;
 use WC_Discounts;
 use WC_Product;
 use WC_Product_Simple;
@@ -62,7 +63,11 @@ class Orders {
 		add_filter( 'woocommerce_bacs_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cheque_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cod_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
-		add_filter( 'woocommerce_payment_successful_result', array( $this, 'apply_unpaid_gateway_order_status' ), 10, 2 );
+		// PHP_INT_MAX: the redirect is the decision input and gateways rewrite it on
+		// this same filter — Stripe swaps get_return_url() for a #confirm-pi hash at
+		// 99999 when the intent needs 3DS. Reading it earlier closes a sale the
+		// customer is still confirming.
+		add_filter( 'woocommerce_payment_successful_result', array( $this, 'apply_unpaid_gateway_order_status' ), PHP_INT_MAX, 2 );
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 		add_filter( 'woocommerce_order_item_product', array( $this, 'order_item_product' ), 10, 2 );
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
@@ -241,6 +246,15 @@ class Orders {
 	 *   status. The settings view synthesizes `wc-completed` for every installed
 	 *   gateway it has never seen, so trusting the computed value would mark an
 	 *   unconfigured third-party gateway Completed with no money taken.
+	 * - the gateway's redirect must be the order's own received page. That is
+	 *   the gateway saying it is finished; any other target means it is still
+	 *   collecting the money — see redirect_targets_order_received().
+	 * - the gateway must not be one that moves money, read from the capability
+	 *   WooCommerce has every gateway declare: refunds. A gateway that can give
+	 *   money back takes money; if it hands the customer to the received page
+	 *   without having taken it, the payment is pending (a bank transfer, an
+	 *   async method) and its webhook owns the status. A quote, invoice or
+	 *   purchase-order gateway cannot refund, because nothing was ever paid.
 	 *
 	 * @param array $result   Gateway result, passed through untouched.
 	 * @param int   $order_id Order ID.
@@ -262,7 +276,15 @@ class Orders {
 			return $result;
 		}
 
+		if ( ! \is_array( $result ) || ! $this->redirect_targets_order_received( $result, $order ) ) {
+			return $result;
+		}
+
 		$gateway_id = $order->get_payment_method();
+
+		if ( $this->gateway_moves_money( $gateway_id ) ) {
+			return $result;
+		}
 		$configured = $this->get_stored_gateway_order_status( $gateway_id );
 
 		if ( '' === $configured ) {
@@ -320,6 +342,176 @@ class Orders {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Whether a successful gateway result sends the customer to the order's received page.
+	 *
+	 * The redirect is the one thing every gateway declares about what happens
+	 * next, and it separates the two shapes that both "return success and leave
+	 * the order open":
+	 *
+	 * - A gateway that is finished sends the customer to the received page,
+	 *   `get_return_url( $order )`. Quotes, invoices, purchase orders, BACS,
+	 *   cheque and COD all do. No money will ever move through it, so the
+	 *   configured POS status is the only thing that closes the sale.
+	 * - A gateway that still has to collect the money sends them somewhere else:
+	 *   a hosted checkout off-site (Dintero, Mollie, PayPal, Klarna), or an
+	 *   on-site pay or receipt page that posts a form to one. It settles the
+	 *   order later, from its callback, through payment_complete(). Acting on
+	 *   this shape marked the order Completed while the cashier was still
+	 *   looking at the hosted checkout (1.10.20–1.10.22): Dintero's capture
+	 *   handler then found no transaction and bounced the order to on-hold, and
+	 *   the till — which reads any status outside its open/unpaid set as a
+	 *   finished sale — opened the receipt before a payment method was chosen.
+	 *
+	 * Compared without scheme or trailing slash: `get_return_url()` may upgrade to
+	 * https, and a gateway may append its own arguments. Both the order's received
+	 * URL and its `woocommerce_get_return_url`-filtered form are accepted, so a
+	 * plugin that moves the thank-you page still matches — see is_same_page() for
+	 * what "same page" means on plain permalinks, where the page is in the query.
+	 *
+	 * A redirect carrying a fragment never matches. A fragment on a thank-you URL
+	 * is a gateway's instruction to its own script to do something before the sale
+	 * is done (Stripe's and WooPayments' `#confirm-pi…` 3DS hand-off); a gateway
+	 * that is finished has no reason to add one. Nor does a missing or relative
+	 * redirect match: WooCommerce's pay handler would redirect to it unchanged,
+	 * and nothing here can tell what it is.
+	 *
+	 * @param array    $result Gateway result from process_payment().
+	 * @param WC_Order $order  The order being paid.
+	 *
+	 * @return bool
+	 */
+	private function redirect_targets_order_received( array $result, WC_Order $order ): bool {
+		$redirect = isset( $result['redirect'] ) && \is_string( $result['redirect'] ) ? trim( $result['redirect'] ) : '';
+
+		if ( '' === $redirect || false !== strpos( $redirect, '#' ) ) {
+			return false;
+		}
+
+		$received_url = $order->get_checkout_order_received_url();
+
+		/** This filter is documented in woocommerce/includes/abstracts/abstract-wc-payment-gateway.php */
+		$return_url = apply_filters( 'woocommerce_get_return_url', $received_url, $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
+
+		foreach ( array_unique( array( $received_url, $return_url ) ) as $candidate ) {
+			if ( \is_string( $candidate ) && '' !== $candidate && $this->is_same_page( $redirect, $candidate ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether a gateway's redirect lands on the given page.
+	 *
+	 * Host (case-insensitive), port and path (without a trailing slash) must
+	 * match; the scheme is ignored, and a port is compared only when it is not
+	 * the scheme's default, so http and https forms of one origin agree while
+	 * two services on one host do not.
+	 *
+	 * The query is compared one way: every argument the page carries must be on
+	 * the redirect with the same value, except `key`, which a gateway may drop.
+	 * Extra arguments on the redirect are fine (`utm_nooverride`, a gateway's own
+	 * tracking). This is what makes plain permalinks safe, where every
+	 * WooCommerce page shares the path `/` and the page is its query: the
+	 * received page carries `page_id` and the received endpoint (`order-received`,
+	 * or whatever the store renamed it to, read from the URL itself rather than
+	 * assumed), so the checkout page, the pay page and any other page of the same
+	 * site fail to carry one of them.
+	 *
+	 * @param string $redirect The gateway's redirect.
+	 * @param string $page     The page it must land on.
+	 *
+	 * @return bool
+	 */
+	private function is_same_page( string $redirect, string $page ): bool {
+		$parts_r = wp_parse_url( $redirect );
+		$parts_p = wp_parse_url( $page );
+
+		if ( ! \is_array( $parts_r ) || ! \is_array( $parts_p ) ) {
+			return false;
+		}
+
+		$host_r = strtolower( (string) ( $parts_r['host'] ?? '' ) );
+		$host_p = strtolower( (string) ( $parts_p['host'] ?? '' ) );
+
+		if ( '' === $host_r || $host_r !== $host_p ) {
+			return false;
+		}
+
+		if ( $this->explicit_port( $parts_r ) !== $this->explicit_port( $parts_p ) ) {
+			return false;
+		}
+
+		$path_r = untrailingslashit( (string) ( $parts_r['path'] ?? '/' ) );
+		$path_p = untrailingslashit( (string) ( $parts_p['path'] ?? '/' ) );
+
+		if ( $path_r !== $path_p ) {
+			return false;
+		}
+
+		parse_str( (string) ( $parts_r['query'] ?? '' ), $query_r );
+		parse_str( (string) ( $parts_p['query'] ?? '' ), $query_p );
+
+		foreach ( $query_p as $name => $value ) {
+			if ( 'key' === $name ) {
+				continue;
+			}
+
+			if ( ! isset( $query_r[ $name ] ) || (string) $query_r[ $name ] !== (string) $value ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * The port of a parsed URL, or '' when it is the scheme's default.
+	 *
+	 * @param array $parts Output of wp_parse_url().
+	 *
+	 * @return string
+	 */
+	private function explicit_port( array $parts ): string {
+		if ( ! isset( $parts['port'] ) ) {
+			return '';
+		}
+
+		$port   = (int) $parts['port'];
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+
+		if ( ( 'http' === $scheme && 80 === $port ) || ( 'https' === $scheme && 443 === $port ) ) {
+			return '';
+		}
+
+		return (string) $port;
+	}
+
+	/**
+	 * Whether a gateway declares WooCommerce's refund capability.
+	 *
+	 * The declaration is the gateway's own (`$supports`, through
+	 * `WC_Payment_Gateway::supports()` and its filter). A gateway WooCommerce
+	 * does not know is taken as not moving money: the merchant stored a POS status
+	 * for it, and that choice is the only thing left to act on.
+	 *
+	 * @param string $gateway_id The payment gateway ID.
+	 *
+	 * @return bool
+	 */
+	private function gateway_moves_money( string $gateway_id ): bool {
+		if ( '' === $gateway_id ) {
+			return false;
+		}
+
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		$gateway  = $gateways[ $gateway_id ] ?? null;
+
+		return $gateway instanceof WC_Payment_Gateway && $gateway->supports( 'refunds' );
 	}
 
 	/**
