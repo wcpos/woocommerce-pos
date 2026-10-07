@@ -240,6 +240,54 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $first['id'], $result->get_error_data()['payment_id'] );
 	}
 
+	public function test_intent_replay_determinate_refusal_on_unanswered_row_fails_it(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$lost = new \WP_Error( 'test_timeout', 'Timeout', array( 'indeterminate' => true ) );
+		$this->assertSame( $lost, Ledger::instance()->intent( $order, $input['id'], $input, array( 'error' => $lost ) ) );
+		$this->assertSame( 'pending', Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] )['status'] );
+		$refused = new \WP_Error( 'test_declined', 'Declined' );
+		$this->assertSame( $refused, Ledger::instance()->intent( $order, $input['id'], $input, array( 'error' => $refused ) ) );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'test_declined', $row['failure_reason'] );
+		$next = $this->payment( 'pos_card', '92.95' );
+		$this->assertIsArray( Ledger::instance()->intent( $order, $next['id'], $next, array() ) );
+	}
+
+	public function test_intent_indeterminate_error_projects_the_order_as_pending(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '92.95' );
+		$lost = new \WP_Error( 'test_timeout', 'Timeout', array( 'indeterminate' => true ) );
+		Ledger::instance()->intent( $order, $input['id'], $input, array( 'error' => $lost ) );
+		$this->assertSame( 'pending', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	public function test_record_refuses_cash_that_exceeds_balance_minus_pending_leg(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$card = $this->payment( 'pos_card', '92.95' );
+		$ledger->intent( $order, $card['id'], $card, array() );
+		$cash = $this->payment( 'pos_cash', '92.95', array( 'tendered' => '100.00' ) );
+		$result = $ledger->record( $order, $cash );
+		$this->assertWPError( $result );
+		$row = $ledger->find( wc_get_order( $order->get_id() ), $cash['id'] );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'payment_in_flight', $row['failure_reason'] );
+		$this->assertSame( 'pending', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	public function test_record_allows_cash_that_fits_beside_a_pending_leg(): void {
+		$order = $this->create_pos_order();
+		$order->set_total( '20.00' );
+		$order->save();
+		$ledger = Ledger::instance();
+		$card = $this->payment( 'pos_card', '10.00' );
+		$ledger->intent( $order, $card['id'], $card, array() );
+		$cash = $this->payment( 'pos_cash', '10.00', array( 'tendered' => '10.00' ) );
+		$this->assertIsArray( $ledger->record( $order, $cash ) );
+	}
+
 	public function test_intent_pending_full_balance_blocks_new_uuid(): void {
 		$order = $this->create_pos_order();
 		$ledger = Ledger::instance();

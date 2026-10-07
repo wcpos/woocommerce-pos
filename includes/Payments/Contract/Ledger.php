@@ -264,9 +264,12 @@ class Ledger {
 		);
 
 		$balance = Money::minor( $this->balance( $order, $rows ) );
-		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
+		// A provider leg still pending has reserved its share of the balance: cash taken on top
+		// of it would count twice if the terminal later confirms (the money moved both ways).
+		$reserved = $this->pending_reserved( $rows );
+		if ( 0 === $balance || Money::minor( $amount ) > $balance || Money::minor( $amount ) > $balance - $reserved ) {
 			$row['status']          = 'failed';
-			$row['failure_reason']  = 0 === $balance ? 'order_already_paid' : 'amount_exceeds_balance';
+			$row['failure_reason']  = 0 === $balance ? 'order_already_paid' : ( Money::minor( $amount ) > $balance ? 'amount_exceeds_balance' : 'payment_in_flight' );
 			$row['captured_at_gmt'] = null;
 			$row                    = $this->normalize_row( $order, $row );
 			$rows[]                 = $row;
@@ -353,6 +356,19 @@ class Ledger {
 			$handler = Capture_Mode_Registry::instance()->resolve( (string) $replayed['capture_mode'], $replayed['provider'] ?? null );
 			$resumed = $handler ? $handler->intent( $replayed, $context ) : $this->unsupported();
 			if ( is_wp_error( $resumed ) ) {
+				// A row the provider never answered (no ref but the reader) is live only on our
+				// side: a determinate refusal on the retry ends it, as the sweeper would, so it
+				// stops reserving the balance. An answered row keeps its provider object.
+				if ( self::is_unanswered( $replayed ) && true !== ( $resumed->get_error_data()['indeterminate'] ?? false ) ) {
+					$this->apply_result(
+						$order,
+						$replayed['id'],
+						array(
+							'status' => 'failed',
+							'failure_reason' => $resumed->get_error_code(),
+						)
+					);
+				}
 				return $resumed;
 			}
 			$handoff = $resumed['handoff'] ?? array();
@@ -371,14 +387,11 @@ class Ledger {
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
 			return new WP_Error( 0 === $balance ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance', 0 === $balance ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ), array( 'status' => 0 === $balance ? 409 : 400 ) );
 		}
-		$pending = 0;
+		$pending = $this->pending_reserved( $rows );
 		$newest_pending = null;
 		foreach ( $rows as $existing ) {
-			if ( 'pending' === $existing['status'] ) {
-				$pending += Money::minor( $existing['amount'] );
-				if ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) {
-					$newest_pending = $existing;
-				}
+			if ( 'pending' === $existing['status'] && ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) ) {
+				$newest_pending = $existing;
 			}
 		}
 		if ( Money::minor( $amount ) > $balance - $pending ) {
@@ -426,6 +439,8 @@ class Ledger {
 					'message' => 'Provider did not answer: ' . $new->get_error_code(),
 				);
 				$this->replace_and_save( $order, $rows, $row, false );
+				$this->derive( $order, $this->read( $order ) );
+				$order->save();
 			} else {
 				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
 				// save() rebuilds payment-id and live-leg indexes from the remaining rows.
@@ -763,13 +778,18 @@ class Ledger {
 	 */
 	public function refusal_error( array $row, WC_Order $order ): ?WP_Error {
 		$reason = 'failed' === ( $row['status'] ?? '' ) ? ( $row['failure_reason'] ?? '' ) : '';
-		if ( ! in_array( $reason, array( 'order_already_paid', 'amount_exceeds_balance', 'amount_mismatch' ), true ) ) {
+		$messages = array(
+			'order_already_paid'     => __( 'The order is already paid.', 'woocommerce-pos' ),
+			'amount_exceeds_balance' => __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ),
+			'amount_mismatch'        => __( 'Provider-confirmed amount or currency does not match the payment.', 'woocommerce-pos' ),
+			'payment_in_flight'      => __( 'Another payment is already in progress on this order.', 'woocommerce-pos' ),
+		);
+		if ( ! isset( $messages[ $reason ] ) ) {
 			return null;
 		}
-		$already = 'order_already_paid' === $reason;
 		return new WP_Error(
 			'wcpos_' . $reason,
-			'amount_mismatch' === $reason ? __( 'Provider-confirmed amount or currency does not match the payment.', 'woocommerce-pos' ) : ( $already ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ) ),
+			$messages[ $reason ],
 			array(
 				'status' => 'amount_exceeds_balance' === $reason ? 400 : 409,
 				'payment' => self::to_wire( $row ),
@@ -1060,6 +1080,31 @@ class Ledger {
 	private function reader_ref( array $input, array $context ): array {
 		$reader = $input['provider_refs']['reader'] ?? ( $context['reader'] ?? null );
 		return is_string( $reader ) && '' !== $reader ? array( 'reader' => sanitize_text_field( $reader ) ) : array();
+	}
+
+	/**
+	 * Minor units reserved by pending legs: money a provider may still confirm.
+	 *
+	 * @param array $rows Payment rows.
+	 */
+	private function pending_reserved( array $rows ): int {
+		$reserved = 0;
+		foreach ( $rows as $row ) {
+			if ( 'pending' === ( $row['status'] ?? '' ) ) {
+				$reserved += Money::minor( $row['amount'] ?? 0 );
+			}
+		}
+		return $reserved;
+	}
+
+	/**
+	 * A pending row the provider has never answered: no provider ref other than the reader
+	 * the till chose. Such a row may be re-dispatched (idempotently) or ended locally.
+	 *
+	 * @param array $row Payment row.
+	 */
+	public static function is_unanswered( array $row ): bool {
+		return 'pending' === ( $row['status'] ?? '' ) && empty( array_diff_key( (array) ( $row['provider_refs'] ?? array() ), array( 'reader' => true ) ) );
 	}
 
 	/**

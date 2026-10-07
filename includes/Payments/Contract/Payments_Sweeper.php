@@ -68,9 +68,23 @@ final class Payments_Sweeper {
 						}
 						// Re-dispatch only a row the provider has never answered: any provider ref other than the
 						// reader (server `action`, device `payment_intent`) means a live provider object to poll.
-						$dispatch = 'pending' === $row['status'] && empty( array_diff_key( (array) ( $row['provider_refs'] ?? array() ), array( 'reader' => true ) ) );
+						$dispatch = Ledger::is_unanswered( $row );
 						// Manual records are never pending; legacy webview legs are not provider intents.
 						if ( $dispatch && in_array( $row['capture_mode'], array( 'manual', 'webview' ), true ) ) {
+							continue;
+						}
+						// An order cancelled or completed since the create was lost takes no new charge:
+						// nothing exists at the provider to cancel, so the row ends here.
+						if ( $dispatch && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
+							$ledger->apply_result(
+								$order,
+								$row['id'],
+								array(
+									'status' => 'voided',
+									'failure_reason' => 'order_closed',
+								),
+								false
+							);
 							continue;
 						}
 						$result = $dispatch

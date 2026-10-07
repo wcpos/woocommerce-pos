@@ -75,6 +75,18 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( 'pending', Ledger::instance()->find( wc_get_order( $order->get_id() ), $id )['status'] );
 	}
 
+	public function test_sweeper_voids_an_unanswered_row_when_the_order_is_closed(): void {
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );
+		$order = wc_get_order( $order->get_id() );
+		$order->set_status( 'cancelled' );
+		$order->save();
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array(), Sweep_Test_Handler::$intents );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $id );
+		$this->assertSame( 'voided', $row['status'] );
+		$this->assertSame( 'order_closed', $row['failure_reason'] );
+	}
+
 	public function test_sweeper_pending_with_action_is_not_redispatched(): void {
 		list( $order, $id ) = $this->leg( 600 );
 		( new Payments_Sweeper() )->run();
