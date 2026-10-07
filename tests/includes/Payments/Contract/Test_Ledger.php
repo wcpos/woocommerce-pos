@@ -211,7 +211,33 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] );
 		$this->assertSame( 'failed', $row['status'] );
 		$this->assertSame( 'amount_mismatch', $row['failure_reason'] );
-		$this->assertNull( $order->get_date_paid() );
+		$this->assertNull( wc_get_order( $order->get_id() )->get_date_paid() );
+	}
+
+	public function test_intent_records_the_context_reader_when_the_input_has_none(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '20.00' );
+		Ledger::instance()->intent( $order, $input['id'], $input, array( 'reader' => 'tmr_ctx' ) );
+		$this->assertSame( array( 'reader' => 'tmr_ctx' ), Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] )['provider_refs'] );
+	}
+
+	public function test_intent_pending_leg_of_another_method_blocks_new_uuid(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $this->payment( 'pos_card', '92.95' );
+		$ledger->intent( $order, $first['id'], $first, array() );
+		add_filter(
+			'woocommerce_pos_payment_gateways_settings',
+			static function ( $settings ) {
+				$settings['gateways']['cod']['enabled'] = true;
+				return $settings;
+			}
+		);
+		$second = $this->payment( 'cod', '92.95' );
+		$result = $ledger->intent( $order, $second['id'], $second, array() );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_payment_in_flight', $result->get_error_code() );
+		$this->assertSame( $first['id'], $result->get_error_data()['payment_id'] );
 	}
 
 	public function test_intent_pending_full_balance_blocks_new_uuid(): void {

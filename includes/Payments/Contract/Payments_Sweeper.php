@@ -66,7 +66,9 @@ final class Payments_Sweeper {
 						if ( ! $handler ) {
 							continue;
 						}
-						$dispatch = 'pending' === $row['status'] && empty( $row['provider_refs']['action'] );
+						// Re-dispatch only a row the provider has never answered: any provider ref other than the
+						// reader (server `action`, device `payment_intent`) means a live provider object to poll.
+						$dispatch = 'pending' === $row['status'] && empty( array_diff_key( (array) ( $row['provider_refs'] ?? array() ), array( 'reader' => true ) ) );
 						// Manual records are never pending; legacy webview legs are not provider intents.
 						if ( $dispatch && in_array( $row['capture_mode'], array( 'manual', 'webview' ), true ) ) {
 							continue;

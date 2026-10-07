@@ -380,6 +380,31 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'handoff', $response->get_data() );
 	}
 
+	/** A second full-balance intent while a leg is live is refused with the live leg's id. */
+	public function test_intent_in_flight_returns_409_with_the_live_payment_id(): void {
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		add_filter(
+			'wcpos_payment_method_capture_mode',
+			static function () {
+				return 'route_test';
+			}
+		);
+		$order = $this->create_pos_order();
+		$first = $this->payment( 'pos_cash', '92.95' );
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $first['id'] ) . '/intent' );
+		$request->set_body_params( array( 'payment' => $first, 'context' => array() ) );
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+		$second = $this->payment( 'pos_cash', '92.95' );
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $second['id'] ) . '/intent' );
+		$request->set_body_params( array( 'payment' => $second, 'context' => array() ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 409, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'wcpos_payment_in_flight', $data['code'] );
+		$this->assertSame( $first['id'], $data['data']['payment_id'] );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Refund responses contain only the payment row. */
 	public function test_refund_response_contains_only_payment(): void {
 		$order = $this->create_pos_order();

@@ -65,6 +65,16 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( array(), Sweep_Test_Handler::$calls );
 	}
 
+	public function test_sweeper_device_row_with_payment_intent_is_polled_not_redispatched(): void {
+		Sweep_Test_Handler::$intent_patch = new \WP_Error( 'test_declined', 'Declined' );
+		Sweep_Test_Handler::$patch = array( 'status' => 'pending' );
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'payment_intent' => 'pi_1' ) ) );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array(), Sweep_Test_Handler::$intents );
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( 'pending', Ledger::instance()->find( wc_get_order( $order->get_id() ), $id )['status'] );
+	}
+
 	public function test_sweeper_pending_with_action_is_not_redispatched(): void {
 		list( $order, $id ) = $this->leg( 600 );
 		( new Payments_Sweeper() )->run();

@@ -406,9 +406,7 @@ class Ledger {
 				// The reader is the one provider ref the till knows before the provider does:
 				// a device-mode leg is minted for a specific reader, and the order must say
 				// which one took the money. Every other ref comes from the handler.
-				'provider_refs' => is_string( $input['provider_refs']['reader'] ?? null ) && '' !== $input['provider_refs']['reader']
-					? array( 'reader' => sanitize_text_field( $input['provider_refs']['reader'] ) )
-					: array(),
+				'provider_refs' => $this->reader_ref( $input, $context ),
 				'register_id' => $input['register_id'] ?? null,
 				'session_id' => $input['session_id'] ?? null,
 				'cashier_id' => (int) ( $context['cashier_id'] ?? get_current_user_id() ),
@@ -1049,6 +1047,19 @@ class Ledger {
 			}
 		}
 		return $row;
+	}
+
+	/**
+	 * The reader a leg is minted for, from the payment input or the handler context the app
+	 * sends — recorded before the provider is called so a re-dispatch after a lost answer
+	 * goes to the same reader.
+	 *
+	 * @param array $input   Payment input.
+	 * @param array $context Provider context.
+	 */
+	private function reader_ref( array $input, array $context ): array {
+		$reader = $input['provider_refs']['reader'] ?? ( $context['reader'] ?? null );
+		return is_string( $reader ) && '' !== $reader ? array( 'reader' => sanitize_text_field( $reader ) ) : array();
 	}
 
 	/**
