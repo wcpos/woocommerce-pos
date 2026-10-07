@@ -510,7 +510,11 @@ final class Collection_Rules {
 	 */
 	public static function client_search_meta_keys(): array {
 		$added = array();
-		foreach ( array( 'customers' => array( 'meta' ), 'orders' => array( 'posts', 'meta' ) ) as $collection => $path ) {
+		$paths = array(
+			'customers' => array( 'meta' ),
+			'orders'    => array( 'posts', 'meta' ),
+		);
+		foreach ( $paths as $collection => $path ) {
 			$declared = self::rules( $collection, false )['search'] ?? array();
 			$filtered = self::rules( $collection )['search'] ?? array();
 			foreach ( $path as $segment ) {
